@@ -1,7 +1,7 @@
 import termsMarkdown from "../../../legal/terms-of-service.md?raw";
 import { LegalDocumentPage } from "@/components/legal/LegalDocumentPage";
 
-const LAST_UPDATED = "April 28, 2026";
+const LAST_UPDATED = "May 26, 2026";
 const EFFECTIVE_DATE = "April 28, 2026";
 
 export default function TermsPage() {

@@ -336,7 +336,7 @@ function BinaryOutcomes({
           )}
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(yesEntry.displayStake)} staked</span>
-            <span>{yesEntry.betCount} bets</span>
+            <span>{yesEntry.betCount} predictions</span>
           </div>
         </button>
       )}
@@ -368,7 +368,7 @@ function BinaryOutcomes({
           )}
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span>{formatNumber(noEntry.displayStake)} staked</span>
-            <span>{noEntry.betCount} bets</span>
+            <span>{noEntry.betCount} predictions</span>
           </div>
         </button>
       )}
@@ -558,7 +558,7 @@ function UpDownOutcomes({
               )}
               <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                 <span>{formatNumber(entry.displayStake)} staked</span>
-                <span>{entry.betCount} bets</span>
+                <span>{entry.betCount} predictions</span>
               </div>
             </button>
           );

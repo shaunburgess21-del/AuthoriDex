@@ -98,7 +98,7 @@ export function MarketCycleHero({ marketState, constrainedWidth = false, sticky 
     if (status === "ENTRIES_CLOSED") {
       return { desktop: "Results In" };
     }
-    return { desktop: "Betting Closes In" };
+    return { desktop: "Predictions Close In" };
   };
 
   const label = getLabel();

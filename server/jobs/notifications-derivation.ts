@@ -545,7 +545,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
         ? `Resolves in ${timing} — last chance to trade`
         : variant === "jackpot"
           ? `Entries close in ${timing}`
-          : `Betting closes in ${timing}`;
+          : `Predictions close in ${timing}`;
 
     const count = markets.length;
     const marketIdsInGroup = markets.map((m) => m.id);
@@ -567,7 +567,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
           ? `Entries close soon on ${count} predictions — tap to review`
           : variant === "amm"
             ? `${count} markets resolve soon — tap to review`
-            : `Betting closes soon on ${count} predictions — tap to review`;
+            : `Predictions close soon on ${count} markets — tap to review`;
       href = "/predict";
       entityType = "market_digest";
       entityId = undefined;

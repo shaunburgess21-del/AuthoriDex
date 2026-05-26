@@ -34,6 +34,8 @@ Vox exists solely to enable participation in the Service. Its use is for enterta
 
 We may change, expire, or revoke Vox at any time, including for inactive accounts, for breaches of these Terms, or for operational reasons. We may also adjust how Vox is awarded, spent, or earned, with reasonable notice for material changes.
 
+**No purchase is necessary to use VoxDex or to earn Vox.** New accounts receive a free Vox grant on signup, and additional Vox can be earned through engagement (voting, posting, streaks, approved suggestions) at no cost. Purchasing Vox is optional and provides no advantage other than a faster top-up.
+
 **Looking ahead:** We may, in future, introduce additional services, features, or products — including services that involve real money, cryptocurrency, or other forms of consideration. Such services would be governed by separate or additional terms, may be available only in certain jurisdictions, and may require additional verification or eligibility checks. Nothing in these Terms commits us to keeping the Service play-money only, but nothing in these Terms changes the play-money nature of Vox as currently offered.
 
 ## 4. Eligibility

@@ -137,7 +137,7 @@ export function getCommunityMarketStatusMessage({
     return {
       title: "Predictions are currently closed",
       description:
-        "Betting is closed and we're waiting for the final outcome to be confirmed.",
+        "Predictions are closed and we're waiting for the final outcome to be confirmed.",
     };
   }
   if (status === "RESOLVED") {
@@ -155,11 +155,11 @@ export function getCommunityMarketStatusMessage({
       title: "Market Voided",
       description:
         voidReason ||
-        "This market was cancelled and any affected bets were voided or refunded.",
+        "This market was cancelled and any affected positions were voided or refunded.",
     };
   }
   return {
     title: "Market Closed",
-    description: "Betting has ended for this market.",
+    description: "Predictions have ended for this market.",
   };
 }

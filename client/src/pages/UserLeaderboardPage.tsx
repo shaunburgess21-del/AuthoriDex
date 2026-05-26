@@ -344,7 +344,7 @@ function UserRow({
         <span className="font-mono text-sm tabular-nums text-muted-foreground">
           {user.totalResolved}
         </span>
-        <p className="text-[10px] text-muted-foreground mt-0.5">bets</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">predictions</p>
       </div>
 
       {canOpenProfile && (
@@ -565,7 +565,7 @@ export default function UserLeaderboardPage() {
             </div>
             <div className="min-w-[70px] text-right shrink-0 hidden sm:block">Volume</div>
             <div className="min-w-[56px] text-right shrink-0 hidden md:block">Win Rate</div>
-            <div className="min-w-[40px] text-right shrink-0 hidden lg:block">Bets</div>
+            <div className="min-w-[40px] text-right shrink-0 hidden lg:block">Predictions</div>
             <div className="w-4 hidden sm:block" />
           </div>
 

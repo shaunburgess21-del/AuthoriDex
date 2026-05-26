@@ -31,7 +31,7 @@ import { CURRENCY, formatVox } from "@/lib/currency";
  *     and the surfaces had drifted (jackpot showed multiple tickets but
  *     no live current score; race used a dead /api/me/bets endpoint;
  *     up/down had a bespoke panel; community had a pill-list summary).
- *   - The notification "Betting closes in 5h" deep-links straight here,
+ *   - The notification "Predictions close in 5h" deep-links straight here,
  *     so the page needs to instantly answer: "what's my position right
  *     now, how is it doing, and can I still take action".
  *

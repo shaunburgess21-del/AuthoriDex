@@ -309,6 +309,24 @@ function ComparisonTable() {
 function PricingFaq() {
   const faqs: { q: string; a: React.ReactNode }[] = [
     {
+      q: "Do I need to buy Vox to use VoxDex?",
+      a: (
+        <p>
+          No purchase is necessary to use VoxDex or earn Vox. Every new
+          account starts with a free Vox grant, and you can earn more by
+          voting, posting, hitting streak milestones, and having suggested
+          candidates or markets approved — see{" "}
+          <Link
+            href="/how-it-works#credits"
+            className="text-primary underline underline-offset-2"
+          >
+            How It Works
+          </Link>
+          . Buying Vox is optional and just a faster way to top up.
+        </p>
+      ),
+    },
+    {
       q: "Does Vox expire?",
       a: (
         <p>
