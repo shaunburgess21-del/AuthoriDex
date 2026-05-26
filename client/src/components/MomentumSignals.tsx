@@ -82,8 +82,11 @@ interface MomentumData {
       avg90d: number;             // 90-day average interest (mass)
       momentumRatio: number;      // interest / max(avg7d, 1), capped at 10×
       momentumLevel: MomentumLevel;
+      /** @deprecated May 2026 — score-only card; always 0 from API */
       deltaPct: number;
       topicId: string | null;
+      fetchedAgeHours?: number;
+      carriedForward?: boolean;
     };
     drivers: {
       status: "active" | "stable";
@@ -126,7 +129,8 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     return "high";
   }
   if (source === "trends") {
-    // `now 7-d` scale (% of week's peak). Recalibrated May 2026 for day-over-day fetch.
+    // `now 7-d` scale: 0–100 normalized to the person's own peak hour in the
+    // last week. Score-only card (May 2026) — thresholds match TRENDS_LEVEL_COPY.
     if (value < 15) return "low";
     if (value < 35) return "medium";
     return "high";
@@ -146,7 +150,17 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Low (under 25) = quiet day. Medium (25–49) = normal attention. High (50+) = unusually busy. Scaled to today's peak hour for this person — 100 = their busiest hour in the last 24 hours, matching the Google Trends 'Past 24 hours' view.";
+  "Interest score (0–100) from Google Trends — mean of the last 24 hours, normalized to this person's busiest hour in the past week (100 = peak). Low (under 15) = quiet, Medium (15–34) = normal, High (35+) = elevated. Refreshed about every 12 hours.";
+
+function formatTrendsRefreshedAgo(ageHours: number | null | undefined): string | null {
+  if (ageHours == null || !Number.isFinite(ageHours) || ageHours < 0) return null;
+  if (ageHours < 1) return "Just now";
+  if (ageHours < 24) {
+    const h = Math.round(ageHours);
+    return h === 1 ? "Refreshed 1h ago" : `Refreshed ${h}h ago`;
+  }
+  return "Updated yesterday";
+}
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -258,8 +272,10 @@ interface SignalCardProps {
   level: MomentumLevel;
   value: string;
   unit: string;
-  deltaPct: number;
+  deltaPct?: number;
   trendWord?: TrendWord;
+  /** When true, omit the 24h % change pill (e.g. Google Trends score-only card). */
+  hideDelta?: boolean;
   headerRight?: React.ReactNode;
   footer?: React.ReactNode;
   tooltip?: React.ReactNode;
@@ -273,8 +289,9 @@ function SignalCard({
   level,
   value,
   unit,
-  deltaPct,
+  deltaPct = 0,
   trendWord,
+  hideDelta = false,
   headerRight,
   footer,
   tooltip,
@@ -322,7 +339,7 @@ function SignalCard({
       <CardContent className="pt-1 pb-3 px-4 space-y-0.5">
         <div className="flex items-center gap-3 flex-wrap">
           <LevelIndicator level={level} testId={`level-${testId ?? title.toLowerCase()}`} />
-          <DeltaPill pct={deltaPct} trendWord={trendWord} />
+          {!hideDelta && <DeltaPill pct={deltaPct} trendWord={trendWord} />}
         </div>
         <div className="text-[11px] text-muted-foreground font-mono">
           <span className="text-foreground/80">{value}</span>
@@ -484,22 +501,22 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   const trendsLevel: MomentumLevel = hasTrendsData
     ? fallbackLevel("trends", trendsInterest)
     : "none";
-  const trendsTrend: TrendWord = signals.trends
-    ? (signals.trends.deltaPct > 5 ? "rising" : signals.trends.deltaPct < -5 ? "falling" : "steady")
-    : "steady";
   const trendsValue = hasTrendsData ? `${Math.round(trendsInterest * 10) / 10}` : "—";
   const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
-  // Activity-card visual convention: no 7-day-avg footer (that belongs on
-  // the Momentum cards). Only show the warm-up notice when we have no data
-  // yet. The 7-day baseline is still computed and persisted server-side
-  // for the future Trends Momentum card.
+  const trendsRefreshedLabel = formatTrendsRefreshedAgo(signals.trends?.fetchedAgeHours);
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
           Awaiting first Google Trends data
         </p>
       )
-    : null;
+    : trendsRefreshedLabel
+      ? (
+          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-refreshed">
+            {signals.trends?.carriedForward ? `${trendsRefreshedLabel} (cached)` : trendsRefreshedLabel}
+          </p>
+        )
+      : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
@@ -536,7 +553,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
             { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
             { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
-            { name: "Google Trends", level: trendsLevel, delta: signals.trends?.deltaPct ?? 0 },
+            { name: "Google Trends", level: trendsLevel, delta: 0 },
           ]}
         />
 
@@ -548,8 +565,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           level={trendsLevel}
           value={trendsValue}
           unit={trendsUnit}
-          deltaPct={signals.trends?.deltaPct ?? 0}
-          trendWord={trendsTrend}
+          hideDelta
           tooltip={
             <TouchTooltip
               side="top"

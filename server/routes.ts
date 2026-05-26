@@ -3173,17 +3173,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Google Trends Activity pill — latest 24h vs previous 24h on one
-      // `now 7-d` SerpApi response (persisted as trendsInterest /
-      // trendsPrevDayInterest). Legacy intra-day snapshots are ignored.
-      const TRENDS_DISPLAY_DEAD_ZONE_PCT = 5;
+      // Google Trends: score-only in UI (May 2026). Interest is a 0–100 index,
+      // not a count — day-over-day % on normalized means was misleading. We still
+      // persist trendsPrevDayInterest in ingest for a possible future direction
+      // signal; API always returns deltaPct: 0.
       const trendsDeltaMethod = trendsDiag?.raw?.trendsDeltaMethod;
       const trendsHasDayOverDayMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
-      const trendsPrevDayInterest = Number(trendsDiag?.raw?.trendsPrevDayInterest ?? 0);
-      const rawTrendsDeltaPct = trendsHasDayOverDayMethod && trendsPrevDayInterest > 0 && trendsInterest > 0
-        ? Math.round(((trendsInterest - trendsPrevDayInterest) / trendsPrevDayInterest) * 100)
-        : 0;
-      const trendsDeltaPct = Math.abs(rawTrendsDeltaPct) <= TRENDS_DISPLAY_DEAD_ZONE_PCT ? 0 : rawTrendsDeltaPct;
+      const trendsDeltaPct = 0;
 
       const trendsFetchedAtRaw = trendsDiag?.raw?.trendsFetchedAt;
       let trendsFetchedAgeHours: number | null = null;
@@ -3288,8 +3284,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
           },
-          // Google Trends — activity card + dormant momentum (not in velocityScore).
-          // deltaPct: latest 24h vs previous 24h on one `now 7-d` graph.
+          // Google Trends — score-only activity card (May 2026). Interest is a
+          // 0–100 index normalized to the person's own 7-d peak; day-over-day %
+          // on that scale was misleading, so deltaPct is always 0 and the UI
+          // hides the % pill. trendsPrevDayInterest still flows through ingest
+          // for a possible future direction signal.
           trends: trendsHasDayOverDayMethod && trendsInterest > 0 ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
