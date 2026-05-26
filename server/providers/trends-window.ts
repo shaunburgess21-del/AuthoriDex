@@ -5,13 +5,26 @@ export interface TrendsTimeseriesPoint {
   interest: number;
 }
 
-/** SerpApi `date` param for activity + day-over-day delta (one shared peak scale). */
-export const TRENDS_SERPAPI_WINDOW = "now 7-d";
+/**
+ * SerpApi `date` param. May 2026: switched from `now 7-d` to `now 1-d` so the
+ * 0-100 score is normalized to the person's busiest hour over the LAST 24h —
+ * exactly matching the curve users see on Google Trends "Past 24 hours" view.
+ * Day-over-day deltas (which were the only reason for the wider window) were
+ * removed from the UI when we made the card score-only.
+ */
+export const TRENDS_SERPAPI_WINDOW = "now 1-d";
 
-/** Persisted on snapshots so routes/UI only use comparable day-over-day deltas. */
-export const TRENDS_DELTA_METHOD = "latest_24h_vs_previous_24h";
+/**
+ * Sentinel persisted on snapshots so routes/UI only render values from the
+ * current methodology. Bumped from "latest_24h_vs_previous_24h" when we moved
+ * to `now 1-d` + last-3h-mean — old snapshots fail the gate and are ignored
+ * until refreshed by the next ingest tick (≤12h).
+ */
+export const TRENDS_DELTA_METHOD = "current_3h_mean_on_now_1d";
 
-const MS_PER_24H = 24 * 60 * 60 * 1000;
+const MS_PER_HOUR = 60 * 60 * 1000;
+const CURRENT_WINDOW_HOURS = 3;
+const MS_PER_CURRENT_WINDOW = CURRENT_WINDOW_HOURS * MS_PER_HOUR;
 
 function meanInterest(points: TrendsTimeseriesPoint[]): number {
   if (points.length === 0) return 0;
@@ -19,20 +32,26 @@ function meanInterest(points: TrendsTimeseriesPoint[]): number {
 }
 
 /**
- * Day-over-day means from one `now 7-d` response (same peak normalisation).
- * - latestInterest: mean of points in the latest 24h ending at the series end
- * - prevWindowInterest: mean of points in the prior 24h
- * - avgWindowInterest: mean over the full returned series (7d momentum baseline)
+ * Current interest reading from a `now 1-d` SerpApi response.
+ *
+ * - `currentInterest`: mean of the points in the last ~3 hours of the series.
+ *   This is the headline "right now" number on the Google Trends card. We
+ *   smooth across 3 hours instead of using the single latest hourly point so
+ *   one quiet/loud hour doesn't whip the score around.
+ * - `avgWindowInterest`: mean over the full returned series (~24 hourly points
+ *   on `now 1-d`). Used as a baseline denominator for the dormant intra-day
+ *   momentum ratio. Persisted in `trendsAvg7d` for backwards compatibility
+ *   with the existing diagnostics field name (semantics is now "24h mean",
+ *   not "7d mean").
  */
-export function computeTrendsDayOverDayMeans(
+export function computeTrendsCurrentInterest(
   series: TrendsTimeseriesPoint[],
 ): {
-  latestInterest: number;
-  prevWindowInterest: number;
+  currentInterest: number;
   avgWindowInterest: number;
 } {
   if (series.length === 0) {
-    return { latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 };
+    return { currentInterest: 0, avgWindowInterest: 0 };
   }
 
   const sorted = [...series].sort(
@@ -40,24 +59,26 @@ export function computeTrendsDayOverDayMeans(
   );
   const endMs = new Date(sorted[sorted.length - 1].date).getTime();
   if (!Number.isFinite(endMs)) {
-    return { latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 };
+    return { currentInterest: 0, avgWindowInterest: 0 };
   }
 
-  const latestStart = endMs - MS_PER_24H;
-  const prevStart = endMs - 2 * MS_PER_24H;
-
-  const latestPoints: TrendsTimeseriesPoint[] = [];
-  const prevPoints: TrendsTimeseriesPoint[] = [];
+  const currentStart = endMs - MS_PER_CURRENT_WINDOW;
+  const currentPoints: TrendsTimeseriesPoint[] = [];
   for (const p of sorted) {
     const t = new Date(p.date).getTime();
     if (!Number.isFinite(t)) continue;
-    if (t > latestStart && t <= endMs) latestPoints.push(p);
-    else if (t > prevStart && t <= latestStart) prevPoints.push(p);
+    if (t > currentStart && t <= endMs) currentPoints.push(p);
   }
 
+  // Fallback: if for some reason fewer than 1 point lands in the 3h window
+  // (very sparse series), use the single most recent point so we never report
+  // 0 when we have data.
+  const fallbackTail = currentPoints.length > 0
+    ? currentPoints
+    : sorted.slice(-1);
+
   return {
-    latestInterest: meanInterest(latestPoints),
-    prevWindowInterest: meanInterest(prevPoints),
+    currentInterest: meanInterest(fallbackTail),
     avgWindowInterest: meanInterest(sorted),
   };
 }

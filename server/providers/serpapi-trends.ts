@@ -1,12 +1,15 @@
 // ============================================================================
-// SerpApi Google Trends Provider (May 2026)
+// SerpApi Google Trends Provider (May 2026 — score-only refresh)
 // ============================================================================
 // Fetches Google Trends "Interest over time" timeseries via SerpApi's
 // google_trends engine. One query per call (no batching) so each person's
 // 0-100 score is normalised against THEIR OWN peak, not against the loudest
-// person in a shared batch. Uses date=now 7-d so the latest 24h and the
-// prior 24h are on one shared peak scale for a true day-over-day delta
-// (same mental model as News Activity / Wikipedia Pulse).
+// person in a shared batch.
+//
+// Window: `now 1-d`. The score is normalised to the person's busiest hour
+// over the LAST 24h, exactly matching the Google Trends "Past 24 hours"
+// view. The headline "current interest" we surface is the mean of the last
+// ~3 hourly points on that series — a smoothed "right now" reading.
 //
 // Why per-person and not batched? When you submit q=a,b,c,d,e to Google
 // Trends, ALL series are normalised against the single highest point across
@@ -18,14 +21,14 @@ import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import {
-  computeTrendsDayOverDayMeans,
+  computeTrendsCurrentInterest,
   TRENDS_SERPAPI_WINDOW,
   type TrendsTimeseriesPoint,
 } from "./trends-window";
 
 export type { TrendsTimeseriesPoint } from "./trends-window";
 export {
-  computeTrendsDayOverDayMeans,
+  computeTrendsCurrentInterest,
   shouldFetchGoogleTrends,
   TRENDS_DELTA_METHOD,
   TRENDS_FETCH_INTERVAL_MS,
@@ -54,11 +57,9 @@ export interface TrendsBatchInput {
 export interface TrendsBatchResult {
   personId: string;
   timeseries: TrendsTimeseriesPoint[];
-  /** Mean of the latest 24h on the `now 7-d` scale (% of week's peak hour). */
-  latestInterest: number;
-  /** Mean of the previous 24h on the same scale (day-over-day comparator). */
-  prevWindowInterest: number;
-  /** Mean over the full returned series (~7d) on the same scale — momentum baseline. */
+  /** Mean of the last ~3 hourly points on the `now 1-d` scale (% of day's peak hour). */
+  currentInterest: number;
+  /** Mean over the full returned series (~24h) on the same scale — intra-day baseline. */
   avgWindowInterest: number;
 }
 
@@ -248,20 +249,19 @@ export async function fetchGoogleTrendsBatch(
       }
 
       if (series.length > 0) {
-        const { latestInterest, prevWindowInterest, avgWindowInterest } =
-          computeTrendsDayOverDayMeans(series);
+        const { currentInterest, avgWindowInterest } =
+          computeTrendsCurrentInterest(series);
         results.push({
           personId: p.personId,
           timeseries: series,
-          latestInterest,
-          prevWindowInterest,
+          currentInterest,
           avgWindowInterest,
         });
       } else {
-        results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 });
+        results.push({ personId: p.personId, timeseries: [], currentInterest: 0, avgWindowInterest: 0 });
       }
     } else if (data) {
-      results.push({ personId: p.personId, timeseries: [], latestInterest: 0, prevWindowInterest: 0, avgWindowInterest: 0 });
+      results.push({ personId: p.personId, timeseries: [], currentInterest: 0, avgWindowInterest: 0 });
     }
 
     if (i < people.length - 1) {

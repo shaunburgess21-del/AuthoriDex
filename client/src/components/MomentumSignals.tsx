@@ -129,10 +129,12 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     return "high";
   }
   if (source === "trends") {
-    // `now 7-d` scale: 0–100 normalized to the person's own peak hour in the
-    // last week. Score-only card (May 2026) — thresholds match TRENDS_LEVEL_COPY.
-    if (value < 15) return "low";
-    if (value < 35) return "medium";
+    // `now 1-d` scale: 0–100 normalized to the person's busiest hour in the
+    // LAST 24h (matches Google Trends "Past 24 hours" view). Score is the
+    // mean of the last ~3 hourly points. Thresholds match TRENDS_LEVEL_COPY.
+    // Recalibrated May 2026 when we switched windows from `now 7-d`.
+    if (value < 30) return "low";
+    if (value < 60) return "medium";
     return "high";
   }
   if (value < 500) return "low";
@@ -150,7 +152,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Interest score (0–100) from Google Trends — mean of the last 24 hours, normalized to this person's busiest hour in the past week (100 = peak). Low (under 15) = quiet, Medium (15–34) = normal, High (35+) = elevated. Refreshed about every 12 hours.";
+  "Live interest score (0–100) from Google Trends — mean of the last ~3 hours, normalized to this person's busiest hour in the past 24h (100 = peak). Matches the right edge of Google's 'Past 24 hours' curve. Low (under 30) = quiet, Medium (30–59) = normal, High (60+) = elevated. Refreshed about every 12 hours.";
 
 function formatTrendsRefreshedAgo(ageHours: number | null | undefined): string | null {
   if (ageHours == null || !Number.isFinite(ageHours) || ageHours < 0) return null;

@@ -3173,12 +3173,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Google Trends: score-only in UI (May 2026). Interest is a 0–100 index,
-      // not a count — day-over-day % on normalized means was misleading. We still
-      // persist trendsPrevDayInterest in ingest for a possible future direction
-      // signal; API always returns deltaPct: 0.
+      // Google Trends: score-only card on `now 1-d` window (May 2026 refresh).
+      // `trendsInterest` is the mean of the last ~3 hourly points, normalized
+      // to the person's busiest hour in the past 24h. The `trendsDeltaMethod`
+      // sentinel gates rendering so old snapshots from previous windows don't
+      // mix scales until they're refreshed by the next ingest tick (≤12h).
       const trendsDeltaMethod = trendsDiag?.raw?.trendsDeltaMethod;
-      const trendsHasDayOverDayMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
+      const trendsHasCurrentMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
       const trendsDeltaPct = 0;
 
       const trendsFetchedAtRaw = trendsDiag?.raw?.trendsFetchedAt;
@@ -3189,7 +3190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           trendsFetchedAgeHours = Math.round((Date.now() - fetchedMs) / (1000 * 60 * 60) * 10) / 10;
         }
       }
-      if (trendsHasDayOverDayMethod && (trendsInterest ?? 0) > 0) activeSources.push("trends");
+      if (trendsHasCurrentMethod && (trendsInterest ?? 0) > 0) activeSources.push("trends");
 
       res.json({
         asOf: latest.timestamp.toISOString(),
@@ -3284,12 +3285,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
           },
-          // Google Trends — score-only activity card (May 2026). Interest is a
-          // 0–100 index normalized to the person's own 7-d peak; day-over-day %
-          // on that scale was misleading, so deltaPct is always 0 and the UI
-          // hides the % pill. trendsPrevDayInterest still flows through ingest
-          // for a possible future direction signal.
-          trends: trendsHasDayOverDayMethod && trendsInterest > 0 ? {
+          // Google Trends — score-only activity card (May 2026 refresh).
+          // `interest` is the mean of the last ~3h on the `now 1-d` series
+          // (matches Google Trends "Past 24 hours" view). 0-100 normalized to
+          // the person's peak hour in that 24h window. deltaPct is always 0
+          // (UI hides the % pill); the dormant `momentumRatio` is the ratio
+          // of the last 3h vs the full 24h on the same series.
+          trends: trendsHasCurrentMethod && trendsInterest > 0 ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
             avg90d: Math.round(trendsAvg90dVal * 10) / 10,
