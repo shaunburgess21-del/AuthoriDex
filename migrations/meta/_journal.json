@@ -512,6 +512,20 @@
       "when": 1780608000000,
       "tag": "0072_matchup_help_dismissed",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1780651200000,
+      "tag": "0073_celebrity_profile_net_worth_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1780694400000,
+      "tag": "0074_enable_rls_on_remaining_backend_tables",
+      "breakpoints": true
     }
   ]
 }
