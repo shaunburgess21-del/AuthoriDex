@@ -24,6 +24,7 @@ import { loadVolatility } from "../services/insights/volatility";
 import { loadStreaks } from "../services/insights/streaks";
 import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
+import { loadMarketsAnalytics } from "../services/insights/markets-analytics";
 
 const insightsEventSchema = z.object({
   surface: z.string().min(1).max(64),
@@ -190,6 +191,16 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] category-heatmap", error);
       res.status(500).json({ error: "Failed to load category heatmap" });
+    }
+  });
+
+  app.get("/api/insights/markets/analytics", async (_req, res) => {
+    try {
+      const data = await loadMarketsAnalytics();
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] markets analytics", error);
+      res.status(500).json({ error: "Failed to load markets analytics" });
     }
   });
 

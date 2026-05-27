@@ -4,12 +4,11 @@ import { loadDriversSummary } from "./drivers";
 import {
   getInsightsCache,
   setInsightsCache,
-  INSIGHTS_AGGREGATE_TTL_MS,
   INSIGHTS_STORY_TTL_MS,
 } from "./cache";
-import { generateAiInsightsStory } from "./story-ai";
 
-const DETERMINISTIC_STORY_KEY = "insights_story:daily";
+export const STORY_AI_KEY = "insights_story:ai";
+export const STORY_DETERMINISTIC_KEY = "insights_story:deterministic";
 
 export function isInsightsAiStoryEnabled(): boolean {
   const raw = process.env.INSIGHTS_AI_STORY_ENABLED?.toLowerCase();
@@ -63,26 +62,22 @@ export async function buildDeterministicStory(): Promise<InsightsStoryPayload> {
 
 export async function getInsightsStory(): Promise<InsightsStoryPayload> {
   if (isInsightsAiStoryEnabled()) {
-    const cached = await getInsightsCache<InsightsStoryPayload>(DETERMINISTIC_STORY_KEY);
-    if (cached?.mode === "ai") {
-      return cached;
+    const aiCached = await getInsightsCache<InsightsStoryPayload>(STORY_AI_KEY);
+    if (aiCached?.mode === "ai") {
+      return aiCached;
     }
-    const ai = await generateAiInsightsStory();
-    if (ai) {
-      await setInsightsCache(DETERMINISTIC_STORY_KEY, "insights_story", ai, INSIGHTS_STORY_TTL_MS);
-      return ai;
-    }
+    // Never call OpenAI on overview requests — cron is the only writer for AI.
   }
 
-  const cached = await getInsightsCache<InsightsStoryPayload>(`${DETERMINISTIC_STORY_KEY}:deterministic`);
-  if (cached) return cached;
+  const detCached = await getInsightsCache<InsightsStoryPayload>(STORY_DETERMINISTIC_KEY);
+  if (detCached) return detCached;
 
   const story = await buildDeterministicStory();
   await setInsightsCache(
-    `${DETERMINISTIC_STORY_KEY}:deterministic`,
+    STORY_DETERMINISTIC_KEY,
     "insights_story",
     story,
-    INSIGHTS_AGGREGATE_TTL_MS,
+    INSIGHTS_STORY_TTL_MS,
   );
   return story;
 }

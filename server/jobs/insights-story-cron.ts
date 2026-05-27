@@ -1,8 +1,11 @@
-import { buildDeterministicStory, isInsightsAiStoryEnabled } from "../services/insights/story";
+import {
+  buildDeterministicStory,
+  isInsightsAiStoryEnabled,
+  STORY_AI_KEY,
+  STORY_DETERMINISTIC_KEY,
+} from "../services/insights/story";
 import { generateAiInsightsStory } from "../services/insights/story-ai";
 import { setInsightsCache, INSIGHTS_STORY_TTL_MS } from "../services/insights/cache";
-
-const STORY_CACHE_KEY = "insights_story:daily";
 
 export interface InsightsStoryCronResult {
   mode: "deterministic" | "ai" | "skipped";
@@ -12,20 +15,34 @@ export interface InsightsStoryCronResult {
 
 export async function runInsightsStoryCronRefresh(): Promise<InsightsStoryCronResult> {
   const start = Date.now();
-  let story;
 
   if (isInsightsAiStoryEnabled()) {
-    story = (await generateAiInsightsStory()) ?? (await buildDeterministicStory());
-    await setInsightsCache(STORY_CACHE_KEY, "insights_story", story, INSIGHTS_STORY_TTL_MS);
+    const aiStory = await generateAiInsightsStory();
+    if (aiStory) {
+      await setInsightsCache(STORY_AI_KEY, "insights_story", aiStory, INSIGHTS_STORY_TTL_MS);
+      return {
+        mode: "ai",
+        headline: aiStory.headline,
+        durationMs: Date.now() - start,
+      };
+    }
+
+    const deterministic = await buildDeterministicStory();
+    await setInsightsCache(
+      STORY_DETERMINISTIC_KEY,
+      "insights_story",
+      deterministic,
+      INSIGHTS_STORY_TTL_MS,
+    );
     return {
-      mode: story.mode,
-      headline: story.headline,
+      mode: "deterministic",
+      headline: deterministic.headline,
       durationMs: Date.now() - start,
     };
   }
 
-  story = await buildDeterministicStory();
-  await setInsightsCache(`${STORY_CACHE_KEY}:deterministic`, "insights_story", story, INSIGHTS_STORY_TTL_MS);
+  const story = await buildDeterministicStory();
+  await setInsightsCache(STORY_DETERMINISTIC_KEY, "insights_story", story, INSIGHTS_STORY_TTL_MS);
 
   return {
     mode: "deterministic",

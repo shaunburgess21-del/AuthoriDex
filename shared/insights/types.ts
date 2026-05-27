@@ -153,3 +153,56 @@ export interface InsightsEventPayload {
   action: string;
   params?: Record<string, unknown>;
 }
+
+export interface MarketsCalibrationBucket {
+  label: string;
+  predictedMid: number;
+  count: number;
+  actualWinRate: number;
+  avgBrier: number;
+}
+
+export interface MarketsCalibrationBlock {
+  buckets: MarketsCalibrationBucket[];
+  totalSettled: number;
+  excludedNoPrice: number;
+}
+
+export interface ContestedMarketPair {
+  label: string;
+  pct: number;
+}
+
+export interface ContestedMarket {
+  marketId: string;
+  slug: string;
+  title: string;
+  marketType: string;
+  engine: "amm" | "parimutuel";
+  score: number;
+  topPair: ContestedMarketPair[];
+}
+
+export interface ContestedMarketsBlock {
+  amm: ContestedMarket[];
+  parimutuel: ContestedMarket[];
+}
+
+export interface OpenInterestRow {
+  key: string;
+  label: string;
+  total: number;
+  marketCount: number;
+}
+
+export interface OpenInterestBlock {
+  total: number;
+  byMarketType: OpenInterestRow[];
+  byCategory: OpenInterestRow[];
+}
+
+export interface InsightsMarketsAnalytics {
+  calibration: MarketsCalibrationBlock;
+  contested: ContestedMarketsBlock;
+  openInterest: OpenInterestBlock;
+}

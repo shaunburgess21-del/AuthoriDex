@@ -37,8 +37,10 @@ import {
   LayoutDashboard,
   Flame,
   BookOpen,
+  LineChart,
 } from "lucide-react";
 import { CURRENCY } from "@/lib/currency";
+import { logInsightsEvent } from "@/lib/insights-telemetry";
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -174,6 +176,18 @@ function UserMenuContent({
         >
           <Trophy className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="text-sm">Top Predictors</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => {
+            logInsightsEvent("nav", "user_menu_click", { destination: "insights" });
+            handleNavClick("/insights");
+          }}
+          data-testid="link-insights-loggedout"
+        >
+          <LineChart className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <span className="text-sm">Insights</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
 
@@ -338,6 +352,18 @@ function UserMenuContent({
         >
           <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <span className="flex-1 text-sm">My Vox</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => {
+            logInsightsEvent("nav", "user_menu_click", { destination: "insights" });
+            handleNavClick("/insights");
+          }}
+          data-testid="link-insights"
+        >
+          <LineChart className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <span className="flex-1 text-sm">Insights</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         <button
