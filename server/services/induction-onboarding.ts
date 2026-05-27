@@ -14,6 +14,7 @@ import {
 } from "../jobs/market-generator";
 import { supabaseServer } from "../supabase";
 import { syncWinningAvatarForPerson } from "../lib/curateAvatar";
+import { resolvePostInductionAvatar } from "./induction-avatar-resolution";
 
 const BASELINE_RUN_ID = "induction-onboard";
 const BUCKET = "celebrity-large";
@@ -56,7 +57,9 @@ export async function runPostInductionOnboarding(args: {
       .from(celebrityImages)
       .where(eq(celebrityImages.personId, personId));
 
-    if (existingImages.length > 0) {
+    const hadCuratedImages = existingImages.length > 0;
+
+    if (hadCuratedImages) {
       // CMS already curated celebrity_images; do not re-import staging slots from storage.
       await syncWinningAvatarForPerson(personId);
     } else if (slug) {
@@ -109,14 +112,28 @@ export async function runPostInductionOnboarding(args: {
 
       if (insertedCount > 0) {
         console.log(`[induction-onboarding] Synced ${insertedCount} image(s) for ${displayName} (slug: ${slug})`);
+        await syncWinningAvatarForPerson(personId);
       }
     }
 
-    // --- Set avatar on tracked_people + trending_people ---
-    const avatarUrl = primaryUrl || tp.avatar || buildPublicUrl(slug, "1.webp");
+    const [refreshed] = await db
+      .select({ avatar: trackedPeople.avatar })
+      .from(trackedPeople)
+      .where(eq(trackedPeople.id, personId))
+      .limit(1);
 
-    if (avatarUrl && !tp.avatar) {
-      await db.update(trackedPeople).set({ avatar: avatarUrl }).where(eq(trackedPeople.id, personId));
+    const resolvedAvatar = resolvePostInductionAvatar({
+      hadCuratedImages,
+      syncedAvatar: refreshed?.avatar ?? null,
+      primaryUrl,
+      slugFallbackUrl: hadCuratedImages ? null : buildPublicUrl(slug, "1.webp"),
+    });
+
+    if (resolvedAvatar && !refreshed?.avatar) {
+      await db
+        .update(trackedPeople)
+        .set({ avatar: resolvedAvatar })
+        .where(eq(trackedPeople.id, personId));
     }
 
     await db
@@ -125,7 +142,7 @@ export async function runPostInductionOnboarding(args: {
         id: personId,
         name: tp.name,
         category: tp.category,
-        avatar: avatarUrl || tp.avatar || null,
+        avatar: resolvedAvatar,
         rank: 0,
         trendScore: 0,
         fameIndex: 0,
@@ -135,7 +152,7 @@ export async function runPostInductionOnboarding(args: {
         set: {
           name: tp.name,
           category: tp.category,
-          avatar: avatarUrl || tp.avatar || null,
+          ...(resolvedAvatar ? { avatar: resolvedAvatar } : {}),
         },
       });
 
@@ -179,7 +196,7 @@ export async function runPostInductionOnboarding(args: {
       id: personId,
       name: displayName,
       category,
-      avatar: tp.avatar || avatarUrl,
+      avatar: resolvedAvatar,
     });
     if (gainer === "no_market") {
       console.log(

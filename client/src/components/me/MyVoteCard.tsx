@@ -251,6 +251,7 @@ const PERSON_VOTE_TYPES = new Set([
   "sentiment",
   "value_vote",
   "image_curate",
+  "induction",
   "overall_rating",
 ]);
 

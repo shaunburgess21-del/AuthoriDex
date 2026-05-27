@@ -101,7 +101,7 @@ import {
 import { computeDriftDelta } from "./services/credit-drift";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
-import { enrichInductionCandidatesWithAvatars } from "./services/person-images";
+import { enrichInductionCandidatesWithAvatars, enrichInductionVoteRows } from "./services/person-images";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
@@ -8248,6 +8248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: inductionVotes.id,
             votedAt: inductionVotes.votedAt,
             candidateName: inductionCandidates.displayName,
+            imageSlug: inductionCandidates.imageSlug,
           })
           .from(inductionVotes)
           .leftJoin(inductionCandidates, eq(inductionCandidates.id, inductionVotes.candidateId))
@@ -8270,6 +8271,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .orderBy(desc(userVotes.votedAt))
           .limit(50),
       ]);
+
+      const enrichedIndVotes = await enrichInductionVoteRows(
+        indVotes.map((v) => ({
+          ...v,
+          candidateName: v.candidateName ?? "",
+          imageSlug: v.imageSlug ?? null,
+        })),
+      );
 
       const results: PublicVote[] = [];
 
@@ -8355,7 +8364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectImageSlug: v.imageSlug ?? null,
         });
       }
-      for (const v of indVotes) {
+      for (const v of enrichedIndVotes) {
         results.push({
           id: v.id,
           voteType: "induction",
@@ -8363,9 +8372,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           targetName: v.candidateName || "Candidate",
           detail: "Induction vote",
           createdAt: v.votedAt ?? new Date(),
-          subjectId: null,
-          subjectAvatar: null,
-          subjectImageSlug: null,
+          subjectId: v.subjectId,
+          subjectAvatar: v.subjectAvatar,
+          subjectImageSlug: v.subjectImageSlug,
         });
       }
       for (const v of ovRatings) {
@@ -8803,6 +8812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: inductionVotes.id,
             votedAt: inductionVotes.votedAt,
             candidateName: inductionCandidates.displayName,
+            imageSlug: inductionCandidates.imageSlug,
           })
           .from(inductionVotes)
           .leftJoin(inductionCandidates, eq(inductionCandidates.id, inductionVotes.candidateId))
@@ -8828,6 +8838,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .orderBy(desc(userVotes.votedAt))
           .limit(50) : Promise.resolve([]),
       ]);
+
+      const enrichedIndVotes = await enrichInductionVoteRows(
+        indVotes.map((v) => ({
+          ...v,
+          candidateName: v.candidateName ?? "",
+          imageSlug: v.imageSlug ?? null,
+        })),
+      );
 
       // TEMP DIAGNOSTIC: verify overall_rating row counts match between Drizzle
       // ORM and raw SQL for the authenticated user. Remove after root cause is
@@ -9062,7 +9080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      for (const v of indVotes) {
+      for (const v of enrichedIndVotes) {
         results.push({
           id: v.id,
           voteType: "induction",
@@ -9071,9 +9089,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           detail: "Induction vote",
           createdAt: v.votedAt ?? new Date(),
           hidden: false,
-          subjectId: null,
-          subjectAvatar: null,
-          subjectImageSlug: null,
+          subjectId: v.subjectId,
+          subjectAvatar: v.subjectAvatar,
+          subjectImageSlug: v.subjectImageSlug,
           alignedWithMajority: null,
         });
       }

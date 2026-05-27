@@ -9,6 +9,22 @@ import {
 } from "../server/services/induction-avatar-resolution";
 import { resolvePersonAvatarCandidates } from "../server/services/person-avatar-urls";
 
+function enrichInductionVoteRowsPure(
+  rows: { candidateName: string; imageSlug: string | null }[],
+  trackedRows: TrackedRowForInductionAvatar[],
+) {
+  const trackedByName = buildTrackedByNameForInduction(trackedRows);
+  return rows.map((row) => {
+    const tracked = trackedByName.get(inductionCandidateNameKey(row.candidateName));
+    return {
+      ...row,
+      subjectId: tracked?.id ?? null,
+      subjectImageSlug: row.imageSlug,
+      subjectAvatar: resolveInductionCandidateAvatar(tracked, row.imageSlug),
+    };
+  });
+}
+
 test("inductionCandidateNameKey normalizes display names", () => {
   assert.equal(inductionCandidateNameKey("  Michael Jordan  "), "michael jordan");
 });
@@ -59,6 +75,29 @@ test("resolveInductionCandidateAvatar falls back to celebrity-large when no trac
     url,
     "https://example.supabase.co/storage/v1/object/public/celebrity-large/scarlett-johansson/1.webp",
   );
+});
+
+test("enrichInductionVoteRowsPure attaches curated avatar and subjectId", () => {
+  const prev = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  const curated =
+    "https://example.supabase.co/storage/v1/object/public/public-images/curate-profile/p1/1.webp";
+  const enriched = enrichInductionVoteRowsPure(
+    [{ candidateName: "Michael Jordan", imageSlug: "michael-jordan" }],
+    [
+      {
+        id: "tp-1",
+        name: "Michael Jordan",
+        avatar: curated,
+        imageSlug: "michael-jordan",
+        status: "induction",
+      },
+    ],
+  );
+  process.env.SUPABASE_URL = prev;
+  assert.equal(enriched[0]!.subjectAvatar, curated);
+  assert.equal(enriched[0]!.subjectImageSlug, "michael-jordan");
+  assert.equal(enriched[0]!.subjectId, "tp-1");
 });
 
 test("resolvePersonAvatarCandidates orders stored avatar before convention slots", () => {

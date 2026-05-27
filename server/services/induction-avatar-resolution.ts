@@ -1,6 +1,7 @@
 import { resolvePersonAvatarUrl } from "./person-avatar-urls";
 
 export type TrackedRowForInductionAvatar = {
+  id?: string;
   name: string;
   avatar: string | null;
   imageSlug: string | null;
@@ -35,4 +36,19 @@ export function resolveInductionCandidateAvatar(
   candidateImageSlug: string | null | undefined,
 ): string | null {
   return resolvePersonAvatarUrl(tracked?.avatar ?? null, candidateImageSlug);
+}
+
+/**
+ * After post-induction onboarding sync, pick the avatar URL for trending_people.
+ * Curated celebrities must not fall back to celebrity-large slot URLs.
+ */
+export function resolvePostInductionAvatar(args: {
+  hadCuratedImages: boolean;
+  syncedAvatar: string | null;
+  primaryUrl: string | null;
+  slugFallbackUrl: string | null;
+}): string | null {
+  if (args.syncedAvatar) return args.syncedAvatar;
+  if (args.hadCuratedImages) return null;
+  return args.primaryUrl ?? args.slugFallbackUrl;
 }
