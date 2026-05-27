@@ -2,13 +2,13 @@ type GtagArgs = [command: string, ...params: any[]];
 
 declare global {
   interface Window {
-    dataLayer?: GtagArgs[];
+    dataLayer?: Array<IArguments | GtagArgs>;
     gtag?: (...args: GtagArgs) => void;
   }
 }
 
 const GA_SCRIPT_ID = "ga4-gtag-script";
-const measurementId = String((import.meta as any).env?.VITE_GA_MEASUREMENT_ID ?? "").trim();
+const measurementId = String(import.meta.env.VITE_GA_MEASUREMENT_ID ?? "").trim();
 
 let initialized = false;
 
@@ -30,8 +30,9 @@ export function initGoogleAnalytics(): void {
   window.dataLayer = window.dataLayer || [];
   window.gtag =
     window.gtag ||
-    function gtagProxy(...args: GtagArgs) {
-      window.dataLayer?.push(args);
+    function gtag() {
+      // gtag.js reads `arguments` objects from the queue — not plain arrays.
+      window.dataLayer?.push(arguments);
     };
 
   window.gtag("js", new Date() as any);
