@@ -154,7 +154,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Today's average Google Trends interest (0–100) — 24-hour mean of the Past 24 hours curve, normalized to this person's busiest hour (100 = peak). Low (under 30) = quiet day, Medium (30–59) = normal day, High (60+) = elevated day. The +/-% chip below shows whether the most recent 3 hours are above or below today's average — only displays when the difference is >10%. Refreshed every ~12 hours.";
+  "How much people are searching Google for this person today, on a scale of 0–100 against their own peak. High = busy day, Medium = normal, Low = quiet. The % change shows if the last few hours are trending up or down.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
