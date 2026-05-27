@@ -158,16 +158,6 @@ const WIKI_MOMENTUM_LEVEL_COPY =
 const TRENDS_LEVEL_COPY =
   "Live interest score (0–100) from Google Trends — mean of the last ~3 hours, normalized to this person's busiest hour in the past 24h (100 = peak). Matches the right edge of Google's 'Past 24 hours' curve. Low (under 25) = quiet, Medium (25–64) = normal, High (65+) = elevated. The +/-% chip shows how the last 3h compares to today's average — only when the difference is >10%. Refreshed about every 12 hours.";
 
-function formatTrendsRefreshedAgo(ageHours: number | null | undefined): string | null {
-  if (ageHours == null || !Number.isFinite(ageHours) || ageHours < 0) return null;
-  if (ageHours < 1) return "Just now";
-  if (ageHours < 24) {
-    const h = Math.round(ageHours);
-    return h === 1 ? "Refreshed 1h ago" : `Refreshed ${h}h ago`;
-  }
-  return "Updated yesterday";
-}
-
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
 //   High   = filled + glow + pulse
@@ -513,20 +503,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     : "steady";
   const trendsValue = hasTrendsData ? `${Math.round(trendsInterest * 10) / 10}` : "—";
   const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
-  const trendsRefreshedLabel = formatTrendsRefreshedAgo(signals.trends?.fetchedAgeHours);
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
           Awaiting first Google Trends data
         </p>
       )
-    : trendsRefreshedLabel
-      ? (
-          <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-refreshed">
-            {signals.trends?.carriedForward ? `${trendsRefreshedLabel} (cached)` : trendsRefreshedLabel}
-          </p>
-        )
-      : null;
+    : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
