@@ -23004,7 +23004,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .select()
         .from(inductionCandidates)
         .orderBy(desc(inductionCandidates.seedVotes));
-      res.json({ data: candidates, totalCount: candidates.length });
+      const data = await enrichInductionCandidatesWithAvatars(candidates);
+      res.json({ data, totalCount: data.length });
     } catch (error: any) {
       console.error("Error fetching admin induction candidates:", error);
       res.status(500).json({ error: "Failed to fetch induction candidates" });
