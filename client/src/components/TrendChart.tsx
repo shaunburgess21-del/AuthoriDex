@@ -27,10 +27,19 @@ export interface ActiveMarketOverlay {
   label: string;
 }
 
+export type TrendChartSeriesKey =
+  | "fameIndex"
+  | "wikiPageviews"
+  | "newsCount"
+  | "velocityScore"
+  | "massScore";
+
 interface TrendChartProps {
   personId: string;
   personName: string;
   activeMarkets?: ActiveMarketOverlay[];
+  /** Primary Y-axis series (default fameIndex). Compare tab uses alternate signals. */
+  seriesKey?: TrendChartSeriesKey;
 }
 
 interface HistoryDataPoint {
@@ -43,6 +52,9 @@ interface HistoryDataPoint {
   youtubeViews: number;
   spotifyFollowers: number;
   searchVolume: number;
+  wikiPageviews?: number;
+  velocityScore?: number;
+  massScore?: number;
 }
 
 const MONTHS = [
@@ -237,7 +249,17 @@ function ComparisonDataLoader({
 
 // ─── Main component ──────────────────────────────────────────────
 
-export function TrendChart({ personId, personName, activeMarkets }: TrendChartProps) {
+function seriesValue(dp: HistoryDataPoint, key: TrendChartSeriesKey): number {
+  const v = dp[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+export function TrendChart({
+  personId,
+  personName,
+  activeMarkets,
+  seriesKey = "fameIndex",
+}: TrendChartProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("7D");
   const [showMarketOverlay, setShowMarketOverlay] = useState(false);
 
@@ -292,8 +314,8 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
 
   const startScore = useMemo(() => {
     if (!historyData || historyData.length === 0) return 0;
-    return historyData[0].fameIndex;
-  }, [historyData]);
+    return seriesValue(historyData[0], seriesKey);
+  }, [historyData, seriesKey]);
 
   // ─── Merged data for multi-line chart ────────────────────────
   const mergedData = useMemo(() => {
@@ -325,7 +347,7 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
     let min = Infinity;
     let max = -Infinity;
     for (const row of mergedData) {
-      const v = row.fameIndex;
+      const v = row[seriesKey] ?? row.fameIndex;
       if (v < min) min = v;
       if (v > max) max = v;
       for (const cp of compared) {
@@ -684,7 +706,7 @@ export function TrendChart({ personId, personName, activeMarkets }: TrendChartPr
                     {/* Primary person area */}
                     <Area
                       type="linear"
-                      dataKey="fameIndex"
+                      dataKey={seriesKey}
                       stroke={focusedLine ? "hsl(var(--primary) / 0.4)" : "hsl(var(--primary))"}
                       strokeWidth={2}
                       fill="url(#trendGradient)"

@@ -414,6 +414,28 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/cron/refresh-insights-story", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runInsightsStoryCronRefresh } = await import("../jobs/insights-story-cron");
+      const result = await runInsightsStoryCronRefresh();
+      res.json({
+        success: true,
+        message: "Insights story refresh completed",
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Insights story refresh error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.post("/api/cron/refresh-why-trending", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
     try {

@@ -65,11 +65,23 @@ import {
   resolvePersonOg,
   resolveSentimentPollOg,
   resolveSiteOg,
+  resolveInsightsOg,
+  buildInsightsRankingsOgCopy,
+  buildInsightsDiscoverOgCopy,
   SITE_URL,
   SITE_NAME,
   DEFAULT_DESCRIPTION,
-  type AmmPriceChip,
 } from "../services/og-page-payload";
+import {
+  renderInsightsOgImage,
+  type InsightsOgRow,
+} from "../services/insights-og-image";
+import { loadInsightsRankings } from "../services/insights/rankings";
+import { loadDivergence, loadSingleSourceSurge } from "../services/insights/discover";
+import { parseFilters } from "@shared/insights/filters";
+import { INSIGHTS_SOURCE_LABELS } from "@shared/insights/constants";
+import type { InsightsDivergenceType } from "@shared/insights/types";
+import type { AmmPriceChip } from "../services/og-page-payload";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -1562,5 +1574,174 @@ ${xmlEntries.join("\n")}
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.send(`User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+  });
+
+  /* Insights OG — default splash with top-3 climbers */
+  app.get("/api/og/insights.png", async (_req: Request, res: Response) => {
+    try {
+      const filters = parseFilters("");
+      const ranking = await loadInsightsRankings(filters).catch(() => null);
+      const rows: InsightsOgRow[] =
+        (ranking?.rows ?? []).slice(0, 3).map((row) => ({
+          rank: row.rank,
+          name: row.name,
+          avatarUrl: row.avatar,
+          meta: row.category ?? undefined,
+        })) ?? [];
+      const png = await renderInsightsOgImage({
+        title: "VoxDex Insights",
+        subtitle: "Rankings, discover & your edge",
+        badge: "Insights",
+        rows,
+      });
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=900");
+      res.send(png);
+    } catch (err: any) {
+      console.error("[OG] Insights default image failed:", err?.message);
+      res.status(500).send("og render failed");
+    }
+  });
+
+  /* Insights OG — Rankings with the top-3 names from the requested view */
+  app.get("/api/og/insights/rankings.png", async (req: Request, res: Response) => {
+    try {
+      const qs = new URLSearchParams();
+      for (const key of ["source", "category", "window", "fav"]) {
+        const v = req.query[key];
+        if (typeof v === "string" && v) qs.set(key, v);
+      }
+      const search = qs.toString() ? `?${qs.toString()}` : "";
+      const filters = parseFilters(search);
+      const { title, subtitle } = buildInsightsRankingsOgCopy(search);
+
+      const ranking = await loadInsightsRankings(filters).catch(() => null);
+      const sourceLabel = INSIGHTS_SOURCE_LABELS[filters.source];
+      const rows: InsightsOgRow[] = (ranking?.rows ?? []).slice(0, 3).map((row) => {
+        const ratio =
+          filters.source === "news_momentum"
+            ? row.newsMomentum?.ratio
+            : filters.source === "wiki_momentum"
+              ? row.wikiMomentum?.ratio
+              : null;
+        const meta =
+          ratio != null
+            ? `${ratio.toFixed(2)}× ${sourceLabel.toLowerCase()}`
+            : row.category ?? undefined;
+        return {
+          rank: row.rank,
+          name: row.name,
+          avatarUrl: row.avatar,
+          meta,
+        };
+      });
+
+      const png = await renderInsightsOgImage({
+        title,
+        subtitle,
+        badge: "Insights",
+        rows,
+      });
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=900");
+      res.send(png);
+    } catch (err: any) {
+      console.error("[OG] Insights rankings image failed:", err?.message);
+      res.status(500).send("og render failed");
+    }
+  });
+
+  /* Insights OG — Discover (divergence type → top-3 names in that bucket) */
+  app.get("/api/og/insights/discover.png", async (req: Request, res: Response) => {
+    try {
+      const typeRaw = typeof req.query.type === "string" ? req.query.type : "";
+      const knownTypes = [
+        "rising_disliked",
+        "underrated_gaining",
+        "overrated_cooling",
+        "consensus",
+      ];
+      const qs = new URLSearchParams();
+      if (typeRaw) qs.set("type", typeRaw);
+      const { title, subtitle } = buildInsightsDiscoverOgCopy(
+        qs.toString() ? `?${qs.toString()}` : "",
+      );
+
+      let rows: InsightsOgRow[] = [];
+      if (knownTypes.includes(typeRaw)) {
+        const data = await loadDivergence(typeRaw as InsightsDivergenceType, 5).catch(
+          () => null,
+        );
+        rows =
+          (data?.rows ?? []).slice(0, 3).map((row) => ({
+            rank: row.rank,
+            name: row.name,
+            avatarUrl: row.avatar,
+            meta:
+              row.change7d != null
+                ? `${row.change7d > 0 ? "+" : ""}${row.change7d.toFixed(1)}% 7d`
+                : undefined,
+          })) ?? [];
+      } else {
+        const surge = await loadSingleSourceSurge(5).catch(() => []);
+        rows = (surge ?? []).slice(0, 3).map((row) => ({
+          rank: row.rank,
+          name: row.name,
+          avatarUrl: row.avatar,
+          meta: `${row.surgeSource} surge`,
+        }));
+      }
+
+      const png = await renderInsightsOgImage({
+        title,
+        subtitle,
+        badge: "Discover",
+        rows,
+      });
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=900");
+      res.send(png);
+    } catch (err: any) {
+      console.error("[OG] Insights discover image failed:", err?.message);
+      res.status(500).send("og render failed");
+    }
+  });
+
+  /** Crawler HTML for /insights and /explore share links (Vercel bot rewrite). */
+  app.get("/api/og/insights", async (req: Request, res: Response) => {
+    try {
+      const forwarded = String(req.query.path ?? req.headers["x-insights-path"] ?? "/insights");
+      const ogParams = new URLSearchParams(
+        typeof req.url === "string" && req.url.includes("?")
+          ? req.url.slice(req.url.indexOf("?") + 1)
+          : "",
+      );
+      ogParams.delete("path");
+      const search = ogParams.toString() ? `?${ogParams.toString()}` : "";
+      const result = await resolveInsightsOg({ pathname: forwarded, search });
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.send(renderOgHtml(result));
+    } catch (err: any) {
+      console.error("[OG] Insights HTML failed:", err?.message);
+      const fallback = await resolveSiteOg(`${SITE_URL}/insights`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(renderOgHtml(fallback));
+    }
+  });
+
+  /** Legacy query-param insights OG image (admin / previews). */
+  app.get("/api/og/image/insights.png", async (req: Request, res: Response) => {
+    try {
+      const title = String(req.query.title ?? "VoxDex Insights").slice(0, 80);
+      const subtitle = String(req.query.subtitle ?? "Rankings & movers by signal").slice(0, 80);
+      const png = await renderOgImage(title, subtitle, "Insights");
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.send(png);
+    } catch (err: any) {
+      console.error("[OG] Insights image render failed:", err?.message);
+      res.status(500).send("og render failed");
+    }
   });
 }

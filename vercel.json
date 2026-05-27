@@ -131,6 +131,28 @@
       "destination": "https://authoridex-production.up.railway.app/api/og/person/:id"
     },
     {
+      "source": "/insights",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/insights?path=/insights"
+    },
+    {
+      "source": "/explore",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|skypeuripreview|pinterest|redditbot|embedly|quora link preview|iframely|mastodon|nuzzel|vkshare|tumblr).*"
+        }
+      ],
+      "destination": "https://authoridex-production.up.railway.app/api/og/insights?path=/explore"
+    },
+    {
       "source": "/((?!api/|attached_assets/|.*\\.).*)",
       "destination": "/index.html"
     }

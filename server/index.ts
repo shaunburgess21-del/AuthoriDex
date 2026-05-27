@@ -821,6 +821,12 @@ async function startServer() {
     } else {
       log("[WhyTrendingRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-why-trending.");
     }
+
+    if (!SERVERLESS_MODE) {
+      startScheduler("InsightsStoryRefresh", startInsightsStoryRefreshScheduler);
+    } else {
+      log("[InsightsStoryRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-insights-story.");
+    }
   });
 }
 
@@ -1108,6 +1114,38 @@ function startWhyTrendingRefreshScheduler() {
     void runScheduledWhyTrendingRefresh();
     setInterval(() => void runScheduledWhyTrendingRefresh(), WHY_TRENDING_REFRESH_INTERVAL_MS);
   }, 3 * 60 * 1000);
+}
+
+const INSIGHTS_STORY_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function msUntilNextUtcHour(targetHour: number): number {
+  const now = new Date();
+  const next = new Date(now);
+  next.setUTCHours(targetHour, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next.getTime() - now.getTime();
+}
+
+async function runScheduledInsightsStoryRefresh(): Promise<void> {
+  try {
+    const { runInsightsStoryCronRefresh } = await import("./jobs/insights-story-cron");
+    const result = await runInsightsStoryCronRefresh();
+    log(`[InsightsStoryRefresh] OK — mode=${result.mode} headline="${result.headline}" duration=${result.durationMs}ms`);
+  } catch (err: any) {
+    log(`[InsightsStoryRefresh] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startInsightsStoryRefreshScheduler() {
+  if (SERVERLESS_MODE) return;
+  const initialDelay = msUntilNextUtcHour(6);
+  log(`[InsightsStoryRefresh] Starting (daily ~06:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`);
+  setTimeout(() => {
+    void runScheduledInsightsStoryRefresh();
+    setInterval(() => void runScheduledInsightsStoryRefresh(), INSIGHTS_STORY_REFRESH_INTERVAL_MS);
+  }, initialDelay);
 }
 
 startServer().catch((error) => {

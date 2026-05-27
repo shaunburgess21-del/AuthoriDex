@@ -130,7 +130,7 @@ import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
 import { minTierForCapability } from "./services/gamification-utils";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1400,6 +1400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerGamificationRoutes(app);
   registerShareRoutes(app);
   registerBadgesRoutes(app);
+  registerInsightsRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);
@@ -2148,6 +2149,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           spotifyFollowers: trendSnapshots.spotifyFollowers,
           searchVolume: trendSnapshots.searchVolume,
           wikiPageviews: trendSnapshots.wikiPageviews,
+          velocityScore: trendSnapshots.velocityScore,
+          massScore: trendSnapshots.massScore,
+          diagnostics: trendSnapshots.diagnostics,
         })
         .from(trendSnapshots)
         .where(and(
@@ -2160,17 +2164,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(daysNum * 24); // Max one per hour for requested days
       
       // Transform for graph display
-      const historyData = snapshots.reverse().map(snapshot => ({
-        timestamp: snapshot.timestamp.toISOString(),
-        date: snapshot.timestamp.toLocaleDateString(),
-        time: snapshot.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        trendScore: snapshot.trendScore,
-        fameIndex: snapshot.fameIndex,
-        newsCount: snapshot.newsCount,
-        youtubeViews: snapshot.youtubeViews,
-        spotifyFollowers: snapshot.spotifyFollowers,
-        searchVolume: snapshot.searchVolume,
-      }));
+      const historyData = snapshots.reverse().map(snapshot => {
+        const diag = snapshot.diagnostics as Record<string, unknown> | null;
+        const raw = diag?.raw as Record<string, unknown> | undefined;
+        const newsRatio = Number(raw?.newsMomentumRatio ?? 0);
+        const wikiRatio = Number(raw?.wikiMomentumRatio ?? 0);
+        const trendsRatio = Number(raw?.trendsMomentumRatio ?? 0);
+        let trendsLevel: "none" | "low" | "medium" | "high" = "none";
+        if (trendsRatio >= 2) trendsLevel = "high";
+        else if (trendsRatio >= 1) trendsLevel = "medium";
+        else if (trendsRatio > 0) trendsLevel = "low";
+
+        return {
+          timestamp: snapshot.timestamp.toISOString(),
+          date: snapshot.timestamp.toLocaleDateString(),
+          time: snapshot.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          trendScore: snapshot.trendScore,
+          fameIndex: snapshot.fameIndex,
+          newsCount: snapshot.newsCount,
+          youtubeViews: snapshot.youtubeViews,
+          spotifyFollowers: snapshot.spotifyFollowers,
+          searchVolume: snapshot.searchVolume,
+          wikiPageviews: snapshot.wikiPageviews,
+          velocityScore: snapshot.velocityScore,
+          massScore: snapshot.massScore,
+          signals: {
+            newsMomentumRatio: newsRatio > 0 ? newsRatio : null,
+            wikiMomentumRatio: wikiRatio > 0 ? wikiRatio : null,
+            trendsLevel,
+          },
+        };
+      });
 
       res.json(historyData);
     } catch (error) {

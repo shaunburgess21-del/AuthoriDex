@@ -98,6 +98,7 @@ const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceD
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
 const H2HDetailPage = lazyWithRetry(() => import("@/pages/H2HDetailPage"));
 const HowItWorksPage = lazyWithRetry(() => import("@/pages/HowItWorksPage"));
+const InsightsPage = lazyWithRetry(() => import("@/pages/InsightsPage"));
 const CreditHistoryPage = lazyWithRetry(() => import("@/pages/CreditHistoryPage"));
 const ShareBetRedirect = lazyWithRetry(
   () => import("@/pages/ShareBetRedirect"),
@@ -134,6 +135,8 @@ function Router() {
         <Route path="/unsubscribe" component={UnsubscribePage} />
         <Route path="/profile" component={UserProfilePage} />
         <Route path="/predict" component={PredictPage} />
+        <Route path="/insights" component={InsightsPage} />
+        <Route path="/explore" component={InsightsPage} />
         <Route path="/vote/value-rankings" component={ValueRankingsPage} />
         <Route path="/vote/induction" component={InductionQueuePage} />
         <Route path="/vote" component={VotePage} />

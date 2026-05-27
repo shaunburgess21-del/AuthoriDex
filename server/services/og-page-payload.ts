@@ -37,6 +37,11 @@ import {
   loadPersonOgContext,
   personOgDescription,
 } from "./person-og-context";
+import { parseFilters, parseTab } from "@shared/insights/filters";
+import {
+  INSIGHTS_DIVERGENCE_LABELS,
+  INSIGHTS_SOURCE_LABELS,
+} from "@shared/insights/constants";
 
 export const SITE_URL =
   process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://voxdex.com";
@@ -66,6 +71,7 @@ export type OgEntityType =
   | "matchup"
   | "person"
   | "bet_share"
+  | "insights"
   | "unknown";
 
 export interface OgPreviewResult extends OgPagePayload {
@@ -737,6 +743,99 @@ export async function resolveBetShareOg(betId: string): Promise<OgPreviewResult>
   );
 }
 
+function insightsImageUrl(
+  variant: "default" | "rankings" | "discover",
+  query: URLSearchParams,
+): string {
+  const qs = query.toString();
+  const suffix = qs ? `?${qs}` : "";
+  if (variant === "rankings") {
+    return `${SITE_URL}/api/og/insights/rankings.png${suffix}`;
+  }
+  if (variant === "discover") {
+    return `${SITE_URL}/api/og/insights/discover.png${suffix}`;
+  }
+  return `${SITE_URL}/api/og/insights.png`;
+}
+
+export function buildInsightsRankingsOgCopy(search: string): {
+  title: string;
+  subtitle: string;
+} {
+  const filters = parseFilters(search);
+  const sourceLabel = INSIGHTS_SOURCE_LABELS[filters.source];
+  const title = filters.category
+    ? `${sourceLabel} · ${filters.category}`
+    : `Rankings · ${sourceLabel}`;
+  const subtitle = filters.favouritesOnly
+    ? "Your favourites — VoxDex Insights"
+    : "Live rankings & signal movers on VoxDex";
+  return { title, subtitle };
+}
+
+export function buildInsightsDiscoverOgCopy(search: string): {
+  title: string;
+  subtitle: string;
+} {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const type = params.get("type") ?? "";
+  const title = type
+    ? (INSIGHTS_DIVERGENCE_LABELS[type] ?? "Discover")
+    : "Insights Discover";
+  const subtitle = "Crowd vs data stories on VoxDex";
+  return { title, subtitle };
+}
+
+export async function resolveInsightsOg(input: {
+  pathname?: string;
+  search?: string;
+}): Promise<OgPreviewResult> {
+  const pathname = input.pathname ?? "/insights";
+  const rawSearch = input.search ?? "";
+  const search = rawSearch.startsWith("?") ? rawSearch : rawSearch ? `?${rawSearch}` : "";
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const tab = parseTab(params);
+  const canonicalUrl = `${SITE_URL}${pathname}${search}`;
+
+  if (tab === "discover") {
+    const { title, subtitle } = buildInsightsDiscoverOgCopy(search);
+    const imageParams = new URLSearchParams();
+    const type = params.get("type");
+    if (type) imageParams.set("type", type);
+    return withPreviewMeta(
+      {
+        title: `${title} • VoxDex Insights`,
+        description: subtitle,
+        canonicalUrl,
+        imageUrl: insightsImageUrl("discover", imageParams),
+      },
+      "insights",
+      "discover",
+    );
+  }
+
+  const { title, subtitle } = buildInsightsRankingsOgCopy(search);
+  const imageParams = new URLSearchParams();
+  for (const key of ["source", "category", "window", "fav"]) {
+    const v = params.get(key);
+    if (v) imageParams.set(key, v);
+  }
+
+  return withPreviewMeta(
+    {
+      title: `${title} • VoxDex Insights`,
+      description: subtitle,
+      canonicalUrl,
+      imageUrl: insightsImageUrl(
+        tab === "rankings" || params.get("source") ? "rankings" : "default",
+        imageParams,
+      ),
+    },
+    "insights",
+    tab,
+  );
+}
+
 /**
  * Resolve OG payload from a public SPA pathname or full URL.
  */
@@ -794,6 +893,11 @@ export async function resolveOgPagePayload(input: {
   const betMatch = pathname.match(/^\/share\/bet\/([^/]+)\/?$/);
   if (betMatch) {
     return resolveBetShareOg(decodeURIComponent(betMatch[1]));
+  }
+
+  if (pathname === "/insights" || pathname === "/explore" || pathname.startsWith("/insights/")) {
+    const search = input.url?.includes("?") ? input.url.slice(input.url.indexOf("?")) : "";
+    return resolveInsightsOg({ pathname, search });
   }
 
   return fallbackPayload(

@@ -2383,3 +2383,19 @@ export type SiteAnnouncement = typeof siteAnnouncements.$inferSelect;
 export type InsertSiteAnnouncement = typeof siteAnnouncements.$inferInsert;
 
 export type SiteBannerStyle = "info" | "promo" | "warning";
+
+/** Product telemetry for Insights surfaces (pill clicks, quadrant taps, etc.). */
+export const insightsEvents = pgTable("insights_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => profiles.id, { onDelete: "set null" }),
+  surface: text("surface").notNull(),
+  action: text("action").notNull(),
+  params: jsonb("params").default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  surfaceCreatedIdx: index("insights_events_surface_created_idx").on(table.surface, table.createdAt),
+  userCreatedIdx: index("insights_events_user_created_idx").on(table.userId, table.createdAt),
+}));
+
+export type InsightsEvent = typeof insightsEvents.$inferSelect;
+export type InsertInsightsEvent = typeof insightsEvents.$inferInsert;

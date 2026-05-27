@@ -8,3 +8,4 @@ export { registerOgRoutes } from "./og-routes";
 export { registerAdminBrandingRoutes } from "./admin-branding-routes";
 export { registerShareRoutes } from "./share-routes";
 export { registerBadgesRoutes } from "./badges-routes";
+export { registerInsightsRoutes } from "./insights-routes";
