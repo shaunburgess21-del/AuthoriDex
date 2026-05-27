@@ -46,7 +46,18 @@ import {
   type TrendsBatchResult,
 } from "../providers/serpapi-trends";
 
-const GDELT_CANDIDATE_COUNT = 25;
+// How many people get a GDELT query each ingest cycle. The candidate set is
+// the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`, so
+// the actual unique count is roughly N..1.6N (lots of overlap on the head of
+// the list). At N=80 we cover ~120-135 of our ~161 tracked people, which
+// eliminates the structural sawtooth caused by people flapping in/out of the
+// gate (May 2026: people like Cristiano Ronaldo and Sydney Sweeney sit just
+// below the old N=25 cutoff and were getting 0 GDELT hours/day, leaving them
+// on Serper-only ~30 articles instead of GDELT+Serper ~130). GDELT is free,
+// no auth, no published rate limit; ~3k requests/day at N=80 is well within
+// polite usage. Tracked people not in the top-80 by either ranking still get
+// Serper + Mediastack as before.
+const GDELT_CANDIDATE_COUNT = 80;
 // Cutover for Google Trends scale changes. Snapshots persisted before this
 // timestamp are filtered out of the rolling baseline so legacy values from
 // previous windows don't poison the current scale. Override via env for
