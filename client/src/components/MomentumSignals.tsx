@@ -74,10 +74,9 @@ interface MomentumData {
       deltaPct: number;       // 24h change in *score* vs prior tick
       level: MomentumLevel;
     };
-    /** Google Trends interest signal — score-only card on `now 1-d` window
-     *  (May 2026 refresh). The card displays `interest` + level + freshness;
-     *  the dormant `momentum*` and `avg*` fields are kept for diagnostics
-     *  and a possible future Trends Momentum card. */
+    /** Google Trends interest signal on `now 1-d` window (May 2026 refresh).
+     *  The card displays `interest` + level + a +/-% chip derived from
+     *  `momentumRatio` (current 3h vs same-response 24h mean, ±10% dead zone). */
     trends?: {
       /** Mean of the last ~3 hourly points on the `now 1-d` series, 0..100. */
       interest: number;
@@ -89,7 +88,7 @@ interface MomentumData {
       /** Dormant intra-day acceleration: interest / max(avg7d, 1), capped 10×. */
       momentumRatio: number;
       momentumLevel: MomentumLevel;
-      /** @deprecated May 2026 — score-only card; always 0 from API. */
+      /** Signed % vs same-response 24h mean: (momentumRatio - 1) × 100, ±10% dead zone. */
       deltaPct: number;
       topicId: string | null;
       fetchedAgeHours?: number;
@@ -136,12 +135,10 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     return "high";
   }
   if (source === "trends") {
-    // `now 1-d` scale: 0–100 normalized to the person's busiest hour in the
-    // LAST 24h (matches Google Trends "Past 24 hours" view). Score is the
-    // mean of the last ~3 hourly points. Thresholds match TRENDS_LEVEL_COPY.
-    // Recalibrated May 2026 when we switched windows from `now 7-d`.
-    if (value < 30) return "low";
-    if (value < 60) return "medium";
+    // `now 1-d` scale: 0–100 normalized to busiest hour in past 24h.
+    // Recalibrated May 2026 from production p25/p50/p75 (26 / 52 / 67).
+    if (value < 25) return "low";
+    if (value < 65) return "medium";
     return "high";
   }
   if (value < 500) return "low";
@@ -159,7 +156,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Live interest score (0–100) from Google Trends — mean of the last ~3 hours, normalized to this person's busiest hour in the past 24h (100 = peak). Matches the right edge of Google's 'Past 24 hours' curve. Low (under 30) = quiet, Medium (30–59) = normal, High (60+) = elevated. Refreshed about every 12 hours.";
+  "Live interest score (0–100) from Google Trends — mean of the last ~3 hours, normalized to this person's busiest hour in the past 24h (100 = peak). Matches the right edge of Google's 'Past 24 hours' curve. Low (under 25) = quiet, Medium (25–64) = normal, High (65+) = elevated. The +/-% chip shows how the last 3h compares to today's average — only when the difference is >10%. Refreshed about every 12 hours.";
 
 function formatTrendsRefreshedAgo(ageHours: number | null | undefined): string | null {
   if (ageHours == null || !Number.isFinite(ageHours) || ageHours < 0) return null;
@@ -510,6 +507,10 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   const trendsLevel: MomentumLevel = hasTrendsData
     ? fallbackLevel("trends", trendsInterest)
     : "none";
+  const trendsDeltaPct = signals.trends?.deltaPct ?? 0;
+  const trendsTrend: TrendWord = hasTrendsData
+    ? (trendsDeltaPct > 0 ? "rising" : trendsDeltaPct < 0 ? "falling" : "steady")
+    : "steady";
   const trendsValue = hasTrendsData ? `${Math.round(trendsInterest * 10) / 10}` : "—";
   const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
   const trendsRefreshedLabel = formatTrendsRefreshedAgo(signals.trends?.fetchedAgeHours);
@@ -574,7 +575,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           level={trendsLevel}
           value={trendsValue}
           unit={trendsUnit}
-          hideDelta
+          deltaPct={trendsDeltaPct}
+          trendWord={trendsTrend}
           tooltip={
             <TouchTooltip
               side="top"

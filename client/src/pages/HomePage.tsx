@@ -748,7 +748,7 @@ interface PersonMomentumResponse {
 // symmetry with "Wiki Momentum". "Google Trends" added as a fifth signal
 // once the SerpApi integration landed.
 interface InsightSignal {
-  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum";
+  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum" | "Google Trends";
   deltaPct: number;
 }
 
@@ -1837,6 +1837,7 @@ export default function HomePage() {
       { label: "News" as const, deltaPct: selectedInsightMomentum.signals.news?.deltaPct ?? 0 },
       { label: "News Momentum" as const, deltaPct: selectedInsightMomentum.signals.momentum?.deltaPct ?? 0 },
       { label: "Wiki Momentum" as const, deltaPct: selectedInsightMomentum.signals.wikiMomentum?.deltaPct ?? 0 },
+      { label: "Google Trends" as const, deltaPct: selectedInsightMomentum.signals.trends?.deltaPct ?? 0 },
     ];
   }, [selectedInsightMomentum]);
 

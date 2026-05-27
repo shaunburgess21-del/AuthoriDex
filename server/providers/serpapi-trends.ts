@@ -1,5 +1,5 @@
 // ============================================================================
-// SerpApi Google Trends Provider (May 2026 — score-only refresh)
+// SerpApi Google Trends Provider (May 2026 — `now 1-d`, last-3h mean + intra-day momentum chip)
 // ============================================================================
 // Fetches Google Trends "Interest over time" timeseries via SerpApi's
 // google_trends engine. One query per call (no batching) so each person's
@@ -29,9 +29,11 @@ import {
 export type { TrendsTimeseriesPoint } from "./trends-window";
 export {
   computeTrendsCurrentInterest,
+  computeTrendsMomentumDeltaPct,
   shouldFetchGoogleTrends,
   TRENDS_DELTA_METHOD,
   TRENDS_FETCH_INTERVAL_MS,
+  TRENDS_MOMENTUM_DEAD_ZONE_PCT,
   TRENDS_SERPAPI_WINDOW,
 } from "./trends-window";
 

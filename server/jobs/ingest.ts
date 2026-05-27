@@ -2244,7 +2244,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : 0;
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
-        // Google Trends diagnostics (May 2026 — score-only card on `now 1-d`).
+        // Google Trends diagnostics (May 2026 — `now 1-d` window; UI chip derives
+        // from momentumRatio = current 3h / same-response 24h mean).
         // `trendsInterest` = mean of last ~3h on the now-1-d series.
         // `trendsAvg7d` field name is legacy; it now stores the 24h mean of
         // the same series (intra-day baseline for the dormant momentum ratio).

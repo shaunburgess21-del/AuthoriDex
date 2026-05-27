@@ -60,7 +60,7 @@ import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
-import { TRENDS_DELTA_METHOD } from "./providers/trends-window";
+import { computeTrendsMomentumDeltaPct, TRENDS_DELTA_METHOD } from "./providers/trends-window";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
@@ -3173,14 +3173,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Google Trends: score-only card on `now 1-d` window (May 2026 refresh).
-      // `trendsInterest` is the mean of the last ~3 hourly points, normalized
-      // to the person's busiest hour in the past 24h. The `trendsDeltaMethod`
-      // sentinel gates rendering so old snapshots from previous windows don't
-      // mix scales until they're refreshed by the next ingest tick (≤12h).
+      // Google Trends — `now 1-d` window (May 2026). `trendsInterest` = mean of
+      // last ~3h; `deltaPct` = (momentumRatio - 1) × 100 with ±10% dead zone,
+      // where momentumRatio = current3h / same-response 24h mean (no cross-fetch drift).
       const trendsDeltaMethod = trendsDiag?.raw?.trendsDeltaMethod;
       const trendsHasCurrentMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
-      const trendsDeltaPct = 0;
+      const trendsDeltaPct = computeTrendsMomentumDeltaPct(
+        trendsMomentumRatio,
+        trendsHasCurrentMethod,
+      );
 
       const trendsFetchedAtRaw = trendsDiag?.raw?.trendsFetchedAt;
       let trendsFetchedAgeHours: number | null = null;
@@ -3285,12 +3286,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
           },
-          // Google Trends — score-only activity card (May 2026 refresh).
-          // `interest` is the mean of the last ~3h on the `now 1-d` series
-          // (matches Google Trends "Past 24 hours" view). 0-100 normalized to
-          // the person's peak hour in that 24h window. deltaPct is always 0
-          // (UI hides the % pill); the dormant `momentumRatio` is the ratio
-          // of the last 3h vs the full 24h on the same series.
+          // Google Trends — activity card on `now 1-d` (May 2026 refresh).
+          // `interest` = last ~3h mean; `deltaPct` = vs same-response 24h mean.
           trends: trendsHasCurrentMethod && trendsInterest > 0 ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,

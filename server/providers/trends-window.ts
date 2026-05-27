@@ -10,7 +10,8 @@ export interface TrendsTimeseriesPoint {
  * 0-100 score is normalized to the person's busiest hour over the LAST 24h —
  * exactly matching the curve users see on Google Trends "Past 24 hours" view.
  * Day-over-day deltas (which were the only reason for the wider window) were
- * removed from the UI when we made the card score-only.
+ * dropped; the card's +/-% chip now derives from the intra-day momentumRatio
+ * (current 3h vs same-response 24h mean) instead.
  */
 export const TRENDS_SERPAPI_WINDOW = "now 1-d";
 
@@ -81,6 +82,30 @@ export function computeTrendsCurrentInterest(
     currentInterest: meanInterest(fallbackTail),
     avgWindowInterest: meanInterest(sorted),
   };
+}
+
+/** Default dead zone for UI display: hide +/-% chip when within this band of 1.0. */
+export const TRENDS_MOMENTUM_DEAD_ZONE_PCT = 10;
+
+/**
+ * Convert persisted `momentumRatio` (current 3h mean / same-response 24h mean) to a
+ * signed percent delta for pills and chips. Both inputs come from one SerpApi
+ * `now 1-d` response, so there is no fetch-over-fetch drift or time-of-day
+ * normalization mismatch.
+ *
+ * @param momentumRatio - interest / max(avg24hMean, 1), capped at 10× in ingest
+ * @param hasCurrentMethod - snapshot uses TRENDS_DELTA_METHOD sentinel
+ */
+export function computeTrendsMomentumDeltaPct(
+  momentumRatio: number,
+  hasCurrentMethod: boolean,
+  deadZonePct = TRENDS_MOMENTUM_DEAD_ZONE_PCT,
+): number {
+  if (!hasCurrentMethod || !Number.isFinite(momentumRatio) || momentumRatio <= 0) {
+    return 0;
+  }
+  const raw = Math.round((momentumRatio - 1) * 100);
+  return Math.abs(raw) <= deadZonePct ? 0 : raw;
 }
 
 // ---------------------------------------------------------------------------
