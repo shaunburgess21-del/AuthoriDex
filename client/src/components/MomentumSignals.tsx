@@ -75,13 +75,11 @@ interface MomentumData {
       level: MomentumLevel;
     };
     /** Google Trends interest signal on `now 1-d` window (May 2026 refresh).
-     *  The card displays `interest` + level + a +/-% chip derived from
-     *  `momentumRatio` (current 3h vs same-response 24h mean, ±10% dead zone). */
+     *  Card headline = `avg7d` (24h mean); +/-% chip = last 3h vs that mean. */
     trends?: {
-      /** Mean of the last ~3 hourly points on the `now 1-d` series, 0..100. */
+      /** Mean of the last ~3 hourly points — drives momentumRatio / chip only. */
       interest: number;
-      /** 24h mean of the same series (intra-day baseline). Field name is
-       *  legacy; semantics is "full-day mean", not a 7-day mean. */
+      /** 24h mean of the same series — card headline score. Legacy field name. */
       avg7d: number;
       /** Reserved (always 0 today). */
       avg90d: number;
@@ -135,10 +133,10 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     return "high";
   }
   if (source === "trends") {
-    // `now 1-d` scale: 0–100 normalized to busiest hour in past 24h.
-    // Recalibrated May 2026 from production p25/p50/p75 (26 / 52 / 67).
-    if (value < 25) return "low";
-    if (value < 65) return "medium";
+    // 24h-mean scale on `now 1-d` (May 2026). Population distribution
+    // p25=28.3, p50=47.9, p75=61.2 — thresholds for ~26/45/29 Low/Med/High.
+    if (value < 30) return "low";
+    if (value < 60) return "medium";
     return "high";
   }
   if (value < 500) return "low";
@@ -156,7 +154,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const TRENDS_LEVEL_COPY =
-  "Live interest score (0–100) from Google Trends — mean of the last ~3 hours, normalized to this person's busiest hour in the past 24h (100 = peak). Matches the right edge of Google's 'Past 24 hours' curve. Low (under 25) = quiet, Medium (25–64) = normal, High (65+) = elevated. The +/-% chip shows how the last 3h compares to today's average — only when the difference is >10%. Refreshed about every 12 hours.";
+  "Today's average Google Trends interest (0–100) — 24-hour mean of the Past 24 hours curve, normalized to this person's busiest hour (100 = peak). Low (under 30) = quiet day, Medium (30–59) = normal day, High (60+) = elevated day. The +/-% chip below shows whether the most recent 3 hours are above or below today's average — only displays when the difference is >10%. Refreshed every ~12 hours.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -492,17 +490,17 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     : null;
 
   // ── Google Trends Activity (May 2026) ──────────────────────────────────
-  const trendsInterest = signals.trends?.interest ?? 0;
-  const hasTrendsData = signals.trends != null && trendsInterest > 0;
+  const trendsAvg24h = signals.trends?.avg7d ?? 0; // 24h mean headline (legacy field name)
+  const hasTrendsData = signals.trends != null && trendsAvg24h > 0;
   const trendsLevel: MomentumLevel = hasTrendsData
-    ? fallbackLevel("trends", trendsInterest)
+    ? fallbackLevel("trends", trendsAvg24h)
     : "none";
   const trendsDeltaPct = signals.trends?.deltaPct ?? 0;
   const trendsTrend: TrendWord = hasTrendsData
     ? (trendsDeltaPct > 0 ? "rising" : trendsDeltaPct < 0 ? "falling" : "steady")
     : "steady";
-  const trendsValue = hasTrendsData ? `${Math.round(trendsInterest * 10) / 10}` : "—";
-  const trendsUnit = hasTrendsData ? "interest score" : "awaiting data";
+  const trendsValue = hasTrendsData ? `${Math.round(trendsAvg24h * 10) / 10}` : "—";
+  const trendsUnit = hasTrendsData ? "interest (24h avg)" : "awaiting data";
   const trendsFooter = !hasTrendsData
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
