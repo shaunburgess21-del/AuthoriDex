@@ -223,17 +223,29 @@ function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: stri
 type TrendWord = "rising" | "falling" | "steady";
 
 function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
-  // pct === 0 from the API usually means "no prior baseline to compare against"
-  // rather than "measured and genuinely flat" — render a neutral em-dash instead
-  // of asserting "flat", which previously appeared on almost every Wiki card.
-  if (!Number.isFinite(pct) || pct === 0) {
+  // Genuinely missing data (no prior snapshot, fetch failed, undefined) — keep
+  // the em-dash so it's visually distinct from a measured-flat reading.
+  if (!Number.isFinite(pct)) {
     return (
       <span
         className="text-[11px] font-medium text-muted-foreground/60 select-none"
         data-testid="badge-delta"
-        aria-label="No change data"
+        aria-label="Change unavailable"
       >
         —
+      </span>
+    );
+  }
+  // Measured, but inside the source's dead zone (±10% Trends, ±5% others) —
+  // show a neutral "Steady" instead of asserting "0%", which reads as noise.
+  if (pct === 0) {
+    return (
+      <span
+        className="text-[11px] font-medium text-muted-foreground/70 select-none"
+        data-testid="badge-delta"
+        aria-label="Steady — no notable change"
+      >
+        Steady
       </span>
     );
   }
