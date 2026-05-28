@@ -49,15 +49,14 @@ import {
 // How many people get a GDELT query each ingest cycle. The candidate set is
 // the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`, so
 // the actual unique count is roughly N..1.6N (lots of overlap on the head of
-// the list). At N=80 we cover ~120-135 of our ~161 tracked people, which
-// eliminates the structural sawtooth caused by people flapping in/out of the
-// gate (May 2026: people like Cristiano Ronaldo and Sydney Sweeney sit just
-// below the old N=25 cutoff and were getting 0 GDELT hours/day, leaving them
-// on Serper-only ~30 articles instead of GDELT+Serper ~130). GDELT is free,
-// no auth, no published rate limit; ~3k requests/day at N=80 is well within
-// polite usage. Tracked people not in the top-80 by either ranking still get
-// Serper + Mediastack as before.
-const GDELT_CANDIDATE_COUNT = 80;
+// Was 80 (top-80 by rank ∪ top-80 by wiki ≈ 106–120 people). Full-cohort
+// coverage (May 2026): every tracked person is eligible for fresh GDELT each
+// cycle so nobody churns in/out of the candidate set between hours (the main
+// remaining news sawtooth cause). Live fetches stay capped by the GDELT time
+// budget + adaptive spacing; people not refreshed this cycle fall back to the
+// 90-min reuse cache or stale cache (flat), not to zero. GDELT is free; cap
+// is intentionally >> roster size so `.slice(0, N)` returns everyone.
+const GDELT_CANDIDATE_COUNT = 1000;
 // Cutover for Google Trends scale changes. Snapshots persisted before this
 // timestamp are filtered out of the rolling baseline so legacy values from
 // previous windows don't poison the current scale. Override via env for
@@ -107,7 +106,7 @@ async function computeNewsCandidates(
     candidates.add(entry.id);
   }
 
-  console.log(`[Ingest] GDELT candidate gating: ${candidates.size} candidates (top ${GDELT_CANDIDATE_COUNT} by rank + top ${GDELT_CANDIDATE_COUNT} by wiki)`);
+  console.log(`[Ingest] GDELT candidate gating: ${candidates.size} candidates (rank ∪ wiki, cap ${GDELT_CANDIDATE_COUNT})`);
   return candidates;
 }
 
@@ -582,7 +581,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             gdeltCandidates,
             mediastackWidenCandidateIds: widenCandidateIds,
             gdeltIsDegraded,
-            gdeltTimeBudgetMs: 120000,
+            gdeltTimeBudgetMs: 180000,
             peopleSortedByRank: peopleSortedByRank.map(p => ({
               id: p.id,
               name: p.name,
