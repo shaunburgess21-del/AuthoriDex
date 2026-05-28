@@ -3215,7 +3215,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           trendsFetchedAgeHours = Math.round((Date.now() - fetchedMs) / (1000 * 60 * 60) * 10) / 10;
         }
       }
-      if (trendsHasCurrentMethod && (trendsInterest ?? 0) > 0) activeSources.push("trends");
+      // Freshness cutoff: the fallback above surfaces the most recent snapshot
+      // with trends data regardless of age, so once Google Trends fetches stop
+      // (e.g. the SerpApi plan is cancelled) the card would otherwise freeze on
+      // the last values forever. Hide it once the underlying fetch is older
+      // than TRENDS_MAX_AGE_HOURS so it sunsets gracefully. Env-tunable;
+      // default 36h (> the 12h fetch cadence plus a missed cycle).
+      const trendsMaxAgeHours = Number(process.env.TRENDS_MAX_AGE_HOURS) || 36;
+      const trendsIsFresh =
+        trendsFetchedAgeHours != null && trendsFetchedAgeHours <= trendsMaxAgeHours;
+      if (trendsHasCurrentMethod && (trendsInterest ?? 0) > 0 && trendsIsFresh) activeSources.push("trends");
 
       res.json({
         asOf: latest.timestamp.toISOString(),
@@ -3312,7 +3321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
           // Google Trends — activity card on `now 1-d` (May 2026 refresh).
           // `interest` = last ~3h mean; `deltaPct` = vs same-response 24h mean.
-          trends: trendsHasCurrentMethod && trendsInterest > 0 ? {
+          trends: trendsHasCurrentMethod && trendsInterest > 0 && trendsIsFresh ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,
             avg90d: Math.round(trendsAvg90dVal * 10) / 10,
