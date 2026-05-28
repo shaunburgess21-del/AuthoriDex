@@ -9,6 +9,8 @@ import {
   normalizeNewsMomentum,
   normalizeWikiMomentum,
   normalizeTrendsMomentum,
+  normalizeSearchVolumeMass,
+  getSearchVolumeMassWeight,
 } from "./normalize";
 import {
   normalizeMass,
@@ -86,6 +88,14 @@ export interface TrendInputs {
   /** Trailing 7-day average daily Google Trends interest (0-100). */
   trendsAvg7d?: number;
 
+  /**
+   * Absolute average monthly Google searches for this person (DataForSEO
+   * Google Ads search volume). May 2026 — blended into the wiki/attention
+   * MASS slot via `normalizeSearchVolumeMass` + `getSearchVolumeMassWeight`.
+   * When 0/undefined the mass score is full wiki (no blend, no penalty).
+   */
+  searchVolumeMonthly?: number;
+
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   prevNewsCount?: number;
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
@@ -152,6 +162,16 @@ export interface TrendScoreResult {
   /** Always 0 — spike detection is gone. Kept for caller compatibility. */
   spikingSourceCount: number;
   massScore: number;
+  /**
+   * Google Ads search-volume mass sub-score (0..100) before weighting.
+   * May 2026 — persisted for diagnostics / weight audits. 0 when no data.
+   */
+  searchVolumeMassScore: number;
+  /**
+   * Blended wiki+search attention mass (0..100) that actually fed `massScore`.
+   * Equals the wiki mass when search volume is absent. May 2026.
+   */
+  attentionMassScore: number;
   velocityScore: number;
   /** Equal to velocityScore. Kept for caller compatibility. */
   velocityAdjusted: number;
@@ -232,6 +252,17 @@ export function computeTrendScore(
     ? normalizeMass(wikiPageviewsForMass * 365)
     : 0;
 
+  // Google Ads search volume → mass (May 2026). Absolute monthly searches,
+  // annualised onto the same log curve as wiki. Blended into the wiki/attention
+  // slot ONLY when a meaningful signal exists, so wiki-strong / low-search
+  // people aren't penalised by a zero. Weight is env-tunable + inert without
+  // DataForSEO data (searchVolumeMassScore == 0).
+  const searchVolumeMassScore = normalizeSearchVolumeMass(inputs.searchVolumeMonthly ?? 0);
+  const searchVolumeMassWeight = getSearchVolumeMassWeight();
+  const attentionMassScore = searchVolumeMassScore > 0
+    ? wikiMassScore * (1 - searchVolumeMassWeight) + searchVolumeMassScore * searchVolumeMassWeight
+    : wikiMassScore;
+
   const followerScore = inputs.totalFollowers
     ? normalizeMass(inputs.totalFollowers)
     : 0;
@@ -244,11 +275,11 @@ export function computeTrendScore(
     const youtubeMassContrib = inputs.activePlatforms.youtube
       ? followerScore * PLATFORM_WEIGHTS.mass.youtube
       : 0;
-    massScore = (wikiMassScore * PLATFORM_WEIGHTS.mass.wiki)
+    massScore = (attentionMassScore * PLATFORM_WEIGHTS.mass.wiki)
       + instagramMassContrib
       + youtubeMassContrib;
   } else {
-    massScore = wikiMassScore;
+    massScore = attentionMassScore;
   }
 
   // ---- 2. Velocity score --------------------------------------------------
@@ -405,6 +436,8 @@ export function computeTrendScore(
     stabDetail: null,
     spikingSourceCount: 0,
     massScore: Math.round(massScore * 100) / 100,
+    searchVolumeMassScore: Math.round(searchVolumeMassScore * 100) / 100,
+    attentionMassScore: Math.round(attentionMassScore * 100) / 100,
     velocityScore: Math.round(velocityScore * 100) / 100,
     velocityAdjusted: Math.round(velocityScore * 100) / 100,
     confidence: Math.round(confidence * 100) / 100,

@@ -1,3 +1,5 @@
+import { normalizeMass } from "./utils";
+
 // ============================================================================
 // SCORING ENGINE — Normalization, Platform Weights, Allocations
 // ============================================================================
@@ -177,6 +179,36 @@ export function computeMomentumLevel(ratio: number): MomentumLevel {
   if (ratio < 1.0) return "low";
   if (ratio < 2.0) return "medium";
   return "high";
+}
+
+// ============================================================================
+// GOOGLE SEARCH VOLUME → MASS (May 2026 — DataForSEO Google Ads search volume)
+// ============================================================================
+// Absolute average monthly Google searches for a person, blended into the
+// wiki/attention half of the MASS score. Unlike Google Trends (relative 0-100,
+// self-normalised per person → not cross-comparable, retired from scoring),
+// Google Ads search volume is an absolute count on one shared scale, so it's a
+// legitimate cross-person popularity signal.
+//
+// We annualise the monthly figure (×12) so it lands on the SAME log curve as
+// wiki mass (which annualises daily pageviews ×365). normalizeMass floors at
+// 10,000 raw (≈833 searches/mo) and saturates at 1e9 — i.e. people with
+// negligible search volume contribute 0 and aren't penalised.
+export function normalizeSearchVolumeMass(monthlySearchVolume: number): number {
+  if (!Number.isFinite(monthlySearchVolume) || monthlySearchVolume <= 0) return 0;
+  return normalizeMass(monthlySearchVolume * 12);
+}
+
+// Fraction of the wiki/attention MASS slot that Google search volume takes when
+// a person has a (nonzero-normalised) search-volume signal. 0 disables the
+// blend (full wiki). Env-overridable (SEARCH_VOLUME_MASS_WEIGHT) for instant
+// tuning / rollback without a redeploy. Inert until DataForSEO data is present,
+// so the feature can ship before the weight is trusted.
+export const SEARCH_VOLUME_MASS_WEIGHT_DEFAULT = 0.30;
+export function getSearchVolumeMassWeight(): number {
+  const raw = Number(process.env.SEARCH_VOLUME_MASS_WEIGHT);
+  if (!Number.isFinite(raw) || raw < 0 || raw > 1) return SEARCH_VOLUME_MASS_WEIGHT_DEFAULT;
+  return raw;
 }
 
 // Score composition: 40% mass, 60% velocity (velocity-heavy for "trending" feel).

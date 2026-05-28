@@ -45,6 +45,13 @@ import {
   TRENDS_SERPAPI_WINDOW,
   type TrendsBatchResult,
 } from "../providers/serpapi-trends";
+import {
+  fetchSearchVolumeBatch,
+  isDataForSeoConfigured,
+  getDataForSeoRunStats,
+  resetDataForSeoRunStats,
+  shouldFetchSearchVolume,
+} from "../providers/dataforseo";
 
 // How many people get a GDELT query each ingest cycle. The candidate set is
 // the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`.
@@ -997,6 +1004,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       trendsWindow: string;
     }>();
 
+    // Newest snapshot per person carrying a DataForSEO search-volume reading.
+    // Search volume is fetched on a daily gate; intervening hourly ticks carry
+    // the last value forward so the mass blend stays populated (mirrors the
+    // Google Trends carry-forward pattern).
+    const latestSearchVolumeDiagMap = new Map<string, {
+      searchVolume: number;
+      fetchedAt: string;
+    }>();
+
     for (const snap of historicalSnapshots) {
       const snapTime = new Date(snap.timestamp).getTime();
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
@@ -1053,6 +1069,26 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 : snapAt.toISOString(),
             trendsDeltaMethod: TRENDS_DELTA_METHOD,
             trendsWindow: String(raw?.trendsWindow ?? TRENDS_SERPAPI_WINDOW),
+          });
+        }
+      }
+
+      const carriedSearchVolume = raw?.googleSearchVolume;
+      if (
+        carriedSearchVolume != null
+        && carriedSearchVolume !== "null"
+        && Number(carriedSearchVolume) > 0
+      ) {
+        const snapAt = new Date(snap.timestamp);
+        const existingSv = latestSearchVolumeDiagMap.get(snap.personId);
+        const svFetchedAt =
+          typeof raw?.googleSearchVolumeFetchedAt === "string" && raw.googleSearchVolumeFetchedAt
+            ? raw.googleSearchVolumeFetchedAt
+            : snapAt.toISOString();
+        if (!existingSv || new Date(svFetchedAt).getTime() > new Date(existingSv.fetchedAt).getTime()) {
+          latestSearchVolumeDiagMap.set(snap.personId, {
+            searchVolume: Number(carriedSearchVolume),
+            fetchedAt: svFetchedAt,
           });
         }
       }
@@ -1717,6 +1753,70 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // GOOGLE SEARCH VOLUME — DataForSEO Google Ads, daily cadence (May 2026)
+    // ══════════════════════════════════════════════════════════════════════════
+    // Absolute monthly search volume per person → MASS sub-signal (blended into
+    // the wiki/attention slot in computeTrendScore). One batch call covers the
+    // whole roster for a flat $0.05; gated to once per day (search volume is a
+    // monthly metric). Between fetches the value is carried forward from the
+    // last snapshot (latestSearchVolumeDiagMap). Inert without credentials.
+    const searchVolumeDataMap = new Map<string, number>();
+
+    if (isDataForSeoConfigured() && !isBackfill) {
+      let shouldFetchSV = true;
+      let lastSVFetchAt: Date | null = null;
+      try {
+        const lastSVRow = await db.execute(
+          sql`SELECT MAX((diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt')::timestamptz) AS last_fetch_ts
+              FROM trend_snapshots
+              WHERE snapshot_origin = 'ingest'
+                AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' IS NOT NULL
+                AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' <> ''`,
+        );
+        const lastFetchRaw = (lastSVRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+        if (lastFetchRaw) {
+          const parsed = new Date(lastFetchRaw);
+          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+            lastSVFetchAt = parsed;
+          }
+        }
+        shouldFetchSV = shouldFetchSearchVolume(lastSVFetchAt);
+        if (!shouldFetchSV && lastSVFetchAt) {
+          const elapsedMin = Math.round((Date.now() - lastSVFetchAt.getTime()) / 60000);
+          console.log(`[Ingest] Search volume: skipping — last DataForSEO fetch ${elapsedMin}min ago (gate: 24h)`);
+        }
+      } catch (e) {
+        console.warn("[Ingest] Search volume gate check failed, will fetch:", (e as Error).message);
+      }
+
+      if (shouldFetchSV) {
+        resetDataForSeoRunStats();
+        const svStart = Date.now();
+        try {
+          const results = await fetchSearchVolumeBatch(
+            people.map(p => ({ personId: p.id, name: p.name, keywordOverride: p.searchQueryOverride })),
+          );
+          for (const [pid, vol] of results) searchVolumeDataMap.set(pid, vol);
+          const svStats = getDataForSeoRunStats();
+          const coveredCount = [...results.values()].filter(v => v > 0).length;
+          const coverage = people.length > 0 ? coveredCount / people.length : 0;
+          if (coveredCount === 0) sourceStatuses.searchVolume = "FAILED";
+          else if (coverage >= 0.7) sourceStatuses.searchVolume = "OK";
+          else sourceStatuses.searchVolume = "DEGRADED";
+          console.log(`[Ingest] Search volume: ${coveredCount}/${people.length} people with volume, ${svStats.callsAttempted} API calls, $${svStats.totalCostUsd}, ${Date.now() - svStart}ms`);
+        } catch (e) {
+          console.error("[Ingest] Search volume batch fetch failed:", (e as Error).message);
+          sourceStatuses.searchVolume = "FAILED";
+        }
+        sourceTimings.searchVolume = Date.now() - svStart;
+      } else {
+        sourceStatuses.searchVolume = "SKIPPED";
+      }
+    } else if (!isDataForSeoConfigured()) {
+      sourceStatuses.searchVolume = "SKIPPED";
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // GOOGLE TRENDS HISTORY — fallback denominator when SerpApi fetch is skipped
     // ══════════════════════════════════════════════════════════════════════════
     // Fresh fetches supply the intra-day baseline directly from the returned
@@ -2129,10 +2229,23 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const news7dForScoring =
           smoothLastNTicks(news7dSeries, NEWS_SMOOTHING_WINDOW) ?? rawNews7dForScoring;
 
+        // DataForSEO search volume: fresh value this cycle, else last carried.
+        // Resolved once so the score input and the persisted diagnostics agree.
+        const svFreshValue = searchVolumeDataMap.get(person.id);
+        const svHasFresh = typeof svFreshValue === "number" && svFreshValue > 0;
+        const svCarried = latestSearchVolumeDiagMap.get(person.id);
+        const searchVolumeForPerson = svHasFresh
+          ? svFreshValue!
+          : (svCarried?.searchVolume ?? 0);
+        const searchVolumeFetchedAtIso = svHasFresh
+          ? now.toISOString()
+          : (svCarried?.fetchedAt ?? null);
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
           wikiAverageDaily7d: wikiAvg7dExcludingToday,
+          searchVolumeMonthly: searchVolumeForPerson,
           trendsInterest: (() => {
             const carried = latestTrendsDiagMap.get(person.id);
             if (trends && (trends.currentInterest > 0 || trends.timeseries.length > 0)) {
@@ -2329,6 +2442,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 : "provider",
             news7dSamples: news7dHistorySamplesMap.get(person.id) ?? 0,
             search: serper?.searchVolume ?? 0,
+            // DataForSEO Google Ads absolute monthly search volume (mass
+            // sub-signal). Only persisted when present so absence is
+            // distinguishable from a real zero; carried forward between the
+            // daily DataForSEO fetches. `googleSearchVolumeFetchedAt` gates the
+            // next fetch and orders carry-forward.
+            ...(searchVolumeForPerson > 0 ? {
+              googleSearchVolume: searchVolumeForPerson,
+              googleSearchVolumeFresh: svHasFresh,
+              ...(searchVolumeFetchedAtIso ? { googleSearchVolumeFetchedAt: searchVolumeFetchedAtIso } : {}),
+            } : {}),
           },
           fresh: {
             wiki: !!wiki,
