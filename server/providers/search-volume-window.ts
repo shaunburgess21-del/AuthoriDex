@@ -58,6 +58,45 @@ export function isInvalidKeywordTaskError(task: any): boolean {
 }
 
 /**
+ * Per-person search-volume reading. `volume` is the trailing-12-month average
+ * monthly searches (Google Ads `search_volume`) — the stable headline + score
+ * input. `momDeltaPct` is the most recent completed month vs the prior month,
+ * derived from the same response's `monthly_searches` series (0 when unknown).
+ */
+export interface SearchVolumeDatum {
+  volume: number;
+  momDeltaPct: number;
+}
+
+/**
+ * Month-over-month % change from a DataForSEO `monthly_searches` array (latest
+ * completed month vs the prior one). Returns 0 when there aren't two usable
+ * months or the prior month is zero. Note: Google Ads volumes are quantised
+ * into tiers, so real moves tend to be chunky (~±20%) — callers should apply a
+ * dead zone before display.
+ */
+export function computeMoMDeltaPct(
+  monthlySearches: Array<{ year?: number; month?: number; search_volume?: number | null }> | null | undefined,
+): number {
+  if (!Array.isArray(monthlySearches)) return 0;
+  const usable = monthlySearches
+    .filter(
+      (m) =>
+        m != null &&
+        typeof m.year === "number" &&
+        typeof m.month === "number" &&
+        typeof m.search_volume === "number" &&
+        Number.isFinite(m.search_volume),
+    )
+    .sort((a, b) => (b.year! - a.year!) || (b.month! - a.month!));
+  if (usable.length < 2) return 0;
+  const latest = usable[0].search_volume as number;
+  const prev = usable[1].search_volume as number;
+  if (!(prev > 0)) return 0;
+  return ((latest - prev) / prev) * 100;
+}
+
+/**
  * Parse a `search_volume/live` response into personId → monthly search volume.
  * Tolerant of nulls/missing fields; unknown keywords are ignored. Exported for
  * unit testing against fixture payloads.
@@ -65,8 +104,8 @@ export function isInvalidKeywordTaskError(task: any): boolean {
 export function parseSearchVolumeResponse(
   json: any,
   keywordToPersonId: Map<string, string>,
-): Map<string, number> {
-  const out = new Map<string, number>();
+): Map<string, SearchVolumeDatum> {
+  const out = new Map<string, SearchVolumeDatum>();
   const tasks = json?.tasks;
   if (!Array.isArray(tasks)) return out;
   for (const task of tasks) {
@@ -78,9 +117,13 @@ export function parseSearchVolumeResponse(
       const personId = keywordToPersonId.get(normalizeKeyword(kw));
       if (!personId) continue;
       const sv = item?.search_volume;
-      const vol = typeof sv === "number" && Number.isFinite(sv) && sv > 0 ? sv : 0;
-      // Keep the max if two inputs collapse to the same normalised keyword.
-      out.set(personId, Math.max(out.get(personId) ?? 0, vol));
+      const volume = typeof sv === "number" && Number.isFinite(sv) && sv > 0 ? sv : 0;
+      const momDeltaPct = computeMoMDeltaPct(item?.monthly_searches);
+      // Keep the higher-volume datum if two inputs collapse to one keyword.
+      const existing = out.get(personId);
+      if (!existing || volume > existing.volume) {
+        out.set(personId, { volume, momDeltaPct });
+      }
     }
   }
   return out;

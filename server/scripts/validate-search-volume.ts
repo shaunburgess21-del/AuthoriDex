@@ -38,19 +38,21 @@ async function main() {
 
   const rows = people
     .map((p) => {
-      const vol = volumes.get(p.id) ?? 0;
-      return { name: p.name, vol, mass: normalizeSearchVolumeMass(vol) };
+      const datum = volumes.get(p.id);
+      const vol = datum?.volume ?? 0;
+      return { name: p.name, vol, mom: datum?.momDeltaPct ?? 0, mass: normalizeSearchVolumeMass(vol) };
     })
     .sort((a, b) => b.vol - a.vol);
 
   const withData = rows.filter((r) => r.vol > 0).length;
   const zero = rows.length - withData;
 
-  console.log("RANK  MONTHLY SEARCHES   MASS(0-100)  NAME");
-  console.log("----  ----------------   -----------  --------------------------------");
+  console.log("RANK  MONTHLY SEARCHES   MASS(0-100)   MoM%   NAME");
+  console.log("----  ----------------   -----------   ----   --------------------------------");
   rows.forEach((r, i) => {
+    const mom = r.vol > 0 ? `${r.mom >= 0 ? "+" : ""}${Math.round(r.mom)}` : "";
     console.log(
-      `${String(i + 1).padStart(4)}  ${String(r.vol).padStart(16)}   ${r.mass.toFixed(1).padStart(11)}  ${r.name}`,
+      `${String(i + 1).padStart(4)}  ${String(r.vol).padStart(16)}   ${r.mass.toFixed(1).padStart(11)}   ${mom.padStart(5)}   ${r.name}`,
     );
   });
 

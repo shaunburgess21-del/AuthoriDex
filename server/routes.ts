@@ -3232,8 +3232,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // carries it forward between the daily fetches); fall back to the most
       // recent snapshot that has it, mirroring the trends lookup. Level is a
       // simple absolute-volume tier (cross-person comparable, unlike Trends).
-      let searchVolumeRaw = diag?.raw?.googleSearchVolume;
-      if (searchVolumeRaw == null) {
+      let searchVolumeDiagRaw = diag?.raw;
+      if (searchVolumeDiagRaw?.googleSearchVolume == null) {
         const [svSnap] = await db
           .select({ diagnostics: trendSnapshots.diagnostics })
           .from(trendSnapshots)
@@ -3245,15 +3245,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .orderBy(desc(trendSnapshots.timestamp))
           .limit(1);
         if (svSnap) {
-          searchVolumeRaw = (svSnap.diagnostics as Record<string, any> | null)?.raw?.googleSearchVolume;
+          searchVolumeDiagRaw = (svSnap.diagnostics as Record<string, any> | null)?.raw;
         }
       }
-      const searchVolumeMonthly = Number(searchVolumeRaw ?? 0);
+      const searchVolumeMonthly = Number(searchVolumeDiagRaw?.googleSearchVolume ?? 0);
       const searchVolumeLevel =
         searchVolumeMonthly >= 500000 ? "high"
           : searchVolumeMonthly >= 100000 ? "medium"
             : searchVolumeMonthly > 0 ? "low"
               : "none";
+      // Month-over-month change (latest completed month vs prior). Google Ads
+      // volumes are tier-quantised, so apply an ±8% dead zone to suppress noise
+      // and only assert a direction on a real tier move.
+      const searchVolumeMoMRaw = Number(searchVolumeDiagRaw?.googleSearchVolumeMoMDeltaPct ?? 0);
+      const searchVolumeDeltaPct =
+        Number.isFinite(searchVolumeMoMRaw) && Math.abs(Math.round(searchVolumeMoMRaw)) > 8
+          ? Math.round(searchVolumeMoMRaw)
+          : 0;
       if (searchVolumeMonthly > 0) activeSources.push("searchVolume");
 
       res.json({
@@ -3364,9 +3372,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } : undefined,
           // Search Interest — absolute monthly Google searches (DataForSEO).
           // Cross-person popularity signal; replaces the Google Trends card.
+          // deltaPct = month-over-month (dead-zoned); 0 = steady/unknown.
           searchVolume: searchVolumeMonthly > 0 ? {
             monthly: searchVolumeMonthly,
             level: searchVolumeLevel,
+            deltaPct: searchVolumeDeltaPct,
           } : undefined,
           drivers: {
             status: driversStatus,

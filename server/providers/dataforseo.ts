@@ -27,6 +27,7 @@ import {
   toApiKeyword,
   isInvalidKeywordTaskError,
   parseSearchVolumeResponse,
+  type SearchVolumeDatum,
 } from "./search-volume-window";
 
 export {
@@ -36,6 +37,8 @@ export {
   sanitizeKeyword,
   toApiKeyword,
   parseSearchVolumeResponse,
+  computeMoMDeltaPct,
+  type SearchVolumeDatum,
 } from "./search-volume-window";
 
 const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN;
@@ -157,7 +160,7 @@ function authHeader(): string {
 async function collectVolumes(
   keywords: string[],
   keywordToPersonId: Map<string, string>,
-): Promise<Map<string, number>> {
+): Promise<Map<string, SearchVolumeDatum>> {
   if (keywords.length === 0) return new Map();
   const json = await dfsFetch(keywords);
   if (!json) return new Map();
@@ -252,13 +255,14 @@ async function dfsFetch(keywords: string[]): Promise<any | null> {
 
 /**
  * Fetch absolute average monthly Google search volume for each person. Returns
- * personId → monthly volume (people with no/zero data are simply absent).
- * Batches into ≤1000-keyword requests (each a flat $0.05). A successful merged
- * batch is cached for ~20h so a same-day re-run doesn't re-bill.
+ * personId → { volume, momDeltaPct } (people with no/zero data are simply
+ * absent). Batches into ≤1000-keyword requests (each a flat $0.05). A
+ * successful merged batch is cached for ~20h so a same-day re-run doesn't
+ * re-bill.
  */
 export async function fetchSearchVolumeBatch(
   people: SearchVolumeInput[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, SearchVolumeDatum>> {
   if (!isDataForSeoConfigured()) {
     console.warn("[DataForSEO] DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD not set — skipping search volume fetch");
     return new Map();
@@ -277,22 +281,26 @@ export async function fetchSearchVolumeBatch(
   }
   const keywords = Array.from(keywordToPersonId.keys());
 
+  // Cache key bumped to v2 when the stored shape changed from a plain volume
+  // number to { volume, momDeltaPct }. Old-shape entries are skipped on read.
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `dataforseo:sv:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
+  const cacheKey = `dataforseo:sv2:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
   const cached = await getCached(cacheKey);
   if (cached && typeof cached === "object") {
-    const out = new Map<string, number>();
-    for (const [pid, vol] of Object.entries(cached as Record<string, number>)) {
-      if (typeof vol === "number" && Number.isFinite(vol)) out.set(pid, vol);
+    const out = new Map<string, SearchVolumeDatum>();
+    for (const [pid, datum] of Object.entries(cached as Record<string, any>)) {
+      if (datum && typeof datum.volume === "number" && Number.isFinite(datum.volume)) {
+        out.set(pid, { volume: datum.volume, momDeltaPct: Number(datum.momDeltaPct ?? 0) });
+      }
     }
     if (out.size > 0) return out;
   }
 
-  const merged = new Map<string, number>();
+  const merged = new Map<string, SearchVolumeDatum>();
   for (let i = 0; i < keywords.length; i += MAX_KEYWORDS_PER_TASK) {
     const chunk = keywords.slice(i, i + MAX_KEYWORDS_PER_TASK);
     const parsed = await collectVolumes(chunk, keywordToPersonId);
-    for (const [pid, vol] of parsed) merged.set(pid, vol);
+    for (const [pid, datum] of parsed) merged.set(pid, datum);
   }
 
   if (merged.size > 0) {

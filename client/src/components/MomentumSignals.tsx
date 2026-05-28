@@ -102,6 +102,8 @@ interface MomentumData {
     searchVolume?: {
       monthly: number;
       level: MomentumLevel;
+      /** Month-over-month % change (latest completed month vs prior), ±8% dead zone. */
+      deltaPct?: number;
     };
     drivers: {
       status: "active" | "stable";
@@ -525,13 +527,29 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     : "none";
   const searchVolumeValue = hasSearchVolume ? formatNum(searchVolumeMonthly) : "—";
   const searchVolumeUnit = hasSearchVolume ? "searches / month" : "awaiting data";
+  const searchVolumeDeltaPct = signals.searchVolume?.deltaPct ?? 0;
   const searchVolumeFooter = !hasSearchVolume
     ? (
         <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-interest-warmup">
           Awaiting search volume data
         </p>
       )
-    : null;
+    : searchVolumeDeltaPct !== 0
+      ? (
+          <p
+            className={cn(
+              "text-[10px] pt-0.5 font-medium font-mono",
+              searchVolumeDeltaPct > 0
+                ? "text-emerald-700 dark:text-emerald-400"
+                : "text-rose-700 dark:text-rose-400",
+            )}
+            data-testid="text-search-interest-mom"
+          >
+            {searchVolumeDeltaPct > 0 ? "▲" : "▼"} {Math.abs(searchVolumeDeltaPct)}%{" "}
+            <span className="text-muted-foreground font-sans font-normal">vs last month</span>
+          </p>
+        )
+      : null;
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">

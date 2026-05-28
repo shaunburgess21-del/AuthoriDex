@@ -51,6 +51,7 @@ import {
   getDataForSeoRunStats,
   resetDataForSeoRunStats,
   shouldFetchSearchVolume,
+  type SearchVolumeDatum,
 } from "../providers/dataforseo";
 
 // How many people get a GDELT query each ingest cycle. The candidate set is
@@ -1010,6 +1011,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // Google Trends carry-forward pattern).
     const latestSearchVolumeDiagMap = new Map<string, {
       searchVolume: number;
+      momDeltaPct: number;
       fetchedAt: string;
     }>();
 
@@ -1088,6 +1090,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         if (!existingSv || new Date(svFetchedAt).getTime() > new Date(existingSv.fetchedAt).getTime()) {
           latestSearchVolumeDiagMap.set(snap.personId, {
             searchVolume: Number(carriedSearchVolume),
+            momDeltaPct: Number(raw?.googleSearchVolumeMoMDeltaPct ?? 0),
             fetchedAt: svFetchedAt,
           });
         }
@@ -1760,7 +1763,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // whole roster for a flat $0.05; gated to once per day (search volume is a
     // monthly metric). Between fetches the value is carried forward from the
     // last snapshot (latestSearchVolumeDiagMap). Inert without credentials.
-    const searchVolumeDataMap = new Map<string, number>();
+    const searchVolumeDataMap = new Map<string, SearchVolumeDatum>();
 
     if (isDataForSeoConfigured() && !isBackfill) {
       let shouldFetchSV = true;
@@ -1796,9 +1799,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           const results = await fetchSearchVolumeBatch(
             people.map(p => ({ personId: p.id, name: p.name, keywordOverride: p.searchQueryOverride })),
           );
-          for (const [pid, vol] of results) searchVolumeDataMap.set(pid, vol);
+          for (const [pid, datum] of results) searchVolumeDataMap.set(pid, datum);
           const svStats = getDataForSeoRunStats();
-          const coveredCount = [...results.values()].filter(v => v > 0).length;
+          const coveredCount = [...results.values()].filter(v => v.volume > 0).length;
           const coverage = people.length > 0 ? coveredCount / people.length : 0;
           if (coveredCount === 0) sourceStatuses.searchVolume = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.searchVolume = "OK";
@@ -2232,11 +2235,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // DataForSEO search volume: fresh value this cycle, else last carried.
         // Resolved once so the score input and the persisted diagnostics agree.
         const svFreshValue = searchVolumeDataMap.get(person.id);
-        const svHasFresh = typeof svFreshValue === "number" && svFreshValue > 0;
+        const svHasFresh = svFreshValue != null && svFreshValue.volume > 0;
         const svCarried = latestSearchVolumeDiagMap.get(person.id);
         const searchVolumeForPerson = svHasFresh
-          ? svFreshValue!
+          ? svFreshValue!.volume
           : (svCarried?.searchVolume ?? 0);
+        const searchVolumeMoMDeltaPct = svHasFresh
+          ? svFreshValue!.momDeltaPct
+          : (svCarried?.momDeltaPct ?? 0);
         const searchVolumeFetchedAtIso = svHasFresh
           ? now.toISOString()
           : (svCarried?.fetchedAt ?? null);
@@ -2449,6 +2455,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             // next fetch and orders carry-forward.
             ...(searchVolumeForPerson > 0 ? {
               googleSearchVolume: searchVolumeForPerson,
+              googleSearchVolumeMoMDeltaPct: searchVolumeMoMDeltaPct,
               googleSearchVolumeFresh: svHasFresh,
               ...(searchVolumeFetchedAtIso ? { googleSearchVolumeFetchedAt: searchVolumeFetchedAtIso } : {}),
             } : {}),

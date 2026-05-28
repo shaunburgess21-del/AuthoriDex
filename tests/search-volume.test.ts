@@ -7,6 +7,7 @@ import {
   toApiKeyword,
   isInvalidKeywordTaskError,
   parseSearchVolumeResponse,
+  computeMoMDeltaPct,
   shouldFetchSearchVolume,
   SEARCH_VOLUME_FETCH_INTERVAL_MS,
 } from "../server/providers/search-volume-window";
@@ -72,9 +73,33 @@ test("parseSearchVolumeResponse: maps keywords back to personId (case-insensitiv
     ],
   };
   const out = parseSearchVolumeResponse(json, k2p);
-  assert.equal(out.get("p1"), 2200000);
-  assert.equal(out.get("p2"), 1500000);
-  assert.equal(out.get("p3"), 90);
+  assert.equal(out.get("p1")?.volume, 2200000);
+  assert.equal(out.get("p2")?.volume, 1500000);
+  assert.equal(out.get("p3")?.volume, 90);
+});
+
+test("parseSearchVolumeResponse: extracts month-over-month delta from monthly_searches", () => {
+  const json = {
+    tasks: [
+      {
+        result: [
+          {
+            keyword: "elon musk",
+            search_volume: 1500000,
+            monthly_searches: [
+              { year: 2026, month: 3, search_volume: 1000000 },
+              { year: 2026, month: 4, search_volume: 823000 }, // latest (out of order on purpose)
+              { year: 2026, month: 2, search_volume: 1000000 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const out = parseSearchVolumeResponse(json, k2p);
+  // latest = April 823k, prev = March 1M -> -17.7%
+  assert.equal(out.get("p2")?.volume, 1500000);
+  assert.ok(Math.abs((out.get("p2")?.momDeltaPct ?? 0) - -17.7) < 0.1);
 });
 
 test("parseSearchVolumeResponse: null/missing volume -> 0, unknown keyword ignored", () => {
@@ -90,9 +115,30 @@ test("parseSearchVolumeResponse: null/missing volume -> 0, unknown keyword ignor
     ],
   };
   const out = parseSearchVolumeResponse(json, k2p);
-  assert.equal(out.get("p1"), 0);
-  assert.equal(out.get("p2"), 0);
+  assert.equal(out.get("p1")?.volume, 0);
+  assert.equal(out.get("p2")?.volume, 0);
   assert.equal(out.has("unknown"), false);
+});
+
+// ── computeMoMDeltaPct ──────────────────────────────────────────────────────
+
+test("computeMoMDeltaPct: latest vs prior completed month", () => {
+  const series = [
+    { year: 2026, month: 2, search_volume: 100000 },
+    { year: 2026, month: 4, search_volume: 120000 },
+    { year: 2026, month: 3, search_volume: 100000 },
+  ];
+  // sorted desc -> Apr 120k vs Mar 100k = +20%
+  assert.equal(computeMoMDeltaPct(series), 20);
+});
+
+test("computeMoMDeltaPct: insufficient/zero data -> 0", () => {
+  assert.equal(computeMoMDeltaPct(null), 0);
+  assert.equal(computeMoMDeltaPct([{ year: 2026, month: 4, search_volume: 100 }]), 0);
+  assert.equal(computeMoMDeltaPct([
+    { year: 2026, month: 4, search_volume: 100 },
+    { year: 2026, month: 3, search_volume: 0 },
+  ]), 0);
 });
 
 test("parseSearchVolumeResponse: tolerant of malformed payloads", () => {
