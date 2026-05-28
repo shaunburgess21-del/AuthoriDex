@@ -11,10 +11,9 @@ export const INSIGHTS_SOURCE_VALUES = [
   "fame",
   "news",
   "wiki",
-  // `trends` (Google Trends) is retired from the UI but kept here so old
-  // shared links (?source=trends) still parse instead of 404-ing.
-  "trends",
   // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
+  // (Google Trends `trends` source was removed; old ?source=trends links fall
+  // back to the default ranking via parseSource.)
   "search_volume",
 ] as const;
 

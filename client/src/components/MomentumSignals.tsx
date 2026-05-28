@@ -104,6 +104,8 @@ interface MomentumData {
       level: MomentumLevel;
       /** Month-over-month % change (latest completed month vs prior), ±8% dead zone. */
       deltaPct?: number;
+      /** Up-to-12-month history (ascending by month) for the sparkline. */
+      history?: Array<{ month: string; volume: number }>;
     };
     drivers: {
       status: "active" | "stable";
@@ -167,7 +169,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const SEARCH_INTEREST_COPY =
-  "Roughly how many times this person is searched on Google each month (Google Ads search volume). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. Updates about monthly, so there's no day-to-day change figure.";
+  "Roughly how many times this person is searched on Google each month (Google Ads search volume). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -280,6 +282,63 @@ function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
       {trendWord && trendWord !== "steady" && (
         <span className="text-muted-foreground font-sans font-normal ml-0.5">· {trendWord}</span>
       )}
+    </div>
+  );
+}
+
+// Format a "YYYY-MM" key as e.g. "Apr '26" for the sparkline axis caption.
+function formatMonthShort(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return `${d.toLocaleDateString(undefined, { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
+}
+
+// Compact, dependency-free monthly bar sparkline for the Search Interest card.
+// Bars are scaled to the series max; the most recent month is emphasised and
+// the first/last months are captioned so the time window is unambiguous. Each
+// bar carries a native title tooltip with the month + formatted volume.
+function SearchVolumeSparkline({
+  history,
+}: {
+  history: Array<{ month: string; volume: number }>;
+}) {
+  const max = Math.max(...history.map((h) => h.volume), 1);
+  const first = history[0];
+  const last = history[history.length - 1];
+  return (
+    <div className="mt-1.5" data-testid="search-interest-sparkline">
+      <div
+        className="flex items-end gap-[3px] h-8"
+        role="img"
+        aria-label={`Monthly search volume, ${formatMonthShort(first.month)} to ${formatMonthShort(last.month)}`}
+      >
+        {history.map((h, i) => {
+          const isLatest = i === history.length - 1;
+          const pct = Math.max(4, Math.round((h.volume / max) * 100));
+          return (
+            <div
+              key={h.month}
+              className="flex-1 min-w-[3px] rounded-sm bg-foreground/10 overflow-hidden flex items-end"
+              style={{ height: "100%" }}
+              title={`${formatMonthShort(h.month)}: ${formatNum(h.volume)} searches`}
+            >
+              <div
+                className={cn(
+                  "w-full rounded-sm transition-colors",
+                  isLatest ? "bg-blue-500/80" : "bg-foreground/30",
+                )}
+                style={{ height: `${pct}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 font-mono leading-none">
+        <span>{formatMonthShort(first.month)}</span>
+        <span className="text-muted-foreground/45">monthly searches</span>
+        <span>{formatMonthShort(last.month)}</span>
+      </div>
     </div>
   );
 }
@@ -528,28 +587,33 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   const searchVolumeValue = hasSearchVolume ? formatNum(searchVolumeMonthly) : "—";
   const searchVolumeUnit = hasSearchVolume ? "searches / month" : "awaiting data";
   const searchVolumeDeltaPct = signals.searchVolume?.deltaPct ?? 0;
-  const searchVolumeFooter = !hasSearchVolume
-    ? (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-interest-warmup">
-          Awaiting search volume data
-        </p>
-      )
-    : searchVolumeDeltaPct !== 0
-      ? (
-          <p
-            className={cn(
-              "text-[10px] pt-0.5 font-medium font-mono",
-              searchVolumeDeltaPct > 0
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-rose-700 dark:text-rose-400",
-            )}
-            data-testid="text-search-interest-mom"
-          >
-            {searchVolumeDeltaPct > 0 ? "▲" : "▼"} {Math.abs(searchVolumeDeltaPct)}%{" "}
-            <span className="text-muted-foreground font-sans font-normal">vs last month</span>
-          </p>
-        )
-      : null;
+  const searchVolumeHistory = signals.searchVolume?.history ?? [];
+  const showSearchSparkline = hasSearchVolume && searchVolumeHistory.length >= 3;
+  const searchVolumeMoMLine =
+    searchVolumeDeltaPct !== 0 ? (
+      <p
+        className={cn(
+          "text-[10px] pt-0.5 font-medium font-mono",
+          searchVolumeDeltaPct > 0
+            ? "text-emerald-700 dark:text-emerald-400"
+            : "text-rose-700 dark:text-rose-400",
+        )}
+        data-testid="text-search-interest-mom"
+      >
+        {searchVolumeDeltaPct > 0 ? "▲" : "▼"} {Math.abs(searchVolumeDeltaPct)}%{" "}
+        <span className="text-muted-foreground font-sans font-normal">vs last month</span>
+      </p>
+    ) : null;
+  const searchVolumeFooter = !hasSearchVolume ? (
+    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-interest-warmup">
+      Awaiting search volume data
+    </p>
+  ) : (
+    <>
+      {searchVolumeMoMLine}
+      {showSearchSparkline && <SearchVolumeSparkline history={searchVolumeHistory} />}
+    </>
+  );
 
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">

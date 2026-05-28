@@ -38,7 +38,9 @@ export {
   toApiKeyword,
   parseSearchVolumeResponse,
   computeMoMDeltaPct,
+  buildSearchVolumeHistory,
   type SearchVolumeDatum,
+  type SearchVolumeHistoryPoint,
 } from "./search-volume-window";
 
 const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN;
@@ -281,16 +283,20 @@ export async function fetchSearchVolumeBatch(
   }
   const keywords = Array.from(keywordToPersonId.keys());
 
-  // Cache key bumped to v2 when the stored shape changed from a plain volume
-  // number to { volume, momDeltaPct }. Old-shape entries are skipped on read.
+  // Cache key bumped on each stored-shape change (sv3 adds `history`). Old-shape
+  // entries live under prior keys and simply expire unused.
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `dataforseo:sv2:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
+  const cacheKey = `dataforseo:sv3:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
   const cached = await getCached(cacheKey);
   if (cached && typeof cached === "object") {
     const out = new Map<string, SearchVolumeDatum>();
     for (const [pid, datum] of Object.entries(cached as Record<string, any>)) {
       if (datum && typeof datum.volume === "number" && Number.isFinite(datum.volume)) {
-        out.set(pid, { volume: datum.volume, momDeltaPct: Number(datum.momDeltaPct ?? 0) });
+        out.set(pid, {
+          volume: datum.volume,
+          momDeltaPct: Number(datum.momDeltaPct ?? 0),
+          history: Array.isArray(datum.history) ? datum.history : [],
+        });
       }
     }
     if (out.size > 0) return out;

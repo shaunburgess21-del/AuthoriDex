@@ -59,7 +59,6 @@ export async function loadInsightsRankings(
       snap?.wikiPageviews ?? 0,
       "wikiMomentumAvg7d",
     );
-    const trendsMomentumRatio = ratioFromDiagnostics(diag, "trendsMomentumRatio", 0, "trendsAvg7d");
 
     const newsMomentum = {
       ratio: newsMomentumRatio > 0 ? newsMomentumRatio : null,
@@ -79,7 +78,6 @@ export async function loadInsightsRankings(
       massScore: snap?.massScore ?? 0,
       newsMomentumRatio,
       wikiMomentumRatio,
-      trendsMomentumRatio,
       newsCount: snap?.newsCount ?? 0,
       wikiPageviews: snap?.wikiPageviews ?? 0,
       searchVolume: Number.isFinite(searchVolume) ? searchVolume : 0,
@@ -96,7 +94,6 @@ export async function loadInsightsRankings(
       massScore: sortRow.massScore,
       newsMomentum,
       wikiMomentum,
-      trendsLevel: sig?.trendsLevel ?? computeMomentumLevel(trendsMomentumRatio),
       primaryDriver: sig?.primaryDriver ?? "MIXED",
       breakdownPct: breakdownFromDiagnostics(diag),
       change24h: filters.window === "7d" ? person.change7d ?? null : person.change24h ?? null,

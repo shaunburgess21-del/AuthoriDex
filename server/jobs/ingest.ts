@@ -2458,6 +2458,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               googleSearchVolumeMoMDeltaPct: searchVolumeMoMDeltaPct,
               googleSearchVolumeFresh: svHasFresh,
               ...(searchVolumeFetchedAtIso ? { googleSearchVolumeFetchedAt: searchVolumeFetchedAtIso } : {}),
+              // 12-month history for the profile sparkline. Persisted only on a
+              // fresh DataForSEO fetch (not carried forward every hourly tick)
+              // to avoid bloating snapshot diagnostics ~24x; the routes layer
+              // falls back to the most recent snapshot that has it.
+              ...(svHasFresh && svFreshValue!.history.length > 0
+                ? { googleSearchVolumeMonthly: svFreshValue!.history }
+                : {}),
             } : {}),
           },
           fresh: {

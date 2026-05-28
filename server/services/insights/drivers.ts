@@ -12,13 +12,14 @@ import {
   classifyPrimaryDriver,
   computeMomentumLevel,
   ratioFromDiagnostics,
+  searchSurgeLevel,
 } from "./signal-utils";
 
 export interface PersonSignalSnapshot {
   personId: string;
   newsLevel: MomentumLevel;
   wikiLevel: MomentumLevel;
-  trendsLevel: MomentumLevel;
+  searchLevel: MomentumLevel;
   velocityScore: number;
   massScore: number;
   primaryDriver: InsightsPrimaryDriver;
@@ -42,18 +43,19 @@ export async function loadPersonSignals(
       snap?.wikiPageviews ?? 0,
       "wikiMomentumAvg7d",
     );
-    const trendsRatio = ratioFromDiagnostics(diag, "trendsMomentumRatio", 0, "trendsAvg7d");
+    const rawDiag = (diag as Record<string, any> | null)?.raw as Record<string, unknown> | undefined;
+    const searchMoMDeltaPct = Number(rawDiag?.googleSearchVolumeMoMDeltaPct ?? 0);
 
     const newsLevel = computeMomentumLevel(newsRatio);
     const wikiLevel = computeMomentumLevel(wikiRatio);
-    const trendsLevel = computeMomentumLevel(trendsRatio);
+    const searchLevel = searchSurgeLevel(searchMoMDeltaPct);
     const velocityScore = snap?.velocityScore ?? 0;
     const massScore = snap?.massScore ?? 0;
 
     const primaryDriver = classifyPrimaryDriver(
       newsLevel,
       wikiLevel,
-      trendsLevel,
+      searchLevel,
       velocityScore,
       massScore,
     );
@@ -62,7 +64,7 @@ export async function loadPersonSignals(
       personId: person.id,
       newsLevel,
       wikiLevel,
-      trendsLevel,
+      searchLevel,
       velocityScore,
       massScore,
       primaryDriver,
@@ -112,6 +114,13 @@ export async function loadDriversSummary(
   return { topN, segments };
 }
 
+type SurgeSource = "news" | "wiki" | "search";
+
+/** A source is "quiet" for surge purposes when it's low or absent. */
+function isQuiet(level: MomentumLevel): boolean {
+  return level === "low" || level === "none";
+}
+
 export async function loadSingleSourceSurge(limit = 25): Promise<
   Array<{
     id: string;
@@ -119,8 +128,8 @@ export async function loadSingleSourceSurge(limit = 25): Promise<
     avatar: string | null;
     category: string | null;
     rank: number;
-    surgeSource: "news" | "wiki" | "trends";
-    levels: { news: MomentumLevel; wiki: MomentumLevel; trends: MomentumLevel };
+    surgeSource: SurgeSource;
+    levels: { news: MomentumLevel; wiki: MomentumLevel; search: MomentumLevel };
   }>
 > {
   const people = await storage.getTrendingPeople();
@@ -131,8 +140,8 @@ export async function loadSingleSourceSurge(limit = 25): Promise<
     avatar: string | null;
     category: string | null;
     rank: number;
-    surgeSource: "news" | "wiki" | "trends";
-    levels: { news: MomentumLevel; wiki: MomentumLevel; trends: MomentumLevel };
+    surgeSource: SurgeSource;
+    levels: { news: MomentumLevel; wiki: MomentumLevel; search: MomentumLevel };
   }> = [];
 
   for (const person of people) {
@@ -142,18 +151,20 @@ export async function loadSingleSourceSurge(limit = 25): Promise<
     const levels = {
       news: sig.newsLevel,
       wiki: sig.wikiLevel,
-      trends: sig.trendsLevel,
+      search: sig.searchLevel,
     };
 
-    const sources: Array<"news" | "wiki" | "trends"> = ["news", "wiki", "trends"];
+    const sources: SurgeSource[] = ["news", "wiki", "search"];
     for (const source of sources) {
       const high = levels[source] === "high";
-      const othersLow =
-        (source === "news" ? levels.wiki === "low" && levels.trends === "low" : true) &&
-        (source === "wiki" ? levels.news === "low" && levels.trends === "low" : true) &&
-        (source === "trends" ? levels.news === "low" && levels.wiki === "low" : true);
+      // The other two sources must be quiet (low OR none). Previously this
+      // required exactly `low`, so a flat/`none` source blocked otherwise-clean
+      // single-source surges from firing.
+      const othersQuiet = sources
+        .filter((s) => s !== source)
+        .every((s) => isQuiet(levels[s]));
 
-      if (high && othersLow) {
+      if (high && othersQuiet) {
         rows.push({
           id: person.id,
           name: person.name,

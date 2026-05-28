@@ -8,9 +8,11 @@ import {
   isInvalidKeywordTaskError,
   parseSearchVolumeResponse,
   computeMoMDeltaPct,
+  buildSearchVolumeHistory,
   shouldFetchSearchVolume,
   SEARCH_VOLUME_FETCH_INTERVAL_MS,
 } from "../server/providers/search-volume-window";
+import { searchSurgeLevel } from "../server/services/insights/signal-utils";
 import {
   normalizeSearchVolumeMass,
   getSearchVolumeMassWeight,
@@ -139,6 +141,71 @@ test("computeMoMDeltaPct: insufficient/zero data -> 0", () => {
     { year: 2026, month: 4, search_volume: 100 },
     { year: 2026, month: 3, search_volume: 0 },
   ]), 0);
+});
+
+// ── buildSearchVolumeHistory ────────────────────────────────────────────────
+
+test("buildSearchVolumeHistory: sorts ascending and formats YYYY-MM", () => {
+  const series = [
+    { year: 2026, month: 2, search_volume: 200000 },
+    { year: 2026, month: 4, search_volume: 120000 },
+    { year: 2025, month: 12, search_volume: 90000 },
+  ];
+  const hist = buildSearchVolumeHistory(series);
+  assert.deepEqual(hist, [
+    { ym: "2025-12", v: 90000 },
+    { ym: "2026-02", v: 200000 },
+    { ym: "2026-04", v: 120000 },
+  ]);
+});
+
+test("buildSearchVolumeHistory: drops malformed entries, clamps negatives, null -> []", () => {
+  assert.deepEqual(buildSearchVolumeHistory(null), []);
+  const hist = buildSearchVolumeHistory([
+    { year: 2026, month: 3, search_volume: 100 },
+    { year: 2026, month: 4, search_volume: null },
+    { year: 2026, search_volume: 50 } as any,
+    { year: 2026, month: 5, search_volume: -10 },
+  ]);
+  assert.deepEqual(hist, [
+    { ym: "2026-03", v: 100 },
+    { ym: "2026-05", v: 0 },
+  ]);
+});
+
+test("parseSearchVolumeResponse: includes history series", () => {
+  const json = {
+    tasks: [
+      {
+        result: [
+          {
+            keyword: "taylor swift",
+            search_volume: 4090000,
+            monthly_searches: [
+              { year: 2026, month: 3, search_volume: 2240000 },
+              { year: 2026, month: 4, search_volume: 2240000 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const out = parseSearchVolumeResponse(json, k2p);
+  assert.equal(out.get("p1")?.history.length, 2);
+  assert.deepEqual(out.get("p1")?.history[0], { ym: "2026-03", v: 2240000 });
+});
+
+// ── searchSurgeLevel ────────────────────────────────────────────────────────
+
+test("searchSurgeLevel: dead zone, tiers, and negatives", () => {
+  assert.equal(searchSurgeLevel(0), "none");
+  assert.equal(searchSurgeLevel(8), "none"); // boundary: not > 8
+  assert.equal(searchSurgeLevel(-40), "none"); // declining is not a surge
+  assert.equal(searchSurgeLevel(15), "low");
+  assert.equal(searchSurgeLevel(20), "medium");
+  assert.equal(searchSurgeLevel(49), "medium");
+  assert.equal(searchSurgeLevel(50), "high");
+  assert.equal(searchSurgeLevel(235), "high");
 });
 
 test("parseSearchVolumeResponse: tolerant of malformed payloads", () => {

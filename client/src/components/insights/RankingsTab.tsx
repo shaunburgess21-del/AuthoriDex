@@ -50,13 +50,9 @@ function formatSortValue(
     massScore: number;
   },
 ): string {
-  if (source === "news_momentum" || source === "wiki_momentum" || source === "trends") {
+  if (source === "news_momentum" || source === "wiki_momentum") {
     const ratio =
-      source === "wiki_momentum"
-        ? row.wikiMomentum.ratio
-        : source === "news_momentum"
-          ? row.newsMomentum.ratio
-          : row.sortValue;
+      source === "wiki_momentum" ? row.wikiMomentum.ratio : row.newsMomentum.ratio;
     return ratio != null ? `${ratio.toFixed(2)}×` : "—";
   }
   if (source === "fame") return String(row.fameIndex);

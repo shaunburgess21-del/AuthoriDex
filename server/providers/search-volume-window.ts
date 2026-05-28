@@ -57,15 +57,48 @@ export function isInvalidKeywordTaskError(task: any): boolean {
   return task?.status_code === 40501;
 }
 
+/** A single month of search-volume history. `ym` is "YYYY-MM". */
+export interface SearchVolumeHistoryPoint {
+  ym: string;
+  v: number;
+}
+
 /**
  * Per-person search-volume reading. `volume` is the trailing-12-month average
  * monthly searches (Google Ads `search_volume`) — the stable headline + score
  * input. `momDeltaPct` is the most recent completed month vs the prior month,
  * derived from the same response's `monthly_searches` series (0 when unknown).
+ * `history` is the up-to-12-month series (ascending by month) for the sparkline.
  */
 export interface SearchVolumeDatum {
   volume: number;
   momDeltaPct: number;
+  history: SearchVolumeHistoryPoint[];
+}
+
+/**
+ * Build an ascending-by-month history series from a DataForSEO
+ * `monthly_searches` array. Filters out malformed/non-finite entries and
+ * formats each month as "YYYY-MM". Returns [] when the input is unusable.
+ */
+export function buildSearchVolumeHistory(
+  monthlySearches: Array<{ year?: number; month?: number; search_volume?: number | null }> | null | undefined,
+): SearchVolumeHistoryPoint[] {
+  if (!Array.isArray(monthlySearches)) return [];
+  return monthlySearches
+    .filter(
+      (m) =>
+        m != null &&
+        typeof m.year === "number" &&
+        typeof m.month === "number" &&
+        typeof m.search_volume === "number" &&
+        Number.isFinite(m.search_volume),
+    )
+    .map((m) => ({
+      ym: `${m.year}-${String(m.month).padStart(2, "0")}`,
+      v: Math.max(0, Math.round(m.search_volume as number)),
+    }))
+    .sort((a, b) => a.ym.localeCompare(b.ym));
 }
 
 /**
@@ -119,10 +152,11 @@ export function parseSearchVolumeResponse(
       const sv = item?.search_volume;
       const volume = typeof sv === "number" && Number.isFinite(sv) && sv > 0 ? sv : 0;
       const momDeltaPct = computeMoMDeltaPct(item?.monthly_searches);
+      const history = buildSearchVolumeHistory(item?.monthly_searches);
       // Keep the higher-volume datum if two inputs collapse to one keyword.
       const existing = out.get(personId);
       if (!existing || volume > existing.volume) {
-        out.set(personId, { volume, momDeltaPct });
+        out.set(personId, { volume, momDeltaPct, history });
       }
     }
   }

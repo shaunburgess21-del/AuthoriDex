@@ -7,6 +7,20 @@ export function computeMomentumLevel(ratio: number): MomentumLevel {
   return "high";
 }
 
+/**
+ * Search "surge" level from the month-over-month search-volume delta (%).
+ * Unlike absolute volume (which would mark every famous person as "search-led"
+ * and overlap with the Mass driver), the MoM delta captures *rising* search
+ * interest, keeping "Search-led" a meaningful, rare driver. Negative/flat moves
+ * are "none" so a person isn't surfaced as search-driven while declining.
+ */
+export function searchSurgeLevel(momDeltaPct: number): MomentumLevel {
+  if (!Number.isFinite(momDeltaPct) || momDeltaPct <= 8) return "none";
+  if (momDeltaPct >= 50) return "high";
+  if (momDeltaPct >= 20) return "medium";
+  return "low";
+}
+
 export function ratioFromDiagnostics(
   diag: Record<string, unknown> | null | undefined,
   ratioKey: string,
@@ -48,14 +62,14 @@ export function breakdownFromDiagnostics(
 export function classifyPrimaryDriver(
   newsLevel: MomentumLevel,
   wikiLevel: MomentumLevel,
-  trendsLevel: MomentumLevel,
+  searchLevel: MomentumLevel,
   velocityScore: number,
   massScore: number,
 ): InsightsPrimaryDriver {
   const scores: Array<{ driver: InsightsPrimaryDriver; weight: number }> = [
     { driver: "NEWS", weight: levelWeight(newsLevel) },
     { driver: "WIKI", weight: levelWeight(wikiLevel) },
-    { driver: "TRENDS", weight: levelWeight(trendsLevel) },
+    { driver: "SEARCH", weight: levelWeight(searchLevel) },
     { driver: "VELOCITY", weight: velocityScore },
     { driver: "MASS", weight: massScore * 0.5 },
   ];
@@ -91,7 +105,6 @@ export function sortValueForSource(
     massScore: number;
     newsMomentumRatio: number;
     wikiMomentumRatio: number;
-    trendsMomentumRatio: number;
     newsCount: number;
     wikiPageviews: number;
     searchVolume: number;
@@ -112,8 +125,6 @@ export function sortValueForSource(
       return row.newsCount;
     case "wiki":
       return row.wikiPageviews;
-    case "trends":
-      return row.trendsMomentumRatio;
     case "search_volume":
       return row.searchVolume;
     default:

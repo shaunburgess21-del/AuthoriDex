@@ -12,14 +12,13 @@ export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
   fame: "Fame Index",
   news: "Press (24h)",
   wiki: "Wikipedia",
-  trends: "Google Trends",
   search_volume: "Search interest",
 };
 
 export const INSIGHTS_DRIVER_LABELS: Record<InsightsPrimaryDriver, string> = {
   NEWS: "Press-led",
   WIKI: "Wiki-led",
-  TRENDS: "Search-led",
+  SEARCH: "Search-led",
   VELOCITY: "Velocity-led",
   MASS: "Mass-led",
   MIXED: "Mixed signals",

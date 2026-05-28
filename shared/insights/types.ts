@@ -5,7 +5,7 @@ export type MomentumLevel = "none" | "low" | "medium" | "high";
 export type InsightsPrimaryDriver =
   | "NEWS"
   | "WIKI"
-  | "TRENDS"
+  | "SEARCH"
   | "VELOCITY"
   | "MASS"
   | "MIXED";
@@ -26,7 +26,6 @@ export interface InsightsRankingRow {
   massScore: number;
   newsMomentum: InsightsMomentumLens;
   wikiMomentum: InsightsMomentumLens;
-  trendsLevel: MomentumLevel;
   primaryDriver: InsightsPrimaryDriver;
   breakdownPct: Record<string, number> | null;
   change24h: number | null;
@@ -140,11 +139,11 @@ export interface InsightsSingleSourceSurgeRow {
   avatar: string | null;
   category: string | null;
   rank: number;
-  surgeSource: "news" | "wiki" | "trends";
+  surgeSource: "news" | "wiki" | "search";
   levels: {
     news: MomentumLevel;
     wiki: MomentumLevel;
-    trends: MomentumLevel;
+    search: MomentumLevel;
   };
 }
 

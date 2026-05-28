@@ -3254,6 +3254,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : searchVolumeMonthly >= 100000 ? "medium"
             : searchVolumeMonthly > 0 ? "low"
               : "none";
+      // 12-month history for the sparkline. Persisted only on fresh DataForSEO
+      // fetches, so it may live on an older snapshot than the carried-forward
+      // volume — look it up separately if the current diag doesn't carry it.
+      let searchVolumeMonthlySeries = searchVolumeDiagRaw?.googleSearchVolumeMonthly;
+      if (!Array.isArray(searchVolumeMonthlySeries) && searchVolumeMonthly > 0) {
+        const [svHistSnap] = await db
+          .select({ diagnostics: trendSnapshots.diagnostics })
+          .from(trendSnapshots)
+          .where(and(
+            eq(trendSnapshots.personId, id),
+            sql`diagnostics::jsonb->'raw'->'googleSearchVolumeMonthly' IS NOT NULL`,
+          ))
+          .orderBy(desc(trendSnapshots.timestamp))
+          .limit(1);
+        if (svHistSnap) {
+          searchVolumeMonthlySeries = (svHistSnap.diagnostics as Record<string, any> | null)?.raw
+            ?.googleSearchVolumeMonthly;
+        }
+      }
+      const searchVolumeHistory = Array.isArray(searchVolumeMonthlySeries)
+        ? searchVolumeMonthlySeries
+            .filter((m: any) => m && typeof m.ym === "string" && typeof m.v === "number" && Number.isFinite(m.v))
+            .map((m: any) => ({ month: m.ym as string, volume: m.v as number }))
+        : [];
       // Month-over-month change (latest completed month vs prior). Google Ads
       // volumes are tier-quantised, so apply an ±8% dead zone to suppress noise
       // and only assert a direction on a real tier move.
@@ -3373,10 +3397,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Search Interest — absolute monthly Google searches (DataForSEO).
           // Cross-person popularity signal; replaces the Google Trends card.
           // deltaPct = month-over-month (dead-zoned); 0 = steady/unknown.
+          // history = up-to-12-month series for the sparkline.
           searchVolume: searchVolumeMonthly > 0 ? {
             monthly: searchVolumeMonthly,
             level: searchVolumeLevel,
             deltaPct: searchVolumeDeltaPct,
+            ...(searchVolumeHistory.length > 0 ? { history: searchVolumeHistory } : {}),
           } : undefined,
           drivers: {
             status: driversStatus,
