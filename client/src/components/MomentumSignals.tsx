@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, TrendingUp } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -92,6 +92,17 @@ interface MomentumData {
       fetchedAgeHours?: number;
       carriedForward?: boolean;
     };
+    /**
+     * Search Interest (May 2026 — DataForSEO Google Ads). Absolute average
+     * monthly Google searches for this person — a cross-person-comparable
+     * popularity signal that replaced the retired Google Trends card. Not a
+     * velocity metric, so no delta pill. Optional: absent until the first
+     * DataForSEO fetch lands (or if the provider is unconfigured).
+     */
+    searchVolume?: {
+      monthly: number;
+      level: MomentumLevel;
+    };
     drivers: {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number; momentum?: number } | null;
@@ -153,8 +164,8 @@ const MOMENTUM_LEVEL_COPY =
 const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
-const TRENDS_LEVEL_COPY =
-  "How much people are searching Google for this person today, on a scale of 0–100 against their own peak. High = busy day, Medium = normal, Low = quiet. The % change shows if the last few hours are trending up or down.";
+const SEARCH_INTEREST_COPY =
+  "Roughly how many times this person is searched on Google each month (Google Ads search volume). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. Updates about monthly, so there's no day-to-day change figure.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -501,22 +512,23 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )
     : null;
 
-  // ── Google Trends Activity (May 2026) ──────────────────────────────────
-  const trendsAvg24h = signals.trends?.avg7d ?? 0; // 24h mean headline (legacy field name)
-  const hasTrendsData = signals.trends != null && trendsAvg24h > 0;
-  const trendsLevel: MomentumLevel = hasTrendsData
-    ? fallbackLevel("trends", trendsAvg24h)
+  // ── Search Interest (May 2026 — DataForSEO Google Ads search volume) ────
+  // Replaces the retired Google Trends card. Absolute monthly Google searches:
+  // a cross-person popularity measure, not a velocity signal, so no delta pill.
+  const searchVolumeMonthly = signals.searchVolume?.monthly ?? 0;
+  const hasSearchVolume = signals.searchVolume != null && searchVolumeMonthly > 0;
+  const searchVolumeLevel: MomentumLevel = hasSearchVolume
+    ? (signals.searchVolume?.level
+        ?? (searchVolumeMonthly >= 500000 ? "high"
+          : searchVolumeMonthly >= 100000 ? "medium"
+            : "low"))
     : "none";
-  const trendsDeltaPct = signals.trends?.deltaPct ?? 0;
-  const trendsTrend: TrendWord = hasTrendsData
-    ? (trendsDeltaPct > 0 ? "rising" : trendsDeltaPct < 0 ? "falling" : "steady")
-    : "steady";
-  const trendsValue = hasTrendsData ? `${Math.round(trendsAvg24h * 10) / 10}` : "—";
-  const trendsUnit = hasTrendsData ? "interest (24h avg)" : "awaiting data";
-  const trendsFooter = !hasTrendsData
+  const searchVolumeValue = hasSearchVolume ? formatNum(searchVolumeMonthly) : "—";
+  const searchVolumeUnit = hasSearchVolume ? "searches / month" : "awaiting data";
+  const searchVolumeFooter = !hasSearchVolume
     ? (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-trends-warmup">
-          Awaiting first Google Trends data
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-interest-warmup">
+          Awaiting search volume data
         </p>
       )
     : null;
@@ -528,7 +540,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <h2 className="text-xl font-bold">Momentum Signals</h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="whitespace-nowrap">Sources: News · Wikipedia · Google Trends</span>
+          <span className="whitespace-nowrap">Sources: News · Wikipedia · Search</span>
         </div>
       </div>
 
@@ -540,14 +552,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )}
 
       {/*
-       * Card layout (May 2026 — 3×2 grid, paired by source):
-       *   Row 1 (overview + trends): Today's Take    |  Google Trends
-       *   Row 2 (news):              News Activity    |  News Momentum
-       *   Row 3 (wiki):              Wikipedia Pulse  |  Wiki Momentum
+       * Card layout (May 2026 — 3×2 grid):
+       *   Row 1: Today's Take     |  Search Interest (monthly Google searches)
+       *   Row 2: News Activity    |  News Momentum
+       *   Row 3: Wikipedia Pulse  |  Wiki Momentum
        *
-       * Pairing volume + acceleration for the same source side-by-side
-       * lets users compare a source's current level against its own
-       * acceleration at a glance.
+       * Search Interest (a mass/popularity signal) replaced the retired Google
+       * Trends card. The news/wiki rows pair volume + acceleration side-by-side.
        */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <MomentumTakeCard
@@ -556,30 +567,28 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
             { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
             { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
-            { name: "Google Trends", level: trendsLevel, delta: 0 },
           ]}
         />
 
         <SignalCard
-          testId="card-trends-activity"
-          icon={<TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />}
+          testId="card-search-interest"
+          icon={<Search className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
-          title="Google Trends"
-          level={trendsLevel}
-          value={trendsValue}
-          unit={trendsUnit}
-          deltaPct={trendsDeltaPct}
-          trendWord={trendsTrend}
+          title="Search Interest"
+          level={searchVolumeLevel}
+          value={searchVolumeValue}
+          unit={searchVolumeUnit}
+          hideDelta
           tooltip={
             <TouchTooltip
               side="top"
               contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-              content={TRENDS_LEVEL_COPY}
+              content={SEARCH_INTEREST_COPY}
             >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-trends-tooltip" />
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-interest-tooltip" />
             </TouchTooltip>
           }
-          footer={trendsFooter}
+          footer={searchVolumeFooter}
         />
 
         <SignalCard
@@ -983,7 +992,7 @@ function MomentumTakeCard({ sources }: { sources: SourceSnapshot[] }) {
           <TouchTooltip
             side="top"
             contentClassName="max-w-[240px] text-xs normal-case tracking-normal"
-            content="A one-line synthesis of all five signals, classifying this person's attention as Peaking, Rising, Mixed, Steady, Cooling, or Quiet based on current levels and 24h movement."
+            content="A one-line synthesis of this person's momentum signals, classifying their attention as Peaking, Rising, Mixed, Steady, Cooling, or Quiet based on current levels and 24h movement."
           >
             <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-take-tooltip" />
           </TouchTooltip>

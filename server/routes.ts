@@ -3226,6 +3226,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trendsFetchedAgeHours != null && trendsFetchedAgeHours <= trendsMaxAgeHours;
       if (trendsHasCurrentMethod && (trendsInterest ?? 0) > 0 && trendsIsFresh) activeSources.push("trends");
 
+      // ── Google search volume (DataForSEO) — absolute monthly searches ──────
+      // Surfaced as the user-facing "Search Interest" card (replaces the
+      // retired Google Trends card). Read from the latest snapshot (ingest
+      // carries it forward between the daily fetches); fall back to the most
+      // recent snapshot that has it, mirroring the trends lookup. Level is a
+      // simple absolute-volume tier (cross-person comparable, unlike Trends).
+      let searchVolumeRaw = diag?.raw?.googleSearchVolume;
+      if (searchVolumeRaw == null) {
+        const [svSnap] = await db
+          .select({ diagnostics: trendSnapshots.diagnostics })
+          .from(trendSnapshots)
+          .where(and(
+            eq(trendSnapshots.personId, id),
+            sql`diagnostics::jsonb->'raw'->'googleSearchVolume' IS NOT NULL`,
+            sql`diagnostics::jsonb->'raw'->>'googleSearchVolume' != 'null'`,
+          ))
+          .orderBy(desc(trendSnapshots.timestamp))
+          .limit(1);
+        if (svSnap) {
+          searchVolumeRaw = (svSnap.diagnostics as Record<string, any> | null)?.raw?.googleSearchVolume;
+        }
+      }
+      const searchVolumeMonthly = Number(searchVolumeRaw ?? 0);
+      const searchVolumeLevel =
+        searchVolumeMonthly >= 500000 ? "high"
+          : searchVolumeMonthly >= 100000 ? "medium"
+            : searchVolumeMonthly > 0 ? "low"
+              : "none";
+      if (searchVolumeMonthly > 0) activeSources.push("searchVolume");
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -3331,6 +3361,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             topicId: person.googleTrendsTopicId ?? null,
             ...(fresh.trendsCarriedForward === true ? { carriedForward: true } : {}),
             ...(trendsFetchedAgeHours != null ? { fetchedAgeHours: trendsFetchedAgeHours } : {}),
+          } : undefined,
+          // Search Interest — absolute monthly Google searches (DataForSEO).
+          // Cross-person popularity signal; replaces the Google Trends card.
+          searchVolume: searchVolumeMonthly > 0 ? {
+            monthly: searchVolumeMonthly,
+            level: searchVolumeLevel,
           } : undefined,
           drivers: {
             status: driversStatus,
