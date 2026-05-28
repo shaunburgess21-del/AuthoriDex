@@ -94,6 +94,7 @@ export function sortValueForSource(
     trendsMomentumRatio: number;
     newsCount: number;
     wikiPageviews: number;
+    searchVolume: number;
   },
 ): number {
   switch (source) {
@@ -113,6 +114,8 @@ export function sortValueForSource(
       return row.wikiPageviews;
     case "trends":
       return row.trendsMomentumRatio;
+    case "search_volume":
+      return row.searchVolume;
     default:
       return row.newsMomentumRatio;
   }

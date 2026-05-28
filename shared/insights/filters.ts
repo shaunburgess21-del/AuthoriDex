@@ -11,7 +11,11 @@ export const INSIGHTS_SOURCE_VALUES = [
   "fame",
   "news",
   "wiki",
+  // `trends` (Google Trends) is retired from the UI but kept here so old
+  // shared links (?source=trends) still parse instead of 404-ing.
   "trends",
+  // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
+  "search_volume",
 ] as const;
 
 export type InsightsSource = (typeof INSIGHTS_SOURCE_VALUES)[number];

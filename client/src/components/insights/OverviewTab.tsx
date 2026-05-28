@@ -312,7 +312,8 @@ export function OverviewTab() {
                 const sourceMap: Record<string, string> = {
                   NEWS: "news_momentum",
                   WIKI: "wiki_momentum",
-                  TRENDS: "trends",
+                  // Search-led → Most Searched ranking (Google Trends ranking retired).
+                  TRENDS: "search_volume",
                   VELOCITY: "velocity",
                   MASS: "mass",
                   MIXED: "news_momentum",

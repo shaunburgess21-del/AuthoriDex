@@ -30,8 +30,14 @@ const PILL_SOURCES: Array<{ id: InsightsSource; label: string; hint: string }> =
   { id: "fame", label: "Fame Index", hint: "Composite rank score" },
   { id: "news", label: "News", hint: "Most press attention" },
   { id: "wiki", label: "Wiki", hint: "Most Wikipedia attention" },
-  { id: "trends", label: "Google Trends", hint: "Strongest search signal" },
+  { id: "search_volume", label: "Search Interest", hint: "Most-searched on Google" },
 ];
+
+function formatCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(Math.round(n));
+}
 
 function formatSortValue(
   source: InsightsSource,
@@ -56,6 +62,9 @@ function formatSortValue(
   if (source === "fame") return String(row.fameIndex);
   if (source === "velocity") return row.velocityScore.toFixed(1);
   if (source === "mass") return row.massScore.toFixed(1);
+  if (source === "search_volume") {
+    return row.sortValue > 0 ? `${formatCompact(row.sortValue)}/mo` : "—";
+  }
   return row.sortValue.toFixed(1);
 }
 

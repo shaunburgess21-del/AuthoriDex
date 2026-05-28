@@ -70,6 +70,9 @@ export async function loadInsightsRankings(
       level: sig?.wikiLevel ?? computeMomentumLevel(wikiMomentumRatio),
     };
 
+    const rawDiag = (diag as Record<string, any> | null)?.raw as Record<string, unknown> | undefined;
+    const searchVolume = Number(rawDiag?.googleSearchVolume ?? 0);
+
     const sortRow = {
       fameIndex: person.fameIndex ?? 0,
       velocityScore: snap?.velocityScore ?? 0,
@@ -79,6 +82,7 @@ export async function loadInsightsRankings(
       trendsMomentumRatio,
       newsCount: snap?.newsCount ?? 0,
       wikiPageviews: snap?.wikiPageviews ?? 0,
+      searchVolume: Number.isFinite(searchVolume) ? searchVolume : 0,
     };
 
     return {

@@ -13,6 +13,7 @@ export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
   news: "Press (24h)",
   wiki: "Wikipedia",
   trends: "Google Trends",
+  search_volume: "Search interest",
 };
 
 export const INSIGHTS_DRIVER_LABELS: Record<InsightsPrimaryDriver, string> = {
