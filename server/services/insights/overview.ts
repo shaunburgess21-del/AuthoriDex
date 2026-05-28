@@ -1,12 +1,14 @@
 import type { InsightsOverviewResponse } from "@shared/insights/types";
-import { QUADRANT_MIN_VOTES } from "@shared/insights/constants";
+import { INSIGHTS_DRIVER_LABELS, QUADRANT_MIN_VOTES } from "@shared/insights/constants";
 import { db } from "../../db";
 import { celebrityMetrics, userFavourites } from "@shared/schema";
 import { eq, gte } from "drizzle-orm";
 import { storage } from "../../storage";
-import { loadDriversSummary } from "./drivers";
+import { loadDriversSummary, loadPersonSignals } from "./drivers";
 import { getInsightsStory } from "./story";
-import { getTrendContextBatch } from "../trend-context";
+import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
+import { withDiscoverCache } from "./discover-cache";
+
 const MOVER_PAGE_SIZE = 20;
 
 function assignQuadrant(
@@ -23,19 +25,35 @@ function assignQuadrant(
   return "unknown_critics";
 }
 
-export async function loadInsightsOverview(
+async function loadInsightsOverviewInner(
   userId?: string | null,
 ): Promise<InsightsOverviewResponse> {
-  const metricsRows = await db
-    .select({
-      celebrityId: celebrityMetrics.celebrityId,
-      approvalPct: celebrityMetrics.approvalPct,
-      approvalAvgRating: celebrityMetrics.approvalAvgRating,
-      approvalVotesCount: celebrityMetrics.approvalVotesCount,
-      fameIndex: celebrityMetrics.fameIndex,
-    })
-    .from(celebrityMetrics)
-    .where(gte(celebrityMetrics.approvalVotesCount, QUADRANT_MIN_VOTES));
+  const [metricsRows, peopleList, snapshots, story, favRows] = await Promise.all([
+    db
+      .select({
+        celebrityId: celebrityMetrics.celebrityId,
+        approvalPct: celebrityMetrics.approvalPct,
+        approvalAvgRating: celebrityMetrics.approvalAvgRating,
+        approvalVotesCount: celebrityMetrics.approvalVotesCount,
+        fameIndex: celebrityMetrics.fameIndex,
+      })
+      .from(celebrityMetrics)
+      .where(gte(celebrityMetrics.approvalVotesCount, QUADRANT_MIN_VOTES)),
+    storage.getTrendingPeople(),
+    loadLatestSnapshotsByPerson(),
+    getInsightsStory(),
+    userId
+      ? db
+          .select({ personId: userFavourites.personId })
+          .from(userFavourites)
+          .where(eq(userFavourites.userId, userId))
+      : Promise.resolve([]),
+  ]);
+
+  const [signals, driverMix] = await Promise.all([
+    loadPersonSignals({ snapshots }),
+    loadDriversSummary(20, { people: peopleList, snapshots }),
+  ]);
 
   const eligible = metricsRows.filter(
     (m) => (m.approvalVotesCount ?? 0) >= QUADRANT_MIN_VOTES && m.approvalPct != null,
@@ -46,7 +64,6 @@ export async function loadInsightsOverview(
   const medianFame = fameValues[Math.floor(fameValues.length / 2)] ?? 0;
   const medianApproval = approvalValues[Math.floor(approvalValues.length / 2)] ?? 50;
 
-  const peopleList = await storage.getTrendingPeople();
   const peopleMap = new Map(peopleList.map((p) => [p.id, p]));
 
   const quadrantPoints = eligible.map((m) => {
@@ -65,9 +82,6 @@ export async function loadInsightsOverview(
       quadrant: assignQuadrant(fame, approval, medianFame, medianApproval),
     };
   });
-
-  const driverMix = await loadDriversSummary(20);
-  const story = await getInsightsStory();
 
   const climbers = [...peopleList]
     .filter((p) => (p.change7d ?? 0) > 0)
@@ -102,36 +116,32 @@ export async function loadInsightsOverview(
     }));
 
   let favouritesSignals: InsightsOverviewResponse["favouritesSignals"];
-  if (userId) {
-    const favs = await db
-      .select({ personId: userFavourites.personId })
-      .from(userFavourites)
-      .where(eq(userFavourites.userId, userId));
-
-    const favIds = favs.map((f) => f.personId);
-    const favTrending = peopleList.filter((p) => favIds.includes(p.id));
-    const contextMap = await getTrendContextBatch(favIds.slice(0, 50));
+  if (userId && favRows.length > 0) {
+    const favIds = new Set(favRows.map((f) => f.personId));
+    const favTrending = peopleList.filter((p) => favIds.has(p.id));
 
     let newsDrivenCount = 0;
     let top50CrossedCount = 0;
-    const highlights: NonNullable<InsightsOverviewResponse["favouritesSignals"]>["highlights"] = [];
 
     for (const p of favTrending) {
-      const ctx = contextMap.get(p.id);
-      if (ctx?.primaryDriver === "NEWS") newsDrivenCount++;
+      const sig = signals.get(p.id);
+      if (sig?.primaryDriver === "NEWS") newsDrivenCount++;
       if (p.rank <= 50 && (p.change7d ?? 0) > 2) top50CrossedCount++;
     }
 
+    const highlights: NonNullable<InsightsOverviewResponse["favouritesSignals"]>["highlights"] =
+      [];
     const biggest = [...favTrending]
       .filter((p) => typeof p.change24h === "number")
       .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))[0];
 
     if (biggest) {
-      const ctx = contextMap.get(biggest.id);
+      const sig = signals.get(biggest.id);
+      const driverSuffix = sig ? ` — ${INSIGHTS_DRIVER_LABELS[sig.primaryDriver]}` : "";
       highlights.push({
         personId: biggest.id,
         name: biggest.name,
-        message: `${biggest.name} moved ${(biggest.change24h ?? 0) > 0 ? "+" : ""}${(biggest.change24h ?? 0).toFixed(1)}% today${ctx?.reasonTag ? ` — ${ctx.reasonTag}` : ""}.`,
+        message: `${biggest.name} moved ${(biggest.change24h ?? 0) > 0 ? "+" : ""}${(biggest.change24h ?? 0).toFixed(1)}% today${driverSuffix}.`,
       });
     }
 
@@ -157,4 +167,12 @@ export async function loadInsightsOverview(
     story,
     favouritesSignals,
   };
+}
+
+export async function loadInsightsOverview(
+  userId?: string | null,
+): Promise<InsightsOverviewResponse> {
+  return withDiscoverCache(`overview:${userId ?? "anon"}`, () =>
+    loadInsightsOverviewInner(userId),
+  );
 }

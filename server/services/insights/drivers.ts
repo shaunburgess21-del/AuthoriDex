@@ -72,13 +72,24 @@ export async function loadPersonSignals(
   return out;
 }
 
-export async function loadDriversSummary(topN: number): Promise<{
+export async function loadDriversSummary(
+  topN: number,
+  prefetched?: {
+    people?: Awaited<ReturnType<typeof storage.getTrendingPeople>>;
+    signals?: Map<string, PersonSignalSnapshot>;
+    snapshots?: Map<string, LatestSnapshotRow>;
+  },
+): Promise<{
   topN: number;
   segments: InsightsDriverMixSegment[];
 }> {
-  const people = await storage.getTrendingPeople();
+  const people = prefetched?.people ?? (await storage.getTrendingPeople());
   const topPeople = [...people].sort((a, b) => a.rank - b.rank).slice(0, topN);
-  const signals = await loadPersonSignals();
+  const signals =
+    prefetched?.signals ??
+    (await loadPersonSignals(
+      prefetched?.snapshots ? { snapshots: prefetched.snapshots } : undefined,
+    ));
 
   const counts = new Map<InsightsPrimaryDriver, string[]>();
   for (const p of topPeople) {

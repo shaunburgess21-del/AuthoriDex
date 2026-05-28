@@ -2,16 +2,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
 import type { InsightsSource } from "@shared/insights/filters";
-import { INSIGHTS_SOURCE_LABELS } from "@shared/insights/constants";
+import { INSIGHTS_DRIVER_LABELS, INSIGHTS_SOURCE_LABELS } from "@shared/insights/constants";
 
-export const DRIVER_DISPLAY: Record<InsightsPrimaryDriver, string> = {
-  NEWS: "Press-led",
-  WIKI: "Wiki-led",
-  TRENDS: "Search-led",
-  VELOCITY: "Velocity-led",
-  MASS: "Mass-led",
-  MIXED: "Mixed signals",
-};
+export const DRIVER_DISPLAY: Record<InsightsPrimaryDriver, string> = INSIGHTS_DRIVER_LABELS;
 
 export const SOURCE_DISPLAY: Record<InsightsSource, string> = INSIGHTS_SOURCE_LABELS;
 

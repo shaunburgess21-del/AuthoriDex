@@ -2022,15 +2022,6 @@ export default function HomePage() {
                   collapsed={trendingNowCollapsed}
                   onToggle={handleTrendingNowToggle}
                 />
-                <p className="mt-3 text-center">
-                  <Link
-                    href="/insights?tab=overview"
-                    className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                    data-testid="link-insights-full-board"
-                  >
-                    See full board on Insights →
-                  </Link>
-                </p>
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />

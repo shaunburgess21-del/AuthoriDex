@@ -30,6 +30,8 @@ export function useInsightsOverview() {
     queryKey: ["/api/insights/overview"],
     queryFn: () => fetchInsightsJson<InsightsOverviewResponse>("/api/insights/overview"),
     staleTime: 90_000,
+    /** Keep last overview visible while refetching so tab switches feel instant. */
+    placeholderData: (prev) => prev,
   });
 }
 
