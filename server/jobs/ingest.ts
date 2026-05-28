@@ -47,8 +47,7 @@ import {
 } from "../providers/serpapi-trends";
 
 // How many people get a GDELT query each ingest cycle. The candidate set is
-// the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`, so
-// the actual unique count is roughly N..1.6N (lots of overlap on the head of
+// the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`.
 // Was 80 (top-80 by rank ∪ top-80 by wiki ≈ 106–120 people). Full-cohort
 // coverage (May 2026): every tracked person is eligible for fresh GDELT each
 // cycle so nobody churns in/out of the candidate set between hours (the main
