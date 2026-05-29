@@ -82,6 +82,14 @@ const TRENDS_DAILY_SCALE_CUTOVER = new Date(
 // fetch instead of waiting up to 12h for the next cadence gate.
 let _trendsMethodRolloutComplete = false;
 
+// Process-lifetime flag mirroring the trends rollout above, for the May 2026
+// switch from Google Ads to clickstream search volume. Forces one fetch on the
+// first post-deploy ingest so the roster flips off the old Google-Ads-scale
+// values (and suppressed politicians stop showing "awaiting") immediately,
+// rather than waiting up to 24h for the daily gate. Self-clears once any
+// snapshot carries `googleSearchVolumeSource = 'clickstream'`.
+let _searchVolumeClickstreamRolloutComplete = false;
+
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,
   wikiData: Map<string, any>,
@@ -1756,13 +1764,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // GOOGLE SEARCH VOLUME — DataForSEO Google Ads, daily cadence (May 2026)
+    // SEARCH VOLUME — DataForSEO clickstream, daily cadence (May 2026)
     // ══════════════════════════════════════════════════════════════════════════
-    // Absolute monthly search volume per person → MASS sub-signal (blended into
+    // Estimated monthly search volume per person → MASS sub-signal (blended into
     // the wiki/attention slot in computeTrendScore). One batch call covers the
-    // whole roster for a flat $0.05; gated to once per day (search volume is a
+    // whole roster for ~$0.01-0.03; gated to once per day (search volume is a
     // monthly metric). Between fetches the value is carried forward from the
     // last snapshot (latestSearchVolumeDiagMap). Inert without credentials.
+    // Source is clickstream (not Google Ads) so political figures aren't
+    // suppressed — see server/providers/dataforseo.ts header.
     const searchVolumeDataMap = new Map<string, SearchVolumeDatum>();
 
     if (isDataForSeoConfigured() && !isBackfill) {
@@ -1784,6 +1794,29 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           }
         }
         shouldFetchSV = shouldFetchSearchVolume(lastSVFetchAt);
+        // One-time clickstream cutover force: if the daily gate would skip but
+        // no snapshot yet carries the clickstream source tag, fetch anyway so
+        // the switch off Google-Ads-scale values lands on the first post-deploy
+        // tick instead of up to 24h later.
+        if (!shouldFetchSV && !_searchVolumeClickstreamRolloutComplete) {
+          try {
+            const rollRow = await db.execute(
+              sql`SELECT EXISTS (
+                    SELECT 1 FROM trend_snapshots
+                    WHERE snapshot_origin = 'ingest'
+                      AND diagnostics::jsonb->'raw'->>'googleSearchVolumeSource' = 'clickstream'
+                  ) AS has_cs`,
+            );
+            if ((rollRow.rows[0] as { has_cs?: boolean })?.has_cs) {
+              _searchVolumeClickstreamRolloutComplete = true;
+            } else {
+              shouldFetchSV = true;
+              console.log("[Ingest] Search volume: forcing fetch for clickstream cutover");
+            }
+          } catch (e) {
+            console.warn("[Ingest] Search volume cutover check failed:", (e as Error).message);
+          }
+        }
         if (!shouldFetchSV && lastSVFetchAt) {
           const elapsedMin = Math.round((Date.now() - lastSVFetchAt.getTime()) / 60000);
           console.log(`[Ingest] Search volume: skipping — last DataForSEO fetch ${elapsedMin}min ago (gate: 24h)`);
@@ -1806,6 +1839,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.searchVolume = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.searchVolume = "OK";
           else sourceStatuses.searchVolume = "DEGRADED";
+          if (coveredCount > 0) _searchVolumeClickstreamRolloutComplete = true;
           console.log(`[Ingest] Search volume: ${coveredCount}/${people.length} people with volume, ${svStats.callsAttempted} API calls, $${svStats.totalCostUsd}, ${Date.now() - svStart}ms`);
         } catch (e) {
           console.error("[Ingest] Search volume batch fetch failed:", (e as Error).message);
@@ -2457,6 +2491,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               googleSearchVolume: searchVolumeForPerson,
               googleSearchVolumeMoMDeltaPct: searchVolumeMoMDeltaPct,
               googleSearchVolumeFresh: svHasFresh,
+              // Marks the cutover from Google Ads to clickstream source. Only
+              // tagged on fresh fetches; the gate's one-time force keys off it.
+              ...(svHasFresh ? { googleSearchVolumeSource: "clickstream" } : {}),
               ...(searchVolumeFetchedAtIso ? { googleSearchVolumeFetchedAt: searchVolumeFetchedAtIso } : {}),
               // 12-month history for the profile sparkline. Persisted only on a
               // fresh DataForSEO fetch (not carried forward every hourly tick)

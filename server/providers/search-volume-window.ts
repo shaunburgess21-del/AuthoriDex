@@ -130,7 +130,10 @@ export function computeMoMDeltaPct(
 }
 
 /**
- * Parse a `search_volume/live` response into personId → monthly search volume.
+ * Parse a DataForSEO search-volume response into personId → monthly search
+ * volume. Handles both response shapes:
+ *  - clickstream `bulk_search_volume`: keyword items nested under result[].items[]
+ *  - Google Ads `search_volume` (legacy): keyword items flat in result[]
  * Tolerant of nulls/missing fields; unknown keywords are ignored. Exported for
  * unit testing against fixture payloads.
  */
@@ -144,19 +147,22 @@ export function parseSearchVolumeResponse(
   for (const task of tasks) {
     const result = task?.result;
     if (!Array.isArray(result)) continue;
-    for (const item of result) {
-      const kw = item?.keyword;
-      if (typeof kw !== "string") continue;
-      const personId = keywordToPersonId.get(normalizeKeyword(kw));
-      if (!personId) continue;
-      const sv = item?.search_volume;
-      const volume = typeof sv === "number" && Number.isFinite(sv) && sv > 0 ? sv : 0;
-      const momDeltaPct = computeMoMDeltaPct(item?.monthly_searches);
-      const history = buildSearchVolumeHistory(item?.monthly_searches);
-      // Keep the higher-volume datum if two inputs collapse to one keyword.
-      const existing = out.get(personId);
-      if (!existing || volume > existing.volume) {
-        out.set(personId, { volume, momDeltaPct, history });
+    for (const node of result) {
+      const items = Array.isArray(node?.items) ? node.items : [node];
+      for (const item of items) {
+        const kw = item?.keyword;
+        if (typeof kw !== "string") continue;
+        const personId = keywordToPersonId.get(normalizeKeyword(kw));
+        if (!personId) continue;
+        const sv = item?.search_volume;
+        const volume = typeof sv === "number" && Number.isFinite(sv) && sv > 0 ? sv : 0;
+        const momDeltaPct = computeMoMDeltaPct(item?.monthly_searches);
+        const history = buildSearchVolumeHistory(item?.monthly_searches);
+        // Keep the higher-volume datum if two inputs collapse to one keyword.
+        const existing = out.get(personId);
+        if (!existing || volume > existing.volume) {
+          out.set(personId, { volume, momDeltaPct, history });
+        }
       }
     }
   }

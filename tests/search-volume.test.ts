@@ -208,6 +208,40 @@ test("searchSurgeLevel: dead zone, tiers, and negatives", () => {
   assert.equal(searchSurgeLevel(235), "high");
 });
 
+test("parseSearchVolumeResponse: handles clickstream result[].items[] nesting", () => {
+  const json = {
+    tasks: [
+      {
+        result: [
+          {
+            location_code: 2840,
+            items_count: 2,
+            items: [
+              {
+                keyword: "donald trump",
+                search_volume: 938156,
+                monthly_searches: [
+                  { year: 2026, month: 3, search_volume: 953320 },
+                  { year: 2026, month: 4, search_volume: 938156 },
+                ],
+              },
+              { keyword: "elon musk", search_volume: 658840 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const k = new Map<string, string>([
+    ["donald trump", "trump"],
+    ["elon musk", "p2"],
+  ]);
+  const out = parseSearchVolumeResponse(json, k);
+  assert.equal(out.get("trump")?.volume, 938156);
+  assert.equal(out.get("trump")?.history.length, 2);
+  assert.equal(out.get("p2")?.volume, 658840);
+});
+
 test("parseSearchVolumeResponse: tolerant of malformed payloads", () => {
   assert.equal(parseSearchVolumeResponse(null, k2p).size, 0);
   assert.equal(parseSearchVolumeResponse({}, k2p).size, 0);

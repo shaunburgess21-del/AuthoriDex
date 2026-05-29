@@ -1,19 +1,25 @@
 // ============================================================================
-// DataForSEO Google Ads Search Volume Provider (May 2026)
+// DataForSEO Clickstream Search Volume Provider (May 2026)
 // ============================================================================
-// Returns ABSOLUTE average monthly Google searches for a person's name — a
+// Returns ABSOLUTE estimated monthly Google searches for a person's name — a
 // cross-person-comparable popularity signal (unlike Google Trends, which is
 // self-normalised 0-100 per query). Used as a MASS sub-signal blended into the
 // wiki/attention slot in the trend score (see scoring/trendScore.ts).
 //
-// Why Google Ads search volume and not Trends: Trends only ever told us "this
-// person vs their own recent peak". Google Ads keyword volume tells us "X gets
-// ~2.2M searches/mo, Y gets ~90k/mo" on one shared absolute scale — which is
-// what a fame/mass signal needs.
+// Source = CLICKSTREAM, not Google Ads. We originally used the Google Ads
+// `search_volume` endpoint, but Google Ads suppresses search volume for
+// political keywords (returns null for Trump, Putin, AOC, etc. — a Google Ads
+// *advertising policy*). Political figures are core to this product, so we
+// switched to DataForSEO's clickstream `bulk_search_volume` endpoint, which is
+// built from real anonymised user search behaviour and is NOT bound by that
+// policy: it returns all 161 people (validated), including every politician.
+// Clickstream runs on a lower but internally-consistent scale (e.g. Taylor
+// Swift ~1.2M vs Google Ads ~4.1M); since the mass score is log-normalised the
+// scale change barely moves fame_index, and every person now sits on one
+// comparable scale.
 //
-// Cadence: search volume is a MONTHLY metric (Google Ads updates mid-month), so
-// a daily refresh is overkill-but-cheap and a once-per-day gate is plenty. One
-// request carries up to 1000 keywords for a flat $0.05, so the entire roster is
+// Cadence: search volume is a MONTHLY metric, so a daily refresh is plenty. One
+// request carries up to 1000 keywords for ~$0.01-0.03, so the entire roster is
 // a single call. Between fetches, ingest carries the last value forward.
 //
 // Auth: HTTP Basic with the login/password pair from
@@ -45,12 +51,15 @@ export {
 
 const DATAFORSEO_LOGIN = process.env.DATAFORSEO_LOGIN;
 const DATAFORSEO_PASSWORD = process.env.DATAFORSEO_PASSWORD;
-// Location for search volume. Defaults to United States (most complete Google
-// Ads data); override to e.g. "United Kingdom" or omit-for-worldwide via env.
-const DATAFORSEO_LOCATION = process.env.DATAFORSEO_LOCATION?.trim() || "United States";
+// Location for search volume as a DataForSEO location_code (the clickstream
+// bulk endpoint takes a numeric code, not a name). Default 2840 = United States.
+// Full list: https://api.dataforseo.com/v3/keywords_data/google_ads/locations
+const DATAFORSEO_LOCATION_CODE = Number(process.env.DATAFORSEO_LOCATION_CODE) || 2840;
+// Kept only as a stable label for the cache key / logs.
+const DATAFORSEO_LOCATION = process.env.DATAFORSEO_LOCATION?.trim() || `loc${DATAFORSEO_LOCATION_CODE}`;
 
 const LIVE_URL =
-  "https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live";
+  "https://api.dataforseo.com/v3/keywords_data/clickstream_data/bulk_search_volume/live";
 const REQUEST_TIMEOUT_MS = 30_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 const MAX_KEYWORDS_PER_TASK = 1000;
@@ -190,7 +199,7 @@ async function dfsFetch(keywords: string[]): Promise<any | null> {
   _callsAttempted++;
   const body = JSON.stringify([
     {
-      location_name: DATAFORSEO_LOCATION,
+      location_code: DATAFORSEO_LOCATION_CODE,
       language_code: "en",
       keywords,
     },
@@ -256,9 +265,9 @@ async function dfsFetch(keywords: string[]): Promise<any | null> {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch absolute average monthly Google search volume for each person. Returns
- * personId → { volume, momDeltaPct } (people with no/zero data are simply
- * absent). Batches into ≤1000-keyword requests (each a flat $0.05). A
+ * Fetch estimated monthly Google search volume (clickstream) for each person.
+ * Returns personId → { volume, momDeltaPct, history } (people with no data are
+ * simply absent). Batches into ≤1000-keyword requests (~$0.01-0.03 each). A
  * successful merged batch is cached for ~20h so a same-day re-run doesn't
  * re-bill.
  */
@@ -283,10 +292,11 @@ export async function fetchSearchVolumeBatch(
   }
   const keywords = Array.from(keywordToPersonId.keys());
 
-  // Cache key bumped on each stored-shape change (sv3 adds `history`). Old-shape
-  // entries live under prior keys and simply expire unused.
+  // Cache key bumped on each stored-shape/source change (csv1 = clickstream
+  // source, replacing the Google Ads sv3 values which were a different scale).
+  // Old-key entries simply expire unused.
   const dayKey = new Date().toISOString().slice(0, 10);
-  const cacheKey = `dataforseo:sv3:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
+  const cacheKey = `dataforseo:csv1:${DATAFORSEO_LOCATION}:${dayKey}:${keywords.length}`;
   const cached = await getCached(cacheKey);
   if (cached && typeof cached === "object") {
     const out = new Map<string, SearchVolumeDatum>();

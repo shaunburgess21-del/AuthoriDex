@@ -1,10 +1,10 @@
-// Live validation for the DataForSEO search-volume mass signal.
+// Live validation for the DataForSEO clickstream search-volume mass signal.
 //
 // Run AFTER setting DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD in .env:
 //   npx tsx --env-file=.env server/scripts/validate-search-volume.ts
 //
-// Fetches absolute monthly Google search volume for the current roster and
-// prints it sorted desc, so you can eyeball disambiguation (a wrong keyword
+// Fetches estimated monthly search volume (clickstream) for the current roster
+// and prints it sorted desc, so you can eyeball disambiguation (a wrong keyword
 // usually shows up as an implausibly huge or zero volume) BEFORE trusting the
 // mass blend in production. No scores are written; this is read-only.
 
