@@ -108,7 +108,7 @@ interface MomentumData {
       /** Up-to-12-month history (ascending by month) for the sparkline. */
       history?: Array<{ month: string; volume: number }>;
     };
-    /** Web Sentiment (May 2026 — DataForSEO Content Analysis). Organic press polarity. */
+    /** Web Sentiment (May 2026 — DataForSEO Content Analysis). Organic web polarity. */
     webSentiment?: {
       /** Omitted when there are citations but too few polarized mentions for a headline. */
       positivePct?: number;
@@ -191,7 +191,7 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const SEARCH_INTEREST_COPY =
-  "Roughly how many times this person is searched on Google each month (estimated from clickstream data). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
+  "Google searches in the most recent month (estimated from clickstream data) — not a 12-month average. A cross-person popularity measure: High = 500k+, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
 
 const SEARCH_MOMENTUM_COPY =
   "How intensely this person is being searched on Google right now, on a 0–100 scale normalised to their own recent peak (Google Trends). The +/-% chip compares the last few hours to their average over the past day — rising means search attention is heating up. Not the same as Search Interest, which shows absolute monthly search volume.";
@@ -615,7 +615,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             : "low"))
     : "none";
   const searchVolumeValue = hasSearchVolume ? formatNum(searchVolumeMonthly) : "—";
-  const searchVolumeUnit = hasSearchVolume ? "searches / month" : "awaiting data";
+  const searchVolumeUnit = hasSearchVolume ? "searches (latest mo)" : "awaiting data";
   const searchVolumeDeltaPct = signals.searchVolume?.deltaPct ?? 0;
   const searchVolumeHistory = signals.searchVolume?.history ?? [];
   const showSearchSparkline = hasSearchVolume && searchVolumeHistory.length >= 3;
@@ -683,7 +683,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       ? "—"
       : "—";
   const webSentimentUnit = hasWebSentimentHeadline
-    ? "positive press (web)"
+    ? "positive (web)"
     : hasWebSentimentBar
       ? "polarity mix (no headline %)"
       : "awaiting data";
