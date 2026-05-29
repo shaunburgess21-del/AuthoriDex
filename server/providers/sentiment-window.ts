@@ -5,11 +5,14 @@ export const SENTIMENT_FETCH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Persisted sentinel for methodology cutover / routes freshness gate.
  *  v2: per-request fetch (v1 batched 100 tasks/POST but summary/live is
- *  single-task, so v1 only ever covered the first person per chunk). */
-export const WEB_SENTIMENT_METHOD = "summary_pos_over_posneg_v2";
+ *  single-task, so v1 only ever covered the first person per chunk).
+ *  v3: English-only corpus (initial_dataset_filters language="en") to match
+ *  our western-English audience; bump forces a clean full re-fetch. */
+export const WEB_SENTIMENT_METHOD = "summary_pos_over_posneg_v3";
 
-/** Window label persisted on snapshots (lifetime corpus; date filters 40501 in probe). */
-export const WEB_SENTIMENT_WINDOW = "lifetime";
+/** Window label persisted on snapshots; also part of the cache key, so changing
+ *  it invalidates pre-English-filter cached readings. English-only lifetime corpus. */
+export const WEB_SENTIMENT_WINDOW = "lifetime_en";
 
 /** Minimum opinionated citations (pos+neg) before we surface a headline %. */
 export const WEB_SENTIMENT_MIN_OPINIONATED = 50;

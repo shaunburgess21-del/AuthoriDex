@@ -1,10 +1,11 @@
 // ============================================================================
 // DataForSEO Content Analysis Provider (May 2026 — Web Sentiment)
 // ============================================================================
-// Corpus-wide citation sentiment for a person's name via
-// content_analysis/summary/live. This is a single-task Live endpoint — it only
-// processes the FIRST task per POST — so we send one task per request and run
-// them with bounded concurrency (batching tasks silently dropped all but one).
+// English-only citation sentiment for a person's name via
+// content_analysis/summary/live (initial_dataset_filters language="en"). This is
+// a single-task Live endpoint — it only processes the FIRST task per POST — so we
+// send one task per request and run them with bounded concurrency (batching tasks
+// silently dropped all but one).
 // Headline = positive / (positive + negative); neutral shown in the 3-segment bar.
 
 import { db } from "../db";
@@ -167,6 +168,10 @@ function buildTaskPayload(personId: string, keyword: string): Record<string, unk
     tag: personId,
     page_type: [...PAGE_TYPES],
     positive_connotation_threshold: 0.4,
+    // English-only corpus (domain main language). Matches our western-English
+    // audience and trims foreign-language citations; probe confirmed this field
+    // works (unlike date filters) and preserves volume.
+    initial_dataset_filters: [["language", "=", "en"]],
   };
 }
 
