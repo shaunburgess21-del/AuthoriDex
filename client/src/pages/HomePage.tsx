@@ -855,7 +855,7 @@ function InsightPanelContent({
           type="button"
           onClick={onViewProfile}
           aria-label={`View ${person.name}'s profile`}
-          className="shrink-0 rounded-full transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-ring"
+          className="shrink-0 rounded-md transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="button-insight-avatar"
         >
           <PersonAvatar
