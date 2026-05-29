@@ -59,13 +59,13 @@ const PRESS_VS_CROWD_CARDS: Array<{
 }> = [
   {
     type: "press_loved_crowd_cool",
-    title: "Press Darling, Crowd Skeptic",
-    description: "Web/press reads positive; crowd approval is low",
+    title: "Web Darling, Crowd Skeptic",
+    description: "Online sentiment reads positive; crowd approval is low",
   },
   {
     type: "crowd_loved_press_critical",
-    title: "Crowd Favorite, Press Critic",
-    description: "Crowd approval is high; web/press reads negative",
+    title: "Crowd Favorite, Web Critic",
+    description: "Crowd approval is high; online sentiment reads negative",
   },
 ];
 
@@ -435,7 +435,7 @@ export function DiscoverTab() {
       </InsightsSection>
 
       <InsightsSection
-        title="Press vs Crowd"
+        title="Web vs Crowd"
         description="Where organic web sentiment and crowd Approval pull in opposite directions."
         accent="voxdex"
       >

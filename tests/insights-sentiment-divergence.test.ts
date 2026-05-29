@@ -26,10 +26,18 @@ test("classifyPressVsCrowd: press loved crowd cool", () => {
 });
 
 test("classifyPressVsCrowd: crowd loved press critical", () => {
-  const web = CROWD_LOVED_WEB_MAX - 5;
-  const crowd = CROWD_LOVED_APPROVAL_MIN + 10;
+  const web = CROWD_LOVED_WEB_MAX - 10;
+  const crowd = CROWD_LOVED_APPROVAL_MIN + 20;
   assert.ok(crowd - web >= SENTIMENT_DIVERGENCE_MIN_GAP);
   assert.equal(classifyPressVsCrowd(web, crowd), "crowd_loved_press_critical");
+});
+
+test("classifyPressVsCrowd: captures strong-gap near-miss at the web ceiling", () => {
+  // Rory-style case: web just under the (relaxed) ceiling, large negative gap.
+  assert.equal(CROWD_LOVED_WEB_MAX, 50);
+  assert.equal(classifyPressVsCrowd(48, 93), "crowd_loved_press_critical");
+  // Just above the ceiling should NOT classify even with a big gap.
+  assert.equal(classifyPressVsCrowd(CROWD_LOVED_WEB_MAX + 1, 93), null);
 });
 
 test("classifyPressVsCrowd: null when gap below minimum", () => {
@@ -44,7 +52,7 @@ test("classifyPressVsCrowd: null when aligned high on both", () => {
 
 test("buildSentimentHighlight: includes both percentages", () => {
   const h = buildSentimentHighlight("press_loved_crowd_cool", 78, 41);
-  assert.match(h, /Press 78%/);
+  assert.match(h, /Web 78%/);
   assert.match(h, /crowd 41%/);
   assert.match(h, /37 pt gap/);
 });

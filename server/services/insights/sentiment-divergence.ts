@@ -9,9 +9,9 @@ export const SENTIMENT_DIVERGENCE_MIN_GAP = 25;
 export const PRESS_LOVED_WEB_MIN = 55;
 export const PRESS_LOVED_APPROVAL_MAX = 50;
 
-/** Crowd reads positive; press reads critical. */
+/** Crowd reads positive; web reads critical. */
 export const CROWD_LOVED_APPROVAL_MIN = 55;
-export const CROWD_LOVED_WEB_MAX = 45;
+export const CROWD_LOVED_WEB_MAX = 50;
 
 export type PressVsCrowdDivergenceType =
   | "press_loved_crowd_cool"
@@ -66,9 +66,9 @@ export function buildSentimentHighlight(
   const gap = sentimentApprovalGap(webPositivePct, approvalPct);
   const gapAbs = gap != null ? Math.abs(gap) : 0;
   if (type === "press_loved_crowd_cool") {
-    return `Press ${Math.round(webPositivePct)}% positive vs crowd ${Math.round(approvalPct)}% approval (${gapAbs} pt gap)`;
+    return `Web ${Math.round(webPositivePct)}% positive vs crowd ${Math.round(approvalPct)}% approval (${gapAbs} pt gap)`;
   }
-  return `Crowd ${Math.round(approvalPct)}% approval vs press ${Math.round(webPositivePct)}% positive (${gapAbs} pt gap)`;
+  return `Crowd ${Math.round(approvalPct)}% approval vs web ${Math.round(webPositivePct)}% positive (${gapAbs} pt gap)`;
 }
 
 export function isPressVsCrowdDivergenceType(
