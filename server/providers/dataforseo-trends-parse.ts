@@ -1,7 +1,7 @@
 // Pure DataForSEO Trends explore/live parsers (no DB / env deps).
 
 import {
-  computeTrendsCurrentInterest,
+  computeTrendsDailyMomentum,
   type TrendsTimeseriesPoint,
 } from "./trends-window";
 
@@ -44,6 +44,6 @@ export function trendsBatchResultFromSeries(
   if (series.length === 0) {
     return { personId, timeseries: [], currentInterest: 0, avgWindowInterest: 0 };
   }
-  const { currentInterest, avgWindowInterest } = computeTrendsCurrentInterest(series);
+  const { currentInterest, avgWindowInterest } = computeTrendsDailyMomentum(series);
   return { personId, timeseries: series, currentInterest, avgWindowInterest };
 }

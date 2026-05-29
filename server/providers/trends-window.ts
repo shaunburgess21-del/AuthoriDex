@@ -16,20 +16,25 @@ export interface TrendsTimeseriesPoint {
 export const TRENDS_SERPAPI_WINDOW = "now 1-d";
 
 /**
- * DataForSEO `time_range` for explore/live (validated: 24 hourly points).
- * Replaces SerpApi `now 1-d` while keeping the same last-3h-mean math.
+ * DataForSEO `time_range` for explore/live. May 2026: switched from `past_day`
+ * (hourly) to `past_30_days` (daily) — the hourly series is normalized to the
+ * day's peak hour, so a "current 3h mean" read at a UTC trough returned ~0 for
+ * the whole roster (pure time-of-day bias). Daily points carry no time-of-day
+ * bias, giving a stable recent-vs-baseline momentum.
  */
-export const TRENDS_DFS_WINDOW = "past_day";
+export const TRENDS_DFS_WINDOW = "past_30_days";
 
 /**
  * Sentinel persisted on snapshots so routes/UI only render values from the
  * current methodology. Bumped May 2026 when ingest moved from SerpApi to
- * DataForSEO Trends (`past_day`) — old snapshots fail the gate and are
- * ignored until refreshed by the next ingest tick (≤12h).
+ * DataForSEO Trends — old snapshots fail the gate and are ignored until
+ * refreshed by the next ingest tick (≤12h).
  * v2: per-request fetch (the batched 100-tasks/POST only ever covered the
- * first keyword per chunk; bumping forces a clean full re-fetch on deploy).
+ * first keyword per chunk).
+ * v3: `past_30_days` daily series, recent-7d vs prior baseline (drops the
+ * time-of-day-biased "current 3h on past_day" reading). Bump forces re-fetch.
  */
-export const TRENDS_DELTA_METHOD = "dfs_current_3h_mean_on_past_day_v2";
+export const TRENDS_DELTA_METHOD = "dfs_recent7d_vs_prior_30d_v3";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const CURRENT_WINDOW_HOURS = 3;
@@ -89,6 +94,36 @@ export function computeTrendsCurrentInterest(
   return {
     currentInterest: meanInterest(fallbackTail),
     avgWindowInterest: meanInterest(sorted),
+  };
+}
+
+/** Recent-window length (days) for the `past_30_days` daily momentum reading. */
+const TRENDS_RECENT_DAYS = 7;
+
+/**
+ * Daily-granularity momentum from a `past_30_days` series (one point per day,
+ * normalized 0-100 to the window's peak day). Unlike the hourly `past_day`
+ * series, daily points carry no time-of-day bias, so the reading is stable
+ * regardless of when ingest samples.
+ *
+ * - `currentInterest`: mean of the most recent `recentDays` daily points — the
+ *   headline "recent search interest" (0-100, relative to the 30-day peak).
+ * - `avgWindowInterest`: mean of the PRIOR days (before the recent window) as a
+ *   momentum baseline; falls back to the full-series mean for short series.
+ */
+export function computeTrendsDailyMomentum(
+  series: TrendsTimeseriesPoint[],
+  recentDays = TRENDS_RECENT_DAYS,
+): { currentInterest: number; avgWindowInterest: number } {
+  if (series.length === 0) return { currentInterest: 0, avgWindowInterest: 0 };
+  const sorted = [...series].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
+  const recent = sorted.slice(-recentDays);
+  const prior = sorted.slice(0, -recentDays);
+  return {
+    currentInterest: meanInterest(recent),
+    avgWindowInterest: prior.length > 0 ? meanInterest(prior) : meanInterest(sorted),
   };
 }
 

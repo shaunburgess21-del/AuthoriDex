@@ -5,7 +5,7 @@ import {
   parseDataForSeoTrendsExploreTask,
   trendsBatchResultFromSeries,
 } from "../server/providers/dataforseo-trends-parse";
-import { computeTrendsCurrentInterest } from "../server/providers/trends-window";
+import { computeTrendsDailyMomentum } from "../server/providers/trends-window";
 
 const H = 60 * 60 * 1000;
 
@@ -53,22 +53,42 @@ test("parseDataForSeoTrendsExploreTask: sparse / missing values default interest
   assert.equal(series[1].interest, 0);
 });
 
-test("trendsBatchResultFromSeries: wires computeTrendsCurrentInterest", () => {
-  const end = Date.parse("2026-05-29T20:00:00.000Z");
-  const series = Array.from({ length: 24 }, (_, i) => ({
-    date: new Date(end - (23 - i) * H).toISOString(),
+test("trendsBatchResultFromSeries: wires computeTrendsDailyMomentum", () => {
+  const day = 24 * H;
+  const start = Date.parse("2026-05-01T00:00:00.000Z");
+  const series = Array.from({ length: 27 }, (_, i) => ({
+    date: new Date(start + i * day).toISOString(),
     interest: 50,
   }));
-  series[22] = { date: new Date(end - 2 * H).toISOString(), interest: 80 };
-  series[23] = { date: new Date(end - 1 * H).toISOString(), interest: 90 };
-  series.push({ date: new Date(end).toISOString(), interest: 100 });
 
   const result = trendsBatchResultFromSeries("person-1", series);
-  const expected = computeTrendsCurrentInterest(series);
+  const expected = computeTrendsDailyMomentum(series);
   assert.equal(result.personId, "person-1");
   assert.equal(result.currentInterest, expected.currentInterest);
   assert.equal(result.avgWindowInterest, expected.avgWindowInterest);
   assert.equal(result.timeseries.length, series.length);
+});
+
+test("computeTrendsDailyMomentum: recent 7d mean vs prior baseline", () => {
+  const day = 24 * H;
+  const start = Date.parse("2026-05-01T00:00:00.000Z");
+  // 20 prior days at 60, then 7 recent days at 90 → rising.
+  const series = [
+    ...Array.from({ length: 20 }, (_, i) => ({ date: new Date(start + i * day).toISOString(), interest: 60 })),
+    ...Array.from({ length: 7 }, (_, i) => ({ date: new Date(start + (20 + i) * day).toISOString(), interest: 90 })),
+  ];
+  const { currentInterest, avgWindowInterest } = computeTrendsDailyMomentum(series);
+  assert.equal(currentInterest, 90); // last 7 days
+  assert.equal(avgWindowInterest, 60); // prior 20 days
+});
+
+test("computeTrendsDailyMomentum: short series falls back to full-series baseline", () => {
+  const day = 24 * H;
+  const start = Date.parse("2026-05-01T00:00:00.000Z");
+  const series = Array.from({ length: 5 }, (_, i) => ({ date: new Date(start + i * day).toISOString(), interest: 40 }));
+  const { currentInterest, avgWindowInterest } = computeTrendsDailyMomentum(series);
+  assert.equal(currentInterest, 40);
+  assert.equal(avgWindowInterest, 40);
 });
 
 test("trendsBatchResultFromSeries: empty series returns zeros", () => {
