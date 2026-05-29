@@ -61,6 +61,11 @@ import geoip from "geoip-lite";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
 import { computeTrendsMomentumDeltaPct, TRENDS_DELTA_METHOD } from "./providers/trends-window";
+import {
+  WEB_SENTIMENT_METHOD,
+  WEB_SENTIMENT_MIN_MENTIONS,
+  webSentimentLevel,
+} from "./providers/dataforseo-sentiment";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
@@ -3288,6 +3293,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : 0;
       if (searchVolumeMonthly > 0) activeSources.push("searchVolume");
 
+      // ── Web Sentiment (DataForSEO Content Analysis) ───────────────────────
+      let webSentimentDiagRaw = diag?.raw;
+      if (webSentimentDiagRaw?.webSentimentPositivePct == null) {
+        const [wsSnap] = await db
+          .select({ diagnostics: trendSnapshots.diagnostics })
+          .from(trendSnapshots)
+          .where(and(
+            eq(trendSnapshots.personId, id),
+            sql`diagnostics::jsonb->'raw'->'webSentimentPositivePct' IS NOT NULL`,
+            sql`diagnostics::jsonb->'raw'->>'webSentimentPositivePct' != 'null'`,
+          ))
+          .orderBy(desc(trendSnapshots.timestamp))
+          .limit(1);
+        if (wsSnap) {
+          webSentimentDiagRaw = (wsSnap.diagnostics as Record<string, any> | null)?.raw;
+        }
+      }
+      const webSentimentMethod = webSentimentDiagRaw?.webSentimentMethod;
+      const webSentimentHasCurrentMethod = webSentimentMethod === WEB_SENTIMENT_METHOD;
+      const webSentimentPositivePctRaw = webSentimentDiagRaw?.webSentimentPositivePct;
+      const webSentimentPositivePct =
+        webSentimentPositivePctRaw != null && webSentimentPositivePctRaw !== "null"
+          ? Number(webSentimentPositivePctRaw)
+          : null;
+      const webSentimentPositive = Number(webSentimentDiagRaw?.webSentimentPositive ?? 0);
+      const webSentimentNegative = Number(webSentimentDiagRaw?.webSentimentNegative ?? 0);
+      const webSentimentNeutral = Number(webSentimentDiagRaw?.webSentimentNeutral ?? 0);
+      const webSentimentTotal = Number(webSentimentDiagRaw?.webSentimentTotal ?? 0);
+      const webSentimentWindow = String(webSentimentDiagRaw?.webSentimentWindow ?? "lifetime");
+
+      const webSentimentFetchedAtRaw = webSentimentDiagRaw?.webSentimentFetchedAt;
+      let webSentimentFetchedAgeHours: number | null = null;
+      if (typeof webSentimentFetchedAtRaw === "string" && webSentimentFetchedAtRaw) {
+        const fetchedMs = Date.parse(webSentimentFetchedAtRaw);
+        if (Number.isFinite(fetchedMs)) {
+          webSentimentFetchedAgeHours =
+            Math.round((Date.now() - fetchedMs) / (1000 * 60 * 60) * 10) / 10;
+        }
+      }
+      const webSentimentMaxAgeHours = Number(process.env.WEB_SENTIMENT_MAX_AGE_HOURS) || 336;
+      const webSentimentIsFresh =
+        webSentimentFetchedAgeHours != null
+        && webSentimentFetchedAgeHours <= webSentimentMaxAgeHours;
+      const freshFlags = diag?.fresh as Record<string, unknown> | undefined;
+      const webSentimentCarriedForward = freshFlags?.webSentimentCarriedForward === true;
+
+      const webSentimentMentionSum =
+        webSentimentPositive + webSentimentNegative + webSentimentNeutral;
+      const webSentimentHasHeadline =
+        webSentimentPositivePct != null && Number.isFinite(webSentimentPositivePct);
+      const webSentimentHasBar =
+        webSentimentMentionSum >= WEB_SENTIMENT_MIN_MENTIONS;
+      const webSentimentShow =
+        webSentimentHasCurrentMethod
+        && webSentimentIsFresh
+        && (webSentimentHasHeadline || webSentimentHasBar);
+
+      if (webSentimentShow) activeSources.push("webSentiment");
+
       res.json({
         asOf: latest.timestamp.toISOString(),
         ageMinutes,
@@ -3404,6 +3468,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: searchVolumeDeltaPct,
             ...(searchVolumeHistory.length > 0 ? { history: searchVolumeHistory } : {}),
           } : undefined,
+          webSentiment: webSentimentShow
+              ? {
+                ...(webSentimentHasHeadline
+                  ? { positivePct: Math.round(webSentimentPositivePct!) }
+                  : {}),
+                positive: webSentimentPositive,
+                negative: webSentimentNegative,
+                neutral: webSentimentNeutral,
+                total: webSentimentTotal,
+                level: webSentimentLevel(
+                  webSentimentHasHeadline ? webSentimentPositivePct : null,
+                ),
+                window: webSentimentWindow,
+                ...(webSentimentCarriedForward ? { carriedForward: true } : {}),
+                ...(webSentimentFetchedAgeHours != null
+                  ? { fetchedAgeHours: webSentimentFetchedAgeHours }
+                  : {}),
+              }
+              : undefined,
           drivers: {
             status: driversStatus,
             breakdown: driverBreakdown,

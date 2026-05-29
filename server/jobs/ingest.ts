@@ -53,6 +53,16 @@ import {
   shouldFetchSearchVolume,
   type SearchVolumeDatum,
 } from "../providers/dataforseo";
+import {
+  fetchWebSentimentBatch,
+  isWebSentimentConfigured,
+  getWebSentimentRunStats,
+  resetWebSentimentRunStats,
+  shouldFetchWebSentiment,
+  WEB_SENTIMENT_METHOD,
+  WEB_SENTIMENT_WINDOW,
+  type WebSentimentBatchResult,
+} from "../providers/dataforseo-sentiment";
 
 // How many people get a GDELT query each ingest cycle. The candidate set is
 // the UNION of `top-N by leaderboard rank` and `top-N by wiki pageviews`.
@@ -89,6 +99,9 @@ let _trendsMethodRolloutComplete = false;
 // rather than waiting up to 24h for the daily gate. Self-clears once any
 // snapshot carries `googleSearchVolumeSource = 'clickstream'`.
 let _searchVolumeClickstreamRolloutComplete = false;
+
+// One-time force-fetch after deploy when no snapshot carries WEB_SENTIMENT_METHOD.
+let _webSentimentRolloutComplete = false;
 
 async function computeNewsCandidates(
   people: Array<{ id: string; name: string }>,
@@ -1023,6 +1036,18 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       fetchedAt: string;
     }>();
 
+    const latestWebSentimentDiagMap = new Map<string, {
+      positive: number;
+      negative: number;
+      neutral: number;
+      total: number;
+      positivePct: number | null;
+      window: string;
+      method: string;
+      usedFallbackName: boolean;
+      fetchedAt: string;
+    }>();
+
     for (const snap of historicalSnapshots) {
       const snapTime = new Date(snap.timestamp).getTime();
       const diff24h = Math.abs(snapTime - time24hAgo.getTime());
@@ -1101,6 +1126,42 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             momDeltaPct: Number(raw?.googleSearchVolumeMoMDeltaPct ?? 0),
             fetchedAt: svFetchedAt,
           });
+        }
+      }
+
+      const wsMethodCarried = String(raw?.webSentimentMethod ?? "");
+      if (wsMethodCarried === WEB_SENTIMENT_METHOD) {
+        const wsPos = Number(raw?.webSentimentPositive ?? 0);
+        const wsNeg = Number(raw?.webSentimentNegative ?? 0);
+        const wsNeu = Number(raw?.webSentimentNeutral ?? 0);
+        if (wsPos + wsNeg + wsNeu > 0) {
+          const snapAt = new Date(snap.timestamp);
+          const existingWs = latestWebSentimentDiagMap.get(snap.personId);
+          const wsFetchedAt =
+            typeof raw?.webSentimentFetchedAt === "string" && raw.webSentimentFetchedAt
+              ? raw.webSentimentFetchedAt
+              : snapAt.toISOString();
+          const pctRaw = raw?.webSentimentPositivePct;
+          const positivePct =
+            pctRaw != null && pctRaw !== "null" && Number.isFinite(Number(pctRaw))
+              ? Number(pctRaw)
+              : null;
+          if (
+            !existingWs
+            || new Date(wsFetchedAt).getTime() > new Date(existingWs.fetchedAt).getTime()
+          ) {
+            latestWebSentimentDiagMap.set(snap.personId, {
+              positive: wsPos,
+              negative: wsNeg,
+              neutral: wsNeu,
+              total: Number(raw?.webSentimentTotal ?? 0),
+              positivePct,
+              window: String(raw?.webSentimentWindow ?? WEB_SENTIMENT_WINDOW),
+              method: WEB_SENTIMENT_METHOD,
+              usedFallbackName: !!raw?.webSentimentUsedFallbackName,
+              fetchedAt: wsFetchedAt,
+            });
+          }
         }
       }
 
@@ -1852,6 +1913,93 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // WEB SENTIMENT — DataForSEO Content Analysis, weekly cadence (May 2026)
+    // ══════════════════════════════════════════════════════════════════════════
+    const webSentimentDataMap = new Map<string, WebSentimentBatchResult>();
+
+    if (isWebSentimentConfigured() && !isBackfill) {
+      let shouldFetchWS = true;
+      let lastWSFetchAt: Date | null = null;
+      try {
+        const lastWSRow = await db.execute(
+          sql`SELECT MAX((diagnostics::jsonb->'raw'->>'webSentimentFetchedAt')::timestamptz) AS last_fetch_ts
+              FROM trend_snapshots
+              WHERE snapshot_origin = 'ingest'
+                AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' IS NOT NULL
+                AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' <> ''`,
+        );
+        const lastFetchRaw = (lastWSRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+        if (lastFetchRaw) {
+          const parsed = new Date(lastFetchRaw);
+          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+            lastWSFetchAt = parsed;
+          }
+        }
+        shouldFetchWS = shouldFetchWebSentiment(lastWSFetchAt);
+        if (!_webSentimentRolloutComplete) {
+          try {
+            const rollRow = await db.execute(
+              sql`SELECT EXISTS (
+                    SELECT 1 FROM trend_snapshots
+                    WHERE snapshot_origin = 'ingest'
+                      AND diagnostics::jsonb->'raw'->>'webSentimentMethod' = ${WEB_SENTIMENT_METHOD}
+                  ) AS has_method`,
+            );
+            if ((rollRow.rows[0] as { has_method?: boolean })?.has_method) {
+              _webSentimentRolloutComplete = true;
+            } else {
+              shouldFetchWS = true;
+              console.log(`[Ingest] Web Sentiment: forcing fetch for rollout (sentinel=${WEB_SENTIMENT_METHOD})`);
+            }
+          } catch (e) {
+            console.warn("[Ingest] Web Sentiment rollout check failed:", (e as Error).message);
+          }
+        }
+        if (!shouldFetchWS && lastWSFetchAt) {
+          const elapsedMin = Math.round((Date.now() - lastWSFetchAt.getTime()) / 60000);
+          console.log(`[Ingest] Web Sentiment: skipping — last fetch ${elapsedMin}min ago (gate: 7d)`);
+        }
+      } catch (e) {
+        console.warn("[Ingest] Web Sentiment gate check failed, will fetch:", (e as Error).message);
+      }
+
+      if (shouldFetchWS) {
+        resetWebSentimentRunStats();
+        const wsStart = Date.now();
+        try {
+          const results = await fetchWebSentimentBatch(
+            people.map(p => ({
+              personId: p.id,
+              name: p.name,
+              keywordOverride: p.searchQueryOverride,
+            })),
+          );
+          for (const r of results) webSentimentDataMap.set(r.personId, r);
+          const wsStats = getWebSentimentRunStats();
+          const coveredCount = results.filter(
+            r => r.positivePct != null && (r.positive + r.negative + r.neutral) > 0,
+          ).length;
+          const coverage = people.length > 0 ? coveredCount / people.length : 0;
+          if (coveredCount === 0) sourceStatuses.webSentiment = "FAILED";
+          else if (coverage >= 0.5) sourceStatuses.webSentiment = "OK";
+          else sourceStatuses.webSentiment = "DEGRADED";
+          if (coveredCount > 0) _webSentimentRolloutComplete = true;
+          console.log(
+            `[Ingest] Web Sentiment: ${coveredCount}/${people.length} with headline %, ${wsStats.callsAttempted} API calls, $${wsStats.totalCostUsd}, ${Date.now() - wsStart}ms`,
+          );
+        } catch (e) {
+          console.error("[Ingest] Web Sentiment batch fetch failed:", (e as Error).message);
+          sourceStatuses.webSentiment = "FAILED";
+        }
+        sourceTimings.webSentiment = Date.now() - wsStart;
+      } else {
+        sourceStatuses.webSentiment = "SKIPPED";
+      }
+    } else if (!isWebSentimentConfigured()) {
+      sourceStatuses.webSentiment = "SKIPPED";
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // GOOGLE TRENDS HISTORY — fallback denominator when SerpApi fetch is skipped
     // ══════════════════════════════════════════════════════════════════════════
     // Fresh fetches supply the intra-day baseline directly from the returned
@@ -2279,6 +2427,31 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ? now.toISOString()
           : (svCarried?.fetchedAt ?? null);
 
+        const wsFresh = webSentimentDataMap.get(person.id);
+        const wsHasFreshFetch =
+          !!wsFresh && (wsFresh.positive + wsFresh.negative + wsFresh.neutral) > 0;
+        const wsCarried = latestWebSentimentDiagMap.get(person.id);
+        const wsCarriedForward = !wsHasFreshFetch && wsCarried != null;
+        const wsPositive = wsHasFreshFetch ? wsFresh!.positive : (wsCarried?.positive ?? 0);
+        const wsNegative = wsHasFreshFetch ? wsFresh!.negative : (wsCarried?.negative ?? 0);
+        const wsNeutral = wsHasFreshFetch ? wsFresh!.neutral : (wsCarried?.neutral ?? 0);
+        const wsTotal = wsHasFreshFetch ? wsFresh!.total : (wsCarried?.total ?? 0);
+        const wsPositivePct = wsHasFreshFetch
+          ? wsFresh!.positivePct
+          : (wsCarried?.positivePct ?? null);
+        const wsFetchedAtIso = wsHasFreshFetch
+          ? now.toISOString()
+          : wsCarriedForward
+            ? wsCarried!.fetchedAt
+            : null;
+        const wsMentionSum = wsPositive + wsNegative + wsNeutral;
+        const hasWebSentimentDiagnostics =
+          (wsHasFreshFetch || wsCarriedForward)
+          && wsMentionSum > 0
+          && (wsHasFreshFetch
+            ? true
+            : wsCarried!.method === WEB_SENTIMENT_METHOD);
+
         const inputs = {
           wikiPageviews: wiki?.pageviews24h || 0,
           wikiPageviews7dAvg: wiki?.averageDaily7d || 0, // 7-day average for stable mass baseline
@@ -2501,6 +2674,21 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 ? { googleSearchVolumeMonthly: svFreshValue!.history }
                 : {}),
             } : {}),
+            ...(hasWebSentimentDiagnostics ? {
+              webSentimentPositive: wsPositive,
+              webSentimentNegative: wsNegative,
+              webSentimentNeutral: wsNeutral,
+              webSentimentTotal: wsTotal,
+              webSentimentPositivePct: wsPositivePct,
+              webSentimentWindow: WEB_SENTIMENT_WINDOW,
+              ...(wsHasFreshFetch ? { webSentimentMethod: WEB_SENTIMENT_METHOD } : wsCarried?.method
+                ? { webSentimentMethod: wsCarried.method }
+                : {}),
+              webSentimentUsedFallbackName: wsHasFreshFetch
+                ? !(person.searchQueryOverride && person.searchQueryOverride.trim())
+                : (wsCarried?.usedFallbackName ?? !(person.searchQueryOverride && person.searchQueryOverride.trim())),
+              ...(wsFetchedAtIso ? { webSentimentFetchedAt: wsFetchedAtIso } : {}),
+            } : {}),
           },
           fresh: {
             wiki: !!wiki,
@@ -2514,6 +2702,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             search: !searchUsedFallback && !searchEmaHeld && (serper?.searchVolume ?? 0) > 0,
             trends: hasFreshTrendsFetch,
             trendsCarriedForward,
+            ...(hasWebSentimentDiagnostics ? { webSentimentCarriedForward: wsCarriedForward } : {}),
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
               ? (mediastackCadence?.shouldRefresh ?? true)

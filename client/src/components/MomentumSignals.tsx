@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp, Globe } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,19 @@ interface MomentumData {
       /** Up-to-12-month history (ascending by month) for the sparkline. */
       history?: Array<{ month: string; volume: number }>;
     };
+    /** Web Sentiment (May 2026 — DataForSEO Content Analysis). Organic press polarity. */
+    webSentiment?: {
+      /** Omitted when there are citations but too few polarized mentions for a headline. */
+      positivePct?: number;
+      positive: number;
+      negative: number;
+      neutral: number;
+      total: number;
+      level: MomentumLevel;
+      window: string;
+      carriedForward?: boolean;
+      fetchedAgeHours?: number;
+    };
     drivers: {
       status: "active" | "stable";
       breakdown: { search: number; news: number; wiki: number; momentum?: number } | null;
@@ -133,7 +146,10 @@ function formatNum(n: number): string {
 
 // Fallback thresholds used only when the server response doesn't carry `level`
 // (e.g. older cached responses or the first load before stats warm up).
-function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | "trends", value: number): MomentumLevel {
+function fallbackLevel(
+  source: "momentum" | "wiki-momentum" | "news" | "wiki" | "trends" | "web-sentiment",
+  value: number,
+): MomentumLevel {
   if (!Number.isFinite(value) || value <= 0) return "none";
   if (source === "momentum" || source === "wiki-momentum") {
     // Kept in sync with computeMomentumLevel in server/routes.ts.
@@ -151,6 +167,11 @@ function fallbackLevel(source: "momentum" | "wiki-momentum" | "news" | "wiki" | 
     // 24h-mean scale on `now 1-d` (May 2026). Population distribution
     // p25=28.3, p50=47.9, p75=61.2 — thresholds for ~26/45/29 Low/Med/High.
     if (value < 30) return "low";
+    if (value < 60) return "medium";
+    return "high";
+  }
+  if (source === "web-sentiment") {
+    if (value < 40) return "low";
     if (value < 60) return "medium";
     return "high";
   }
@@ -173,6 +194,9 @@ const SEARCH_INTEREST_COPY =
 
 const SEARCH_MOMENTUM_COPY =
   "How intensely this person is being searched on Google right now, on a 0–100 scale normalised to their own recent peak (Google Trends). The +/-% chip compares the last few hours to their average over the past day — rising means search attention is heating up. Not the same as Search Interest, which shows absolute monthly search volume.";
+
+const WEB_SENTIMENT_COPY =
+  "How news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % counts only positive vs negative mentions — neutral is shown in the bar but not in the %. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -301,6 +325,48 @@ function formatMonthShort(ym: string): string {
 // Bars are scaled to the series max; the most recent month is emphasised and
 // the first/last months are captioned so the time window is unambiguous. Each
 // bar carries a native title tooltip with the month + formatted volume.
+function SentimentBar({
+  positive,
+  negative,
+  neutral,
+}: {
+  positive: number;
+  negative: number;
+  neutral: number;
+}) {
+  const sum = positive + negative + neutral;
+  if (sum <= 0) return null;
+  const segments = [
+    { key: "pos", pct: (positive / sum) * 100, className: "bg-emerald-500/80" },
+    { key: "neu", pct: (neutral / sum) * 100, className: "bg-muted-foreground/35" },
+    { key: "neg", pct: (negative / sum) * 100, className: "bg-rose-500/80" },
+  ];
+  return (
+    <div className="mt-1.5" data-testid="web-sentiment-bar">
+      <div
+        className="flex h-2 w-full overflow-hidden rounded-full"
+        role="img"
+        aria-label={`Web sentiment: ${Math.round((positive / sum) * 100)}% positive, ${Math.round((neutral / sum) * 100)}% neutral, ${Math.round((negative / sum) * 100)}% negative`}
+      >
+        {segments.map((s) => (
+          s.pct > 0 ? (
+            <div
+              key={s.key}
+              className={cn("h-full min-w-[2px]", s.className)}
+              style={{ width: `${s.pct}%` }}
+            />
+          ) : null
+        ))}
+      </div>
+      <div className="flex justify-between text-[9px] text-muted-foreground/70 mt-0.5 font-mono">
+        <span>+{formatNum(positive)}</span>
+        <span>{formatNum(neutral)} neutral</span>
+        <span>-{formatNum(negative)}</span>
+      </div>
+    </div>
+  );
+}
+
 function SearchVolumeSparkline({
   history,
 }: {
@@ -461,9 +527,11 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   if (isLoading) {
     return (
       <div className="mt-8" data-testid="section-momentum-signals">
-        <h2 className="text-xl font-bold mb-1">Momentum Signals</h2>
+        <h2 className="text-xl font-bold mb-1">Attention Signals</h2>
         <p className="text-sm text-muted-foreground mb-4">Loading live signals...</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <SignalSkeleton />
+          <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
@@ -639,14 +707,51 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     </p>
   ) : null;
 
+  const ws = signals.webSentiment;
+  const webSentimentMentions = (ws?.positive ?? 0) + (ws?.negative ?? 0) + (ws?.neutral ?? 0);
+  const hasWebSentimentHeadline =
+    ws != null && ws.positivePct != null && Number.isFinite(ws.positivePct);
+  const hasWebSentimentBar = ws != null && webSentimentMentions > 0;
+  const hasWebSentiment = hasWebSentimentHeadline || hasWebSentimentBar;
+  const webSentimentLevel: MomentumLevel = hasWebSentimentHeadline
+    ? (ws!.level ?? fallbackLevel("web-sentiment", ws!.positivePct!))
+    : hasWebSentimentBar
+      ? "medium"
+      : "none";
+  const webSentimentValue = hasWebSentimentHeadline
+    ? `${Math.round(ws!.positivePct!)}%`
+    : hasWebSentimentBar
+      ? "—"
+      : "—";
+  const webSentimentUnit = hasWebSentimentHeadline
+    ? "positive press (web)"
+    : hasWebSentimentBar
+      ? "polarity mix (no headline %)"
+      : "awaiting data";
+  const webSentimentFooter = !hasWebSentiment ? (
+    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-web-sentiment-warmup">
+      {ws?.carriedForward ? "Carried forward from last weekly fetch" : "Awaiting web sentiment data"}
+    </p>
+  ) : (
+    <>
+      <SentimentBar positive={ws!.positive} negative={ws!.negative} neutral={ws!.neutral} />
+      <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-web-sentiment-mentions">
+        {hasWebSentimentHeadline
+          ? `Based on ${formatNum(webSentimentMentions)} web mentions`
+          : `Too few polarized mentions for a % — showing ${formatNum(webSentimentMentions)} citations`}
+        {ws!.carriedForward ? " · carried forward" : ""}
+      </p>
+    </>
+  );
+
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-xl font-bold">Momentum Signals</h2>
+          <h2 className="text-xl font-bold">Attention Signals</h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="whitespace-nowrap">Sources: News · Wikipedia · Search</span>
+          <span className="whitespace-nowrap">Sources: News · Wikipedia · Search · Web</span>
         </div>
       </div>
 
@@ -658,14 +763,11 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )}
 
       {/*
-       * Card layout (May 2026 — interim 7-card grid):
-       *   Row 1: Today's Take     |  Search Interest (monthly volume)
-       *   Row 2: Search Momentum    |  News Activity
-       *   Row 3: News Momentum      |  Wikipedia Pulse
-       *   Row 4: Wiki Momentum
-       *
-       * Search Interest + Search Momentum = mass + velocity search pair.
-       * News/wiki rows pair volume + acceleration side-by-side.
+       * Card layout (May 2026 — 8-card grid):
+       *   Row 1: Today's Take     |  Web Sentiment
+       *   Row 2: Search Interest  |  Search Momentum
+       *   Row 3: News Activity    |  News Momentum
+       *   Row 4: Wikipedia Pulse  |  Wiki Momentum
        */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <MomentumTakeCard
@@ -675,6 +777,27 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
             { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
           ]}
+        />
+
+        <SignalCard
+          testId="card-web-sentiment"
+          icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="Web Sentiment"
+          level={webSentimentLevel}
+          value={webSentimentValue}
+          unit={webSentimentUnit}
+          hideDelta
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={WEB_SENTIMENT_COPY}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-web-sentiment-tooltip" />
+            </TouchTooltip>
+          }
+          footer={webSentimentFooter}
         />
 
         <SignalCard

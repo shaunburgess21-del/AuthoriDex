@@ -147,7 +147,9 @@ const SOURCE_LABELS = {
   mediastack: "News (Mediastack)",
   gdelt: "News (GDELT)",
   serper: "Search (Serper)",
-  trends: "Search (Google Trends)",
+  trends: "Search Momentum",
+  searchVolume: "Search Interest",
+  webSentiment: "Web Sentiment",
 } as const;
 
 // Shared color mapping for the per-run W/M/G/S letter badges and any other
@@ -165,8 +167,11 @@ function sourceStatusColor(status: string | null | undefined): string {
 function sourceStatusTooltip(provider: string, status: string | null | undefined): string {
   const base = `${provider}: ${status ?? "—"}`;
   if (status === "THROTTLED") return `${base} (cache-only mode — Mediastack budget hard-stop active)`;
-  if (status === "SKIPPED" && provider === "Google Trends") {
-    return `${base} (12h fetch cadence — Google Trends is fetched separately, not every cycle)`;
+  if (status === "SKIPPED" && provider === "Search Momentum") {
+    return `${base} (12h fetch cadence — fetched separately, not every cycle)`;
+  }
+  if (status === "SKIPPED" && provider === "Web Sentiment") {
+    return `${base} (7d fetch cadence — fetched separately, not every cycle)`;
   }
   return base;
 }
@@ -6549,7 +6554,9 @@ export default function AdminDashboard() {
                                     <span title={sourceStatusTooltip("Mediastack", run.sourceStatuses.mediastack)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
                                     <span title={sourceStatusTooltip("GDELT", run.sourceStatuses.gdelt)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
                                     <span title={sourceStatusTooltip("Serper", run.sourceStatuses.serper)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
-                                    <span title={sourceStatusTooltip("Google Trends", run.sourceStatuses.trends)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.trends))}>T</span>
+                                    <span title={sourceStatusTooltip("Search Momentum", run.sourceStatuses.trends)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.trends))}>T</span>
+                                    <span title={sourceStatusTooltip("Search Interest", run.sourceStatuses.searchVolume)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.searchVolume))}>I</span>
+                                    <span title={sourceStatusTooltip("Web Sentiment", run.sourceStatuses.webSentiment)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.webSentiment))}>A</span>
                                   </div>
                                 )}
                                 {run.status === "locked_out" && <Badge variant="outline" className="text-[10px] text-yellow-500 py-0">locked</Badge>}
