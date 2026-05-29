@@ -26,8 +26,10 @@ export const TRENDS_DFS_WINDOW = "past_day";
  * current methodology. Bumped May 2026 when ingest moved from SerpApi to
  * DataForSEO Trends (`past_day`) — old snapshots fail the gate and are
  * ignored until refreshed by the next ingest tick (≤12h).
+ * v2: per-request fetch (the batched 100-tasks/POST only ever covered the
+ * first keyword per chunk; bumping forces a clean full re-fetch on deploy).
  */
-export const TRENDS_DELTA_METHOD = "dfs_current_3h_mean_on_past_day";
+export const TRENDS_DELTA_METHOD = "dfs_current_3h_mean_on_past_day_v2";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const CURRENT_WINDOW_HOURS = 3;
