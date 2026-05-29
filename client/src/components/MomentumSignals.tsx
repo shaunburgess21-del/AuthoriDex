@@ -194,10 +194,10 @@ const SEARCH_INTEREST_COPY =
   "Google searches in the most recent month (estimated from clickstream data) — not a 12-month average. A cross-person popularity measure: High = 500k+, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
 
 const SEARCH_MOMENTUM_COPY =
-  "How intensely this person is being searched on Google right now, on a 0–100 scale normalised to their own recent peak (Google Trends). The +/-% chip compares the last few hours to their average over the past day — rising means search attention is heating up. Not the same as Search Interest, which shows absolute monthly search volume.";
+  "How this person's Google search interest over the last week compares to the prior weeks, on a 0–100 scale normalised to their own 30-day peak (Google Trends). The +/-% chip shows whether recent search attention is rising or falling versus that baseline. Not the same as Search Interest, which shows absolute monthly search volume.";
 
 const WEB_SENTIMENT_COPY =
-  "How news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % counts only positive vs negative mentions — neutral is shown in the bar but not in the %. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
+  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % counts only positive vs negative mentions — neutral is shown in the bar but not in the %. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:

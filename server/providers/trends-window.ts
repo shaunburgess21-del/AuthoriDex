@@ -131,6 +131,14 @@ export function computeTrendsDailyMomentum(
 export const TRENDS_MOMENTUM_DEAD_ZONE_PCT = 10;
 
 /**
+ * Display cap for the momentum % chip. The peak-normalized daily series can give
+ * a tiny baseline when a person's 30-day peak falls in the recent window, which
+ * inflates recent/baseline into a meaningless "+900%". Clamp the displayed delta
+ * so a genuine surge reads "rising sharply" rather than a broken-looking number.
+ */
+export const TRENDS_MOMENTUM_DELTA_CAP_PCT = 200;
+
+/**
  * Convert persisted `momentumRatio` (current 3h mean / same-response 24h mean) to a
  * signed percent delta for pills and chips. Both inputs come from one SerpApi
  * `now 1-d` response, so there is no fetch-over-fetch drift or time-of-day
@@ -148,7 +156,11 @@ export function computeTrendsMomentumDeltaPct(
     return 0;
   }
   const raw = Math.round((momentumRatio - 1) * 100);
-  return Math.abs(raw) <= deadZonePct ? 0 : raw;
+  const bounded = Math.max(
+    -TRENDS_MOMENTUM_DELTA_CAP_PCT,
+    Math.min(TRENDS_MOMENTUM_DELTA_CAP_PCT, raw),
+  );
+  return Math.abs(bounded) <= deadZonePct ? 0 : bounded;
 }
 
 // ---------------------------------------------------------------------------

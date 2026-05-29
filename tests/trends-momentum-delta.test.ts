@@ -34,3 +34,9 @@ test("computeTrendsMomentumDeltaPct: exactly at +10% boundary -> 0", () => {
 test("computeTrendsMomentumDeltaPct: just outside +10% boundary -> 11%", () => {
   assert.equal(computeTrendsMomentumDeltaPct(1.11, true), 11);
 });
+
+test("computeTrendsMomentumDeltaPct: spiky recent peak (ratio 10) clamps to +200%", () => {
+  // Messi-style: prior baseline near zero inflates the ratio; the displayed
+  // delta must stay bounded rather than reading "+900%".
+  assert.equal(computeTrendsMomentumDeltaPct(10, true), 200);
+});
