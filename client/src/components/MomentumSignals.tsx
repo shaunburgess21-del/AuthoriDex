@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp, Globe } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { SentimentMiniBar } from "@/components/insights/SentimentMiniBar";
 import { cn } from "@/lib/utils";
 
 type MomentumLevel = "none" | "low" | "medium" | "high";
@@ -325,48 +326,6 @@ function formatMonthShort(ym: string): string {
 // Bars are scaled to the series max; the most recent month is emphasised and
 // the first/last months are captioned so the time window is unambiguous. Each
 // bar carries a native title tooltip with the month + formatted volume.
-function SentimentBar({
-  positive,
-  negative,
-  neutral,
-}: {
-  positive: number;
-  negative: number;
-  neutral: number;
-}) {
-  const sum = positive + negative + neutral;
-  if (sum <= 0) return null;
-  const segments = [
-    { key: "pos", pct: (positive / sum) * 100, className: "bg-emerald-500/80" },
-    { key: "neu", pct: (neutral / sum) * 100, className: "bg-muted-foreground/35" },
-    { key: "neg", pct: (negative / sum) * 100, className: "bg-rose-500/80" },
-  ];
-  return (
-    <div className="mt-1.5" data-testid="web-sentiment-bar">
-      <div
-        className="flex h-2 w-full overflow-hidden rounded-full"
-        role="img"
-        aria-label={`Web sentiment: ${Math.round((positive / sum) * 100)}% positive, ${Math.round((neutral / sum) * 100)}% neutral, ${Math.round((negative / sum) * 100)}% negative`}
-      >
-        {segments.map((s) => (
-          s.pct > 0 ? (
-            <div
-              key={s.key}
-              className={cn("h-full min-w-[2px]", s.className)}
-              style={{ width: `${s.pct}%` }}
-            />
-          ) : null
-        ))}
-      </div>
-      <div className="flex justify-between text-[9px] text-muted-foreground/70 mt-0.5 font-mono">
-        <span>+{formatNum(positive)}</span>
-        <span>{formatNum(neutral)} neutral</span>
-        <span>-{formatNum(negative)}</span>
-      </div>
-    </div>
-  );
-}
-
 function SearchVolumeSparkline({
   history,
 }: {
@@ -734,7 +693,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     </p>
   ) : (
     <>
-      <SentimentBar positive={ws!.positive} negative={ws!.negative} neutral={ws!.neutral} />
+      <SentimentMiniBar
+        positive={ws!.positive}
+        negative={ws!.negative}
+        neutral={ws!.neutral}
+        className="mt-1.5"
+        testId="web-sentiment-bar"
+      />
       <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-web-sentiment-mentions">
         {hasWebSentimentHeadline
           ? `Based on ${formatNum(webSentimentMentions)} web mentions`

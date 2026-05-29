@@ -24,6 +24,7 @@ import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { shareInsightsView } from "@/lib/insights-share";
 import { writeInsightsQuery } from "@shared/insights/filters";
 import { ChartOrList } from "./ChartOrList";
+import { SentimentMiniBar } from "./SentimentMiniBar";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,23 @@ const DIVERGENCE_CARDS: Array<{ type: InsightsDivergenceType; title: string; des
     type: "consensus",
     title: "Consensus Sweet Spot",
     description: "High approval with fair-rating consensus",
+  },
+];
+
+const PRESS_VS_CROWD_CARDS: Array<{
+  type: Extract<InsightsDivergenceType, "press_loved_crowd_cool" | "crowd_loved_press_critical">;
+  title: string;
+  description: string;
+}> = [
+  {
+    type: "press_loved_crowd_cool",
+    title: "Press Darling, Crowd Skeptic",
+    description: "Web/press reads positive; crowd approval is low",
+  },
+  {
+    type: "crowd_loved_press_critical",
+    title: "Crowd Favorite, Press Critic",
+    description: "Crowd approval is high; web/press reads negative",
   },
 ];
 
@@ -146,6 +164,92 @@ function DivergenceCard({
         ))}
         {data && data.rows.length === 0 && (
           <li className="text-xs text-muted-foreground">No matches right now.</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function PressVsCrowdCard({
+  type,
+  title,
+  description,
+}: {
+  type: Extract<InsightsDivergenceType, "press_loved_crowd_cool" | "crowd_loved_press_critical">;
+  title: string;
+  description: string;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/insights/discover/divergence", type],
+    queryFn: () => fetchDivergence(type),
+    staleTime: 90_000,
+  });
+
+  return (
+    <div className="rounded-lg border border-border/40 bg-background/40 p-3 h-full flex flex-col">
+      <h4 className="font-medium text-sm">{title}</h4>
+      <p className="text-xs text-muted-foreground mb-3 mt-0.5">{description}</p>
+      {isLoading && <Skeleton className="h-20 w-full flex-1" />}
+      <ul className="space-y-3 flex-1">
+        {data?.rows.map((row) => {
+          const webPct = row.webSentimentPositivePct;
+          const crowdPct = row.approvalPct;
+          const gap = row.sentimentApprovalGap;
+          return (
+            <li key={row.id} className="rounded-md border border-border/30 p-2">
+              <Link
+                href={`/person/${row.id}`}
+                onClick={() =>
+                  logInsightsEvent("discover", "divergence_row_click", { type, personId: row.id })
+                }
+                className="flex items-center gap-2 text-sm hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                <PersonAvatar name={row.name} avatar={row.avatar} size="xs" />
+                <span className="truncate flex-1 font-medium">{row.name}</span>
+                {gap != null && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono font-semibold tabular-nums shrink-0 px-1.5 py-0.5 rounded",
+                      gap > 0
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        : "bg-rose-500/15 text-rose-700 dark:text-rose-400",
+                    )}
+                  >
+                    {gap > 0 ? "+" : ""}
+                    {gap} pt
+                  </span>
+                )}
+              </Link>
+              {webPct != null && crowdPct != null && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground ml-8 mt-1 font-mono tabular-nums">
+                  <span>
+                    Web{" "}
+                    <span className="text-foreground font-medium">{Math.round(webPct)}%</span> pos
+                  </span>
+                  <span>
+                    Crowd{" "}
+                    <span className="text-foreground font-medium">{Math.round(crowdPct)}%</span>{" "}
+                    approval
+                  </span>
+                </div>
+              )}
+              {(row.webSentimentPositive ?? 0) + (row.webSentimentNegative ?? 0) + (row.webSentimentNeutral ?? 0) > 0 && (
+                <div className="ml-8">
+                  <SentimentMiniBar
+                    positive={row.webSentimentPositive ?? 0}
+                    negative={row.webSentimentNegative ?? 0}
+                    neutral={row.webSentimentNeutral ?? 0}
+                    showCounts={false}
+                  />
+                </div>
+              )}
+            </li>
+          );
+        })}
+        {data && data.rows.length === 0 && (
+          <li className="text-xs text-muted-foreground leading-relaxed">
+            No matches yet — needs web-sentiment coverage and 20+ approval votes.
+          </li>
         )}
       </ul>
     </div>
@@ -326,6 +430,18 @@ export function DiscoverTab() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
           {DIVERGENCE_CARDS.map((card) => (
             <DivergenceCard key={card.type} {...card} />
+          ))}
+        </div>
+      </InsightsSection>
+
+      <InsightsSection
+        title="Press vs Crowd"
+        description="Where organic web sentiment and crowd Approval pull in opposite directions."
+        accent="voxdex"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {PRESS_VS_CROWD_CARDS.map((card) => (
+            <PressVsCrowdCard key={card.type} {...card} />
           ))}
         </div>
       </InsightsSection>

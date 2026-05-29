@@ -114,7 +114,9 @@ export type InsightsDivergenceType =
   | "rising_disliked"
   | "underrated_gaining"
   | "overrated_cooling"
-  | "consensus";
+  | "consensus"
+  | "press_loved_crowd_cool"
+  | "crowd_loved_press_critical";
 
 export interface InsightsDiscoverRow {
   id: string;
@@ -131,6 +133,13 @@ export interface InsightsDiscoverRow {
   overratedPct: number | null;
   fairlyRatedPct: number | null;
   highlight: string;
+  /** Press vs crowd divergence — optional; populated for sentiment types only. */
+  webSentimentPositivePct?: number | null;
+  webSentimentPositive?: number;
+  webSentimentNegative?: number;
+  webSentimentNeutral?: number;
+  /** Signed: web positive % minus crowd approval %. */
+  sentimentApprovalGap?: number | null;
 }
 
 export interface InsightsSingleSourceSurgeRow {

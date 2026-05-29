@@ -37,6 +37,8 @@ const divergenceTypes = [
   "underrated_gaining",
   "overrated_cooling",
   "consensus",
+  "press_loved_crowd_cool",
+  "crowd_loved_press_critical",
 ] as const;
 
 const insightsEventLimiter = rateLimit({
