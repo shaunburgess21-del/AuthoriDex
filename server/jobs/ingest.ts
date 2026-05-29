@@ -36,15 +36,15 @@ import {
   MOMENTUM_RATIO_CAP,
 } from "../scoring/normalize";
 import {
-  fetchGoogleTrendsBatch,
-  isSerpApiTrendsConfigured,
-  getSerpApiTrendsRunStats,
-  resetSerpApiTrendsRunStats,
+  fetchDataForSeoTrendsBatch,
+  isDataForSeoTrendsConfigured,
+  getDataForSeoTrendsRunStats,
+  resetDataForSeoTrendsRunStats,
   shouldFetchGoogleTrends,
   TRENDS_DELTA_METHOD,
-  TRENDS_SERPAPI_WINDOW,
+  TRENDS_DFS_WINDOW,
   type TrendsBatchResult,
-} from "../providers/serpapi-trends";
+} from "../providers/dataforseo-trends";
 import {
   fetchSearchVolumeBatch,
   isDataForSeoConfigured,
@@ -70,7 +70,7 @@ const GDELT_CANDIDATE_COUNT = 1000;
 // replays. Bumped May 2026 when we switched from `now 7-d` (mean-of-24h) to
 // `now 1-d` (mean-of-last-3h) — different normalisation peak, not comparable.
 const TRENDS_DAILY_SCALE_CUTOVER = new Date(
-  process.env.TRENDS_DAILY_SCALE_CUTOVER ?? "2026-05-26T20:00:00.000Z",
+  process.env.TRENDS_DAILY_SCALE_CUTOVER ?? "2026-05-29T20:00:00.000Z",
 );
 
 // Process-lifetime flag: once we've persisted at least one snapshot on the
@@ -1078,7 +1078,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 ? raw.trendsFetchedAt
                 : snapAt.toISOString(),
             trendsDeltaMethod: TRENDS_DELTA_METHOD,
-            trendsWindow: String(raw?.trendsWindow ?? TRENDS_SERPAPI_WINDOW),
+            trendsWindow: String(raw?.trendsWindow ?? TRENDS_DFS_WINDOW),
           });
         }
       }
@@ -1645,21 +1645,19 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // GOOGLE TRENDS — 12h cadence gate + per-person fetch (May 2026)
+    // SEARCH MOMENTUM — DataForSEO Trends, 12h cadence gate (May 2026)
     // ══════════════════════════════════════════════════════════════════════════
-    // Gate on last *SerpApi* fetch (`raw.trendsFetchedAt`), not snapshot
-    // `timestamp`. Carry-forward hourly ticks persist `trendsInterest` but must
-    // not reset the 12h clock — see `shouldFetchGoogleTrends`.
+    // Gate on last real fetch (`raw.trendsFetchedAt`), not snapshot `timestamp`.
+    // Carry-forward hourly ticks persist `trendsInterest` but must not reset
+    // the 12h clock — see `shouldFetchGoogleTrends`.
     //
-    // Per-person (un-batched) fetch — see `serpapi-trends.ts` header for why.
-    // Budget math at ~160 people: 160 calls × 2 cycles/day × 30 days ≈ 9.6k
-    // calls/month, well within the 15k SerpApi budget and leaves headroom for
-    // autocomplete lookups and roster growth.
+    // One keyword per task (clean per-person 0–100 normalisation); tasks are
+    // batched into few POSTs (~$11/mo queued vs SerpApi $150).
     const trendsDataMap = new Map<string, TrendsBatchResult>();
 
-    if (isSerpApiTrendsConfigured() && !isBackfill) {
+    if (isDataForSeoTrendsConfigured() && !isBackfill) {
       let shouldFetchTrends = true;
-      let lastSerpApiFetchAt: Date | null = null;
+      let lastTrendsFetchAt: Date | null = null;
       try {
         const lastTrendsRow = await db.execute(
           sql`SELECT GREATEST(
@@ -1685,10 +1683,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         if (lastFetchRaw) {
           const parsed = new Date(lastFetchRaw);
           if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
-            lastSerpApiFetchAt = parsed;
+            lastTrendsFetchAt = parsed;
           }
         }
-        shouldFetchTrends = shouldFetchGoogleTrends(lastSerpApiFetchAt);
+        shouldFetchTrends = shouldFetchGoogleTrends(lastTrendsFetchAt);
         let forceTrendsMethodRollout = false;
         if (!_trendsMethodRolloutComplete) {
           try {
@@ -1706,37 +1704,37 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               forceTrendsMethodRollout = true;
             }
           } catch (e) {
-            console.warn("[Ingest] Google Trends rollout check failed, will fetch:", (e as Error).message);
+            console.warn("[Ingest] Search Momentum rollout check failed, will fetch:", (e as Error).message);
             forceTrendsMethodRollout = true;
           }
         }
         if (forceTrendsMethodRollout) {
           shouldFetchTrends = true;
-          console.log(`[Ingest] Google Trends: forcing fetch for methodology rollout (sentinel=${TRENDS_DELTA_METHOD})`);
-        } else if (!shouldFetchTrends && lastSerpApiFetchAt) {
-          const elapsedMin = Math.round((Date.now() - lastSerpApiFetchAt.getTime()) / 60000);
+          console.log(`[Ingest] Search Momentum: forcing fetch for methodology rollout (sentinel=${TRENDS_DELTA_METHOD})`);
+        } else if (!shouldFetchTrends && lastTrendsFetchAt) {
+          const elapsedMin = Math.round((Date.now() - lastTrendsFetchAt.getTime()) / 60000);
           console.log(
-            `[Ingest] Google Trends: skipping — last SerpApi fetch ${elapsedMin}min ago (gate: 12h)`,
+            `[Ingest] Search Momentum: skipping — last fetch ${elapsedMin}min ago (gate: 12h)`,
           );
         }
       } catch (e) {
-        console.warn("[Ingest] Google Trends gate check failed, will fetch:", (e as Error).message);
+        console.warn("[Ingest] Search Momentum gate check failed, will fetch:", (e as Error).message);
       }
 
       if (shouldFetchTrends) {
-        resetSerpApiTrendsRunStats();
+        resetDataForSeoTrendsRunStats();
         const trendsStart = Date.now();
         let trendsFetchOk = false;
         try {
           const batchInput = people.map(p => ({
             personId: p.id,
             name: p.name,
-            googleTrendsTopicId: p.googleTrendsTopicId,
+            keywordOverride: p.searchQueryOverride,
           }));
-          const results = await fetchGoogleTrendsBatch(batchInput);
+          const results = await fetchDataForSeoTrendsBatch(batchInput);
           for (const r of results) trendsDataMap.set(r.personId, r);
-          const trendsStats = getSerpApiTrendsRunStats();
-          console.log(`[Ingest] Google Trends: ${results.length}/${people.length} people, ${trendsStats.callsAttempted} API calls, ${trendsStats.finalFailures} failures, ${Date.now() - trendsStart}ms`);
+          const trendsStats = getDataForSeoTrendsRunStats();
+          console.log(`[Ingest] Search Momentum: ${results.length}/${people.length} people, ${trendsStats.callsAttempted} API calls ($${trendsStats.totalCostUsd}), ${trendsStats.finalFailures} failures, ${Date.now() - trendsStart}ms`);
           trendsFetchOk = true;
           // Coverage-based status (mirrors news/serper). "OK" when most of the
           // roster came back with usable data, "DEGRADED" when partial,
@@ -1748,7 +1746,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           else sourceStatuses.trends = "DEGRADED";
           if (coveredCount > 0) _trendsMethodRolloutComplete = true;
         } catch (e) {
-          console.error("[Ingest] Google Trends batch fetch failed:", (e as Error).message);
+          console.error("[Ingest] Search Momentum batch fetch failed:", (e as Error).message);
           if (!trendsFetchOk) sourceStatuses.trends = "FAILED";
         }
         sourceTimings.trends = Date.now() - trendsStart;
@@ -1758,8 +1756,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // it as a neutral grey pill rather than disappearing entirely.
         sourceStatuses.trends = "SKIPPED";
       }
-    } else if (!isSerpApiTrendsConfigured()) {
-      console.log("[Ingest] Google Trends: SERPAPI_API_KEY not set — skipping");
+    } else if (!isDataForSeoTrendsConfigured()) {
+      console.log("[Ingest] Search Momentum: DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD not set — skipping");
       sourceStatuses.trends = "SKIPPED";
     }
 
@@ -2455,13 +2453,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               trendsMomentumRatio,
               trendsMomentumLevel,
               trendsTopicId: person.googleTrendsTopicId ?? null,
-              trendsWindow: TRENDS_SERPAPI_WINDOW,
+              trendsWindow: TRENDS_DFS_WINDOW,
               ...(hasFreshTrendsFetch ? { trendsDeltaMethod: TRENDS_DELTA_METHOD } : trendsCarried?.trendsDeltaMethod
                 ? { trendsDeltaMethod: trendsCarried.trendsDeltaMethod }
                 : {}),
               trendsUsedFallbackName: hasFreshTrendsFetch
-                ? !person.googleTrendsTopicId
-                : (trendsCarried?.trendsUsedFallbackName ?? !person.googleTrendsTopicId),
+                ? !(person.searchQueryOverride && person.searchQueryOverride.trim())
+                : (trendsCarried?.trendsUsedFallbackName ?? !(person.searchQueryOverride && person.searchQueryOverride.trim())),
               ...(trendsFetchedAtIso ? { trendsFetchedAt: trendsFetchedAtIso } : {}),
             } : {}),
             news: news?.articleCount24h ?? 0,

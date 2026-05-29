@@ -16,12 +16,18 @@ export interface TrendsTimeseriesPoint {
 export const TRENDS_SERPAPI_WINDOW = "now 1-d";
 
 /**
- * Sentinel persisted on snapshots so routes/UI only render values from the
- * current methodology. Bumped from "latest_24h_vs_previous_24h" when we moved
- * to `now 1-d` + last-3h-mean — old snapshots fail the gate and are ignored
- * until refreshed by the next ingest tick (≤12h).
+ * DataForSEO `time_range` for explore/live (validated: 24 hourly points).
+ * Replaces SerpApi `now 1-d` while keeping the same last-3h-mean math.
  */
-export const TRENDS_DELTA_METHOD = "current_3h_mean_on_now_1d";
+export const TRENDS_DFS_WINDOW = "past_day";
+
+/**
+ * Sentinel persisted on snapshots so routes/UI only render values from the
+ * current methodology. Bumped May 2026 when ingest moved from SerpApi to
+ * DataForSEO Trends (`past_day`) — old snapshots fail the gate and are
+ * ignored until refreshed by the next ingest tick (≤12h).
+ */
+export const TRENDS_DELTA_METHOD = "dfs_current_3h_mean_on_past_day";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const CURRENT_WINDOW_HOURS = 3;

@@ -745,10 +745,10 @@ interface PersonMomentumResponse {
 }
 
 // Chip labels (May 2026): "Momentum" renamed to "News Momentum" for
-// symmetry with "Wiki Momentum". "Google Trends" added as a fifth signal
-// once the SerpApi integration landed.
+// symmetry with "Wiki Momentum". "Search Momentum" = Google Trends relative
+// interest velocity (DataForSEO, May 2026).
 interface InsightSignal {
-  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum" | "Google Trends";
+  label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum" | "Search Momentum";
   deltaPct: number;
 }
 
@@ -1837,7 +1837,7 @@ export default function HomePage() {
       { label: "News" as const, deltaPct: selectedInsightMomentum.signals.news?.deltaPct ?? 0 },
       { label: "News Momentum" as const, deltaPct: selectedInsightMomentum.signals.momentum?.deltaPct ?? 0 },
       { label: "Wiki Momentum" as const, deltaPct: selectedInsightMomentum.signals.wikiMomentum?.deltaPct ?? 0 },
-      { label: "Google Trends" as const, deltaPct: selectedInsightMomentum.signals.trends?.deltaPct ?? 0 },
+      { label: "Search Momentum" as const, deltaPct: selectedInsightMomentum.signals.trends?.deltaPct ?? 0 },
     ];
   }, [selectedInsightMomentum]);
 

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { cn } from "@/lib/utils";
@@ -74,8 +74,8 @@ interface MomentumData {
       deltaPct: number;       // 24h change in *score* vs prior tick
       level: MomentumLevel;
     };
-    /** Google Trends interest signal on `now 1-d` window (May 2026 refresh).
-     *  Card headline = `avg7d` (24h mean); +/-% chip = last 3h vs that mean. */
+    /** Search Momentum — Google Trends relative interest on `past_day` (May 2026).
+     *  Card value = last ~3h mean (0–100); +/-% chip = vs same-response 24h mean. */
     trends?: {
       /** Mean of the last ~3 hourly points — drives momentumRatio / chip only. */
       interest: number;
@@ -169,7 +169,10 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const SEARCH_INTEREST_COPY =
-  "Roughly how many times this person is searched on Google each month (Google Ads search volume). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
+  "Roughly how many times this person is searched on Google each month (estimated from clickstream data). A cross-person popularity measure — High = 500k+ searches/month, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
+
+const SEARCH_MOMENTUM_COPY =
+  "How intensely this person is being searched on Google right now, on a 0–100 scale normalised to their own recent peak (Google Trends). The +/-% chip compares the last few hours to their average over the past day — rising means search attention is heating up. Not the same as Search Interest, which shows absolute monthly search volume.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -615,6 +618,27 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     </>
   );
 
+  // ── Search Momentum (May 2026 — DataForSEO Google Trends relative interest) ──
+  const trendsInterest = signals.trends?.interest ?? 0;
+  const hasSearchMomentum = signals.trends != null && trendsInterest > 0;
+  const searchMomentumLevel: MomentumLevel = hasSearchMomentum
+    ? (signals.trends?.momentumLevel ?? fallbackLevel("trends", trendsInterest))
+    : "none";
+  const searchMomentumDeltaPct = signals.trends?.deltaPct ?? 0;
+  const searchMomentumTrend: TrendWord =
+    searchMomentumDeltaPct > 5 ? "rising" : searchMomentumDeltaPct < -5 ? "falling" : "steady";
+  const searchMomentumValue = hasSearchMomentum ? String(Math.round(trendsInterest)) : "—";
+  const searchMomentumUnit = hasSearchMomentum ? "relative interest (0–100)" : "awaiting data";
+  const searchMomentumFooter = !hasSearchMomentum ? (
+    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-momentum-warmup">
+      {signals.trends?.carriedForward ? "Carried forward from last fetch" : "Awaiting search momentum data"}
+    </p>
+  ) : signals.trends?.carriedForward ? (
+    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-momentum-carried">
+      Last live fetch over 12h ago — values carried forward
+    </p>
+  ) : null;
+
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
@@ -634,13 +658,14 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )}
 
       {/*
-       * Card layout (May 2026 — 3×2 grid):
-       *   Row 1: Today's Take     |  Search Interest (monthly Google searches)
-       *   Row 2: News Activity    |  News Momentum
-       *   Row 3: Wikipedia Pulse  |  Wiki Momentum
+       * Card layout (May 2026 — interim 7-card grid):
+       *   Row 1: Today's Take     |  Search Interest (monthly volume)
+       *   Row 2: Search Momentum    |  News Activity
+       *   Row 3: News Momentum      |  Wikipedia Pulse
+       *   Row 4: Wiki Momentum
        *
-       * Search Interest (a mass/popularity signal) replaced the retired Google
-       * Trends card. The news/wiki rows pair volume + acceleration side-by-side.
+       * Search Interest + Search Momentum = mass + velocity search pair.
+       * News/wiki rows pair volume + acceleration side-by-side.
        */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <MomentumTakeCard
@@ -671,6 +696,28 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             </TouchTooltip>
           }
           footer={searchVolumeFooter}
+        />
+
+        <SignalCard
+          testId="card-search-momentum"
+          icon={<TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />}
+          iconWrapClass="bg-muted"
+          title="Search Momentum"
+          level={searchMomentumLevel}
+          value={searchMomentumValue}
+          unit={searchMomentumUnit}
+          deltaPct={searchMomentumDeltaPct}
+          trendWord={searchMomentumTrend}
+          tooltip={
+            <TouchTooltip
+              side="top"
+              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
+              content={SEARCH_MOMENTUM_COPY}
+            >
+              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-momentum-tooltip" />
+            </TouchTooltip>
+          }
+          footer={searchMomentumFooter}
         />
 
         <SignalCard
