@@ -22182,6 +22182,46 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  app.get("/api/admin/users/:id/activity-history", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = 50;
+      const filterRaw = (req.query.filter as string) || "all";
+      const filter =
+        filterRaw === "credit" || filterRaw === "vote" ? filterRaw : "all";
+
+      const { getAdminUserActivityHistory } = await import("./services/admin-user-activity");
+      const authEmail = await getSupabaseAuthEmail(id);
+      const result = await getAdminUserActivityHistory(
+        id,
+        page,
+        pageSize,
+        filter,
+        authEmail,
+      );
+      if (!result) return res.status(404).json({ error: "User not found" });
+
+      res.json({
+        ...result,
+        entries: result.entries.map((e) => ({
+          ...e,
+          createdAt: e.createdAt.toISOString(),
+        })),
+        profile: {
+          ...result.profile,
+          createdAt: result.profile.createdAt.toISOString(),
+          emailMarketingUnsubscribedAt: result.profile.emailMarketingUnsubscribedAt
+            ? result.profile.emailMarketingUnsubscribedAt.toISOString()
+            : null,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error fetching activity history:", error.message);
+      res.status(500).json({ error: "Failed to fetch activity history" });
+    }
+  });
+
   app.get("/api/admin/users/:id/credit-history", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
