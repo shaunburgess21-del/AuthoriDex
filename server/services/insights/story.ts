@@ -1,5 +1,5 @@
 import type { InsightsStoryPayload } from "@shared/insights/types";
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import { loadDriversSummary } from "./drivers";
 import {
   getInsightsCache,
@@ -16,7 +16,7 @@ export function isInsightsAiStoryEnabled(): boolean {
 }
 
 export async function buildDeterministicStory(): Promise<InsightsStoryPayload> {
-  const people = await storage.getTrendingPeople();
+  const people = await getCachedTrendingPeople();
   const driverMix = await loadDriversSummary(20);
 
   const topMover = [...people]

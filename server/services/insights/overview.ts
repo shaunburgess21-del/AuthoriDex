@@ -3,7 +3,7 @@ import { INSIGHTS_DRIVER_LABELS, QUADRANT_MIN_VOTES } from "@shared/insights/con
 import { db } from "../../db";
 import { celebrityMetrics, userFavourites } from "@shared/schema";
 import { eq, gte } from "drizzle-orm";
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import { loadDriversSummary, loadPersonSignals } from "./drivers";
 import { getInsightsStory } from "./story";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
@@ -39,7 +39,7 @@ async function loadInsightsOverviewInner(
       })
       .from(celebrityMetrics)
       .where(gte(celebrityMetrics.approvalVotesCount, QUADRANT_MIN_VOTES)),
-    storage.getTrendingPeople(),
+    getCachedTrendingPeople(),
     loadLatestSnapshotsByPerson(),
     getInsightsStory(),
     userId

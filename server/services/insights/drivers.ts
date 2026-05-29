@@ -3,7 +3,7 @@ import type {
   InsightsPrimaryDriver,
   MomentumLevel,
 } from "@shared/insights/types";
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import {
   loadLatestSnapshotsByPerson,
   type LatestSnapshotRow,
@@ -29,7 +29,7 @@ export interface PersonSignalSnapshot {
 export async function loadPersonSignals(
   prefetched?: { snapshots?: Map<string, LatestSnapshotRow> },
 ): Promise<Map<string, PersonSignalSnapshot>> {
-  const people = await storage.getTrendingPeople();
+  const people = await getCachedTrendingPeople();
   const snapshots = prefetched?.snapshots ?? (await loadLatestSnapshotsByPerson());
   const out = new Map<string, PersonSignalSnapshot>();
 
@@ -77,7 +77,7 @@ export async function loadPersonSignals(
 export async function loadDriversSummary(
   topN: number,
   prefetched?: {
-    people?: Awaited<ReturnType<typeof storage.getTrendingPeople>>;
+    people?: Awaited<ReturnType<typeof getCachedTrendingPeople>>;
     signals?: Map<string, PersonSignalSnapshot>;
     snapshots?: Map<string, LatestSnapshotRow>;
   },
@@ -85,7 +85,7 @@ export async function loadDriversSummary(
   topN: number;
   segments: InsightsDriverMixSegment[];
 }> {
-  const people = prefetched?.people ?? (await storage.getTrendingPeople());
+  const people = prefetched?.people ?? (await getCachedTrendingPeople());
   const topPeople = [...people].sort((a, b) => a.rank - b.rank).slice(0, topN);
   const signals =
     prefetched?.signals ??
@@ -132,7 +132,7 @@ export async function loadSingleSourceSurge(limit = 25): Promise<
     levels: { news: MomentumLevel; wiki: MomentumLevel; search: MomentumLevel };
   }>
 > {
-  const people = await storage.getTrendingPeople();
+  const people = await getCachedTrendingPeople();
   const signals = await loadPersonSignals();
   const rows: Array<{
     id: string;

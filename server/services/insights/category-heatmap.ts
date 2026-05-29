@@ -1,4 +1,4 @@
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 
 export interface CategoryHeatmapRow {
   category: string;
@@ -24,7 +24,7 @@ function median(values: number[]): number {
 }
 
 export async function loadCategoryHeatmap(): Promise<{ rows: CategoryHeatmapRow[] }> {
-  const people = await storage.getTrendingPeople();
+  const people = await getCachedTrendingPeople();
   const byCategory = new Map<
     string,
     { changes24: number[]; changes7: number[]; members: typeof people }

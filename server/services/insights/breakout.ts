@@ -1,4 +1,4 @@
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import { loadSnapshotRankMap24hAgo } from "./snapshot-rank-24h";
 
@@ -32,7 +32,7 @@ function median(values: number[]): number {
 
 export async function loadBreakoutRadar(): Promise<BreakoutResponse> {
   const [people, snapshots, prevRanks] = await Promise.all([
-    storage.getTrendingPeople(),
+    getCachedTrendingPeople(),
     loadLatestSnapshotsByPerson(),
     loadSnapshotRankMap24hAgo(),
   ]);

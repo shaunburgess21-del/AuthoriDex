@@ -1,4 +1,4 @@
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 
 export type MassVelocityQuadrant =
@@ -49,7 +49,7 @@ function classifyQuadrant(
 
 export async function loadMassVelocityQuadrant(): Promise<MassVelocityResponse> {
   const [people, snapshots] = await Promise.all([
-    storage.getTrendingPeople(),
+    getCachedTrendingPeople(),
     loadLatestSnapshotsByPerson(),
   ]);
 

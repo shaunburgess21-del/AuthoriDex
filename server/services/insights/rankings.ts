@@ -1,12 +1,14 @@
 import type { InsightsFilters } from "@shared/insights/filters";
+import { canonicalCacheKey } from "@shared/insights/filters";
 import type { InsightsRankingRow, InsightsRankingsResponse } from "@shared/insights/types";
 import { normalizeMarketCategory } from "@shared/constants";
 import { db } from "../../db";
 import { userFavourites } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { storage } from "../../storage";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import { loadPersonSignals } from "./drivers";
+import { getCachedTrendingPeople } from "./insights-people-cache";
+import { withInsightsAggregateCache } from "./discover-cache";
 import {
   breakdownFromDiagnostics,
   computeMomentumLevel,
@@ -14,12 +16,30 @@ import {
   sortValueForSource,
 } from "./signal-utils";
 
+function rankingsCacheKey(filters: InsightsFilters, userId?: string | null): string {
+  const base = canonicalCacheKey("rankings", filters);
+  if (filters.favouritesOnly && userId) {
+    return `${base}|uid=${userId}`;
+  }
+  return base;
+}
+
 export async function loadInsightsRankings(
   filters: InsightsFilters,
   userId?: string | null,
 ): Promise<InsightsRankingsResponse> {
+  const fullKey = `insights:rankings:${rankingsCacheKey(filters, userId)}`;
+  return withInsightsAggregateCache(fullKey, "insights_rankings", () =>
+    loadInsightsRankingsInner(filters, userId),
+  );
+}
+
+async function loadInsightsRankingsInner(
+  filters: InsightsFilters,
+  userId?: string | null,
+): Promise<InsightsRankingsResponse> {
   const [people0, snapshots] = await Promise.all([
-    storage.getTrendingPeople(),
+    getCachedTrendingPeople(),
     loadLatestSnapshotsByPerson(),
   ]);
   let people = people0;

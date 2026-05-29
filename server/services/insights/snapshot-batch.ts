@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { trendSnapshots } from "@shared/schema";
 import { sql } from "drizzle-orm";
+import { INSIGHTS_REQUEST_MEMO_TTL_MS, memoizeAsync } from "./request-memo";
 
 export interface LatestSnapshotRow {
   personId: string;
@@ -14,8 +15,9 @@ export interface LatestSnapshotRow {
   drivers: string[] | null;
 }
 
-/** Latest on-the-hour ingest snapshot per person (bulk). */
-export async function loadLatestSnapshotsByPerson(): Promise<Map<string, LatestSnapshotRow>> {
+const SNAPSHOTS_MEMO_KEY = "insights:latest-snapshots-by-person";
+
+async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, LatestSnapshotRow>> {
   const result = await db.execute(sql`
     SELECT DISTINCT ON (person_id)
       person_id AS "personId",
@@ -50,4 +52,9 @@ export async function loadLatestSnapshotsByPerson(): Promise<Map<string, LatestS
     });
   }
   return map;
+}
+
+/** Latest on-the-hour ingest snapshot per person (bulk). Memoized in-process. */
+export async function loadLatestSnapshotsByPerson(): Promise<Map<string, LatestSnapshotRow>> {
+  return memoizeAsync(SNAPSHOTS_MEMO_KEY, INSIGHTS_REQUEST_MEMO_TTL_MS, loadLatestSnapshotsByPersonUncached);
 }

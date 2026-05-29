@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { InsightsStoryPayload } from "@shared/insights/types";
 import { buildDeterministicStory } from "./story";
 import { loadDriversSummary } from "./drivers";
-import { storage } from "../../storage";
+import { getCachedTrendingPeople } from "./insights-people-cache";
 import { getAiModel, getChatCompletionTokenLimit } from "../../config/ai-models";
 import {
   getInsightsCache,
@@ -93,7 +93,7 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
   const model = storyModel();
   const start = Date.now();
 
-  const people = await storage.getTrendingPeople();
+  const people = await getCachedTrendingPeople();
   const driverMix = await loadDriversSummary(20);
 
   const withChange = people.filter((p) => (p.change7d ?? 0) !== 0);
