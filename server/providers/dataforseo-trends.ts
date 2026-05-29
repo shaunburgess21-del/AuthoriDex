@@ -46,7 +46,8 @@ const LIVE_URL =
   "https://api.dataforseo.com/v3/keywords_data/dataforseo_trends/explore/live";
 const REQUEST_TIMEOUT_MS = 30_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const MAX_TASKS_PER_REQUEST = 100;
+/** explore/live is single-task; fan out one request per keyword at this concurrency. */
+const FETCH_CONCURRENCY = 6;
 // Cache TTL — must stay below ingest TRENDS_FETCH_INTERVAL_MS (12h).
 const TRENDS_DATA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -277,21 +278,26 @@ export async function fetchDataForSeoTrendsBatch(
     }
   }
 
-  for (let i = 0; i < toFetch.length; i += MAX_TASKS_PER_REQUEST) {
-    const chunk = toFetch.slice(i, i + MAX_TASKS_PER_REQUEST);
-    const json = await dfsTrendsFetch(chunk.map((kw) => buildTaskPayload(kw)));
-    const tasks: unknown[] = Array.isArray(json?.tasks) ? json.tasks : [];
-
-    for (let j = 0; j < chunk.length; j++) {
-      const keyword = chunk[j];
-      const series = parseDataForSeoTrendsExploreTask(tasks[j]);
-      seriesByKeyword.set(keyword, series);
-      if (series.length > 0) {
-        const cacheKey = `dataforseo_trends:person:${keyword}:${TRENDS_DFS_WINDOW}`;
-        await setCache(cacheKey, { series });
-      }
+  const fetchOne = async (keyword: string): Promise<void> => {
+    const json = await dfsTrendsFetch([buildTaskPayload(keyword)]);
+    const task = Array.isArray(json?.tasks) ? json.tasks[0] : undefined;
+    const series = parseDataForSeoTrendsExploreTask(task);
+    seriesByKeyword.set(keyword, series);
+    if (series.length > 0) {
+      await setCache(`dataforseo_trends:person:${keyword}:${TRENDS_DFS_WINDOW}`, { series });
     }
-  }
+  };
+
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < toFetch.length) {
+      const keyword = toFetch[cursor++];
+      await fetchOne(keyword);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(FETCH_CONCURRENCY, toFetch.length) }, () => worker()),
+  );
 
   return people.map((p) => {
     const keyword = keywordByPerson.get(p.personId) ?? "";

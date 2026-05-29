@@ -3,8 +3,10 @@
 /** Weekly refresh — sentiment is a slow-moving corpus aggregate. */
 export const SENTIMENT_FETCH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Persisted sentinel for methodology cutover / routes freshness gate. */
-export const WEB_SENTIMENT_METHOD = "summary_pos_over_posneg_v1";
+/** Persisted sentinel for methodology cutover / routes freshness gate.
+ *  v2: per-request fetch (v1 batched 100 tasks/POST but summary/live is
+ *  single-task, so v1 only ever covered the first person per chunk). */
+export const WEB_SENTIMENT_METHOD = "summary_pos_over_posneg_v2";
 
 /** Window label persisted on snapshots (lifetime corpus; date filters 40501 in probe). */
 export const WEB_SENTIMENT_WINDOW = "lifetime";

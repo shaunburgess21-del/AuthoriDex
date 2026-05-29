@@ -2,7 +2,9 @@
 // DataForSEO Content Analysis Provider (May 2026 — Web Sentiment)
 // ============================================================================
 // Corpus-wide citation sentiment for a person's name via
-// content_analysis/summary/live. One keyword per task; tasks batched per POST.
+// content_analysis/summary/live. This is a single-task Live endpoint — it only
+// processes the FIRST task per POST — so we send one task per request and run
+// them with bounded concurrency (batching tasks silently dropped all but one).
 // Headline = positive / (positive + negative); neutral shown in the 3-segment bar.
 
 import { db } from "../db";
@@ -37,7 +39,8 @@ const DATAFORSEO_PASSWORD = process.env.DATAFORSEO_PASSWORD;
 const LIVE_URL = "https://api.dataforseo.com/v3/content_analysis/summary/live";
 const REQUEST_TIMEOUT_MS = 60_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const MAX_TASKS_PER_REQUEST = 100;
+/** summary/live is single-task; fan out one request per keyword at this concurrency. */
+const FETCH_CONCURRENCY = 6;
 const CACHE_TTL_MS = 6 * 24 * 60 * 60 * 1000;
 
 const PAGE_TYPES = ["news", "blogs", "message-boards"] as const;
@@ -297,49 +300,43 @@ export async function fetchWebSentimentBatch(
     if (kw && !keywordToPersonId.has(kw)) keywordToPersonId.set(kw, p.personId);
   }
 
-  for (let i = 0; i < toFetch.length; i += MAX_TASKS_PER_REQUEST) {
-    const chunk = toFetch.slice(i, i + MAX_TASKS_PER_REQUEST);
-    const tasks = chunk.map((kw) => {
-      const personId = keywordToPersonId.get(kw) ?? `kw:${kw}`;
-      return buildTaskPayload(personId, kw);
-    });
-
-    const json = await dfsSentimentFetch(tasks);
-    const taskList: unknown[] = Array.isArray(json?.tasks) ? json.tasks : [];
-
-    const byTag = new Map<string, unknown>();
-    for (const task of taskList) {
-      const tag = (task as { data?: { tag?: string } })?.data?.tag;
-      if (tag) byTag.set(tag, task);
-    }
-
-    for (const kw of chunk) {
-      const personId = keywordToPersonId.get(kw) ?? "";
-      const task = personId ? byTag.get(personId) : taskList[chunk.indexOf(kw)];
-      if (task) {
-        const statusCode = (task as { status_code?: number }).status_code;
-        if (statusCode != null && statusCode !== 20000) {
-          const msg = (task as { status_message?: string }).status_message;
-          console.warn(
-            `[DataForSEO Sentiment] task ${statusCode} for keyword ${kw}: ${msg ?? "(no message)"}`,
-          );
-        }
-      }
-      const reading = task ? readingFromTask(task) : null;
-      const value: WebSentimentReading = reading ?? {
-        positive: 0,
-        negative: 0,
-        neutral: 0,
-        total: 0,
-        positivePct: null,
-      };
-      readingByKeyword.set(kw, value);
-      if (reading && (reading.positive + reading.negative + reading.neutral) > 0) {
-        const cacheKey = `dataforseo_sentiment:person:${kw}:${WEB_SENTIMENT_WINDOW}`;
-        await setCache(cacheKey, value);
+  const fetchOne = async (kw: string): Promise<void> => {
+    const personId = keywordToPersonId.get(kw) ?? `kw:${kw}`;
+    const json = await dfsSentimentFetch([buildTaskPayload(personId, kw)]);
+    const task = Array.isArray(json?.tasks) ? json.tasks[0] : null;
+    if (task) {
+      const statusCode = (task as { status_code?: number }).status_code;
+      if (statusCode != null && statusCode !== 20000) {
+        const msg = (task as { status_message?: string }).status_message;
+        console.warn(
+          `[DataForSEO Sentiment] task ${statusCode} for keyword ${kw}: ${msg ?? "(no message)"}`,
+        );
       }
     }
-  }
+    const reading = task ? readingFromTask(task) : null;
+    const value: WebSentimentReading = reading ?? {
+      positive: 0,
+      negative: 0,
+      neutral: 0,
+      total: 0,
+      positivePct: null,
+    };
+    readingByKeyword.set(kw, value);
+    if (reading && (reading.positive + reading.negative + reading.neutral) > 0) {
+      await setCache(`dataforseo_sentiment:person:${kw}:${WEB_SENTIMENT_WINDOW}`, value);
+    }
+  };
+
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < toFetch.length) {
+      const kw = toFetch[cursor++];
+      await fetchOne(kw);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(FETCH_CONCURRENCY, toFetch.length) }, () => worker()),
+  );
 
   return people.map((p) => {
     const keyword = keywordByPerson.get(p.personId) ?? "";
