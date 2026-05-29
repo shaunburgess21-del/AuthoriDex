@@ -207,8 +207,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes for real-time feel
       refetchOnWindowFocus: true, // Refetch when user returns to tab
+      refetchIntervalInBackground: false, // Opt-in polling pauses on hidden tabs
       staleTime: 2 * 60 * 1000, // Data considered stale after 2 minutes
       retry: shouldRetryQuery,
       retryDelay: queryRetryDelay,

@@ -1,19 +1,16 @@
 /**
  * PWA "new version available" prompt.
  *
- * VoxDex is a PWA (`vite-plugin-pwa`, see vite.config.ts). On every deploy the
- * service worker swaps to a fresh build and `skipWaiting + clientsClaim` lets
- * the new SW take control of open tabs immediately — but the page itself still
- * has the OLD JS chunks loaded in memory until the user navigates or refreshes.
- * Without an explicit affordance, users sit on stale UI for the rest of their
- * session (or longer, since mobile Chrome happily keeps tabs alive for days).
+ * VoxDex is a PWA (`vite-plugin-pwa`, see vite.config.ts) with
+ * `registerType: "prompt"`. When a deploy ships a new service worker it enters
+ * the `waiting` state until the user opts in — we never reload mid-interaction.
  *
  * This component wires the official vite-plugin-pwa React hook to a Sonner
  * toast: when a new SW is detected we surface a persistent toast with a
  * "Refresh now" action button. Clicking it calls `updateServiceWorker(true)`
  * which activates the waiting worker and reloads the page so users land on the
- * fresh bundle in one tap. Closing the toast just dismisses the prompt — the
- * autoUpdate SW will still apply the new code on the next navigation.
+ * fresh bundle in one tap. Closing the toast dismisses the prompt; the user
+ * can keep working on the current build until they choose to refresh.
  *
  * Lives globally next to the Toaster in App.tsx so it can observe SW state
  * regardless of which route the user is on. Renders nothing on its own.
