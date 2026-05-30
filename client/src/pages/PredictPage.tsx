@@ -1428,7 +1428,7 @@ export default function PredictPage() {
     error: recentActivityError,
     refetch: refetchRecentActivity,
   } = useQuery<RecentPredictionActivity[]>({
-    queryKey: ["/api/predict/recent-activity?limit=20"],
+    queryKey: ['/api/predict/recent-activity'],
     staleTime: 60_000,
     refetchInterval: 90_000,
   });

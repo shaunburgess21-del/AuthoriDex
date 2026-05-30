@@ -47,7 +47,6 @@ interface XpBurstProviderProps {
 
 export function XpBurstProvider({ children }: XpBurstProviderProps) {
   const [floaters, setFloaters] = useState<Floater[]>([]);
-  const [burstLayerMounted, setBurstLayerMounted] = useState(false);
   const idRef = useRef(0);
 
   const removeFloater = useCallback((id: number) => {
@@ -71,7 +70,6 @@ export function XpBurstProvider({ children }: XpBurstProviderProps) {
       }
 
       const accent = getRouteAccent();
-      setBurstLayerMounted(true);
       setFloaters((prev) => [
         ...prev,
         { id: idRef.current++, x, y, amount, reason, accent },
@@ -87,8 +85,7 @@ export function XpBurstProvider({ children }: XpBurstProviderProps) {
   return (
     <XpBurstContext.Provider value={{ trigger }}>
       {children}
-      {burstLayerMounted &&
-        portalTarget &&
+      {portalTarget &&
         floaters.length > 0 &&
         createPortal(
           <Suspense fallback={null}>
