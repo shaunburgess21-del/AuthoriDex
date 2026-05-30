@@ -16,7 +16,7 @@ import {
 } from "../server/services/ingest-provider-alert";
 
 function healthSummaryForProvider(
-  provider: "mediastack" | "serper" | "gdelt",
+  provider: "currents" | "mediastack" | "serper" | "gdelt",
   peopleWithArticles: number,
   peopleWithData: number,
 ): Record<string, unknown> {
@@ -51,6 +51,15 @@ test("extractProviderCoverageFromHealthSummary computes ratio", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].provider, "mediastack");
   assert.ok(Math.abs(rows[0].coverageRatio - 10 / 161) < 0.001);
+});
+
+test("extractProviderCoverageFromHealthSummary includes currents", () => {
+  const rows = extractProviderCoverageFromHealthSummary(
+    healthSummaryForProvider("currents", 80, 161),
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].provider, "currents");
+  assert.ok(Math.abs(rows[0].coverageRatio - 80 / 161) < 0.001);
 });
 
 test("alerts when last 3 runs are below low threshold and 24h had healthy coverage", () => {

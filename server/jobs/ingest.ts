@@ -6,6 +6,7 @@ import { fetchBatchWikiPageviews } from "../providers/wiki";
 import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../providers/gdelt";
 import { fetchSerperBatch, fetchSerperNewsBatch, getSerperRunStats, resetSerperRunStats } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
+import type { CurrentsBatchStats } from "../providers/currents";
 import { fetchMultiSourceNewsBatch, type AggregatorStats } from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
 import {
@@ -565,10 +566,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     //     3. Serper News (emergency, paid, last resort)
     //
     //   "union" — Multi-source parallel aggregation:
-    //     All three providers called in parallel every tick. Articles
-    //     deduplicated by canonicalised URL. finalCount preserves
-    //     Mediastack's uncapped paginationTotal while picking up articles
-    //     other providers catch that Mediastack missed.
+    //     Currents + GDELT + Serper (+ Mediastack when configured) in parallel.
+    //     Articles deduplicated by canonicalised URL; finalCount = union size
+    //     (max with Mediastack paginationTotal when Mediastack is enabled).
     // ═══════════════════════════════════════════════════════════════════════════
     const COVERAGE_THRESHOLD = 0.70;
     const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
@@ -579,12 +579,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let gdeltBatchStats: GdeltBatchStats | null = null;
     let mediastackBatchStats: MediastackBatchStats | null = null;
     let aggregatorStats: AggregatorStats | null = null;
+    let currentsBatchStats: CurrentsBatchStats | null = null;
 
     const mediastackAvailable = isMediastackConfigured();
     let mediastackCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean } | null = null;
+    let currentsCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean } | null = null;
 
     if (newsAggregationMode === "union") {
-      console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Mediastack + GDELT + Serper News in parallel`);
+      console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Currents + Mediastack + GDELT + Serper News in parallel`);
       const unionStart = Date.now();
       try {
         const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
@@ -624,6 +626,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         mediastackBatchStats = aggResult.mediastackBatchStats;
         gdeltBatchStats = aggResult.gdeltBatchStats;
         mediastackCadence = aggResult.mediastackCadence;
+        currentsCadence = aggResult.currentsCadence;
+        currentsBatchStats = aggResult.currentsBatchStats;
         aggregatorStats = aggResult.stats;
 
         const ps = aggResult.stats.providers;
@@ -635,6 +639,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : ps.mediastack.succeeded
             ? (ps.mediastack.peopleWithData > 0 ? "OK" : "DEGRADED")
             : (ps.mediastack.attempted ? "FAILED" : "SKIPPED");
+        sourceStatuses.currents = ps.currents.budgetThrottled && ps.currents.peopleWithData === 0
+          ? "THROTTLED"
+          : ps.currents.succeeded
+            ? (ps.currents.peopleWithData > 0 ? "OK" : "DEGRADED")
+            : (ps.currents.attempted ? "FAILED" : "SKIPPED");
         sourceStatuses.gdelt = ps.gdelt.succeeded
           ? (ps.gdelt.peopleWithData > 0 ? "OK" : "DEGRADED")
           : "FAILED";
@@ -2066,6 +2075,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       return (h.sum + safeLatest) / (h.n + 1);
     };
 
+    // Union mode: hold/smoothing should only run on ticks where a paid news
+    // provider actually refreshed (Currents and/or Mediastack). When Mediastack
+    // is disabled, `mediastackCadence` is null — do NOT default to true.
+    const isNewsProviderRefreshTick =
+      newsSource === "union"
+        ? ((currentsCadence?.shouldRefresh ?? false) || (mediastackCadence?.shouldRefresh ?? false))
+        : newsSource === "mediastack"
+          ? (mediastackCadence?.shouldRefresh ?? true)
+          : true;
+
     for (const person of people) {
       try {
         const PER_PERSON_TIMEOUT_MS = 30_000;
@@ -2153,14 +2172,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         
         let newsEmaHeld = false;
         let newsHoldDiag: Record<string, any> | null = null;
-        // Union mode shares Mediastack's cache-only / refresh cadence because
-        // Mediastack is still the uncapped signal; when it's cache-only we
-        // want the same sticky-zero protection as in Mediastack-primary mode.
-        const isMediastackRefreshTick = (newsSource === "mediastack" || newsSource === "union")
-          ? (mediastackCadence?.shouldRefresh ?? true)
-          : true;
-        const stickyZeroGuard = !isMediastackRefreshTick && newsCount === 0 && (newsBaselineMap.get(person.id) ?? 0) >= 8;
-        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && (isMediastackRefreshTick || stickyZeroGuard)) {
+        const stickyZeroGuard = !isNewsProviderRefreshTick && newsCount === 0 && (newsBaselineMap.get(person.id) ?? 0) >= 8;
+        if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && (isNewsProviderRefreshTick || stickyZeroGuard)) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
           if (isProviderHealthy) {
             const rawNewsCount = newsCount;
@@ -2704,9 +2717,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             trendsCarriedForward,
             ...(hasWebSentimentDiagnostics ? { webSentimentCarriedForward: wsCarriedForward } : {}),
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
-            newsIsRefresh: (newsSource === "mediastack" || newsSource === "union")
-              ? (mediastackCadence?.shouldRefresh ?? true)
-              : true,
+            newsIsRefresh: newsSource === "union"
+              ? ((currentsCadence?.shouldRefresh ?? false) || (mediastackCadence?.shouldRefresh ?? false))
+              : (newsSource === "mediastack"
+                ? (mediastackCadence?.shouldRefresh ?? true)
+                : true),
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
             ...(newsSource === "union" && news?.source === "union" && isDiagnosticsVerbose() ? {
               newsUnion: {
@@ -3131,10 +3146,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
         newsLiveApiFetched: newsSource === "mediastack" || newsSource === "union"
-          ? ((mediastackBatchStats?.fetched ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
+          ? ((mediastackBatchStats?.fetched ?? 0) + (currentsBatchStats?.apiCallsMade ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
           : (gdeltBatchStats?.liveApiFetched ?? 0),
         newsCacheReused: newsSource === "mediastack" || newsSource === "union"
-          ? ((mediastackBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
+          ? ((mediastackBatchStats?.cached ?? 0) + (currentsBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
           : (gdeltBatchStats?.cacheReused ?? 0),
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
         mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
@@ -3146,6 +3161,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           lastFetchAt: mediastackCadence.lastFetchAt?.toISOString() ?? null,
           ageHours: mediastackCadence.ageMs != null ? Math.round(mediastackCadence.ageMs / (1000 * 60 * 60) * 10) / 10 : null,
         } : null,
+        currentsCadence: currentsCadence ? {
+          isRefresh: currentsCadence.shouldRefresh,
+          lastFetchAt: currentsCadence.lastFetchAt?.toISOString() ?? null,
+          ageHours: currentsCadence.ageMs != null ? Math.round(currentsCadence.ageMs / (1000 * 60 * 60) * 10) / 10 : null,
+        } : null,
+        currentsApiCalls: currentsBatchStats?.apiCallsMade ?? null,
         mediastackWidening: mediastackBatchStats?.widening ?? null,
         newsAggregator: aggregatorStats ? {
           peopleWithAnyData: aggregatorStats.peopleWithAnyData,
@@ -3164,6 +3185,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
               peopleWithData: aggregatorStats.providers.mediastack.peopleWithData,
               peopleWithArticles: aggregatorStats.providers.mediastack.peopleWithArticles,
               elapsedMs: aggregatorStats.providers.mediastack.elapsedMs,
+            },
+            currents: {
+              succeeded: aggregatorStats.providers.currents.succeeded,
+              peopleWithData: aggregatorStats.providers.currents.peopleWithData,
+              peopleWithArticles: aggregatorStats.providers.currents.peopleWithArticles,
+              elapsedMs: aggregatorStats.providers.currents.elapsedMs,
             },
             gdelt: {
               succeeded: aggregatorStats.providers.gdelt.succeeded,

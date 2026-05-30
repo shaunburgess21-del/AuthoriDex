@@ -1,7 +1,7 @@
 /**
  * Multi-source news aggregator.
  *
- * Parallel-fetches Mediastack, GDELT, and Serper News for every person, then
+ * Parallel-fetches Mediastack, Currents, GDELT, and Serper News for every person, then
  * builds a URL-deduplicated union count so we don't miss articles any single
  * provider overlooked. Preserves Mediastack's uncapped paginationTotal for
  * mega-stories (where the union of ~100 URLs from each provider would
@@ -27,6 +27,13 @@ import {
   fetchSerperNewsBatch24h,
   type SerperNewsCountData,
 } from "./serper";
+import {
+  fetchCurrentsBatch,
+  isCurrentsConfigured,
+  shouldRefreshCurrents,
+  type CurrentsBatchStats,
+  type CurrentsNewsData,
+} from "./currents";
 
 export interface AggregatorPerson {
   id: string;
@@ -46,6 +53,10 @@ export interface AggregatorOptions {
   gdeltTimeBudgetMs?: number;
   /** Ranked people (by leaderboard rank, best first) — passed to Mediastack for widen ordering. */
   peopleSortedByRank?: AggregatorPerson[];
+  /** When true, Currents batch uses cache only (cadence / budget throttle). */
+  currentsCacheOnly?: boolean;
+  /** Currents budget hard-stop flag (for THROTTLED reporting). */
+  currentsBudgetThrottled?: boolean;
 }
 
 /**
@@ -68,16 +79,18 @@ export interface AggregatedNewsData {
   /** Mediastack's pagination total (uncapped, can be much larger than returned list). */
   mediastackPaginationTotal: number;
   /** Providers that returned any usable signal for this person (count > 0 or articles > 0). */
-  contributingProviders: Array<"mediastack" | "gdelt" | "serper_news">;
+  contributingProviders: Array<"mediastack" | "currents" | "gdelt" | "serper_news">;
   /** Raw per-source counts; useful for diagnostics and baseline-drift tracking. */
   perSourceCounts: {
     mediastack: number;
+    currents: number;
     gdelt: number;
     serper: number;
   };
   /** URLs first seen by each provider — shows each provider's unique contribution to unionCount. */
   uniqueContributed: {
     mediastack: number;
+    currents: number;
     gdelt: number;
     serper: number;
   };
@@ -123,6 +136,7 @@ export interface AggregatorStats {
   peopleWithAnyData: number;
   providers: {
     mediastack: AggregatorProviderSummary;
+    currents: AggregatorProviderSummary;
     gdelt: AggregatorProviderSummary;
     serper: AggregatorProviderSummary;
   };
@@ -150,6 +164,9 @@ export interface AggregatorResult {
   gdeltBatchStats: GdeltBatchStats | null;
   /** Mediastack cadence info (refresh vs cache-only). */
   mediastackCadence: Awaited<ReturnType<typeof shouldRefreshMediastack>> | null;
+  /** Currents cadence info (refresh vs cache-only). */
+  currentsCadence: Awaited<ReturnType<typeof shouldRefreshCurrents>> | null;
+  currentsBatchStats: CurrentsBatchStats | null;
 }
 
 // ── URL CANONICALIZATION ────────────────────────────────────────────────────
@@ -199,12 +216,14 @@ export function canonicalizeArticleUrl(raw: string): string | null {
 
 function mergeHeadlines(
   mediastack: string[] | undefined,
-  gdelt: string[] | undefined,
+  currents: string[] | undefined,
   serper: string[] | undefined,
+  gdelt: string[] | undefined,
   limit = 3,
 ): string[] {
-  // Prefer Mediastack English headlines (if any), then Serper (Google News, usually English),
-  // then GDELT (can be any language). Dedup on a normalised title prefix.
+  // Prefer Mediastack English headlines (if any), then Currents (fresh hourly SLA),
+  // then Serper (Google News, usually English), then GDELT (can be any language).
+  // Dedup on a normalised title prefix.
   //
   // NOTE on language: when Mediastack widens to a no-language query (languageRelaxed=true),
   // it intentionally returns `topHeadlines: []` so we never surface non-English titles.
@@ -226,6 +245,7 @@ function mergeHeadlines(
   };
 
   for (const h of mediastack || []) push(h);
+  if (out.length < limit) for (const h of currents || []) push(h);
   if (out.length < limit) for (const h of serper || []) push(h);
   if (out.length < limit) for (const h of gdelt || []) push(h);
 
@@ -242,9 +262,10 @@ export async function fetchMultiSourceNewsBatch(
   const peopleCount = people.length;
 
   const mediastackAvailable = isMediastackConfigured();
+  const currentsAvailable = isCurrentsConfigured();
   const rankedPeople = options.peopleSortedByRank ?? people;
 
-  // Kick off all three provider batches in parallel. Each uses its own
+  // Kick off all provider batches in parallel. Each uses its own
   // error handling; we use allSettled so a single failure doesn't take
   // down the aggregator.
   let mediastackCadence: Awaited<ReturnType<typeof shouldRefreshMediastack>> | null = null;
@@ -257,8 +278,20 @@ export async function fetchMultiSourceNewsBatch(
   }
   const mediastackCacheOnly = mediastackCadence ? !mediastackCadence.shouldRefresh : true;
 
+  let currentsCadence: Awaited<ReturnType<typeof shouldRefreshCurrents>> | null = null;
+  if (currentsAvailable) {
+    try {
+      currentsCadence = await shouldRefreshCurrents();
+    } catch (err) {
+      console.warn("[News Aggregator] Currents cadence check failed:", err);
+    }
+  }
+  const currentsCacheOnly = options.currentsCacheOnly ?? (currentsCadence ? !currentsCadence.shouldRefresh : true);
+  const currentsBudgetThrottled = options.currentsBudgetThrottled ?? (currentsCadence?.budgetThrottled ?? false);
+
   const providerStart = {
     mediastack: Date.now(),
+    currents: Date.now(),
     gdelt: Date.now(),
     serper: Date.now(),
   };
@@ -294,14 +327,29 @@ export async function fetchMultiSourceNewsBatch(
     300,
   );
 
-  const [mediastackSettled, gdeltSettled, serperSettled] = await Promise.allSettled([
+  const currentsPromise = currentsAvailable
+    ? fetchCurrentsBatch(
+        people.map(p => ({
+          id: p.id,
+          name: p.name,
+          searchQueryOverride: p.searchQueryOverride,
+        })),
+        4,
+        300,
+        { cacheOnly: currentsCacheOnly, budgetThrottled: currentsBudgetThrottled },
+      )
+    : Promise.resolve(null);
+
+  const [mediastackSettled, currentsSettled, gdeltSettled, serperSettled] = await Promise.allSettled([
     mediastackPromise,
+    currentsPromise,
     gdeltPromise,
     serperPromise,
   ]);
 
   const providerSummary: AggregatorStats["providers"] = {
     mediastack: { attempted: mediastackAvailable, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
+    currents: { attempted: currentsAvailable, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
     gdelt: { attempted: true, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
     serper: { attempted: true, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
   };
@@ -329,6 +377,24 @@ export async function fetchMultiSourceNewsBatch(
     console.warn("[News Aggregator] Mediastack batch failed:", mediastackSettled.reason);
   }
   providerSummary.mediastack.elapsedMs = Date.now() - providerStart.mediastack;
+
+  // ── Unpack Currents ───────────────────────────────────────────────────
+  let currentsMap = new Map<string, CurrentsNewsData>();
+  let currentsBatchStats: CurrentsBatchStats | null = null;
+  if (currentsSettled.status === "fulfilled" && currentsSettled.value) {
+    currentsMap = currentsSettled.value.data;
+    currentsBatchStats = currentsSettled.value.stats;
+    providerSummary.currents.succeeded = true;
+    providerSummary.currents.peopleWithData = currentsMap.size;
+    providerSummary.currents.peopleWithArticles = Array.from(currentsMap.values())
+      .filter(v => (v.articles?.length ?? 0) > 0).length;
+    providerSummary.currents.cacheOnlyEmpty = currentsBatchStats.cacheOnlyEmpty;
+    providerSummary.currents.budgetThrottled = currentsBatchStats.budgetThrottled;
+  } else if (currentsSettled.status === "rejected") {
+    providerSummary.currents.error = String(currentsSettled.reason);
+    console.warn("[News Aggregator] Currents batch failed:", currentsSettled.reason);
+  }
+  providerSummary.currents.elapsedMs = Date.now() - providerStart.currents;
 
   // ── Unpack GDELT ──────────────────────────────────────────────────────
   let gdeltMap = new Map<string, GdeltNewsData>();
@@ -372,22 +438,23 @@ export async function fetchMultiSourceNewsBatch(
 
   for (const person of people) {
     const ms = mediastackMap.get(person.id);
+    const cu = currentsMap.get(person.id);
     const gd = gdeltMap.get(person.id);
     const sn = serperMap.get(person.id);
 
-    const hasAny = !!ms || !!gd || !!sn;
+    const hasAny = !!ms || !!cu || !!gd || !!sn;
     if (!hasAny) continue;
     peopleWithAnyData++;
 
     // Build URL dedup set. Each source's contribution may be missing if
     // the cached entry predates the `articles` field addition — graceful.
     const urlSet = new Set<string>();
-    const urlFirstSeenBy = new Map<string, "mediastack" | "gdelt" | "serper_news">();
+    const urlFirstSeenBy = new Map<string, "mediastack" | "currents" | "gdelt" | "serper_news">();
     let perPersonOverlap = 0;
 
     const addUrls = (
       list: Array<{ url: string; title?: string; publishedAt?: string }> | undefined,
-      provider: "mediastack" | "gdelt" | "serper_news",
+      provider: "mediastack" | "currents" | "gdelt" | "serper_news",
     ) => {
       if (!list) return;
       for (const a of list) {
@@ -402,6 +469,7 @@ export async function fetchMultiSourceNewsBatch(
       }
     };
     addUrls(ms?.articles, "mediastack");
+    addUrls(cu?.articles, "currents");
     addUrls(gd?.articles, "gdelt");
     addUrls(sn?.articles, "serper_news");
 
@@ -413,6 +481,7 @@ export async function fetchMultiSourceNewsBatch(
     // Per-source raw counts (what each provider claims independently).
     const perSourceCounts = {
       mediastack: ms?.paginationTotal ?? ms?.articleCount24h ?? 0,
+      currents: cu?.articleCount24h ?? 0,
       gdelt: gd?.articleCount24h ?? 0,
       serper: sn?.articleCount24h ?? 0,
     };
@@ -420,9 +489,10 @@ export async function fetchMultiSourceNewsBatch(
     // Attribution: how many unique URLs each provider was first to see. This is
     // what each provider actually added to unionCount (vs just overlapping with
     // what others already had). Sums to unionCount by construction.
-    const uniqueContributed = { mediastack: 0, gdelt: 0, serper: 0 };
+    const uniqueContributed = { mediastack: 0, currents: 0, gdelt: 0, serper: 0 };
     for (const provider of urlFirstSeenBy.values()) {
       if (provider === "mediastack") uniqueContributed.mediastack++;
+      else if (provider === "currents") uniqueContributed.currents++;
       else if (provider === "gdelt") uniqueContributed.gdelt++;
       else uniqueContributed.serper++;
     }
@@ -463,15 +533,16 @@ export async function fetchMultiSourceNewsBatch(
       ? (finalCount - averageDaily7d) / averageDaily7d
       : (finalCount > 0 ? 1 : 0);
 
-    const contributingProviders: Array<"mediastack" | "gdelt" | "serper_news"> = [];
+    const contributingProviders: Array<"mediastack" | "currents" | "gdelt" | "serper_news"> = [];
     if (ms && (ms.articleCount24h > 0 || (ms.articles?.length ?? 0) > 0)) contributingProviders.push("mediastack");
+    if (cu && (cu.articleCount24h > 0 || (cu.articles?.length ?? 0) > 0)) contributingProviders.push("currents");
     if (gd && (gd.articleCount24h > 0 || (gd.articles?.length ?? 0) > 0)) contributingProviders.push("gdelt");
     if (sn && (sn.articleCount24h > 0 || (sn.articles?.length ?? 0) > 0)) contributingProviders.push("serper_news");
 
-    const topHeadlines = mergeHeadlines(ms?.topHeadlines, gd?.topHeadlines, sn?.topHeadlines);
+    const topHeadlines = mergeHeadlines(ms?.topHeadlines, cu?.topHeadlines, sn?.topHeadlines, gd?.topHeadlines);
 
     data.set(person.id, {
-      query: ms?.query ?? gd?.query ?? sn?.query ?? person.name,
+      query: ms?.query ?? cu?.query ?? gd?.query ?? sn?.query ?? person.name,
       articleCount24h: finalCount,
       articleCount7d,
       averageDaily7d,
@@ -512,9 +583,11 @@ export async function fetchMultiSourceNewsBatch(
     `msBeats=${peopleMediastackBeatsUnion}, elapsed=${(stats.elapsedMs / 1000).toFixed(1)}s`,
   );
   const msLegacy = providerSummary.mediastack.legacyCacheEntries ?? 0;
+  const cuEmpty = providerSummary.currents.cacheOnlyEmpty ?? 0;
   console.log(
     `[News Aggregator] Providers: ` +
     `mediastack ${providerSummary.mediastack.succeeded ? "OK" : "FAIL"} (${providerSummary.mediastack.peopleWithData} people, ${providerSummary.mediastack.peopleWithArticles} with URLs, ${(providerSummary.mediastack.elapsedMs / 1000).toFixed(1)}s${msLegacy > 0 ? `, ${msLegacy} legacy cache entries` : ""}), ` +
+    `currents ${providerSummary.currents.succeeded ? "OK" : "FAIL"} (${providerSummary.currents.peopleWithData} people, ${providerSummary.currents.peopleWithArticles} with URLs, ${(providerSummary.currents.elapsedMs / 1000).toFixed(1)}s${cuEmpty > 0 ? `, ${cuEmpty} cache-only-empty` : ""}), ` +
     `gdelt ${providerSummary.gdelt.succeeded ? "OK" : "FAIL"} (${providerSummary.gdelt.peopleWithData} people, ${providerSummary.gdelt.peopleWithArticles} with URLs, ${(providerSummary.gdelt.elapsedMs / 1000).toFixed(1)}s), ` +
     `serper ${providerSummary.serper.succeeded ? "OK" : "FAIL"} (${providerSummary.serper.peopleWithData} people, ${providerSummary.serper.peopleWithArticles} with URLs, ${(providerSummary.serper.elapsedMs / 1000).toFixed(1)}s)`,
   );
@@ -528,5 +601,7 @@ export async function fetchMultiSourceNewsBatch(
     mediastackBatchStats,
     gdeltBatchStats,
     mediastackCadence,
+    currentsCadence,
+    currentsBatchStats,
   };
 }

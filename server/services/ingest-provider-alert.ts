@@ -5,7 +5,7 @@
  * completed runs after having been healthy (>= 50%) within the prior 24h.
  */
 
-export const INGEST_ALERT_PROVIDERS = ["mediastack", "serper", "gdelt"] as const;
+export const INGEST_ALERT_PROVIDERS = ["currents", "mediastack", "serper", "gdelt"] as const;
 export type IngestAlertProvider = (typeof INGEST_ALERT_PROVIDERS)[number];
 
 export const COVERAGE_LOW_THRESHOLD = 0.25;
