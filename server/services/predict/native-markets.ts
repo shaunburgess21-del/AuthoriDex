@@ -5,7 +5,8 @@ import {
   marketAmmState,
   trendingPeople,
 } from "@shared/schema";
-import { and, desc, eq, gt, inArray, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, type SQL } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { ensureWeeklyMarketsForCurrentWeek } from "../../jobs/market-generator";
 import { deriveNativeMarketLifecycle } from "../../native-markets/lifecycle";
 import { h2hModelProbability } from "@shared/h2hModel";
@@ -20,7 +21,8 @@ export const NATIVE_MARKETS_MEMO_MS = 10_000;
 const NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS = 2 * 60 * 1000;
 const _nativeMarketsSelfHealByType = new Map<string, number>();
 
-type OrderTerm = SQL | AnyColumn;
+/** Matches what Drizzle's pg `.orderBy()` accepts. */
+export type OrderTerm = SQL | PgColumn;
 
 /**
  * Cache-key fragment for the personalised `updown` feed. The ordering only

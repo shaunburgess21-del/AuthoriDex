@@ -19,7 +19,7 @@ import {
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
-import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull, type AnyColumn } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, requireMinTier, type AuthRequest } from "./auth-middleware";
@@ -130,7 +130,7 @@ import { upsertEngagement } from "./lib/engagementWriter";
 import { captureBackgroundError } from "./sentry";
 import { computeBlendStateForUser, resolveBlendState } from "./lib/blendedRank";
 import { getMarketEngagementPreview } from "./services/predict/market-engagement";
-import { loadNativeMarkets, updownOrderingKey } from "./services/predict/native-markets";
+import { loadNativeMarkets, updownOrderingKey, type OrderTerm } from "./services/predict/native-markets";
 import {
   ANON_VOTE_BUDGET,
   BEHAVIOUR_HALF_LIFE_DAYS,
@@ -19262,7 +19262,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // key (orderingKey) scopes a cached updown ordering to users who
       // share the same preferred-category set; cold/anonymous users all
       // map to "cold" and share one cached payload.
-      let orderTerms: (SQL | AnyColumn)[];
+      let orderTerms: OrderTerm[];
       let orderingKey: string;
       if (type === 'updown') {
         const state = await resolveBlendState(req);
