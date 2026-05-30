@@ -1,15 +1,20 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import {
-  ShareCardModal,
-} from "@/components/share/ShareCardModal";
 import type { ShareCardData } from "@/components/share/ShareCard";
+
+const LazyShareCardModal = lazy(() =>
+  import("@/components/share/ShareCardModal").then((m) => ({
+    default: m.ShareCardModal,
+  })),
+);
 
 /**
  * Arguments accepted by `openShareCard`. Mirrors the `ShareCardModal`
@@ -66,16 +71,20 @@ export function ShareCardProvider({ children }: { children: ReactNode }) {
   return (
     <ShareCardContext.Provider value={value}>
       {children}
-      <ShareCardModal
-        open={args !== null}
-        onOpenChange={(next) => {
-          if (!next) setArgs(null);
-        }}
-        data={args?.data ?? null}
-        fallbackText={args?.fallbackText}
-        shareUrl={args?.shareUrl}
-        filenameBase={args?.filenameBase}
-      />
+      {args !== null && (
+        <Suspense fallback={null}>
+          <LazyShareCardModal
+            open
+            onOpenChange={(next) => {
+              if (!next) setArgs(null);
+            }}
+            data={args.data}
+            fallbackText={args.fallbackText}
+            shareUrl={args.shareUrl}
+            filenameBase={args.filenameBase}
+          />
+        </Suspense>
+      )}
     </ShareCardContext.Provider>
   );
 }

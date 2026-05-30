@@ -1,7 +1,19 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence } from "framer-motion";
-import { XpBurst, type Floater, type XpBurstAccent } from "@/components/XpBurst";
+import type { Floater, XpBurstAccent } from "@/components/XpBurst";
+
+const LazyXpBurstLayer = lazy(() =>
+  import("@/components/XpBurstLayer").then((m) => ({ default: m.XpBurstLayer })),
+);
 
 type TriggerEvent = MouseEvent | React.MouseEvent;
 
@@ -35,10 +47,11 @@ interface XpBurstProviderProps {
 
 export function XpBurstProvider({ children }: XpBurstProviderProps) {
   const [floaters, setFloaters] = useState<Floater[]>([]);
+  const [burstLayerMounted, setBurstLayerMounted] = useState(false);
   const idRef = useRef(0);
 
   const removeFloater = useCallback((id: number) => {
-    setFloaters(prev => prev.filter(f => f.id !== id));
+    setFloaters((prev) => prev.filter((f) => f.id !== id));
   }, []);
 
   const trigger = useCallback((amount: number, event?: TriggerEvent, reason?: string) => {
@@ -58,9 +71,12 @@ export function XpBurstProvider({ children }: XpBurstProviderProps) {
       }
 
       const accent = getRouteAccent();
-      setFloaters(prev => [...prev, { id: idRef.current++, x, y, amount, reason, accent }]);
+      setBurstLayerMounted(true);
+      setFloaters((prev) => [
+        ...prev,
+        { id: idRef.current++, x, y, amount, reason, accent },
+      ]);
     } catch (err) {
-      // Never let a burst failure break the calling mutation's flow.
       // eslint-disable-next-line no-console
       console.error("XpBurst trigger failed:", err);
     }
@@ -71,13 +87,13 @@ export function XpBurstProvider({ children }: XpBurstProviderProps) {
   return (
     <XpBurstContext.Provider value={{ trigger }}>
       {children}
-      {portalTarget &&
+      {burstLayerMounted &&
+        portalTarget &&
+        floaters.length > 0 &&
         createPortal(
-          <AnimatePresence>
-            {floaters.map(f => (
-              <XpBurst key={f.id} floater={f} onComplete={removeFloater} />
-            ))}
-          </AnimatePresence>,
+          <Suspense fallback={null}>
+            <LazyXpBurstLayer floaters={floaters} onComplete={removeFloater} />
+          </Suspense>,
           portalTarget,
         )}
     </XpBurstContext.Provider>
