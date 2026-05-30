@@ -19,9 +19,46 @@ export interface StreaksResponse {
   retentionDays: number;
 }
 
+type StreakRow = Record<string, unknown>;
+
+function extractRows(result: unknown): StreakRow[] {
+  return (
+    (Array.isArray(result) ? result : (result as { rows: StreakRow[] }).rows) ?? []
+  );
+}
+
+function mapFirstTimeRow(row: StreakRow): StreakPerson {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    avatar: (row.avatar as string) ?? null,
+    category: (row.category as string) ?? null,
+    rank: Number(row.rank ?? 0),
+    streakHours: 0,
+    firstTop10At: row.first_top10_at
+      ? new Date(row.first_top10_at as string | Date).toISOString()
+      : null,
+  };
+}
+
+function mapLongestRow(row: StreakRow): StreakPerson {
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    avatar: (row.avatar as string) ?? null,
+    category: (row.category as string) ?? null,
+    rank: Number(row.rank ?? 0),
+    streakHours: Number(row.streak_hours ?? 0),
+    firstTop10At: row.streak_start
+      ? new Date(row.streak_start as string | Date).toISOString()
+      : null,
+  };
+}
+
+/** Single round-trip: one 90-day hourly_ranks scan feeds both leaderboard branches. */
 export async function loadStreaks(): Promise<StreaksResponse> {
-  const firstTimeResult = await db.execute(sql`
-    WITH hourly_ranks AS (
+  const result = await db.execute(sql`
+    WITH hourly_ranks AS MATERIALIZED (
       SELECT
         person_id,
         timestamp,
@@ -46,41 +83,26 @@ export async function loadStreaks(): Promise<StreaksResponse> {
         MIN(timestamp) AS first_top10_at
       FROM top10_hours
       GROUP BY person_id
-    )
-    SELECT
-      fe.person_id AS id,
-      fe.first_top10_at,
-      tp.name,
-      tp.avatar,
-      tp.category,
-      tp.rank
-    FROM first_entries fe
-    INNER JOIN trending_people tp ON tp.id = fe.person_id
-    WHERE fe.first_top10_at >= NOW() - INTERVAL '30 days'
-      AND NOT EXISTS (
-        SELECT 1
-        FROM top10_hours th
-        WHERE th.person_id = fe.person_id
-          AND th.timestamp < fe.first_top10_at - INTERVAL '1 hour'
-      )
-    ORDER BY fe.first_top10_at DESC
-    LIMIT 10
-  `);
-
-  const longestResult = await db.execute(sql`
-    WITH hourly_ranks AS (
+    ),
+    first_time_candidates AS (
       SELECT
-        person_id,
-        timestamp,
-        RANK() OVER (
-          PARTITION BY timestamp
-          ORDER BY fame_index DESC NULLS LAST
-        ) AS rnk
-      FROM trend_snapshots
-      WHERE snapshot_origin = 'ingest'
-        AND timestamp = date_trunc('hour', timestamp)
-        AND fame_index IS NOT NULL
-        AND timestamp >= NOW() - INTERVAL '90 days'
+        fe.person_id AS id,
+        fe.first_top10_at,
+        tp.name,
+        tp.avatar,
+        tp.category,
+        tp.rank
+      FROM first_entries fe
+      INNER JOIN trending_people tp ON tp.id = fe.person_id
+      WHERE fe.first_top10_at >= NOW() - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM top10_hours th
+          WHERE th.person_id = fe.person_id
+            AND th.timestamp < fe.first_top10_at - INTERVAL '1 hour'
+        )
+      ORDER BY fe.first_top10_at DESC
+      LIMIT 10
     ),
     top10_flag AS (
       SELECT
@@ -120,52 +142,48 @@ export async function loadStreaks(): Promise<StreaksResponse> {
         streak_end
       FROM streak_lengths
       ORDER BY person_id, streak_hours DESC
+    ),
+    longest_candidates AS (
+      SELECT
+        bs.person_id AS id,
+        bs.streak_hours,
+        bs.streak_start,
+        tp.name,
+        tp.avatar,
+        tp.category,
+        tp.rank
+      FROM best_streaks bs
+      INNER JOIN trending_people tp ON tp.id = bs.person_id
+      WHERE bs.streak_hours >= 24
+      ORDER BY bs.streak_hours DESC
+      LIMIT 10
     )
     SELECT
-      bs.person_id AS id,
-      bs.streak_hours,
-      bs.streak_start,
-      tp.name,
-      tp.avatar,
-      tp.category,
-      tp.rank
-    FROM best_streaks bs
-    INNER JOIN trending_people tp ON tp.id = bs.person_id
-    WHERE bs.streak_hours >= 24
-    ORDER BY bs.streak_hours DESC
-    LIMIT 10
+      (SELECT COALESCE(json_agg(row_to_json(f) ORDER BY f.first_top10_at DESC), '[]'::json)
+       FROM first_time_candidates f) AS first_time_json,
+      (SELECT COALESCE(json_agg(row_to_json(l) ORDER BY l.streak_hours DESC), '[]'::json)
+       FROM longest_candidates l) AS longest_json
   `);
 
-  const extract = (result: unknown) =>
-    (Array.isArray(result) ? result : (result as { rows: Record<string, unknown>[] }).rows) ?? [];
+  const parseJsonArray = (value: unknown): StreakRow[] => {
+    if (Array.isArray(value)) return value as StreakRow[];
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value) as StreakRow[];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
 
-  const firstTimeTop10: StreakPerson[] = extract(firstTimeResult).map((row) => ({
-    id: String(row.id),
-    name: String(row.name ?? ""),
-    avatar: (row.avatar as string) ?? null,
-    category: (row.category as string) ?? null,
-    rank: Number(row.rank ?? 0),
-    streakHours: 0,
-    firstTop10At: row.first_top10_at
-      ? new Date(row.first_top10_at as string | Date).toISOString()
-      : null,
-  }));
-
-  const longestStreaks: StreakPerson[] = extract(longestResult).map((row) => ({
-    id: String(row.id),
-    name: String(row.name ?? ""),
-    avatar: (row.avatar as string) ?? null,
-    category: (row.category as string) ?? null,
-    rank: Number(row.rank ?? 0),
-    streakHours: Number(row.streak_hours ?? 0),
-    firstTop10At: row.streak_start
-      ? new Date(row.streak_start as string | Date).toISOString()
-      : null,
-  }));
+  const [row] = extractRows(result);
+  const firstTimeRows = parseJsonArray(row?.first_time_json);
+  const longestRows = parseJsonArray(row?.longest_json);
 
   return {
-    firstTimeTop10,
-    longestStreaks,
+    firstTimeTop10: firstTimeRows.map(mapFirstTimeRow),
+    longestStreaks: longestRows.map(mapLongestRow),
     retentionDays: STREAK_RETENTION_DAYS,
   };
 }
