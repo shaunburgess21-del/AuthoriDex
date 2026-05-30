@@ -13,8 +13,23 @@ import { storage } from "../storage";
 import { fetchNetWorthContext, fetchWebSearchContext, type NetWorthContext, type WebSearchContext } from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { classifyNetWorthVolatility } from "./net-worth-refresher";
+import {
+  MONEY_RE,
+  extractNetWorthFromSnippets,
+  extractNetWorthFromText,
+  isImplausibleNetWorth as isImplausibleNetWorthPure,
+  isLikelyNetWorthSource,
+  isTrustedNetWorthSource,
+  normalizeMoney,
+  parseNetWorthToUsd as parseNetWorthToUsdPure,
+} from "./net-worth-extraction";
 
-export const PROFILE_PROMPT_VERSION = 3;
+// Re-exports for backward compat with any external callers / tests that
+// imported these names from profile-generator before the extraction.
+export const parseNetWorthToUsd = parseNetWorthToUsdPure;
+export const isImplausibleNetWorth = isImplausibleNetWorthPure;
+
+export const PROFILE_PROMPT_VERSION = 4;
 export const PROFILE_BIO_TTL_DAYS = 30;
 /** Cron only force-regenerates bios older than this (daily job). */
 export const PROFILE_BIO_CRON_REFRESH_DAYS = 25;
@@ -25,8 +40,6 @@ const inFlightRegenerations = new Map<string, Promise<void>>();
 const HIGH_RISK_CATEGORY_RE = /politic|business|tech|technology|finance|world leader|government/i;
 const ROLE_CHANGE_RE = /\b(defeated|lost election|no longer|former|replaced by|succeeded by|ousted|resigned|stepped down|appointed|elected|inaugurated|became|named|will become|set to become)\b/i;
 const CURRENT_ROLE_RE = /\b(currently|serves as|is the|is an|is a|became|current)\b/i;
-const MONEY_RE = /\$[\d,.]+(?:\s*(?:-|to)\s*\$?[\d,.]+)?\s*(?:billion|million|trillion|thousand|[KMBT])\b/i;
-const NET_WORTH_CONTEXT_RE = /\b(net worth|fortune|wealth|worth an estimated|estimated worth)\b/i;
 
 const monthIndex: Record<string, number> = {
   january: 0,
@@ -304,7 +317,7 @@ async function buildProfileContext(person: TrendingPerson): Promise<ProfileConte
       ...(webContext?.snippets ?? []),
       ...(netWorthContext?.sources ?? []).flatMap((s) => [s.title, s.snippet]),
     ].join("\n"),
-    extractedNetWorth: extractNetWorthFromContext(netWorthContext),
+    extractedNetWorth: extractNetWorthFromContext(netWorthContext, name),
   } satisfies ProfileContext;
 
   const openAiWebContext = shouldUseOpenAiWebSearch(person, preliminaryContext)
@@ -342,7 +355,8 @@ async function buildProfileContext(person: TrendingPerson): Promise<ProfileConte
     sourceHash,
     sourceUrls,
     snippetsText,
-    extractedNetWorth: extractNetWorthFromContext(netWorthContext) || extractNetWorthFromOpenAiWeb(openAiWebContext),
+    extractedNetWorth: extractNetWorthFromContext(netWorthContext, name)
+      || extractNetWorthFromOpenAiWeb(openAiWebContext, name),
   };
 }
 
@@ -428,6 +442,11 @@ Grounding rules:
 - Do not describe a future-dated appointment as already true unless a snippet says it has already taken effect.
 - If snippets indicate someone lost, resigned, was replaced, or is former, reflect that accurately.
 - Do not include net worth or wealth figures in longBio. Net worth belongs only in estimatedNetWorth.
+
+Net-worth attribution (critical):
+- Only cite a money figure for estimatedNetWorth if the surrounding snippet names THIS specific person near the figure. A snippet that mentions another famous person (e.g. "Musk's $835 billion") is not evidence for the subject of this profile.
+- If snippets only mention this person's wealth in generic terms ("wealthy", "millionaire") with no figure attributed to them, return "Not available".
+- For actors, athletes, musicians, influencers and other entertainment figures whose exact wealth is not public, an estimated ballpark from Celebrity Net Worth, Forbes, or comparable reputable outlet is acceptable and preferred over "Not available". Express as a single figure (e.g. "$40 million") or a range (e.g. "$30-$50 million"). Reserve "Not available" for cases where no reputable source provides ANY estimate at all.
 - Return only valid JSON.`;
 }
 
@@ -472,7 +491,7 @@ Output exactly this JSON shape:
   "fromCountryCode": "ISO 3166-1 alpha-2",
   "basedIn": "Current country where they live or primarily work",
   "basedInCountryCode": "ISO 3166-1 alpha-2",
-  "estimatedNetWorth": "Approximate ballpark in the form '$X billion', '$X million', or '$X thousand' (e.g. '$2.6 billion', '$250 million', '$500 thousand'). Match the magnitude to the actual figure - never round a sub-million amount up to '$1 million'. If sources show a range, you may write the range (e.g. '$800-$840 billion'). Use the most recent figure you can find in NET WORTH SOURCES or the OPENAI WEB SEARCH AUGMENTATION notes - prefer Forbes/Bloomberg, otherwise any reputable outlet (Reuters, CNBC, Fortune, Business Insider, Investopedia, Celebrity Net Worth, Wikipedia, etc.). Use \"Not available\" only when no source provides any estimate at all.",
+  "estimatedNetWorth": "Approximate ballpark in the form '$X billion', '$X million', or '$X thousand' (e.g. '$2.6 billion', '$250 million', '$500 thousand'). Match the magnitude to the actual figure - never round a sub-million amount up to '$1 million'. If sources show a range, you may write the range (e.g. '$800-$840 billion'). Use the most recent figure you can find in NET WORTH SOURCES or the OPENAI WEB SEARCH AUGMENTATION notes - prefer Forbes/Bloomberg, otherwise any reputable outlet (Reuters, CNBC, Fortune, Business Insider, Investopedia, Celebrity Net Worth, Wikipedia, etc.). CRITICAL: only cite a figure if a snippet attributes it to this specific person - do not borrow a figure mentioned for someone else in the same snippet. For entertainers/athletes/musicians a Celebrity Net Worth-style estimated ballpark is acceptable and preferred over 'Not available'. Use \"Not available\" only when NO reputable source provides any estimate attributed to this person.",
   "confidence": 0.0
 }`;
 }
@@ -483,7 +502,12 @@ function shouldUseOpenAiWebSearch(person: TrendingPerson, context: ProfileContex
   if ((person.rank ?? Number.MAX_SAFE_INTEGER) <= 20) return true;
   if (person.category && HIGH_RISK_CATEGORY_RE.test(person.category)) return true;
   if (!context.webContext || context.webContext.sources.length < 3) return true;
-  if (!context.extractedNetWorth && /business|tech|technology|politic|government/i.test(person.category ?? "")) return true;
+  // Always augment when Serper alone didn't yield a person-attributed net-worth
+  // figure, regardless of category. This is what gives entertainers/athletes
+  // (Sydney Sweeney, etc.) a fair shot at a Celebrity Net Worth / Forbes-style
+  // ballpark instead of silently falling back to "Not available" because the
+  // Serper snippet was thin.
+  if (!context.extractedNetWorth) return true;
   if (ROLE_CHANGE_RE.test(context.snippetsText)) return true;
   return false;
 }
@@ -707,52 +731,24 @@ function deriveShortBio(longBio: string): string {
   return `${trimmed.slice(0, 247).trimEnd()}...`;
 }
 
-export function extractNetWorthFromContext(context: NetWorthContext | null): string | null {
-  for (const source of context?.sources ?? []) {
-    const sourceText = `${source.title} ${source.snippet}`;
-    if (!isTrustedNetWorthSource(source.link) || !isLikelyNetWorthSource(sourceText)) continue;
-    const match = extractNetWorthMoney(sourceText);
-    if (match) {
-      const normalized = normalizeMoney(match[0]);
-      // Guard against mis-grabbed figures (e.g. a number meant for a different
-      // person in the same snippet) — no real individual exceeds the ceiling.
-      if (isImplausibleNetWorth(normalized)) continue;
-      return normalized;
-    }
-  }
-  return null;
+/**
+ * Source-aware net-worth extractor. Public name kept stable for backward
+ * compat; the actual logic lives in `net-worth-extraction.ts` so it can be
+ * unit-tested without pulling in the DB. The person-attribution gate here
+ * is what stops figures like Musk's $828B leaking into Farage's profile.
+ */
+export function extractNetWorthFromContext(
+  context: NetWorthContext | null,
+  personName: string,
+): string | null {
+  return extractNetWorthFromSnippets(context?.sources ?? [], personName);
 }
 
-function extractNetWorthFromOpenAiWeb(context: OpenAiWebContext | null): string | null {
-  if (!context?.text || !isLikelyNetWorthSource(context.text)) return null;
-  const match = extractNetWorthMoney(context.text);
-  if (!match) return null;
-  const normalized = normalizeMoney(match[0]);
-  return isImplausibleNetWorth(normalized) ? null : normalized;
-}
-
-/** Above any real individual's wealth (top of the planet is ~$0.4T). */
-const MAX_PLAUSIBLE_NET_WORTH_USD = 500_000_000_000;
-
-/** Parse "$X billion/million/..." to a USD number for sanity bounds. */
-export function parseNetWorthToUsd(value: string): number | null {
-  const m = value.match(/\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])?\b/i);
-  if (!m) return null;
-  const num = parseFloat(m[1].replace(/,/g, ""));
-  if (!Number.isFinite(num)) return null;
-  const unit = (m[2] ?? "").toLowerCase();
-  const mult =
-    unit === "trillion" || unit === "t" ? 1e12
-      : unit === "billion" || unit === "b" ? 1e9
-        : unit === "million" || unit === "m" ? 1e6
-          : unit === "thousand" || unit === "k" ? 1e3
-            : 1;
-  return num * mult;
-}
-
-export function isImplausibleNetWorth(value: string): boolean {
-  const usd = parseNetWorthToUsd(value);
-  return usd != null && usd > MAX_PLAUSIBLE_NET_WORTH_USD;
+function extractNetWorthFromOpenAiWeb(
+  context: OpenAiWebContext | null,
+  personName: string,
+): string | null {
+  return extractNetWorthFromText(context?.text ?? null, personName);
 }
 
 function isNetWorthSourceBacked(value: string, context: ProfileContext): boolean {
@@ -779,47 +775,6 @@ function isNotAvailable(value: string): boolean {
   return /\b(not available|unknown|unavailable)\b/i.test(value.trim());
 }
 
-function isLikelyNetWorthSource(text: string): boolean {
-  return NET_WORTH_CONTEXT_RE.test(text);
-}
-
-// Reputable financial / news outlets that commonly publish net-worth estimates.
-// Broader than the original Forbes/Bloomberg/CelebrityNetWorth list so we surface
-// a ballpark figure for almost everyone instead of falling back to "Not available".
-const TRUSTED_NET_WORTH_HOSTS = [
-  "forbes.com",
-  "bloomberg.com",
-  "celebritynetworth.com",
-  "reuters.com",
-  "apnews.com",
-  "cnbc.com",
-  "wsj.com",
-  "ft.com",
-  "businessinsider.com",
-  "fortune.com",
-  "marketwatch.com",
-  "investopedia.com",
-  "money.com",
-  "nytimes.com",
-  "axios.com",
-  "yahoo.com",
-  "moneyweek.com",
-  "wikipedia.org",
-  "time.com",
-  "cnn.com",
-  "bbc.com",
-  "theguardian.com",
-];
-
-function isTrustedNetWorthSource(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
-    return TRUSTED_NET_WORTH_HOSTS.some((trusted) => host === trusted || host.endsWith(`.${trusted}`));
-  } catch {
-    return false;
-  }
-}
-
 function isUnsupportedBillionDollarNetWorth(person: TrendingPerson, value: string, context: ProfileContext): boolean {
   if (!/\bbillion\b/i.test(value)) return false;
   if (isNotAvailable(value)) return false;
@@ -842,19 +797,6 @@ function isUnsupportedBillionDollarNetWorth(person: TrendingPerson, value: strin
     && context.openAiWebContext.text.toLowerCase().includes(personName);
 
   return !(reputableMention || openAiMention);
-}
-
-function extractNetWorthMoney(text: string): RegExpMatchArray | null {
-  const moneyMatches = [...text.matchAll(new RegExp(MONEY_RE.source, "gi"))];
-  return moneyMatches.find((match) => {
-    const start = Math.max(0, (match.index ?? 0) - 100);
-    const end = Math.min(text.length, (match.index ?? 0) + match[0].length + 100);
-    return NET_WORTH_CONTEXT_RE.test(text.slice(start, end));
-  }) ?? null;
-}
-
-function normalizeMoney(value: string): string {
-  return value.replace(/\s+/g, " ").replace(/\$ /g, "$").trim();
 }
 
 function stripMoney(value: string): string {

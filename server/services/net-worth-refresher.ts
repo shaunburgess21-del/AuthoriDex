@@ -42,7 +42,7 @@ export async function refreshNetWorth(
     };
   }
 
-  const extracted = extractNetWorthFromContext(context);
+  const extracted = extractNetWorthFromContext(context, personName);
   const now = new Date();
 
   if (!extracted) {
