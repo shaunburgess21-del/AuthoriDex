@@ -3,6 +3,13 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getBaselineDiagnostics } from "./utils/baseline";
+import {
+  applyBaselineDegraded,
+  filterAndSortTrendingPeople,
+  loadTrendingEnrichedSnapshot,
+  paginateTrendingPeople,
+} from "./services/trending/trending-snapshot";
+import { getLatestCompletedRunId, getSnapshotRankMap } from "./services/trending/snapshot-rank-map";
 import { db } from "./db";
 import { syncWinningAvatarForPerson } from "./lib/curateAvatar";
 import {
@@ -820,13 +827,6 @@ function shouldCountView(req: Request, personId: string): boolean {
   return true;
 }
 
-// Cached snapshot rank lookup (shared between /api/trending and /api/leaderboard)
-// Pinned baseline: only re-selects when a new completed ingestion run is detected.
-// This matches the "APIs refresh hourly" mental model — Hot Movers only changes
-// when genuinely new data arrives, never due to time passing.
-let _cachedPrevRanks: Map<string, number> | null = null;
-let _lastCompletedRunId: string | null = null;
-
 type HotMoversResponse = {
   data: Array<Record<string, unknown>>;
   meta: {
@@ -864,115 +864,6 @@ async function getSupabaseAuthEmail(userId: string): Promise<string | null> {
     console.warn(`[Admin Users] Error loading auth email for ${userId}: ${error?.message || "unknown error"}`);
     return null;
   }
-}
-
-async function getLatestCompletedRunId(): Promise<string | null> {
-  try {
-    const [row] = await db
-      .select({ id: ingestionRuns.id })
-      .from(ingestionRuns)
-      .where(eq(ingestionRuns.status, "completed"))
-      .orderBy(desc(ingestionRuns.finishedAt))
-      .limit(1);
-    return row?.id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function getSnapshotRankMap(): Promise<Map<string, number>> {
-  const now = Date.now();
-
-  const newestRunId = await getLatestCompletedRunId();
-  const newRunCompleted = newestRunId && newestRunId !== _lastCompletedRunId;
-
-  if (_cachedPrevRanks && _cachedPrevRanks.size > 0 && !newRunCompleted) {
-    return _cachedPrevRanks;
-  }
-
-  if (newestRunId) {
-    _lastCompletedRunId = newestRunId;
-  }
-
-  const map = new Map<string, number>();
-  try {
-    const t24hAgo = new Date(now - 24 * 60 * 60 * 1000);
-
-    // Strategy 1: Find the closest completed ingestion run to 24h ago (preferred)
-    const [baselineRun] = await db
-      .select({ id: ingestionRuns.id })
-      .from(ingestionRuns)
-      .where(and(
-        eq(ingestionRuns.status, "completed"),
-        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
-        gt(ingestionRuns.finishedAt, new Date(now - 28 * 60 * 60 * 1000)),
-        sql`${ingestionRuns.finishedAt} < ${new Date(now - 20 * 60 * 60 * 1000)}`
-      ))
-      .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${t24hAgo}::timestamp))`)
-      .limit(1);
-
-    if (baselineRun) {
-      const prevSnapshot = await db
-        .select({
-          personId: trendSnapshots.personId,
-          fameIndex: sql<number>`MAX(${trendSnapshots.fameIndex})`,
-        })
-        .from(trendSnapshots)
-        .where(eq(trendSnapshots.runId, baselineRun.id))
-        .groupBy(trendSnapshots.personId)
-        .orderBy(sql`MAX(${trendSnapshots.fameIndex}) DESC NULLS LAST`);
-
-      prevSnapshot.forEach((s, i) => {
-        map.set(s.personId, i + 1);
-      });
-    } else {
-      // Strategy 2: Fallback to hour-bucketed timestamps, but ONLY trusted snapshots (run_id IS NOT NULL)
-      const targetHour = new Date(t24hAgo);
-      targetHour.setMinutes(0, 0, 0);
-      const tLow = new Date(targetHour.getTime() - 8 * 60 * 60 * 1000);
-      const tHigh = new Date(targetHour.getTime() + 8 * 60 * 60 * 1000);
-
-      const nearestHourRow = await db
-        .select({ hour: sql<string>`date_trunc('hour', ${trendSnapshots.timestamp})` })
-        .from(trendSnapshots)
-        .where(and(
-          sql`${trendSnapshots.timestamp} BETWEEN ${tLow} AND ${tHigh}`,
-          isNotNull(trendSnapshots.runId)
-        ))
-        .groupBy(sql`date_trunc('hour', ${trendSnapshots.timestamp})`)
-        .orderBy(sql`ABS(EXTRACT(EPOCH FROM date_trunc('hour', ${trendSnapshots.timestamp}) - ${targetHour}::timestamp))`)
-        .limit(1);
-
-      if (nearestHourRow.length > 0) {
-        const snapshotHour = new Date(nearestHourRow[0].hour);
-        const snapshotHourEnd = new Date(snapshotHour.getTime() + 60 * 60 * 1000);
-
-        const prevSnapshot = await db
-          .select({
-            personId: trendSnapshots.personId,
-            fameIndex: sql<number>`MAX(${trendSnapshots.fameIndex})`,
-          })
-          .from(trendSnapshots)
-          .where(and(
-            sql`${trendSnapshots.timestamp} >= ${snapshotHour} AND ${trendSnapshots.timestamp} < ${snapshotHourEnd}`,
-            isNotNull(trendSnapshots.runId)
-          ))
-          .groupBy(trendSnapshots.personId)
-          .orderBy(sql`MAX(${trendSnapshots.fameIndex}) DESC NULLS LAST`);
-
-        prevSnapshot.forEach((s, i) => {
-          map.set(s.personId, i + 1);
-        });
-      }
-    }
-  } catch (e) {
-    console.warn("[rankChange] Snapshot rank computation failed:", e);
-  }
-
-  if (map.size > 0) {
-    _cachedPrevRanks = map;
-  }
-  return map;
 }
 
 const BET_RATE_WINDOW_MS = 60_000;
@@ -1482,128 +1373,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/trending", async (req, res) => {
     try {
       const { search, category, sort, limit, offset } = req.query;
-      
-      let people = await storage.getTrendingPeople();
-      
+
+      const snapshot = await loadTrendingEnrichedSnapshot();
+
       // If storage is empty, return empty array (ingestion job populates the database)
       // DO NOT fetch mock data here - it corrupts real scores
-      if (people.length === 0) {
+      if (!snapshot) {
         console.log('[API] trending_people is empty - waiting for ingestion job to populate');
         res.json([]);
         return;
       }
 
-      // Fetch approval metrics for all celebrities
-      const metrics = await db
-        .select({
-          celebrityId: celebrityMetrics.celebrityId,
-          approvalPct: celebrityMetrics.approvalPct,
-          approvalAvgRating: celebrityMetrics.approvalAvgRating,
-          approvalVotesCount: celebrityMetrics.approvalVotesCount,
-          underratedPct: celebrityMetrics.underratedPct,
-          overratedPct: celebrityMetrics.overratedPct,
-          fairlyRatedPct: celebrityMetrics.fairlyRatedPct,
-          valueScore: celebrityMetrics.valueScore,
-        })
-        .from(celebrityMetrics);
-      
-      // Create a lookup map for metrics
-      const metricsMap = new Map<string, typeof metrics[0]>();
-      for (const m of metrics) {
-        metricsMap.set(m.celebrityId, m);
-      }
-
-      // Compute rank changes from actual trend_snapshots ~24h ago (cached)
-      let prevRankMap = await getSnapshotRankMap();
-
-      // Fallback: estimate from change24h if snapshot lookup returned empty
-      if (prevRankMap.size === 0) {
-        prevRankMap = new Map<string, number>();
-        const previousScores = people.map(p => {
-          const fi = p.fameIndex ?? Math.round(p.trendScore / 100);
-          const delta = p.change24h ?? 0;
-          const prevFi = delta !== 0 ? fi / (1 + delta / 100) : fi;
-          return { id: p.id, prevFi };
-        }).sort((a, b) => b.prevFi - a.prevFi);
-        previousScores.forEach((s, i) => prevRankMap.set(s.id, i + 1));
-      }
-
-      // Merge metrics + rankChange into people
-      let enrichedPeople = people.map(p => {
-        const m = metricsMap.get(p.id);
-        const prevRank = prevRankMap.get(p.id) ?? p.rank;
-        const rankChange = prevRank - p.rank;
-        return {
-          ...p,
-          approvalPct: m?.approvalPct ?? null,
-          approvalAvgRating: m?.approvalAvgRating ?? null,
-          approvalVotesCount: m?.approvalVotesCount ?? null,
-          underratedPct: m?.underratedPct ?? null,
-          overratedPct: m?.overratedPct ?? null,
-          fairlyRatedPct: m?.fairlyRatedPct ?? null,
-          valueScore: m?.valueScore ?? null,
-          rankChange,
-        };
+      const filtered = filterAndSortTrendingPeople(snapshot.people, {
+        search: typeof search === "string" ? search : undefined,
+        category: typeof category === "string" ? category : undefined,
+        sort: typeof sort === "string" ? sort : undefined,
       });
 
-      // Apply search filter
-      if (search && typeof search === 'string') {
-        const searchLower = search.toLowerCase();
-        enrichedPeople = enrichedPeople.filter(p => 
-          p.name.toLowerCase().includes(searchLower) ||
-          (p.category && p.category.toLowerCase().includes(searchLower))
-        );
-      }
-
-      // Apply category filter
-      if (category && typeof category === 'string') {
-        enrichedPeople = enrichedPeople.filter(p => p.category === category);
-      }
-
-      // Apply sorting
-      if (sort === 'rank') {
-        enrichedPeople.sort((a, b) => a.rank - b.rank);
-      } else if (sort === 'score') {
-        enrichedPeople.sort((a, b) => b.trendScore - a.trendScore);
-      } else if (sort === '24h') {
-        enrichedPeople.sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0));
-      } else if (sort === '7d') {
-        enrichedPeople.sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0));
-      } else if (sort === 'approval') {
-        // Sort by avg rating (highest first), tiebreak by vote count (more votes first), nulls last
-        enrichedPeople.sort((a, b) => {
-          const aRating = (a as any).approvalAvgRating ?? null;
-          const bRating = (b as any).approvalAvgRating ?? null;
-          if (aRating === null && bRating === null) return 0;
-          if (aRating === null) return 1;
-          if (bRating === null) return -1;
-          if (bRating !== aRating) return bRating - aRating;
-          // Tiebreak: more votes ranks higher
-          return ((b as any).approvalVotesCount ?? 0) - ((a as any).approvalVotesCount ?? 0);
-        });
-      }
-
-      // Store total count before pagination
-      const totalCount = enrichedPeople.length;
-
-      // Apply pagination — default limit prevents unbounded JSON responses
-      const DEFAULT_TRENDING_LIMIT = 200;
-      const requestedLimit = limit && typeof limit === 'string' ? limit : String(DEFAULT_TRENDING_LIMIT);
-      if (requestedLimit !== 'all') {
-        const limitNum = parseInt(requestedLimit, 10);
-        const offsetNum = offset && typeof offset === 'string' ? parseInt(offset, 10) : 0;
-        
-        if (!isNaN(limitNum) && limitNum > 0) {
-          enrichedPeople = enrichedPeople.slice(offsetNum, offsetNum + limitNum);
-        }
-      }
-
-      const baselineMeta = await getBaselineDiagnostics(totalCount);
-      const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
-
-      const safeData = baselineDegraded
-        ? enrichedPeople.map(p => ({ ...p, change24h: null, change7d: null }))
-        : enrichedPeople;
+      const totalCount = filtered.length;
+      const paginated = paginateTrendingPeople(filtered, {
+        limit: typeof limit === "string" ? limit : undefined,
+        offset: typeof offset === "string" ? offset : undefined,
+      });
+      const safeData = applyBaselineDegraded(paginated, snapshot.baselineMeta);
+      const { baselineMeta } = snapshot;
 
       res.json({
         data: safeData,
