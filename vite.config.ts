@@ -88,12 +88,41 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom"],
-          "vendor-query": ["@tanstack/react-query"],
-          "vendor-recharts": ["recharts"],
-          "vendor-motion": ["framer-motion", "motion"],
-          "vendor-swiper": ["swiper"],
+        // Function-form manualChunks: gives Rollup per-module control based on
+        // the actual (async-only) import graph and matches nested deps the
+        // object form misses (recharts' d3-*, react/jsx-runtime). The object
+        // form was dragging recharts into the entry chunk (eagerly preloaded)
+        // and leaving vendor-react empty.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          // Tiny class utilities behind the eagerly-used cn() helper (every
+          // shadcn component). recharts ALSO depends on clsx, so if left
+          // unassigned Rollup co-locates clsx into vendor-recharts and the
+          // entry's static clsx import drags the whole 117 kB-gzip recharts
+          // chunk into first paint. Pin them to the always-eager vendor-react.
+          if (
+            id.includes("/clsx/") ||
+            id.includes("/tailwind-merge/") ||
+            id.includes("/class-variance-authority/")
+          )
+            return "vendor-react";
+          if (
+            id.includes("recharts") ||
+            id.includes("d3-") ||
+            id.includes("victory-vendor")
+          )
+            return "vendor-recharts";
+          if (id.includes("framer-motion") || id.includes("/motion/"))
+            return "vendor-motion";
+          if (id.includes("swiper")) return "vendor-swiper";
+          if (id.includes("@tanstack/react-query")) return "vendor-query";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/scheduler/") ||
+            id.includes("react/jsx-runtime")
+          )
+            return "vendor-react";
         },
       },
     },
