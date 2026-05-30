@@ -588,6 +588,10 @@ function validateGeneratedProfile(person: TrendingPerson, profile: GeneratedProf
     notes.push("Billion-dollar net worth is not backed by a strong billionaire source for this person; use Not available.");
   }
 
+  if (isImplausibleNetWorth(profile.estimatedNetWorth)) {
+    notes.push("Estimated net worth exceeds any real individual's wealth (likely confused with someone else); use Not available.");
+  }
+
   // Soft 2-letter check. The Zod schema coerces "USA"→"US" and "us"→"US", so
   // we only land here when the model returned something genuinely unusable
   // (empty, "?", "X"). Surfacing as a validation note triggers the retry
@@ -708,7 +712,13 @@ export function extractNetWorthFromContext(context: NetWorthContext | null): str
     const sourceText = `${source.title} ${source.snippet}`;
     if (!isTrustedNetWorthSource(source.link) || !isLikelyNetWorthSource(sourceText)) continue;
     const match = extractNetWorthMoney(sourceText);
-    if (match) return normalizeMoney(match[0]);
+    if (match) {
+      const normalized = normalizeMoney(match[0]);
+      // Guard against mis-grabbed figures (e.g. a number meant for a different
+      // person in the same snippet) — no real individual exceeds the ceiling.
+      if (isImplausibleNetWorth(normalized)) continue;
+      return normalized;
+    }
   }
   return null;
 }
@@ -716,7 +726,33 @@ export function extractNetWorthFromContext(context: NetWorthContext | null): str
 function extractNetWorthFromOpenAiWeb(context: OpenAiWebContext | null): string | null {
   if (!context?.text || !isLikelyNetWorthSource(context.text)) return null;
   const match = extractNetWorthMoney(context.text);
-  return match ? normalizeMoney(match[0]) : null;
+  if (!match) return null;
+  const normalized = normalizeMoney(match[0]);
+  return isImplausibleNetWorth(normalized) ? null : normalized;
+}
+
+/** Above any real individual's wealth (top of the planet is ~$0.4T). */
+const MAX_PLAUSIBLE_NET_WORTH_USD = 500_000_000_000;
+
+/** Parse "$X billion/million/..." to a USD number for sanity bounds. */
+export function parseNetWorthToUsd(value: string): number | null {
+  const m = value.match(/\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])?\b/i);
+  if (!m) return null;
+  const num = parseFloat(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(num)) return null;
+  const unit = (m[2] ?? "").toLowerCase();
+  const mult =
+    unit === "trillion" || unit === "t" ? 1e12
+      : unit === "billion" || unit === "b" ? 1e9
+        : unit === "million" || unit === "m" ? 1e6
+          : unit === "thousand" || unit === "k" ? 1e3
+            : 1;
+  return num * mult;
+}
+
+export function isImplausibleNetWorth(value: string): boolean {
+  const usd = parseNetWorthToUsd(value);
+  return usd != null && usd > MAX_PLAUSIBLE_NET_WORTH_USD;
 }
 
 function isNetWorthSourceBacked(value: string, context: ProfileContext): boolean {

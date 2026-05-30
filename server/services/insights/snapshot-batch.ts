@@ -18,21 +18,31 @@ export interface LatestSnapshotRow {
 const SNAPSHOTS_MEMO_KEY = "insights:latest-snapshots-by-person";
 
 async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, LatestSnapshotRow>> {
+  // Two-step: resolve the latest snapshot id per person over NARROW columns
+  // first, then fetch the wide `diagnostics` JSONB for only those ~hundreds of
+  // rows. Selecting diagnostics in the DISTINCT ON forced Postgres to sort the
+  // entire 320k-row history with the JSONB payload, spilling ~220MB to disk
+  // (~27s). This keeps the sort narrow and joins the heavy column by PK (~4s).
   const result = await db.execute(sql`
-    SELECT DISTINCT ON (person_id)
-      person_id AS "personId",
-      timestamp,
-      news_count AS "newsCount",
-      wiki_pageviews AS "wikiPageviews",
-      velocity_score AS "velocityScore",
-      mass_score AS "massScore",
-      fame_index AS "fameIndex",
-      diagnostics,
-      drivers
-    FROM trend_snapshots
-    WHERE snapshot_origin = 'ingest'
-      AND timestamp = date_trunc('hour', timestamp)
-    ORDER BY person_id, timestamp DESC, id DESC
+    WITH latest AS (
+      SELECT DISTINCT ON (person_id) id
+      FROM trend_snapshots
+      WHERE snapshot_origin = 'ingest'
+        AND timestamp = date_trunc('hour', timestamp)
+      ORDER BY person_id, timestamp DESC, id DESC
+    )
+    SELECT
+      ts.person_id AS "personId",
+      ts.timestamp,
+      ts.news_count AS "newsCount",
+      ts.wiki_pageviews AS "wikiPageviews",
+      ts.velocity_score AS "velocityScore",
+      ts.mass_score AS "massScore",
+      ts.fame_index AS "fameIndex",
+      ts.diagnostics,
+      ts.drivers
+    FROM trend_snapshots ts
+    JOIN latest l ON l.id = ts.id
   `);
 
   const rows = (Array.isArray(result) ? result : (result as { rows: unknown[] }).rows) as LatestSnapshotRow[];
