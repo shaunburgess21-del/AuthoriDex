@@ -19,7 +19,7 @@ import {
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
-import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull, type AnyColumn } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, requireMinTier, type AuthRequest } from "./auth-middleware";
@@ -128,7 +128,9 @@ import {
 } from "./lib/coldStartOrder";
 import { upsertEngagement } from "./lib/engagementWriter";
 import { captureBackgroundError } from "./sentry";
-import { computeBlendStateForUser } from "./lib/blendedRank";
+import { computeBlendStateForUser, resolveBlendState } from "./lib/blendedRank";
+import { getMarketEngagementPreview } from "./services/predict/market-engagement";
+import { loadNativeMarkets, updownOrderingKey } from "./services/predict/native-markets";
 import {
   ANON_VOTE_BUDGET,
   BEHAVIOUR_HALF_LIFE_DAYS,
@@ -758,11 +760,9 @@ const LEADERBOARD_MAX_OFFSET = Math.max(
   0,
   parseInt(process.env.LEADERBOARD_MAX_OFFSET || "20000", 10) || 20000,
 );
-const NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS = 2 * 60 * 1000;
 
 const _viewDedupe = new Map<string, number>();
 const _viewIpCounts = new Map<string, { count: number; resetAt: number }>();
-const _nativeMarketsSelfHealByType = new Map<string, number>();
 
 function cleanViewDedupe() {
   const now = Date.now();
@@ -16761,135 +16761,6 @@ Target length: about 90-150 words.`;
 
   // ============ REAL-WORLD MARKETS (Open Markets) API ============
 
-  async function getMarketEngagementPreview(marketIds: string[]) {
-    const recentParticipantsByMarket = new Map<string, Array<{
-      userId: string;
-      username: string | null;
-      displayName: string;
-      avatarUrl: string | null;
-      isAgent: boolean;
-    }>>();
-    const activeParticipantCountByMarket = new Map<string, number>();
-    const latestRationaleByMarket = new Map<string, {
-      text: string;
-      authorUsername: string | null;
-      authorDisplayName: string;
-      authorAvatarUrl: string | null;
-      isAgent: boolean;
-    }>();
-
-    if (marketIds.length === 0) {
-      return {
-        recentParticipantsByMarket,
-        activeParticipantCountByMarket,
-        latestRationaleByMarket,
-      };
-    }
-
-    const bets = await db
-      .select({
-        marketId: marketBets.marketId,
-        userId: marketBets.userId,
-        createdAt: marketBets.createdAt,
-        betMetadata: marketBets.betMetadata,
-      })
-      .from(marketBets)
-      .where(and(
-        inArray(marketBets.marketId, marketIds),
-        eq(marketBets.status, "active"),
-      ))
-      .orderBy(desc(marketBets.createdAt));
-
-    if (bets.length === 0) {
-      return {
-        recentParticipantsByMarket,
-        activeParticipantCountByMarket,
-        latestRationaleByMarket,
-      };
-    }
-
-    const userIds = Array.from(new Set(bets.map((bet) => bet.userId)));
-    const profileRows = userIds.length > 0
-      ? await db
-          .select({
-            id: profiles.id,
-            username: profiles.username,
-            avatarUrl: profiles.avatarUrl,
-            isAgent: profiles.isAgent,
-          })
-          .from(profiles)
-          .where(
-            and(
-              inArray(profiles.id, userIds),
-              // Defensive: exclude the AMM house sentinel from
-              // participant avatar stacks. The house never inserts
-              // into market_bets directly today, but Phase 3+ ledger
-              // flows touch market_bets-adjacent paths and we want
-              // user-facing UIs to never show __house__.
-              eq(profiles.isHouse, false),
-            ),
-          )
-      : [];
-
-    const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
-    const participantSets = new Map<string, Set<string>>();
-    const countedParticipants = new Map<string, Set<string>>();
-
-    for (const bet of bets) {
-      const profile = profileMap.get(bet.userId);
-      const displayName = profile?.username || "Anonymous";
-      const username = profile?.username || null;
-      const avatarUrl = profile?.avatarUrl || null;
-      const isAgent = profile?.isAgent ?? false;
-
-      const counted = countedParticipants.get(bet.marketId) || new Set<string>();
-      counted.add(bet.userId);
-      countedParticipants.set(bet.marketId, counted);
-      activeParticipantCountByMarket.set(bet.marketId, counted.size);
-
-      const seen = participantSets.get(bet.marketId) || new Set<string>();
-      if (!seen.has(bet.userId)) {
-        seen.add(bet.userId);
-        participantSets.set(bet.marketId, seen);
-
-        const participants = recentParticipantsByMarket.get(bet.marketId) || [];
-        if (participants.length < 3) {
-          participants.push({
-            userId: bet.userId,
-            username,
-            displayName,
-            avatarUrl,
-            isAgent,
-          });
-          recentParticipantsByMarket.set(bet.marketId, participants);
-        }
-      }
-
-      const rationaleText =
-        bet.betMetadata &&
-        typeof bet.betMetadata === "object" &&
-        "rationale" in (bet.betMetadata as Record<string, unknown>)
-          ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
-          : "";
-
-      if (isAgent && rationaleText && !latestRationaleByMarket.has(bet.marketId)) {
-        latestRationaleByMarket.set(bet.marketId, {
-          text: rationaleText,
-          authorUsername: username,
-          authorDisplayName: displayName,
-          authorAvatarUrl: avatarUrl,
-          isAgent,
-        });
-      }
-    }
-
-    return {
-      recentParticipantsByMarket,
-      activeParticipantCountByMarket,
-      latestRationaleByMarket,
-    };
-  }
-
   app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
@@ -19382,235 +19253,31 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.get("/api/native-markets/:type", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { type } = req.params;
-      const validTypes = ['jackpot', 'updown', 'h2h', 'gainer'];
-      if (!validTypes.includes(type)) {
+      if (!['jackpot', 'updown', 'h2h', 'gainer'].includes(type)) {
         return res.status(400).json({ error: "Invalid market type" });
       }
 
-      // Only the Weekly Up/Down feed renders as a card stack on the Predict
-      // page; the others are leaderboard-driven and reordering them would
-      // confuse rank semantics. Personalised + cold-start ordering therefore
-      // only applies to type === 'updown'.
-      const orderTerms = type === 'updown'
-        ? await orderFeaturedCategoryForUser(
-            req,
-            predictionMarkets.featured,
-            predictionMarkets.category,
-          )
-        : [desc(predictionMarkets.featured), predictionMarkets.category];
-
-      const nowForCutoff = new Date();
-      const fetchOpenNativeMarkets = async () =>
-        db.select()
-          .from(predictionMarkets)
-          .where(
-            and(
-              eq(predictionMarkets.marketType, type),
-              eq(predictionMarkets.status, "OPEN"),
-              inArray(predictionMarkets.visibility, ["live", "inactive"]),
-              gt(predictionMarkets.endAt, nowForCutoff),
-            )
-          )
-          .orderBy(...orderTerms);
-
-      let markets = await fetchOpenNativeMarkets();
-      if (markets.length === 0) {
-        const nowMs = Date.now();
-        const lastAttemptAt = _nativeMarketsSelfHealByType.get(type) ?? 0;
-        if (nowMs - lastAttemptAt > NATIVE_MARKETS_SELF_HEAL_COOLDOWN_MS) {
-          _nativeMarketsSelfHealByType.set(type, nowMs);
-          try {
-            const ensureResult = await ensureWeeklyMarketsForCurrentWeek("read-self-heal");
-            console.log(
-              `[Native Markets] Self-heal attempt type=${type} outcome=${ensureResult.outcome} week=${ensureResult.weekNumber} before=${ensureResult.openBefore} after=${ensureResult.openAfter}`,
-            );
-          } catch (selfHealError: any) {
-            console.warn(`[Native Markets] Self-heal failed for type=${type}:`, selfHealError?.message || selfHealError);
-          }
-          markets = await fetchOpenNativeMarkets();
-        }
+      // Only the Weekly Up/Down feed is personalised (interest-bucket
+      // ordering); the others use a global deterministic order. The memo
+      // key (orderingKey) scopes a cached updown ordering to users who
+      // share the same preferred-category set; cold/anonymous users all
+      // map to "cold" and share one cached payload.
+      let orderTerms: (SQL | AnyColumn)[];
+      let orderingKey: string;
+      if (type === 'updown') {
+        const state = await resolveBlendState(req);
+        orderTerms = await orderFeaturedCategoryForUser(
+          req,
+          predictionMarkets.featured,
+          predictionMarkets.category,
+        );
+        orderingKey = updownOrderingKey(state);
+      } else {
+        orderTerms = [desc(predictionMarkets.featured), predictionMarkets.category];
+        orderingKey = "global";
       }
 
-      const marketIds = markets.map(m => m.id);
-      let entries: any[] = [];
-      if (marketIds.length > 0) {
-        entries = await db.select()
-          .from(marketEntries)
-          .where(inArray(marketEntries.marketId, marketIds))
-          .orderBy(marketEntries.displayOrder);
-      }
-
-      // Phase 4: pull AMM state for any engine='amm' markets so cards
-      // can render live LMSR probabilities without a follow-up fetch.
-      const ammMarketIds = markets
-        .filter((m) => (m as any).engine === "amm")
-        .map((m) => m.id);
-      const ammStateByMarket = new Map<string, {
-        liquidityB: number;
-        outcomeOrder: string[];
-        shareQuantities: Record<string, number>;
-        houseSeedAmount: number;
-        totalUserCreditsIn: number;
-        prices: Record<string, number>;
-        updatedAt: string;
-      }>();
-      if (ammMarketIds.length > 0) {
-        const stateRows = await db
-          .select()
-          .from(marketAmmState)
-          .where(inArray(marketAmmState.marketId, ammMarketIds));
-        const { currentPrices } = await import("@shared/lib/amm/positions");
-        for (const r of stateRows) {
-          const liquidityB = Number(r.liquidityB);
-          const outcomeOrder = r.outcomeOrder as string[];
-          const shareQuantities = r.shareQuantities as Record<string, number>;
-          const prices = currentPrices({ liquidityB, outcomeOrder, shareQuantities });
-          ammStateByMarket.set(r.marketId, {
-            liquidityB,
-            outcomeOrder,
-            shareQuantities,
-            houseSeedAmount: r.houseSeedAmount,
-            totalUserCreditsIn: Number(r.totalUserCreditsIn),
-            prices,
-            updatedAt: r.updatedAt.toISOString(),
-          });
-        }
-      }
-
-      const engagement = await getMarketEngagementPreview(marketIds);
-      const addLifecycleFields = (m: { endAt: Date | null; engine?: string | null }) => {
-        const engineKind: "parimutuel" | "amm" = m.engine === "amm" ? "amm" : "parimutuel";
-        const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff, engineKind);
-        return {
-          bettingCutoff: lifecycle.bettingCutoff?.toISOString() ?? null,
-          resolutionDeadline: lifecycle.resolutionDeadline?.toISOString() ?? null,
-          lifecycleStatus: lifecycle.status,
-          isCutoffPassed: lifecycle.isCutoffPassed,
-        };
-      };
-      const ammStateFor = (marketId: string) => ammStateByMarket.get(marketId) ?? null;
-
-      if (type === 'updown' || type === 'jackpot') {
-        const personIds = markets.map(m => m.personId).filter(Boolean) as string[];
-        let persons: any[] = [];
-        if (personIds.length > 0) {
-          persons = await db.select().from(trendingPeople).where(inArray(trendingPeople.id, personIds));
-        }
-        const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
-
-        const enriched = markets.map((m, idx) => {
-          const ammState = ammStateFor(m.id);
-          // Polymarket-style "Vol." chip. We use the LMSR's
-          // totalUserCreditsIn (cumulative credits users have spent
-          // buying shares this week) — that's the cleanest single
-          // number that reads as "how active is this market". Sells
-          // don't subtract, which matches Polymarket / Kalshi.
-          // Parimutuel markets get 0 (they sunset Sunday, so we don't
-          // back-compute a parimutuel volume just for the last week).
-          const volume = Number(ammState?.totalUserCreditsIn ?? 0);
-          return {
-            ...m,
-            ...addLifecycleFields(m),
-            person: m.personId ? personMap[m.personId] || null : null,
-            entries: entries.filter(e => e.marketId === m.id),
-            recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-            activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-            latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-            ammState,
-            volume,
-            __idx: idx,
-          };
-        });
-
-        // Default sort for the Up/Down feed: most-traded markets first.
-        // Stable tiebreaker preserves the personalised /
-        // featured / category ordering from the DB query so users with
-        // category prefs still see "their" markets first within the
-        // same volume bucket. Parimutuel markets (volume = 0) sink
-        // to the bottom for the last week of their lives.
-        if (type === 'updown') {
-          enriched.sort((a, b) => {
-            if (b.volume !== a.volume) return b.volume - a.volume;
-            return a.__idx - b.__idx;
-          });
-        }
-
-        return res.json(enriched.map(({ __idx, ...rest }) => rest));
-      }
-
-      if (type === 'h2h' || type === 'gainer') {
-        const personEntryIds = entries.filter(e => e.personId).map(e => e.personId!);
-        let persons: any[] = [];
-        if (personEntryIds.length > 0) {
-          persons = await db.select().from(trendingPeople).where(inArray(trendingPeople.id, personEntryIds));
-        }
-        const personMap = Object.fromEntries(persons.map(p => [p.id, p]));
-
-        const enriched = markets.map((m, idx) => {
-          const mEntries = entries.filter(e => e.marketId === m.id).map(e => ({
-            ...e,
-            person: e.personId ? personMap[e.personId] || null : null,
-          }));
-
-          // Deterministic VoxDex-model probability for H2H cards. Two-entry
-          // markets only; anything else (gainer, malformed) leaves the field
-          // undefined so the client can skip rendering the pill.
-          let modelP1Percent: number | undefined;
-          let modelConfidence: "low" | "medium" | "high" | undefined;
-          if (type === 'h2h' && mEntries.length === 2) {
-            const p1 = mEntries[0]?.person;
-            const p2 = mEntries[1]?.person;
-            if (p1 && p2) {
-              const model = h2hModelProbability(
-                { fameIndex: Number(p1.fameIndex ?? 0), momentum: p1.momentum ?? undefined },
-                { fameIndex: Number(p2.fameIndex ?? 0), momentum: p2.momentum ?? undefined },
-              );
-              modelP1Percent = model.p1;
-              modelConfidence = model.confidence;
-            }
-          }
-
-          const ammState = ammStateFor(m.id);
-          return {
-            ...m,
-            ...addLifecycleFields(m),
-            entries: mEntries,
-            recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-            activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-            latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-            ...(modelP1Percent !== undefined ? { modelP1Percent, modelConfidence } : {}),
-            ammState,
-            volume: Number(ammState?.totalUserCreditsIn ?? 0),
-            __idx: idx,
-          };
-        });
-
-        // Sprint 5 / Phase 1.5: H2H and Race feeds now sort by volume
-        // DESC by default (same as Up/Down — Sprint 4.3). Parimutuel
-        // markets (volume = 0) sink to the bottom for sunset week, and
-        // the stable __idx tiebreaker preserves the DB's category /
-        // featured ordering inside each volume bucket.
-        enriched.sort((a, b) => {
-          if (b.volume !== a.volume) return b.volume - a.volume;
-          return a.__idx - b.__idx;
-        });
-
-        return res.json(enriched.map(({ __idx, ...rest }) => rest));
-      }
-
-      res.json(markets.map(m => {
-        const ammState = ammStateFor(m.id);
-        return {
-          ...m,
-          ...addLifecycleFields(m),
-          entries: entries.filter(e => e.marketId === m.id),
-          recentParticipants: engagement.recentParticipantsByMarket.get(m.id) || [],
-          activeParticipantCount: engagement.activeParticipantCountByMarket.get(m.id) || 0,
-          latestRationale: engagement.latestRationaleByMarket.get(m.id) || null,
-          ammState,
-          volume: Number(ammState?.totalUserCreditsIn ?? 0),
-        };
-      }));
+      res.json(await loadNativeMarkets({ type, orderTerms, orderingKey }));
     } catch (error: any) {
       console.error("Error fetching native markets:", error.message);
       res.status(500).json({ error: "Failed to fetch native markets" });

@@ -356,17 +356,28 @@ export function blendedSeedVotesScore(
  * of stated interests and categories with decayed behavioural score
  * above a small epsilon — this is the thumb on a tier-less feed.
  */
+/**
+ * The user's preferred category set for tier-less bucketing: stated
+ * interests plus behavioural categories with a non-trivial decayed score.
+ * Shared by `blendedInterestBucket` and the native-markets cache key so
+ * the two can never drift (same set drives the SQL ordering and the memo
+ * key that scopes a cached ordering to the users it's valid for).
+ */
+export function preferredCategorySet(state: BlendState): Set<string> {
+  const preferred = new Set<string>(state.stated);
+  if (state.behaviourEffectiveWeight > 0) {
+    for (const score of state.behavioural.values()) {
+      if (score.decayed > 0.01) preferred.add(score.categoryId);
+    }
+  }
+  return preferred;
+}
+
 export function blendedInterestBucket(
   categoryCol: AnyColumn | SQL,
   state: BlendState,
 ): SQL {
-  const preferredIds = new Set<string>();
-  for (const id of state.stated) preferredIds.add(id);
-  if (state.behaviourEffectiveWeight > 0) {
-    for (const score of state.behavioural.values()) {
-      if (score.decayed > 0.01) preferredIds.add(score.categoryId);
-    }
-  }
+  const preferredIds = preferredCategorySet(state);
   if (preferredIds.size === 0) {
     return sql`1`;
   }
