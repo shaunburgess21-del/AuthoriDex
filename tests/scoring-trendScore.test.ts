@@ -361,28 +361,62 @@ test("computeTrendScore: rawFameIndex equals raw mass/velocity composite (within
   );
 });
 
-test("computeTrendScore: cross-snapshot EMA dampens fameIndex toward previous tick", () => {
-  // With a recent prior tick supplied, fameIndex should be a 50/50 blend of
-  // the raw composite and the prior fameIndex. Pre-EMA composite is still
-  // exposed as rawFameIndex.
+test("computeTrendScore: asymmetric EMA — downward move uses 0.6/0.4 blend", () => {
+  // When the raw composite is BELOW the prior tick (a decline), the EMA damps
+  // it: fameIndex = 0.6·raw + 0.4·prev. Pre-EMA composite stays as rawFameIndex.
   const withoutPrev = computeTrendScore(baseInputs());
   const withPrev = computeTrendScore(
     baseInputs(),
     undefined,
     undefined,
-    900_000, // previousFameIndex (large — dragged toward this)
+    900_000, // previousFameIndex (large — raw is below this → downward)
     DEFAULT_SOURCE_STATS,
+  );
+  assert.ok(
+    withoutPrev.fameIndex < 900_000,
+    "test precondition: raw composite should be below the previous tick",
   );
   assert.equal(withPrev.rawFameIndex, withoutPrev.fameIndex,
     "rawFameIndex should match the no-prev fameIndex (EMA happens after raw is computed)");
-  const expected = Math.round(withoutPrev.fameIndex * 0.5 + 900_000 * 0.5);
+  const expected = Math.round(withoutPrev.fameIndex * 0.6 + 900_000 * 0.4);
   assert.ok(
     Math.abs(withPrev.fameIndex - expected) < 2,
-    `expected EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`
+    `expected downward EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`
   );
   assert.ok(
     withPrev.fameIndex > withoutPrev.fameIndex,
     "fameIndex should be lifted by a higher previous tick",
+  );
+});
+
+test("computeTrendScore: asymmetric EMA — upward spike uses 0.85/0.15 blend", () => {
+  // When the raw composite is AT OR ABOVE the prior tick (a breakout), the EMA
+  // barely damps it: fameIndex = 0.85·raw + 0.15·prev, so spikes show fast.
+  const withoutPrev = computeTrendScore(baseInputs());
+  const lowPrev = 100_000; // well below the raw composite → upward
+  const withPrev = computeTrendScore(
+    baseInputs(),
+    undefined,
+    undefined,
+    lowPrev,
+    DEFAULT_SOURCE_STATS,
+  );
+  assert.ok(
+    withoutPrev.fameIndex > lowPrev,
+    "test precondition: raw composite should be above the previous tick",
+  );
+  const expected = Math.round(withoutPrev.fameIndex * 0.85 + lowPrev * 0.15);
+  assert.ok(
+    Math.abs(withPrev.fameIndex - expected) < 2,
+    `expected upward EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`
+  );
+  assert.ok(
+    withPrev.fameIndex < withoutPrev.fameIndex,
+    "fameIndex should be pulled down slightly by a lower previous tick",
+  );
+  assert.ok(
+    withPrev.fameIndex > expected - 2 && withPrev.fameIndex >= withoutPrev.fameIndex * 0.84,
+    "upward spike should retain ≥84% of the raw composite (fast propagation)",
   );
 });
 

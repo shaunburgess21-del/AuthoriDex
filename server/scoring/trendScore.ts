@@ -30,19 +30,18 @@ import {
 //                   permanently zero. Momentum carries the news 24h-vs-7d
 //                   acceleration ratio.)
 //   rawFameIndex  = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
-//   fameIndex     = clamp( round( 0.7 × rawFameIndex + 0.3 × previousFameIndex ), 0, 1M )
+//   fameIndex     = clamp( round( α × rawFameIndex + (1−α) × previousFameIndex ), 0, 1M )
 //                   (Fix Z — Apr 2026 PR2: cross-snapshot EMA when a
 //                   recent previousFameIndex is supplied; otherwise
 //                   fameIndex === rawFameIndex.)
 //
-// The Apr 2026 cross-snapshot EMA caps any single-tick fameIndex swing to
-// ~70% of the raw delta. Step-up from baseline to spike: 70% on tick 1,
-// 91% on tick 2, ~98% on tick 4 — fast enough that breakouts still
-// register, but enough damping to eliminate the leftover ±150K
-// oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
-// catch (e.g. mass-side wiki-7d-avg refresh flips). Step-down has the
-// same shape, so a real news-cycle decline takes ~5 ticks to fully
-// propagate.
+// The cross-snapshot EMA is ASYMMETRIC (May 2026 — Phase A). α depends on
+// direction: 0.85 when raw ≥ prev (spike shows ~85% on tick 1, ~98% by tick 2)
+// and 0.60 when raw < prev (a real news-cycle decline propagates over ~3-4
+// ticks). This lets genuine attention breakouts register almost immediately
+// while still damping the downside against single-tick flicker / the leftover
+// ±150K oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
+// catch (e.g. mass-side wiki-7d-avg refresh flips).
 //
 // `rawFameIndex` is preserved un-smoothed for admin diagnostics so the
 // pre-EMA composite is always inspectable. Other "stability" fields
@@ -219,11 +218,21 @@ export interface TrendScoreResult {
 }
 
 // ── CROSS-SNAPSHOT EMA CONSTANTS (Apr 2026 trend-engine tuning) ──────────────
-// TEMPORARY (May 2026 native-markets calibration): tightened from 0.70/0.30
-// while ingest news-count smoothing (3-tick) is verified stable in prod for
-// ~7 days. Relax back to 0.70/0.30 once sawtooth is confirmed gone.
-const FAME_INDEX_EMA_ALPHA_CURRENT = 0.50;
-const FAME_INDEX_EMA_ALPHA_PREVIOUS = 0.50;
+// ASYMMETRIC EMA (May 2026 — Phase A, post-CurrentsAPI integration). The old
+// symmetric 0.50/0.50 (and earlier 0.70/0.30) damped genuine upward attention
+// spikes just as hard as downward noise. Now that the news signal is sourced
+// from a fresher union (Currents 120min cadence + GDELT + Serper, URL-deduped),
+// we let real breakouts show fast while still smoothing the downside against
+// single-tick flicker / sawtooth:
+//   • Upward move  (raw ≥ prev): alpha 0.85 — spike shows ~85% on tick 1,
+//                                 ~98% by tick 2.
+//   • Downward move (raw < prev): alpha 0.60 — declines propagate over ~3-4
+//                                  ticks, absorbing one-off dips.
+// The downside-only ingest layers (outage fill-forward, hard hold, soft EMA,
+// 24h decay-floor) sit upstream; Phase B will lighten those once the
+// post-Currents personal baselines/floors have recalibrated.
+const FAME_INDEX_EMA_ALPHA_UP = 0.85;
+const FAME_INDEX_EMA_ALPHA_DOWN = 0.6;
 
 export function computeTrendScore(
   inputs: TrendInputs,
@@ -365,11 +374,22 @@ export function computeTrendScore(
     Number.isFinite(previousFameIndex) &&
     previousFameIndex > 0;
 
+  // Asymmetric EMA: pick alpha by direction so genuine spikes propagate fast
+  // (raw ≥ prev) while downward moves stay damped against single-tick flicker.
+  // Direction is keyed off the rounded rawFameIndex vs the prior tick; the
+  // continuous trendScore reuses the same alpha to stay consistent with it.
+  const emaAlphaCurrent = hasUsablePrev
+    ? rawFameIndex >= previousFameIndex!
+      ? FAME_INDEX_EMA_ALPHA_UP
+      : FAME_INDEX_EMA_ALPHA_DOWN
+    : 1;
+  const emaAlphaPrevious = 1 - emaAlphaCurrent;
+
   const fameIndex = hasUsablePrev
     ? clamp(
         Math.round(
-          rawFameIndex * FAME_INDEX_EMA_ALPHA_CURRENT +
-            previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+          rawFameIndex * emaAlphaCurrent +
+            previousFameIndex! * emaAlphaPrevious,
         ),
         0,
         1000000,
@@ -378,8 +398,8 @@ export function computeTrendScore(
 
   const trendScore = hasUsablePrev
     ? clamp(
-        rawTrendScore * FAME_INDEX_EMA_ALPHA_CURRENT +
-          previousFameIndex * FAME_INDEX_EMA_ALPHA_PREVIOUS,
+        rawTrendScore * emaAlphaCurrent +
+          previousFameIndex! * emaAlphaPrevious,
         0,
         1000000,
       )
