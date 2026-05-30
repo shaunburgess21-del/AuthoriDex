@@ -44,6 +44,7 @@ import {
   checkAndAwardSuggestionBadges,
   checkAndAwardPredictionBadges,
   checkAndAwardProfileBadges,
+  tryAwardAvatarCustomizationBadge,
   checkAndAwardUpvoteReceivedBadges,
 } from "./services/badges";
 import {
@@ -6816,7 +6817,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updateData: Partial<Profile> = {
           lastActiveAt: new Date(),
         };
-        if (avatarUrl && !existing[0].avatarUrl) updateData.avatarUrl = avatarUrl;
+        // Do not import OAuth provider photos while onboarding is
+        // incomplete — Welcome step 0 uploads our generative PNG.
+        const canImportOAuthAvatar =
+          avatarUrl &&
+          !existing[0].avatarUrl &&
+          existing[0].onboardingCompletedAt != null;
+        if (canImportOAuthAvatar) updateData.avatarUrl = avatarUrl;
         // Backfill referralCode for accounts that pre-date the
         // referral system. New accounts always get one at insert
         // time below; this branch covers the migration window.
@@ -6869,7 +6876,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newProfile = {
         id: userId,
         username: null,
-        avatarUrl,
+        // Generative avatar is chosen on /login/welcome — do not seed
+        // Google/OAuth picture URLs or WelcomeStep skips PNG upload.
+        avatarUrl: null,
         avatarSeed: `${userId}:default:v1`,
         isPublic: true,
         role: "user",
@@ -7666,7 +7675,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/profile/avatar", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
-      const { seed, avatarUrl } = req.body ?? {};
+      const { seed, avatarUrl, customizationSource: rawSource } = req.body ?? {};
+      const customizationSource =
+        rawSource === "settings" ? "settings" : "onboarding";
 
       // `seed` accepts either a non-empty string (generative avatar) or
       // explicit null (user uploaded a custom photo — no seed to track).
@@ -7685,6 +7696,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "avatarUrl is required and must be a non-empty string" });
       }
 
+      const [existing] = await db
+        .select({
+          avatarSeed: profiles.avatarSeed,
+          avatarUrl: profiles.avatarUrl,
+          onboardingCompletedAt: profiles.onboardingCompletedAt,
+        })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+
+      if (!existing) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
       const updated = await db
         .update(profiles)
         .set({ avatarSeed: seed, avatarUrl })
@@ -7695,8 +7720,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Profile not found" });
       }
 
-      // Profile-completion fan-out for the avatar surface (badge +
-      // profile_avatar XP only — credits retired). Idempotent + non-blocking.
+      void tryAwardAvatarCustomizationBadge(userId, {
+        source: customizationSource,
+        onboardingCompletedAt: existing.onboardingCompletedAt,
+        previousAvatarSeed: existing.avatarSeed,
+        previousAvatarUrl: existing.avatarUrl,
+        newSeed: seed,
+        newAvatarUrl: avatarUrl,
+      });
+
+      // Other profile-completion badges (bio, demographics, etc.).
       void checkAndAwardProfileBadges(userId);
 
       res.json({ profile: updated[0] });

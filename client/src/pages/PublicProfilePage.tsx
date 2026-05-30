@@ -1122,6 +1122,8 @@ function ProfileAboutStrip({
   const GENDER_LABELS: Record<string, string> = {
     male: "Male",
     female: "Female",
+    woman: "Female",
+    man: "Male",
     non_binary: "Non-binary",
     prefer_not_to_say: "Prefer not to say",
     other: "Other",

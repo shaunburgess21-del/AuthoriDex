@@ -50,6 +50,13 @@ import {
   STREAK_MILESTONE_BADGE_KEYS,
   type BadgeConfig,
 } from "@shared/badge-config";
+import {
+  isAvatarCustomizationEligible,
+  type AvatarCustomizationCheckOpts,
+} from "@shared/avatar-customization";
+
+export type { AvatarCustomizationSource } from "@shared/avatar-customization";
+export type TryAwardAvatarCustomizationOpts = AvatarCustomizationCheckOpts;
 
 interface AwardBadgeResult {
   awarded: boolean;
@@ -628,6 +635,36 @@ export async function checkAndAwardShareMasterBadge(
 }
 
 /**
+ * Awards Fresh Look + profile_avatar XP when the user deliberately changes
+ * their avatar from Settings (custom upload or generative re-pick). Never
+ * fires during onboarding shuffle/auto-save.
+ */
+export async function tryAwardAvatarCustomizationBadge(
+  userId: string,
+  opts: TryAwardAvatarCustomizationOpts,
+): Promise<void> {
+  if (!userId || !isAvatarCustomizationEligible(opts)) return;
+
+  try {
+    await badgeService.awardBadge(userId, "avatar_uploaded");
+  } catch (err) {
+    console.warn("[badges] avatar_uploaded award failed", { userId, err });
+  }
+
+  try {
+    const { gamificationService } = await import("./gamification");
+    await gamificationService.awardXp(
+      userId,
+      "profile_avatar",
+      `xp_profile_profile_avatar_${userId}`,
+      { source: "profile_completion" },
+    );
+  } catch (err) {
+    console.warn("[badges] xp profile_avatar failed", { userId, err });
+  }
+}
+
+/**
  * Profile-completion surface. Called after every profile mutation
  * (PATCH /api/profile/me + avatar / username endpoints). Idempotent
  * on three levels:
@@ -651,7 +688,6 @@ export async function checkAndAwardProfileBadges(
   try {
     const [profile] = await db
       .select({
-        avatarUrl: profiles.avatarUrl,
         username: profiles.username,
         fullName: profiles.fullName,
         bio: profiles.bio,
@@ -660,7 +696,6 @@ export async function checkAndAwardProfileBadges(
         countryOfOrigin: profiles.countryOfOrigin,
         countryOfResidence: profiles.countryOfResidence,
         ethnicity: profiles.ethnicity,
-        onboardingCompletedAt: profiles.onboardingCompletedAt,
       })
       .from(profiles)
       .where(eq(profiles.id, userId))
@@ -702,14 +737,8 @@ export async function checkAndAwardProfileBadges(
       }
     };
 
-    // "Fresh Look" only fires once the user has finished onboarding —
-    // the seeded generative avatar that signup auto-saves shouldn't
-    // unlock it. Any later change (generative pick OR custom upload)
-    // from Settings is treated as an earned avatar choice.
-    if (hasText(profile.avatarUrl) && profile.onboardingCompletedAt) {
-      await badgeService.awardBadge(userId, "avatar_uploaded");
-      await awardProfileTier("profile_avatar");
-    }
+    // Fresh Look (avatar_uploaded) is awarded only from Settings via
+    // tryAwardAvatarCustomizationBadge — not here.
     // Display name = username (canonical) OR fullName (deprecated but
     // still readable for legacy rows).
     const hasName = hasText(profile.username) || hasText(profile.fullName);

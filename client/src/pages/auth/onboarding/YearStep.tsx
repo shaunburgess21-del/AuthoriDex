@@ -177,53 +177,54 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
   );
 
   return (
-    <div className="relative mx-auto my-auto w-full max-w-[14rem] select-none">
-      {/* Selection band — sits behind the rows.
-          Lifted 18px above geometric centre so the digit glyphs sit
-          visually centred inside it. Tuned by eye at text-3xl with
-          our serif stack — smaller values still read as the band
-          hanging below the year, larger values read as the year
-          floating above. */}
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
-        style={{
-          height: ROW_HEIGHT,
-          transform: "translateY(calc(-50% - 18px))",
-        }}
+        className="relative mx-auto w-full max-w-[14rem] shrink-0 select-none overflow-hidden"
+        style={{ height: VIEWPORT_HEIGHT }}
       >
-        <div className="mx-2 h-full rounded-2xl border border-primary/40 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15),0_0_24px_-6px_hsl(var(--primary)/0.5)]" />
-      </div>
+        {/* Selection band — sits behind the rows.
+            Lifted 18px above geometric centre so the digit glyphs sit
+            visually centred inside it. Tuned by eye at text-3xl with
+            our serif stack — smaller values still read as the band
+            hanging below the year, larger values read as the year
+            floating above. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
+          style={{
+            height: ROW_HEIGHT,
+            transform: "translateY(calc(-50% - 18px))",
+          }}
+        >
+          <div className="mx-2 h-full rounded-2xl border border-primary/40 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15),0_0_24px_-6px_hsl(var(--primary)/0.5)]" />
+        </div>
 
-      {/* Edge fades — top + bottom masks make rows recede into the
-          background. The gradient stops match the row positions so
-          the transition feels mechanical rather than mushy. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-20"
-        style={{
-          background:
-            "linear-gradient(to bottom, hsl(var(--background)) 0%, hsl(var(--background) / 0.0) 28%, hsl(var(--background) / 0.0) 72%, hsl(var(--background)) 100%)",
-        }}
-      />
+        {/* Edge fades — clipped to the wheel viewport so they never bleed over the sticky footer. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[26%] bg-gradient-to-b from-background to-transparent"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[20%] bg-gradient-to-t from-background to-transparent"
+        />
 
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
-        role="listbox"
-        aria-label="Year of birth"
-        aria-activedescendant={`year-${selected}`}
-          className="scrollbar-hide relative overflow-y-auto rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        style={{
-          height: VIEWPORT_HEIGHT,
-          scrollSnapType: "y mandatory",
-          // The scroll-padding lines up snap targets with the band.
-          scrollPaddingBlock: PAD_ROWS * ROW_HEIGHT,
-        }}
-        data-testid="year-wheel"
-      >
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          onKeyDown={handleKeyDown}
+          tabIndex={0}
+          role="listbox"
+          aria-label="Year of birth"
+          aria-activedescendant={`year-${selected}`}
+          className="scrollbar-hide relative h-full overflow-y-auto rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          style={{
+            scrollSnapType: "y mandatory",
+            // The scroll-padding lines up snap targets with the band.
+            scrollPaddingBlock: PAD_ROWS * ROW_HEIGHT,
+          }}
+          data-testid="year-wheel"
+        >
         {/* Spacers above and below give the first / last year room to
             scroll into the centre band. */}
         <div style={{ height: PAD_ROWS * ROW_HEIGHT }} aria-hidden="true" />
@@ -276,9 +277,10 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
           );
         })}
         <div style={{ height: PAD_ROWS * ROW_HEIGHT }} aria-hidden="true" />
+        </div>
       </div>
 
-      <p className="mt-4 text-center text-xs text-muted-foreground">
+      <p className="mt-4 shrink-0 text-center text-xs text-muted-foreground">
         Scroll, swipe, or use ↑ / ↓ to choose.
       </p>
     </div>

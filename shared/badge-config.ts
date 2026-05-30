@@ -508,7 +508,7 @@ export const BADGES: BadgeConfig[] = [
   },
   {
     key: "full_voxmaxer",
-    name: "Full VoxMaxer",
+    name: "Full VoxMaxxer",
     description: "Complete all profile demographic fields",
     category: BADGE_CATEGORIES.PROFILE,
     rarity: BADGE_RARITIES.EPIC,

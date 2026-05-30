@@ -10,11 +10,25 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const GENDER_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "woman", label: "Woman" },
-  { value: "man", label: "Man" },
-  { value: "non_binary", label: "Non-binary" },
-  { value: "prefer_not_to_say", label: "I prefer not to say" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "prefer_not_to_say", label: "Prefer not to say" },
 ];
+
+const ONBOARDING_GENDER_VALUES = new Set(
+  GENDER_OPTIONS.map((o) => o.value),
+);
+
+/** Map legacy onboarding values to current options for resume/back navigation. */
+export function normalizeOnboardingGender(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  if (value === "woman") return "female";
+  if (value === "man") return "male";
+  if (ONBOARDING_GENDER_VALUES.has(value)) return value;
+  return null;
+}
 
 interface GenderListProps {
   value: string | null;

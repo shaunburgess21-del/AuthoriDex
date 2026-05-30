@@ -57,7 +57,7 @@ async function seedXpActions() {
     // your insight or comment receives an upvote, you (the
     // author) earn a small bounty, capped per author per day.
     { actionKey: 'upvote_insight', displayName: 'Upvote Insight', xpValue: 5, dailyCap: 10, description: 'Upvote a community insight or comment' },
-    { actionKey: 'insight_upvoted', displayName: 'Insight Upvoted', xpValue: 20, dailyCap: 10, description: 'Earned when your insight or comment receives an upvote from another VoxMaxer' },
+    { actionKey: 'insight_upvoted', displayName: 'Insight Upvoted', xpValue: 20, dailyCap: 10, description: 'Earned when your insight or comment receives an upvote from another VoxMaxxer' },
 
     // Prediction Actions
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },

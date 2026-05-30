@@ -81,7 +81,7 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "market_suggestion_approved", displayName: "Market Suggestion Approved", xpValue: 100, dailyCap: null, description: "Bonus when a suggested world/open market is approved and published", category: "Content" },
 
   { actionKey: "upvote_insight", displayName: "Upvote Insight", xpValue: 5, dailyCap: 10, description: "Upvote a community insight or comment", category: "Engagement" },
-  { actionKey: "insight_upvoted", displayName: "Insight Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxer", category: "Engagement" },
+  { actionKey: "insight_upvoted", displayName: "Insight Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxxer", category: "Engagement" },
 
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
   { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour", category: "Prediction" },

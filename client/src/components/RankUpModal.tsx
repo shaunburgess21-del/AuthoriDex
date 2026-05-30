@@ -196,7 +196,7 @@ export function RankUpModal({ payload, onClose }: RankUpModalProps) {
           )}
 
           <Button onClick={onClose} className="w-full mt-2">
-            Keep VoxMaxing
+            Keep VoxMaxxing
           </Button>
         </div>
       </DialogContent>

@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { GenerativeAvatar } from "@/components/avatar/GenerativeAvatar";
+import { isVoxDexHostedAvatarUrl } from "@/lib/avatar/hosted";
 import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError, apiRequest } from "@/lib/queryClient";
@@ -85,7 +86,7 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
     if (!USERNAME_PATTERN.test(trimmed)) {
       setAvailability({
         status: "invalid",
-        reason: "3–30 letters, numbers, or underscores.",
+        reason: "Use 3–30 characters: letters, numbers, and underscores only.",
       });
       return;
     }
@@ -131,6 +132,7 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
         await apiRequest("PATCH", "/api/profile/avatar", {
           seed,
           avatarUrl: url,
+          customizationSource: "onboarding",
         });
         await refreshProfile();
         toast.success("Avatar updated", { description: "Looking sharp." });
@@ -157,12 +159,17 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
         // they can re-roll from Settings any time.
         const seed = profile?.avatarSeed;
         const userIdForAvatar = profile?.id || user?.id;
-        if (!profile?.avatarUrl && seed && userIdForAvatar) {
+        const needsGenerativeUpload =
+          seed &&
+          userIdForAvatar &&
+          !isVoxDexHostedAvatarUrl(profile?.avatarUrl, userIdForAvatar);
+        if (needsGenerativeUpload) {
           try {
             const { url } = await uploadGeneratedAvatar(userIdForAvatar, seed);
             await apiRequest("PATCH", "/api/profile/avatar", {
               seed,
               avatarUrl: url,
+              customizationSource: "onboarding",
             });
           } catch (avatarErr) {
             console.warn(
@@ -248,7 +255,7 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             onFocus={(e) => e.currentTarget.select()}
-            placeholder="yourname"
+            placeholder="username"
             data-testid="input-welcome-username"
             className="h-12 pr-10 text-base"
           />
@@ -355,11 +362,7 @@ function UsernameStatusText({
   username: string;
 }) {
   if (!username.trim()) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        3–30 letters, numbers, or underscores.
-      </p>
-    );
+    return null;
   }
   switch (availability.status) {
     case "checking":
@@ -377,10 +380,6 @@ function UsernameStatusText({
         </p>
       );
     default:
-      return (
-        <p className="text-xs text-muted-foreground">
-          3–30 letters, numbers, or underscores.
-        </p>
-      );
+      return null;
   }
 }

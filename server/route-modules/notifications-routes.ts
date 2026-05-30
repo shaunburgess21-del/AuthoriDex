@@ -147,27 +147,32 @@ export function registerNotificationsRoutes(app: Express): void {
     try {
       const userId = req.userId!;
 
+      const unreadBase = and(
+        eq(notifications.userId, userId),
+        isNull(notifications.readAt),
+        isNull(notifications.dismissedAt),
+      );
+      const unseenBase = and(
+        eq(notifications.userId, userId),
+        isNull(notifications.seenAt),
+        isNull(notifications.dismissedAt),
+      );
+
+      // Match inbox collapse (see shared/notifications-collapse.ts): one row
+      // per groupKey, or per id when groupKey is null.
       const [unreadRow] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
+        .select({
+          count: sql<number>`COUNT(DISTINCT COALESCE(${notifications.groupKey}, ${notifications.id}::text))::int`,
+        })
         .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            isNull(notifications.readAt),
-            isNull(notifications.dismissedAt),
-          ),
-        );
+        .where(unreadBase);
 
       const [unseenRow] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
+        .select({
+          count: sql<number>`COUNT(DISTINCT COALESCE(${notifications.groupKey}, ${notifications.id}::text))::int`,
+        })
         .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            isNull(notifications.seenAt),
-            isNull(notifications.dismissedAt),
-          ),
-        );
+        .where(unseenBase);
 
       const unread = Math.min(unreadRow?.count ?? 0, UNREAD_COUNT_CAP);
       const unseen = Math.min(unseenRow?.count ?? 0, UNREAD_COUNT_CAP);

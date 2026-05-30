@@ -53,7 +53,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#6B7280",
     icon: "user",
     description:
-      "Every VoxMaxer starts here. Cast your first votes and stake your first predictions — your journey starts now.",
+      "Every VoxMaxxer starts here. Cast your first votes and stake your first predictions — your journey starts now.",
   },
   {
     name: "Aspirant",

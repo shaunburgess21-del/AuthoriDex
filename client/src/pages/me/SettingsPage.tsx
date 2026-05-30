@@ -342,7 +342,11 @@ function ProfileTab() {
     try {
       const userId = profile?.id || user!.id;
       const { url } = await uploadGeneratedAvatar(userId, seed);
-      await apiRequest("PATCH", "/api/profile/avatar", { seed, avatarUrl: url });
+      await apiRequest("PATCH", "/api/profile/avatar", {
+        seed,
+        avatarUrl: url,
+        customizationSource: "settings",
+      });
       setAvatarUrl(url);
       await refreshProfile();
       toast("Avatar updated", { description: "Looking sharp." });
@@ -365,6 +369,7 @@ function ProfileTab() {
       await apiRequest("PATCH", "/api/profile/avatar", {
         seed: null,
         avatarUrl: url,
+        customizationSource: "settings",
       });
       setAvatarUrl(url);
       await refreshProfile();

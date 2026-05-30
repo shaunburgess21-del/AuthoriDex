@@ -24,6 +24,7 @@ import {
   captureReferralFromUrl,
   captureShareClickFromUrl,
 } from "@/lib/referral-capture";
+import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
 
 const CHUNK_RETRY_KEY = "chunk_retry";
 /** Prevent reload loops within a single deploy window; allow retry after TTL. */
@@ -222,11 +223,16 @@ function Router() {
 }
 
 function XpCelebrationWatcher() {
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, profile } = useAuth();
+  const [location] = useLocation();
+  const celebrationsEnabled =
+    isLoggedIn && shouldShowCelebrationToasts(profile, location);
   useXpCelebration(isLoggedIn);
   // Daily streak check-in lives alongside the celebration watcher so
   // its toast/burst output flows through the same XpBurstProvider tree.
-  useDailyCheckin(isLoggedIn);
+  // Defer until onboarding completes — avoids streak toast covering
+  // signup credit notifications on /login/welcome.
+  useDailyCheckin(celebrationsEnabled);
   return null;
 }
 

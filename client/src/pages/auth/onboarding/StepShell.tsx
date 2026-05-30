@@ -27,6 +27,8 @@ interface StepShellProps {
   footer?: ReactNode;
   /** Hide the progress bar (used on the completion screen). */
   hideProgress?: boolean;
+  /** When true, body does not page-scroll — inner widgets own scrolling (year wheel). */
+  lockBodyScroll?: boolean;
   testId?: string;
 }
 
@@ -40,6 +42,7 @@ export function StepShell({
   children,
   footer,
   hideProgress = false,
+  lockBodyScroll = false,
   testId,
 }: StepShellProps) {
   return (
@@ -82,7 +85,12 @@ export function StepShell({
       </div>
 
       {/* Body — centered column, generous breathing room. */}
-      <div className="flex flex-1 flex-col px-5 pt-6 pb-4 sm:px-8">
+      <div
+        className={cn(
+          "flex flex-1 flex-col px-5 pt-6 pb-4 sm:px-8",
+          lockBodyScroll && "min-h-0 overflow-hidden",
+        )}
+      >
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -99,7 +107,12 @@ export function StepShell({
           ) : null}
         </motion.div>
 
-        <div className="mx-auto mt-8 flex w-full max-w-md flex-1 flex-col">
+        <div
+          className={cn(
+            "mx-auto mt-8 flex w-full max-w-md flex-1 flex-col",
+            lockBodyScroll && "min-h-0 overflow-hidden",
+          )}
+        >
           {children}
         </div>
       </div>

@@ -39,13 +39,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 
 import { StepShell } from "./onboarding/StepShell";
 import { WelcomeStep } from "./onboarding/WelcomeStep";
 import { YearWheel, buildDateOfBirth } from "./onboarding/YearStep";
-import { GenderList } from "./onboarding/GenderStep";
+import { GenderList, normalizeOnboardingGender } from "./onboarding/GenderStep";
 import { CountryList } from "./onboarding/CountryStep";
 import { CompletionStep } from "./onboarding/CompletionStep";
 
@@ -125,7 +126,8 @@ export default function WelcomePage() {
       const y = Number(profile.dateOfBirth.slice(0, 4));
       if (!Number.isNaN(y)) setYear(y);
     }
-    if (profile.gender) setGender(profile.gender);
+    const normalizedGender = normalizeOnboardingGender(profile.gender);
+    if (normalizedGender) setGender(normalizedGender);
     if (profile.countryOfResidence) setCountry(profile.countryOfResidence);
     setBootstrapped(true);
   }, [profile, bootstrapped]);
@@ -277,7 +279,7 @@ export default function WelcomePage() {
   switch (step) {
     case 0:
       title = "Welcome to VoxDex";
-      subtitle = "Pick a handle and you're in. You can change it any time.";
+      subtitle = "Pick a handle and avatar — you can change either any time.";
       content = (
         <WelcomeStep onCompleted={() => void goNext(0)} />
       );
@@ -307,7 +309,7 @@ export default function WelcomePage() {
       );
       break;
     case 2:
-      title = "How do you identify?";
+      title = "What is your gender?";
       subtitle = "Optional. Helps us serve a more relevant feed.";
       onSkip = () => void goNext(2);
       content = <GenderList value={gender} onChange={setGender} />;
@@ -371,6 +373,7 @@ export default function WelcomePage() {
       onBack={onBack}
       onSkip={onSkip}
       hideProgress={hideProgress || step === 5}
+      lockBodyScroll={step === 1}
       footer={footer}
       testId={`onboarding-step-${step}`}
     >
@@ -383,7 +386,7 @@ export default function WelcomePage() {
           animate="animate"
           exit="exit"
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-1 flex-col"
+          className={cn("flex flex-1 flex-col", step === 1 && "min-h-0 overflow-hidden")}
         >
           {content}
         </motion.div>

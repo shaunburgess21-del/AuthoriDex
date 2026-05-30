@@ -73,6 +73,7 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
       (b) =>
         b.earned &&
         b.earnedAt !== null &&
+        b.key !== "avatar_uploaded" &&
         new Date(b.earnedAt).getTime() >= cutoff,
     );
   }, [badges]);
@@ -151,7 +152,7 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
           size="lg"
           data-testid="completion-cta"
         >
-          Start VoxMaxing
+          Start VoxMaxxing
         </Button>
       </div>
     </div>

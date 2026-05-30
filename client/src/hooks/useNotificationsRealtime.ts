@@ -11,6 +11,10 @@ import { dispatchRankUp } from "@/components/RankUpModal";
 import { STREAK_BADGE_KEYS } from "@shared/badge-config";
 import { BadgeToast } from "@/components/BadgeToast";
 import { createElement } from "react";
+import {
+  ONBOARDING_SUPPRESSED_TOAST_KINDS,
+  shouldShowCelebrationToasts,
+} from "@/lib/onboarding-toasts";
 
 /**
  * Notification kinds that imply the user's credit balance just
@@ -72,10 +76,10 @@ interface RealtimeNotificationPayload {
  * it more than once would create duplicate channels and double-toast.
  */
 export function useNotificationsRealtime(): void {
-  const { user, isLoggedIn, refreshProfile } = useAuth();
+  const { user, isLoggedIn, profile, refreshProfile } = useAuth();
   const invalidate = useInvalidateNotifications();
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const lastUserIdRef = useRef<string | null>(null);
   // Keep a stable ref to setLocation so the effect doesn't tear down the
   // realtime channel just because wouter handed us a new function ref.
@@ -85,6 +89,10 @@ export function useNotificationsRealtime(): void {
   // doesn't tear the channel down.
   const refreshProfileRef = useRef(refreshProfile);
   refreshProfileRef.current = refreshProfile;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const pathnameRef = useRef(location);
+  pathnameRef.current = location;
   const toastBurstRef = useRef(new ToastBurstCoalescer());
 
   useEffect(() => {
@@ -168,6 +176,14 @@ export function useNotificationsRealtime(): void {
               // with the existing streak_milestone toast that the
               // daily-checkin handler fires moments earlier.
               if (row.kind === "badge_awarded") {
+                if (
+                  !shouldShowCelebrationToasts(
+                    profileRef.current,
+                    pathnameRef.current,
+                  )
+                ) {
+                  return;
+                }
                 const meta = parseMetadata(row.metadata);
                 const badgeKey = meta?.badgeKey
                   ? String(meta.badgeKey)
@@ -220,7 +236,16 @@ export function useNotificationsRealtime(): void {
               // Best-effort toast for high-priority kinds. We use the
               // existing Sonner instance mounted in App.tsx so the
               // styling matches every other toast in the app.
-              if (shouldAutoToast(row.kind)) {
+              if (
+                shouldAutoToast(row.kind) &&
+                !(
+                  ONBOARDING_SUPPRESSED_TOAST_KINDS.has(row.kind) &&
+                  !shouldShowCelebrationToasts(
+                    profileRef.current,
+                    pathnameRef.current,
+                  )
+                )
+              ) {
                 const burst = toastBurstRef.current.record(row.kind);
                 const notificationsHref = "/me/notifications";
 

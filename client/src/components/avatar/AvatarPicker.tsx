@@ -98,7 +98,8 @@ export function AvatarPicker({
           <DialogTitle>Choose your avatar</DialogTitle>
           <DialogDescription>
             Every avatar is unique and generated just for you. Pick one, shuffle for more options,
-            or keep what you have.
+            or keep what you have. You can change your avatar any time in Settings — pick another
+            generative style or upload your own photo.
           </DialogDescription>
         </DialogHeader>
 
