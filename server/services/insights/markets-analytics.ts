@@ -144,25 +144,27 @@ async function loadTopPairsForMarkets(
   if (engine === "amm") {
     const result = await db.execute(sql`
       WITH latest AS (
-        SELECT DISTINCT ON (aps.market_id, aps.entry_id)
-          aps.market_id,
-          aps.entry_id,
-          aps.price::float AS price
-        FROM amm_price_snapshots aps
-        WHERE aps.market_id = ANY(${marketIds})
-        ORDER BY aps.market_id, aps.entry_id, aps.recorded_at DESC
+        SELECT me.market_id, me.id AS entry_id, me.label, lp.price
+        FROM market_entries me
+        CROSS JOIN LATERAL (
+          SELECT aps.price::float AS price
+          FROM amm_price_snapshots aps
+          WHERE aps.market_id = me.market_id AND aps.entry_id = me.id
+          ORDER BY aps.recorded_at DESC
+          LIMIT 1
+        ) lp
+        WHERE me.market_id = ANY(${marketIds})
       ),
       ranked AS (
         SELECT
-          l.market_id,
-          me.label,
-          l.price,
+          market_id,
+          label,
+          price,
           ROW_NUMBER() OVER (
-            PARTITION BY l.market_id
-            ORDER BY ABS(l.price - 0.5) ASC
+            PARTITION BY market_id
+            ORDER BY ABS(price - 0.5) ASC
           ) AS rn
-        FROM latest l
-        INNER JOIN market_entries me ON me.id = l.entry_id
+        FROM latest
       )
       SELECT market_id, label, price
       FROM ranked
@@ -238,14 +240,17 @@ async function loadContestedByEngine(
   if (engine === "amm") {
     const result = await db.execute(sql`
       WITH latest AS (
-        SELECT DISTINCT ON (aps.market_id, aps.entry_id)
-          aps.market_id,
-          aps.entry_id,
-          aps.price::float AS price
-        FROM amm_price_snapshots aps
-        INNER JOIN prediction_markets pm ON pm.id = aps.market_id
+        SELECT pm.id AS market_id, me.id AS entry_id, lp.price
+        FROM prediction_markets pm
+        JOIN market_entries me ON me.market_id = pm.id
+        CROSS JOIN LATERAL (
+          SELECT aps.price::float AS price
+          FROM amm_price_snapshots aps
+          WHERE aps.market_id = pm.id AND aps.entry_id = me.id
+          ORDER BY aps.recorded_at DESC
+          LIMIT 1
+        ) lp
         WHERE pm.status = 'OPEN' AND pm.engine = 'amm'
-        ORDER BY aps.market_id, aps.entry_id, aps.recorded_at DESC
       ),
       scores AS (
         SELECT market_id, MIN(ABS(price - 0.5)) AS contested_score

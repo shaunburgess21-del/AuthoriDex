@@ -1552,6 +1552,11 @@ export const ammPriceSnapshots = pgTable(
       t.marketId,
       t.recordedAt,
     ),
+    marketEntryTimeIdx: index("amm_price_snapshots_market_entry_time_idx").on(
+      t.marketId,
+      t.entryId,
+      t.recordedAt.desc(),
+    ),
   }),
 );
 
