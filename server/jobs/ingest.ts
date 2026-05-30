@@ -2912,42 +2912,39 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         throw new Error("[Ingest] Another job is writing to trending_people. Aborting to prevent conflicts.");
       }
       console.log(`[Ingest] Acquired advisory lock for trending_people writes`);
-      
-      const upsertedIds: string[] = [];
-      let insertedCount = 0;
-      for (let i = 0; i < scoreResults.length; i++) {
-        const { person, score } = scoreResults[i];
-        
-        const avatarUrl = primaryImageMap.get(person.id) || person.avatar;
 
-        await tx.insert(trendingPeople).values({
-          id: person.id,
-          name: person.name,
-          avatar: avatarUrl,
-          bio: person.bio,
-          rank: i + 1,
-          trendScore: score.trendScore,
-          fameIndex: score.fameIndex,
-          change24h: score.change24h,
-          change7d: score.change7d,
-          category: person.category,
-        }).onConflictDoUpdate({
+      const trendingRows = scoreResults.map(({ person, score }, i) => ({
+        id: person.id,
+        name: person.name,
+        avatar: primaryImageMap.get(person.id) || person.avatar,
+        bio: person.bio,
+        rank: i + 1,
+        trendScore: score.trendScore,
+        fameIndex: score.fameIndex,
+        change24h: score.change24h,
+        change7d: score.change7d,
+        category: person.category,
+      }));
+
+      const TRENDING_PEOPLE_BATCH_SIZE = 50;
+      for (let i = 0; i < trendingRows.length; i += TRENDING_PEOPLE_BATCH_SIZE) {
+        const batch = trendingRows.slice(i, i + TRENDING_PEOPLE_BATCH_SIZE);
+        await tx.insert(trendingPeople).values(batch).onConflictDoUpdate({
           target: trendingPeople.id,
           set: {
-            name: person.name,
-            avatar: avatarUrl,
-            bio: person.bio,
-            rank: i + 1,
-            trendScore: score.trendScore,
-            fameIndex: score.fameIndex,
-            change24h: score.change24h,
-            change7d: score.change7d,
-            category: person.category,
+            name: sql`excluded.name`,
+            avatar: sql`excluded.avatar`,
+            bio: sql`excluded.bio`,
+            rank: sql`excluded.rank`,
+            trendScore: sql`excluded.trend_score`,
+            fameIndex: sql`excluded.fame_index`,
+            change24h: sql`excluded.change_24h`,
+            change7d: sql`excluded.change_7d`,
+            category: sql`excluded.category`,
           },
         });
-        upsertedIds.push(person.id);
-        insertedCount++;
       }
+      const upsertedIds = trendingRows.map((r) => r.id);
 
       if (upsertedIds.length > 0) {
         const staleCountResult = await tx.execute(

@@ -9,7 +9,10 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "10", 10);
+// Default 25: app connects via Supavisor pooler (multiplexes client slots onto fewer
+// backend connections). Headroom for API traffic + 15+ in-process schedulers.
+// Override per environment with DB_POOL_MAX if needed.
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "25", 10);
 
 /**
  * Default: `rejectUnauthorized: false` (common for Neon/Railway-style TLS without bundling CA).
