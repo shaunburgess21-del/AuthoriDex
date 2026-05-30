@@ -1295,21 +1295,18 @@ export default function PredictPage() {
     queryKey: ['/api/native-markets/updown'],
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
   const { data: nativeH2hData, isLoading: h2hLoading, error: h2hError, refetch: refetchH2h } = useQuery<any[]>({
     queryKey: ['/api/native-markets/h2h'],
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
   const { data: nativeGainerData, isLoading: gainerLoading, error: gainerError, refetch: refetchGainers } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
   // Sprint 4.3: pull the current user's AMM open positions so each
@@ -1356,7 +1353,6 @@ export default function PredictPage() {
     queryKey: ['/api/native-markets/jackpot'],
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
 
@@ -1432,7 +1428,7 @@ export default function PredictPage() {
     error: recentActivityError,
     refetch: refetchRecentActivity,
   } = useQuery<RecentPredictionActivity[]>({
-    queryKey: ['/api/predict/recent-activity'],
+    queryKey: ["/api/predict/recent-activity?limit=20"],
     staleTime: 60_000,
     refetchInterval: 90_000,
   });

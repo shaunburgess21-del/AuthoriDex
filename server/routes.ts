@@ -65,6 +65,7 @@ import { IMAGE_FLAG_WINDOW_MS, isImageFlagRateLimited, isValidImageFlagReason } 
 import { classifyImageVoteAction } from "./utils/image-vote-transition";
 import { optimizeImage } from "./utils/image-optimize";
 import geoip from "geoip-lite";
+import { loadRecentPredictionActivity } from "./services/predict/recent-activity";
 import { getTrendContext, getTrendContextBatch, formatRelativeTime, type TrendContext } from "./services/trend-context";
 import { fetchTrendingNewsContext, probeSerperSearchLive, refreshSerperCacheForPerson, getSerperDegradedState, getSerperRunStats } from "./providers/serper";
 import { computeTrendsMomentumDeltaPct, TRENDS_DELTA_METHOD } from "./providers/trends-window";
@@ -19616,159 +19617,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
-  app.get("/api/predict/recent-activity", async (_req, res) => {
+  app.get("/api/predict/recent-activity", async (req, res) => {
     try {
-      const requestedLimit = typeof _req.query.limit === "string" ? parseInt(_req.query.limit, 10) : 20;
-      const queryLimit = Math.max(1, Math.min(requestedLimit || 20, 100));
-
-      // Town Square shows BOTH parimutuel and AMM activity. AMM buys land
-      // in `status='active'` (until market resolves) and AMM sells land
-      // in `status='settled'` (immediately). Without `settled` the feed
-      // would silently drop every sell, so an active AMM trader's exits
-      // would never appear.
-      const recentBets = await db
-        .select({
-          id: marketBets.id,
-          marketId: marketBets.marketId,
-          entryId: marketBets.entryId,
-          userId: marketBets.userId,
-          stakeAmount: marketBets.stakeAmount,
-          actionType: marketBets.actionType,
-          shareCount: marketBets.shareCount,
-          pricePerShare: marketBets.pricePerShare,
-          payoutAmount: marketBets.payoutAmount,
-          confidence: marketBets.confidence,
-          createdAt: marketBets.createdAt,
-          betMetadata: marketBets.betMetadata,
-        })
-        .from(marketBets)
-        .where(inArray(marketBets.status, ["active", "settled"]))
-        .orderBy(desc(marketBets.createdAt))
-        .limit(queryLimit);
-
-      if (recentBets.length === 0) {
-        return res.json([]);
-      }
-
-      const userIds = Array.from(new Set(recentBets.map((bet) => bet.userId)));
-      const marketIds = Array.from(new Set(recentBets.map((bet) => bet.marketId)));
-      const entryIds = Array.from(new Set(recentBets.map((bet) => bet.entryId)));
-
-      const { getSimulationProfile, shouldShowPublicConfidence } = await import("./agents/simulationProfile");
-      const { agentConfigs: agentConfigsTable } = await import("@shared/schema");
-
-      const [profileRows, marketRows, entryRows, agentRows] = await Promise.all([
-        db
-          .select({
-            id: profiles.id,
-            username: profiles.username,
-            avatarUrl: profiles.avatarUrl,
-            isAgent: profiles.isAgent,
-            isPublic: profiles.isPublic,
-            positionsPublic: profiles.positionsPublic,
-          })
-          .from(profiles)
-          .where(and(inArray(profiles.id, userIds), eq(profiles.isHouse, false))),
-        db
-          .select({
-            id: predictionMarkets.id,
-            title: predictionMarkets.title,
-            slug: predictionMarkets.slug,
-            marketType: predictionMarkets.marketType,
-            status: predictionMarkets.status,
-            visibility: predictionMarkets.visibility,
-          })
-          .from(predictionMarkets)
-          .where(inArray(predictionMarkets.id, marketIds)),
-        db
-          .select({
-            id: marketEntries.id,
-            label: marketEntries.label,
-          })
-          .from(marketEntries)
-          .where(inArray(marketEntries.id, entryIds)),
-        db
-          .select({
-            userId: agentConfigsTable.userId,
-            simulationProfile: agentConfigsTable.simulationProfile,
-          })
-          .from(agentConfigsTable)
-          .where(inArray(agentConfigsTable.userId, userIds)),
-      ]);
-
-      const profileMap = new Map(profileRows.map((profile) => [profile.id, profile]));
-      const marketMap = new Map(marketRows.map((market) => [market.id, market]));
-      const entryMap = new Map(entryRows.map((entry) => [entry.id, entry]));
-      const agentSimulationMap = new Map(
-        agentRows.map((row) => [row.userId, getSimulationProfile(row.simulationProfile)] as const),
-      );
-
-      const activity = recentBets
-        .map((bet) => {
-          const profile = profileMap.get(bet.userId);
-          const market = marketMap.get(bet.marketId);
-          const entry = entryMap.get(bet.entryId);
-
-          if (!profile || !market || !entry) return null;
-          if (market.status !== "OPEN") return null;
-          if (!["live", "inactive"].includes(market.visibility || "")) return null;
-
-          const rationale =
-            bet.betMetadata &&
-            typeof bet.betMetadata === "object" &&
-            "rationale" in (bet.betMetadata as Record<string, unknown>)
-              ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
-              : null;
-
-          const rawConfidence = bet.confidence ? Number(bet.confidence) : null;
-          let displayConfidence: number | null = rawConfidence;
-          if (profile?.isAgent) {
-            const sim = agentSimulationMap.get(bet.userId);
-            displayConfidence = sim && rawConfidence != null && shouldShowPublicConfidence(sim, `bet:${bet.id}`)
-              ? rawConfidence
-              : null;
-          }
-
-          const actionType = (bet.actionType ?? "parimutuel") as
-            | "parimutuel"
-            | "buy"
-            | "sell";
-
-          // Phase 15.C.3 privacy enforcement: anonymise rows when the
-          // user has hidden their positions. The trade itself stays in
-          // the feed (market activity is the point of Town Square);
-          // only the identifying fields collapse to "Private Predictor".
-          const positionsHidden = profile?.positionsPublic === false;
-          const profilePrivate = profile?.isPublic === false;
-          const reveal = !positionsHidden && !profilePrivate;
-
-          return {
-            id: bet.id,
-            createdAt: bet.createdAt,
-            stakeAmount: bet.stakeAmount,
-            actionType,
-            shareCount: bet.shareCount != null ? Number(bet.shareCount) : null,
-            pricePerShare:
-              bet.pricePerShare != null ? Number(bet.pricePerShare) : null,
-            payoutAmount: bet.payoutAmount ?? null,
-            confidence: displayConfidence,
-            choiceLabel: entry.label,
-            marketId: market.id,
-            marketTitle: market.title,
-            marketSlug: market.slug,
-            marketType: market.marketType,
-            username: reveal ? profile?.username || null : null,
-            displayName: reveal
-              ? profile?.username || "Anonymous"
-              : "Private Predictor",
-            avatarUrl: reveal ? profile?.avatarUrl || null : null,
-            isAgent: profile?.isAgent ?? false,
-            isPublic: reveal,
-            rationale: reveal ? rationale || null : null,
-          };
-        })
-        .filter(Boolean);
-
+      const requestedLimit =
+        typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 20;
+      const activity = await loadRecentPredictionActivity(requestedLimit);
       res.json(activity);
     } catch (error: any) {
       console.error("Error fetching recent prediction activity:", error.message);
