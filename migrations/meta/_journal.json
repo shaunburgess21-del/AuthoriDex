@@ -519,6 +519,27 @@
       "when": 1780651200000,
       "tag": "0073_celebrity_profile_net_worth_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1780848000000,
+      "tag": "0074_enable_rls_on_remaining_backend_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1780934400000,
+      "tag": "0075_insights_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1781020800000,
+      "tag": "0076_repair_scaling_indexes",
+      "breakpoints": true
     }
   ]
 }

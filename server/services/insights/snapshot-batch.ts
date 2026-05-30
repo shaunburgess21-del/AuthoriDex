@@ -18,19 +18,23 @@ export interface LatestSnapshotRow {
 const SNAPSHOTS_MEMO_KEY = "insights:latest-snapshots-by-person";
 
 async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, LatestSnapshotRow>> {
-  // Two-step: resolve the latest snapshot id per person over NARROW columns
-  // first, then fetch the wide `diagnostics` JSONB for only those ~hundreds of
-  // rows. Selecting diagnostics in the DISTINCT ON forced Postgres to sort the
-  // entire 320k-row history with the JSONB payload, spilling ~220MB to disk
-  // (~27s). This keeps the sort narrow and joins the heavy column by PK (~4s).
+  // Lateral-join pattern driven by the small tracked_people table (~161 rows).
+  // For each person we do an index-only lookup into trend_snapshots using
+  // trend_snapshots_person_ts_idx (person_id, timestamp DESC) and grab the
+  // single latest ingest snapshot. Total ~5ms on prod versus ~7s for the
+  // previous DISTINCT-ON-over-the-whole-table approach.
+  //
+  // History:
+  //   - Original code selected diagnostics inside DISTINCT ON over 322k rows
+  //     and spilled ~220 MB to disk (~27 s cold).
+  //   - First fix (commit 13c22dd5) split into a narrow DISTINCT ON then a
+  //     JSONB join. Improved to ~7 s but still seq-scanned because the
+  //     declared per-person indexes were missing in prod (migration 0009
+  //     was silently baselined). Migration 0076 repaired those indexes.
+  //   - With the indexes in place, the lateral pattern is dramatically
+  //     simpler than the CTE and lets Postgres do ~161 index lookups
+  //     instead of one giant scan + sort.
   const result = await db.execute(sql`
-    WITH latest AS (
-      SELECT DISTINCT ON (person_id) id
-      FROM trend_snapshots
-      WHERE snapshot_origin = 'ingest'
-        AND timestamp = date_trunc('hour', timestamp)
-      ORDER BY person_id, timestamp DESC, id DESC
-    )
     SELECT
       ts.person_id AS "personId",
       ts.timestamp,
@@ -41,8 +45,15 @@ async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, Latest
       ts.fame_index AS "fameIndex",
       ts.diagnostics,
       ts.drivers
-    FROM trend_snapshots ts
-    JOIN latest l ON l.id = ts.id
+    FROM tracked_people tp
+    CROSS JOIN LATERAL (
+      SELECT *
+      FROM trend_snapshots
+      WHERE person_id = tp.id
+        AND snapshot_origin = 'ingest'
+      ORDER BY timestamp DESC, id DESC
+      LIMIT 1
+    ) ts
   `);
 
   const rows = (Array.isArray(result) ? result : (result as { rows: unknown[] }).rows) as LatestSnapshotRow[];
