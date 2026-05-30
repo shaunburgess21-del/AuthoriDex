@@ -2,8 +2,12 @@ import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import https from "https";
-
-const GDELT_API_BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
+import {
+  buildGdelt24hArtlistUrl,
+  buildGdeltQueryText,
+  normalizeGdeltNewsData,
+  parseGdelt24hArtlistResponse,
+} from "./gdelt-parse";
 
 // GDELT_RELAX_SSL is an escape hatch for environments that can't validate the
 // GDELT certificate chain (corporate MITM proxies, older Node/OpenSSL builds).
@@ -189,6 +193,10 @@ export interface GdeltNewsData {
   articles?: Array<{ url: string; title?: string; publishedAt?: string }>;
 }
 
+function parseGdeltCachedJson(raw: string): GdeltNewsData {
+  return normalizeGdeltNewsData(JSON.parse(raw)) as GdeltNewsData;
+}
+
 async function getCachedResponse(cacheKey: string): Promise<string | null> {
   const cached = await db.query.apiCache.findFirst({
     where: and(
@@ -247,10 +255,6 @@ async function setCachedResponse(
   });
 }
 
-function formatGdeltDate(date: Date): string {
-  return date.toISOString().slice(0, 10).replace(/-/g, "") + "000000";
-}
-
 export async function fetchGdeltNews(
   personName: string,
   personId?: string,
@@ -266,104 +270,48 @@ export async function fetchGdeltNews(
   if (reuseMinutes && reuseMinutes > 0) {
     const reusable = await getFreshEnoughCache(cacheKey, reuseMinutes);
     if (reusable) {
-      return JSON.parse(reusable);
+      return parseGdeltCachedJson(reusable);
     }
   }
 
   if (isCircuitBreakerOpen()) {
     const stale = await getStaleCache(cacheKey);
-    if (stale) return JSON.parse(stale);
+    if (stale) return parseGdeltCachedJson(stale);
     return null;
   }
 
   const cached = await getCachedResponse(cacheKey);
   if (cached) {
-    return JSON.parse(cached);
+    return parseGdeltCachedJson(cached);
   }
 
   try {
     const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo = new Date(now);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    
-    const queryText = searchQueryOverride
-      ? searchQueryOverride.split(/\s+OR\s+/i).map(t => t.trim()).filter(Boolean).join(" OR ")
-      : `"${personName}"`;
+    const queryText = buildGdeltQueryText(personName, searchQueryOverride);
     if (searchQueryOverride) {
       console.log(`[GDELT] Using search override for ${personName}: "${queryText}"`);
     }
-    const query = encodeURIComponent(queryText);
-    
-    const url24h = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=250&format=json&startdatetime=${formatGdeltDate(yesterday)}&enddatetime=${formatGdeltDate(now)}`;
-    const url7d = `${GDELT_API_BASE}?query=${query}&mode=artlist&maxrecords=250&format=json&startdatetime=${formatGdeltDate(weekAgo)}&enddatetime=${formatGdeltDate(now)}`;
-    
+
+    const url24h = buildGdelt24hArtlistUrl(personName, now, searchQueryOverride);
+
     const response24h = await fetchWithRetry(url24h);
     if (response24h?.ok) {
       recordSpacingSuccess();
     } else if (response24h === null) {
       recordSpacingFailure();
     }
-    
-    await sleep(getJitteredDelay(adaptiveSpacingMs));
-    
-    const response7d = await fetchWithRetry(url7d);
-    if (response7d?.ok) {
-      recordSpacingSuccess();
-    } else if (response7d === null) {
-      recordSpacingFailure();
-    }
 
-    let articleCount24h = 0;
-    let articleCount7d = 0;
-    let topHeadlines: string[] = [];
-    let articles: Array<{ url: string; title?: string; publishedAt?: string }> = [];
-
+    let parsed = parseGdelt24hArtlistResponse(null, searchQueryOverride || personName);
     if (response24h?.ok) {
       const text = await response24h.text();
       try {
-        const data = JSON.parse(text);
-        articleCount24h = data.articles?.length || 0;
-        topHeadlines = (data.articles || [])
-          .slice(0, 3)
-          .map((a: { title?: string }) => a.title || "");
-        articles = (data.articles || [])
-          .filter((a: { url?: string }) => !!a.url)
-          .map((a: { url: string; title?: string; seendate?: string }) => ({
-            url: a.url,
-            title: a.title,
-            publishedAt: a.seendate,
-          }));
+        parsed = parseGdelt24hArtlistResponse(JSON.parse(text), searchQueryOverride || personName);
       } catch {
-        articleCount24h = 0;
+        parsed = parseGdelt24hArtlistResponse(null, searchQueryOverride || personName);
       }
     }
 
-    if (response7d?.ok) {
-      const text = await response7d.text();
-      try {
-        const data = JSON.parse(text);
-        articleCount7d = data.articles?.length || 0;
-      } catch {
-        articleCount7d = 0;
-      }
-    }
-
-    const averageDaily7d = articleCount7d / 7;
-    const delta = averageDaily7d > 0 
-      ? ((articleCount24h - averageDaily7d) / averageDaily7d)
-      : (articleCount24h > 0 ? 1 : 0);
-
-    const result: GdeltNewsData = {
-      query: searchQueryOverride || personName,
-      articleCount24h,
-      articleCount7d,
-      averageDaily7d,
-      delta,
-      topHeadlines,
-      articles,
-    };
+    const result: GdeltNewsData = { ...parsed };
 
     await setCachedResponse(cacheKey, "gdelt", personId || null, JSON.stringify(result), 2);
 
@@ -371,7 +319,7 @@ export async function fetchGdeltNews(
   } catch (error) {
     console.error(`[GDELT] Error fetching ${personName}:`, error);
     const stale = await getStaleCache(cacheKey);
-    if (stale) return JSON.parse(stale);
+    if (stale) return parseGdeltCachedJson(stale);
     return null;
   }
 }
@@ -429,12 +377,12 @@ export async function fetchBatchGdeltNews(
     const cacheKey = `gdelt:news:${person.name.toLowerCase().replace(/\s+/g, "_")}`;
     const cached = await getCachedResponse(cacheKey);
     if (cached) {
-      results.set(person.id, JSON.parse(cached));
+      results.set(person.id, parseGdeltCachedJson(cached));
       cacheReused++;
     } else {
       const stale = await getStaleCache(cacheKey);
       if (stale) {
-        results.set(person.id, JSON.parse(stale));
+        results.set(person.id, parseGdeltCachedJson(stale));
         staleUsed++;
       }
     }
@@ -449,7 +397,7 @@ export async function fetchBatchGdeltNews(
       for (const remaining of priorityPeople.slice(processed)) {
         const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
         const stale = await getStaleCache(cacheKey);
-        if (stale) { results.set(remaining.id, JSON.parse(stale)); staleUsed++; }
+        if (stale) { results.set(remaining.id, parseGdeltCachedJson(stale)); staleUsed++; }
       }
       break;
     }
@@ -460,7 +408,7 @@ export async function fetchBatchGdeltNews(
       for (const remaining of priorityPeople.slice(processed)) {
         const cacheKey = `gdelt:news:${remaining.name.toLowerCase().replace(/\s+/g, "_")}`;
         const stale = await getStaleCache(cacheKey);
-        if (stale) { results.set(remaining.id, JSON.parse(stale)); staleUsed++; }
+        if (stale) { results.set(remaining.id, parseGdeltCachedJson(stale)); staleUsed++; }
       }
       break;
     }
@@ -477,7 +425,7 @@ export async function fetchBatchGdeltNews(
       const reusable = reuseMinutes > 0 ? await getFreshEnoughCache(cacheKey, reuseMinutes) : null;
       
       if (reusable) {
-        results.set(person.id, JSON.parse(reusable));
+        results.set(person.id, parseGdeltCachedJson(reusable));
         cacheReused++;
       } else {
         const data = await fetchGdeltNews(person.name, person.id, undefined, person.searchQueryOverride);

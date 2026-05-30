@@ -2417,7 +2417,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const rawNews7dForScoring =
           (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
             ? (news7dHistoryAvgMap.get(person.id) ?? 0)
-            : (news?.averageDaily7d ?? 0);
+            : (news?.averageDaily7d || sourceStats.news.p50);
         const news7dSeries = [
           ...(recentNews7dSeriesMap.get(person.id) ?? []),
           rawNews7dForScoring,
@@ -2659,7 +2659,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             news7d:
               (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
                 ? (news7dHistoryAvgMap.get(person.id) ?? 0)
-                : (news?.averageDaily7d ?? 0),
+                : (news?.averageDaily7d || sourceStats.news.p50),
             news7dSource:
               (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
                 ? "history"

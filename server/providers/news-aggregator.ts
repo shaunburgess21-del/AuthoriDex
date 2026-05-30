@@ -23,6 +23,7 @@ import {
   type GdeltBatchStats,
   type GdeltNewsData,
 } from "./gdelt";
+import { gdeltUnionAttributionCount } from "./gdelt-parse";
 import {
   fetchSerperNewsBatch24h,
   type SerperNewsCountData,
@@ -252,6 +253,8 @@ function mergeHeadlines(
   return out.slice(0, limit);
 }
 
+export { gdeltUnionAttributionCount } from "./gdelt-parse";
+
 // ── MAIN AGGREGATOR ─────────────────────────────────────────────────────────
 
 export async function fetchMultiSourceNewsBatch(
@@ -319,7 +322,7 @@ export async function fetchMultiSourceNewsBatch(
     gdeltOptions,
   );
 
-  // 24h-only variant (aggregator sources 7d from GDELT) with bumped concurrency
+  // 24h-only Serper variant (7d from Serper when available; ingest prefers history)
   // for faster per-tick completion. Previous: (2, 500ms). Now: (4, 300ms).
   const serperPromise = fetchSerperNewsBatch24h(
     people.map(p => ({ id: p.id, name: p.name })),
@@ -479,10 +482,11 @@ export async function fetchMultiSourceNewsBatch(
     unionSum += unionCount;
 
     // Per-source raw counts (what each provider claims independently).
+    const gdeltUrlCount = gdeltUnionAttributionCount(gd);
     const perSourceCounts = {
       mediastack: ms?.paginationTotal ?? ms?.articleCount24h ?? 0,
       currents: cu?.articleCount24h ?? 0,
-      gdelt: gd?.articleCount24h ?? 0,
+      gdelt: gdeltUrlCount,
       serper: sn?.articleCount24h ?? 0,
     };
 
@@ -521,12 +525,9 @@ export async function fetchMultiSourceNewsBatch(
       biggestGainPerson = { name: person.name, legacy: legacyTieredCount, final: finalCount };
     }
 
-    // 7d stats: GDELT/Serper provide these, Mediastack hardcodes 0. Pick the
-    // largest non-zero as the 7d signal (Serper multiplies by 2.5 already).
-    const count7dCandidates = [
-      gd?.articleCount7d ?? 0,
-      sn?.articleCount7d ?? 0,
-    ];
+    // 7d stats: Serper provides these when available; ingest prefers history-
+    // derived 7d. GDELT no longer fetches 7d (throughput under rate limits).
+    const count7dCandidates = [sn?.articleCount7d ?? 0];
     const articleCount7d = Math.max(...count7dCandidates, 0);
     const averageDaily7d = articleCount7d / 7;
     const delta = averageDaily7d > 0
@@ -536,7 +537,7 @@ export async function fetchMultiSourceNewsBatch(
     const contributingProviders: Array<"mediastack" | "currents" | "gdelt" | "serper_news"> = [];
     if (ms && (ms.articleCount24h > 0 || (ms.articles?.length ?? 0) > 0)) contributingProviders.push("mediastack");
     if (cu && (cu.articleCount24h > 0 || (cu.articles?.length ?? 0) > 0)) contributingProviders.push("currents");
-    if (gd && (gd.articleCount24h > 0 || (gd.articles?.length ?? 0) > 0)) contributingProviders.push("gdelt");
+    if (gd && gdeltUrlCount > 0) contributingProviders.push("gdelt");
     if (sn && (sn.articleCount24h > 0 || (sn.articles?.length ?? 0) > 0)) contributingProviders.push("serper_news");
 
     const topHeadlines = mergeHeadlines(ms?.topHeadlines, cu?.topHeadlines, sn?.topHeadlines, gd?.topHeadlines);
