@@ -193,7 +193,7 @@ export function YearWheel({ initialDateOfBirth, onChange }: YearWheelProps) {
           className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
           style={{
             height: ROW_HEIGHT,
-            transform: "translateY(calc(-50% - 18px))",
+            transform: "translateY(-50%)",
           }}
         >
           <div className="mx-2 h-full rounded-2xl border border-primary/40 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.15),0_0_24px_-6px_hsl(var(--primary)/0.5)]" />

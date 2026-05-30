@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     runtimeErrorOverlay(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
       includeAssets: [
         "voxdex-logo.svg",
         "voxdex-favicon.svg",
@@ -35,7 +35,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Prompt mode: new SW stays waiting until the user accepts via PWAUpdatePrompt.
+        // autoUpdate: new SW activates on deploy; next navigation loads fresh assets.
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallback: "/index.html",
         // Do not serve the SPA for /api/* navigations (e.g. opening OG JPG URLs in a tab).

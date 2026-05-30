@@ -721,9 +721,9 @@ export async function checkAndAwardProfileBadges(
       } catch (err) {
         console.warn(`[badges] xp ${key} failed`, err);
       }
-      // profile_avatar credits retired — onboarding auto-saves a
-      // generative avatar, so a credit grant stacked on signup.
-      if (key !== "profile_avatar") {
+      // profile_avatar / community_member: XP only (no credit grant).
+      const xpOnlyKeys = new Set(["profile_avatar", "community_member"]);
+      if (!xpOnlyKeys.has(key)) {
         try {
           await gamificationService.adjustCredits(
             userId,
@@ -751,7 +751,13 @@ export async function checkAndAwardProfileBadges(
       hasText(profile.gender) &&
       hasText(profile.countryOfResidence)
     ) {
-      await badgeService.awardBadge(userId, "community_member");
+      const communityResult = await badgeService.awardBadge(
+        userId,
+        "community_member",
+      );
+      if (communityResult.awarded) {
+        await awardProfileTier("community_member");
+      }
     }
     if (
       hasText(profile.dateOfBirth) &&

@@ -38,7 +38,7 @@ function parseReason(value: string | null): AuthReason | null {
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, profileLoading } = useAuth();
   const params = new URLSearchParams(window.location.search);
   const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
   const [email, setEmail] = useState(params.get("email") ?? "");
@@ -66,14 +66,19 @@ export default function LoginPage() {
     clearStaleAuthReturnSnapshotOnDirectVisit();
   }, []);
 
-  // Google OAuth returns here with a session; redirect using the snapshot stashed before OAuth.
+  // Google OAuth returns here with a session. Un-onboarded users go straight
+  // to welcome — never via / (avoids a flash of home before NewUserGate).
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (authLoading || profileLoading || !user) return;
     if (window.location.pathname !== "/login") return;
     if (emailAuthInProgressRef.current) return;
+    if (profile && !profile.onboardingCompletedAt) {
+      setLocation("/login/welcome", { replace: true });
+      return;
+    }
     if (!hasPendingAuthReturnSnapshot()) return;
     redirectAfterLogin(setLocation);
-  }, [user, authLoading, setLocation]);
+  }, [user, profile, authLoading, profileLoading, setLocation]);
 
   // Keep mode in sync with the querystring (mainly for the Edit-email return from /login/verify).
   useEffect(() => {

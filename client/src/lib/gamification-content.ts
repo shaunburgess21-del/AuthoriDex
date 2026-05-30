@@ -86,6 +86,8 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
   { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour", category: "Prediction" },
 
+  { actionKey: "community_member", displayName: "Community Member", xpValue: 25, dailyCap: null, description: "One-time XP for adding age, gender, and country of residence", category: "Special" },
+
   { actionKey: "daily_login", displayName: "Daily Login", xpValue: 10, dailyCap: 1, description: "Log in to keep your streak alive", category: "Streak" },
   { actionKey: "streak_bonus", displayName: "Streak Bonus", xpValue: 25, dailyCap: 1, description: "Bonus XP for maintaining a multi-day streak", category: "Streak" },
 

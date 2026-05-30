@@ -69,6 +69,7 @@ async function seedXpActions() {
     // the cap.
     { actionKey: 'profile_avatar', displayName: 'Profile Photo Added', xpValue: 25, dailyCap: null, description: 'One-time XP for uploading a profile photo' },
     { actionKey: 'profile_bio', displayName: 'Profile Name & Bio', xpValue: 25, dailyCap: null, description: 'One-time XP for completing your display name and bio' },
+    { actionKey: 'community_member', displayName: 'Community Member', xpValue: 25, dailyCap: null, description: 'One-time XP for adding age, gender, and country of residence' },
     { actionKey: 'profile_demographics', displayName: 'Profile Demographics', xpValue: 100, dailyCap: null, description: 'One-time XP for completing all demographic fields' },
     
     // Streak & Bonus Actions. The per-milestone rows below are
