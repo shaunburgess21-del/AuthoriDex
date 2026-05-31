@@ -257,19 +257,16 @@ function buildTaskPayload(keyword: string): Record<string, unknown> {
   };
 }
 
-async function fetchOnePerson(
+/**
+ * Live fetch + cache-write for one person. Assumes the caller has already
+ * checked the cache (worker does) and the daily cap (recordLiveCall happens
+ * here). Returns null on API failure.
+ */
+async function fetchOnePersonLive(
   p: DataForSeoNewsInput,
-  options: { cacheOnly?: boolean },
+  keyword: string,
+  cacheKey: string,
 ): Promise<DataForSeoNewsData | null> {
-  const keyword = resolveKeyword(p);
-  const cacheKey = cacheKeyFor(keyword);
-  const cached = await getCached(cacheKey);
-  if (cached) return toNewsData(cached);
-
-  if (options.cacheOnly || !canMakeLiveCall()) {
-    return null;
-  }
-
   recordLiveCall();
   const json = await dfsNewsFetch(buildTaskPayload(keyword));
   if (!json) return null;
@@ -333,6 +330,7 @@ export async function fetchDataForSeoNewsBatch(
   let fetched = 0;
   let cached = 0;
   let failed = 0;
+  let capSkipped = 0;
   let apiCallsMade = 0;
 
   const toFetch = [...people];
@@ -353,12 +351,20 @@ export async function fetchDataForSeoNewsBatch(
         failed++;
         continue;
       }
+      // Respect the daily cap mid-batch (it can flip once exhausted).
+      if (!canMakeLiveCall()) {
+        capSkipped++;
+        failed++;
+        continue;
+      }
       apiCallsMade++;
-      const result = await fetchOnePerson(person, { cacheOnly: false });
+      const result = await fetchOnePersonLive(person, keyword, cacheKey);
       if (result) {
+        // `fetched` = successful live fetch (mirrors Currents semantics:
+        // counts coverage, not just non-zero hits). Zero-count results are
+        // still a successful refresh — the person simply has no news.
         data.set(person.personId, result);
-        if (result.articleCount24h > 0) fetched++;
-        else cached++;
+        fetched++;
       } else {
         failed++;
       }
@@ -388,8 +394,9 @@ export async function fetchDataForSeoNewsBatch(
   };
 
   console.log(
-    `[DataForSEO News] Batch complete: ${data.size}/${people.length} with data, ` +
-      `${fetched} non-zero fresh, ${cached} cached, ${failed} empty, ` +
+    `[DataForSEO News] Batch complete: ${data.size}/${people.length} with data ` +
+      `(${nonZeroCount} non-zero), ${fetched} fresh, ${cached} cached, ${failed} failed` +
+      `${capSkipped > 0 ? ` (${capSkipped} cap-skipped)` : ""}, ` +
       `${apiCallsMade} API calls, $${_totalCostUsd.toFixed(4)}, ${(stats.durationMs / 1000).toFixed(1)}s`,
   );
 
