@@ -29,6 +29,7 @@ export const INSIGHTS_TAB_VALUES = [
   "you",
   "compare",
   "markets",
+  "approval",
 ] as const satisfies readonly string[];
 export type InsightsTab = (typeof INSIGHTS_TAB_VALUES)[number];
 

@@ -10,6 +10,7 @@ import { DiscoverTab } from "@/components/insights/DiscoverTab";
 import { YouTab } from "@/components/insights/YouTab";
 import { CompareTab } from "@/components/insights/CompareTab";
 import { MarketsTab } from "@/components/insights/MarketsTab";
+import { ApprovalTab } from "@/components/insights/ApprovalTab";
 import { useAuth } from "@/contexts/AuthContext";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -117,6 +118,7 @@ export default function InsightsPage() {
           ))}
         {tab === "compare" && <CompareTab />}
         {tab === "markets" && <MarketsTab />}
+        {tab === "approval" && <ApprovalTab />}
       </main>
     </div>
   );
