@@ -199,7 +199,7 @@ const SEARCH_MOMENTUM_COPY =
   "A 0–100 score for how much people are Googling this person lately, where 100 is their own busiest day in the past month. The +/–% shows whether their search attention is rising or falling — we compare the last 7 days against the weeks before. It's a relative interest score provided by Google Trends, not the actual number of searches. For total estimated search volume, see Search Interest.";
 
 const WEB_SENTIMENT_COPY =
-  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % and bar split positive (including neutral mentions) vs negative. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
+  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % and bar split positive vs negative mentions. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
