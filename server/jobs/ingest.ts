@@ -7,7 +7,13 @@ import { fetchBatchGdeltNews, GdeltBatchOptions, GdeltBatchStats } from "../prov
 import { fetchSerperBatch, fetchSerperNewsBatch, getSerperRunStats, resetSerperRunStats } from "../providers/serper";
 import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, shouldRefreshMediastack } from "../providers/mediastack";
 import type { CurrentsBatchStats } from "../providers/currents";
-import { fetchMultiSourceNewsBatch, type AggregatorStats } from "../providers/news-aggregator";
+import type { DataForSeoNewsBatchStats } from "../providers/dataforseo-news";
+import {
+  fetchMultiSourceNewsBatch,
+  fetchCascadeNewsBatch,
+  type AggregatorStats,
+  type CascadeAggregatorStats,
+} from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
 import {
   appendToRecentSeriesMap,
@@ -36,6 +42,10 @@ import {
   computeMomentumLevel,
   MOMENTUM_RATIO_CAP,
 } from "../scoring/normalize";
+import {
+  shouldApplyNews24hDecayFloor,
+  shouldUseRawNewsCountForScoring,
+} from "../scoring/news-smoothing";
 import {
   fetchDataForSeoTrendsBatch,
   isDataForSeoTrendsConfigured,
@@ -143,7 +153,7 @@ export const SNAPSHOT_DIAGNOSTICS_VERSION = 1;
 
 export interface LastRunMeta {
   runId: string;
-  newsProviderUsed: "mediastack" | "gdelt" | "serper_news" | "union";
+  newsProviderUsed: "mediastack" | "gdelt" | "serper_news" | "union" | "cascade";
   newsFreshCoveragePct: number;
   searchFreshCoveragePct: number;
   newsGovernorFactor: number;
@@ -565,20 +575,20 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     //     2. GDELT (secondary, free, fallback)
     //     3. Serper News (emergency, paid, last resort)
     //
-    //   "union" — Multi-source parallel aggregation:
-    //     Currents + GDELT + Serper (+ Mediastack when configured) in parallel.
-    //     Articles deduplicated by canonicalised URL; finalCount = union size
-    //     (max with Mediastack paginationTotal when Mediastack is enabled).
+    //   "union" — Multi-source parallel aggregation (legacy).
+    //   "cascade" — Currents primary; DataForSEO → Serper → GDELT on Currents=0 only.
     // ═══════════════════════════════════════════════════════════════════════════
     const COVERAGE_THRESHOLD = 0.70;
     const SERPER_NEWS_FALLBACK_THRESHOLD = 0.30;
     const GDELT_QUALITY_THRESHOLD = 3;
     const newsAggregationMode = getNewsAggregationMode();
-    let newsSource: "mediastack" | "gdelt" | "serper_news" | "union" = "gdelt";
+    let newsSource: "mediastack" | "gdelt" | "serper_news" | "union" | "cascade" = "gdelt";
     let newsData = new Map<string, any>();
     let gdeltBatchStats: GdeltBatchStats | null = null;
     let mediastackBatchStats: MediastackBatchStats | null = null;
     let aggregatorStats: AggregatorStats | null = null;
+    let cascadeStats: CascadeAggregatorStats | null = null;
+    let dataforseoNewsBatchStats: DataForSeoNewsBatchStats | null = null;
     let currentsBatchStats: CurrentsBatchStats | null = null;
 
     const mediastackAvailable = isMediastackConfigured();
@@ -692,8 +702,90 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       }
     }
 
+    if (newsAggregationMode === "cascade") {
+      console.log(
+        `[Ingest] NEWS_AGGREGATION_MODE=cascade — Currents primary, ` +
+          `DataForSEO → Serper → GDELT for Currents=0 only`,
+      );
+      const cascadeStart = Date.now();
+      try {
+        const gdeltCandidates = await computeNewsCandidates(people, wikiData);
+        const newsHealth = getCurrentHealthSnapshot().news;
+        const gdeltIsDegraded =
+          newsHealth.state === "DEGRADED" ||
+          newsHealth.state === "OUTAGE" ||
+          newsHealth.state === "RECOVERY";
+
+        const cascadeResult = await fetchCascadeNewsBatch(
+          people.map((p) => ({
+            id: p.id,
+            name: p.name,
+            newsQueryWidened: p.newsQueryWidened,
+            searchQueryOverride: p.searchQueryOverride,
+          })),
+          { gdeltCandidates, gdeltIsDegraded, gdeltTimeBudgetMs: 180000 },
+        );
+
+        newsData = cascadeResult.data as Map<string, any>;
+        newsSource = "cascade";
+        currentsCadence = cascadeResult.currentsCadence;
+        currentsBatchStats = cascadeResult.currentsBatchStats;
+        gdeltBatchStats = cascadeResult.gdeltBatchStats;
+        dataforseoNewsBatchStats = cascadeResult.dataforseoBatchStats;
+        cascadeStats = cascadeResult.stats;
+
+        const ps = cascadeResult.stats.providers;
+        sourceStatuses.currents = ps.currents.budgetThrottled && ps.currents.peopleWithData === 0
+          ? "THROTTLED"
+          : ps.currents.succeeded
+            ? ps.currents.peopleWithData > 0
+              ? "OK"
+              : "DEGRADED"
+            : ps.currents.attempted
+              ? "FAILED"
+              : "SKIPPED";
+        sourceStatuses.dataforseo_news = ps.dataforseo.attempted
+          ? ps.dataforseo.succeeded
+            ? ps.dataforseo.peopleWithData > 0
+              ? "OK"
+              : "DEGRADED"
+            : "FAILED"
+          : "SKIPPED";
+        sourceStatuses.gdelt = ps.gdelt.succeeded
+          ? ps.gdelt.peopleWithData > 0
+            ? "OK"
+            : "DEGRADED"
+          : ps.gdelt.attempted
+            ? "FAILED"
+            : "SKIPPED";
+        sourceStatuses.serper = ps.serper.succeeded
+          ? ps.serper.peopleWithData > 0
+            ? "OK"
+            : "DEGRADED"
+          : ps.serper.attempted
+            ? "FAILED"
+            : "SKIPPED";
+
+        sourceTimings.currents = ps.currents.elapsedMs;
+        sourceTimings.dataforseo_news = ps.dataforseo.elapsedMs;
+        sourceTimings.serper = ps.serper.elapsedMs;
+        sourceTimings.gdelt = ps.gdelt.elapsedMs;
+      } catch (err) {
+        console.error(`[Ingest] Cascade news fetch failed:`, err);
+        sourceStatuses.currents = "FAILED";
+        sourceStatuses.dataforseo_news = "FAILED";
+        sourceStatuses.gdelt = "FAILED";
+        sourceStatuses.serper = "FAILED";
+        newsData = new Map();
+      }
+      console.log(
+        `[Ingest] Cascade complete in ${((Date.now() - cascadeStart) / 1000).toFixed(1)}s — ` +
+          `${newsData.size}/${people.length} people with data`,
+      );
+    }
+
     // ── TIER 1: Mediastack (primary) — TIERED MODE ONLY ──────────────────────
-    if (newsAggregationMode !== "union" && mediastackAvailable) {
+    if (newsAggregationMode !== "union" && newsAggregationMode !== "cascade" && mediastackAvailable) {
       const msStart = Date.now();
       try {
         mediastackCadence = await shouldRefreshMediastack();
@@ -822,7 +914,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
 
     // ── TIER 2: GDELT (secondary) — TIERED MODE ONLY ─────────────────────────
-    if (newsAggregationMode !== "union" && newsSource !== "mediastack") {
+    if (newsAggregationMode !== "union" && newsAggregationMode !== "cascade" && newsSource !== "mediastack") {
       const gdeltCandidates = await computeNewsCandidates(people, wikiData);
       let gdeltStart = Date.now();
       try {
@@ -1622,7 +1714,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // global_zero signal so the health state can transition out of OUTAGE.
     // Without this, the near-zero threshold (5) in detectGlobalOutage would keep
     // re-triggering OUTAGE even when fallback data is meaningful (median >= 3).
-    const fallbackOverridesOutage = (newsSource === "serper_news" && !gdeltQualityLow) || newsSource === "mediastack" || newsSource === "union";
+    const fallbackOverridesOutage =
+      (newsSource === "serper_news" && !gdeltQualityLow) ||
+      newsSource === "mediastack" ||
+      newsSource === "union" ||
+      newsSource === "cascade";
 
     if (newsSource !== "gdelt") {
       console.log(`[Ingest] Post-news-fetch quality (${newsSource}): globalZero=${globalHealth.isNewsGlobalOutage}, nearZeroPct=${(globalHealth.newsNearZeroPercent * 100).toFixed(0)}%, fallbackOverride=${fallbackOverridesOutage}`);
@@ -1676,9 +1772,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
     const newsFreshCount = mediastackBatchStats
       ? mediastackBatchStats.fetched
-      : gdeltBatchStats
-        ? gdeltBatchStats.liveApiFetched
-        : Array.from(newsData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
+      : newsSource === "cascade"
+        ? (currentsBatchStats?.fetched ?? 0) + (dataforseoNewsBatchStats?.fetched ?? 0)
+        : gdeltBatchStats
+          ? gdeltBatchStats.liveApiFetched
+          : Array.from(newsData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
     const newsCoveragePctActual = (newsFreshCount / people.length) * 100;
     const searchFreshCount = Array.from(serperData.values()).filter(d => (d.searchVolume ?? 0) > 0).length;
     const searchCoveragePctActual = (searchFreshCount / people.length) * 100;
@@ -2081,9 +2179,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     const isNewsProviderRefreshTick =
       newsSource === "union"
         ? ((currentsCadence?.shouldRefresh ?? false) || (mediastackCadence?.shouldRefresh ?? false))
-        : newsSource === "mediastack"
-          ? (mediastackCadence?.shouldRefresh ?? true)
-          : true;
+        : newsSource === "cascade"
+          ? (currentsCadence?.shouldRefresh ?? false)
+          : newsSource === "mediastack"
+            ? (mediastackCadence?.shouldRefresh ?? true)
+            : true;
 
     for (const person of people) {
       try {
@@ -2134,7 +2234,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // per-person Serper) and has meaningful article counts, prefer it over decayed
         // fill-forward values. This prevents the system from ignoring good fallback data.
         const hasPerPersonFallback = news?._perPersonFallback === true;
-        const newsHasGoodFallbackData = (newsSource === "serper_news" || newsSource === "union" || hasPerPersonFallback) && news && newsCount >= 3;
+        const newsHasGoodFallbackData =
+          (newsSource === "serper_news" || newsSource === "union" || newsSource === "cascade" || hasPerPersonFallback) &&
+          news &&
+          newsCount >= 3;
         
         // Also detect individual suspicious drop, but only activate fallback if global outage
         const suspiciousNewsDrop = news && prevNewsCount >= 5 && 
@@ -2175,7 +2278,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const stickyZeroGuard = !isNewsProviderRefreshTick && newsCount === 0 && (newsBaselineMap.get(person.id) ?? 0) >= 8;
         if (!newsUsedFallback && !newsNeedsOutageFallback && !hasPerPersonFallback && news && (isNewsProviderRefreshTick || stickyZeroGuard)) {
           const isProviderHealthy = newsHealth.state === "HEALTHY" || newsHealth.state === "RECOVERY";
-          if (isProviderHealthy) {
+          // Cascade/Currents-primary: skip healthy-path holds — real drops should surface.
+          // Holds remain for DEGRADED/OUTAGE (provider flicker / outage protection).
+          if (!isProviderHealthy) {
             const rawNewsCount = newsCount;
             const bp50 = newsBaselineMap.get(person.id);
             const hasBaseline = bp50 !== undefined && bp50 >= 5;
@@ -2335,7 +2440,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         let newsFloorApplied = false;
         let newsFloorDetail: Record<string, any> | null = null;
         const newsHigh = personalNewsHigh24hMap.get(person.id);
-        if (newsHigh && newsHigh.value > 0) {
+        const applyNewsDecayFloor = shouldApplyNews24hDecayFloor({
+          newsNeedsOutageFallback,
+          newsUsedFallback,
+          newsHealthState: newsHealth.state,
+        });
+        if (newsHigh && newsHigh.value > 0 && applyNewsDecayFloor) {
           const hoursSinceHigh = (now.getTime() - newsHigh.timestamp.getTime()) / (1000 * 60 * 60);
           const decayFactor = Math.max(0, 1 - hoursSinceHigh / 24);
           const floor = Math.round(newsHigh.value * decayFactor);
@@ -2411,8 +2521,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ...(recentNewsCountSeriesMap.get(person.id) ?? []),
           newsCount,
         ];
-        const newsCountForScoring =
-          smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount;
+        const newsProviderHealthy = shouldUseRawNewsCountForScoring({
+          newsHealthState: newsHealth.state,
+          newsUsedFallback,
+          newsNeedsOutageFallback,
+        });
+        const newsCountForScoring = newsProviderHealthy
+          ? newsCount
+          : (smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount);
 
         const rawNews7dForScoring =
           (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
@@ -2719,9 +2835,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             newsSource: hasPerPersonFallback ? "serper_news" : newsSource,
             newsIsRefresh: newsSource === "union"
               ? ((currentsCadence?.shouldRefresh ?? false) || (mediastackCadence?.shouldRefresh ?? false))
-              : (newsSource === "mediastack"
-                ? (mediastackCadence?.shouldRefresh ?? true)
-                : true),
+              : newsSource === "cascade"
+                ? (currentsCadence?.shouldRefresh ?? false)
+                : (newsSource === "mediastack"
+                  ? (mediastackCadence?.shouldRefresh ?? true)
+                  : true),
             ...(hasPerPersonFallback ? { fallbackReason: news?._fallbackReason ?? "per_person_zero_streak" } : {}),
             ...(newsSource === "union" && news?.source === "union" && isDiagnosticsVerbose() ? {
               newsUnion: {
@@ -2731,6 +2849,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 contributingProviders: news.contributingProviders ?? [],
                 perSourceCounts: news.perSourceCounts ?? null,
                 uniqueContributed: news.uniqueContributed ?? null,
+              },
+            } : {}),
+            ...(newsSource === "cascade" && isDiagnosticsVerbose() ? {
+              newsCascade: {
+                winningSource: news.winningSource ?? news.source,
+                perSourceCounts: news.perSourceCounts ?? null,
+                contributingProviders: news.contributingProviders ?? [],
               },
             } : {}),
             newsEmaHeld,
@@ -3145,12 +3270,18 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         searchFreshnessGovernor: `${(searchGovernorFactor * 100).toFixed(0)}%`,
         newsProviderUsed: newsSource,
         newsFreshCoveragePct: `${newsCoveragePctActual.toFixed(0)}%`,
-        newsLiveApiFetched: newsSource === "mediastack" || newsSource === "union"
-          ? ((mediastackBatchStats?.fetched ?? 0) + (currentsBatchStats?.apiCallsMade ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
-          : (gdeltBatchStats?.liveApiFetched ?? 0),
-        newsCacheReused: newsSource === "mediastack" || newsSource === "union"
-          ? ((mediastackBatchStats?.cached ?? 0) + (currentsBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
-          : (gdeltBatchStats?.cacheReused ?? 0),
+        newsLiveApiFetched:
+          newsSource === "mediastack" || newsSource === "union"
+            ? ((mediastackBatchStats?.fetched ?? 0) + (currentsBatchStats?.apiCallsMade ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
+            : newsSource === "cascade"
+              ? ((currentsBatchStats?.apiCallsMade ?? 0) + (dataforseoNewsBatchStats?.apiCallsMade ?? 0) + (gdeltBatchStats?.liveApiFetched ?? 0))
+              : (gdeltBatchStats?.liveApiFetched ?? 0),
+        newsCacheReused:
+          newsSource === "mediastack" || newsSource === "union"
+            ? ((mediastackBatchStats?.cached ?? 0) + (currentsBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
+            : newsSource === "cascade"
+              ? ((currentsBatchStats?.cached ?? 0) + (dataforseoNewsBatchStats?.cached ?? 0) + (gdeltBatchStats?.cacheReused ?? 0))
+              : (gdeltBatchStats?.cacheReused ?? 0),
         avgGdeltSpacingMs: gdeltBatchStats?.avgSpacingMs ?? 0,
         mediastackApiCalls: mediastackBatchStats?.apiCallsMade ?? 0,
         mediastackSuccessPct: mediastackBatchStats ? `${mediastackBatchStats.successCoveragePct.toFixed(0)}%` : null,
@@ -3206,6 +3337,15 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             },
           },
         } : null,
+        newsCascade: cascadeStats
+          ? {
+              peopleCurrentsHit: cascadeStats.peopleCurrentsHit,
+              peopleDataForSeoHit: cascadeStats.peopleDataForSeoHit,
+              peopleSerperHit: cascadeStats.peopleSerperHit,
+              peopleGdeltHit: cascadeStats.peopleGdeltHit,
+              providers: cascadeStats.providers,
+            }
+          : null,
       },
       newsQuality: {
         medianArticles: gdeltMedianArticles,

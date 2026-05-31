@@ -24,6 +24,15 @@ import {
   type GdeltNewsData,
 } from "./gdelt";
 import { gdeltUnionAttributionCount } from "./gdelt-parse";
+import type { CascadeNewsSource } from "./cascade-news";
+export type { CascadeNewsSource } from "./cascade-news";
+export { pickCascadeWinningSource } from "./cascade-news";
+import {
+  fetchDataForSeoNewsBatch,
+  isDataForSeoNewsConfigured,
+  type DataForSeoNewsBatchStats,
+  type DataForSeoNewsData,
+} from "./dataforseo-news";
 import {
   fetchSerperNewsBatch24h,
   type SerperNewsCountData,
@@ -168,6 +177,64 @@ export interface AggregatorResult {
   /** Currents cadence info (refresh vs cache-only). */
   currentsCadence: Awaited<ReturnType<typeof shouldRefreshCurrents>> | null;
   currentsBatchStats: CurrentsBatchStats | null;
+}
+
+/**
+ * Per-person news payload from cascade mode — shape-compatible with ingest
+ * expectations (`articleCount24h`, `topHeadlines`, `delta`, etc.).
+ */
+export interface CascadeNewsData {
+  query: string;
+  articleCount24h: number;
+  articleCount7d: number;
+  averageDaily7d: number;
+  delta: number;
+  topHeadlines: string[];
+  source: CascadeNewsSource;
+  paginationTotal: number;
+  winningSource: CascadeNewsSource;
+  perSourceCounts: {
+    currents: number;
+    dataforseo: number;
+    serper: number;
+    gdelt: number;
+  };
+  contributingProviders: CascadeNewsSource[];
+  /** Mirrors articleCount24h for diagnostics readers that expect union fields. */
+  unionCount: number;
+  mediastackPaginationTotal: number;
+  legacyTieredCount: number;
+}
+
+export interface CascadeAggregatorStats {
+  peopleTotal: number;
+  peopleWithAnyData: number;
+  peopleCurrentsHit: number;
+  peopleDataForSeoHit: number;
+  peopleSerperHit: number;
+  peopleGdeltHit: number;
+  elapsedMs: number;
+  providers: {
+    currents: AggregatorProviderSummary;
+    dataforseo: AggregatorProviderSummary;
+    serper: AggregatorProviderSummary;
+    gdelt: AggregatorProviderSummary;
+  };
+}
+
+export interface CascadeAggregatorResult {
+  data: Map<string, CascadeNewsData>;
+  stats: CascadeAggregatorStats;
+  currentsCadence: Awaited<ReturnType<typeof shouldRefreshCurrents>> | null;
+  currentsBatchStats: CurrentsBatchStats | null;
+  dataforseoBatchStats: DataForSeoNewsBatchStats | null;
+  gdeltBatchStats: GdeltBatchStats | null;
+}
+
+export interface CascadeAggregatorOptions {
+  gdeltCandidates?: Set<string>;
+  gdeltIsDegraded?: boolean;
+  gdeltTimeBudgetMs?: number;
 }
 
 // ── URL CANONICALIZATION ────────────────────────────────────────────────────
@@ -604,5 +671,303 @@ export async function fetchMultiSourceNewsBatch(
     mediastackCadence,
     currentsCadence,
     currentsBatchStats,
+  };
+}
+
+// ── CASCADE MODE (Currents → DataForSEO → Serper → GDELT) ───────────────────
+
+function emptyProviderSummary(): AggregatorProviderSummary {
+  return {
+    attempted: false,
+    succeeded: false,
+    peopleWithData: 0,
+    peopleWithArticles: 0,
+    elapsedMs: 0,
+  };
+}
+
+function countFromCurrents(cu: CurrentsNewsData | undefined): number {
+  return cu?.articleCount24h ?? 0;
+}
+
+function countFromSerper(sn: SerperNewsCountData | undefined): number {
+  return sn?.articles?.length ?? sn?.articleCount24h ?? 0;
+}
+
+function countFromGdelt(gd: GdeltNewsData | undefined): number {
+  return gdeltUnionAttributionCount(gd);
+}
+
+function countFromDataForSeo(dfs: DataForSeoNewsData | undefined): number {
+  return dfs?.articleCount24h ?? 0;
+}
+
+/**
+ * Per-person cascade: Currents for all 161; fall through to DataForSEO, Serper,
+ * GDELT only when Currents returns exactly 0. First non-zero wins.
+ */
+export async function fetchCascadeNewsBatch(
+  people: AggregatorPerson[],
+  options: CascadeAggregatorOptions = {},
+): Promise<CascadeAggregatorResult> {
+  const batchStart = Date.now();
+  const data = new Map<string, CascadeNewsData>();
+
+  const providerSummary = {
+    currents: emptyProviderSummary(),
+    dataforseo: emptyProviderSummary(),
+    serper: emptyProviderSummary(),
+    gdelt: emptyProviderSummary(),
+  };
+
+  let currentsCadence: Awaited<ReturnType<typeof shouldRefreshCurrents>> | null = null;
+  let currentsBatchStats: CurrentsBatchStats | null = null;
+  let dataforseoBatchStats: DataForSeoNewsBatchStats | null = null;
+  let gdeltBatchStats: GdeltBatchStats | null = null;
+
+  const currentsMap = new Map<string, CurrentsNewsData>();
+  const dfsMap = new Map<string, DataForSeoNewsData>();
+  const serperMap = new Map<string, SerperNewsCountData>();
+  const gdeltMap = new Map<string, GdeltNewsData>();
+
+  // Stage 1 — Currents (full roster)
+  const cuStart = Date.now();
+  if (isCurrentsConfigured()) {
+    providerSummary.currents.attempted = true;
+    try {
+      currentsCadence = await shouldRefreshCurrents();
+    } catch (err) {
+      console.warn("[Cascade] Currents cadence check failed:", err);
+    }
+    const currentsCacheOnly = currentsCadence ? !currentsCadence.shouldRefresh : true;
+    const currentsBudgetThrottled = currentsCadence?.budgetThrottled ?? false;
+
+    try {
+      const cuResult = await fetchCurrentsBatch(
+        people.map((p) => ({
+          id: p.id,
+          name: p.name,
+          searchQueryOverride: p.searchQueryOverride,
+        })),
+        4,
+        300,
+        { cacheOnly: currentsCacheOnly, budgetThrottled: currentsBudgetThrottled },
+      );
+      for (const [id, v] of cuResult.data) currentsMap.set(id, v);
+      currentsBatchStats = cuResult.stats;
+      providerSummary.currents.succeeded = true;
+      providerSummary.currents.peopleWithData = currentsMap.size;
+      providerSummary.currents.peopleWithArticles = Array.from(currentsMap.values()).filter(
+        (v) => countFromCurrents(v) > 0,
+      ).length;
+      providerSummary.currents.cacheOnlyEmpty = currentsCacheOnly ? cuResult.stats.cacheOnlyEmpty : 0;
+      providerSummary.currents.budgetThrottled = currentsBudgetThrottled;
+    } catch (err) {
+      providerSummary.currents.error = String(err);
+      console.warn("[Cascade] Currents batch failed:", err);
+    }
+  } else {
+    console.warn("[Cascade] Currents not configured — cascade will rely on fallbacks only");
+  }
+  providerSummary.currents.elapsedMs = Date.now() - cuStart;
+
+  let stillZero = people.filter((p) => countFromCurrents(currentsMap.get(p.id)) === 0);
+
+  // Stage 2 — DataForSEO (Currents misses only)
+  const dfsStart = Date.now();
+  if (stillZero.length > 0 && isDataForSeoNewsConfigured()) {
+    providerSummary.dataforseo.attempted = true;
+    try {
+      const dfsResult = await fetchDataForSeoNewsBatch(
+        stillZero.map((p) => ({
+          personId: p.id,
+          name: p.name,
+          keywordOverride: p.searchQueryOverride,
+        })),
+      );
+      for (const [id, v] of dfsResult.data) dfsMap.set(id, v);
+      dataforseoBatchStats = dfsResult.stats;
+      providerSummary.dataforseo.succeeded = true;
+      providerSummary.dataforseo.peopleWithData = dfsMap.size;
+      providerSummary.dataforseo.peopleWithArticles = Array.from(dfsMap.values()).filter(
+        (v) => countFromDataForSeo(v) > 0,
+      ).length;
+      providerSummary.dataforseo.budgetThrottled = dfsResult.stats.budgetThrottled;
+    } catch (err) {
+      providerSummary.dataforseo.error = String(err);
+      console.warn("[Cascade] DataForSEO News batch failed:", err);
+    }
+  }
+  providerSummary.dataforseo.elapsedMs = Date.now() - dfsStart;
+
+  stillZero = stillZero.filter((p) => {
+    const cu = countFromCurrents(currentsMap.get(p.id));
+    const dfs = countFromDataForSeo(dfsMap.get(p.id));
+    return cu === 0 && dfs === 0;
+  });
+
+  // Stage 3 — Serper (remaining zeros)
+  const snStart = Date.now();
+  if (stillZero.length > 0) {
+    providerSummary.serper.attempted = true;
+    try {
+      const snResult = await fetchSerperNewsBatch24h(
+        stillZero.map((p) => ({ id: p.id, name: p.name })),
+        4,
+        300,
+      );
+      for (const [id, v] of snResult) serperMap.set(id, v);
+      providerSummary.serper.succeeded = true;
+      providerSummary.serper.peopleWithData = serperMap.size;
+      providerSummary.serper.peopleWithArticles = Array.from(serperMap.values()).filter(
+        (v) => countFromSerper(v) > 0,
+      ).length;
+    } catch (err) {
+      providerSummary.serper.error = String(err);
+      console.warn("[Cascade] Serper News batch failed:", err);
+    }
+  }
+  providerSummary.serper.elapsedMs = Date.now() - snStart;
+
+  stillZero = stillZero.filter((p) => {
+    const cu = countFromCurrents(currentsMap.get(p.id));
+    const dfs = countFromDataForSeo(dfsMap.get(p.id));
+    const sn = countFromSerper(serperMap.get(p.id));
+    return cu === 0 && dfs === 0 && sn === 0;
+  });
+
+  // Stage 4 — GDELT (last resort)
+  const gdStart = Date.now();
+  if (stillZero.length > 0) {
+    providerSummary.gdelt.attempted = true;
+    try {
+      const gdResult = await fetchBatchGdeltNews(
+        stillZero.map((p) => ({
+          id: p.id,
+          name: p.name,
+          searchQueryOverride: p.searchQueryOverride,
+        })),
+        {
+          candidates: options.gdeltCandidates,
+          timeBudgetMs: options.gdeltTimeBudgetMs ?? 180000,
+          isDegraded: options.gdeltIsDegraded ?? false,
+        },
+      );
+      for (const [id, v] of gdResult.data) gdeltMap.set(id, v);
+      gdeltBatchStats = gdResult.stats;
+      providerSummary.gdelt.succeeded = true;
+      providerSummary.gdelt.peopleWithData = gdeltMap.size;
+      providerSummary.gdelt.peopleWithArticles = Array.from(gdeltMap.values()).filter(
+        (v) => countFromGdelt(v) > 0,
+      ).length;
+    } catch (err) {
+      providerSummary.gdelt.error = String(err);
+      console.warn("[Cascade] GDELT batch failed:", err);
+    }
+  }
+  providerSummary.gdelt.elapsedMs = Date.now() - gdStart;
+
+  let peopleCurrentsHit = 0;
+  let peopleDataForSeoHit = 0;
+  let peopleSerperHit = 0;
+  let peopleGdeltHit = 0;
+
+  for (const person of people) {
+    const cu = currentsMap.get(person.id);
+    const dfs = dfsMap.get(person.id);
+    const sn = serperMap.get(person.id);
+    const gd = gdeltMap.get(person.id);
+
+    const perSourceCounts = {
+      currents: countFromCurrents(cu),
+      dataforseo: countFromDataForSeo(dfs),
+      serper: countFromSerper(sn),
+      gdelt: countFromGdelt(gd),
+    };
+
+    let winningSource: CascadeNewsSource = "currents";
+    let articleCount24h = 0;
+    let query = person.name;
+    let topHeadlines: string[] = [];
+    let delta = 0;
+
+    if (perSourceCounts.currents > 0 && cu) {
+      winningSource = "currents";
+      articleCount24h = perSourceCounts.currents;
+      query = cu.query;
+      topHeadlines = cu.topHeadlines;
+      delta = cu.delta;
+      peopleCurrentsHit++;
+    } else if (perSourceCounts.dataforseo > 0 && dfs) {
+      winningSource = "dataforseo_news";
+      articleCount24h = perSourceCounts.dataforseo;
+      query = dfs.query;
+      topHeadlines = dfs.topHeadlines;
+      delta = dfs.delta;
+      peopleDataForSeoHit++;
+    } else if (perSourceCounts.serper > 0 && sn) {
+      winningSource = "serper_news";
+      articleCount24h = perSourceCounts.serper;
+      query = sn.query;
+      topHeadlines = sn.topHeadlines;
+      delta = sn.delta;
+      peopleSerperHit++;
+    } else if (perSourceCounts.gdelt > 0 && gd) {
+      winningSource = "gdelt";
+      articleCount24h = perSourceCounts.gdelt;
+      query = gd.query;
+      topHeadlines = gd.topHeadlines;
+      delta = gd.delta;
+      peopleGdeltHit++;
+    }
+
+    const contributingProviders: CascadeNewsSource[] = [];
+    if (perSourceCounts.currents > 0) contributingProviders.push("currents");
+    if (perSourceCounts.dataforseo > 0) contributingProviders.push("dataforseo_news");
+    if (perSourceCounts.serper > 0) contributingProviders.push("serper_news");
+    if (perSourceCounts.gdelt > 0) contributingProviders.push("gdelt");
+
+    data.set(person.id, {
+      query,
+      articleCount24h,
+      articleCount7d: 0,
+      averageDaily7d: 0,
+      delta,
+      topHeadlines,
+      source: winningSource,
+      paginationTotal: articleCount24h,
+      winningSource,
+      perSourceCounts,
+      contributingProviders,
+      unionCount: articleCount24h,
+      mediastackPaginationTotal: 0,
+      legacyTieredCount: articleCount24h,
+    });
+  }
+
+  const stats: CascadeAggregatorStats = {
+    peopleTotal: people.length,
+    peopleWithAnyData: Array.from(data.values()).filter((d) => d.articleCount24h > 0).length,
+    peopleCurrentsHit,
+    peopleDataForSeoHit,
+    peopleSerperHit,
+    peopleGdeltHit,
+    elapsedMs: Date.now() - batchStart,
+    providers: providerSummary,
+  };
+
+  console.log(
+    `[Cascade] Complete: ${stats.peopleWithAnyData}/${people.length} with news, ` +
+      `currents=${peopleCurrentsHit} dfs=${peopleDataForSeoHit} serper=${peopleSerperHit} gdelt=${peopleGdeltHit}, ` +
+      `${(stats.elapsedMs / 1000).toFixed(1)}s`,
+  );
+
+  return {
+    data,
+    stats,
+    currentsCadence,
+    currentsBatchStats,
+    dataforseoBatchStats,
+    gdeltBatchStats,
   };
 }

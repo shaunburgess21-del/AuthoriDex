@@ -218,20 +218,21 @@ export const VELOCITY_ALLOCATION = 0.60;
 // ============================================================================
 // NEWS AGGREGATION MODE — Multi-source news count vs tiered fallback
 // ============================================================================
-// "tiered" = legacy. Mediastack primary, GDELT fallback, Serper News
-//            emergency fallback. Exactly one provider wins per run.
-// "union"  = multi-source. All three providers called in parallel, URLs
-//            deduplicated, finalCount = max(mediastackPaginationTotal,
-//            unionCount).
+// "tiered"  = legacy. Mediastack primary, GDELT fallback, Serper News emergency.
+// "union"   = multi-source parallel URL union (legacy; GDELT flicker risk).
+// "cascade" = Currents primary; DataForSEO → Serper → GDELT only when
+//             Currents returns 0 for that person (first non-zero wins).
 //
-// Default "tiered" for zero-risk rollout. Flip to "union" via
-// NEWS_AGGREGATION_MODE env var on Railway; no redeploy required.
+// Default "tiered" for zero-risk rollout. Set NEWS_AGGREGATION_MODE=cascade
+// on Railway after deploy; no code redeploy required to flip.
 
-export type NewsAggregationMode = "tiered" | "union";
+export type NewsAggregationMode = "tiered" | "union" | "cascade";
 
 export function getNewsAggregationMode(): NewsAggregationMode {
   const raw = (process.env.NEWS_AGGREGATION_MODE ?? "tiered").trim().toLowerCase();
-  return raw === "union" ? "union" : "tiered";
+  if (raw === "union") return "union";
+  if (raw === "cascade") return "cascade";
+  return "tiered";
 }
 
 /**
