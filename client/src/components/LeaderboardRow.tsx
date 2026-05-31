@@ -306,7 +306,7 @@ export function LeaderboardRow({
                 Approval
               </p>
             </div>
-            <div className="w-[88px] shrink-0 flex justify-end gap-1">
+            <div className="shrink-0 flex justify-end gap-1 ml-4 md:ml-6 lg:ml-auto min-w-[108px]">
               {(() => {
                 const upDisabled = userPredictionPick === "down";
                 const downDisabled = userPredictionPick === "up";

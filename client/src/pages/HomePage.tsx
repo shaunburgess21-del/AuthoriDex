@@ -2047,7 +2047,7 @@ export default function HomePage() {
                             <div className="text-right w-[140px]">Trend Score</div>
                             <div className="text-right w-[80px]">24h</div>
                             <div className="text-right w-[84px]">Approval</div>
-                            <div className="flex justify-end w-[88px]">
+                            <div className="flex justify-end shrink-0 min-w-[108px]">
                               <Button
                                 type="button"
                                 variant="outline"
