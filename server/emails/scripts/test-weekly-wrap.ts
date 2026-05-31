@@ -30,10 +30,10 @@ const VARIANTS: Record<string, FullWeeklyDigestStats> = {
     worstPick: { label: "Taylor Swift UP", profit: -120 },
     rankDelta: { previous: 142, current: 138 },
     jackpot: { won: true, profit: 450 },
-    topMoversNextWeek: [
-      { name: "Jensen Huang", change24h: 17.2 },
-      { name: "Drake", change24h: 9.1 },
-      { name: "Khaby Lame", change24h: -12.4 },
+    topWeeklyGainers: [
+      { name: "Jensen Huang", change7d: 17.2 },
+      { name: "Drake", change7d: 9.1 },
+      { name: "Khaby Lame", change7d: 12.4 },
     ],
     windowStart,
     windowEnd: now,
@@ -46,9 +46,9 @@ const VARIANTS: Record<string, FullWeeklyDigestStats> = {
     worstPick: { label: "MrBeast race", profit: -200 },
     rankDelta: { previous: 88, current: 91 },
     jackpot: { won: false, profit: -100 },
-    topMoversNextWeek: [
-      { name: "Elon Musk", change24h: 8.5 },
-      { name: "Zendaya", change24h: 6.2 },
+    topWeeklyGainers: [
+      { name: "Elon Musk", change7d: 8.5 },
+      { name: "Zendaya", change7d: 6.2 },
     ],
     windowStart,
     windowEnd: now,
@@ -61,7 +61,7 @@ const VARIANTS: Record<string, FullWeeklyDigestStats> = {
     worstPick: { label: "Big miss", profit: -350 },
     rankDelta: null,
     jackpot: null,
-    topMoversNextWeek: [{ name: "Sabrina Carpenter", change24h: 11.0 }],
+    topWeeklyGainers: [{ name: "Sabrina Carpenter", change7d: 11.0 }],
     windowStart,
     windowEnd: now,
   },

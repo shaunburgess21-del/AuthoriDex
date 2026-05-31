@@ -14,6 +14,8 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "../db";
 import { storage } from "../storage";
+import { selectWeeklyGainers } from "../services/trending/weekly-gainers";
+import { getBaselineDiagnostics } from "../utils/baseline";
 import { resolvePickContextLabel } from "./notification-market-labels";
 import {
   type FullWeeklyDigestStats,
@@ -25,7 +27,6 @@ import {
 
 const entryPerson = alias(trackedPeople, "entry_person_digest");
 const RANK_SNAPSHOT_PERIOD = "all";
-const HOT_MOVERS_CAP = 3;
 
 const SEVEN_DAYS_AGO = sql`NOW() - INTERVAL '7 days'`;
 
@@ -48,18 +49,19 @@ export async function listActiveDigestUserIds(): Promise<string[]> {
   return rows.map((r) => r.userId);
 }
 
-async function loadTopMoversNextWeek(): Promise<
-  FullWeeklyDigestStats["topMoversNextWeek"]
+async function loadTopWeeklyGainers(): Promise<
+  FullWeeklyDigestStats["topWeeklyGainers"]
 > {
   const people = await storage.getTrendingPeople();
-  return people
-    .filter((p) => p.change24h != null && p.change24h > 0)
-    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
-    .slice(0, HOT_MOVERS_CAP)
-    .map((p) => ({
-      name: p.name,
-      change24h: p.change24h ?? 0,
-    }));
+  if (people.length === 0) return [];
+
+  const baselineMeta = await getBaselineDiagnostics(people.length);
+  if (baselineMeta.baseline7dStatus !== "normal") return [];
+
+  return selectWeeklyGainers(people).map((p) => ({
+    name: p.name,
+    change7d: p.change7d as number,
+  }));
 }
 
 async function loadRankDelta(
@@ -179,9 +181,9 @@ export async function getWeeklyDigestStats(
 
   const jackpot = summariseJackpotRows(jackpotRows);
 
-  const [rankDelta, topMoversNextWeek] = await Promise.all([
+  const [rankDelta, topWeeklyGainers] = await Promise.all([
     loadRankDelta(userId, isoWeek),
-    loadTopMoversNextWeek(),
+    loadTopWeeklyGainers(),
   ]);
 
   return {
@@ -192,7 +194,7 @@ export async function getWeeklyDigestStats(
     worstPick,
     rankDelta,
     jackpot,
-    topMoversNextWeek,
+    topWeeklyGainers,
     windowStart,
     windowEnd,
   };

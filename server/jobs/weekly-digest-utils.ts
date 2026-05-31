@@ -107,7 +107,7 @@ export interface FullWeeklyDigestStats {
   worstPick: { label: string; profit: number } | null;
   rankDelta: { previous: number; current: number } | null;
   jackpot: { won: boolean; profit: number } | null;
-  topMoversNextWeek: Array<{ name: string; change24h: number }>;
+  topWeeklyGainers: Array<{ name: string; change7d: number }>;
   windowStart: Date;
   windowEnd: Date;
 }

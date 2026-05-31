@@ -61,9 +61,9 @@ export function formatRankDeltaCopy(
   return `You held your ground at #${current}.`;
 }
 
-export function formatMoverLine(name: string, change24h: number): string {
-  const sign = change24h >= 0 ? "+" : "";
-  return `${name} ${sign}${change24h.toFixed(1)}%`;
+export function formatMoverLine(name: string, changePct: number): string {
+  const sign = changePct >= 0 ? "+" : "";
+  return `${name} ${sign}${changePct.toFixed(1)}%`;
 }
 
 export function WeeklyWrapEmail({
@@ -79,7 +79,7 @@ export function WeeklyWrapEmail({
     worstPick,
     rankDelta,
     jackpot,
-    topMoversNextWeek,
+    topWeeklyGainers,
   } = stats;
 
   const heroPnl = formatHeroPnl(netCredits);
@@ -160,12 +160,12 @@ export function WeeklyWrapEmail({
         </Section>
       ) : null}
 
-      {topMoversNextWeek.length > 0 ? (
+      {topWeeklyGainers.length > 0 ? (
         <Section style={blockStyle}>
           <Text style={blockHeadingStyle}>Watch this week</Text>
-          {topMoversNextWeek.map((mover) => (
-            <Text key={mover.name} style={{ ...typography.small, margin: `0 0 ${spacing.tight}` }}>
-              {formatMoverLine(mover.name, mover.change24h)}
+          {topWeeklyGainers.map((gainer) => (
+            <Text key={gainer.name} style={{ ...typography.small, margin: `0 0 ${spacing.tight}` }}>
+              {formatMoverLine(gainer.name, gainer.change7d)}
             </Text>
           ))}
         </Section>
