@@ -219,10 +219,11 @@ export const VELOCITY_ALLOCATION = 0.60;
 // NEWS AGGREGATION MODE — Multi-source news count vs tiered fallback
 // ============================================================================
 // "tiered"  = legacy. Mediastack primary, GDELT fallback, Serper News emergency.
-// "union"   = CURRENT PRODUCTION. Multi-source parallel URL union. Mediastack
-//             is the primary (uncapped paginationTotal); GDELT + Serper union in
-//             for coverage. Currents is disabled (blank CURRENTS_API_KEY) after
-//             it showed structural coverage gaps for digital-native categories.
+// "union"   = CURRENT PRODUCTION. Multi-source parallel URL union. Currents is
+//             the live primary (fresh same-day news, ~71% roster coverage);
+//             GDELT + Serper union in to backfill its creator/streamer/crypto
+//             blind spot. Mediastack is on standby (feed frozen 2026-05-22 →
+//             returns 0) and auto-rejoins the union once its ingestion recovers.
 // "cascade" = Currents primary; DataForSEO → Serper → GDELT only when
 //             Currents returns 0 (retired; kept for rollback only).
 //
