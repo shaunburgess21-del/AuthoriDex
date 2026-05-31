@@ -120,6 +120,14 @@ type ContestedRow = {
   contested_score: number;
 };
 
+/** Drizzle `sql` templates expand JS arrays as $1,$2,... — invalid for `ANY`. */
+function sqlMarketIdArray(marketIds: string[]) {
+  return sql`ARRAY[${sql.join(
+    marketIds.map((id) => sql`${id}`),
+    sql`, `,
+  )}]::text[]`;
+}
+
 function mapContestedRows(result: unknown): ContestedRow[] {
   const rows =
     (Array.isArray(result)
@@ -153,7 +161,7 @@ async function loadTopPairsForMarkets(
           ORDER BY aps.recorded_at DESC
           LIMIT 1
         ) lp
-        WHERE me.market_id = ANY(${marketIds})
+        WHERE me.market_id = ANY(${sqlMarketIdArray(marketIds)})
       ),
       ranked AS (
         SELECT
@@ -194,7 +202,7 @@ async function loadTopPairsForMarkets(
         me.label,
         (me.total_stake::numeric + COALESCE(me.no_stake::numeric, 0)) AS stake
       FROM market_entries me
-      WHERE me.market_id = ANY(${marketIds})
+      WHERE me.market_id = ANY(${sqlMarketIdArray(marketIds)})
     ),
     totals AS (
       SELECT market_id, SUM(stake) AS total_stake

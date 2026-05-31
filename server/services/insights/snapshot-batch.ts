@@ -17,6 +17,12 @@ export interface LatestSnapshotRow {
 
 const SNAPSHOTS_MEMO_KEY = "insights:latest-snapshots-by-person";
 
+function coerceSnapshotTimestamp(value: unknown): Date {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  const d = new Date(String(value ?? ""));
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
 async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, LatestSnapshotRow>> {
   // Lateral-join pattern driven by the small tracked_people table (~161 rows).
   // For each person we do an index-only lookup into trend_snapshots using
@@ -62,6 +68,7 @@ async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, Latest
     const diag = row.diagnostics;
     map.set(row.personId, {
       ...row,
+      timestamp: coerceSnapshotTimestamp(row.timestamp),
       newsCount: Number(row.newsCount ?? 0),
       wikiPageviews: Number(row.wikiPageviews ?? 0),
       velocityScore: Number(row.velocityScore ?? 0),

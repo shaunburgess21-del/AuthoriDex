@@ -436,6 +436,28 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/cron/refresh-insights-cache", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runInsightsCacheCronRefresh } = await import("../jobs/insights-cache-cron");
+      const result = await runInsightsCacheCronRefresh();
+      res.json({
+        success: true,
+        message: "Insights cache refresh completed",
+        ...result,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Insights cache refresh error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.post("/api/cron/refresh-why-trending", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
     try {

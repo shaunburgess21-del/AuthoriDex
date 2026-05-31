@@ -7,7 +7,7 @@ import {
   INSIGHTS_SOURCE_VALUES,
 } from "@shared/insights/filters";
 import type { InsightsDivergenceType } from "@shared/insights/types";
-import { requireAuth, optionalAuth, type AuthRequest } from "../auth-middleware";
+import { optionalAuth, type AuthRequest } from "../auth-middleware";
 import { db } from "../db";
 import { insightsEvents } from "@shared/schema";
 import { loadInsightsRankings } from "../services/insights/rankings";
@@ -15,7 +15,6 @@ import { loadInsightsOverview } from "../services/insights/overview";
 import { loadDivergence, loadSingleSourceSurge } from "../services/insights/discover";
 import { loadDriversSummary } from "../services/insights/drivers";
 import { getInsightsStory } from "../services/insights/story";
-import { loadUserInsightsBreakdown } from "../services/insights/calibration";
 import { withDiscoverCache } from "../services/insights/discover-cache";
 import { loadMassVelocityQuadrant } from "../services/insights/mass-velocity";
 import { loadBreakoutRadar } from "../services/insights/breakout";
@@ -203,16 +202,6 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] markets analytics", error);
       res.status(500).json({ error: "Failed to load markets analytics" });
-    }
-  });
-
-  app.get("/api/insights/me/breakdown", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const data = await loadUserInsightsBreakdown(req.userId!);
-      res.json({ data });
-    } catch (error) {
-      console.error("[insights] me breakdown", error);
-      res.status(500).json({ error: "Failed to load your insights" });
     }
   });
 

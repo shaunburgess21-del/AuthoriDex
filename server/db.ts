@@ -12,7 +12,19 @@ if (!process.env.DATABASE_URL) {
 // Default 25: app connects via Supavisor pooler (multiplexes client slots onto fewer
 // backend connections). Headroom for API traffic + 15+ in-process schedulers.
 // Override per environment with DB_POOL_MAX if needed.
+//
+// Supabase: use the transaction-mode pooler URL (port 6543), not session mode
+// (5432). Session mode pins one backend connection per pool slot and exhausts
+// `max_connections` under parallel schedulers + API traffic.
 const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || "25", 10);
+
+// Per-statement cap (applied via SET on each physical connection, below) so a
+// runaway query is killed by Postgres instead of pinning a pooled connection
+// indefinitely. Kept comfortably above the slowest *legitimate* analytics jobs
+// (volatility precompute / market opening-scores ~20s) so we never clip real
+// work — this is a guard against hung/runaway queries, not the request-path
+// fix (that's the api_cache + insights cache-warmer). Set to 0 to disable.
+const DB_STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS || "30000", 10);
 
 /**
  * Default: `rejectUnauthorized: false` (common for Neon/Railway-style TLS without bundling CA).
@@ -39,6 +51,20 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10000,
   ssl: buildPgSsl(),
 });
+
+// Apply statement_timeout per physical connection rather than via the libpq
+// `options` startup parameter: the Supabase/Supavisor pooler can reject unknown
+// startup parameters, which would break every connection at boot. Running it as
+// a plain SET after the handshake is pooler-safe (works in session + transaction
+// mode) and best-effort — a failure here must never take down the pool.
+if (DB_STATEMENT_TIMEOUT_MS > 0) {
+  pool.on("connect", (client) => {
+    client
+      .query(`SET statement_timeout TO ${DB_STATEMENT_TIMEOUT_MS}`)
+      .catch((err) => log(`[DB] Failed to set statement_timeout: ${err}`));
+  });
+}
+
 export const db = drizzle(pool, { schema });
 
 let dbPoolMonitorStarted = false;

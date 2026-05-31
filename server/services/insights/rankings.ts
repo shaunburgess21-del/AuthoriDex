@@ -132,10 +132,15 @@ async function loadInsightsRankingsInner(
     .map((s) => s.timestamp)
     .sort((a, b) => b.getTime() - a.getTime())[0];
 
+  const asOf =
+    latestTs instanceof Date && !Number.isNaN(latestTs.getTime())
+      ? latestTs.toISOString()
+      : null;
+
   return {
     rows: pageRows,
     total,
-    asOf: latestTs?.toISOString() ?? null,
+    asOf,
     source: filters.source,
   };
 }

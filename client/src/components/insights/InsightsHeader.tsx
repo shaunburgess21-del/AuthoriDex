@@ -5,7 +5,6 @@ const TAB_LABELS: Record<InsightsTab, string> = {
   overview: "Overview",
   rankings: "Rankings",
   discover: "Discover",
-  you: "You",
   compare: "Compare",
   markets: "Markets",
   approval: "Approval",
@@ -13,14 +12,10 @@ const TAB_LABELS: Record<InsightsTab, string> = {
 
 interface InsightsHeaderProps {
   activeTab: InsightsTab;
-  isLoggedIn: boolean;
 }
 
-export function InsightsHeader({ activeTab, isLoggedIn }: InsightsHeaderProps) {
-  const tabs = INSIGHTS_TAB_VALUES.filter((t) => {
-    if (t === "you") return isLoggedIn;
-    return true;
-  });
+export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
+  const tabs = INSIGHTS_TAB_VALUES;
 
   return (
     <div

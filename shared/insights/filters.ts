@@ -26,7 +26,6 @@ export const INSIGHTS_TAB_VALUES = [
   "overview",
   "rankings",
   "discover",
-  "you",
   "compare",
   "markets",
   "approval",
@@ -155,6 +154,10 @@ export function parseTab(search: string | URLSearchParams): InsightsTab {
       ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
       : search;
   const tab = params.get("tab");
+  // Legacy deep links to the removed "you" tab land on overview.
+  if (tab === "you") {
+    return "overview";
+  }
   if (tab && (INSIGHTS_TAB_VALUES as readonly string[]).includes(tab)) {
     return tab as InsightsTab;
   }

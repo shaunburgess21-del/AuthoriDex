@@ -827,6 +827,14 @@ async function startServer() {
     } else {
       log("[InsightsStoryRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-insights-story.");
     }
+
+    // Pre-warm rankings / markets / volatility caches (90s TTL) so Insights
+    // tabs avoid cold-compute stampedes on the shared connection pool.
+    if (!SERVERLESS_MODE) {
+      startScheduler("InsightsCacheRefresh", startInsightsCacheRefreshScheduler);
+    } else {
+      log("[InsightsCacheRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-insights-cache.");
+    }
   });
 }
 
@@ -1146,6 +1154,30 @@ function startInsightsStoryRefreshScheduler() {
     void runScheduledInsightsStoryRefresh();
     setInterval(() => void runScheduledInsightsStoryRefresh(), INSIGHTS_STORY_REFRESH_INTERVAL_MS);
   }, initialDelay);
+}
+
+const INSIGHTS_CACHE_REFRESH_INTERVAL_MS = 60 * 1000;
+
+async function runScheduledInsightsCacheRefresh(): Promise<void> {
+  try {
+    const { runInsightsCacheCronRefresh } = await import("./jobs/insights-cache-cron");
+    const result = await runInsightsCacheCronRefresh();
+    const failedSuffix = result.failed.length ? ` failed=${result.failed.join(",")}` : "";
+    log(
+      `[InsightsCacheRefresh] OK — warmed=${result.warmed.join(",")}${failedSuffix} duration=${result.durationMs}ms`,
+    );
+  } catch (err: any) {
+    log(`[InsightsCacheRefresh] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startInsightsCacheRefreshScheduler() {
+  if (SERVERLESS_MODE) return;
+  log("[InsightsCacheRefresh] Starting (every 60s, staggered 90s after boot)");
+  setTimeout(() => {
+    void runScheduledInsightsCacheRefresh();
+    setInterval(() => void runScheduledInsightsCacheRefresh(), INSIGHTS_CACHE_REFRESH_INTERVAL_MS);
+  }, 90 * 1000);
 }
 
 startServer().catch((error) => {
