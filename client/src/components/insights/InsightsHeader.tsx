@@ -8,6 +8,7 @@ const TAB_LABELS: Record<InsightsTab, string> = {
   you: "You",
   compare: "Compare",
   markets: "Markets",
+  approval: "Approval",
 };
 
 interface InsightsHeaderProps {

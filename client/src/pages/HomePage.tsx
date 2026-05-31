@@ -3,7 +3,6 @@ import { WelcomeModal } from "@/components/WelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
-import { VotingModal } from "@/components/VotingModal";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { toast } from "sonner";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -12,7 +11,6 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill, getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
 import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { TrendScoreInfoContent } from "@/components/TrendScoreInfo";
-import { ApprovalRatingInfoContent } from "@/components/ApprovalRatingInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +19,7 @@ import { tooltipSurfaceClass } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Popover, PopoverAnchor, PopoverContent, PopoverClose } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverClose, PopoverTrigger } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -36,7 +34,6 @@ import {
   ChevronRight,
   ChevronDown,
   LineChart,
-  Vote,
   Trophy,
   Users,
   Sparkles,
@@ -51,9 +48,6 @@ import {
   Scale,
   Swords,
   BarChart3,
-  MessageSquare,
-  UserPlus,
-  ImageIcon,
   Loader2,
 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
@@ -77,10 +71,9 @@ import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, Link } from "wouter";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { motion, AnimatePresence, type PanInfo } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { VOTE_HUB_DEEP_LINKS, type VoteHubSectionToggle } from "@/lib/voteHubDeepLinks";
 
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
@@ -91,15 +84,6 @@ const LEADERBOARD_PREDICT_MORE_LINKS = [
   { label: "Head-to-Head Battles", href: "/predict#h2h", icon: Swords },
   { label: "Category races", href: "/predict#race", icon: BarChart3 },
 ] as const satisfies ReadonlyArray<{ label: string; href: string; icon: LucideIcon }>;
-
-const VOTE_HUB_LINK_ICONS: Record<VoteHubSectionToggle, LucideIcon> = {
-  "Sentiment Polls": MessageSquare,
-  Matchups: Swords,
-  "Opinion Polls": Vote,
-  "Underrated/Overrated": BarChart3,
-  "Induction Queue": UserPlus,
-  "Curate Profile": ImageIcon,
-};
 
 function LeaderboardDrawerNavList({ children }: { children: ReactNode }) {
   return (
@@ -161,47 +145,6 @@ function LeaderboardUpDownSnapshot() {
         Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
       </p>
     </div>
-  );
-}
-
-/** Short copy for the Approval leaderboard drawer (Rate / aggregate approval). */
-function LeaderboardApprovalSnapshot() {
-  return (
-    <div>
-      <div className="mb-2 flex items-center gap-2">
-        <Star className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden />
-        <h3 className="text-sm font-semibold">Approval rating</h3>
-      </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        The <span className="font-medium text-foreground">Approval</span> score on each row is an aggregate from the community (shown out of 5).
-      </p>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Use <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote—it feeds into that person&apos;s approval rating.
-      </p>
-    </div>
-  );
-}
-
-function LeaderboardVoteInfoBody({ onNavigateLink }: { onNavigateLink: () => void }) {
-  return (
-    <>
-      <LeaderboardApprovalSnapshot />
-      <div className="mt-6 space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Vote</p>
-        <LeaderboardDrawerNavList>
-          {VOTE_HUB_DEEP_LINKS.map(({ label, href, sectionToggle }) => (
-            <LeaderboardDrawerNavLink
-              key={href}
-              href={href}
-              label={label}
-              icon={VOTE_HUB_LINK_ICONS[sectionToggle]}
-              accent="vote"
-              onNavigateLink={onNavigateLink}
-            />
-          ))}
-        </LeaderboardDrawerNavList>
-      </div>
-    </>
   );
 }
 
@@ -1120,7 +1063,6 @@ function InsightWhyTrendingSnippet({
   );
 }
 
-type LeaderboardTab = "fame" | "approval";
 type SortDirection = "desc" | "asc";
 
 export default function HomePage() {
@@ -1146,13 +1088,9 @@ export default function HomePage() {
       });
     }
   }, []);
-  const [votingModalOpen, setVotingModalOpen] = useState(false);
-  const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
-  const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardTab>("fame");
   const [predictLeaderboardInfoOpen, setPredictLeaderboardInfoOpen] = useState(false);
-  const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
@@ -1536,14 +1474,14 @@ export default function HomePage() {
     isFetching,
     error,
   } = useInfiniteQuery<TrendingResponse>({
-    queryKey: ['/api/leaderboard', searchQuery, category, leaderboardTab, sortDirection],
+    queryKey: ['/api/leaderboard', searchQuery, category, 'fame', sortDirection],
     queryFn: async ({ pageParam = 0 }) => {
       const queryParams = new URLSearchParams();
       if (searchQuery) queryParams.set('search', searchQuery);
       if (category !== 'all') queryParams.set('category', category);
       queryParams.set('limit', String(PAGE_SIZE));
       queryParams.set('offset', String(pageParam));
-      queryParams.set('tab', leaderboardTab);
+      queryParams.set('tab', 'fame');
       queryParams.set('sortDir', sortDirection);
 
       const authHeaders = await getAuthHeaders();
@@ -1650,25 +1588,19 @@ export default function HomePage() {
     staleTime: 60_000,
   });
 
-  // Leaderboard tab tooltips (Trending vs Approval): only the inline Info icon
-  // opens the popover — never the tab pill area. Fine pointer: hover icon opens
-  // with 120ms close grace into PopoverContent; pointer-down / click on icon
-  // pins open (mouse-leave dismiss disabled) until X / outside click / ESC.
-  // Coarse pointer: tap icon toggles. X close button is visible on both
-  // platforms. useIsCoarsePointer still gates tap-vs-hover on the icon and
-  // omits mouse handlers on coarse.
+  // Trending leaderboard info popover (now lives in the card header). Fine
+  // pointer: hover the Info icon to open with a 120ms close grace into the
+  // PopoverContent; pointer-down / click pins the popover open (mouse-leave
+  // dismiss disabled) until X / outside click / ESC. Coarse pointer: tap
+  // toggles. X close button is visible on both platforms.
   const isCoarsePointer = useIsCoarsePointer();
   const [fameTooltipOpen, setFameTooltipOpen] = useState(false);
-  const [approvalTooltipOpen, setApprovalTooltipOpen] = useState(false);
   const fameCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const approvalCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fameTooltipLeaveDismissDisabledRef = useRef(false);
-  const approvalTooltipLeaveDismissDisabledRef = useRef(false);
 
   useEffect(() => {
     return () => {
       if (fameCloseTimerRef.current) clearTimeout(fameCloseTimerRef.current);
-      if (approvalCloseTimerRef.current) clearTimeout(approvalCloseTimerRef.current);
     };
   }, []);
 
@@ -1683,41 +1615,12 @@ export default function HomePage() {
     if (fameCloseTimerRef.current) clearTimeout(fameCloseTimerRef.current);
     fameCloseTimerRef.current = setTimeout(() => setFameTooltipOpen(false), 120);
   };
-  const openApprovalTooltip = () => {
-    if (approvalCloseTimerRef.current) {
-      clearTimeout(approvalCloseTimerRef.current);
-      approvalCloseTimerRef.current = null;
-    }
-    setApprovalTooltipOpen(true);
-  };
-  const scheduleCloseApproval = () => {
-    if (approvalCloseTimerRef.current) clearTimeout(approvalCloseTimerRef.current);
-    approvalCloseTimerRef.current = setTimeout(() => setApprovalTooltipOpen(false), 120);
-  };
 
   const handleFameTooltipOpenChange = (open: boolean) => {
     if (!open) {
       fameTooltipLeaveDismissDisabledRef.current = false;
     }
     setFameTooltipOpen(open);
-  };
-  const handleApprovalTooltipOpenChange = (open: boolean) => {
-    if (!open) {
-      approvalTooltipLeaveDismissDisabledRef.current = false;
-    }
-    setApprovalTooltipOpen(open);
-  };
-
-  const handleTabClick = (tab: LeaderboardTab) => {
-    if (tab === leaderboardTab) {
-      return;
-    }
-    setLeaderboardTab(tab);
-    setSortDirection("desc");
-    setFameTooltipOpen(false);
-    setApprovalTooltipOpen(false);
-    fameTooltipLeaveDismissDisabledRef.current = false;
-    approvalTooltipLeaveDismissDisabledRef.current = false;
   };
 
   // For display, just use allPeople from the API
@@ -1780,11 +1683,6 @@ export default function HomePage() {
   const handleClearFilters = () => {
     setSearchQuery("");
     setCategory("all");
-  };
-
-  const handleVoteClick = (personId: string) => {
-    setVotingPersonId(personId);
-    setVotingModalOpen(true);
   };
 
   const handlePullRefresh = useCallback(async () => {
@@ -2038,8 +1936,72 @@ export default function HomePage() {
                   <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
                             <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                            <Popover open={fameTooltipOpen} onOpenChange={handleFameTooltipOpenChange}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="Trending leaderboard info"
+                                  data-testid="icon-trending-toggle-info"
+                                  className="no-default-hover-elevate no-default-active-elevate inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#3C83F6] hover:bg-muted/50"
+                                  onPointerDown={() => {
+                                    if (!isCoarsePointer) {
+                                      fameTooltipLeaveDismissDisabledRef.current = true;
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (isCoarsePointer) {
+                                      handleFameTooltipOpenChange(!fameTooltipOpen);
+                                    } else {
+                                      fameTooltipLeaveDismissDisabledRef.current = true;
+                                      handleFameTooltipOpenChange(true);
+                                    }
+                                  }}
+                                  onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
+                                  onMouseLeave={
+                                    !isCoarsePointer
+                                      ? () => {
+                                          if (!fameTooltipLeaveDismissDisabledRef.current) {
+                                            scheduleCloseFame();
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  <Info className="h-4 w-4" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                side="bottom"
+                                align="start"
+                                className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
+                                onOpenAutoFocus={(e) => e.preventDefault()}
+                                onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
+                                onMouseLeave={
+                                  !isCoarsePointer
+                                    ? () => {
+                                        if (!fameTooltipLeaveDismissDisabledRef.current) {
+                                          scheduleCloseFame();
+                                        }
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <span className="sr-only">Trending leaderboard info</span>
+                                <PopoverClose asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="Close"
+                                    data-testid="button-close-trending-tooltip"
+                                    className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </PopoverClose>
+                                <TrendScoreInfoContent />
+                              </PopoverContent>
+                            </Popover>
                           </div>
                           <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                             <TouchTooltip
@@ -2061,190 +2023,6 @@ export default function HomePage() {
                   className="sticky top-16 z-30 border-b border-border/60 bg-card/95 backdrop-blur-md"
                   data-testid="leaderboard-sticky-toolbar"
                 >
-                  <div className="border-b border-border/60 px-3 py-2.5">
-                    <div className="flex min-h-10 w-full items-stretch overflow-hidden rounded-lg bg-muted/50" data-testid="toggle-leaderboard-tabs">
-                    <div
-                      className={`relative flex flex-1 min-w-0 items-center justify-center rounded-l-lg rounded-r-none px-4 py-1.5 text-[15px] font-medium transition-all ${
-                        leaderboardTab === "fame"
-                          ? "bg-background shadow-sm text-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {leaderboardTab === "fame" && (
-                        <span className="pointer-events-none absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#3C83F6]" />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleTabClick("fame")}
-                        aria-label="Show Trending leaderboard"
-                        className="absolute inset-0 z-0 rounded-l-lg rounded-r-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                        data-testid="tab-leaderboard-fame"
-                      />
-                      <div className="pointer-events-none relative z-10 flex min-w-0 items-center justify-center gap-2">
-                        <Crown
-                          className={`h-[18px] w-[18px] shrink-0 ${leaderboardTab === "fame" ? "text-[#3C83F6]" : "text-muted-foreground/60"}`}
-                        />
-                        <span className="whitespace-nowrap">Trending</span>
-                        {leaderboardTab === "fame" && (
-                          <Popover open={fameTooltipOpen} onOpenChange={handleFameTooltipOpenChange}>
-                            <PopoverAnchor asChild>
-                              <button
-                                type="button"
-                                aria-label="Trending leaderboard info"
-                                data-testid="icon-trending-toggle-info"
-                                className="pointer-events-auto no-default-hover-elevate no-default-active-elevate ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#3C83F6] hover:bg-muted/50"
-                                onPointerDown={() => {
-                                  if (!isCoarsePointer) {
-                                    fameTooltipLeaveDismissDisabledRef.current = true;
-                                  }
-                                }}
-                                onClick={() => {
-                                  if (isCoarsePointer) {
-                                    handleFameTooltipOpenChange(!fameTooltipOpen);
-                                  } else {
-                                    fameTooltipLeaveDismissDisabledRef.current = true;
-                                    handleFameTooltipOpenChange(true);
-                                  }
-                                }}
-                                onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
-                                onMouseLeave={
-                                  !isCoarsePointer
-                                    ? () => {
-                                        if (!fameTooltipLeaveDismissDisabledRef.current) {
-                                          scheduleCloseFame();
-                                        }
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <Info className="h-3 w-3" />
-                              </button>
-                            </PopoverAnchor>
-                            <PopoverContent
-                              side="bottom"
-                              align="center"
-                              className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
-                              onOpenAutoFocus={(e) => e.preventDefault()}
-                              onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
-                              onMouseLeave={
-                                !isCoarsePointer
-                                  ? () => {
-                                      if (!fameTooltipLeaveDismissDisabledRef.current) {
-                                        scheduleCloseFame();
-                                      }
-                                    }
-                                  : undefined
-                              }
-                            >
-                              <span className="sr-only">Trending leaderboard info</span>
-                              <PopoverClose asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Close"
-                                  data-testid="button-close-trending-tooltip"
-                                  className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </PopoverClose>
-                              <TrendScoreInfoContent />
-                            </PopoverContent>
-                          </Popover>
-                        )}
-                      </div>
-                    </div>
-                    <div
-                      className={`relative flex flex-1 min-w-0 items-center justify-center rounded-r-lg rounded-l-none px-4 py-1.5 text-[15px] font-medium transition-all ${
-                        leaderboardTab === "approval"
-                          ? "bg-background shadow-sm text-foreground"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {leaderboardTab === "approval" && (
-                        <span className="pointer-events-none absolute bottom-0 left-1 right-1 h-[2px] rounded-full bg-[#22D3EE]" />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleTabClick("approval")}
-                        aria-label="Show Approval leaderboard"
-                        className="absolute inset-0 z-0 rounded-r-lg rounded-l-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                        data-testid="tab-leaderboard-approval"
-                      />
-                      <div className="pointer-events-none relative z-10 flex min-w-0 items-center justify-center gap-2">
-                        <Star
-                          className={`h-[18px] w-[18px] shrink-0 ${leaderboardTab === "approval" ? "text-[#22D3EE]" : "text-muted-foreground/60"}`}
-                        />
-                        <span className="whitespace-nowrap">Approval</span>
-                        {leaderboardTab === "approval" && (
-                          <Popover open={approvalTooltipOpen} onOpenChange={handleApprovalTooltipOpenChange}>
-                            <PopoverAnchor asChild>
-                              <button
-                                type="button"
-                                aria-label="Approval leaderboard info"
-                                data-testid="icon-approval-toggle-info"
-                                className="pointer-events-auto no-default-hover-elevate no-default-active-elevate ml-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#22D3EE] hover:bg-muted/50"
-                                onPointerDown={() => {
-                                  if (!isCoarsePointer) {
-                                    approvalTooltipLeaveDismissDisabledRef.current = true;
-                                  }
-                                }}
-                                onClick={() => {
-                                  if (isCoarsePointer) {
-                                    handleApprovalTooltipOpenChange(!approvalTooltipOpen);
-                                  } else {
-                                    approvalTooltipLeaveDismissDisabledRef.current = true;
-                                    handleApprovalTooltipOpenChange(true);
-                                  }
-                                }}
-                                onMouseEnter={!isCoarsePointer ? openApprovalTooltip : undefined}
-                                onMouseLeave={
-                                  !isCoarsePointer
-                                    ? () => {
-                                        if (!approvalTooltipLeaveDismissDisabledRef.current) {
-                                          scheduleCloseApproval();
-                                        }
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <Info className="h-3 w-3" />
-                              </button>
-                            </PopoverAnchor>
-                            <PopoverContent
-                              side="bottom"
-                              align="center"
-                              className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
-                              onOpenAutoFocus={(e) => e.preventDefault()}
-                              onMouseEnter={!isCoarsePointer ? openApprovalTooltip : undefined}
-                              onMouseLeave={
-                                !isCoarsePointer
-                                  ? () => {
-                                      if (!approvalTooltipLeaveDismissDisabledRef.current) {
-                                        scheduleCloseApproval();
-                                      }
-                                    }
-                                  : undefined
-                              }
-                            >
-                              <span className="sr-only">Approval leaderboard info</span>
-                              <PopoverClose asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Close"
-                                  data-testid="button-close-approval-tooltip"
-                                  className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </PopoverClose>
-                              <ApprovalRatingInfoContent />
-                            </PopoverContent>
-                          </Popover>
-                        )}
-                      </div>
-                    </div>
-                    </div>
-                  </div>
                   <div className="pl-3 pr-4 sm:pr-6 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
@@ -2266,69 +2044,33 @@ export default function HomePage() {
                             className="hidden lg:flex items-center gap-5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground ml-auto shrink-0"
                             data-testid="leaderboard-column-header"
                           >
-                            {leaderboardTab === "fame" ? (
-                              <>
-                                <div className="text-right w-[140px]">Trend Score</div>
-                                <div className="text-right w-[80px]">24h</div>
-                                <div className="text-right w-[84px]">Approval</div>
-                                <div className="flex justify-end w-[88px]">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                                    aria-label="About predicting Up or Down from the leaderboard"
-                                    data-testid="button-leaderboard-predict-info"
-                                    onClick={() => setPredictLeaderboardInfoOpen(true)}
-                                  >
-                                    Predict
-                                  </Button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="text-right w-[100px]">Vote Count</div>
-                                <div className="text-right w-[120px]">Approval</div>
-                                <div className="text-right w-[120px]">Trend Score</div>
-                                <div className="flex justify-end w-[88px]">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                                    aria-label="About approval rating and Rate on the leaderboard"
-                                    data-testid="button-leaderboard-your-vote-info"
-                                    onClick={() => setVoteLeaderboardInfoOpen(true)}
-                                  >
-                                    Your Vote
-                                  </Button>
-                                </div>
-                              </>
-                            )}
+                            <div className="text-right w-[140px]">Trend Score</div>
+                            <div className="text-right w-[80px]">24h</div>
+                            <div className="text-right w-[84px]">Approval</div>
+                            <div className="flex justify-end w-[88px]">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                                aria-label="About predicting Up or Down from the leaderboard"
+                                data-testid="button-leaderboard-predict-info"
+                                onClick={() => setPredictLeaderboardInfoOpen(true)}
+                              >
+                                Predict
+                              </Button>
+                            </div>
                           </div>
                         )}
-                        {leaderboardTab === "fame" && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                            aria-label="About predicting Up or Down from the leaderboard"
-                            data-testid="label-mobile-predict"
-                            onClick={() => setPredictLeaderboardInfoOpen(true)}
-                          >
-                            Predict
-                          </Button>
-                        )}
-                        {leaderboardTab === "approval" && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                            aria-label="About approval rating and Rate on the leaderboard"
-                            data-testid="label-mobile-your-vote"
-                            onClick={() => setVoteLeaderboardInfoOpen(true)}
-                          >
-                            Your Vote
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                          aria-label="About predicting Up or Down from the leaderboard"
+                          data-testid="label-mobile-predict"
+                          onClick={() => setPredictLeaderboardInfoOpen(true)}
+                        >
+                          Predict
+                        </Button>
                       </div>
                       {hasActiveFilters && (
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2365,27 +2107,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <CardContent className="p-0">
-                  <motion.div
-                    {...(isMobile
-                      ? {
-                          drag: "x" as const,
-                          dragConstraints: { left: 0, right: 0 },
-                          dragElastic: 0.15,
-                          onDragEnd: (_: unknown, info: PanInfo) => {
-                            const SWIPE_THRESHOLD = 60;
-                            if (info.offset.x < -SWIPE_THRESHOLD && leaderboardTab === "fame") {
-                              setLeaderboardTab("approval");
-                              setSortDirection("desc");
-                              hapticSuccess();
-                            } else if (info.offset.x > SWIPE_THRESHOLD && leaderboardTab === "approval") {
-                              setLeaderboardTab("fame");
-                              setSortDirection("desc");
-                              hapticSuccess();
-                            }
-                          },
-                        }
-                      : {})}
-                  >
+                  <div>
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center">
                         <p className="text-muted-foreground mb-3">
@@ -2405,10 +2127,9 @@ export default function HomePage() {
                       <LeaderboardRow
                         key={person.id}
                         person={person}
-                        activeTab={leaderboardTab}
+                        activeTab="fame"
                         isHotMover={hotMoverIds.has(person.id)}
                         onOpenInsight={() => openInsightFromTrendingPerson(person)}
-                        onVoteClick={() => handleVoteClick(person.id)}
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
                         onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
                         userPredictionPick={userUpdownPickByPerson.get(person.id)?.pick ?? null}
@@ -2416,7 +2137,7 @@ export default function HomePage() {
                         predictionsClosedMessage={leaderboardClosedMessage}
                       />
                     ))}
-                  </motion.div>
+                  </div>
                   
                   {/* Infinite scroll trigger element */}
                   {hasNextPage && (
@@ -2569,41 +2290,6 @@ export default function HomePage() {
           </DialogContent>
         </Dialog>
       )}
-      {isMobile ? (
-        <Drawer open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
-          <DrawerContent className="max-h-[85vh]">
-            <DrawerHeader className="space-y-1.5 text-left">
-              <DrawerTitle>Your vote on the leaderboard</DrawerTitle>
-              <DrawerDescription className="text-sm text-muted-foreground">
-                How approval works here, plus jump to a section on Vote.
-              </DrawerDescription>
-            </DrawerHeader>
-            <div className="overflow-y-auto px-4 pb-6 pt-0">
-              <LeaderboardVoteInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
-            </div>
-          </DrawerContent>
-        </Drawer>
-      ) : (
-        <Dialog open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
-          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
-            <DialogHeader className="shrink-0 space-y-1.5 text-left">
-              <DialogTitle>Your vote on the leaderboard</DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                How approval works here, plus jump to a section on Vote.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
-              <LeaderboardVoteInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-      <VotingModal
-        open={votingModalOpen}
-        onOpenChange={setVotingModalOpen}
-        initialPersonId={votingPersonId}
-        peopleList={allPeople}
-      />
       <StakeModal
         open={stakeModalOpen}
         onClose={() => {
