@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -191,10 +192,10 @@ const WIKI_MOMENTUM_LEVEL_COPY =
   "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
 
 const SEARCH_INTEREST_COPY =
-  "Google searches in the most recent month (estimated from clickstream data) — not a 12-month average. A cross-person popularity measure: High = 500k+, Medium = 100k+, Low = below that. The bars show the last 12 months; updates about monthly.";
+  "An estimate of how many times people Googled this person over the last month. Because it's a search count rather than a relative score, you can compare different people directly — High means 500k+ searches, Medium 100k+, and Low is below that. See Search Momentum for whether their attention is rising or falling.";
 
 const SEARCH_MOMENTUM_COPY =
-  "How this person's Google search interest over the last week compares to the prior weeks, on a 0–100 scale normalised to their own 30-day peak (Google Trends). The +/-% chip shows whether recent search attention is rising or falling versus that baseline. Not the same as Search Interest, which shows absolute monthly search volume.";
+  "A 0–100 score for how much people are Googling this person lately, where 100 is their own busiest day in the past month. The +/–% shows whether their search attention is rising or falling — we compare the last 7 days against the weeks before. It's a relative interest score provided by Google Trends, not the actual number of searches. For total estimated search volume, see Search Interest.";
 
 const WEB_SENTIMENT_COPY =
   "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % counts only positive vs negative mentions — neutral is shown in the bar but not in the %. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
@@ -324,44 +325,65 @@ function formatMonthShort(ym: string): string {
 
 // Compact, dependency-free monthly bar sparkline for the Search Interest card.
 // Bars are scaled to the series max; the most recent month is emphasised and
-// the first/last months are captioned so the time window is unambiguous. Each
-// bar carries a native title tooltip with the month + formatted volume.
+// the first/last months are captioned so the time window is unambiguous.
+// Tap/click a bar to show its month + volume (native title still works on hover).
 function SearchVolumeSparkline({
   history,
 }: {
   history: Array<{ month: string; volume: number }>;
 }) {
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const max = Math.max(...history.map((h) => h.volume), 1);
   const first = history[0];
   const last = history[history.length - 1];
+  const selected = selectedIndex != null ? history[selectedIndex] : null;
   return (
     <div className="mt-1.5" data-testid="search-interest-sparkline">
       <div
         className="flex items-end gap-[3px] h-8"
-        role="img"
+        role="group"
         aria-label={`Monthly search volume, ${formatMonthShort(first.month)} to ${formatMonthShort(last.month)}`}
       >
         {history.map((h, i) => {
           const isLatest = i === history.length - 1;
+          const isSelected = selectedIndex === i;
           const pct = Math.max(4, Math.round((h.volume / max) * 100));
+          const barLabel = `${formatMonthShort(h.month)}: ${formatNum(h.volume)} searches`;
           return (
-            <div
+            <button
               key={h.month}
-              className="flex-1 min-w-[3px] rounded-sm bg-foreground/10 overflow-hidden flex items-end"
+              type="button"
+              className={cn(
+                "flex-1 min-w-[3px] rounded-sm bg-foreground/10 overflow-hidden flex items-end",
+                "p-0 border-0 cursor-pointer touch-manipulation",
+                isSelected && "ring-1 ring-blue-500/70 ring-inset",
+              )}
               style={{ height: "100%" }}
-              title={`${formatMonthShort(h.month)}: ${formatNum(h.volume)} searches`}
+              title={barLabel}
+              aria-label={barLabel}
+              aria-pressed={isSelected}
+              onClick={() => setSelectedIndex(isSelected ? null : i)}
             >
               <div
                 className={cn(
                   "w-full rounded-sm transition-colors",
                   isLatest ? "bg-blue-500/80" : "bg-foreground/30",
+                  isSelected && !isLatest && "bg-foreground/50",
                 )}
                 style={{ height: `${pct}%` }}
               />
-            </div>
+            </button>
           );
         })}
       </div>
+      {selected && (
+        <p
+          className="mt-1 text-center text-[10px] text-muted-foreground font-mono leading-none"
+          data-testid="search-interest-sparkline-selected"
+        >
+          {formatMonthShort(selected.month)}: {formatNum(selected.volume)} searches
+        </p>
+      )}
       <div className="mt-1 flex items-center justify-between text-[9px] text-muted-foreground/60 font-mono leading-none">
         <span>{formatMonthShort(first.month)}</span>
         <span className="text-muted-foreground/45">monthly searches</span>
