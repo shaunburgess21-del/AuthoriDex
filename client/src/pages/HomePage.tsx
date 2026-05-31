@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { CategoryPill, getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
+import { MoverRowSubtext } from "@/components/MoverRowSubtext";
+import { getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
 import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { TrendScoreInfoContent } from "@/components/TrendScoreInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -282,7 +283,12 @@ function MarketPulseCard({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{person.name}</p>
-                      <p className={`text-[10px] ${getCategoryTextColor(person.category ?? "")}`}>{person.category}</p>
+                      <MoverRowSubtext
+                        rank={person.rank}
+                        fameIndex={person.fameIndex}
+                        fameIndexLive={person.fameIndexLive}
+                        trendScore={person.trendScore}
+                      />
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${

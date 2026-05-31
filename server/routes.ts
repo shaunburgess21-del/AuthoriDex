@@ -1502,6 +1502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         category: p.category,
         rank: p.rank,
         fameIndex: p.fameIndex,
+        fameIndexLive: p.fameIndexLive,
         change24h: p.change24h,
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
       }));

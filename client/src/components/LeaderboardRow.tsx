@@ -5,6 +5,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
+import { resolveFameScore } from "@/lib/fameScore";
 import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X, Flame } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
@@ -158,7 +159,7 @@ export function LeaderboardRow({
     };
   }, [person.id, person.userApprovalRating, userId]);
 
-  const fameScore = (person as any).fameIndexLive ?? person.fameIndex ?? Math.round(person.trendScore / 100);
+  const fameScore = resolveFameScore(person);
   const delta24h = formatDelta(person.change24h);
   const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
   const hasVoted = sentimentScore !== null;

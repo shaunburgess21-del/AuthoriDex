@@ -1,7 +1,7 @@
 import { formatDelta } from "@/lib/formatNumber";
 import { Flame, ChevronDown, ArrowRight } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
-import { getCategoryTextColor } from "@/components/CategoryPill";
+import { MoverRowSubtext } from "./MoverRowSubtext";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 
@@ -12,6 +12,7 @@ export interface HotMover {
   category: string | null;
   rank: number;
   fameIndex: number | null;
+  fameIndexLive?: number | null;
   change24h: number | null;
   rankChange: number | null;
 }
@@ -106,11 +107,11 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-xs truncate text-foreground dark:text-slate-200">{displayName}</p>
-                    {person.category && (
-                      <p className={`text-[10px] truncate ${getCategoryTextColor(person.category)}`}>
-                        {person.category}
-                      </p>
-                    )}
+                    <MoverRowSubtext
+                      rank={person.rank}
+                      fameIndex={person.fameIndex}
+                      fameIndexLive={person.fameIndexLive}
+                    />
                   </div>
                   {delta && (
                     <span
