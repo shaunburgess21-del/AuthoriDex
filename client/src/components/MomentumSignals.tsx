@@ -115,7 +115,8 @@ interface MomentumData {
       positivePct?: number;
       positive: number;
       negative: number;
-      neutral: number;
+      /** Always 0 from the API — neutral is merged into positive server-side. */
+      neutral?: number;
       total: number;
       level: MomentumLevel;
       window: string;
@@ -198,7 +199,7 @@ const SEARCH_MOMENTUM_COPY =
   "A 0–100 score for how much people are Googling this person lately, where 100 is their own busiest day in the past month. The +/–% shows whether their search attention is rising or falling — we compare the last 7 days against the weeks before. It's a relative interest score provided by Google Trends, not the actual number of searches. For total estimated search volume, see Search Interest.";
 
 const WEB_SENTIMENT_COPY =
-  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % counts only positive vs negative mentions — neutral is shown in the bar but not in the %. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
+  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % and bar split positive (including neutral mentions) vs negative. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -689,7 +690,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
   ) : null;
 
   const ws = signals.webSentiment;
-  const webSentimentMentions = (ws?.positive ?? 0) + (ws?.negative ?? 0) + (ws?.neutral ?? 0);
+  const webSentimentMentions = (ws?.positive ?? 0) + (ws?.negative ?? 0);
   const hasWebSentimentHeadline =
     ws != null && ws.positivePct != null && Number.isFinite(ws.positivePct);
   const hasWebSentimentBar = ws != null && webSentimentMentions > 0;
@@ -718,7 +719,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       <SentimentMiniBar
         positive={ws!.positive}
         negative={ws!.negative}
-        neutral={ws!.neutral}
         className="mt-1.5"
         testId="web-sentiment-bar"
       />

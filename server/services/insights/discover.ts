@@ -1,5 +1,8 @@
 import type { InsightsDivergenceType, InsightsDiscoverRow } from "@shared/insights/types";
-import { WEB_SENTIMENT_METHOD } from "../../providers/sentiment-window";
+import {
+  WEB_SENTIMENT_METHOD,
+  displayWebSentimentFromRaw,
+} from "../../providers/sentiment-window";
 import { db } from "../../db";
 import { sql } from "drizzle-orm";
 import { loadSingleSourceSurge } from "./drivers";
@@ -18,6 +21,15 @@ function isWebSentimentFresh(fetchedAtRaw: unknown): boolean {
   if (!Number.isFinite(fetchedMs)) return false;
   const ageHours = (Date.now() - fetchedMs) / (1000 * 60 * 60);
   return ageHours <= WEB_SENTIMENT_MAX_AGE_HOURS;
+}
+
+function displayWebPctFromRow(row: Record<string, unknown>): number | null {
+  const reading = displayWebSentimentFromRaw({
+    webSentimentPositive: row.web_sentiment_positive,
+    webSentimentNegative: row.web_sentiment_negative,
+    webSentimentNeutral: row.web_sentiment_neutral,
+  });
+  return reading.positivePct;
 }
 
 export async function loadDivergence(
@@ -41,7 +53,6 @@ export async function loadDivergence(
         tp.category,
         COALESCE(ts.velocity_score, 0) AS velocity_score,
         PERCENT_RANK() OVER (ORDER BY cm.approval_avg_rating NULLS LAST) AS approval_percentile,
-        ts.web_sentiment_pct,
         ts.web_sentiment_positive,
         ts.web_sentiment_negative,
         ts.web_sentiment_neutral,
@@ -52,7 +63,6 @@ export async function loadDivergence(
       LEFT JOIN LATERAL (
         SELECT
           velocity_score,
-          (diagnostics::jsonb->'raw'->>'webSentimentPositivePct')::numeric AS web_sentiment_pct,
           (diagnostics::jsonb->'raw'->>'webSentimentPositive')::numeric AS web_sentiment_positive,
           (diagnostics::jsonb->'raw'->>'webSentimentNegative')::numeric AS web_sentiment_negative,
           (diagnostics::jsonb->'raw'->>'webSentimentNeutral')::numeric AS web_sentiment_neutral,
@@ -93,10 +103,8 @@ export async function loadDivergence(
       case "crowd_loved_press_critical": {
         if (row.web_sentiment_method !== WEB_SENTIMENT_METHOD) return false;
         if (!isWebSentimentFresh(row.web_sentiment_fetched_at)) return false;
-        const webPctRaw = row.web_sentiment_pct;
-        if (webPctRaw == null || webPctRaw === "null") return false;
-        const webPct = Number(webPctRaw);
-        if (!Number.isFinite(webPct)) return false;
+        const webPct = displayWebPctFromRow(row);
+        if (webPct == null) return false;
         const crowdPct = row.approval_pct != null ? Number(row.approval_pct) : null;
         const classified = classifyPressVsCrowd(webPct, crowdPct);
         return classified === type;
@@ -111,13 +119,13 @@ export async function loadDivergence(
       ? [...filtered].sort((a, b) => {
         const gapA = Math.abs(
           sentimentApprovalGap(
-            Number(a.web_sentiment_pct),
+            displayWebPctFromRow(a),
             a.approval_pct != null ? Number(a.approval_pct) : null,
           ) ?? 0,
         );
         const gapB = Math.abs(
           sentimentApprovalGap(
-            Number(b.web_sentiment_pct),
+            displayWebPctFromRow(b),
             b.approval_pct != null ? Number(b.approval_pct) : null,
           ) ?? 0,
         );
@@ -128,10 +136,9 @@ export async function loadDivergence(
   const rows: InsightsDiscoverRow[] = sorted.slice(0, limit).map((row) => {
     const change7d = Number(row.change_7d ?? 0);
     const approvalPctVal = row.approval_pct != null ? Number(row.approval_pct) : null;
-    const webPct =
-      row.web_sentiment_pct != null && row.web_sentiment_pct !== "null"
-        ? Number(row.web_sentiment_pct)
-        : null;
+    const webPct = isPressVsCrowdDivergenceType(type)
+      ? displayWebPctFromRow(row)
+      : null;
 
     let highlight = "";
     switch (type) {
@@ -174,12 +181,17 @@ export async function loadDivergence(
     };
 
     if (isPressVsCrowdDivergenceType(type) && webPct != null && approvalPctVal != null) {
+      const wsDisplay = displayWebSentimentFromRaw({
+        webSentimentPositive: row.web_sentiment_positive,
+        webSentimentNegative: row.web_sentiment_negative,
+        webSentimentNeutral: row.web_sentiment_neutral,
+      });
       return {
         ...base,
         webSentimentPositivePct: webPct,
-        webSentimentPositive: Number(row.web_sentiment_positive ?? 0),
-        webSentimentNegative: Number(row.web_sentiment_negative ?? 0),
-        webSentimentNeutral: Number(row.web_sentiment_neutral ?? 0),
+        webSentimentPositive: wsDisplay.positive,
+        webSentimentNegative: wsDisplay.negative,
+        webSentimentNeutral: wsDisplay.neutral,
         sentimentApprovalGap: sentimentApprovalGap(webPct, approvalPctVal),
       };
     }

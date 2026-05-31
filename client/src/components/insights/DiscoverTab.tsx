@@ -233,12 +233,11 @@ function PressVsCrowdCard({
                   </span>
                 </div>
               )}
-              {(row.webSentimentPositive ?? 0) + (row.webSentimentNegative ?? 0) + (row.webSentimentNeutral ?? 0) > 0 && (
+              {(row.webSentimentPositive ?? 0) + (row.webSentimentNegative ?? 0) > 0 && (
                 <div className="ml-8">
                   <SentimentMiniBar
                     positive={row.webSentimentPositive ?? 0}
                     negative={row.webSentimentNegative ?? 0}
-                    neutral={row.webSentimentNeutral ?? 0}
                     showCounts={false}
                   />
                 </div>

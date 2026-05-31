@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  allocateNeutralToPositive,
   computePositivePct,
+  displayWebSentimentFromRaw,
   parseSentimentSummaryTask,
   webSentimentLevel,
   webSentimentReadingFromCounts,
@@ -29,7 +31,37 @@ test("parseSentimentSummaryTask: failed task returns null", () => {
   assert.equal(parseSentimentSummaryTask(null), null);
 });
 
-test("computePositivePct: organic pos/(pos+neg), neutral excluded", () => {
+test("allocateNeutralToPositive: merges neutral into positive", () => {
+  assert.deepEqual(
+    allocateNeutralToPositive({ positive: 300, negative: 200, neutral: 500, total: 1000 }),
+    { positive: 800, negative: 200, neutral: 0, total: 1000 },
+  );
+});
+
+test("displayWebSentimentFromRaw: merged counts and pct from snapshot fields", () => {
+  const display = displayWebSentimentFromRaw({
+    webSentimentPositive: 300,
+    webSentimentNegative: 200,
+    webSentimentNeutral: 500,
+    webSentimentTotal: 1000,
+  });
+  assert.equal(display.positive, 800);
+  assert.equal(display.negative, 200);
+  assert.equal(display.neutral, 0);
+  assert.equal(display.positivePct, 80);
+});
+
+test("displayWebSentimentFromRaw: ignores stored positivePct (recomputes)", () => {
+  const display = displayWebSentimentFromRaw({
+    webSentimentPositive: 577_300,
+    webSentimentNegative: 793_700,
+    webSentimentNeutral: 301_600,
+    webSentimentPositivePct: 42,
+  });
+  assert.equal(display.positivePct, 53);
+});
+
+test("computePositivePct: pos/(pos+neg) on display counts", () => {
   assert.equal(computePositivePct(60, 40), 60);
   assert.equal(computePositivePct(0, 0), null);
   assert.equal(computePositivePct(10, 10), null);

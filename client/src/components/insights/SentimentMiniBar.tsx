@@ -9,23 +9,23 @@ function formatNum(n: number): string {
 export function SentimentMiniBar({
   positive,
   negative,
-  neutral,
+  neutral: _neutral = 0,
   className,
   testId = "sentiment-mini-bar",
   showCounts = true,
 }: {
   positive: number;
   negative: number;
-  neutral: number;
+  /** Ignored — kept for API compat; neutral is merged into positive server-side. */
+  neutral?: number;
   className?: string;
   testId?: string;
   showCounts?: boolean;
 }) {
-  const sum = positive + negative + neutral;
+  const sum = positive + negative;
   if (sum <= 0) return null;
   const segments = [
     { key: "pos", pct: (positive / sum) * 100, className: "bg-emerald-500/80" },
-    { key: "neu", pct: (neutral / sum) * 100, className: "bg-muted-foreground/35" },
     { key: "neg", pct: (negative / sum) * 100, className: "bg-rose-500/80" },
   ];
   return (
@@ -48,7 +48,6 @@ export function SentimentMiniBar({
       {showCounts && (
         <div className="flex justify-between text-[9px] text-muted-foreground/70 mt-0.5 font-mono">
           <span>+{formatNum(positive)}</span>
-          <span>{formatNum(neutral)} neu</span>
           <span>-{formatNum(negative)}</span>
         </div>
       )}

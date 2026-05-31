@@ -6,7 +6,7 @@
 // a single-task Live endpoint — it only processes the FIRST task per POST — so we
 // send one task per request and run them with bounded concurrency (batching tasks
 // silently dropped all but one).
-// Headline = positive / (positive + negative); neutral shown in the 3-segment bar.
+// Ingest persists raw pos/neg/neu; UI merges neutral into positive (see displayWebSentimentFromRaw).
 
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
@@ -24,6 +24,8 @@ export {
   shouldFetchWebSentiment,
   parseSentimentSummaryTask,
   computePositivePct,
+  allocateNeutralToPositive,
+  displayWebSentimentFromRaw,
   webSentimentLevel,
   webSentimentReadingFromCounts,
   WEB_SENTIMENT_METHOD,

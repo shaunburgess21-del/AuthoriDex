@@ -72,7 +72,36 @@ export function parseSentimentSummaryTask(task: unknown): SentimentCounts | null
   return { positive, negative, neutral, total };
 }
 
-/** Organic headline: positive / (positive + negative). Neutral excluded. */
+/** Display layer: neutral citations count toward positive (two-way bar / %). */
+export function allocateNeutralToPositive(counts: SentimentCounts): SentimentCounts {
+  return {
+    positive: counts.positive + counts.neutral,
+    negative: counts.negative,
+    neutral: 0,
+    total: counts.total,
+  };
+}
+
+/** Headline % and bar counts from raw snapshot diagnostics (ignores stored positivePct). */
+export function displayWebSentimentFromRaw(raw: {
+  webSentimentPositive?: unknown;
+  webSentimentNegative?: unknown;
+  webSentimentNeutral?: unknown;
+  webSentimentTotal?: unknown;
+}): WebSentimentReading {
+  const counts = allocateNeutralToPositive({
+    positive: Number(raw.webSentimentPositive ?? 0),
+    negative: Number(raw.webSentimentNegative ?? 0),
+    neutral: Number(raw.webSentimentNeutral ?? 0),
+    total: Number(raw.webSentimentTotal ?? 0),
+  });
+  return {
+    ...counts,
+    positivePct: computePositivePct(counts.positive, counts.negative),
+  };
+}
+
+/** Headline %: positive / (positive + negative) on display counts. */
 export function computePositivePct(positive: number, negative: number): number | null {
   const pos = Number(positive);
   const neg = Number(negative);

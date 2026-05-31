@@ -73,6 +73,7 @@ import { computeTrendsMomentumDeltaPct, TRENDS_DELTA_METHOD } from "./providers/
 import {
   WEB_SENTIMENT_METHOD,
   WEB_SENTIMENT_MIN_MENTIONS,
+  displayWebSentimentFromRaw,
   webSentimentLevel,
 } from "./providers/dataforseo-sentiment";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
@@ -3107,15 +3108,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const webSentimentMethod = webSentimentDiagRaw?.webSentimentMethod;
       const webSentimentHasCurrentMethod = webSentimentMethod === WEB_SENTIMENT_METHOD;
-      const webSentimentPositivePctRaw = webSentimentDiagRaw?.webSentimentPositivePct;
-      const webSentimentPositivePct =
-        webSentimentPositivePctRaw != null && webSentimentPositivePctRaw !== "null"
-          ? Number(webSentimentPositivePctRaw)
-          : null;
-      const webSentimentPositive = Number(webSentimentDiagRaw?.webSentimentPositive ?? 0);
-      const webSentimentNegative = Number(webSentimentDiagRaw?.webSentimentNegative ?? 0);
-      const webSentimentNeutral = Number(webSentimentDiagRaw?.webSentimentNeutral ?? 0);
-      const webSentimentTotal = Number(webSentimentDiagRaw?.webSentimentTotal ?? 0);
+      const webSentimentDisplay = webSentimentDiagRaw
+        ? displayWebSentimentFromRaw(webSentimentDiagRaw)
+        : null;
+      const webSentimentPositivePct = webSentimentDisplay?.positivePct ?? null;
+      const webSentimentPositive = webSentimentDisplay?.positive ?? 0;
+      const webSentimentNegative = webSentimentDisplay?.negative ?? 0;
+      const webSentimentNeutral = webSentimentDisplay?.neutral ?? 0;
+      const webSentimentTotal = webSentimentDisplay?.total ?? 0;
       const webSentimentWindow = String(webSentimentDiagRaw?.webSentimentWindow ?? "lifetime");
 
       const webSentimentFetchedAtRaw = webSentimentDiagRaw?.webSentimentFetchedAt;
@@ -3134,8 +3134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const freshFlags = diag?.fresh as Record<string, unknown> | undefined;
       const webSentimentCarriedForward = freshFlags?.webSentimentCarriedForward === true;
 
-      const webSentimentMentionSum =
-        webSentimentPositive + webSentimentNegative + webSentimentNeutral;
+      const webSentimentMentionSum = webSentimentPositive + webSentimentNegative;
       const webSentimentHasHeadline =
         webSentimentPositivePct != null && Number.isFinite(webSentimentPositivePct);
       const webSentimentHasBar =
