@@ -16,6 +16,10 @@ _fix-*.cjs
 _fix-*.js
 scripts/.cache/
 
+# Throwaway provider probe scripts (often contain hardcoded API keys —
+# never commit). Local-only diagnostics for news/search providers.
+server/scripts/probe-*
+
 # IDE / agent workspace state
 .claude/
 .cursor/
