@@ -46,6 +46,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useIsHotMover } from "@/hooks/useHotMoverIds";
 import { TrendingPerson } from "@shared/schema";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useAuth } from "@/contexts/AuthContext";
@@ -911,21 +912,7 @@ export default function PersonDetailPage() {
     image: person?.id ? personOgImagePath(person.id) : null,
   });
 
-  const { data: hotMoversData } = useQuery<{ data: Array<{ id: string }> }>({
-    queryKey: ['/api/trending/hot-movers'],
-    queryFn: async () => {
-      const response = await fetch('/api/trending/hot-movers');
-      if (!response.ok) throw new Error('Failed to fetch');
-      return response.json();
-    },
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
-  });
-
-  const isHotMover = useMemo(() => {
-    if (!person || !hotMoversData?.data) return false;
-    return hotMoversData.data.some(m => m.id === person.id);
-  }, [person, hotMoversData]);
+  const isHotMover = useIsHotMover(person?.id);
 
   const isVoteTab = activeTab === "vote";
 

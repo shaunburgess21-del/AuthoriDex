@@ -2,6 +2,7 @@ import { formatDelta } from "@/lib/formatNumber";
 import { Flame, ChevronDown, ArrowRight } from "lucide-react";
 import { PersonAvatar } from "./PersonAvatar";
 import { MoverRowSubtext } from "./MoverRowSubtext";
+import { HOT_MOVERS_QUERY_KEY } from "@/hooks/useHotMoverIds";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 
@@ -29,7 +30,7 @@ interface TrendingNowFeedProps {
 
 export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: TrendingNowFeedProps) {
   const { data: rawResponse } = useQuery<HotMoversResponse | HotMover[]>({
-    queryKey: ['/api/trending/hot-movers'],
+    queryKey: HOT_MOVERS_QUERY_KEY,
     refetchInterval: 60_000,
   });
   const hotMovers: HotMover[] = rawResponse

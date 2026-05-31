@@ -1671,7 +1671,7 @@ export default function HomePage() {
       rank: ((person as any).liveRank ?? person.rank ?? null) as number | null,
       change24h: person.change24h ?? null,
       rankChange: ((person as any).rankChange ?? null) as number | null,
-      hotMover: false,
+      hotMover: hotMoverIds.has(person.id),
     });
   };
 
