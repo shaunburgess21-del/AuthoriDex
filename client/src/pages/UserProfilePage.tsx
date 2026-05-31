@@ -8,12 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
-import { ArrowLeft, Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
+import { SiteHeader } from "@/components/SiteHeader";
+import { Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { voteToApprovalPercent } from "@/lib/utils";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest } from "@/lib/queryClient";
 
 interface MySuggestion {
@@ -202,51 +201,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div
-              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setLocation("/")}
-              data-testid="link-logo-home"
-            >
-              <VoxDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">VoxDex</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
-                Leaderboard
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => {
-                setLocation("/vote");
-                window.scrollTo(0, 0);
-              }} data-testid="nav-vote-desktop">
-                Vote
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
-                Predict
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader backButton="always" />
 
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-6xl">
         {/* Profile card */}

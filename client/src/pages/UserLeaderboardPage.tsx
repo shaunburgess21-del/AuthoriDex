@@ -2,8 +2,7 @@ import { useMemo, useRef, useState, useCallback } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +31,6 @@ import {
   ChevronRight,
   Zap,
   Info,
-  ArrowLeft,
   Flame,
   Lock,
   RefreshCw,
@@ -417,57 +415,7 @@ export default function UserLeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              aria-label="Go back"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <button
-              onClick={() => {
-                setLocation("/");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-              data-testid="button-logo-home"
-            >
-              <VoxDexLogo size={32} variant="predict" />
-              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-4">
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/")} data-testid="nav-leaderboard-desktop">
-                Leaderboard
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
-                Vote
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
-                Predict
-              </Button>
-              <Button variant="ghost" size="sm" className="text-amber-600 dark:text-amber-400 md:text-sm" data-testid="nav-top-predictors-desktop">
-                Top Predictors
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader logoVariant="predict" />
 
       <div className="max-w-5xl mx-auto px-4 pt-8 pb-20">
         {/* Page header + compact last updated */}

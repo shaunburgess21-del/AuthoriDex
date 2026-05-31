@@ -1,4 +1,4 @@
-import { Home, TrendingUp, Vote } from "lucide-react";
+import { Home, TrendingUp, Vote, LineChart } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 
@@ -12,6 +12,7 @@ const navItems: NavItem[] = [
   { path: "/", label: "Home", icon: Home },
   { path: "/vote", label: "Vote", icon: Vote },
   { path: "/predict", label: "Predict", icon: TrendingUp },
+  { path: "/insights", label: "Insights", icon: LineChart },
 ];
 
 export function BottomNav() {

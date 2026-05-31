@@ -12,7 +12,7 @@ import {
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,7 +20,6 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useUserStats } from "@/hooks/useGamification";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { 
-  ArrowLeft, 
   Plus, 
   Vote,
   Users,
@@ -83,7 +82,6 @@ import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
 import { CardSection } from "@/components/CardSection";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
@@ -2672,52 +2670,7 @@ export default function VotePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              className="md:hidden"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <button 
-              onClick={() => {
-                setLocation("/");
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              data-testid="button-logo-home"
-            >
-              <VoxDexLogo size={32} variant="vote" />
-              <span className="font-serif font-bold text-xl">VoxDex</span>
-            </button>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-4">
-              <Link href="/#leaderboard">
-                <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-leaderboard">Leaderboard</Button>
-              </Link>
-              <Link href="/vote">
-                <Button variant="ghost" size="sm" className="text-cyan-700 dark:text-cyan-400 md:text-sm" data-testid="link-nav-vote">Vote</Button>
-              </Link>
-              <Link href="/predict">
-                <Button variant="ghost" size="sm" className="md:text-sm" data-testid="link-nav-predict">Predict</Button>
-              </Link>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader active="vote" logoVariant="vote" />
       <div 
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="section-toggles-container"

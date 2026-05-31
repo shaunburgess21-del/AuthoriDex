@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
-import { ArrowLeft } from "lucide-react";
+import { Link } from "wouter";
 import { parseTab } from "@shared/insights/filters";
 import type { InsightsTab } from "@shared/insights/filters";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
@@ -13,13 +12,11 @@ import { MarketsTab } from "@/components/insights/MarketsTab";
 import { ApprovalTab } from "@/components/insights/ApprovalTab";
 import { useAuth } from "@/contexts/AuthContext";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
 
 export default function InsightsPage() {
   const { isLoggedIn } = useAuth();
-  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<InsightsTab>(() => parseTab(window.location.search));
 
   useEffect(() => {
@@ -41,52 +38,7 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 bg-background overflow-x-clip">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 max-w-7xl h-16 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden shrink-0"
-              onClick={() => {
-                if (window.history.length > 1) window.history.back();
-                else setLocation("/");
-              }}
-              aria-label="Go back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <Link
-              href="/"
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0"
-            >
-              <VoxDexLogo size={32} variant="default" />
-              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
-            </Link>
-          </div>
-          <nav className="hidden md:flex items-center gap-1 text-sm">
-            <Link href="/">
-              <Button variant="ghost" size="sm">
-                Home
-              </Button>
-            </Link>
-            <Link href="/vote">
-              <Button variant="ghost" size="sm">
-                Vote
-              </Button>
-            </Link>
-            <Link href="/predict">
-              <Button variant="ghost" size="sm">
-                Predict
-              </Button>
-            </Link>
-            <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400">
-              Insights
-            </Button>
-          </nav>
-          <HeaderUserActions />
-        </div>
-      </header>
+      <SiteHeader active="insights" />
 
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 max-w-7xl py-5 md:py-6">

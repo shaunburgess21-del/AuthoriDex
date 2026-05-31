@@ -5,7 +5,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { toast } from "sonner";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill, getCategoryTextColor, getCategoryStyle } from "@/components/CategoryPill";
@@ -70,7 +70,6 @@ import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, Link } from "wouter";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
@@ -1809,53 +1808,14 @@ export default function HomePage() {
           </div>
         </div>
       )}
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <button 
-            onClick={() => {
-              setActiveView("leaderboard");
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            data-testid="button-logo-home"
-          >
-            <VoxDexLogo size={32} />
-            <span className="font-serif font-bold text-xl">VoxDex</span>
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="text-blue-700 dark:text-blue-400 md:text-sm" 
-                onClick={() => {
-                  setActiveView("leaderboard");
-                  document.getElementById("leaderboard")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                data-testid="nav-leaderboard-desktop"
-              >
-                Leaderboard
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="md:text-sm"
-                onClick={() => {
-                  setLocation("/vote");
-                  window.scrollTo(0, 0);
-                }} 
-                data-testid="nav-vote-desktop"
-              >
-                Vote
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
-                Predict
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        active="home"
+        backButton="none"
+        onHomeClick={() => {
+          setActiveView("leaderboard");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
       <VoxDexPulse collapsed={pulseCollapsed} onToggle={handlePulseToggle} />
       <WelcomeModal ref={welcomeOnboardingRef} />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable

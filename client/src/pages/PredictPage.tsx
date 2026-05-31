@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -53,7 +53,6 @@ import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import { 
-  ArrowLeft, 
   TrendingUp, 
   TrendingDown, 
   Zap, 
@@ -111,7 +110,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
@@ -2965,75 +2963,28 @@ export default function PredictPage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              className="md:hidden"
-              aria-label="Go back"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
+      <SiteHeader
+        active="predict"
+        logoVariant="predict"
+        mobileExtras={(
+          <div className="flex items-center gap-1.5 md:hidden">
+            {user && (
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setLocation("/me/credits")}
+                data-testid="predict-mobile-credits-pill"
+              >
+                <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+                <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
+              </button>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
+              <ScrollText className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <button 
-              onClick={() => {
-                setLocation("/");
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              data-testid="button-logo-home"
-            >
-              <VoxDexLogo size={32} variant="predict" />
-              <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
-            </button>
           </div>
-          
-          {/* Right cluster.
-              On md+: `[Leaderboard] [Vote] [Predict] [Bell] [UserMenu]` with gap-3.
-              On mobile: `[Credits][ScrollText]` then `[Bell][UserMenu]` — outer row
-              uses gap-2 for ~360px widths. Bell + UserMenu use the same defaults as
-              Vote / Leaderboard (`HeaderUserActions`); rules stays h-8. */}
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="hidden md:flex items-center gap-4">
-              <Link href="/#leaderboard">
-                <Button variant="ghost" size="sm" className="md:text-sm">Leaderboard</Button>
-              </Link>
-              <Link href="/vote">
-                <Button variant="ghost" size="sm" className="md:text-sm">Vote</Button>
-              </Link>
-              <Link href="/predict">
-                <Button variant="ghost" size="sm" className="text-violet-700 dark:text-violet-500 md:text-sm">Predict</Button>
-              </Link>
-            </div>
-            <div className="flex items-center gap-1.5 md:hidden">
-              {user && (
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setLocation("/me/credits")}
-                  data-testid="predict-mobile-credits-pill"
-                >
-                  <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                  <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
-                </button>
-              )}
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
-                <ScrollText className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+        )}
+      />
       <div data-testid="pre-timer-sticky-scope">
       <div
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"

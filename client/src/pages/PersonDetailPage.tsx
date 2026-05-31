@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
@@ -56,7 +56,6 @@ import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -1274,49 +1273,7 @@ export default function PersonDetailPage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              aria-label="Go back"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div 
-              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setLocation("/")}
-              data-testid="link-logo-home"
-            >
-              <VoxDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">VoxDex</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
-                Leaderboard
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")} data-testid="nav-vote-desktop">
-                Vote
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
-                Predict
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader backButton="always" />
       <div className="container mx-auto px-2 sm:px-4 pt-4 md:pt-12 max-w-6xl">
         {/* 1. Header: Name + Category */}
         <div className="mb-8">

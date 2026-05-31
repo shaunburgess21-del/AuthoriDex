@@ -1,14 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { ArrowLeft, User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award } from "lucide-react";
+import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
@@ -26,53 +25,7 @@ export default function MePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  setLocation("/");
-                }
-              }}
-              className="md:hidden"
-              aria-label="Go back"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div 
-              className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setLocation("/")}
-              data-testid="link-logo-home"
-            >
-              <VoxDexLogo size={32} />
-              <span className="font-serif font-bold text-xl">VoxDex</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/#leaderboard")} data-testid="nav-leaderboard-desktop">
-                Leaderboard
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => {
-                setLocation("/vote");
-                window.scrollTo(0, 0);
-              }} data-testid="nav-vote-desktop">
-                Vote
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")} data-testid="nav-predict-desktop">
-                Predict
-              </Button>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
         <h1 className="text-3xl font-serif font-bold mb-6" data-testid="text-me-title">
