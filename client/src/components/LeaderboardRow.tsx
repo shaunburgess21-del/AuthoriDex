@@ -5,7 +5,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
-import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X } from "lucide-react";
+import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X, Flame } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -37,6 +37,7 @@ interface ExtendedPerson extends TrendingPerson {
 interface LeaderboardRowProps {
   person: ExtendedPerson;
   activeTab?: LeaderboardTab;
+  isHotMover?: boolean;
   onOpenInsight: () => void;
   onVoteClick?: () => void;
   onPredictUp?: () => void;
@@ -73,6 +74,7 @@ function markEverVoted() {
 export function LeaderboardRow({
   person,
   activeTab = "fame",
+  isHotMover = false,
   onOpenInsight,
   onVoteClick,
   onPredictUp,
@@ -212,8 +214,17 @@ export function LeaderboardRow({
           />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm sm:text-base truncate" data-testid={`text-name-${person.id}`}>
-            {person.name}
+          <h3
+            className="flex items-center gap-1.5 font-semibold text-sm sm:text-base min-w-0"
+            data-testid={`text-name-${person.id}`}
+          >
+            <span className="truncate">{person.name}</span>
+            {isHotMover && (
+              <Flame
+                className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+                aria-label="Hot Mover"
+              />
+            )}
           </h3>
           {person.category && (() => {
             const canonicalCategoryId = categoryRegistry.resolveCanonicalId(person.category);

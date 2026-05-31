@@ -78,6 +78,7 @@ import {
 } from "./providers/dataforseo-sentiment";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
+import { HOT_MOVERS_CAP, selectHotMovers } from "./services/trending/hot-movers";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
 import { VOTE_TAB_VOTE_TYPES } from "./utils/vote-actions";
 import {
@@ -1492,11 +1493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // correlated in production, so the bands collapsed to a single
       // "Breakout" group anyway. The list is now simply the biggest
       // upward movers, ranked by raw 24h percentage change.
-      const HOT_MOVERS_CAP = 5;
-      const candidates = people
-        .filter(p => p.change24h != null && p.change24h > 0)
-        .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
-        .slice(0, HOT_MOVERS_CAP);
+      const candidates = selectHotMovers(people);
 
       const result = candidates.map(p => ({
         id: p.id,

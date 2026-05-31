@@ -7,10 +7,10 @@ import {
   type WhyTrendingPayload,
 } from "../services/why-trending";
 import type { TrendingPerson } from "@shared/schema";
+import { selectHotMovers } from "../services/trending/hot-movers";
 
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 1000;
-const HOT_MOVERS_CAP = 5;
 
 export interface WhyTrendingCronResult {
   total: number;
@@ -48,10 +48,7 @@ async function collectEligiblePeople(): Promise<Array<{ person: TrendingPerson; 
   }
 
   if (baselineMeta.baseline24hStatus === "normal") {
-    const hotCandidates = people
-      .filter((p) => p.change24h != null && p.change24h > 0)
-      .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))
-      .slice(0, HOT_MOVERS_CAP);
+    const hotCandidates = selectHotMovers(people);
 
     for (const person of hotCandidates) {
       if (!byId.has(person.id)) {

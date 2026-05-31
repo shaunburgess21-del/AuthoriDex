@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Popover, PopoverAnchor, PopoverContent, PopoverClose } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatVox } from "@/lib/currency";
 import type { LucideIcon } from "lucide-react";
@@ -1632,6 +1633,8 @@ export default function HomePage() {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  const hotMoverIds = useHotMoverIds();
+
   const {
     data: selectedInsightMomentum,
     isLoading: selectedInsightMomentumLoading,
@@ -2403,6 +2406,7 @@ export default function HomePage() {
                         key={person.id}
                         person={person}
                         activeTab={leaderboardTab}
+                        isHotMover={hotMoverIds.has(person.id)}
                         onOpenInsight={() => openInsightFromTrendingPerson(person)}
                         onVoteClick={() => handleVoteClick(person.id)}
                         onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
