@@ -60,11 +60,11 @@ function markEverVoted() {
 
 function RankDeltaPill({
   rankChange,
-  size = "default",
+  size = "desktop",
   className = "",
 }: {
   rankChange: number;
-  size?: "default" | "compact";
+  size?: "desktop" | "compact";
   className?: string;
 }) {
   const isUp = rankChange > 0;
@@ -74,15 +74,11 @@ function RankDeltaPill({
       className={`inline-flex items-center justify-center font-mono tabular-nums ${
         compact
           ? "min-w-0 gap-px px-1 py-0.5 rounded-sm text-[10px] font-medium leading-none"
-          : "min-w-[2rem] px-2 py-0.5 rounded text-xs font-semibold"
+          : "min-w-0 gap-px px-1.5 py-px rounded-sm text-[11px] font-medium leading-none"
       } ${
         isUp
-          ? compact
-            ? "bg-green-500/10 text-green-600/90 dark:text-green-400/90"
-            : "bg-green-500/15 text-green-600 dark:text-green-400"
-          : compact
-            ? "bg-red-500/10 text-red-600/90 dark:text-red-400/90"
-            : "bg-red-500/15 text-red-600 dark:text-red-400"
+          ? "bg-green-500/10 text-green-600/90 dark:text-green-400/90"
+          : "bg-red-500/10 text-red-600/90 dark:text-red-400/90"
       } ${className}`}
     >
       {isUp ? "\u25B2" : "\u25BC"}
@@ -319,7 +315,7 @@ export function LeaderboardRow({
                 contentClassName="max-w-[230px]"
               >
                 <span
-                  className="inline-flex items-center gap-1.5 cursor-help"
+                  className="inline-flex items-center gap-1 cursor-help"
                   data-testid={`text-delta-desktop-${person.id}`}
                 >
                   <span
