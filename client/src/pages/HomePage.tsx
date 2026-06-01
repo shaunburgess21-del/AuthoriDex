@@ -628,7 +628,11 @@ function InsightPanelContent({
   const previousRank = currentRank != null && typeof person.rankChange === "number"
     ? currentRank + person.rankChange
     : null;
-  const showRankShift = currentRank != null && previousRank != null;
+  const showRankShift =
+    currentRank != null &&
+    previousRank != null &&
+    currentRank >= 1 &&
+    previousRank >= 1;
   const rankChange = person.rankChange ?? 0;
 
   const [, setLocation] = useLocation();
@@ -697,8 +701,8 @@ function InsightPanelContent({
   const categoryStyle = person.category ? getCategoryStyle(person.category) : null;
 
   return (
-    <div className="space-y-3 sm:space-y-4 sm:pt-2">
-      <div className="flex items-center gap-3 px-3 py-2 sm:p-3 sm:pr-8 rounded-lg bg-muted/40 border border-border/50">
+    <div className="space-y-3 sm:space-y-4 sm:pt-2 min-w-0 w-full">
+      <div className="flex items-center gap-3 px-3 py-2 sm:p-3 rounded-lg bg-muted/40 border border-border/50 min-w-0">
         <button
           type="button"
           onClick={onViewProfile}
@@ -787,14 +791,14 @@ function InsightPanelContent({
         )}
       </div>
 
-      <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+      <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">24H RANK MOVEMENT</p>
         {showRankShift ? (
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-sm font-medium">
+          <div className="flex items-center justify-between gap-3 flex-wrap min-w-0">
+            <p className="text-sm font-medium shrink-0">
               Was #{previousRank} {"\u2192"} Now #{currentRank}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
               {typeof person.change24h === "number" && person.change24h !== 0 && (
                 <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
                   person.change24h > 0
@@ -844,9 +848,9 @@ function InsightPanelContent({
       ) : (
         <>
           {growthSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">GROWTH SIGNALS</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 min-w-0">
                 {growthSignals.map((signal) => (
                   <span
                     key={signal.label}
@@ -859,9 +863,9 @@ function InsightPanelContent({
             </div>
           )}
           {coolingSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">COOLING SIGNALS</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 min-w-0">
                 {coolingSignals.map((signal) => (
                   <span
                     key={signal.label}
@@ -876,32 +880,30 @@ function InsightPanelContent({
         </>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-        <div className="flex flex-row gap-2 sm:contents">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setLocation(`/person/${person.id}?tab=vote`);
-              onClose();
-            }}
-            className="flex-1 sm:flex-initial bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20 hover:bg-cyan-500/35 dark:hover:bg-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400"
-            data-testid="button-insight-vote"
-          >
-            Vote
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setLocation(`/person/${person.id}?tab=predict`);
-              onClose();
-            }}
-            className="flex-1 sm:flex-initial bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20 hover:bg-violet-500/35 dark:hover:bg-violet-500/30 hover:text-violet-600 dark:hover:text-violet-400"
-            data-testid="button-insight-predict"
-          >
-            Predict
-          </Button>
-        </div>
-        <Button onClick={onViewProfile}>
+      <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:justify-end min-w-0 w-full">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setLocation(`/person/${person.id}?tab=vote`);
+            onClose();
+          }}
+          className="flex-1 sm:flex-none shrink-0 bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20 hover:bg-cyan-500/35 dark:hover:bg-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400"
+          data-testid="button-insight-vote"
+        >
+          Vote
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setLocation(`/person/${person.id}?tab=predict`);
+            onClose();
+          }}
+          className="flex-1 sm:flex-none shrink-0 bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20 hover:bg-violet-500/35 dark:hover:bg-violet-500/30 hover:text-violet-600 dark:hover:text-violet-400"
+          data-testid="button-insight-predict"
+        >
+          Predict
+        </Button>
+        <Button onClick={onViewProfile} className="flex-1 sm:flex-none shrink-0">
           View full profile
         </Button>
       </div>
@@ -948,9 +950,9 @@ function InsightWhyTrendingSnippet({
   }
 
   return (
-    <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+    <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
       <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">WHY THEY'RE TRENDING</p>
-      <p className="text-xs leading-snug text-muted-foreground line-clamp-3" data-testid="text-insight-why-trending">
+      <p className="text-xs leading-snug text-muted-foreground line-clamp-3 break-words" data-testid="text-insight-why-trending">
         {data.summary}
       </p>
       <div className="flex justify-end mt-1.5">
@@ -1631,7 +1633,7 @@ export default function HomePage() {
         </Drawer>
       ) : (
         <Dialog open={!!selectedInsightPerson} onOpenChange={(open) => { if (!open) handleCloseInsightPanel(); }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md overflow-x-hidden [&>*]:min-w-0">
             {selectedInsightPerson && (
               <>
                 <DialogHeader className="sr-only">
