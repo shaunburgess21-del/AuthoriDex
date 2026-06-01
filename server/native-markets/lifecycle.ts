@@ -61,17 +61,39 @@ function envFlag(value: string | undefined): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }
 
+/**
+ * Market types that use Friday 23:59 UTC betting cutoff when
+ * `NATIVE_FRIDAY_CUTOFF_ENABLED` is on. H2H and gainer keep the short
+ * AMM pre-resolve window (see plan: concentration fix targets thin
+ * weekly up/down cards only).
+ */
+export const NATIVE_FRIDAY_CUTOFF_MARKET_TYPES = ["updown"] as const;
+
+export type NativeFridayCutoffMarketType =
+  (typeof NATIVE_FRIDAY_CUTOFF_MARKET_TYPES)[number];
+
+/** True when this market type gets the weekly Friday lock under the flag. */
+export function usesNativeFridayBettingCutoff(
+  marketType: string | null | undefined,
+  engine: MarketEngine = "amm",
+): boolean {
+  return (
+    envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED) &&
+    engine === "amm" &&
+    marketType != null &&
+    (NATIVE_FRIDAY_CUTOFF_MARKET_TYPES as readonly string[]).includes(
+      marketType,
+    )
+  );
+}
+
 /** Friday 23:59 UTC cutoff for weekly up/down when `NATIVE_FRIDAY_CUTOFF_ENABLED`. */
 function nativeFridayCutoffForUpdown(
   endAt: Date,
   engine: MarketEngine,
   marketType?: string,
 ): boolean {
-  return (
-    envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED) &&
-    engine === "amm" &&
-    marketType === "updown"
-  );
+  return usesNativeFridayBettingCutoff(marketType, engine);
 }
 
 export function getMarketBettingCutoff(
@@ -87,7 +109,7 @@ export function getMarketBettingCutoff(
 
 /** User-facing copy when a buy is rejected past cutoff. */
 export function getAmmTradingClosedMessage(marketType?: string): string {
-  if (envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED) && marketType === "updown") {
+  if (usesNativeFridayBettingCutoff(marketType, "amm")) {
     return "Weekly trading closed — entries locked Friday 23:59 UTC until results Sunday.";
   }
   return "Trading is closed (final minutes before resolution). This market is now locked.";

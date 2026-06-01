@@ -80,6 +80,42 @@ function readThresholds(): DrainBreakerThresholds {
   };
 }
 
+async function fetchHouse24hPnl(): Promise<{
+  houseBalance: number;
+  houseDelta24h: number;
+  found: boolean;
+}> {
+  const [houseProfile] = await db
+    .select({ predictCredits: profiles.predictCredits })
+    .from(profiles)
+    .where(eq(profiles.id, HOUSE_PROFILE_ID))
+    .limit(1);
+
+  if (!houseProfile) {
+    return { houseBalance: 0, houseDelta24h: 0, found: false };
+  }
+
+  const cutoff = new Date(Date.now() - WINDOW_MS);
+  const [delta] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${creditLedger.amount}), 0)`,
+    })
+    .from(creditLedger)
+    .where(
+      and(
+        eq(creditLedger.userId, HOUSE_PROFILE_ID),
+        inArray(creditLedger.txnType, HOUSE_PNL_TXN_TYPES as readonly string[]),
+        sql`${creditLedger.createdAt} >= ${cutoff}`,
+      ),
+    );
+
+  return {
+    houseBalance: houseProfile.predictCredits,
+    houseDelta24h: Number(delta?.total ?? 0),
+    found: true,
+  };
+}
+
 export interface DrainBreakerCheckResult {
   /** True when the call resulted in a trip (i.e. agents now paused
    *  because of this run). False if no-op (already paused, or below
@@ -117,13 +153,9 @@ export async function checkAndTripDrainBreaker(): Promise<DrainBreakerCheckResul
   // Read house balance + prior pause state up front. These are two
   // separate reads (different tables) but both small singleton-style
   // queries so the cost is negligible.
-  const [houseProfile] = await db
-    .select({ predictCredits: profiles.predictCredits })
-    .from(profiles)
-    .where(eq(profiles.id, HOUSE_PROFILE_ID))
-    .limit(1);
+  const { houseBalance, houseDelta24h, found } = await fetchHouse24hPnl();
 
-  if (!houseProfile) {
+  if (!found) {
     return {
       tripped: false,
       reason: "house_profile_missing",
@@ -133,26 +165,6 @@ export async function checkAndTripDrainBreaker(): Promise<DrainBreakerCheckResul
       thresholdApplied: 0,
     };
   }
-
-  const houseBalance = houseProfile.predictCredits;
-
-  const cutoff = new Date(Date.now() - WINDOW_MS);
-  const [delta] = await db
-    .select({
-      total: sql<string>`COALESCE(SUM(${creditLedger.amount}), 0)`,
-    })
-    .from(creditLedger)
-    .where(
-      and(
-        eq(creditLedger.userId, HOUSE_PROFILE_ID),
-        // Consume the shared constant via `inArray` so adding a new AMM
-        // txn type in `amm-ledger-types.ts` automatically flows through
-        // here — see `tests/amm-house-pnl-consistency.test.ts`.
-        inArray(creditLedger.txnType, HOUSE_PNL_TXN_TYPES as readonly string[]),
-        sql`${creditLedger.createdAt} >= ${cutoff}`,
-      ),
-    );
-  const houseDelta24h = Number(delta?.total ?? 0);
 
   const { trip, thresholdApplied } = evaluateDrainBreaker({
     houseDelta24h,
@@ -235,5 +247,47 @@ export async function checkAndTripDrainBreaker(): Promise<DrainBreakerCheckResul
     houseBalance,
     thresholds,
     thresholdApplied,
+  };
+}
+
+export interface DrainBreakerSnapshot {
+  houseDelta24h: number;
+  houseBalance: number;
+  thresholds: DrainBreakerThresholds;
+  thresholdApplied: number;
+  /** Credits of additional 24h loss before trip (negative if already over). */
+  lossHeadroom: number;
+  agentsPaused: boolean;
+  pauseReason: string | null;
+  wouldTrip: boolean;
+}
+
+/**
+ * Read-only drain-breaker view for ops scripts (does not pause agents).
+ */
+export async function fetchDrainBreakerSnapshot(): Promise<DrainBreakerSnapshot> {
+  const thresholds = readThresholds();
+  const { houseBalance, houseDelta24h } = await fetchHouse24hPnl();
+
+  const { trip, thresholdApplied } = evaluateDrainBreaker({
+    houseDelta24h,
+    houseBalance,
+    thresholds,
+  });
+
+  const loss = houseDelta24h < 0 ? -houseDelta24h : 0;
+  const lossHeadroom = thresholdApplied - loss;
+
+  const runtime = await getAgentRuntimeState();
+
+  return {
+    houseDelta24h,
+    houseBalance,
+    thresholds,
+    thresholdApplied,
+    lossHeadroom,
+    agentsPaused: runtime.paused,
+    pauseReason: runtime.reason,
+    wouldTrip: trip && !runtime.paused,
   };
 }

@@ -22,6 +22,8 @@
  *      lookback window. Warns at 5%, fails at 10%.
  *   8. Up/Down calibration — avg |actual win rate − final UP price| on
  *      decided buckets (warn >0.12, fail >0.20).
+ *   9. Live convergence (advisory) — open markets: |fair − price| on
+ *      decided weekly moves (warn only; never fails `ok`).
  *
  * Failure semantics: any check returning status="fail" makes the overall
  * result `ok=false`. "warn" rows do NOT flip ok — operators should still
@@ -91,6 +93,7 @@ export async function runAmmHealthCheck(
   checks.push(await checkAgentPause());
   checks.push(await checkTieVoidRate(lookbackDays));
   checks.push(await checkMarketCalibration(lookbackDays));
+  checks.push(await checkLiveConvergence());
 
   const passed = checks.filter((c) => c.status === "pass").length;
   const warned = checks.filter((c) => c.status === "warn").length;
@@ -576,6 +579,45 @@ async function checkTieVoidRate(lookbackDays: number): Promise<CheckResult> {
 // ---------------------------------------------------------------------------
 const CALIBRATION_GAP_WARN = 0.12;
 const CALIBRATION_GAP_FAIL = 0.20;
+
+async function checkLiveConvergence(): Promise<CheckResult> {
+  const {
+    fetchLiveUpDownConvergence,
+    LIVE_CONVERGENCE_AVG_GAP_WARN,
+    LIVE_CONVERGENCE_MISPRICED_WARN_PCT,
+  } = await import("../agents/liveConvergence.ts");
+
+  const live = await fetchLiveUpDownConvergence();
+  const { summary } = live;
+  const mispricedPct = summary.decidedMispricedPct;
+  const avgGap = summary.avgAbsGapOnDecided;
+
+  let status: CheckStatus = "pass";
+  if (
+    (mispricedPct != null && mispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
+    (avgGap != null && avgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
+  ) {
+    status = "warn";
+  }
+
+  return {
+    name: "Live Up/Down convergence (open markets)",
+    status,
+    rowCount: summary.decidedCount,
+    details:
+      summary.decidedCount === 0
+        ? "No decided open up/down markets (|pct vs open| < 10%)."
+        : `${summary.decidedMispricedCount}/${summary.decidedCount} decided mispriced (|fair−price|>10pp, ${mispricedPct != null ? `${(mispricedPct * 100).toFixed(0)}%` : "n/a"}); avg |gap|=${avgGap?.toFixed(3) ?? "n/a"}; arb-eligible=${summary.arbEligibleCount}. Run: npm run amm:convergence`,
+    sample: live.markets.slice(0, 5).map((m) => ({
+      marketId: m.marketId.slice(0, 8),
+      gap: m.gap,
+      pctOpen: m.pctChangeVsOpen,
+      price: m.favoredPrice,
+      fair: m.favoredFair,
+      sampledAt: live.sampledAt,
+    })),
+  };
+}
 
 async function checkMarketCalibration(lookbackDays: number): Promise<CheckResult> {
   const { fetchUpDownCalibration } = await import("../agents/marketCalibration.ts");
