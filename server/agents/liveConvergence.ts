@@ -1,16 +1,24 @@
 /**
- * Live Up/Down AMM convergence diagnostics — open markets only.
- * Compares current UP price to lock-in fair value from trend vs weekly open.
+ * Live native AMM convergence diagnostics — open markets only.
+ * Up/Down: lock-in fair from pct vs open. H2H: lock-in fair from score ratio.
  */
 
-import { sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
+import { marketEntries, trendingPeople } from "@shared/schema";
 import {
   computeLockInFairUp,
+  fairH2HByEntryId,
+  favoredH2HFromFairMap,
   hoursUntilEnd,
   LOCKIN_DECISIVE_PCT,
 } from "./lockInFair";
-import { ARB_MIN_EDGE_PP } from "./constants";
+import {
+  ARB_MIN_EDGE_PP,
+  LOCKIN_H2H_DECISIVE_FAIR,
+  LOCKIN_H2H_SIGMA_1D,
+  LOCKIN_H2H_BETA,
+} from "./constants";
 
 /** |fair − price| above this counts as mispriced (10pp, same as lock-in decisive band). */
 const MISPRICED_GAP_PP = LOCKIN_DECISIVE_PCT;
@@ -55,6 +63,25 @@ export interface LiveConvergenceResult {
   sampledAt: string;
 }
 
+export interface LiveH2HConvergenceMarketRow {
+  marketId: string;
+  title: string | null;
+  hoursRemaining: number;
+  favoredLabel: string | null;
+  favoredFair: number | null;
+  favoredPrice: number | null;
+  gap: number | null;
+  scoreRatio: number | null;
+  volume: number;
+  liquidityB: number;
+}
+
+export interface LiveH2HConvergenceResult {
+  markets: LiveH2HConvergenceMarketRow[];
+  summary: LiveConvergenceSummary;
+  sampledAt: string;
+}
+
 function lmsrUpPrice(
   b: number,
   sq: Record<string, number>,
@@ -68,6 +95,66 @@ function lmsrUpPrice(
   const ed = Math.exp(qd / b);
   const denom = eu + ed;
   return denom > 0 ? eu / denom : 0.5;
+}
+
+function lmsrEntryPrice(
+  b: number,
+  sq: Record<string, number>,
+  entryId: string,
+  entryIds: string[],
+): number {
+  if (!Number.isFinite(b) || b <= 0 || entryIds.length === 0) {
+    return 1 / Math.max(1, entryIds.length);
+  }
+  const qs = entryIds.map((id) => Number(sq[id] ?? 0));
+  const maxQ = Math.max(...qs);
+  const weights = qs.map((q) => Math.exp((q - maxQ) / b));
+  const sum = weights.reduce((a, w) => a + w, 0);
+  if (sum <= 0) return 1 / entryIds.length;
+  const idx = entryIds.indexOf(entryId);
+  return idx >= 0 ? weights[idx]! / sum : 1 / entryIds.length;
+}
+
+function summarizeConvergenceGaps<T extends {
+  gap: number | null;
+  volume: number;
+  favoredFair: number | null;
+}>(
+  markets: T[],
+  isDecided: (m: T) => boolean,
+): LiveConvergenceSummary {
+  const withFair = markets.filter((m) => m.gap != null);
+  const decided = withFair.filter(isDecided);
+  const mispriced = decided.filter(
+    (m) => m.gap != null && Math.abs(m.gap) > MISPRICED_GAP_PP,
+  );
+  const arbEligible = decided.filter(
+    (m) => m.gap != null && m.gap > ARB_MIN_EDGE_PP,
+  );
+  const avgAbsGapOnDecided =
+    decided.length > 0
+      ? decided.reduce((s, m) => s + Math.abs(m.gap!), 0) / decided.length
+      : null;
+  const avgGapOnDecided =
+    decided.length > 0
+      ? decided.reduce((s, m) => s + m.gap!, 0) / decided.length
+      : null;
+  const roughUnderpricingExposure = decided.reduce(
+    (s, m) => s + Math.max(0, m.gap ?? 0) * (m.volume || 0),
+    0,
+  );
+  return {
+    openMarkets: markets.length,
+    withFair: withFair.length,
+    decidedCount: decided.length,
+    decidedMispricedCount: mispriced.length,
+    decidedMispricedPct:
+      decided.length > 0 ? mispriced.length / decided.length : null,
+    avgAbsGapOnDecided,
+    avgGapOnDecided,
+    roughUnderpricingExposure,
+    arbEligibleCount: arbEligible.length,
+  };
 }
 
 export async function fetchLiveUpDownConvergence(
@@ -175,49 +262,133 @@ export async function fetchLiveUpDownConvergence(
 
   markets.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
 
-  const withFair = markets.filter((m) => m.gap != null);
-  const decided = withFair.filter(
-    (m) =>
+  return {
+    markets,
+    summary: summarizeConvergenceGaps(markets, (m) =>
       m.pctChangeVsOpen != null &&
       Math.abs(m.pctChangeVsOpen) >= LOCKIN_DECISIVE_PCT,
-  );
-  const mispriced = decided.filter(
-    (m) => m.gap != null && Math.abs(m.gap) > MISPRICED_GAP_PP,
-  );
-  const arbEligible = decided.filter(
-    (m) => m.gap != null && m.gap > ARB_MIN_EDGE_PP,
-  );
+    ),
+    sampledAt: now.toISOString(),
+  };
+}
 
-  const avgAbsGapOnDecided =
-    decided.length > 0
-      ? decided.reduce((s, m) => s + Math.abs(m.gap!), 0) / decided.length
-      : null;
-  const avgGapOnDecided =
-    decided.length > 0
-      ? decided.reduce((s, m) => s + m.gap!, 0) / decided.length
-      : null;
+export async function fetchLiveH2HConvergence(
+  now: Date = new Date(),
+): Promise<LiveH2HConvergenceResult> {
+  const marketRows = await db.execute(sql`
+    SELECT
+      pm.id AS market_id,
+      pm.title,
+      pm.end_at,
+      mas.liquidity_b,
+      mas.share_quantities AS sq,
+      COALESCE(mas.total_user_credits_in, 0)::float AS volume
+    FROM prediction_markets pm
+    INNER JOIN market_amm_state mas ON mas.market_id = pm.id
+    WHERE pm.engine = 'amm'
+      AND pm.market_type = 'h2h'
+      AND pm.status = 'OPEN'
+      AND pm.visibility = 'live'
+      AND pm.end_at > ${now}
+  `);
 
-  const roughUnderpricingExposure = decided.reduce(
-    (s, m) => s + Math.max(0, m.gap ?? 0) * (m.volume || 0),
-    0,
+  const marketIds = (marketRows.rows as Array<{ market_id: string }>).map(
+    (r) => r.market_id,
   );
+  if (marketIds.length === 0) {
+    return {
+      markets: [],
+      summary: summarizeConvergenceGaps([], () => false),
+      sampledAt: now.toISOString(),
+    };
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      entryId: marketEntries.id,
+      label: marketEntries.label,
+      score: trendingPeople.fameIndex,
+    })
+    .from(marketEntries)
+    .leftJoin(trendingPeople, eq(trendingPeople.id, marketEntries.personId))
+    .where(inArray(marketEntries.marketId, marketIds));
+
+  const entriesByMarket = new Map<
+    string,
+    Array<{ id: string; label: string | null; score: number | null }>
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.entryId, label: row.label, score: row.score });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const markets: LiveH2HConvergenceMarketRow[] = [];
+
+  for (const row of marketRows.rows as Array<{
+    market_id: string;
+    title: string | null;
+    end_at: Date | string;
+    liquidity_b: string | number;
+    sq: Record<string, number>;
+    volume: number;
+  }>) {
+    const entries = entriesByMarket.get(row.market_id) ?? [];
+    if (entries.length !== 2) continue;
+    const [eA, eB] = entries;
+    if (
+      eA.score == null ||
+      !Number.isFinite(eA.score) ||
+      eB.score == null ||
+      !Number.isFinite(eB.score)
+    ) {
+      continue;
+    }
+
+    const b = Number(row.liquidity_b);
+    const sq = row.sq ?? {};
+    const entryIds = [eA.id, eB.id];
+    const endAt =
+      row.end_at instanceof Date ? row.end_at : new Date(row.end_at);
+    const hrs = hoursUntilEnd(endAt, now);
+    const fairMap = fairH2HByEntryId(
+      eA.id,
+      eA.score,
+      eB.id,
+      eB.score,
+      hrs,
+      LOCKIN_H2H_SIGMA_1D,
+      LOCKIN_H2H_BETA,
+    );
+    const favored = favoredH2HFromFairMap(fairMap);
+    if (!favored) continue;
+
+    const favoredPrice = lmsrEntryPrice(b, sq, favored.entryId, entryIds);
+    const gap = favored.fair - favoredPrice;
+    const favoredEntry = entries.find((e) => e.id === favored.entryId);
+
+    markets.push({
+      marketId: row.market_id,
+      title: row.title,
+      hoursRemaining: hrs,
+      favoredLabel: favoredEntry?.label ?? null,
+      favoredFair: favored.fair,
+      favoredPrice,
+      gap,
+      scoreRatio: eA.score / eB.score,
+      volume: Number(row.volume) || 0,
+      liquidityB: b,
+    });
+  }
+
+  markets.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
 
   return {
     markets,
-    summary: {
-      openMarkets: markets.length,
-      withFair: withFair.length,
-      decidedCount: decided.length,
-      decidedMispricedCount: mispriced.length,
-      decidedMispricedPct:
-        decided.length > 0
-          ? mispriced.length / decided.length
-          : null,
-      avgAbsGapOnDecided,
-      avgGapOnDecided,
-      roughUnderpricingExposure,
-      arbEligibleCount: arbEligible.length,
-    },
+    summary: summarizeConvergenceGaps(markets, (m) =>
+      m.favoredFair != null && m.favoredFair >= LOCKIN_H2H_DECISIVE_FAIR,
+    ),
     sampledAt: now.toISOString(),
   };
 }

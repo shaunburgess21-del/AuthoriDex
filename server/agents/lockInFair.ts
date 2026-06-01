@@ -59,6 +59,11 @@ export interface LockInFairInput {
   marketType?: string;
   sigma1d?: number;
   beta?: number;
+  /** H2H: entry ids + live scores for fairByEntryId. */
+  entryAId?: string;
+  entryBId?: string;
+  scoreA?: number;
+  scoreB?: number;
 }
 
 export interface LockInFairResult {
@@ -110,11 +115,67 @@ export function computeLockInFairH2H(
   return clampFair(normalCdf(z));
 }
 
+/**
+ * H2H fair probabilities keyed by entry id (P(A wins), P(B wins) = 1 - P(A)).
+ */
+export function fairH2HByEntryId(
+  entryAId: string,
+  scoreA: number,
+  entryBId: string,
+  scoreB: number,
+  hoursRemaining: number,
+  sigma1d = LOCKIN_SIGMA_1D,
+  beta = LOCKIN_BETA,
+): Record<string, number> {
+  const pA = computeLockInFairH2H(scoreA, scoreB, hoursRemaining, sigma1d, beta);
+  return {
+    [entryAId]: pA,
+    [entryBId]: clampFair(1 - pA),
+  };
+}
+
+/** Favored entry id and fair on that side from an H2H fair map. */
+export function favoredH2HFromFairMap(
+  fairByEntryId: Record<string, number>,
+): { entryId: string; fair: number } | null {
+  const entries = Object.entries(fairByEntryId);
+  if (entries.length === 0) return null;
+  const [bestId, bestFair] = entries.reduce((best, cur) =>
+    cur[1] > best[1] ? cur : best,
+  );
+  return { entryId: bestId, fair: bestFair };
+}
+
 export function computeLockInFair(input: LockInFairInput): LockInFairResult {
   const { signals, hoursRemaining, marketType, sigma1d, beta } = input;
   const sig = sigmaRemain(hoursRemaining, sigma1d, beta);
 
   if (marketType === "h2h") {
+    const { entryAId, entryBId, scoreA, scoreB } = input;
+    if (
+      entryAId &&
+      entryBId &&
+      scoreA != null &&
+      Number.isFinite(scoreA) &&
+      scoreB != null &&
+      Number.isFinite(scoreB)
+    ) {
+      const fairByEntryId = fairH2HByEntryId(
+        entryAId,
+        scoreA,
+        entryBId,
+        scoreB,
+        hoursRemaining,
+        sigma1d,
+        beta,
+      );
+      return {
+        fairUp: null,
+        fairByEntryId,
+        sigmaRemain: sig,
+        logMoneyness: null,
+      };
+    }
     return {
       fairUp: null,
       fairByEntryId: undefined,

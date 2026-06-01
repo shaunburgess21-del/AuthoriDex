@@ -290,6 +290,37 @@ export const ARB_CONVERGENCE_MARKETS_PER_SWEEP = (() => {
   return Number.isInteger(raw) && raw > 0 ? raw : 10;
 })();
 
+/** H2H lock-in: shadow logs only (no bet changes). */
+export const LOCKIN_FAIR_H2H_SHADOW = envFlag(process.env.LOCKIN_FAIR_H2H_SHADOW);
+/** H2H lock-in: confidence floor + force-pick + arb convergence. */
+export const LOCKIN_FAIR_H2H_ENABLED = envFlag(process.env.LOCKIN_FAIR_H2H_ENABLED);
+/** Favored-side fair at or above this → force-pick that entry (H2H). */
+export const LOCKIN_H2H_DECISIVE_FAIR = (() => {
+  const raw = Number(process.env.LOCKIN_H2H_DECISIVE_FAIR);
+  return Number.isFinite(raw) && raw > 0.5 && raw < 1 ? raw : 0.58;
+})();
+export const LOCKIN_H2H_SIGMA_1D = (() => {
+  const raw = Number(process.env.LOCKIN_H2H_SIGMA_1D);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  const base = Number(process.env.LOCKIN_SIGMA_1D);
+  return Number.isFinite(base) && base > 0 ? base : 0.109;
+})();
+export const LOCKIN_H2H_BETA = (() => {
+  const raw = Number(process.env.LOCKIN_H2H_BETA);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  const base = Number(process.env.LOCKIN_BETA);
+  return Number.isFinite(base) && base > 0 ? base : 0.36;
+})();
+
+/** Runtime read (tests can flip env without re-importing the module). */
+export function isLockInFairH2HShadow(): boolean {
+  return envFlag(process.env.LOCKIN_FAIR_H2H_SHADOW);
+}
+
+export function isLockInFairH2HEnabled(): boolean {
+  return envFlag(process.env.LOCKIN_FAIR_H2H_ENABLED);
+}
+
 // ---------------------------------------------------------------------------
 // Stage 4 (optional) — early-week settlement bonus + score EMA relaxation
 // ---------------------------------------------------------------------------

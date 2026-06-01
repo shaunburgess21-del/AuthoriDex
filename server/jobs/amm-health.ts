@@ -583,39 +583,61 @@ const CALIBRATION_GAP_FAIL = 0.20;
 async function checkLiveConvergence(): Promise<CheckResult> {
   const {
     fetchLiveUpDownConvergence,
+    fetchLiveH2HConvergence,
     LIVE_CONVERGENCE_AVG_GAP_WARN,
     LIVE_CONVERGENCE_MISPRICED_WARN_PCT,
   } = await import("../agents/liveConvergence.ts");
 
   const live = await fetchLiveUpDownConvergence();
+  const h2h = await fetchLiveH2HConvergence();
   const { summary } = live;
+  const h2hSummary = h2h.summary;
   const mispricedPct = summary.decidedMispricedPct;
   const avgGap = summary.avgAbsGapOnDecided;
+  const h2hMispricedPct = h2hSummary.decidedMispricedPct;
+  const h2hAvgGap = h2hSummary.avgAbsGapOnDecided;
 
   let status: CheckStatus = "pass";
   if (
     (mispricedPct != null && mispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
-    (avgGap != null && avgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
+    (avgGap != null && avgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN) ||
+    (h2hMispricedPct != null && h2hMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
+    (h2hAvgGap != null && h2hAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
   ) {
     status = "warn";
   }
 
+  const updownDetail =
+    summary.decidedCount === 0
+      ? "up/down: no decided open markets."
+      : `up/down: ${summary.decidedMispricedCount}/${summary.decidedCount} mispriced (${mispricedPct != null ? `${(mispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${avgGap?.toFixed(3) ?? "n/a"}`;
+  const h2hDetail =
+    h2hSummary.decidedCount === 0
+      ? "h2h: no decisive open pairings (fav fair < 58%)."
+      : `h2h: ${h2hSummary.decidedMispricedCount}/${h2hSummary.decidedCount} mispriced (${h2hMispricedPct != null ? `${(h2hMispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${h2hAvgGap?.toFixed(3) ?? "n/a"}`;
+
   return {
-    name: "Live Up/Down convergence (open markets)",
+    name: "Live native convergence (up/down + h2h)",
     status,
-    rowCount: summary.decidedCount,
-    details:
-      summary.decidedCount === 0
-        ? "No decided open up/down markets (|pct vs open| < 10%)."
-        : `${summary.decidedMispricedCount}/${summary.decidedCount} decided mispriced (|fair−price|>10pp, ${mispricedPct != null ? `${(mispricedPct * 100).toFixed(0)}%` : "n/a"}); avg |gap|=${avgGap?.toFixed(3) ?? "n/a"}; arb-eligible=${summary.arbEligibleCount}. Run: npm run amm:convergence`,
-    sample: live.markets.slice(0, 5).map((m) => ({
-      marketId: m.marketId.slice(0, 8),
-      gap: m.gap,
-      pctOpen: m.pctChangeVsOpen,
-      price: m.favoredPrice,
-      fair: m.favoredFair,
-      sampledAt: live.sampledAt,
-    })),
+    rowCount: summary.decidedCount + h2hSummary.decidedCount,
+    details: `${updownDetail}; ${h2hDetail}. Run: npm run amm:convergence`,
+    sample: [
+      ...live.markets.slice(0, 3).map((m) => ({
+        type: "updown",
+        marketId: m.marketId.slice(0, 8),
+        gap: m.gap,
+        price: m.favoredPrice,
+        fair: m.favoredFair,
+      })),
+      ...h2h.markets.slice(0, 3).map((m) => ({
+        type: "h2h",
+        marketId: m.marketId.slice(0, 8),
+        gap: m.gap,
+        price: m.favoredPrice,
+        fair: m.favoredFair,
+        favored: m.favoredLabel,
+      })),
+    ],
   };
 }
 

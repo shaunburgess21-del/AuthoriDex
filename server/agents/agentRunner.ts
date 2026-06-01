@@ -23,7 +23,11 @@ import {
 import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
-import { computeArbPrediction, isArbAgent } from "./arbAgent";
+import {
+  computeArbPrediction,
+  computeArbPredictionH2H,
+  isArbAgent,
+} from "./arbAgent";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { prefetchNativeAssessmentsForSweep } from "./nativeMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
@@ -53,6 +57,7 @@ import {
   ARB_COHORT_ENABLED,
   ARB_AGENT_MAX_STAKE,
   ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+  isLockInFairH2HEnabled,
   AGENT_RUNNER_INTERVAL_MS,
   AGENT_RUNNER_STARTUP_DELAY_MS,
   AGENT_CREDIT_LOW_THRESHOLD,
@@ -661,7 +666,13 @@ async function runAgentBatchOnce(): Promise<{
         );
         if (now.getTime() >= cutoff.getTime() - bufferMs) {
           // Near-close window: arb cohort is handled by runConvergenceSweep.
-          if (!(ARB_COHORT_ENABLED && isArbAgent(agentData) && market.marketType === "updown")) {
+          if (
+            !(
+              ARB_COHORT_ENABLED &&
+              isArbAgent(agentData) &&
+              (market.marketType === "updown" || market.marketType === "h2h")
+            )
+          ) {
             skipped++;
           }
           continue;
@@ -819,6 +830,26 @@ async function runAgentBatchOnce(): Promise<{
           const snap = ammStateByMarket.get(market.id);
           const prices = snap ? ammCurrentPrices(snap) : {};
           decision = computeArbPrediction(marketData, signals, hoursRemaining, prices);
+        } else if (
+          ARB_COHORT_ENABLED &&
+          isArbAgent(agentData) &&
+          market.marketType === "h2h" &&
+          isLockInFairH2HEnabled() &&
+          entrySignals
+        ) {
+          const snap = ammStateByMarket.get(market.id);
+          const prices = snap ? ammCurrentPrices(snap) : {};
+          const scoreByEntryId: Record<string, number> = {};
+          for (const entry of entries) {
+            const fi = entrySignals.get(entry.id)?.fameIndex;
+            if (fi != null && Number.isFinite(fi)) scoreByEntryId[entry.id] = fi;
+          }
+          decision = computeArbPredictionH2H(
+            marketData.entries,
+            scoreByEntryId,
+            hoursRemaining,
+            prices,
+          );
         } else {
           decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, {
             priority,
@@ -1047,6 +1078,7 @@ async function runAgentBatchOnce(): Promise<{
       now,
       updownSweepCtx,
     );
+    convergenceScheduled += await runConvergenceSweepH2H(agents, markets, now);
   } catch (convSweepErr) {
     log(
       `[AgentRunner] Convergence sweep error: ${convSweepErr instanceof Error ? convSweepErr.message : convSweepErr}`,
@@ -1938,6 +1970,170 @@ async function runConvergenceSweep(
 
   if (scheduled > 0) {
     log(`[AgentRunner] Convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
+}
+
+/**
+ * Near-close H2H convergence — arb cohort pushes prices toward lock-in fair.
+ */
+async function runConvergenceSweepH2H(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+): Promise<number> {
+  if (!ARB_COHORT_ENABLED || !isLockInFairH2HEnabled()) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const ammH2h = allMarkets.filter(
+    (m) => m.marketType === "h2h" && m.engine === "amm",
+  );
+  if (!ammH2h.length) return 0;
+
+  const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+  const nearCloseMarkets = ammH2h.filter((m) => {
+    if (!m.endAt) return false;
+    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "h2h");
+    const t = now.getTime();
+    return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
+  });
+  if (!nearCloseMarkets.length) return 0;
+
+  const targetIds = new Set(
+    nearCloseMarkets
+      .slice(0, ARB_CONVERGENCE_MARKETS_PER_SWEEP)
+      .map((m) => m.id),
+  );
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, Array.from(targetIds)));
+
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      label: marketEntries.label,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, Array.from(targetIds)));
+
+  const entriesByMarket = new Map<
+    string,
+    { id: string; label: string | null; personId: string | null }[]
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label, personId: row.personId });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const market of nearCloseMarkets) {
+    if (!targetIds.has(market.id)) continue;
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length !== 2) continue;
+    if (!entries.every((e) => e.personId)) continue;
+
+    const scoreByEntryId: Record<string, number> = {};
+    for (const entry of entries) {
+      const entryOpeningScore = market.createdAt
+        ? await getEntryOpeningScore(entry.personId!, market.id, market.createdAt)
+        : null;
+      const sig = await getTrendSignals(entry.personId!, {
+        openingScore: entryOpeningScore,
+      });
+      const fi = sig.fameIndex;
+      if (fi == null || !Number.isFinite(fi)) continue;
+      scoreByEntryId[entry.id] = fi;
+    }
+    if (Object.keys(scoreByEntryId).length < 2) continue;
+
+    const hoursRemaining =
+      market.endAt != null
+        ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+        : 0;
+
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+    const prices = ammCurrentPrices(snap);
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const marketEntriesData = entries.map((e) => ({
+      id: e.id,
+      label: e.label ?? "",
+      totalStake: 0,
+      noStake: 0,
+      personId: e.personId,
+    }));
+
+    const decision = computeArbPredictionH2H(
+      marketEntriesData,
+      scoreByEntryId,
+      hoursRemaining,
+      prices,
+    );
+    if (decision.abstain || !decision.entryId) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, convergenceSweepH2H: true },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] H2H convergence ${agent.displayName} → ${market.title?.slice(0, 28)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] H2H convergence sweep scheduled ${scheduled} actions`);
   }
   return scheduled;
 }

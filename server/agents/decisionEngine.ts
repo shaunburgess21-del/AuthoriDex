@@ -25,10 +25,17 @@ import {
   NATIVE_LLM_BOOST_WEIGHT,
   LOCKIN_FAIR_ENABLED,
   LOCKIN_FAIR_SHADOW,
+  isLockInFairH2HShadow,
+  isLockInFairH2HEnabled,
+  LOCKIN_H2H_DECISIVE_FAIR,
+  LOCKIN_H2H_SIGMA_1D,
+  LOCKIN_H2H_BETA,
 } from "./constants";
 import {
   computeLockInFairUp,
   fairForEntry,
+  fairH2HByEntryId,
+  favoredH2HFromFairMap,
   LOCKIN_DECISIVE_PCT,
   LOCKIN_FAIR_MAX,
 } from "./lockInFair";
@@ -117,6 +124,36 @@ export function computePrediction(
     fairUp != null &&
     pctVsOpen != null &&
     Math.abs(pctVsOpen) >= LOCKIN_DECISIVE_PCT;
+
+  const isH2HPair = market.marketType === "h2h" && entries.length === 2;
+  let h2hFairByEntryId: Record<string, number> | null = null;
+  if (isH2HPair && entrySignals && entrySignals.size >= 2) {
+    const [eA, eB] = entries;
+    const scoreA = entrySignals.get(eA.id)?.fameIndex;
+    const scoreB = entrySignals.get(eB.id)?.fameIndex;
+    if (
+      scoreA != null &&
+      Number.isFinite(scoreA) &&
+      scoreB != null &&
+      Number.isFinite(scoreB)
+    ) {
+      h2hFairByEntryId = fairH2HByEntryId(
+        eA.id,
+        scoreA,
+        eB.id,
+        scoreB,
+        hoursRemaining,
+        LOCKIN_H2H_SIGMA_1D,
+        LOCKIN_H2H_BETA,
+      );
+    }
+  }
+  const h2hFavored =
+    h2hFairByEntryId != null ? favoredH2HFromFairMap(h2hFairByEntryId) : null;
+  const lockInH2HDecisive =
+    isH2HPair &&
+    h2hFavored != null &&
+    h2hFavored.fair >= LOCKIN_H2H_DECISIVE_FAIR;
 
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";
@@ -453,7 +490,9 @@ export function computePrediction(
   // Step 3e: Lock-in fair — on a decisive weekly lead, pick the favoured side
   // deterministically so contrarianism / weighted random can't price backwards.
   let lockInForcedEntryId: string | null = null;
-  if (
+  if (isLockInFairH2HEnabled() && lockInH2HDecisive && h2hFavored) {
+    lockInForcedEntryId = h2hFavored.entryId;
+  } else if (
     LOCKIN_FAIR_ENABLED &&
     lockInDecisive &&
     fairUp != null
@@ -566,7 +605,18 @@ export function computePrediction(
     chanceLevel + (rawProbability - chanceLevel) * agent.confidenceCal;
 
   let targetConfidence = opinionConfidence;
-  if (LOCKIN_FAIR_ENABLED && fairUp != null) {
+  if (isLockInFairH2HEnabled() && h2hFairByEntryId != null) {
+    const chosenFair = h2hFairByEntryId[chosenEntryId];
+    if (chosenFair != null && Number.isFinite(chosenFair)) {
+      const h2hForced =
+        lockInH2HDecisive &&
+        h2hFavored != null &&
+        chosenEntryId === h2hFavored.entryId;
+      targetConfidence = h2hForced
+        ? h2hFavored.fair
+        : Math.max(opinionConfidence, chosenFair);
+    }
+  } else if (LOCKIN_FAIR_ENABLED && fairUp != null) {
     const chosenEntry = entries.find((e) => e.id === chosenEntryId);
     const fairSide = fairForEntry(
       fairUp,
@@ -597,6 +647,13 @@ export function computePrediction(
     );
     console.log(
       `[LockInFair][shadow] market=${market.id.slice(0, 8)} hrs=${hoursRemaining.toFixed(1)} fairUp=${fairUp.toFixed(3)} fairSide=${fairSide?.toFixed(3) ?? "n/a"} opinion=${opinionConfidence.toFixed(3)} target=${clampedConfidence.toFixed(3)} pctOpen=${pctVsOpen?.toFixed(3) ?? "n/a"}`,
+    );
+  }
+
+  if (isLockInFairH2HShadow() && h2hFairByEntryId != null && market.id) {
+    const chosenFair = h2hFairByEntryId[chosenEntryId];
+    console.log(
+      `[LockInFairH2H][shadow] market=${market.id.slice(0, 8)} hrs=${hoursRemaining.toFixed(1)} fairFav=${h2hFavored?.fair.toFixed(3) ?? "n/a"} favEntry=${h2hFavored?.entryId.slice(0, 8) ?? "n/a"} chosenFair=${chosenFair?.toFixed(3) ?? "n/a"} opinion=${opinionConfidence.toFixed(3)} target=${clampedConfidence.toFixed(3)}`,
     );
   }
 

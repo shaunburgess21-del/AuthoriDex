@@ -89,3 +89,76 @@ export async function fetchUpDownCalibration(
     decidedCount: decided.reduce((s, b) => s + b.n, 0),
   };
 }
+
+export interface H2HCalibrationResult {
+  totalResolved: number;
+  /** Mean final LMSR price on the entry that won at resolution. */
+  avgWinnerFinalPrice: number | null;
+  /** Winners with final price <= 0.55 (pre-fix baseline ~53%). */
+  winnersPricedAtOrBelow55: number;
+  winnersTotal: number;
+}
+
+export async function fetchH2HCalibration(
+  lookbackDays = 30,
+): Promise<H2HCalibrationResult> {
+  const rows = await db.execute(sql`
+    WITH base AS (
+      SELECT
+        pm.id AS market_id,
+        mas.liquidity_b::numeric AS b,
+        mas.share_quantities AS sq
+      FROM prediction_markets pm
+      JOIN market_amm_state mas ON mas.market_id = pm.id
+      WHERE pm.engine = 'amm'
+        AND pm.market_type = 'h2h'
+        AND pm.status = 'RESOLVED'
+        AND pm.resolved_at > now() - make_interval(days => ${lookbackDays})
+    ),
+    e AS (
+      SELECT
+        b.market_id,
+        b.b,
+        me.id AS entry_id,
+        me.resolution_status,
+        COALESCE((b.sq->>me.id::text)::numeric, 0) AS q
+      FROM base b
+      JOIN market_entries me ON me.market_id = b.market_id
+    ),
+    mx AS (
+      SELECT market_id, max(q) AS qmax FROM e GROUP BY market_id
+    ),
+    ex AS (
+      SELECT
+        e.*,
+        exp((e.q - mx.qmax) / NULLIF(e.b, 0)) AS w
+      FROM e
+      JOIN mx ON mx.market_id = e.market_id
+    ),
+    priced AS (
+      SELECT
+        market_id,
+        resolution_status,
+        w / NULLIF(SUM(w) OVER (PARTITION BY market_id), 0) AS price
+      FROM ex
+    )
+    SELECT
+      count(*) FILTER (WHERE resolution_status = 'winner')::int AS n_winners,
+      round(avg(price) FILTER (WHERE resolution_status = 'winner'), 3)::float AS avg_winner_price,
+      count(*) FILTER (WHERE resolution_status = 'winner' AND price <= 0.55)::int AS winners_le_55
+    FROM priced
+  `);
+
+  const row = rows.rows[0] as {
+    n_winners: number;
+    avg_winner_price: number | null;
+    winners_le_55: number;
+  } | undefined;
+
+  return {
+    totalResolved: Number(row?.n_winners ?? 0),
+    avgWinnerFinalPrice: row?.avg_winner_price ?? null,
+    winnersPricedAtOrBelow55: Number(row?.winners_le_55 ?? 0),
+    winnersTotal: Number(row?.n_winners ?? 0),
+  };
+}
