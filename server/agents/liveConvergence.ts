@@ -425,7 +425,6 @@ export async function fetchLiveGainerConvergence(
       pm.id AS market_id,
       pm.title,
       pm.end_at,
-      pm.created_at,
       mas.liquidity_b,
       mas.share_quantities AS sq,
       COALESCE(mas.total_user_credits_in, 0)::float AS volume
@@ -481,13 +480,38 @@ export async function fetchLiveGainerConvergence(
     entriesByMarket.set(row.marketId, list);
   }
 
+  const openingRows = await db.execute(sql`
+    SELECT DISTINCT ON (me.market_id, me.id)
+      me.market_id,
+      me.id AS entry_id,
+      ts.fame_index AS opening_score
+    FROM market_entries me
+    INNER JOIN prediction_markets pm ON pm.id = me.market_id
+    INNER JOIN trend_snapshots ts
+      ON ts.person_id = me.person_id
+      AND ts.timestamp <= pm.created_at
+    WHERE me.market_id IN (${sql.join(marketIds.map((id) => sql`${id}`), sql`, `)})
+      AND me.person_id IS NOT NULL
+    ORDER BY me.market_id, me.id, ts.timestamp DESC
+  `);
+
+  const openingByEntryId = new Map<string, number>();
+  for (const row of openingRows.rows as Array<{
+    market_id: string;
+    entry_id: string;
+    opening_score: number;
+  }>) {
+    if (row.opening_score != null && Number.isFinite(Number(row.opening_score))) {
+      openingByEntryId.set(row.entry_id, Number(row.opening_score));
+    }
+  }
+
   const markets: LiveGainerConvergenceMarketRow[] = [];
 
   for (const row of marketRows.rows as Array<{
     market_id: string;
     title: string | null;
     end_at: Date | string;
-    created_at: Date | string | null;
     liquidity_b: string | number;
     sq: Record<string, number>;
     volume: number;
@@ -495,37 +519,11 @@ export async function fetchLiveGainerConvergence(
     const entries = entriesByMarket.get(row.market_id) ?? [];
     if (entries.length < 2) continue;
 
-    const createdAt =
-      row.created_at instanceof Date
-        ? row.created_at
-        : row.created_at
-          ? new Date(row.created_at)
-          : null;
-
     const pctByEntryId: Record<string, number | null | undefined> = {};
     let leaderPct: number | null = null;
 
     for (const entry of entries) {
-      if (!entry.personId) {
-        pctByEntryId[entry.id] = null;
-        continue;
-      }
-      let openingScore: number | null = null;
-      if (createdAt) {
-        const openRows = await db.execute(sql`
-          SELECT fame_index AS opening_score
-          FROM trend_snapshots
-          WHERE person_id = ${entry.personId}
-            AND timestamp <= ${createdAt}
-          ORDER BY timestamp DESC
-          LIMIT 1
-        `);
-        const openRow = openRows.rows[0] as { opening_score: number } | undefined;
-        openingScore =
-          openRow?.opening_score != null && Number.isFinite(openRow.opening_score)
-            ? Number(openRow.opening_score)
-            : null;
-      }
+      const openingScore = openingByEntryId.get(entry.id) ?? null;
       const fame = entry.currentFame;
       if (
         openingScore != null &&

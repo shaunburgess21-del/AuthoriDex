@@ -86,6 +86,18 @@ describe("lockInFair", () => {
     assert.ok(fair.lead! > 0.85, `expected decisive leader, got ${fair.lead}`);
   });
 
+  it("computeLockInFairGainer: 16-entry field sums to ~1 near close", () => {
+    const entries = Array.from({ length: 16 }, (_, i) => ({
+      entryId: `e${i}`,
+      pctChangeVsOpen: i === 0 ? 0.22 : 0.02 + i * 0.008,
+    }));
+    const fair = computeLockInFairGainer(entries, 0.5);
+    const sum = Object.values(fair).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sum - 1) < 0.02, `expected sum ~1, got ${sum}`);
+    assert.ok(fair.e0! > fair.e1!, "leader should have highest fair");
+    assert.ok(fair.e0! > 0.5, "near-close leader should be favored");
+  });
+
   it("fairGainerByEntryId favors entry with best pct vs open", () => {
     const fair = fairGainerByEntryId(
       { a: 0.12, b: 0.20, c: 0.05 },

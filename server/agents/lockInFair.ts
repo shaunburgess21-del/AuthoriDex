@@ -64,6 +64,8 @@ export interface LockInFairInput {
   entryBId?: string;
   scoreA?: number;
   scoreB?: number;
+  /** Gainer: entry id → pctChangeVsOpen for fairByEntryId. */
+  pctByEntryId?: Record<string, number | null | undefined>;
 }
 
 export interface LockInFairResult {
@@ -204,7 +206,7 @@ function gainerWinProbGrid(
 
 /**
  * Gainer: P(entry i has highest pctChange at close) keyed by entry id.
- * Probabilities sum to 1 (after normalization + clamp).
+ * Probabilities sum to 1 after normalization (per-entry clamp is applied at use sites).
  */
 export function computeLockInFairGainer(
   entries: GainerFairEntryInput[],
@@ -235,7 +237,7 @@ export function computeLockInFairGainer(
 
   const out: Record<string, number> = {};
   for (const [id, p] of Object.entries(raw)) {
-    out[id] = clampFair(p / sum);
+    out[id] = p / sum;
   }
   return out;
 }
@@ -287,6 +289,21 @@ export function computeLockInFair(input: LockInFairInput): LockInFairResult {
     return {
       fairUp: null,
       fairByEntryId: undefined,
+      sigmaRemain: sig,
+      logMoneyness: null,
+    };
+  }
+
+  if (marketType === "gainer" && input.pctByEntryId) {
+    const fairByEntryId = fairGainerByEntryId(
+      input.pctByEntryId,
+      hoursRemaining,
+      sigma1d,
+      beta,
+    );
+    return {
+      fairUp: null,
+      fairByEntryId,
       sigmaRemain: sig,
       logMoneyness: null,
     };
