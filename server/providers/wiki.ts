@@ -12,6 +12,37 @@ const USER_AGENT = "VoxDex/1.0 (https://voxdex.com; contact@voxdex.com)";
 const WIKI_REQUEST_TIMEOUT_MS = 15_000;
 const WIKI_MAX_RETRIES = 2;
 const WIKI_RETRY_BACKOFF_MS = [500, 1500];
+// Cap on how long we'll honour a 429 `Retry-After` header. Wikimedia can ask
+// for long waits; blocking the sequential batch that long would blow the
+// ingest heartbeat budget, so we give up fast and let the person fall back to
+// their last cached value rather than stalling the whole run.
+const WIKI_RETRY_AFTER_CAP_MS = 2000;
+
+// Pageviews data only advances once per day on Wikimedia's side, so a longer
+// base TTL costs nothing in freshness. The jitter is the important part: a flat
+// TTL makes all ~161 entries expire in the same hour, stampeding Wikimedia in
+// one run (→ sustained 429s → 2s backoff per person → run exceeds the 4-min
+// heartbeat → stale-lock failure). Spreading expiries over a window keeps each
+// run's live-fetch count low.
+const WIKI_PAGEVIEWS_TTL_BASE_HOURS = 12;
+const WIKI_PAGEVIEWS_TTL_JITTER_HOURS = 6;
+// Redirect/canonical mappings for tracked people effectively never change, so
+// cache them long-term to avoid 1-2 extra api.php calls per person per fetch.
+const WIKI_REDIRECT_TTL_HOURS = 24 * 30;
+
+/**
+ * Parse a 429/503 `Retry-After` header into milliseconds. Supports both the
+ * delta-seconds form ("5") and the HTTP-date form. Returns null if absent or
+ * unparseable.
+ */
+function parseRetryAfterMs(headerValue: string | null): number | null {
+  if (!headerValue) return null;
+  const seconds = Number(headerValue);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const dateMs = Date.parse(headerValue);
+  if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -29,7 +60,13 @@ async function fetchWithTimeout(
         response.status !== 404 &&
         (response.status === 429 || response.status >= 500);
       if (shouldRetry) {
-        const backoff = WIKI_RETRY_BACKOFF_MS[attempt] ?? 2000;
+        let backoff = WIKI_RETRY_BACKOFF_MS[attempt] ?? 2000;
+        if (response.status === 429) {
+          const retryAfter = parseRetryAfterMs(response.headers.get("retry-after"));
+          if (retryAfter !== null) {
+            backoff = Math.min(retryAfter, WIKI_RETRY_AFTER_CAP_MS);
+          }
+        }
         console.warn(`[Wiki] HTTP ${response.status} on attempt ${attempt + 1}, retrying in ${backoff}ms`);
         await new Promise(r => setTimeout(r, backoff));
         continue;
@@ -105,8 +142,9 @@ async function setCachedResponse(
   data: string,
   ttlHours: number = 6
 ): Promise<void> {
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + ttlHours);
+  // Use ms arithmetic so fractional-hour TTLs (jitter) are honoured exactly;
+  // Date.setHours() would truncate the fractional part.
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
   
   await db.insert(apiCache).values({
     cacheKey,
@@ -192,27 +230,13 @@ export async function fetchWikiPageviews(
       return null;
     }
 
-    let redirectTitle: string | null = null;
-    let canonicalTitle: string | null = null;
+    const redirectInfo = await resolveRedirectInfoCached(wikiSlug);
+    const redirectTitle = redirectInfo.redirectTitle;
+    const canonicalTitle = redirectInfo.canonicalTitle;
     let altItems: { views: number }[] | null = null;
 
-    const resolvedCanonical = await resolveWikiRedirect(wikiSlug);
-    if (resolvedCanonical && resolvedCanonical !== wikiSlug) {
-      // Stored slug is a redirect — also fetch the canonical page's views
-      redirectTitle = wikiSlug;
-      canonicalTitle = resolvedCanonical;
-      altItems = await fetchPageviewsRaw(resolvedCanonical, range7d);
-      console.log(`[Wiki] ${wikiSlug} is redirect → ${resolvedCanonical}, summing views from both titles`);
-    } else {
-      // Stored slug is canonical — check if common redirect patterns exist
-      // Try to find redirects pointing to this page and fetch their views too
-      canonicalTitle = wikiSlug;
-      const altSlug = await findRedirectsTo(wikiSlug);
-      if (altSlug) {
-        redirectTitle = altSlug;
-        altItems = await fetchPageviewsRaw(altSlug, range7d);
-        console.log(`[Wiki] Found redirect ${altSlug} → ${wikiSlug}, summing views from both titles`);
-      }
+    if (redirectInfo.companionSlug && redirectInfo.companionSlug !== wikiSlug) {
+      altItems = await fetchPageviewsRaw(redirectInfo.companionSlug, range7d);
     }
 
     // Sum per-day views from both titles
@@ -250,7 +274,9 @@ export async function fetchWikiPageviews(
       canonicalTitle,
     };
 
-    await setCachedResponse(cacheKey, "wiki", personId || null, JSON.stringify(result), 6);
+    const ttlHours =
+      WIKI_PAGEVIEWS_TTL_BASE_HOURS + Math.random() * WIKI_PAGEVIEWS_TTL_JITTER_HOURS;
+    await setCachedResponse(cacheKey, "wiki", personId || null, JSON.stringify(result), ttlHours);
 
     return result;
   } catch (error) {
@@ -280,6 +306,46 @@ async function findRedirectsTo(canonicalSlug: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+interface WikiRedirectInfo {
+  redirectTitle: string | null;
+  canonicalTitle: string | null;
+  // The "other" title whose views should also be summed (companion of the
+  // stored slug), or null when the stored slug stands alone.
+  companionSlug: string | null;
+}
+
+/**
+ * Resolve (and long-term cache) the redirect/canonical relationship for a
+ * stored wiki slug. These mappings are stable for tracked people, so caching
+ * them removes 1-2 api.php calls per person on every ingest run — the main
+ * driver of the per-run Wikimedia request volume that triggers 429s.
+ */
+async function resolveRedirectInfoCached(wikiSlug: string): Promise<WikiRedirectInfo> {
+  const cacheKey = `wiki:redirectinfo:${wikiSlug}`;
+  const cached = await getCachedResponse(cacheKey);
+  if (cached) {
+    try {
+      return JSON.parse(cached) as WikiRedirectInfo;
+    } catch {
+      /* fall through to re-resolve */
+    }
+  }
+
+  let info: WikiRedirectInfo;
+  const resolvedCanonical = await resolveWikiRedirect(wikiSlug);
+  if (resolvedCanonical && resolvedCanonical !== wikiSlug) {
+    // Stored slug is itself a redirect → sum the canonical page too.
+    info = { redirectTitle: wikiSlug, canonicalTitle: resolvedCanonical, companionSlug: resolvedCanonical };
+  } else {
+    // Stored slug is canonical → sum the most common redirect pointing to it.
+    const altSlug = await findRedirectsTo(wikiSlug);
+    info = { redirectTitle: altSlug, canonicalTitle: wikiSlug, companionSlug: altSlug };
+  }
+
+  await setCachedResponse(cacheKey, "wiki", null, JSON.stringify(info), WIKI_REDIRECT_TTL_HOURS);
+  return info;
 }
 
 export async function fetchBatchWikiPageviews(
