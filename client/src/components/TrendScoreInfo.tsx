@@ -6,7 +6,7 @@ export function TrendScoreInfoContent() {
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Trend Score Works</p>
       <p className="text-xs text-muted-foreground">
-        Trend Score measures how much attention a person is getting right now, using three independent signals from public sources:
+        Trend Score measures how much attention a person is getting recently, using multiple streams of data from public sources:
       </p>
       <ul className="space-y-1.5">
         <li className="flex items-center gap-2 text-xs">
@@ -26,7 +26,7 @@ export function TrendScoreInfoContent() {
         We combine these signals into a single score that updates as new data comes in. A higher score means more attention right now.
       </p>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
-        API Sources: Mediastack · Wikipedia · SerpApi · CurrentsAPI · APILayer DataForSEO · OpenAI · Serper
+        API Sources: Mediastack · Wikipedia · SerpApi · CurrentsAPI · APILayer · DataForSEO · OpenAI · Serper
       </p>
     </div>
   );
