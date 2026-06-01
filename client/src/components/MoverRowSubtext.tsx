@@ -20,11 +20,11 @@ export function MoverRowSubtext({
   if (fameScore === 0 && !hasRank) return null;
 
   return (
-    <div className="flex items-center gap-1.5 min-w-0 mt-0.5" data-testid="mover-row-subtext">
+    <div className="flex items-center gap-1 min-w-0 mt-0.5" data-testid="mover-row-subtext">
       <span className="font-mono text-[10px] text-muted-foreground tabular-nums shrink-0">
         {fameScore.toLocaleString("en-US")}
       </span>
-      {hasRank && <OverallRankPill rank={rank} size="xs" />}
+      {hasRank && <OverallRankPill rank={rank} size="mover" />}
     </div>
   );
 }
