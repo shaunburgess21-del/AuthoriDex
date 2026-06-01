@@ -625,15 +625,17 @@ function InsightPanelContent({
 }) {
   const formatPct = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1).replace(/\.0$/, "")}%`;
   const currentRank = typeof person.rank === "number" ? person.rank : null;
-  const previousRank = currentRank != null && typeof person.rankChange === "number"
-    ? currentRank + person.rankChange
-    : null;
-  const showRankShift =
+  const hasRankChange = typeof person.rankChange === "number";
+  const previousRank =
+    currentRank != null && hasRankChange ? currentRank + person.rankChange! : null;
+  const showWasNow =
     currentRank != null &&
-    previousRank != null &&
     currentRank >= 1 &&
+    previousRank != null &&
     previousRank >= 1;
-  const rankChange = person.rankChange ?? 0;
+  const hasPct = typeof person.change24h === "number";
+  const showRankMovement =
+    showWasNow || (hasRankChange && currentRank != null) || hasPct;
 
   const [, setLocation] = useLocation();
   const { session } = useAuth();
@@ -793,34 +795,40 @@ function InsightPanelContent({
 
       <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">24H RANK MOVEMENT</p>
-        {showRankShift ? (
+        {showRankMovement ? (
           <div className="flex items-center justify-between gap-3 flex-wrap min-w-0">
-            <p className="text-sm font-medium shrink-0">
-              Was #{previousRank} {"\u2192"} Now #{currentRank}
-            </p>
+            {showWasNow ? (
+              <p className="text-sm font-medium shrink-0">
+                Was #{previousRank} {"\u2192"} Now #{currentRank}
+              </p>
+            ) : hasRankChange && currentRank != null ? (
+              <p className="text-sm font-medium shrink-0">Now #{currentRank}</p>
+            ) : (
+              <span className="sr-only">24h rank movement</span>
+            )}
             <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
-              {typeof person.change24h === "number" && person.change24h !== 0 && (
+              {hasPct && person.change24h !== 0 && (
                 <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
-                  person.change24h > 0
+                  person.change24h! > 0
                     ? "bg-green-500/15 text-green-600 dark:text-green-400"
                     : "bg-red-500/15 text-red-600 dark:text-red-400"
                 }`}>
-                  {person.change24h > 0 ? "+" : ""}
-                  {person.change24h.toFixed(1)}%
+                  {person.change24h! > 0 ? "+" : ""}
+                  {person.change24h!.toFixed(1)}%
                 </span>
               )}
-              {rankChange === 0 ? (
+              {hasRankChange && person.rankChange === 0 ? (
                 <span className="text-xs text-muted-foreground italic">No rank change</span>
-              ) : (
+              ) : hasRankChange && person.rankChange !== 0 ? (
                 <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold ${
-                  rankChange > 0
+                  person.rankChange! > 0
                     ? "bg-green-500/15 text-green-600 dark:text-green-400"
                     : "bg-red-500/15 text-red-600 dark:text-red-400"
                 }`}>
-                  {rankChange > 0 ? "+" : ""}
-                  {rankChange} rank
+                  {person.rankChange! > 0 ? "+" : ""}
+                  {person.rankChange} rank
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
         ) : (
