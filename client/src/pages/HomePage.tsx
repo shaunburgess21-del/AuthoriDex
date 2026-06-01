@@ -3,7 +3,6 @@ import { WelcomeModal } from "@/components/WelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
-import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { toast } from "sonner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -16,16 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { tooltipSurfaceClass } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { Popover, PopoverContent, PopoverClose, PopoverTrigger } from "@/components/ui/popover";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import { navigateToLogin } from "@/lib/authReturn";
-import { formatVox } from "@/lib/currency";
-import type { LucideIcon } from "lucide-react";
 import {
   X,
   RefreshCw,
@@ -43,29 +38,15 @@ import {
   ThumbsDown,
   Minus,
   Star,
-  Info,
-  Crown,
   HelpCircle,
-  Scale,
-  Swords,
-  BarChart3,
   Loader2,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
-import { useQuery, useQueries, useInfiniteQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders, parseApiError, queryClient } from "@/lib/queryClient";
-import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { getAuthHeaders, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { hapticSuccess, hapticError } from "@/lib/haptic";
-import { useXpBurst } from "@/components/XpBurstProvider";
-import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
-import { useMarketCycle } from "@/hooks/useMarketCycle";
-import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
-import { fireAmmTradeToast } from "@/lib/share-data";
-import { useShareCard } from "@/contexts/ShareCardContext";
 import { TrendingPerson } from "@shared/schema";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -80,114 +61,30 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
 
-const LEADERBOARD_PREDICT_MORE_LINKS = [
-  { label: "World Markets", href: "/predict#community", icon: Scale },
-  { label: "Weekly Jackpot", href: "/predict#jackpot", icon: Crown },
-  { label: "Head-to-Head Battles", href: "/predict#h2h", icon: Swords },
-  { label: "Category races", href: "/predict#race", icon: BarChart3 },
-] as const satisfies ReadonlyArray<{ label: string; href: string; icon: LucideIcon }>;
-
-function LeaderboardDrawerNavList({ children }: { children: ReactNode }) {
+// Clickable "Trend Score" column header. Carries the same explainer that
+// used to live behind the (i) next to the leaderboard title — moved here
+// because the tooltip is about Trend Score specifically, and the bordered
+// label doubles as the column header on every breakpoint.
+function TrendScoreHeaderLabel({ className }: { className?: string }) {
   return (
-    <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
-      {children}
-    </div>
-  );
-}
-
-function LeaderboardDrawerNavLink({
-  href,
-  label,
-  icon: Icon,
-  accent,
-  onNavigateLink,
-}: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  accent: "vote" | "predict";
-  onNavigateLink: () => void;
-}) {
-  const iconTint =
-    accent === "vote"
-      ? "text-cyan-600 dark:text-cyan-400"
-      : "text-violet-600 dark:text-violet-400";
-  return (
-    <Link
-      href={href}
-      onClick={() => onNavigateLink()}
-      className="flex min-h-10 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+    <TouchTooltip
+      content={<TrendScoreInfoContent />}
+      side="bottom"
+      align="end"
+      contentClassName="max-w-[300px]"
+      showCloseButton
     >
-      <span className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/40" aria-hidden>
-          <Icon className={cn("h-4 w-4", iconTint)} aria-hidden />
-        </span>
-        <span className="truncate text-sm font-medium">{label}</span>
+      <span
+        className={cn(
+          "inline-flex h-9 items-center rounded-md border border-border px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground/80 cursor-pointer",
+          className,
+        )}
+        data-testid="header-trend-score-info"
+      >
+        Trend Score
       </span>
-      <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
-    </Link>
+    </TouchTooltip>
   );
-}
-
-/** Short copy for the home leaderboard drawer only (~65% fewer words than full rules). */
-function LeaderboardUpDownSnapshot() {
-  return (
-    <div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Each Monday we snapshot every celebrity's Trend Score — that's their{" "}
-        <span className="font-medium text-foreground">baseline</span> for the week. Buy{" "}
-        <span className="font-medium text-foreground">UP</span> shares if you think their score will close higher by Sunday,{" "}
-        <span className="font-medium text-foreground">DOWN</span> shares if lower. Exact tie refunds everyone.
-      </p>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Each winning share pays{" "}
-        <span className="font-medium text-foreground">Ꝟ1</span> at close. Cheaper shares pay multiples if your side wins — and you can sell anytime before close to lock in profits.
-      </p>
-      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground/70">
-        Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
-      </p>
-    </div>
-  );
-}
-
-function LeaderboardPredictInfoBody({ onNavigateLink }: { onNavigateLink: () => void }) {
-  return (
-    <>
-      <LeaderboardUpDownSnapshot />
-      <div className="mt-6 space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Predict</p>
-        <LeaderboardDrawerNavList>
-          {LEADERBOARD_PREDICT_MORE_LINKS.map(({ label, href, icon }) => (
-            <LeaderboardDrawerNavLink
-              key={href}
-              href={href}
-              label={label}
-              icon={icon}
-              accent="predict"
-              onNavigateLink={onNavigateLink}
-            />
-          ))}
-        </LeaderboardDrawerNavList>
-      </div>
-    </>
-  );
-}
-
-// Detects pointer:coarse devices (touchscreens/phones/tablets). Drives the
-// dual-mode behaviour of the leaderboard toggle tooltips: hover-to-open on
-// fine-pointer (desktop mouse/trackpad), tap-active-toggle-to-open on
-// coarse. SSR-safe: defaults to false so server renders the hover variant.
-function useIsCoarsePointer(): boolean {
-  const [isCoarse, setIsCoarse] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mql = window.matchMedia("(pointer: coarse)");
-    const update = () => setIsCoarse(mql.matches);
-    update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-  return isCoarse;
 }
 
 function MarketPulseCard({ 
@@ -1097,356 +994,9 @@ export default function HomePage() {
   }, []);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
-  const [predictLeaderboardInfoOpen, setPredictLeaderboardInfoOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
-  const [stakeModalOpen, setStakeModalOpen] = useState(false);
-  const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
-  /**
-   * Sprint 5 / Phase 1.3: parity with PredictPage. The home leaderboard
-   * doesn't yet surface a "Sell" affordance directly, but the StakeModal
-   * itself toggles between Buy/Sell and we want the same `initialAmmMode`
-   * default so behaviour is identical regardless of which page launched
-   * the modal.
-   */
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
-  // Idempotency key for the active trade-modal intent. See
-  // `client/src/lib/useIdempotencyKey.ts` for the contract.
-  const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
-    pendingSelection?.marketId,
-    pendingSelection?.entryId,
-    modalIntent,
-  ]);
-  // Real wallet balance from the auth profile — was previously a
-  // hardcoded `useState(10000)`, which let users on the home
-  // leaderboard appear to stake credits they didn't have. The
-  // PredictPage / UpDownDetailPage modals already read from
-  // profile.predictCredits; the home leaderboard's predict column
-  // now mirrors that single source of truth so balance + post-bet
-  // validation behave identically.
-  const { user, profile, refreshProfile } = useAuth();
-  // Sprint 3.1: home leaderboard buys fire AMM trade toasts with a
-  // Share action that dispatches into the global ShareCard modal.
-  const { openShareCard } = useShareCard();
-  const { trigger: triggerXpBurst } = useXpBurst();
-  const walletCredits = profile?.predictCredits ?? 0;
-
-  const { data: nativeUpdownData } = useQuery<any[]>({
-    queryKey: ['/api/native-markets/updown'],
-  });
-
-  // Same-side / opposite-side rule for the leaderboard predict column.
-  // We need each user's existing pick (if any) on the active weekly
-  // market for each person so we can:
-  //   1) visually grey the opposite-side button (hedges blocked), and
-  //   2) treat re-clicking the picked side as a same-side top-up.
-  // The leaderboard already polls /api/native-markets/updown; pairing
-  // it with /api/me/predictions gives us everything per row.
-  const { data: userPredictionsData } = useQuery<any>({
-    queryKey: ["/api/me/predictions"],
-    enabled: !!user,
-  });
-  const updownMarkets = useMemo(() => {
-    const dbMarkets = (nativeUpdownData || []).filter((m: any) => m.visibility === "live");
-    return dbMarkets.map((m: any) => {
-      const person = m.person || {};
-      const entries = m.entries || [];
-      const upEntry = entries.find((e: any) => e.label?.toLowerCase() === "up");
-      const downEntry = entries.find((e: any) => e.label?.toLowerCase() === "down");
-      const upStake = Number(upEntry?.totalStake || 0);
-      const downStake = Number(downEntry?.totalStake || 0);
-      const total = upStake + downStake || 1;
-      const upPercent = Math.round((upStake / total) * 100);
-      const currentScore = Number(person.trendScore || 0);
-      const baselineScore = getMarketBaselineScore(m as MarketBaselineSource, currentScore) ?? currentScore;
-      return {
-        id: m.id,
-        personId: m.personId || "",
-        personName: person.name || m.title?.replace(/: Up or Down\?$/, "") || "Unknown",
-        personAvatar: (person.imageUrl as string | null) ?? null,
-        currentScore,
-        startScore: baselineScore,
-        baselineScore,
-        upEntryId: upEntry?.id as string | undefined,
-        downEntryId: downEntry?.id as string | undefined,
-        upPoolPercent: upPercent || 50,
-        bettingCutoff: (m.bettingCutoff as string) || null,
-        startAt: (m.startAt as string) || null,
-        endAt: (m.endAt as string) || null,
-        engine: "amm" as const,
-        ammState: (m as { ammState?: unknown }).ammState ?? null,
-        category: (m.category as string | null) ?? null,
-      };
-    });
-  }, [nativeUpdownData]);
-
-  // Per-personId pending pick + cumulative stake on that side. Maps
-  // any leaderboard row's `personId` to the user's open up/down ticket
-  // so the row can render guarded buttons + the parent's predict
-  // handler can branch into same-side top-up mode.
-  const userUpdownPickByPerson = useMemo(() => {
-    const map = new Map<
-      string,
-      { pick: "up" | "down"; stakeAmount: number; marketId: string }
-    >();
-    if (!userPredictionsData || updownMarkets.length === 0) return map;
-    const betsArray = Array.isArray(userPredictionsData)
-      ? userPredictionsData
-      : (userPredictionsData as any)?.predictions ?? [];
-    const personByMarket = new Map<string, string>();
-    for (const m of updownMarkets) {
-      if (m.id && m.personId) personByMarket.set(String(m.id), String(m.personId));
-    }
-    for (const bet of betsArray as any[]) {
-      const personId = personByMarket.get(String(bet.marketId));
-      if (!personId) continue;
-      if (bet.result && bet.result !== "pending") continue;
-      const label = (bet.entryLabel || "").toLowerCase();
-      const pick: "up" | "down" | null =
-        label === "up" ? "up" : label === "down" ? "down" : null;
-      if (!pick) continue;
-      const prev = map.get(personId);
-      if (prev) {
-        prev.stakeAmount += Number(bet.stakeAmount || 0);
-      } else {
-        map.set(personId, {
-          pick,
-          stakeAmount: Number(bet.stakeAmount || 0),
-          marketId: String(bet.marketId),
-        });
-      }
-    }
-    return map;
-  }, [userPredictionsData, updownMarkets]);
-
-  const updownCanonicalCycle = useMemo(
-    () => getCanonicalNativeCycle((nativeUpdownData || []) as any[]),
-    [nativeUpdownData],
-  );
-
-  const updownCycle = useMarketCycle({
-    bettingCutoff: updownCanonicalCycle.bettingCutoff,
-    resolutionDeadline: updownCanonicalCycle.resolutionDeadline,
-  });
-
-  const isUpdownCutoffPassed = updownCycle.status !== "OPEN";
-
-  const leaderboardClosedMessage = useMemo(() => {
-    return getClosedMarketMessage({
-      bettingCutoff: updownCanonicalCycle.bettingCutoff,
-      resolutionDeadline: updownCanonicalCycle.resolutionDeadline,
-    });
-  }, [updownCanonicalCycle.bettingCutoff, updownCanonicalCycle.resolutionDeadline]);
-
-  const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
-    if (isUpdownCutoffPassed) {
-      return;
-    }
-    const market = updownMarkets.find(m => m.personId === personId);
-    if (!market) {
-      toast("No active market", { description: "No active prediction market for this person this week." });
-      return;
-    }
-    // Same-side top-up vs opposite-side hedge. Visual greying on the
-    // opposite chip is the primary deterrent (see LeaderboardRow); this
-    // toast catches users who fire onClick before the disabled prop
-    // settles in (e.g. profile data still loading).
-    const existing = userUpdownPickByPerson.get(personId);
-    if (existing && direction !== existing.pick) {
-      hapticError();
-      toast("Stick with your pick", {
-        description: `You already picked ${existing.pick.toUpperCase()}. We don't allow switching sides — top up your existing pick instead.`,
-      });
-      return;
-    }
-    const isTopUp = !!existing;
-
-    const crowdSentiment = direction === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
-    setPendingSelection({
-      type: "updown",
-      choice: direction === "up" ? "Trend Score UP" : "Trend Score DOWN",
-      marketName: market.personName,
-      marketId: market.id,
-      entryId: direction === "up" ? market.upEntryId : market.downEntryId,
-      startScore: market.startScore,
-      currentScore: market.currentScore,
-      crowdSentiment,
-      baselineScore: market.baselineScore,
-      baselineTimestamp: market.startAt || undefined,
-      endAt: market.endAt || undefined,
-      bettingCutoff: market.bettingCutoff,
-      isTopUp,
-      existingStake: isTopUp ? existing.stakeAmount : undefined,
-      engine: "amm",
-      ammState: (market.ammState ?? null) as StakeSelection["ammState"],
-    });
-    refreshProfile?.().catch(() => {});
-    setModalIntent("buy");
-    setStakeModalOpen(true);
-  }, [updownMarkets, isUpdownCutoffPassed, refreshProfile, userUpdownPickByPerson]);
-
-  // Real updown bet path, mirroring PredictPage's nativeUpdownBetMutation
-  // so the home leaderboard's predict column hits the same backend
-  // endpoint with the same payload, gets the same XP burst + cache
-  // invalidation + balance refresh, and shows the same error toast on
-  // failure. Previously this was a fake setState that just decremented
-  // a hardcoded local balance without ever calling the API.
-  const nativeUpdownBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/native-markets/updown/${marketId}/bet`,
-        { entryId, stakeAmount },
-        { idempotencyKey: tradeIdempotencyKey },
-      );
-      return res.json();
-    },
-    onSuccess: async (data, variables) => {
-      hapticSuccess();
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-      }
-      const market = updownMarkets.find(
-        (m) => String(m.id) === String(variables.marketId),
-      );
-      if (market) {
-        const choice =
-          variables.entryId === market.downEntryId ? "DOWN" : "UP";
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
-        fireAmmTradeToast({
-          response: data,
-          actionType: "buy",
-          username: profile?.username || "you",
-          personName: market.personName ?? null,
-          personAvatar: market.personAvatar ?? null,
-          marketTitle: `${market.personName}: Up or Down?`,
-          category: market.category,
-          entryLabel: choice,
-          direction: choice === "DOWN" ? "down" : "up",
-          openShareCard,
-          fallbackShareUrl: `${origin}/predict/updown/${market.id}`,
-        });
-      } else {
-        toast("Prediction placed!", {
-          description: "Your weekly up/down prediction has been recorded.",
-        });
-      }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      await Promise.all([
-        refreshProfile(),
-        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
-    },
-    onError: (err: Error) => {
-      hapticError();
-      const { title, description } = parseApiError(err, "Failed to place prediction");
-      toast.error(title, { description });
-    },
-  });
-
-  const handleConfirmStake = useCallback((amount: number) => {
-    if (!pendingSelection || pendingSelection.type !== "updown" || !pendingSelection.marketId) {
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      return;
-    }
-    const market = updownMarkets.find((m) => m.id === pendingSelection.marketId);
-    if (!market) {
-      toast.error("Market unavailable", { description: "Could not find the selected market. Please refresh and try again." });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      return;
-    }
-    const isDownPick = pendingSelection.choice.toUpperCase().includes("DOWN");
-    const entryId = isDownPick ? market.downEntryId : market.upEntryId;
-    if (!entryId) {
-      toast.error("Selection unavailable", { description: "This market selection is not available right now." });
-      return;
-    }
-    nativeUpdownBetMutation.mutate({ marketId: market.id, entryId, stakeAmount: amount });
-  }, [pendingSelection, updownMarkets, nativeUpdownBetMutation]);
-
-  /**
-   * Sprint 5 / Phase 1.3: AMM sell support for the home leaderboard
-   * StakeModal. Without this `StakeModal.canSellAmm` is false and the
-   * Sell tab silently disappears even when the user is in an AMM
-   * position. Home leaderboard only opens Up/Down markets today, so
-   * we keep the wiring narrow rather than reaching for the multi-type
-   * dispatch that PredictPage uses.
-   */
-  const homeAmmSellMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/native-markets/${marketId}/bet`,
-        {
-          entryId,
-          actionType: "sell",
-          shares,
-        },
-        { idempotencyKey: tradeIdempotencyKey },
-      );
-      return res.json();
-    },
-    onSuccess: async (data: any) => {
-      hapticSuccess();
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-      }
-      const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
-        description:
-          proceeds > 0
-            ? `Proceeds credited: +${formatVox(proceeds)}`
-            : "Proceeds have been credited to your wallet.",
-      });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      await Promise.all([
-        refreshProfile(),
-        queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
-    },
-    onError: (err: Error) => {
-      hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
-      toast.error(title, { description });
-    },
-  });
-
-  const handleConfirmAmmSell = useCallback(async (shares: number) => {
-    if (!pendingSelection?.marketId || !pendingSelection.entryId) {
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      return;
-    }
-    await homeAmmSellMutation.mutateAsync({
-      marketId: String(pendingSelection.marketId),
-      entryId: String(pendingSelection.entryId),
-      shares,
-    });
-  }, [pendingSelection, homeAmmSellMutation]);
-
-  /**
-   * Live AMM state for the currently-open selection. Without this the
-   * StakeModal renders stale prices (cached on the original pick) for
-   * the lifetime of the modal, so a fast-moving market visibly drifts
-   * away from the % shown in the buy panel. Mirrors PredictPage.
-   */
-  const liveAmmStateForPending = useMemo(() => {
-    if (!pendingSelection || pendingSelection.engine !== "amm") return null;
-    const id = pendingSelection.marketId;
-    const m = updownMarkets.find((entry) => String(entry?.id) === String(id));
-    return (m?.ammState ?? null) as StakeSelection["ammState"] | null;
-  }, [pendingSelection, updownMarkets]);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem('trending_now_collapsed');
@@ -1598,41 +1148,6 @@ export default function HomePage() {
     enabled: !!selectedInsightPerson?.id,
     staleTime: 60_000,
   });
-
-  // Trending leaderboard info popover (now lives in the card header). Fine
-  // pointer: hover the Info icon to open with a 120ms close grace into the
-  // PopoverContent; pointer-down / click pins the popover open (mouse-leave
-  // dismiss disabled) until X / outside click / ESC. Coarse pointer: tap
-  // toggles. X close button is visible on both platforms.
-  const isCoarsePointer = useIsCoarsePointer();
-  const [fameTooltipOpen, setFameTooltipOpen] = useState(false);
-  const fameCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fameTooltipLeaveDismissDisabledRef = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      if (fameCloseTimerRef.current) clearTimeout(fameCloseTimerRef.current);
-    };
-  }, []);
-
-  const openFameTooltip = () => {
-    if (fameCloseTimerRef.current) {
-      clearTimeout(fameCloseTimerRef.current);
-      fameCloseTimerRef.current = null;
-    }
-    setFameTooltipOpen(true);
-  };
-  const scheduleCloseFame = () => {
-    if (fameCloseTimerRef.current) clearTimeout(fameCloseTimerRef.current);
-    fameCloseTimerRef.current = setTimeout(() => setFameTooltipOpen(false), 120);
-  };
-
-  const handleFameTooltipOpenChange = (open: boolean) => {
-    if (!open) {
-      fameTooltipLeaveDismissDisabledRef.current = false;
-    }
-    setFameTooltipOpen(open);
-  };
 
   // For display, just use allPeople from the API
   const displayPeople = useMemo(() => {
@@ -1895,70 +1410,6 @@ export default function HomePage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
-                            <Popover open={fameTooltipOpen} onOpenChange={handleFameTooltipOpenChange}>
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Trending leaderboard info"
-                                  data-testid="icon-trending-toggle-info"
-                                  className="no-default-hover-elevate no-default-active-elevate inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#3C83F6] hover:bg-muted/50"
-                                  onPointerDown={() => {
-                                    if (!isCoarsePointer) {
-                                      fameTooltipLeaveDismissDisabledRef.current = true;
-                                    }
-                                  }}
-                                  onClick={() => {
-                                    if (isCoarsePointer) {
-                                      handleFameTooltipOpenChange(!fameTooltipOpen);
-                                    } else {
-                                      fameTooltipLeaveDismissDisabledRef.current = true;
-                                      handleFameTooltipOpenChange(true);
-                                    }
-                                  }}
-                                  onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
-                                  onMouseLeave={
-                                    !isCoarsePointer
-                                      ? () => {
-                                          if (!fameTooltipLeaveDismissDisabledRef.current) {
-                                            scheduleCloseFame();
-                                          }
-                                        }
-                                      : undefined
-                                  }
-                                >
-                                  <Info className="h-4 w-4" />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent
-                                side="bottom"
-                                align="start"
-                                className={cn(tooltipSurfaceClass, "relative max-w-[280px] pr-8")}
-                                onOpenAutoFocus={(e) => e.preventDefault()}
-                                onMouseEnter={!isCoarsePointer ? openFameTooltip : undefined}
-                                onMouseLeave={
-                                  !isCoarsePointer
-                                    ? () => {
-                                        if (!fameTooltipLeaveDismissDisabledRef.current) {
-                                          scheduleCloseFame();
-                                        }
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <span className="sr-only">Trending leaderboard info</span>
-                                <PopoverClose asChild>
-                                  <button
-                                    type="button"
-                                    aria-label="Close"
-                                    data-testid="button-close-trending-tooltip"
-                                    className="absolute top-2 right-2 p-0.5 rounded-sm text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </PopoverClose>
-                                <TrendScoreInfoContent />
-                              </PopoverContent>
-                            </Popover>
                           </div>
                           <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
                             <TouchTooltip
@@ -1980,7 +1431,7 @@ export default function HomePage() {
                   className="sticky top-16 z-30 border-b border-border/60 bg-card/95 backdrop-blur-md"
                   data-testid="leaderboard-sticky-toolbar"
                 >
-                  <div className="pl-3 pr-4 sm:pr-6 py-4 bg-muted/30">
+                  <div className="pl-2 pr-3 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -1990,44 +1441,27 @@ export default function HomePage() {
                           sortDirection={sortDirection}
                           onSortDirectionChange={setSortDirection}
                         />
-                        <div className="flex-1 min-w-0 lg:max-w-[400px]">
+                        <div className="flex-1 min-w-0 md:max-w-none lg:max-w-[400px]">
                           <SearchBar 
                             onSearch={setSearchQuery} 
                             placeholder="Search..."
                           />
                         </div>
                         {displayPeople.length > 0 && (
+                          <TrendScoreHeaderLabel className="md:hidden shrink-0" />
+                        )}
+                        {displayPeople.length > 0 && (
                           <div
-                            className="hidden lg:flex items-center gap-5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground ml-auto shrink-0"
+                            className="hidden md:flex items-center gap-4 lg:gap-5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground ml-auto shrink-0"
                             data-testid="leaderboard-column-header"
                           >
-                            <div className="text-right w-[140px]">Trend Score</div>
-                            <div className="text-right w-[80px]">24h</div>
-                            <div className="text-right w-[84px]">Approval</div>
-                            <div className="flex justify-end shrink-0 min-w-[108px]">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                                aria-label="About predicting Up or Down from the leaderboard"
-                                data-testid="button-leaderboard-predict-info"
-                                onClick={() => setPredictLeaderboardInfoOpen(true)}
-                              >
-                                Predict
-                              </Button>
+                            <div className="flex justify-end w-[120px] lg:w-[140px]">
+                              <TrendScoreHeaderLabel />
                             </div>
+                            <div className="text-right w-[96px]">24h</div>
+                            <div className="text-right w-[72px] lg:w-[84px]">Approval</div>
                           </div>
                         )}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                          aria-label="About predicting Up or Down from the leaderboard"
-                          data-testid="label-mobile-predict"
-                          onClick={() => setPredictLeaderboardInfoOpen(true)}
-                        >
-                          Predict
-                        </Button>
                       </div>
                       {hasActiveFilters && (
                         <div className="flex items-center gap-2 flex-wrap">
@@ -2087,11 +1521,6 @@ export default function HomePage() {
                         activeTab="fame"
                         isHotMover={hotMoverIds.has(person.id)}
                         onOpenInsight={() => openInsightFromTrendingPerson(person)}
-                        onPredictUp={() => handleLeaderboardPredict(person.id, "up")}
-                        onPredictDown={() => handleLeaderboardPredict(person.id, "down")}
-                        userPredictionPick={userUpdownPickByPerson.get(person.id)?.pick ?? null}
-                        predictionsDisabled={isUpdownCutoffPassed}
-                        predictionsClosedMessage={leaderboardClosedMessage}
                       />
                     ))}
                   </div>
@@ -2218,70 +1647,6 @@ export default function HomePage() {
           </DialogContent>
         </Dialog>
       )}
-      {isMobile ? (
-        <Drawer open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
-          <DrawerContent className="max-h-[85vh]">
-            <DrawerHeader className="space-y-1.5 text-left">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
-                <DrawerTitle>How Up/Down Works</DrawerTitle>
-              </div>
-            </DrawerHeader>
-            <div className="overflow-y-auto px-4 pb-6 pt-0">
-              <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
-            </div>
-          </DrawerContent>
-        </Drawer>
-      ) : (
-        <Dialog open={predictLeaderboardInfoOpen} onOpenChange={setPredictLeaderboardInfoOpen}>
-          <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md">
-            <DialogHeader className="shrink-0 space-y-1.5 text-left">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 shrink-0 text-violet-500" aria-hidden />
-                <DialogTitle>How Up/Down Works</DialogTitle>
-              </div>
-            </DialogHeader>
-            <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
-              <LeaderboardPredictInfoBody onNavigateLink={() => setPredictLeaderboardInfoOpen(false)} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-      <StakeModal
-        open={stakeModalOpen}
-        onClose={() => {
-          setStakeModalOpen(false);
-          setPendingSelection(null);
-        }}
-        selection={pendingSelection}
-        onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
-        initialAmmMode={modalIntent}
-        liveAmmState={liveAmmStateForPending}
-        walletBalance={walletCredits}
-        onDirectionChange={(dir) => {
-          if (!pendingSelection || pendingSelection.type !== "updown") return;
-          const market = updownMarkets.find(m => m.id === pendingSelection.marketId);
-          if (!market) return;
-          const crowdSentiment = dir === "up" ? market.upPoolPercent : (100 - market.upPoolPercent);
-          setPendingSelection({
-            type: "updown",
-            choice: dir === "up" ? "Trend Score UP" : "Trend Score DOWN",
-            marketName: market.personName,
-            marketId: market.id,
-            entryId: dir === "up" ? market.upEntryId : market.downEntryId,
-            startScore: market.startScore,
-            currentScore: market.currentScore,
-            crowdSentiment,
-            baselineScore: market.baselineScore,
-            baselineTimestamp: market.startAt || undefined,
-            endAt: market.endAt || undefined,
-            bettingCutoff: market.bettingCutoff,
-            engine: "amm",
-            ammState: (market.ammState ?? null) as StakeSelection["ammState"],
-          });
-        }}
-      />
     </div>
   );
 }

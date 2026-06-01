@@ -44,16 +44,17 @@ export function MatchupCardSkeleton({ count = 3 }: { count?: number }) {
 
 export function LeaderboardRowSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="space-y-2">
+    <div className="divide-y divide-border/60">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-          <Skeleton className="h-5 w-5 rounded" />
-          <Skeleton className="h-10 w-10 rounded-full" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-1/3" />
-            <Skeleton className="h-3 w-1/4" />
+        <div key={i} className="flex items-center gap-3 py-4 px-3">
+          <Skeleton className="h-12 w-[4.5rem] rounded-lg shrink-0" />
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-1/4 lg:hidden" />
           </div>
-          <Skeleton className="h-6 w-16 rounded-md" />
+          <Skeleton className="h-7 w-16 shrink-0" />
+          <Skeleton className="hidden md:block h-8 w-[4.5rem] shrink-0" />
+          <Skeleton className="hidden md:block h-7 w-12 shrink-0" />
         </div>
       ))}
     </div>

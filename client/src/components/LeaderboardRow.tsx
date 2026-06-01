@@ -6,11 +6,9 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/compone
 import { useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { resolveFameScore } from "@/lib/fameScore";
-import { ThumbsUp, Star, Zap, TrendingUp, TrendingDown, Check, X, Flame } from "lucide-react";
+import { Star, X, Flame } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
-import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
@@ -41,18 +39,6 @@ interface LeaderboardRowProps {
   isHotMover?: boolean;
   onOpenInsight: () => void;
   onVoteClick?: () => void;
-  onPredictUp?: () => void;
-  onPredictDown?: () => void;
-  /**
-   * The user's existing pending pick on this person's weekly Up/Down
-   * market, if any. When set, we visually disable the opposite-side
-   * chip (40% opacity, no hover) — matching the same-side rule on the
-   * detail / card surfaces. Same-side clicks still fire onPredict* so
-   * the parent can route into the StakeModal's top-up flow.
-   */
-  userPredictionPick?: "up" | "down" | null;
-  predictionsDisabled?: boolean;
-  predictionsClosedMessage?: Pick<ClosedMarketMessage, "title" | "lines">;
 }
 
 const EVER_VOTED_KEY = "authoridex-has-ever-voted";
@@ -72,17 +58,34 @@ function markEverVoted() {
   } catch {}
 }
 
+function RankDeltaPill({
+  rankChange,
+  className = "",
+}: {
+  rankChange: number;
+  className?: string;
+}) {
+  const isUp = rankChange > 0;
+  return (
+    <span
+      className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded text-xs font-mono font-semibold tabular-nums ${
+        isUp
+          ? "bg-green-500/15 text-green-600 dark:text-green-400"
+          : "bg-red-500/15 text-red-600 dark:text-red-400"
+      } ${className}`}
+    >
+      {isUp ? "\u25B2" : "\u25BC"}
+      {Math.abs(rankChange)}
+    </span>
+  );
+}
+
 export function LeaderboardRow({
   person,
   activeTab = "fame",
   isHotMover = false,
   onOpenInsight,
   onVoteClick,
-  onPredictUp,
-  onPredictDown,
-  userPredictionPick = null,
-  predictionsDisabled,
-  predictionsClosedMessage,
 }: LeaderboardRowProps) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -141,8 +144,6 @@ export function LeaderboardRow({
         if (!getHasEverVoted()) {
           markEverVoted();
         }
-        setJustVoted(true);
-        setTimeout(() => setJustVoted(false), 1500);
       }
     };
 
@@ -161,22 +162,18 @@ export function LeaderboardRow({
 
   const fameScore = resolveFameScore(person);
   const delta24h = formatDelta(person.change24h);
-  const showDelta = person.change24h != null && Math.abs(person.change24h) >= 2;
+  /** Colour the % once |change24h| >= 1; below that stays muted grey. */
+  const showPctColor =
+    person.change24h != null && Math.abs(person.change24h) >= 1;
+  const showRankDelta =
+    person.rankChange != null && Math.abs(person.rankChange) >= 2;
   const hasVoted = sentimentScore !== null;
   const showVotePulse = !hasVoted && !hasEverVoted;
-  const [justVoted, setJustVoted] = useState(false);
   const rank = person.leaderboardRank ?? (person as any).liveRank ?? person.rank;
   const isColdStart = rank == null || rank === 0;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
-  const closedPredictMessage = predictionsClosedMessage || {
-    title: "Predictions are currently closed",
-    lines: [
-      "This market is in settlement mode right now, so new trades are temporarily disabled.",
-      "Trading reopens with the next weekly cycle on Monday.",
-    ],
-  };
   useEffect(() => {
     if (prevScoreRef.current !== fameScore) {
       prevScoreRef.current = fameScore;
@@ -185,6 +182,18 @@ export function LeaderboardRow({
       return () => clearTimeout(t);
     }
   }, [fameScore]);
+
+  const pctColorClass =
+    person.change24h != null && person.change24h >= 1
+      ? "text-emerald-600 dark:text-emerald-400"
+      : person.change24h != null && person.change24h <= -1
+        ? "text-red-600 dark:text-red-400"
+        : "text-muted-foreground";
+
+  // Show % whenever it exists; colour at |%| >= 1. Rank pill stays |Δ| >= 2.
+  const hasPct = person.change24h != null;
+  const hasMobileMovement = hasPct || showRankDelta;
+  const pctMuted = !showPctColor;
 
   return (
     <div className="border-b">
@@ -236,18 +245,20 @@ export function LeaderboardRow({
               </p>
             );
           })()}
-          <p className="md:hidden text-[11px] text-muted-foreground leading-tight truncate">
-            {activeTab === "fame" && (
-              <span className="font-mono">
-                {fameScore.toLocaleString('en-US')}
-                {showDelta && (
-                  <span className={person.change24h! > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
-                    {' '}{delta24h}
-                  </span>
-                )}
+          {activeTab === "fame" && hasMobileMovement && (
+            <p className="md:hidden text-[11px] leading-tight truncate mt-0.5">
+              <span className="font-mono inline-flex items-center gap-1.5">
+                {hasPct ? (
+                  <span className={pctColorClass}>{delta24h}</span>
+                ) : null}
+                {showRankDelta && person.rankChange != null ? (
+                  <RankDeltaPill rankChange={person.rankChange} className="py-0 px-1.5 text-[10px]" />
+                ) : null}
               </span>
-            )}
-            {activeTab === "approval" && (
+            </p>
+          )}
+          {activeTab === "approval" && (
+            <p className="md:hidden text-[11px] text-muted-foreground leading-tight truncate mt-0.5">
               <span className="text-muted-foreground">
                 {person.approvalVotesCount != null
                   ? `${compactVotes(person.approvalVotesCount)} votes`
@@ -262,31 +273,46 @@ export function LeaderboardRow({
                   </>
                 )}
               </span>
-            )}
-          </p>
+            </p>
+          )}
         </div>
 
         {activeTab === "fame" && (
           <>
-            <div className="text-right hidden sm:block w-[120px] lg:w-[140px] shrink-0">
-              <p className={`font-mono font-bold text-2xl tabular-nums ${scoreFlash ? 'number-flash' : ''}`} data-testid={`text-score-${person.id}`}>
+            <div className="text-right min-w-[4.5rem] max-w-[6.5rem] sm:min-w-[5rem] sm:max-w-none sm:w-[120px] lg:w-[140px] shrink-0">
+              <p
+                className={`font-mono font-bold text-lg sm:text-2xl tabular-nums leading-none tracking-tight text-muted-foreground ${scoreFlash ? 'number-flash' : ''}`}
+                data-testid={`text-score-${person.id}`}
+              >
                 {fameScore.toLocaleString('en-US')}
               </p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
-                Trend Score
-              </p>
             </div>
-            <div className="hidden lg:block text-right w-[72px] lg:w-[80px] shrink-0" data-testid={`text-delta-desktop-${person.id}`}>
-              <p className={`font-mono font-semibold text-sm tabular-nums ${
-                person.change24h == null || Math.abs(person.change24h) < 0.05
-                  ? "text-muted-foreground"
-                  : person.change24h > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-red-600 dark:text-red-400"
-              }`}>
-                {person.change24h != null ? delta24h : '—'}
-              </p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">24h</p>
+            <div className="hidden md:flex justify-end items-center w-[96px] shrink-0">
+              <TouchTooltip
+                content="Trend score % change and 24h rank move. Rank can climb even if score dips \u2014 when rivals fall faster."
+                side="top"
+                contentClassName="max-w-[230px]"
+              >
+                <span
+                  className="inline-flex items-center gap-1.5 cursor-help"
+                  data-testid={`text-delta-desktop-${person.id}`}
+                >
+                  <span
+                    className={`font-mono text-xs tabular-nums ${
+                      pctMuted
+                        ? "text-muted-foreground"
+                        : person.change24h! > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {hasPct ? delta24h : "\u2014"}
+                  </span>
+                  {showRankDelta && person.rankChange != null ? (
+                    <RankDeltaPill rankChange={person.rankChange} />
+                  ) : null}
+                </span>
+              </TouchTooltip>
             </div>
             <div className="hidden md:block text-right w-[72px] lg:w-[84px] shrink-0">
               <TouchTooltip
@@ -306,60 +332,6 @@ export function LeaderboardRow({
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Approval
               </p>
-            </div>
-            <div className="shrink-0 flex justify-end gap-1 ml-4 md:ml-6 lg:ml-auto min-w-[108px]">
-              {(() => {
-                const upDisabled = userPredictionPick === "down";
-                const downDisabled = userPredictionPick === "up";
-                return (
-                  <>
-                    <ClosedMarketActionTrigger
-                      isClosed={!!predictionsDisabled}
-                      message={closedPredictMessage}
-                      side="top"
-                      align="center"
-                    >
-                      <button
-                        className={`no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#00C853]/10 border-[#00C853]/50 text-[#00C853] transition-colors ${upDisabled ? "opacity-40 cursor-not-allowed" : "hover:border-[#00C853]/80 hover:bg-[#00C853]/20"}`}
-                        aria-label={`Predict ${person.name} Up`}
-                        aria-disabled={upDisabled || undefined}
-                        disabled={upDisabled}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (upDisabled) return;
-                          onPredictUp?.();
-                        }}
-                        data-testid={`button-predict-up-${person.id}`}
-                      >
-                        <TrendingUp style={{ width: 12, height: 12 }} />
-                        Up
-                      </button>
-                    </ClosedMarketActionTrigger>
-                    <ClosedMarketActionTrigger
-                      isClosed={!!predictionsDisabled}
-                      message={closedPredictMessage}
-                      side="top"
-                      align="center"
-                    >
-                      <button
-                        className={`no-default-hover-elevate no-default-active-elevate inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium border bg-[#FF0000]/10 border-[#FF0000]/50 text-[#FF0000] transition-colors ${downDisabled ? "opacity-40 cursor-not-allowed" : "hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"}`}
-                        aria-label={`Predict ${person.name} Down`}
-                        aria-disabled={downDisabled || undefined}
-                        disabled={downDisabled}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (downDisabled) return;
-                          onPredictDown?.();
-                        }}
-                        data-testid={`button-predict-down-${person.id}`}
-                      >
-                        <TrendingDown style={{ width: 12, height: 12 }} />
-                        Dn
-                      </button>
-                    </ClosedMarketActionTrigger>
-                  </>
-                );
-              })()}
             </div>
           </>
         )}
