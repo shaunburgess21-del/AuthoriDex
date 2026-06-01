@@ -459,6 +459,14 @@ export function StakeModal({
             resolveAt={selection.endAt ?? null}
             variant="modal"
             engine="amm"
+            marketKind={
+              selection.type === "updown" ||
+              selection.type === "h2h" ||
+              selection.type === "gainer" ||
+              selection.type === "jackpot"
+                ? selection.type
+                : undefined
+            }
           />
         )}
 

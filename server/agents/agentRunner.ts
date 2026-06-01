@@ -23,6 +23,7 @@ import {
 import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
+import { computeArbPrediction, isArbAgent } from "./arbAgent";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { prefetchNativeAssessmentsForSweep } from "./nativeMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
@@ -49,6 +50,9 @@ import {
   QUIET_HOUR_END_SAST,
   BASE_STAKE_AMOUNT,
   MAX_AGENT_STAKE,
+  ARB_COHORT_ENABLED,
+  ARB_AGENT_MAX_STAKE,
+  ARB_CONVERGENCE_MARKETS_PER_SWEEP,
   AGENT_RUNNER_INTERVAL_MS,
   AGENT_RUNNER_STARTUP_DELAY_MS,
   AGENT_CREDIT_LOW_THRESHOLD,
@@ -653,9 +657,13 @@ async function runAgentBatchOnce(): Promise<{
         const cutoff = getMarketBettingCutoff(
           market.endAt,
           market.engine === "parimutuel" ? "parimutuel" : "amm",
+          market.marketType ?? undefined,
         );
         if (now.getTime() >= cutoff.getTime() - bufferMs) {
-          skipped++;
+          // Near-close window: arb cohort is handled by runConvergenceSweep.
+          if (!(ARB_COHORT_ENABLED && isArbAgent(agentData) && market.marketType === "updown")) {
+            skipped++;
+          }
           continue;
         }
       }
@@ -802,14 +810,28 @@ async function runAgentBatchOnce(): Promise<{
           signals.pctChangeVsOpen,
         );
 
-        decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, {
-          priority,
-          decisiveLatched,
-          nativeAssessment: nativeAssessmentByMarket.get(market.id) ?? null,
-        });
+        const hoursRemaining =
+          market.endAt != null
+            ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+            : 7 * 24;
+
+        if (ARB_COHORT_ENABLED && isArbAgent(agentData) && market.marketType === "updown") {
+          const snap = ammStateByMarket.get(market.id);
+          const prices = snap ? ammCurrentPrices(snap) : {};
+          decision = computeArbPrediction(marketData, signals, hoursRemaining, prices);
+        } else {
+          decision = computePrediction(agentData, marketData, signals, crowd, undefined, entrySignals, {
+            priority,
+            decisiveLatched,
+            nativeAssessment: nativeAssessmentByMarket.get(market.id) ?? null,
+            hoursRemaining,
+          });
+        }
       }
 
-      decision = applySimulationDecisionLayer(agentData, marketData, decision);
+      if (!isArbAgent(agentData)) {
+        decision = applySimulationDecisionLayer(agentData, marketData, decision);
+      }
 
       if (decision.abstain) {
         abstained++;
@@ -1017,6 +1039,20 @@ async function runAgentBatchOnce(): Promise<{
   // purpose: a market that just triggered a conviction add-on still
   // gets evaluated for sells (the runner's idempotency check below
   // makes them mutually exclusive at the per-(agent, market) level).
+  let convergenceScheduled = 0;
+  try {
+    convergenceScheduled = await runConvergenceSweep(
+      agents,
+      markets,
+      now,
+      updownSweepCtx,
+    );
+  } catch (convSweepErr) {
+    log(
+      `[AgentRunner] Convergence sweep error: ${convSweepErr instanceof Error ? convSweepErr.message : convSweepErr}`,
+    );
+  }
+
   let sellsScheduled = 0;
   try {
     sellsScheduled = await runSellSweep(
@@ -1036,6 +1072,7 @@ async function runAgentBatchOnce(): Promise<{
     skippedNoEntryId,
     convictionScheduled,
     repredictScheduled,
+    convergenceScheduled,
     sellsScheduled,
   };
   log(`[AgentRunner] Batch complete: ${JSON.stringify(exitStats)}`);
@@ -1638,7 +1675,7 @@ async function runRepredictSweep(
       if (!wrongSide) continue;
 
       if (market.endAt) {
-        const cutoff = getMarketBettingCutoff(market.endAt, "amm");
+        const cutoff = getMarketBettingCutoff(market.endAt, "amm", market.marketType ?? undefined);
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
         if (now.getTime() >= cutoff.getTime() - bufferMs) continue;
       }
@@ -1675,6 +1712,11 @@ async function runRepredictSweep(
         entries,
       };
 
+      const hoursRemaining =
+        market.endAt != null
+          ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+          : 7 * 24;
+
       let decision = computePrediction(
         agentData,
         marketData,
@@ -1685,6 +1727,7 @@ async function runRepredictSweep(
         {
           decisiveLatched,
           nativeAssessment: nativeAssessmentByMarket.get(market.id) ?? null,
+          hoursRemaining,
         },
       );
       decision = applySimulationDecisionLayer(agentData, marketData, decision);
@@ -1731,6 +1774,172 @@ async function runRepredictSweep(
   }
 
   return repredictScheduled;
+}
+
+/**
+ * Near-close convergence sweep — arb cohort only, inside the final-hours
+ * window the main agent loop skips. Walks decided up/down markets toward
+ * lock-in fair when |fair − price| exceeds ARB_MIN_EDGE_PP.
+ */
+async function runConvergenceSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+  ctx: UpdownSweepContext,
+): Promise<number> {
+  if (!ARB_COHORT_ENABLED) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const ammUpdown = filterAmmPerPersonUpdown(allMarkets);
+  if (!ammUpdown.length) return 0;
+
+  const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+  const nearCloseMarkets = ammUpdown.filter((m) => {
+    if (!m.endAt) return false;
+    const cutoff = getMarketBettingCutoff(m.endAt, "amm", m.marketType ?? undefined);
+    const t = now.getTime();
+    return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
+  });
+  if (!nearCloseMarkets.length) return 0;
+
+  const priorityIds = await pickMispricedUpdownMarketIds(
+    nearCloseMarkets,
+    ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+    ctx.marketContext,
+  );
+  const targetIds = new Set(
+    priorityIds.length > 0
+      ? priorityIds
+      : nearCloseMarkets.slice(0, ARB_CONVERGENCE_MARKETS_PER_SWEEP).map((m) => m.id),
+  );
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, Array.from(targetIds)));
+
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entriesByMarket = new Map<string, { id: string; label: string | null }[]>();
+  const entryRows = await db
+    .select({ marketId: marketEntries.marketId, id: marketEntries.id, label: marketEntries.label })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, Array.from(targetIds)));
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const market of nearCloseMarkets) {
+    if (!targetIds.has(market.id)) continue;
+    const mctx = ctx.marketContext.get(market.id);
+    if (!mctx) continue;
+
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length !== 2) continue;
+
+    let signals = market.personId ? ctx.signalsByPerson.get(market.personId) : undefined;
+    if (!signals && market.personId) {
+      const meta = market.metadata as Record<string, unknown> | null;
+      const openingScore =
+        typeof (meta?.openingScore as { score?: number } | undefined)?.score === "number"
+          ? (meta!.openingScore as { score: number }).score
+          : null;
+      signals = await getTrendSignals(market.personId, { openingScore });
+      ctx.signalsByPerson.set(market.personId, signals);
+    }
+    if (!signals) continue;
+
+    const hoursRemaining =
+      market.endAt != null
+        ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+        : 0;
+
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+    const prices = ammCurrentPrices(snap);
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const marketData: MarketWithEntries = {
+      id: market.id,
+      marketType: "updown",
+      status: "OPEN",
+      title: market.title ?? "",
+      category: null,
+      personId: market.personId,
+      endAt: market.endAt ?? null,
+      createdAt: market.createdAt ?? null,
+      entries: entries.map((e) => ({
+        id: e.id,
+        label: e.label ?? "",
+        totalStake: 0,
+        noStake: 0,
+        personId: market.personId,
+      })),
+    };
+
+    const decision = computeArbPrediction(marketData, signals, hoursRemaining, prices);
+    if (decision.abstain || !decision.entryId) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, convergenceSweep: true },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] Convergence ${agent.displayName} → ${market.title?.slice(0, 28)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] Convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
 }
 
 /**
@@ -2509,12 +2718,11 @@ function applyQuietHours(minSec: number, maxSec: number): Date {
   return executeAt;
 }
 
-function computeStakeAmount(confidence: number): number {
-  // Higher confidence → higher stake, between BASE and MAX
+function computeStakeAmount(confidence: number, maxStake = MAX_AGENT_STAKE): number {
   const scaled =
     BASE_STAKE_AMOUNT +
-    Math.round((confidence - 0.5) * 2 * (MAX_AGENT_STAKE - BASE_STAKE_AMOUNT));
-  return Math.max(BASE_STAKE_AMOUNT, Math.min(MAX_AGENT_STAKE, scaled));
+    Math.round((confidence - 0.5) * 2 * (maxStake - BASE_STAKE_AMOUNT));
+  return Math.max(BASE_STAKE_AMOUNT, Math.min(maxStake, scaled));
 }
 
 function applySimulationDecisionLayer(
@@ -2698,7 +2906,9 @@ function computeAgentStakeAmount(
   // Narrow variance — ±15%. The point of the new curve is that smart
   // signals drive size, not RNG.
   const variance = 0.85 + Math.random() * 0.30;
-  const base = computeStakeAmount(confidence);
+  const stakeCap =
+    ARB_COHORT_ENABLED && isArbAgent(agent) ? ARB_AGENT_MAX_STAKE : MAX_AGENT_STAKE;
+  const base = computeStakeAmount(confidence, stakeCap);
   const rawStake = base * simulation.stakeMultiplier * smartnessMultiplier * variance;
   const stake = Number.isFinite(rawStake) ? Math.round(rawStake) : simulation.minStake;
 

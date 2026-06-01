@@ -30,7 +30,10 @@ export const DEFAULT_TARGET_MAX_LOSS_PER_MARKET = 5000;
  *   - 'gainer' → ~8000 (3-10 outcomes, ln(N) scales the loss)
  *   - 'community' → 5000 (default for now; admin-tunable per market later)
  */
-export const TARGET_MAX_LOSS_BY_MARKET_TYPE: Record<string, number> = {};
+export const TARGET_MAX_LOSS_BY_MARKET_TYPE: Record<string, number> = {
+  updown: 2000,
+  h2h: 2000,
+};
 
 /**
  * Pick the right targetMaxLoss for a market. Caller-supplied overrides

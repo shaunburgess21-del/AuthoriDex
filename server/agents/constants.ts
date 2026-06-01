@@ -259,6 +259,55 @@ export const NATIVE_LLM_BOOST_WEIGHT = 0.15;
 export const NATIVE_ASSESSMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
+// Lock-in fair value (time-aware certainty — May/Jun 2026)
+// ---------------------------------------------------------------------------
+/** Log shadow fair targets without changing bets. */
+export const LOCKIN_FAIR_SHADOW = envFlag(process.env.LOCKIN_FAIR_SHADOW);
+/** Apply fair as confidence floor in computePrediction. */
+export const LOCKIN_FAIR_ENABLED = envFlag(process.env.LOCKIN_FAIR_ENABLED);
+/** Dedicated arb / convergence cohort places trades. */
+export const ARB_COHORT_ENABLED = envFlag(process.env.ARB_COHORT_ENABLED);
+/** Friday 23:59 UTC betting cutoff for native AMM up/down (not just jackpot). */
+export const NATIVE_FRIDAY_CUTOFF_ENABLED = envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED);
+/** Weekly up/down only for top N by fameIndex (default 20). */
+export const UPDOWN_TOP_N_ENABLED = envFlag(process.env.UPDOWN_TOP_N_ENABLED);
+export const UPDOWN_TOP_N = (() => {
+  const raw = Number(process.env.UPDOWN_TOP_N);
+  return Number.isInteger(raw) && raw > 0 ? raw : 20;
+})();
+
+/** Arb agents: per-trade budget ceiling (actionWorker). */
+export const ARB_AGENT_MAX_STAKE = (() => {
+  const raw = Number(process.env.ARB_AGENT_MAX_STAKE);
+  return Number.isFinite(raw) && raw >= 100 ? Math.round(raw) : 5000;
+})();
+
+export const ARB_MIN_EDGE_PP = 0.04;
+export const ARB_EDGE_BAND = 0.35;
+/** Max up/down markets per near-close convergence sweep (canary). */
+export const ARB_CONVERGENCE_MARKETS_PER_SWEEP = (() => {
+  const raw = Number(process.env.ARB_CONVERGENCE_MARKETS_PER_SWEEP);
+  return Number.isInteger(raw) && raw > 0 ? raw : 10;
+})();
+
+// ---------------------------------------------------------------------------
+// Stage 4 (optional) — early-week settlement bonus + score EMA relaxation
+// ---------------------------------------------------------------------------
+export const EARLY_WEEK_SETTLEMENT_BONUS_ENABLED = envFlag(
+  process.env.EARLY_WEEK_SETTLEMENT_BONUS_ENABLED,
+);
+export const EARLY_WEEK_SETTLEMENT_BONUS_MULTIPLIER = (() => {
+  const raw = Number(process.env.EARLY_WEEK_SETTLEMENT_BONUS_MULTIPLIER);
+  return Number.isFinite(raw) && raw >= 1 && raw <= 1.5 ? raw : 1.15;
+})();
+/** Hours after market startAt that qualify as "early week" for bonus. */
+export const EARLY_WEEK_BONUS_HOURS = (() => {
+  const raw = Number(process.env.EARLY_WEEK_BONUS_HOURS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 48;
+})();
+export const SCORE_EMA_MORE_RAW_ENABLED = envFlag(process.env.SCORE_EMA_MORE_RAW_ENABLED);
+
+// ---------------------------------------------------------------------------
 // Agent sells (Phase 1 — AMM up/down only)
 // ---------------------------------------------------------------------------
 //
@@ -318,7 +367,7 @@ export interface SellPersonaTuning {
 }
 
 export const SELL_PERSONA_TUNING: Record<
-  "sharp" | "casual" | "noisy" | "liquidity" | "whale",
+  "sharp" | "casual" | "noisy" | "liquidity" | "whale" | "arb",
   SellPersonaTuning
 > = {
   sharp: {
@@ -375,6 +424,17 @@ export const SELL_PERSONA_TUNING: Record<
     bottomFractionRange: [0.50, 0.80],
     earlyFractionRange: [0.20, 0.40],
     bandRadiusScale: 0.95,
+  },
+  arb: {
+    forgetSkipPct: 0.70,
+    pSellTop: 0.15,
+    pSellBottom: 0.10,
+    hopeForReversalPct: 0.60,
+    earlyProfitPct: 0.02,
+    topFractionRange: [0.25, 0.45],
+    bottomFractionRange: [0.20, 0.40],
+    earlyFractionRange: [0.15, 0.25],
+    bandRadiusScale: 1.35,
   },
 };
 

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { computeTrendScore, type TrendInputs } from "../server/scoring/trendScore";
+import {
+  computeTrendScore,
+  getFameIndexEmaAlphaDown,
+  type TrendInputs,
+} from "../server/scoring/trendScore";
 import { DEFAULT_SOURCE_STATS, MASS_ALLOCATION, VELOCITY_ALLOCATION } from "../server/scoring/normalize";
 
 // Build a minimal valid TrendInputs — the full type has many optional fields,
@@ -361,7 +365,8 @@ test("computeTrendScore: rawFameIndex equals raw mass/velocity composite (within
   );
 });
 
-test("computeTrendScore: asymmetric EMA — downward move uses 0.6/0.4 blend", () => {
+test("computeTrendScore: asymmetric EMA — downward move uses alpha_down blend", () => {
+  const alphaDown = getFameIndexEmaAlphaDown();
   // When the raw composite is BELOW the prior tick (a decline), the EMA damps
   // it: fameIndex = 0.6·raw + 0.4·prev. Pre-EMA composite stays as rawFameIndex.
   const withoutPrev = computeTrendScore(baseInputs());
@@ -378,7 +383,7 @@ test("computeTrendScore: asymmetric EMA — downward move uses 0.6/0.4 blend", (
   );
   assert.equal(withPrev.rawFameIndex, withoutPrev.fameIndex,
     "rawFameIndex should match the no-prev fameIndex (EMA happens after raw is computed)");
-  const expected = Math.round(withoutPrev.fameIndex * 0.6 + 900_000 * 0.4);
+  const expected = Math.round(withoutPrev.fameIndex * alphaDown + 900_000 * (1 - alphaDown));
   assert.ok(
     Math.abs(withPrev.fameIndex - expected) < 2,
     `expected downward EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`

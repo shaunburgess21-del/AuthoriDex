@@ -23,7 +23,15 @@ import {
   NO_SIGNAL_ABSTAIN_RATE_SHARP,
   YOUNG_MARKET_HOURS,
   NATIVE_LLM_BOOST_WEIGHT,
+  LOCKIN_FAIR_ENABLED,
+  LOCKIN_FAIR_SHADOW,
 } from "./constants";
+import {
+  computeLockInFairUp,
+  fairForEntry,
+  LOCKIN_DECISIVE_PCT,
+  LOCKIN_FAIR_MAX,
+} from "./lockInFair";
 import type { NativeAssessment } from "./nativeMarketTypes";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import { productionRNG, type RNG } from "./prng";
@@ -51,6 +59,8 @@ export function computePrediction(
     priority?: "high" | "normal";
     decisiveLatched?: boolean;
     nativeAssessment?: NativeAssessment | null;
+    /** Hours until market endAt — drives lock-in fair value. */
+    hoursRemaining?: number;
   } = {},
 ): PredictionDecision {
   const abstain = (
@@ -89,6 +99,24 @@ export function computePrediction(
   const decisiveWeeklyMove =
     options.decisiveLatched === true ||
     (pctVsOpen != null && Math.abs(pctVsOpen) >= DECISIVE_WEEKLY_MOVE_PCT);
+
+  const hoursRemaining =
+    typeof options.hoursRemaining === "number" && Number.isFinite(options.hoursRemaining)
+      ? Math.max(0, options.hoursRemaining)
+      : 7 * 24;
+
+  const isBinaryUpDown =
+    market.marketType === "updown" && entries.length === 2;
+  const fairUp =
+    isBinaryUpDown
+      ? computeLockInFairUp(signals.pctChangeVsOpen, hoursRemaining)
+      : null;
+
+  const lockInDecisive =
+    isBinaryUpDown &&
+    fairUp != null &&
+    pctVsOpen != null &&
+    Math.abs(pctVsOpen) >= LOCKIN_DECISIVE_PCT;
 
   // Step 1: Domain filter
   const marketCategory = market.category?.toLowerCase() ?? "";
@@ -422,6 +450,32 @@ export function computePrediction(
     }
   }
 
+  // Step 3e: Lock-in fair — on a decisive weekly lead, pick the favoured side
+  // deterministically so contrarianism / weighted random can't price backwards.
+  let lockInForcedEntryId: string | null = null;
+  if (
+    LOCKIN_FAIR_ENABLED &&
+    lockInDecisive &&
+    fairUp != null
+  ) {
+    for (const entry of entries) {
+      const f = fairForEntry(fairUp, entry.label, POSITIVE_HINTS, NEGATIVE_HINTS);
+      if (f != null && f >= 0.5) {
+        lockInForcedEntryId = entry.id;
+        break;
+      }
+    }
+    if (lockInForcedEntryId == null) {
+      for (const entry of entries) {
+        const f = fairForEntry(fairUp, entry.label, POSITIVE_HINTS, NEGATIVE_HINTS);
+        if (f != null && f < 0.5) {
+          lockInForcedEntryId = entry.id;
+          break;
+        }
+      }
+    }
+  }
+
   // Step 4: Select entry
   // - Multi-outcome community markets (3+ entries) and H2H pairings always
   //   use weighted random selection so agents distribute across options in
@@ -444,19 +498,14 @@ export function computePrediction(
     market.openMarketType === "multi" &&
     n >= 3;
 
-  const isBinaryUpDown = !isH2H && !isMultiCommunity && n === 2;
-  // Skip the weighted-random side split when the weekly-open delta is
-  // decisive (|move| >= 15%, see `decisiveWeeklyMove` at top). The split
-  // exists to prevent the standard cohort from piling onto the same
-  // low-conviction side on borderline reads (Theo Von 2026-05-01) — but
-  // on a market where the person has already moved ±15%+ from open the
-  // deterministic top pick IS the correct read, and randomizing fights
-  // reality. Sharps were already exempt; this just extends the exemption
-  // to standard agents when the market itself is no longer borderline.
+  const isBinaryUpDownSelect = !isH2H && !isMultiCommunity && n === 2;
   const useWeightedUpDown =
-    isBinaryUpDown && !sharp && sorted[0][1] < 0.65 && !decisiveWeeklyMove;
+    isBinaryUpDownSelect && !sharp && sorted[0][1] < 0.65 && !decisiveWeeklyMove;
 
-  if (isMultiCommunity) {
+  if (lockInForcedEntryId) {
+    chosenEntryId = lockInForcedEntryId;
+    rawProbability = sorted.find(([id]) => id === lockInForcedEntryId)?.[1] ?? 0.5;
+  } else if (isMultiCommunity) {
     const candidates = sorted.slice(0, Math.min(3, n));
     const totalWeight = candidates.reduce((s, [, v]) => s + v, 0);
     const roll = rng.nextFloat() * totalWeight;
@@ -513,12 +562,43 @@ export function computePrediction(
   // Step 6: Confidence calibration
   // confidence_cal > 0.7 → more extreme outputs (bold agent)
   // confidence_cal < 0.5 → compressed outputs (cautious agent)
-  const confidence =
+  const opinionConfidence =
     chanceLevel + (rawProbability - chanceLevel) * agent.confidenceCal;
+
+  let targetConfidence = opinionConfidence;
+  if (LOCKIN_FAIR_ENABLED && fairUp != null) {
+    const chosenEntry = entries.find((e) => e.id === chosenEntryId);
+    const fairSide = fairForEntry(
+      fairUp,
+      chosenEntry?.label,
+      POSITIVE_HINTS,
+      NEGATIVE_HINTS,
+    );
+    if (fairSide != null) {
+      // Lock-in is a fact near close — bypass confidenceCal (not a bold opinion).
+      targetConfidence = lockInForcedEntryId
+        ? fairSide
+        : Math.max(opinionConfidence, fairSide);
+    }
+  }
+
   const clampedConfidence = Math.max(
     chanceLevel + 0.01,
-    Math.min(0.97, confidence)
+    Math.min(LOCKIN_FAIR_MAX, targetConfidence),
   );
+
+  if (LOCKIN_FAIR_SHADOW && fairUp != null && market.id) {
+    const chosenEntry = entries.find((e) => e.id === chosenEntryId);
+    const fairSide = fairForEntry(
+      fairUp,
+      chosenEntry?.label,
+      POSITIVE_HINTS,
+      NEGATIVE_HINTS,
+    );
+    console.log(
+      `[LockInFair][shadow] market=${market.id.slice(0, 8)} hrs=${hoursRemaining.toFixed(1)} fairUp=${fairUp.toFixed(3)} fairSide=${fairSide?.toFixed(3) ?? "n/a"} opinion=${opinionConfidence.toFixed(3)} target=${clampedConfidence.toFixed(3)} pctOpen=${pctVsOpen?.toFixed(3) ?? "n/a"}`,
+    );
+  }
 
   // Step 7: Final random abstain. Sharps abstain less because the whole
   // point of the band is they show up consistently when the model has

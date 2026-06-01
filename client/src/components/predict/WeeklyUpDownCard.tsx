@@ -150,6 +150,7 @@ export function WeeklyUpDownCard({
         resolveAt={market.endAt ?? null}
         variant="compact"
         engine="amm"
+        marketKind="updown"
         className="mb-2"
       />
 

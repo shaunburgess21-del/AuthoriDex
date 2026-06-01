@@ -56,6 +56,7 @@ const PERSONA_LIKE_BEHAVIOUR: Record<
   casual:    { chance: 0.13, min: 1, max: 1 },
   sharp:     { chance: 0.10, min: 1, max: 1 },
   whale:     { chance: 0.065, min: 1, max: 1 },
+  arb:       { chance: 0, min: 0, max: 0 },
 };
 
 /** Count likes this agent has cast in the last 24h. Used to skip agents

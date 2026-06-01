@@ -52,6 +52,11 @@ import { gamificationService } from "./gamification";
 import { checkAndAwardPredictionWinBadges } from "./badges";
 import { syncProfilePredictionStats } from "./profile-prediction-stats";
 import { scoreResolvedMarket } from "../agents/performanceUpdater";
+import {
+  EARLY_WEEK_BONUS_HOURS,
+  EARLY_WEEK_SETTLEMENT_BONUS_ENABLED,
+  EARLY_WEEK_SETTLEMENT_BONUS_MULTIPLIER,
+} from "../agents/constants";
 
 type DbOrTx = Pick<typeof db, "select" | "insert" | "update">;
 
@@ -574,6 +579,24 @@ async function runWinnerPath(
   // Pull all 'active' AMM buy rows for this market — these are the
   // open positions that need to be marked won/lost. Sell rows live
   // in status='settled' from creation and don't need touching.
+  const [marketRow] = await tx
+    .select({
+      startAt: predictionMarkets.startAt,
+      marketType: predictionMarkets.marketType,
+    })
+    .from(predictionMarkets)
+    .where(eq(predictionMarkets.id, marketId))
+    .limit(1);
+
+  const earlyBonusCutoff =
+    EARLY_WEEK_SETTLEMENT_BONUS_ENABLED &&
+    marketRow?.marketType === "updown" &&
+    marketRow.startAt
+      ? new Date(
+          marketRow.startAt.getTime() + EARLY_WEEK_BONUS_HOURS * 3_600_000,
+        )
+      : null;
+
   const activeBuys = await tx
     .select({
       id: marketBets.id,
@@ -581,6 +604,7 @@ async function runWinnerPath(
       entryId: marketBets.entryId,
       shareCount: marketBets.shareCount,
       stakeAmount: marketBets.stakeAmount,
+      createdAt: marketBets.createdAt,
     })
     .from(marketBets)
     .where(
@@ -648,7 +672,19 @@ async function runWinnerPath(
   for (const [userId, slot] of winnerBuysByUser) {
     const sellShares = sellByUser.get(userId) ?? 0;
     const netShares = Math.max(0, slot.totalBuyShares - sellShares);
-    const payout = Math.floor(netShares);
+    let payout = Math.floor(netShares);
+    if (earlyBonusCutoff) {
+      let earlyWinnerShares = 0;
+      for (const row of slot.rows) {
+        if (row.createdAt && new Date(row.createdAt) <= earlyBonusCutoff) {
+          earlyWinnerShares += Number(row.shareCount ?? 0);
+        }
+      }
+      const bonusShares = Math.min(earlyWinnerShares, netShares);
+      payout += Math.floor(
+        bonusShares * (EARLY_WEEK_SETTLEMENT_BONUS_MULTIPLIER - 1),
+      );
+    }
 
     if (payout > 0) {
       // `selectPayoutLedgerShape` returns the right txn type + idempotency

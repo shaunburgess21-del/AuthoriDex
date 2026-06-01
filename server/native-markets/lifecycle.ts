@@ -55,17 +55,49 @@ export function getAmmTradingCutoff(endAt: Date): Date {
  * should pass `"parimutuel"` explicitly. Every other call site can
  * either omit the engine arg or pass it for documentation.
  */
+function envFlag(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+/** Friday 23:59 UTC cutoff for weekly up/down when `NATIVE_FRIDAY_CUTOFF_ENABLED`. */
+function nativeFridayCutoffForUpdown(
+  endAt: Date,
+  engine: MarketEngine,
+  marketType?: string,
+): boolean {
+  return (
+    envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED) &&
+    engine === "amm" &&
+    marketType === "updown"
+  );
+}
+
 export function getMarketBettingCutoff(
   endAt: Date,
   engine: MarketEngine = "amm",
+  marketType?: string,
 ): Date {
+  if (nativeFridayCutoffForUpdown(endAt, engine, marketType)) {
+    return getWeeklyBettingCutoff(endAt);
+  }
   return engine === "amm" ? getAmmTradingCutoff(endAt) : getWeeklyBettingCutoff(endAt);
+}
+
+/** User-facing copy when a buy is rejected past cutoff. */
+export function getAmmTradingClosedMessage(marketType?: string): string {
+  if (envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED) && marketType === "updown") {
+    return "Weekly trading closed — entries locked Friday 23:59 UTC until results Sunday.";
+  }
+  return "Trading is closed (final minutes before resolution). This market is now locked.";
 }
 
 export function deriveNativeMarketLifecycle(
   endAt: Date | null | undefined,
   now: Date = new Date(),
   engine: MarketEngine = "amm",
+  marketType?: string,
 ): NativeMarketLifecycle {
   if (!endAt) {
     return {
@@ -77,7 +109,7 @@ export function deriveNativeMarketLifecycle(
   }
 
   const resolutionDeadline = new Date(endAt);
-  const bettingCutoff = getMarketBettingCutoff(resolutionDeadline, engine);
+  const bettingCutoff = getMarketBettingCutoff(resolutionDeadline, engine, marketType);
   const isCutoffPassed = now > bettingCutoff;
 
   let status: NativeMarketLifecycleStatus = "OPEN";

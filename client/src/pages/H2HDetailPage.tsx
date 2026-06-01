@@ -626,6 +626,7 @@ export default function H2HDetailPage() {
           resolveAt={hydrated.endAt}
           variant="full"
           engine="amm"
+          marketKind="h2h"
         />
 
         {/* Hero – Side-by-side portraits */}

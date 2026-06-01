@@ -96,6 +96,14 @@ const V2_HANDLES: Array<{ username: string; band: SimulationPersonaBand; special
   { username: "lineLentil", band: "liquidity", specialties: ["music", "business"] },
   { username: "bentOdds", band: "noisy", specialties: ["creator", "sports"] },
   { username: "maybMarket", band: "casual", specialties: ["entertainment", "politics"] },
+  { username: "fairWalk1", band: "arb", specialties: ["sports", "business"] },
+  { username: "fairWalk2", band: "arb", specialties: ["music", "entertainment"] },
+  { username: "fairWalk3", band: "arb", specialties: ["politics", "tech"] },
+  { username: "fairWalk4", band: "arb", specialties: ["creator", "sports"] },
+  { username: "fairWalk5", band: "arb", specialties: ["business", "entertainment"] },
+  { username: "fairWalk6", band: "arb", specialties: ["music", "creator"] },
+  { username: "fairWalk7", band: "arb", specialties: ["sports", "politics"] },
+  { username: "fairWalk8", band: "arb", specialties: ["tech", "business"] },
 ];
 
 const BAND_TRAITS: Record<SimulationPersonaBand, Omit<AgentSeed, "username" | "displayName" | "specialties" | "daysAgo" | "xpPoints" | "rank" | "predictCredits" | "simulationProfile">> = {
@@ -159,6 +167,18 @@ const BAND_TRAITS: Record<SimulationPersonaBand, Omit<AgentSeed, "username" | "d
     consensusSensitivity: 0.30,
     activityRate: 0.30,
   },
+  arb: {
+    bio: "Convergence desk — walks mispriced weekly cards toward fair.",
+    archetype: "high_conviction",
+    boldness: 0.50,
+    contrarianism: 0,
+    recencyWeight: 0.90,
+    prestigeBias: 0.50,
+    confidenceCal: 1.0,
+    riskAppetite: 0.90,
+    consensusSensitivity: 0.10,
+    activityRate: 0.95,
+  },
 };
 
 function hashNumber(input: string): number {
@@ -181,6 +201,26 @@ function clamp01(value: number): number {
 
 function buildSimulationProfile(seed: typeof V2_HANDLES[number]): AgentSimulationProfile {
   const band = seed.band;
+  if (band === "arb") {
+    return {
+      schemaVersion: 2,
+      cohortId: SIMULATION_V2_COHORT_ID,
+      personaBand: "arb",
+      skillTier: 0.92,
+      favoriteCategories: seed.specialties,
+      edgeThreshold: -0.15,
+      publicConfidenceRate: 0.05,
+      stakeMultiplier: 2.5,
+      minStake: 100,
+      maxStake: 5000,
+      weeklyVoteCap: 1,
+      weeklyCommentCap: 0,
+      dailyVoteChance: 0.05,
+      dailyCommentChance: 0,
+      commentStyle: "analytical",
+      bankrollProfile: "large",
+    };
+  }
   const skillBase = band === "sharp" ? 0.82 : band === "whale" ? 0.68 : band === "liquidity" ? 0.58 : band === "casual" ? 0.52 : 0.34;
   const jitter = seededRoll(`${seed.username}:skill`, -0.08, 0.08);
   const large = band === "whale";
@@ -235,7 +275,14 @@ const AGENT_SEEDS: AgentSeed[] = V2_HANDLES.map((handle, index) => {
   const daysAgo = Math.round(seededRoll(`${handle.username}:age`, 18, 130));
   const xpPoints = Math.round(seededRoll(`${handle.username}:xp`, 90, handle.band === "whale" ? 4200 : 1800));
   const rank = xpPoints > 2800 ? "Analyst" : xpPoints > 1400 ? "Insider" : xpPoints > 450 ? "Aspirant" : "Citizen";
-  const creditsBase = handle.band === "whale" ? 22000 : handle.band === "sharp" ? 14000 : AGENT_CREDIT_TOPUP_TARGET;
+  const creditsBase =
+    handle.band === "arb"
+      ? 50000
+      : handle.band === "whale"
+        ? 22000
+        : handle.band === "sharp"
+          ? 14000
+          : AGENT_CREDIT_TOPUP_TARGET;
 
   return {
     username: handle.username,

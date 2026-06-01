@@ -85,10 +85,16 @@ export function getClosedMarketTimes(options: ClosedMarketMessageOptions = {}): 
 
 export function getClosedMarketMessage(options: ClosedMarketMessageOptions = {}): ClosedMarketMessage {
   const times = getClosedMarketTimes(options);
+  const cutoffDate = toDate(options.bettingCutoff) ?? getFallbackDates().cutoff;
+  const now = new Date();
+  const entriesClosed = now > cutoffDate;
 
+  const closeVerb = entriesClosed ? "Entries closed" : "Entries close";
   const lines = [
-    "This market is in settlement mode right now, so new predictions are temporarily disabled.",
-    `Entries close on ${times.cutoffUtc} (${times.cutoffLocal} local), resolve on ${times.resolveUtc} (${times.resolveLocal} local), and reopen Monday (${times.reopenLocal} local / ${times.reopenUtc}).`,
+    entriesClosed
+      ? "Trading is closed for this week — new predictions are disabled until the next cycle."
+      : "This market is in settlement mode right now, so new predictions are temporarily disabled.",
+    `${closeVerb} ${times.cutoffUtc} (${times.cutoffLocal} local), resolve ${times.resolveUtc} (${times.resolveLocal} local), reopen Monday (${times.reopenLocal} local / ${times.reopenUtc}).`,
     "Please check back Monday to place your next prediction.",
   ];
 

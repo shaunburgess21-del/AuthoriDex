@@ -130,6 +130,7 @@ const PERSONA_LENGTH_TILT: Record<SimulationPersonaBand, Record<LengthTier, numb
   noisy:     { tiny: 1.3, short: 1.1, medium: 1.0, long: 0.8 },
   liquidity: { tiny: 2.2, short: 1.4, medium: 0.4, long: 0.1 },
   whale:     { tiny: 0.7, short: 1.0, medium: 1.3, long: 1.3 },
+  arb:       { tiny: 1.0, short: 1.0, medium: 1.0, long: 1.0 },
 };
 
 function pickLength(
@@ -166,6 +167,7 @@ const PERSONA_VOICE: Record<AgentSimulationProfile["personaBand"], string> = {
     "very short. One sentence, often a fragment. You don't explain yourself. 'Yeah no chance.' / 'Nikola for me.' / 'Easy Spain.' is your full comment most of the time.",
   whale:
     "calm and direct. You state your view in plain words and stop. No selling, no flourish. Confidence reads as brevity, not as performance.",
+  arb: "you do not post social comments — this persona is market-making only.",
 };
 
 const STYLE_GUIDANCE: Record<AgentSimulationProfile["commentStyle"], string> = {

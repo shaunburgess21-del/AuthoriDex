@@ -20,6 +20,8 @@
  *   6. Agent pause state — warn (not fail) if paused.
  *   7. Tie-void rate — per-type rate of `amm_auto_tie` voids in the
  *      lookback window. Warns at 5%, fails at 10%.
+ *   8. Up/Down calibration — avg |actual win rate − final UP price| on
+ *      decided buckets (warn >0.12, fail >0.20).
  *
  * Failure semantics: any check returning status="fail" makes the overall
  * result `ok=false`. "warn" rows do NOT flip ok — operators should still
@@ -88,6 +90,7 @@ export async function runAmmHealthCheck(
   checks.push(await checkDuplicateIdemKeys());
   checks.push(await checkAgentPause());
   checks.push(await checkTieVoidRate(lookbackDays));
+  checks.push(await checkMarketCalibration(lookbackDays));
 
   const passed = checks.filter((c) => c.status === "pass").length;
   const warned = checks.filter((c) => c.status === "warn").length;
@@ -565,6 +568,33 @@ async function checkTieVoidRate(lookbackDays: number): Promise<CheckResult> {
         ? `Tie-void rate within bounds. ${detailLines.join("; ")}`
         : `Tie-void rate elevated. ${detailLines.join("; ")}. If a market type sustains >${(TIE_VOID_RATE_WARN_PCT * 100).toFixed(0)}% across multiple weeks, consider adding a tiebreaker rule (e.g. higher absolute score wins) instead of voiding.`,
     sample: breakdown,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Check 8: Up/Down price calibration
+// ---------------------------------------------------------------------------
+const CALIBRATION_GAP_WARN = 0.12;
+const CALIBRATION_GAP_FAIL = 0.20;
+
+async function checkMarketCalibration(lookbackDays: number): Promise<CheckResult> {
+  const { fetchUpDownCalibration } = await import("../agents/marketCalibration.ts");
+  const cal = await fetchUpDownCalibration(lookbackDays);
+  const gap = cal.avgGapOnDecided;
+
+  let status: CheckStatus = "pass";
+  if (gap != null && gap >= CALIBRATION_GAP_FAIL) status = "fail";
+  else if (gap != null && gap >= CALIBRATION_GAP_WARN) status = "warn";
+
+  return {
+    name: `Up/Down calibration gap (last ${lookbackDays}d)`,
+    status,
+    rowCount: cal.totalResolved,
+    details:
+      gap == null
+        ? "Insufficient resolved up/down markets for calibration."
+        : `${cal.totalResolved} resolved; avg |actual−price| on decided buckets = ${gap.toFixed(3)} (warn≥${CALIBRATION_GAP_WARN}, fail≥${CALIBRATION_GAP_FAIL}). Run: npx tsx scripts/market-calibration.ts`,
+    sample: cal.buckets,
   };
 }
 

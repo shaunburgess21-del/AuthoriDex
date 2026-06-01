@@ -106,7 +106,12 @@ import pLimit from "p-limit";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
-import { deriveNativeMarketLifecycle, getWeeklyBettingCutoff, getMarketBettingCutoff } from "./native-markets/lifecycle";
+import {
+  deriveNativeMarketLifecycle,
+  getWeeklyBettingCutoff,
+  getMarketBettingCutoff,
+  getAmmTradingClosedMessage,
+} from "./native-markets/lifecycle";
 import { executeBuy, executeSell } from "./services/amm-trades";
 import { fireAmmPlacementHooks } from "./services/amm-bet-hooks";
 import {
@@ -9536,7 +9541,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (nativeTypes.includes(market.marketType as (typeof nativeTypes)[number])) {
         const nowForCutoff = new Date();
         const engineKind: "parimutuel" | "amm" = market.engine === "amm" ? "amm" : "parimutuel";
-        const lifecycle = deriveNativeMarketLifecycle(market.endAt, nowForCutoff, engineKind);
+        const lifecycle = deriveNativeMarketLifecycle(
+          market.endAt,
+          nowForCutoff,
+          engineKind,
+          market.marketType ?? undefined,
+        );
         const engagement = await getMarketEngagementPreview([market.id]);
         const volume = Number(ammState?.totalUserCreditsIn ?? 0);
         const lifecycleFields = {
@@ -18438,10 +18448,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm");
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm", "updown");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: "Trading is closed (5-minute pre-resolve cooldown). This market is now locked.",
+            error: getAmmTradingClosedMessage("updown"),
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }
@@ -18628,10 +18638,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const now = new Date();
       if (market.endAt) {
-        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm");
+        const bettingCutoff = getMarketBettingCutoff(market.endAt, "amm", "updown");
         if (now > bettingCutoff) {
           return res.status(400).json({
-            error: "Trading is closed (5-minute pre-resolve cooldown). This market is now locked.",
+            error: getAmmTradingClosedMessage("updown"),
             bettingCutoff: bettingCutoff.toISOString(),
           });
         }

@@ -124,9 +124,18 @@ async function buildNativeMarketsPayload(
   }
 
   const engagement = await getMarketEngagementPreview(marketIds);
-  const addLifecycleFields = (m: { endAt: Date | null; engine?: string | null }) => {
+  const addLifecycleFields = (m: {
+    endAt: Date | null;
+    engine?: string | null;
+    marketType?: string | null;
+  }) => {
     const engineKind: "parimutuel" | "amm" = m.engine === "amm" ? "amm" : "parimutuel";
-    const lifecycle = deriveNativeMarketLifecycle(m.endAt, nowForCutoff, engineKind);
+    const lifecycle = deriveNativeMarketLifecycle(
+      m.endAt,
+      nowForCutoff,
+      engineKind,
+      m.marketType ?? undefined,
+    );
     return {
       bettingCutoff: lifecycle.bettingCutoff?.toISOString() ?? null,
       resolutionDeadline: lifecycle.resolutionDeadline?.toISOString() ?? null,

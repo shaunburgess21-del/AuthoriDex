@@ -24,6 +24,12 @@ export interface MarketCycleStripProps {
    * jackpot is now the only parimutuel surface.
    */
   engine?: "amm" | "parimutuel";
+  /**
+   * Native market kind — drives fallback labels when `bettingCutoff` is
+   * still loading. Up/Down uses Friday lock when the server applies the
+   * weekly cutoff policy; H2H/gainer keep the short pre-resolve window.
+   */
+  marketKind?: "updown" | "h2h" | "gainer" | "jackpot";
   className?: string;
 }
 
@@ -51,6 +57,7 @@ export function MarketCycleStrip({
   resolveAt,
   variant = "compact",
   engine = "amm",
+  marketKind,
   className,
 }: MarketCycleStripProps) {
   const cycle = useMarketCycle({
@@ -59,19 +66,25 @@ export function MarketCycleStrip({
   });
 
   const isAmm = engine === "amm";
+  const fridayUpdown = marketKind === "updown";
 
-  // Cutoff fallbacks are engine-aware. AMM cards trade until ~Sunday
-  // close, parimutuel jackpot still locks at Friday 23:59 UTC. The
-  // fallback only renders when `bettingCutoff` is missing — which is
-  // rare in production but happens in storybook / a few admin previews.
+  const cutoffFallbackFull = fridayUpdown
+    ? "Friday 23:59 UTC"
+    : isAmm
+      ? "Sunday 23:59 UTC"
+      : "Friday 23:59 UTC";
+  const cutoffFallbackShort = fridayUpdown
+    ? "Fri 23:59 UTC"
+    : isAmm
+      ? "Sun 23:59 UTC"
+      : "Fri 23:59 UTC";
+
   const cutoffLabelFull =
-    formatCycleDate(bettingCutoff, { withDate: true }) ??
-    (isAmm ? "Sunday 23:59 UTC" : "Friday 23:59 UTC");
+    formatCycleDate(bettingCutoff, { withDate: true }) ?? cutoffFallbackFull;
   const resolveLabelFull =
     formatCycleDate(resolveAt, { withDate: true }) ?? "Sunday 23:59 UTC";
   const cutoffLabelShort =
-    formatCycleDate(bettingCutoff, { withDate: false }) ??
-    (isAmm ? "Sun 23:59 UTC" : "Fri 23:59 UTC");
+    formatCycleDate(bettingCutoff, { withDate: false }) ?? cutoffFallbackShort;
   const resolveLabelShort =
     formatCycleDate(resolveAt, { withDate: false }) ?? "Sun 23:59 UTC";
 

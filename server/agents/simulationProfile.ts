@@ -5,7 +5,8 @@ export type SimulationPersonaBand =
   | "casual"
   | "noisy"
   | "liquidity"
-  | "whale";
+  | "whale"
+  | "arb";
 
 export interface AgentSimulationProfile {
   schemaVersion: 2;
@@ -80,7 +81,7 @@ export function getSimulationProfile(value: unknown): AgentSimulationProfile {
     cohortId: typeof value.cohortId === "string" ? value.cohortId : SIMULATION_V2_COHORT_ID,
     personaBand: enumOr(
       value.personaBand,
-      ["sharp", "casual", "noisy", "liquidity", "whale"] as const,
+      ["sharp", "casual", "noisy", "liquidity", "whale", "arb"] as const,
       DEFAULT_SIMULATION_PROFILE.personaBand,
     ),
     skillTier: numberOr(value.skillTier, DEFAULT_SIMULATION_PROFILE.skillTier),

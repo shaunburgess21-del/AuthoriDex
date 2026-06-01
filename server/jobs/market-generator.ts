@@ -105,9 +105,55 @@ export function decideMissingMarketTypes(
   return order.filter((t) => counts[t] === 0);
 }
 
+function envFlag(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+const UPDOWN_TOP_N_LIMIT = (() => {
+  if (!envFlag(process.env.UPDOWN_TOP_N_ENABLED)) return null;
+  const raw = Number(process.env.UPDOWN_TOP_N);
+  return Number.isInteger(raw) && raw > 0 ? raw : 20;
+})();
+
 export async function generateWeeklyUpDown(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
   let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
+
+  if (UPDOWN_TOP_N_LIMIT != null) {
+    const ranked = await db
+      .select({
+        id: trackedPeople.id,
+        name: trackedPeople.name,
+        category: trackedPeople.category,
+        avatar: trackedPeople.avatar,
+        displayOrder: trackedPeople.displayOrder,
+        imageSlug: trackedPeople.imageSlug,
+        bio: trackedPeople.bio,
+        youtubeId: trackedPeople.youtubeId,
+        spotifyId: trackedPeople.spotifyId,
+        wikiSlug: trackedPeople.wikiSlug,
+        xHandle: trackedPeople.xHandle,
+        instagramHandle: trackedPeople.instagramHandle,
+        tiktokHandle: trackedPeople.tiktokHandle,
+        searchQueryOverride: trackedPeople.searchQueryOverride,
+        newsQueryWidened: trackedPeople.newsQueryWidened,
+        googleTrendsTopicId: trackedPeople.googleTrendsTopicId,
+        status: trackedPeople.status,
+      })
+      .from(trackedPeople)
+      .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
+      .where(eq(trackedPeople.status, "main_leaderboard"))
+      .orderBy(desc(trendingPeople.fameIndex), trackedPeople.id)
+      .limit(UPDOWN_TOP_N_LIMIT);
+    if (ranked.length > 0) {
+      people = ranked;
+      log(
+        `[MarketGenerator:UpDown] Week ${weekNumber}: top ${UPDOWN_TOP_N_LIMIT} by fameIndex (${people.length} people)`,
+      );
+    }
+  }
 
   if (people.length === 0) {
     log(`[MarketGenerator:UpDown] No trackedPeople found, falling back to trendingPeople`);
@@ -170,7 +216,7 @@ export async function generateWeeklyUpDown(): Promise<number> {
       status: "OPEN" as const,
       startAt: monday,
       endAt: sunday,
-      closeAt: getMarketBettingCutoff(sunday, engine),
+      closeAt: getMarketBettingCutoff(sunday, engine, "updown"),
       weekNumber,
       metadata: openScore
         ? {

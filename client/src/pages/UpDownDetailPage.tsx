@@ -624,6 +624,7 @@ export default function UpDownDetailPage() {
           resolveAt={hydrated.endAt}
           variant="full"
           engine="amm"
+          marketKind="updown"
         />
 
         {/* Hero */}

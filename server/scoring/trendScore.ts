@@ -232,7 +232,19 @@ export interface TrendScoreResult {
 // 24h decay-floor) sit upstream; Phase B will lighten those once the
 // post-Currents personal baselines/floors have recalibrated.
 const FAME_INDEX_EMA_ALPHA_UP = 0.85;
-const FAME_INDEX_EMA_ALPHA_DOWN = 0.6;
+
+function envFlag(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+/** Downside EMA alpha — relax toward raw when `SCORE_EMA_MORE_RAW_ENABLED`. */
+export function getFameIndexEmaAlphaDown(): number {
+  if (envFlag(process.env.SCORE_EMA_MORE_RAW_ENABLED)) return 0.75;
+  const raw = Number(process.env.FAME_INDEX_EMA_ALPHA_DOWN);
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 0.6;
+}
 
 export function computeTrendScore(
   inputs: TrendInputs,
@@ -381,7 +393,7 @@ export function computeTrendScore(
   const emaAlphaCurrent = hasUsablePrev
     ? rawFameIndex >= previousFameIndex!
       ? FAME_INDEX_EMA_ALPHA_UP
-      : FAME_INDEX_EMA_ALPHA_DOWN
+      : getFameIndexEmaAlphaDown()
     : 1;
   const emaAlphaPrevious = 1 - emaAlphaCurrent;
 

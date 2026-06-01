@@ -214,6 +214,7 @@ export function HeadToHeadCard({
           resolveAt={market.endAt ?? null}
           variant="compact"
           engine="amm"
+          marketKind="h2h"
           className="mb-2"
         />
 

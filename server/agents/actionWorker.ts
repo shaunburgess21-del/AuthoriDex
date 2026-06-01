@@ -22,12 +22,16 @@ import {
   JACKPOT_AGENT_COLLISION_RANGE,
   BASE_STAKE_AMOUNT,
   MAX_AGENT_STAKE,
+  ARB_AGENT_MAX_STAKE,
+  ARB_COHORT_ENABLED,
+  ARB_EDGE_BAND,
 } from "./constants";
+import { getSimulationProfile } from "./simulationProfile";
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import { WORLD_MARKETS_LLM_ENABLED, MIN_SHARES_TO_SELL } from "./constants";
 import type { PredictionDecision, SellDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
-import { getMarketBettingCutoff } from "../native-markets/lifecycle";
+import { getMarketBettingCutoff, getAmmTradingClosedMessage } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
 import { executeBuy, executeSell, type TradeError } from "../services/amm-trades";
 import { syncProfilePredictionStats } from "../services/profile-prediction-stats";
@@ -198,12 +202,16 @@ async function executeAction(action: {
     // UTC parimutuel wall is gone.
     const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType ?? "");
     if (isWeeklyNative && market.endAt) {
-      const cutoff = getMarketBettingCutoff(market.endAt, "amm");
+      const cutoff = getMarketBettingCutoff(
+        market.endAt,
+        "amm",
+        market.marketType ?? undefined,
+      );
       if (new Date() > cutoff) {
         await db.update(scheduledAgentActions)
           .set({
             status: "skipped",
-            errorMessage: "Betting cutoff passed (AMM cooldown reached)",
+            errorMessage: getAmmTradingClosedMessage(market.marketType ?? undefined),
             executedAt: new Date(),
           })
           .where(eq(scheduledAgentActions.id, action.id));
@@ -381,9 +389,13 @@ async function executeAmmBuy(
   // never spends more than persona allows, but may spend less if their
   // confidence target is reached cheaply. Floor at MIN_AMM_BUY_CREDITS=5
   // (mirrored in sizeAmmBudget defaults).
+  const isArb =
+    ARB_COHORT_ENABLED &&
+    getSimulationProfile(agent.simulationProfile).personaBand === "arb";
+  const agentMaxStake = isArb ? ARB_AGENT_MAX_STAKE : MAX_AGENT_STAKE;
   const maxBudget = Math.max(
     1,
-    Math.min(MAX_AGENT_STAKE, Math.round(action.stakeAmount || BASE_STAKE_AMOUNT)),
+    Math.min(agentMaxStake, Math.round(action.stakeAmount || BASE_STAKE_AMOUNT)),
   );
 
   const sizing = sizeAmmBudget({
@@ -391,6 +403,7 @@ async function executeAmmBuy(
     entryId: action.entryId,
     confidence: decision.confidence ?? 0.5,
     maxBudget,
+    edgeBand: isArb ? ARB_EDGE_BAND : undefined,
     // Read back the LLM ranker's conviction (Agent v2). When present and
     // > 0.5, `sizeAmmBudget` linearly widens the per-trade edge band from
     // DEFAULT (0.10) toward MAX (0.20), letting a high-conviction sharp

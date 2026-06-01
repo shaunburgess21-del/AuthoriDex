@@ -61,6 +61,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
+import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { getMarketBaselineScore, type MarketBaselineSource } from "@/lib/predict-market-baseline";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -1218,19 +1220,24 @@ export default function HomePage() {
     return map;
   }, [userPredictionsData, updownMarkets]);
 
-  const isUpdownCutoffPassed = useMemo(() => {
-    const allNative = (nativeUpdownData || []) as any[];
-    return allNative.some((m: any) => m.isCutoffPassed === true);
-  }, [nativeUpdownData]);
+  const updownCanonicalCycle = useMemo(
+    () => getCanonicalNativeCycle((nativeUpdownData || []) as any[]),
+    [nativeUpdownData],
+  );
+
+  const updownCycle = useMarketCycle({
+    bettingCutoff: updownCanonicalCycle.bettingCutoff,
+    resolutionDeadline: updownCanonicalCycle.resolutionDeadline,
+  });
+
+  const isUpdownCutoffPassed = updownCycle.status !== "OPEN";
 
   const leaderboardClosedMessage = useMemo(() => {
-    const allNative = (nativeUpdownData || []) as any[];
-    const firstMarket = allNative[0];
     return getClosedMarketMessage({
-      bettingCutoff: firstMarket?.bettingCutoff,
-      resolutionDeadline: firstMarket?.resolutionDeadline || firstMarket?.endAt,
+      bettingCutoff: updownCanonicalCycle.bettingCutoff,
+      resolutionDeadline: updownCanonicalCycle.resolutionDeadline,
     });
-  }, [nativeUpdownData]);
+  }, [updownCanonicalCycle.bettingCutoff, updownCanonicalCycle.resolutionDeadline]);
 
   const handleLeaderboardPredict = useCallback((personId: string, direction: "up" | "down") => {
     if (isUpdownCutoffPassed) {
