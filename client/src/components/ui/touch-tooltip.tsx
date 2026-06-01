@@ -48,14 +48,22 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="relative inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 cursor-help text-inherit font-inherit text-left before:absolute before:inset-[-12px] before:content-['']"
+          <span
+            className="relative inline-flex items-center justify-center cursor-help text-inherit before:absolute before:inset-[-12px] before:content-['']"
+            role="button"
+            tabIndex={0}
             aria-label="More info"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                setOpen((prev) => !prev);
+              }
+            }}
           >
             {children}
-          </button>
+          </span>
         </PopoverTrigger>
         <PopoverContent side={side} align={align} className={popoverMergedClass}>
           {showCloseButton && (

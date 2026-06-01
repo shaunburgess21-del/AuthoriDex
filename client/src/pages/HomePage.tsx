@@ -1607,6 +1607,9 @@ export default function HomePage() {
               <>
                 <DrawerHeader className="text-left sr-only">
                   <DrawerTitle>{selectedInsightPerson.name}</DrawerTitle>
+                  <DrawerDescription>
+                    Trend score insight and 24h movement for {selectedInsightPerson.name}
+                  </DrawerDescription>
                 </DrawerHeader>
                 <div className="px-3 pb-3 pt-1">
                   <InsightPanelContent
@@ -1631,6 +1634,9 @@ export default function HomePage() {
               <>
                 <DialogHeader className="sr-only">
                   <DialogTitle>{selectedInsightPerson.name}</DialogTitle>
+                  <DialogDescription>
+                    Trend score insight and 24h movement for {selectedInsightPerson.name}
+                  </DialogDescription>
                 </DialogHeader>
                 <InsightPanelContent
                   person={selectedInsightPerson}
