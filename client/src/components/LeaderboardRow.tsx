@@ -69,17 +69,20 @@ function RankDeltaPill({
 }) {
   const isUp = rankChange > 0;
   const compact = size === "compact";
+  const tint = compact
+    ? isUp
+      ? "bg-green-500/10 text-green-600/90 dark:text-green-400/90"
+      : "bg-red-500/10 text-red-600/90 dark:text-red-400/90"
+    : isUp
+      ? "bg-green-500/[0.12] text-green-600 dark:text-green-400"
+      : "bg-red-500/[0.12] text-red-600 dark:text-red-400";
   return (
     <span
       className={`inline-flex items-center justify-center font-mono tabular-nums ${
         compact
           ? "min-w-0 gap-px px-1 py-0.5 rounded-sm text-[10px] font-medium leading-none"
           : "min-w-0 gap-px px-1.5 py-px rounded-sm text-[11px] font-medium leading-none"
-      } ${
-        isUp
-          ? "bg-green-500/10 text-green-600/90 dark:text-green-400/90"
-          : "bg-red-500/10 text-red-600/90 dark:text-red-400/90"
-      } ${className}`}
+      } ${tint} ${className}`}
     >
       {isUp ? "\u25B2" : "\u25BC"}
       {Math.abs(rankChange)}
