@@ -1431,7 +1431,7 @@ export default function HomePage() {
                   className="sticky top-16 z-30 border-b border-border/60 bg-card/95 backdrop-blur-md"
                   data-testid="leaderboard-sticky-toolbar"
                 >
-                  <div className="pl-2 pr-3 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
+                  <div className="pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -1448,7 +1448,9 @@ export default function HomePage() {
                           />
                         </div>
                         {displayPeople.length > 0 && (
-                          <TrendScoreHeaderLabel className="md:hidden shrink-0" />
+                          <div className="md:hidden shrink-0 min-w-[4.5rem] max-w-[6.5rem] flex justify-end">
+                            <TrendScoreHeaderLabel />
+                          </div>
                         )}
                         {displayPeople.length > 0 && (
                           <div

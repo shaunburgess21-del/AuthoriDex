@@ -60,18 +60,29 @@ function markEverVoted() {
 
 function RankDeltaPill({
   rankChange,
+  size = "default",
   className = "",
 }: {
   rankChange: number;
+  size?: "default" | "compact";
   className?: string;
 }) {
   const isUp = rankChange > 0;
+  const compact = size === "compact";
   return (
     <span
-      className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded text-xs font-mono font-semibold tabular-nums ${
+      className={`inline-flex items-center justify-center font-mono tabular-nums ${
+        compact
+          ? "min-w-0 gap-px px-1 py-0.5 rounded-sm text-[10px] font-medium leading-none"
+          : "min-w-[2rem] px-2 py-0.5 rounded text-xs font-semibold"
+      } ${
         isUp
-          ? "bg-green-500/15 text-green-600 dark:text-green-400"
-          : "bg-red-500/15 text-red-600 dark:text-red-400"
+          ? compact
+            ? "bg-green-500/10 text-green-600/90 dark:text-green-400/90"
+            : "bg-green-500/15 text-green-600 dark:text-green-400"
+          : compact
+            ? "bg-red-500/10 text-red-600/90 dark:text-red-400/90"
+            : "bg-red-500/15 text-red-600 dark:text-red-400"
       } ${className}`}
     >
       {isUp ? "\u25B2" : "\u25BC"}
@@ -198,7 +209,7 @@ export function LeaderboardRow({
   return (
     <div className="border-b">
       <div
-        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-4 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
         onClick={onOpenInsight}
         data-testid={`row-person-${person.id}`}
       >
@@ -225,35 +236,49 @@ export function LeaderboardRow({
         </div>
         <div className="flex-1 min-w-0">
           <h3
-            className="flex items-center gap-1.5 font-semibold text-sm sm:text-base min-w-0"
+            className="font-semibold text-sm sm:text-base min-w-0 truncate"
             data-testid={`text-name-${person.id}`}
           >
-            <span className="truncate">{person.name}</span>
-            {isHotMover && (
-              <Flame
-                className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
-                aria-label="Hot Mover"
-              />
-            )}
+            {person.name}
           </h3>
           {person.category && (() => {
             const canonicalCategoryId = categoryRegistry.resolveCanonicalId(person.category);
             const displayCategoryLabel = categoryRegistry.getDisplayLabel(person.category);
             return (
-              <p className={`hidden md:block text-sm truncate ${getCategoryTextColor(person.category, canonicalCategoryId)}`}>
-                {displayCategoryLabel}
+              <p className={`hidden md:flex items-center gap-1.5 text-sm truncate ${getCategoryTextColor(person.category, canonicalCategoryId)}`}>
+                <span className="truncate">{displayCategoryLabel}</span>
+                {isHotMover && (
+                  <Flame
+                    className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+                    aria-label="Hot Mover"
+                  />
+                )}
               </p>
             );
           })()}
-          {activeTab === "fame" && hasMobileMovement && (
+          {isHotMover && !person.category && (
+            <p className="hidden md:flex items-center">
+              <Flame
+                className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+                aria-label="Hot Mover"
+              />
+            </p>
+          )}
+          {activeTab === "fame" && (hasMobileMovement || isHotMover) && (
             <p className="md:hidden text-[11px] leading-tight truncate mt-0.5">
-              <span className="font-mono inline-flex items-center gap-1.5">
+              <span className="font-mono inline-flex items-center gap-1">
                 {hasPct ? (
                   <span className={pctColorClass}>{delta24h}</span>
                 ) : null}
                 {showRankDelta && person.rankChange != null ? (
-                  <RankDeltaPill rankChange={person.rankChange} className="py-0 px-1.5 text-[10px]" />
+                  <RankDeltaPill rankChange={person.rankChange} size="compact" />
                 ) : null}
+                {isHotMover && (
+                  <Flame
+                    className="h-3 w-3 shrink-0 text-orange-600 dark:text-orange-400"
+                    aria-label="Hot Mover"
+                  />
+                )}
               </span>
             </p>
           )}
