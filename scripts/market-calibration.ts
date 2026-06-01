@@ -7,6 +7,7 @@
 import {
   fetchUpDownCalibration,
   fetchH2HCalibration,
+  fetchGainerCalibration,
 } from "../server/agents/marketCalibration.ts";
 
 const daysArg = process.argv.find((a) => a.startsWith("--days"));
@@ -16,6 +17,7 @@ const lookbackDays = daysArg
 
 const result = await fetchUpDownCalibration(lookbackDays);
 const h2h = await fetchH2HCalibration(lookbackDays);
+const gainer = await fetchGainerCalibration(lookbackDays);
 
 console.log(`\nUp/Down calibration (last ${lookbackDays}d, ${result.totalResolved} resolved)\n`);
 console.log("Bin\tN\tAvg price UP\tActual UP win\tGap");
@@ -44,9 +46,20 @@ if (h2h.avgWinnerFinalPrice != null) {
   console.log("(Target after LOCKIN_FAIR_H2H: avg winner price > 0.70 on clear favorites)\n");
 }
 
+console.log(`\nGainer winner final price (last ${lookbackDays}d, ${gainer.winnersTotal} winners)\n`);
+if (gainer.avgWinnerFinalPrice != null) {
+  console.log(`Avg winner final AMM price: ${gainer.avgWinnerFinalPrice.toFixed(3)}`);
+  console.log(
+    `Winners priced ≤ 0.15 at close: ${gainer.winnersPricedAtOrBelow15}/${gainer.winnersTotal} (pre-fix baseline ~0.124)`,
+  );
+  console.log("(Target after LOCKIN_FAIR_GAINER: avg winner price well above 1/N baseline)\n");
+}
+
 const badUpdown =
   result.avgGapOnDecided != null && result.avgGapOnDecided > 0.15;
 const badH2h =
   h2h.avgWinnerFinalPrice != null && h2h.avgWinnerFinalPrice < 0.55;
+const badGainer =
+  gainer.avgWinnerFinalPrice != null && gainer.avgWinnerFinalPrice < 0.15;
 
-process.exit(badUpdown || badH2h ? 1 : 0);
+process.exit(badUpdown || badH2h || badGainer ? 1 : 0);

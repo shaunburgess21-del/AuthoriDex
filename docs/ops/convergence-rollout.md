@@ -24,10 +24,22 @@ Optional tuning: `LOCKIN_H2H_DECISIVE_FAIR` (default `0.58`), `LOCKIN_H2H_SIGMA_
 
 Pre-fix baseline (resolved H2H): winner avg final price **~0.538**; target post-fix **> 0.70** on clear favorites.
 
+### Gainer (separate flags — does not affect up/down or H2H rollout)
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| G1 | `LOCKIN_FAIR_GAINER_SHADOW=true` | Logs `[LockInFairGainer][shadow]`; no bet changes |
+| G2 | `LOCKIN_FAIR_GAINER_ENABLED=true` | Confidence floor + decisive force-pick on gainer |
+| G3 | (with G2) `ARB_COHORT_ENABLED=true` | Near-close gainer convergence sweep uses `computeArbPredictionGainer` |
+
+Optional tuning: `LOCKIN_GAINER_DECISIVE_FAIR` (default `0.45`), `LOCKIN_GAINER_SIGMA_1D`, `LOCKIN_GAINER_BETA`.
+
+Pre-fix baseline (resolved gainer): winner avg final price **~0.124** (near 1/N random baseline); target post-fix **well above 0.15** on clear leaders.
+
 ## CLI tools
 
 ```bash
-npm run amm:convergence      # live up/down + H2H fair vs price
+npm run amm:convergence      # live up/down + H2H + gainer fair vs price
 npm run amm:calibration      # resolved-market reliability (after Sunday)
 npm run amm:validate-convergence
 npm run amm:drain-headroom   # 24h house P&L vs breaker threshold

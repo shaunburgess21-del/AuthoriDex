@@ -584,25 +584,32 @@ async function checkLiveConvergence(): Promise<CheckResult> {
   const {
     fetchLiveUpDownConvergence,
     fetchLiveH2HConvergence,
+    fetchLiveGainerConvergence,
     LIVE_CONVERGENCE_AVG_GAP_WARN,
     LIVE_CONVERGENCE_MISPRICED_WARN_PCT,
   } = await import("../agents/liveConvergence.ts");
 
   const live = await fetchLiveUpDownConvergence();
   const h2h = await fetchLiveH2HConvergence();
+  const gainer = await fetchLiveGainerConvergence();
   const { summary } = live;
   const h2hSummary = h2h.summary;
+  const gainerSummary = gainer.summary;
   const mispricedPct = summary.decidedMispricedPct;
   const avgGap = summary.avgAbsGapOnDecided;
   const h2hMispricedPct = h2hSummary.decidedMispricedPct;
   const h2hAvgGap = h2hSummary.avgAbsGapOnDecided;
+  const gainerMispricedPct = gainerSummary.decidedMispricedPct;
+  const gainerAvgGap = gainerSummary.avgAbsGapOnDecided;
 
   let status: CheckStatus = "pass";
   if (
     (mispricedPct != null && mispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
     (avgGap != null && avgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN) ||
     (h2hMispricedPct != null && h2hMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
-    (h2hAvgGap != null && h2hAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
+    (h2hAvgGap != null && h2hAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN) ||
+    (gainerMispricedPct != null && gainerMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
+    (gainerAvgGap != null && gainerAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
   ) {
     status = "warn";
   }
@@ -615,12 +622,16 @@ async function checkLiveConvergence(): Promise<CheckResult> {
     h2hSummary.decidedCount === 0
       ? "h2h: no decisive open pairings (fav fair < 58%)."
       : `h2h: ${h2hSummary.decidedMispricedCount}/${h2hSummary.decidedCount} mispriced (${h2hMispricedPct != null ? `${(h2hMispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${h2hAvgGap?.toFixed(3) ?? "n/a"}`;
+  const gainerDetail =
+    gainerSummary.decidedCount === 0
+      ? "gainer: no decisive open fields (fav fair < 45%)."
+      : `gainer: ${gainerSummary.decidedMispricedCount}/${gainerSummary.decidedCount} mispriced (${gainerMispricedPct != null ? `${(gainerMispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${gainerAvgGap?.toFixed(3) ?? "n/a"}`;
 
   return {
-    name: "Live native convergence (up/down + h2h)",
+    name: "Live native convergence (up/down + h2h + gainer)",
     status,
-    rowCount: summary.decidedCount + h2hSummary.decidedCount,
-    details: `${updownDetail}; ${h2hDetail}. Run: npm run amm:convergence`,
+    rowCount: summary.decidedCount + h2hSummary.decidedCount + gainerSummary.decidedCount,
+    details: `${updownDetail}; ${h2hDetail}; ${gainerDetail}. Run: npm run amm:convergence`,
     sample: [
       ...live.markets.slice(0, 3).map((m) => ({
         type: "updown",
@@ -631,6 +642,14 @@ async function checkLiveConvergence(): Promise<CheckResult> {
       })),
       ...h2h.markets.slice(0, 3).map((m) => ({
         type: "h2h",
+        marketId: m.marketId.slice(0, 8),
+        gap: m.gap,
+        price: m.favoredPrice,
+        fair: m.favoredFair,
+        favored: m.favoredLabel,
+      })),
+      ...gainer.markets.slice(0, 3).map((m) => ({
+        type: "gainer",
         marketId: m.marketId.slice(0, 8),
         gap: m.gap,
         price: m.favoredPrice,

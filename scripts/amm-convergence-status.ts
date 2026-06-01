@@ -8,6 +8,7 @@
 import {
   fetchLiveUpDownConvergence,
   fetchLiveH2HConvergence,
+  fetchLiveGainerConvergence,
 } from "../server/agents/liveConvergence.ts";
 import { fetchDrainBreakerSnapshot } from "../server/agents/drainBreaker.ts";
 
@@ -28,10 +29,11 @@ const skipDrain = process.argv.includes("--no-drain");
 
 const updown = await fetchLiveUpDownConvergence();
 const h2h = await fetchLiveH2HConvergence();
+const gainer = await fetchLiveGainerConvergence();
 
 if (jsonOut) {
   const drain = skipDrain ? null : await fetchDrainBreakerSnapshot();
-  console.log(JSON.stringify({ updown, h2h, drainBreaker: drain }, null, 2));
+  console.log(JSON.stringify({ updown, h2h, gainer, drainBreaker: drain }, null, 2));
   process.exit(0);
 }
 
@@ -76,6 +78,12 @@ printSummary(
   h2h.sampledAt,
   "LOCKIN_FAIR_H2H_ENABLED",
 );
+printSummary(
+  "Live Gainer convergence",
+  gainer.summary,
+  gainer.sampledAt,
+  "LOCKIN_FAIR_GAINER_ENABLED",
+);
 
 console.log(`\nTop ${topN} Up/Down by |fair − price|:\n`);
 console.log("Market\tSide\tPrice\tFair\tGap\tpctOpen\tHrs\tVol");
@@ -100,6 +108,20 @@ for (const m of h2h.markets.slice(0, topN)) {
     m.scoreRatio != null ? m.scoreRatio.toFixed(3) : "n/a";
   console.log(
     `${title} (${id})\t${(m.favoredLabel ?? "?").slice(0, 16)}\t${(m.favoredPrice ?? 0).toFixed(3)}\t${(m.favoredFair ?? 0).toFixed(3)}\t${(m.gap ?? 0) >= 0 ? "+" : ""}${(m.gap ?? 0).toFixed(3)}\t${ratio}\t${m.hoursRemaining.toFixed(0)}\t${Math.round(m.volume)}`,
+  );
+}
+
+console.log(`\nTop ${topN} Gainer by |fair − price|:\n`);
+console.log("Market\tFavored\tPrice\tFair\tGap\tLeaderPct\tHrs\tVol\tN");
+for (const m of gainer.markets.slice(0, topN)) {
+  const id = m.marketId.slice(0, 8);
+  const title = (m.title ?? "?").slice(0, 24).replace(/\t/g, " ");
+  const leaderPct =
+    m.leaderPctOpen != null
+      ? `${(m.leaderPctOpen * 100).toFixed(1)}%`
+      : "n/a";
+  console.log(
+    `${title} (${id})\t${(m.favoredLabel ?? "?").slice(0, 16)}\t${(m.favoredPrice ?? 0).toFixed(3)}\t${(m.favoredFair ?? 0).toFixed(3)}\t${(m.gap ?? 0) >= 0 ? "+" : ""}${(m.gap ?? 0).toFixed(3)}\t${leaderPct}\t${m.hoursRemaining.toFixed(0)}\t${Math.round(m.volume)}\t${m.entryCount}`,
   );
 }
 
@@ -134,6 +156,10 @@ const badH2h =
   h2h.summary.decidedMispricedPct != null &&
   h2h.summary.decidedMispricedPct > 0.5 &&
   (h2h.summary.avgAbsGapOnDecided ?? 0) > 0.15;
+const badGainer =
+  gainer.summary.decidedMispricedPct != null &&
+  gainer.summary.decidedMispricedPct > 0.5 &&
+  (gainer.summary.avgAbsGapOnDecided ?? 0) > 0.15;
 
 console.log("");
-process.exit(badUpdown || badH2h ? 1 : 0);
+process.exit(badUpdown || badH2h || badGainer ? 1 : 0);

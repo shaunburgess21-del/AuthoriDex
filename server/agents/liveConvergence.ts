@@ -9,6 +9,7 @@ import { marketEntries, trendingPeople } from "@shared/schema";
 import {
   computeLockInFairUp,
   fairH2HByEntryId,
+  fairGainerByEntryId,
   favoredH2HFromFairMap,
   hoursUntilEnd,
   LOCKIN_DECISIVE_PCT,
@@ -18,6 +19,9 @@ import {
   LOCKIN_H2H_DECISIVE_FAIR,
   LOCKIN_H2H_SIGMA_1D,
   LOCKIN_H2H_BETA,
+  LOCKIN_GAINER_DECISIVE_FAIR,
+  LOCKIN_GAINER_SIGMA_1D,
+  LOCKIN_GAINER_BETA,
 } from "./constants";
 
 /** |fair − price| above this counts as mispriced (10pp, same as lock-in decisive band). */
@@ -78,6 +82,26 @@ export interface LiveH2HConvergenceMarketRow {
 
 export interface LiveH2HConvergenceResult {
   markets: LiveH2HConvergenceMarketRow[];
+  summary: LiveConvergenceSummary;
+  sampledAt: string;
+}
+
+export interface LiveGainerConvergenceMarketRow {
+  marketId: string;
+  title: string | null;
+  hoursRemaining: number;
+  entryCount: number;
+  favoredLabel: string | null;
+  favoredFair: number | null;
+  favoredPrice: number | null;
+  gap: number | null;
+  leaderPctOpen: number | null;
+  volume: number;
+  liquidityB: number;
+}
+
+export interface LiveGainerConvergenceResult {
+  markets: LiveGainerConvergenceMarketRow[];
   summary: LiveConvergenceSummary;
   sampledAt: string;
 }
@@ -388,6 +412,175 @@ export async function fetchLiveH2HConvergence(
     markets,
     summary: summarizeConvergenceGaps(markets, (m) =>
       m.favoredFair != null && m.favoredFair >= LOCKIN_H2H_DECISIVE_FAIR,
+    ),
+    sampledAt: now.toISOString(),
+  };
+}
+
+export async function fetchLiveGainerConvergence(
+  now: Date = new Date(),
+): Promise<LiveGainerConvergenceResult> {
+  const marketRows = await db.execute(sql`
+    SELECT
+      pm.id AS market_id,
+      pm.title,
+      pm.end_at,
+      pm.created_at,
+      mas.liquidity_b,
+      mas.share_quantities AS sq,
+      COALESCE(mas.total_user_credits_in, 0)::float AS volume
+    FROM prediction_markets pm
+    INNER JOIN market_amm_state mas ON mas.market_id = pm.id
+    WHERE pm.engine = 'amm'
+      AND pm.market_type = 'gainer'
+      AND pm.status = 'OPEN'
+      AND pm.visibility = 'live'
+      AND pm.end_at > ${now}
+  `);
+
+  const marketIds = (marketRows.rows as Array<{ market_id: string }>).map(
+    (r) => r.market_id,
+  );
+  if (marketIds.length === 0) {
+    return {
+      markets: [],
+      summary: summarizeConvergenceGaps([], () => false),
+      sampledAt: now.toISOString(),
+    };
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      entryId: marketEntries.id,
+      label: marketEntries.label,
+      personId: marketEntries.personId,
+      currentFame: trendingPeople.fameIndex,
+    })
+    .from(marketEntries)
+    .leftJoin(trendingPeople, eq(trendingPeople.id, marketEntries.personId))
+    .where(inArray(marketEntries.marketId, marketIds));
+
+  const entriesByMarket = new Map<
+    string,
+    Array<{
+      id: string;
+      label: string | null;
+      personId: string | null;
+      currentFame: number | null;
+    }>
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({
+      id: row.entryId,
+      label: row.label,
+      personId: row.personId,
+      currentFame: row.currentFame,
+    });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const markets: LiveGainerConvergenceMarketRow[] = [];
+
+  for (const row of marketRows.rows as Array<{
+    market_id: string;
+    title: string | null;
+    end_at: Date | string;
+    created_at: Date | string | null;
+    liquidity_b: string | number;
+    sq: Record<string, number>;
+    volume: number;
+  }>) {
+    const entries = entriesByMarket.get(row.market_id) ?? [];
+    if (entries.length < 2) continue;
+
+    const createdAt =
+      row.created_at instanceof Date
+        ? row.created_at
+        : row.created_at
+          ? new Date(row.created_at)
+          : null;
+
+    const pctByEntryId: Record<string, number | null | undefined> = {};
+    let leaderPct: number | null = null;
+
+    for (const entry of entries) {
+      if (!entry.personId) {
+        pctByEntryId[entry.id] = null;
+        continue;
+      }
+      let openingScore: number | null = null;
+      if (createdAt) {
+        const openRows = await db.execute(sql`
+          SELECT fame_index AS opening_score
+          FROM trend_snapshots
+          WHERE person_id = ${entry.personId}
+            AND timestamp <= ${createdAt}
+          ORDER BY timestamp DESC
+          LIMIT 1
+        `);
+        const openRow = openRows.rows[0] as { opening_score: number } | undefined;
+        openingScore =
+          openRow?.opening_score != null && Number.isFinite(openRow.opening_score)
+            ? Number(openRow.opening_score)
+            : null;
+      }
+      const fame = entry.currentFame;
+      if (
+        openingScore != null &&
+        openingScore > 0 &&
+        fame != null &&
+        Number.isFinite(fame)
+      ) {
+        const pct = (fame - openingScore) / openingScore;
+        pctByEntryId[entry.id] = pct;
+        if (leaderPct == null || pct > leaderPct) leaderPct = pct;
+      } else {
+        pctByEntryId[entry.id] = null;
+      }
+    }
+
+    const b = Number(row.liquidity_b);
+    const sq = row.sq ?? {};
+    const entryIds = entries.map((e) => e.id);
+    const endAt =
+      row.end_at instanceof Date ? row.end_at : new Date(row.end_at);
+    const hrs = hoursUntilEnd(endAt, now);
+    const fairMap = fairGainerByEntryId(
+      pctByEntryId,
+      hrs,
+      LOCKIN_GAINER_SIGMA_1D,
+      LOCKIN_GAINER_BETA,
+    );
+    const favored = favoredH2HFromFairMap(fairMap);
+    if (!favored) continue;
+
+    const favoredPrice = lmsrEntryPrice(b, sq, favored.entryId, entryIds);
+    const gap = favored.fair - favoredPrice;
+    const favoredEntry = entries.find((e) => e.id === favored.entryId);
+
+    markets.push({
+      marketId: row.market_id,
+      title: row.title,
+      hoursRemaining: hrs,
+      entryCount: entries.length,
+      favoredLabel: favoredEntry?.label ?? null,
+      favoredFair: favored.fair,
+      favoredPrice,
+      gap,
+      leaderPctOpen: leaderPct,
+      volume: Number(row.volume) || 0,
+      liquidityB: b,
+    });
+  }
+
+  markets.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
+
+  return {
+    markets,
+    summary: summarizeConvergenceGaps(markets, (m) =>
+      m.favoredFair != null && m.favoredFair >= LOCKIN_GAINER_DECISIVE_FAIR,
     ),
     sampledAt: now.toISOString(),
   };

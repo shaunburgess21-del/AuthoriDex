@@ -321,6 +321,37 @@ export function isLockInFairH2HEnabled(): boolean {
   return envFlag(process.env.LOCKIN_FAIR_H2H_ENABLED);
 }
 
+/** Gainer lock-in: shadow logs only (no bet changes). */
+export const LOCKIN_FAIR_GAINER_SHADOW = envFlag(process.env.LOCKIN_FAIR_GAINER_SHADOW);
+/** Gainer lock-in: confidence floor + force-pick + arb convergence. */
+export const LOCKIN_FAIR_GAINER_ENABLED = envFlag(process.env.LOCKIN_FAIR_GAINER_ENABLED);
+/** Favored-side fair at or above this → force-pick that entry (gainer). */
+export const LOCKIN_GAINER_DECISIVE_FAIR = (() => {
+  const raw = Number(process.env.LOCKIN_GAINER_DECISIVE_FAIR);
+  return Number.isFinite(raw) && raw > 0.2 && raw < 1 ? raw : 0.45;
+})();
+export const LOCKIN_GAINER_SIGMA_1D = (() => {
+  const raw = Number(process.env.LOCKIN_GAINER_SIGMA_1D);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  const base = Number(process.env.LOCKIN_SIGMA_1D);
+  return Number.isFinite(base) && base > 0 ? base : 0.109;
+})();
+export const LOCKIN_GAINER_BETA = (() => {
+  const raw = Number(process.env.LOCKIN_GAINER_BETA);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  const base = Number(process.env.LOCKIN_BETA);
+  return Number.isFinite(base) && base > 0 ? base : 0.36;
+})();
+
+/** Runtime read (tests can flip env without re-importing the module). */
+export function isLockInFairGainerShadow(): boolean {
+  return envFlag(process.env.LOCKIN_FAIR_GAINER_SHADOW);
+}
+
+export function isLockInFairGainerEnabled(): boolean {
+  return envFlag(process.env.LOCKIN_FAIR_GAINER_ENABLED);
+}
+
 // ---------------------------------------------------------------------------
 // Stage 4 (optional) — early-week settlement bonus + score EMA relaxation
 // ---------------------------------------------------------------------------

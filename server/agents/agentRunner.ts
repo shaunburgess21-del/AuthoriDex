@@ -26,6 +26,7 @@ import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import {
   computeArbPrediction,
   computeArbPredictionH2H,
+  computeArbPredictionGainer,
   isArbAgent,
 } from "./arbAgent";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
@@ -59,8 +60,11 @@ import {
   ARB_CONVERGENCE_MARKETS_PER_SWEEP,
   ARB_MIN_EDGE_PP,
   isLockInFairH2HEnabled,
+  isLockInFairGainerEnabled,
   LOCKIN_H2H_SIGMA_1D,
   LOCKIN_H2H_BETA,
+  LOCKIN_GAINER_SIGMA_1D,
+  LOCKIN_GAINER_BETA,
   AGENT_RUNNER_INTERVAL_MS,
   AGENT_RUNNER_STARTUP_DELAY_MS,
   AGENT_CREDIT_LOW_THRESHOLD,
@@ -92,6 +96,7 @@ import { isAgentsPaused } from "./runtime-state";
 import { sizeAmmBudget } from "./sizing";
 import {
   fairH2HByEntryId,
+  fairGainerByEntryId,
   favoredH2HFromFairMap,
   hoursUntilEnd,
 } from "./lockInFair";
@@ -678,7 +683,9 @@ async function runAgentBatchOnce(): Promise<{
             !(
               ARB_COHORT_ENABLED &&
               isArbAgent(agentData) &&
-              (market.marketType === "updown" || market.marketType === "h2h")
+              (market.marketType === "updown" ||
+                market.marketType === "h2h" ||
+                market.marketType === "gainer")
             )
           ) {
             skipped++;
@@ -855,6 +862,25 @@ async function runAgentBatchOnce(): Promise<{
           decision = computeArbPredictionH2H(
             marketData.entries,
             scoreByEntryId,
+            hoursRemaining,
+            prices,
+          );
+        } else if (
+          ARB_COHORT_ENABLED &&
+          isArbAgent(agentData) &&
+          market.marketType === "gainer" &&
+          isLockInFairGainerEnabled() &&
+          entrySignals
+        ) {
+          const snap = ammStateByMarket.get(market.id);
+          const prices = snap ? ammCurrentPrices(snap) : {};
+          const pctByEntryId: Record<string, number | null | undefined> = {};
+          for (const entry of entries) {
+            pctByEntryId[entry.id] = entrySignals.get(entry.id)?.pctChangeVsOpen;
+          }
+          decision = computeArbPredictionGainer(
+            marketData.entries,
+            pctByEntryId,
             hoursRemaining,
             prices,
           );
@@ -1087,6 +1113,7 @@ async function runAgentBatchOnce(): Promise<{
       updownSweepCtx,
     );
     convergenceScheduled += await runConvergenceSweepH2H(agents, markets, now);
+    convergenceScheduled += await runConvergenceSweepGainer(agents, markets, now);
   } catch (convSweepErr) {
     log(
       `[AgentRunner] Convergence sweep error: ${convSweepErr instanceof Error ? convSweepErr.message : convSweepErr}`,
@@ -2246,6 +2273,252 @@ async function runConvergenceSweepH2H(
 
   if (scheduled > 0) {
     log(`[AgentRunner] H2H convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
+}
+
+/** Rank near-close gainer markets by lock-in fair minus live price on the favored entry. */
+async function pickMispricedGainerMarketIds(
+  candidates: UpdownMarketRow[],
+  limit: number,
+  now: Date,
+): Promise<string[]> {
+  if (!candidates.length || limit <= 0) return [];
+
+  const marketIds = candidates.map((m) => m.id);
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, marketIds));
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, marketIds));
+
+  const entriesByMarket = new Map<
+    string,
+    Array<{ id: string; personId: string | null }>
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, personId: row.personId });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const scored: { id: string; gap: number }[] = [];
+
+  for (const market of candidates) {
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length < 2 || !entries.every((e) => e.personId)) continue;
+
+    const state = stateRows.find((r) => r.marketId === market.id);
+    if (!state) continue;
+    const b = Number(state.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    const sq = (state.shareQuantities ?? {}) as Record<string, number>;
+    const entryIds = entries.map((e) => e.id);
+
+    const pctByEntryId: Record<string, number | null | undefined> = {};
+    for (const entry of entries) {
+      const entryOpeningScore = market.createdAt
+        ? await getEntryOpeningScore(entry.personId!, market.id, market.createdAt)
+        : null;
+      const sig = await getTrendSignals(entry.personId!, {
+        openingScore: entryOpeningScore,
+      });
+      pctByEntryId[entry.id] = sig.pctChangeVsOpen;
+    }
+
+    const hrs = hoursUntilEnd(market.endAt ?? null, now);
+    const fairMap = fairGainerByEntryId(
+      pctByEntryId,
+      hrs,
+      LOCKIN_GAINER_SIGMA_1D,
+      LOCKIN_GAINER_BETA,
+    );
+    const favored = favoredH2HFromFairMap(fairMap);
+    if (!favored) continue;
+
+    const price = lmsrH2HEntryPrice(b, sq, favored.entryId, entryIds);
+    const gap = favored.fair - price;
+    if (gap >= ARB_MIN_EDGE_PP) scored.push({ id: market.id, gap });
+  }
+
+  scored.sort((a, b) => b.gap - a.gap);
+  return scored.slice(0, limit).map((s) => s.id);
+}
+
+/**
+ * Near-close gainer convergence — arb cohort pushes prices toward lock-in fair.
+ */
+async function runConvergenceSweepGainer(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+): Promise<number> {
+  if (!ARB_COHORT_ENABLED || !isLockInFairGainerEnabled()) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const ammGainer = allMarkets.filter(
+    (m) => m.marketType === "gainer" && m.engine === "amm",
+  );
+  if (!ammGainer.length) return 0;
+
+  const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+  const nearCloseMarkets = ammGainer.filter((m) => {
+    if (!m.endAt) return false;
+    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "gainer");
+    const t = now.getTime();
+    return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
+  });
+  if (!nearCloseMarkets.length) return 0;
+
+  const priorityIds = await pickMispricedGainerMarketIds(
+    nearCloseMarkets,
+    ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+    now,
+  );
+  const targetIds = new Set(
+    priorityIds.length > 0
+      ? priorityIds
+      : nearCloseMarkets.slice(0, ARB_CONVERGENCE_MARKETS_PER_SWEEP).map((m) => m.id),
+  );
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, Array.from(targetIds)));
+
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      label: marketEntries.label,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, Array.from(targetIds)));
+
+  const entriesByMarket = new Map<
+    string,
+    { id: string; label: string | null; personId: string | null }[]
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label, personId: row.personId });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const market of nearCloseMarkets) {
+    if (!targetIds.has(market.id)) continue;
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length < 2) continue;
+    if (!entries.every((e) => e.personId)) continue;
+
+    const pctByEntryId: Record<string, number | null | undefined> = {};
+    for (const entry of entries) {
+      const entryOpeningScore = market.createdAt
+        ? await getEntryOpeningScore(entry.personId!, market.id, market.createdAt)
+        : null;
+      const sig = await getTrendSignals(entry.personId!, {
+        openingScore: entryOpeningScore,
+      });
+      pctByEntryId[entry.id] = sig.pctChangeVsOpen;
+    }
+
+    const hoursRemaining =
+      market.endAt != null
+        ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+        : 0;
+
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+    const prices = ammCurrentPrices(snap);
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const marketEntriesData = entries.map((e) => ({
+      id: e.id,
+      label: e.label ?? "",
+      totalStake: 0,
+      noStake: 0,
+      personId: e.personId,
+    }));
+
+    const decision = computeArbPredictionGainer(
+      marketEntriesData,
+      pctByEntryId,
+      hoursRemaining,
+      prices,
+    );
+    if (decision.abstain || !decision.entryId) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, convergenceSweepGainer: true },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] Gainer convergence ${agent.displayName} → ${market.title?.slice(0, 28)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] Gainer convergence sweep scheduled ${scheduled} actions`);
   }
   return scheduled;
 }

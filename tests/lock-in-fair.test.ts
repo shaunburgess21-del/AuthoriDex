@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   computeLockInFairUp,
   computeLockInFairH2H,
+  computeLockInFairGainer,
   fairH2HByEntryId,
+  fairGainerByEntryId,
   favoredH2HFromFairMap,
   hoursUntilEnd,
   LOCKIN_FAIR_MAX,
@@ -56,5 +58,40 @@ describe("lockInFair", () => {
     const fav = favoredH2HFromFairMap(fair);
     assert.equal(fav?.entryId, "a");
     assert.ok(fair.a! + fair.b! <= 1.001);
+  });
+
+  it("computeLockInFairGainer: clear leader gets highest P(win)", () => {
+    const fair = computeLockInFairGainer(
+      [
+        { entryId: "lead", pctChangeVsOpen: 0.25 },
+        { entryId: "mid", pctChangeVsOpen: 0.05 },
+        { entryId: "trail", pctChangeVsOpen: -0.02 },
+      ],
+      24,
+    );
+    assert.ok(fair.lead! > fair.mid!);
+    assert.ok(fair.lead! > fair.trail!);
+    const sum = Object.values(fair).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sum - 1) < 0.02);
+  });
+
+  it("computeLockInFairGainer: near close concentrates on current leader", () => {
+    const fair = computeLockInFairGainer(
+      [
+        { entryId: "lead", pctChangeVsOpen: 0.15 },
+        { entryId: "b", pctChangeVsOpen: 0.08 },
+      ],
+      0.5,
+    );
+    assert.ok(fair.lead! > 0.85, `expected decisive leader, got ${fair.lead}`);
+  });
+
+  it("fairGainerByEntryId favors entry with best pct vs open", () => {
+    const fair = fairGainerByEntryId(
+      { a: 0.12, b: 0.20, c: 0.05 },
+      48,
+    );
+    const fav = favoredH2HFromFairMap(fair);
+    assert.equal(fav?.entryId, "b");
   });
 });

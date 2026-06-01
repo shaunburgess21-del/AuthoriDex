@@ -134,7 +134,7 @@ export function fairH2HByEntryId(
   };
 }
 
-/** Favored entry id and fair on that side from an H2H fair map. */
+/** Favored entry id and fair on that side from a fair map. */
 export function favoredH2HFromFairMap(
   fairByEntryId: Record<string, number>,
 ): { entryId: string; fair: number } | null {
@@ -144,6 +144,114 @@ export function favoredH2HFromFairMap(
     cur[1] > best[1] ? cur : best,
   );
   return { entryId: bestId, fair: bestFair };
+}
+
+/** Alias — same helper works for H2H and gainer fair maps. */
+export const favoredFromFairMap = favoredH2HFromFairMap;
+
+export interface GainerFairEntryInput {
+  entryId: string;
+  pctChangeVsOpen: number | null | undefined;
+}
+
+const GAINER_Z_MIN = -6;
+const GAINER_Z_MAX = 6;
+const GAINER_Z_STEP = 0.02;
+const SQRT_2PI = Math.sqrt(2 * Math.PI);
+
+function standardNormalPdf(z: number): number {
+  return Math.exp(-0.5 * z * z) / SQRT_2PI;
+}
+
+/** Locked-in log-gain from weekly pct change vs open (gainer resolution metric). */
+export function logGainFromPctChange(
+  pctChangeVsOpen: number | null | undefined,
+): number {
+  if (pctChangeVsOpen == null || !Number.isFinite(pctChangeVsOpen)) return 0;
+  const ratio = 1 + pctChangeVsOpen;
+  if (ratio <= 0) return -10;
+  return Math.log(ratio);
+}
+
+/**
+ * P(entry i is the top gainer) via Gaussian-argmax grid integration.
+ * L_i = m_i + sigma * Z_i, Z_i i.i.d. N(0,1); winner = argmax_i L_i.
+ */
+function gainerWinProbGrid(
+  mI: number,
+  mOthers: number[],
+  sigma: number,
+): number {
+  if (mOthers.length === 0) return 1;
+  if (sigma <= 1e-9) {
+    const all = [mI, ...mOthers];
+    const maxM = Math.max(...all);
+    if (mI < maxM) return 0;
+    const ties = all.filter((m) => m === maxM).length;
+    return 1 / ties;
+  }
+  let prob = 0;
+  for (let z = GAINER_Z_MIN; z <= GAINER_Z_MAX + 1e-9; z += GAINER_Z_STEP) {
+    const w = standardNormalPdf(z) * GAINER_Z_STEP;
+    let factor = 1;
+    for (const mJ of mOthers) {
+      factor *= normalCdf((mI - mJ) / sigma + z);
+    }
+    prob += w * factor;
+  }
+  return prob;
+}
+
+/**
+ * Gainer: P(entry i has highest pctChange at close) keyed by entry id.
+ * Probabilities sum to 1 (after normalization + clamp).
+ */
+export function computeLockInFairGainer(
+  entries: GainerFairEntryInput[],
+  hoursRemaining: number,
+  sigma1d = LOCKIN_SIGMA_1D,
+  beta = LOCKIN_BETA,
+): Record<string, number> {
+  if (entries.length === 0) return {};
+  const sigma = sigmaRemain(hoursRemaining, sigma1d, beta);
+  const mById = entries.map((e) => ({
+    entryId: e.entryId,
+    m: logGainFromPctChange(e.pctChangeVsOpen),
+  }));
+
+  const raw: Record<string, number> = {};
+  for (const { entryId, m } of mById) {
+    const others = mById.filter((x) => x.entryId !== entryId).map((x) => x.m);
+    raw[entryId] = gainerWinProbGrid(m, others, sigma);
+  }
+
+  let sum = Object.values(raw).reduce((a, b) => a + b, 0);
+  if (sum <= 0 || !Number.isFinite(sum)) {
+    const uniform = 1 / entries.length;
+    const out: Record<string, number> = {};
+    for (const e of entries) out[e.entryId] = uniform;
+    return out;
+  }
+
+  const out: Record<string, number> = {};
+  for (const [id, p] of Object.entries(raw)) {
+    out[id] = clampFair(p / sum);
+  }
+  return out;
+}
+
+/** Build gainer fair map from entry id → pctChangeVsOpen. */
+export function fairGainerByEntryId(
+  pctByEntryId: Record<string, number | null | undefined>,
+  hoursRemaining: number,
+  sigma1d = LOCKIN_SIGMA_1D,
+  beta = LOCKIN_BETA,
+): Record<string, number> {
+  const entries = Object.entries(pctByEntryId).map(([entryId, pctChangeVsOpen]) => ({
+    entryId,
+    pctChangeVsOpen,
+  }));
+  return computeLockInFairGainer(entries, hoursRemaining, sigma1d, beta);
 }
 
 export function computeLockInFair(input: LockInFairInput): LockInFairResult {

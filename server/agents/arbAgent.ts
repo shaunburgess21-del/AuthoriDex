@@ -14,13 +14,17 @@ import {
   ARB_MIN_EDGE_PP,
   ARB_COHORT_ENABLED,
   isLockInFairH2HEnabled,
+  isLockInFairGainerEnabled,
   LOCKIN_H2H_SIGMA_1D,
   LOCKIN_H2H_BETA,
+  LOCKIN_GAINER_SIGMA_1D,
+  LOCKIN_GAINER_BETA,
 } from "./constants";
 import {
   computeLockInFairUp,
   fairForEntry,
   fairH2HByEntryId,
+  fairGainerByEntryId,
   favoredH2HFromFairMap,
   LOCKIN_FAIR_MAX,
   LOCKIN_DECISIVE_PCT,
@@ -123,6 +127,45 @@ export function computeArbPredictionH2H(
   if (!favored) return abstain("low_edge");
 
   const cur = currentPrices[favored.entryId] ?? 0.5;
+  if (favored.fair - cur < ARB_MIN_EDGE_PP) {
+    return abstain("low_edge");
+  }
+
+  return {
+    abstain: false,
+    entryId: favored.entryId,
+    direction: "yes",
+    confidence: Math.min(LOCKIN_FAIR_MAX, favored.fair),
+    source: "deterministic",
+  };
+}
+
+/**
+ * Gainer arb — buy favored entry when live price is below lock-in fair by ARB_MIN_EDGE_PP.
+ */
+export function computeArbPredictionGainer(
+  entries: MarketEntryData[],
+  pctByEntryId: Record<string, number | null | undefined>,
+  hoursRemaining: number,
+  currentPrices: Record<string, number>,
+): PredictionDecision {
+  const abstain = (
+    reason: PredictionDecision["abstainReason"],
+  ): PredictionDecision => ({ abstain: true, abstainReason: reason });
+
+  if (!isLockInFairGainerEnabled()) return abstain("low_edge");
+  if (entries.length < 2) return abstain("low_edge");
+
+  const fairMap = fairGainerByEntryId(
+    pctByEntryId,
+    hoursRemaining,
+    LOCKIN_GAINER_SIGMA_1D,
+    LOCKIN_GAINER_BETA,
+  );
+  const favored = favoredH2HFromFairMap(fairMap);
+  if (!favored) return abstain("low_edge");
+
+  const cur = currentPrices[favored.entryId] ?? 1 / entries.length;
   if (favored.fair - cur < ARB_MIN_EDGE_PP) {
     return abstain("low_edge");
   }

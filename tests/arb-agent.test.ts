@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { computeArbPrediction, computeArbPredictionH2H } from "../server/agents/arbAgent";
+import { computeArbPrediction, computeArbPredictionH2H, computeArbPredictionGainer } from "../server/agents/arbAgent";
 import type { MarketWithEntries, TrendSignals } from "../server/agents/types";
 
 const entries = [
@@ -100,5 +100,51 @@ test("computeArbPredictionH2H buys leader when underpriced", () => {
   } finally {
     if (prev === undefined) delete process.env.LOCKIN_FAIR_H2H_ENABLED;
     else process.env.LOCKIN_FAIR_H2H_ENABLED = prev;
+  }
+});
+
+test("computeArbPredictionGainer abstains when flag off", () => {
+  const prev = process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  try {
+    const gainerEntries = [
+      { id: "a", label: "Alice", totalStake: 0, noStake: 0, personId: "p1" },
+      { id: "b", label: "Bob", totalStake: 0, noStake: 0, personId: "p2" },
+      { id: "c", label: "Carol", totalStake: 0, noStake: 0, personId: "p3" },
+    ];
+    const d = computeArbPredictionGainer(
+      gainerEntries,
+      { a: 0.05, b: 0.25, c: 0.02 },
+      12,
+      { a: 0.1, b: 0.12, c: 0.1 },
+    );
+    assert.equal(d.abstain, true);
+  } finally {
+    if (prev === undefined) delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+    else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
+  }
+});
+
+test("computeArbPredictionGainer buys leader when underpriced", () => {
+  const prev = process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  process.env.LOCKIN_FAIR_GAINER_ENABLED = "true";
+  try {
+    const gainerEntries = [
+      { id: "a", label: "Alice", totalStake: 0, noStake: 0, personId: "p1" },
+      { id: "b", label: "Bob", totalStake: 0, noStake: 0, personId: "p2" },
+      { id: "c", label: "Carol", totalStake: 0, noStake: 0, personId: "p3" },
+    ];
+    const d = computeArbPredictionGainer(
+      gainerEntries,
+      { a: 0.05, b: 0.25, c: 0.02 },
+      12,
+      { a: 0.08, b: 0.12, c: 0.08 },
+    );
+    assert.equal(d.abstain, false);
+    assert.equal(d.entryId, "b");
+    assert.ok((d.confidence ?? 0) > 0.35);
+  } finally {
+    if (prev === undefined) delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+    else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
   }
 });
