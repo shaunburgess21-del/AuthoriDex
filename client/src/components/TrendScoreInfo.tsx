@@ -19,14 +19,14 @@ export function TrendScoreInfoContent() {
         </li>
         <li className="flex items-center gap-2 text-xs">
           <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span><span className="font-medium">Google Trends</span> — how often people search for them</span>
+          <span><span className="font-medium">Search and mentions</span> — how they are trending on the web</span>
         </li>
       </ul>
       <p className="text-xs text-muted-foreground">
         We combine these signals into a single score that updates as new data comes in. A higher score means more attention right now.
       </p>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
-        API Sources: News · Wikipedia · Google Trends
+        API Sources: Mediastack · Wikipedia · SerpApi · CurrentsAPI · APILayer DataForSEO · OpenAI · Serper
       </p>
     </div>
   );
