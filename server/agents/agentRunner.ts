@@ -57,7 +57,10 @@ import {
   ARB_COHORT_ENABLED,
   ARB_AGENT_MAX_STAKE,
   ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+  ARB_MIN_EDGE_PP,
   isLockInFairH2HEnabled,
+  LOCKIN_H2H_SIGMA_1D,
+  LOCKIN_H2H_BETA,
   AGENT_RUNNER_INTERVAL_MS,
   AGENT_RUNNER_STARTUP_DELAY_MS,
   AGENT_CREDIT_LOW_THRESHOLD,
@@ -87,6 +90,11 @@ import {
 import { filterRankableMarketsForRanker } from "./sharpRanker-input";
 import { isAgentsPaused } from "./runtime-state";
 import { sizeAmmBudget } from "./sizing";
+import {
+  fairH2HByEntryId,
+  favoredH2HFromFairMap,
+  hoursUntilEnd,
+} from "./lockInFair";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
 
@@ -1974,6 +1982,105 @@ async function runConvergenceSweep(
   return scheduled;
 }
 
+function lmsrH2HEntryPrice(
+  b: number,
+  sq: Record<string, number>,
+  entryId: string,
+  entryIds: string[],
+): number {
+  if (!Number.isFinite(b) || b <= 0 || entryIds.length === 0) {
+    return 1 / Math.max(1, entryIds.length);
+  }
+  const qs = entryIds.map((id) => Number(sq[id] ?? 0));
+  const maxQ = Math.max(...qs);
+  const weights = qs.map((q) => Math.exp((q - maxQ) / b));
+  const sum = weights.reduce((a, w) => a + w, 0);
+  if (sum <= 0) return 1 / entryIds.length;
+  const idx = entryIds.indexOf(entryId);
+  return idx >= 0 ? weights[idx]! / sum : 1 / entryIds.length;
+}
+
+/** Rank near-close H2H markets by lock-in fair minus live price on the favoured side. */
+async function pickMispricedH2HMarketIds(
+  candidates: UpdownMarketRow[],
+  limit: number,
+  now: Date,
+): Promise<string[]> {
+  if (!candidates.length || limit <= 0) return [];
+
+  const marketIds = candidates.map((m) => m.id);
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, marketIds));
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, marketIds));
+
+  const entriesByMarket = new Map<
+    string,
+    Array<{ id: string; personId: string | null }>
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, personId: row.personId });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const scored: { id: string; gap: number }[] = [];
+
+  for (const market of candidates) {
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length !== 2 || !entries.every((e) => e.personId)) continue;
+
+    const state = stateRows.find((r) => r.marketId === market.id);
+    if (!state) continue;
+    const b = Number(state.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    const sq = (state.shareQuantities ?? {}) as Record<string, number>;
+    const entryIds = entries.map((e) => e.id);
+
+    const scoreByEntryId: Record<string, number> = {};
+    for (const entry of entries) {
+      const sig = await getTrendSignals(entry.personId!);
+      const fi = sig.fameIndex;
+      if (fi != null && Number.isFinite(fi)) scoreByEntryId[entry.id] = fi;
+    }
+    if (Object.keys(scoreByEntryId).length < 2) continue;
+
+    const [eA, eB] = entries;
+    const hrs = hoursUntilEnd(market.endAt ?? null, now);
+    const fairMap = fairH2HByEntryId(
+      eA.id,
+      scoreByEntryId[eA.id]!,
+      eB.id,
+      scoreByEntryId[eB.id]!,
+      hrs,
+      LOCKIN_H2H_SIGMA_1D,
+      LOCKIN_H2H_BETA,
+    );
+    const favored = favoredH2HFromFairMap(fairMap);
+    if (!favored) continue;
+
+    const price = lmsrH2HEntryPrice(b, sq, favored.entryId, entryIds);
+    const gap = favored.fair - price;
+    if (gap >= ARB_MIN_EDGE_PP) scored.push({ id: market.id, gap });
+  }
+
+  scored.sort((a, b) => b.gap - a.gap);
+  return scored.slice(0, limit).map((s) => s.id);
+}
+
 /**
  * Near-close H2H convergence — arb cohort pushes prices toward lock-in fair.
  */
@@ -2001,10 +2108,15 @@ async function runConvergenceSweepH2H(
   });
   if (!nearCloseMarkets.length) return 0;
 
+  const priorityIds = await pickMispricedH2HMarketIds(
+    nearCloseMarkets,
+    ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+    now,
+  );
   const targetIds = new Set(
-    nearCloseMarkets
-      .slice(0, ARB_CONVERGENCE_MARKETS_PER_SWEEP)
-      .map((m) => m.id),
+    priorityIds.length > 0
+      ? priorityIds
+      : nearCloseMarkets.slice(0, ARB_CONVERGENCE_MARKETS_PER_SWEEP).map((m) => m.id),
   );
 
   const stateRows = await db

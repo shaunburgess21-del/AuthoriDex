@@ -451,6 +451,7 @@ export function computePrediction(
   if (
     agent.contrarianism > 0.5 &&
     !decisiveWeeklyMove &&
+    !lockInH2HDecisive &&
     Object.keys(crowd).length > 0
   ) {
     const crowdEntries = Object.entries(crowd).sort((a, b) => b[1] - a[1]);
@@ -580,13 +581,15 @@ export function computePrediction(
   // may have intentionally picked the lower-scoring side, so we instead
   // gate on whether EITHER side has any conviction at all.
   const chanceLevel = 1 / n;
-  if (isH2H || useWeightedUpDown) {
+  if ((isH2H || useWeightedUpDown) && !lockInForcedEntryId) {
     // Sanity floor: only abstain when both sides are essentially a coin
     // flip with no model signal at all (max < 52%). Otherwise honour the
     // weighted draw — that's the whole point of the spread.
+    // Skip when lock-in already force-picked — fame-weighted scores can stay
+    // near 50/50 even when fair value is decisive.
     const topScore = sorted[0][1];
     if (topScore < 0.52) return abstain("low_edge");
-  } else {
+  } else if (!lockInForcedEntryId) {
     const edge = rawProbability - chanceLevel;
     // Halved from 0.5/n to 0.25/n. With the previous threshold an average
     // riskAppetite=0.5 agent needed model probability ≥62.5% on every up/down
