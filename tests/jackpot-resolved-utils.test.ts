@@ -15,7 +15,8 @@ test("jackpot win with profit → market-first title", () => {
     stake: 100,
     payout: 470,
   });
-  assert.equal(out.title, "Celebrity score pool jackpot — +Ꝟ370");
+  assert.equal(out.title, "You won! Celebrity score pool — +Ꝟ370");
+  assert.match(out.body, /Congrats!/);
   assert.match(out.body, /Closed at 42/);
   assert.match(out.body, /Payout Ꝟ470/);
 });
@@ -29,7 +30,7 @@ test("jackpot win break-even → stake returned title", () => {
     stake: 50,
     payout: 50,
   });
-  assert.equal(out.title, "Tight pool jackpot — stake returned");
+  assert.equal(out.title, "You won! Tight pool — stake returned");
   assert.match(out.body, /net Ꝟ0/);
 });
 

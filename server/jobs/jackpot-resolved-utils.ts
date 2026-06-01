@@ -40,10 +40,10 @@ export function buildJackpotResolvedWinNotification(
   const signedProfit = formatSignedVox(profit);
   const title =
     profit > 0
-      ? `${marketTitle} jackpot \u2014 ${signedProfit}`
-      : `${marketTitle} jackpot \u2014 stake returned`;
+      ? `You won! ${marketTitle} \u2014 ${signedProfit}`
+      : `You won! ${marketTitle} \u2014 stake returned`;
   const body =
-    `Closed at ${actualScore}. You predicted ${predictedScore} (off by ${diff}). ` +
+    `Congrats! Closed at ${actualScore}. You predicted ${predictedScore} (off by ${diff}). ` +
     `Payout ${formatVox(payout)} (net ${signedProfit}).`;
   return { title, body };
 }
