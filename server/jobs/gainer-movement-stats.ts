@@ -16,6 +16,18 @@ type SqlExecutor = {
 /**
  * Batched movement stats for gainer field selection (mirrors insights volatility
  * hourly bucketing). `momentum7d` is |% change| from fame at `asOf - 7d` to `asOf`.
+ *
+ * BACKLOG — gap-aware coverage (not urgent; self-heals as old gaps age out of the
+ * 30d/7d windows). Eligibility and the stddev/momentum below use a raw COUNT plus
+ * endpoint lookups over a fixed window. A person with a sparse, NON-contiguous
+ * cluster of old snapshots — e.g. an ex-induction shadow promoted to the main
+ * leaderboard while the May 2026 "everyone-tracked" incident cluster is still
+ * inside the window — can (a) fast-track the 24-sample gate and (b) read
+ * artificially high volatility AND momentum, because `week_ago` grabs a stale
+ * value across a multi-week gap. Fix: require recent CONTIGUOUS coverage (N
+ * distinct hours in the last D days with no large gap) for BOTH the eligibility
+ * gate and the momentum baseline — not just a raw window COUNT. Land before any
+ * category with a freshly-promoted inductee actually starts racing.
  */
 export async function loadGainerMovementStats(
   personIds: string[],
