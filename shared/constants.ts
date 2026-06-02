@@ -197,3 +197,21 @@ export const MARKET_CATEGORY_OPTIONS = CANONICAL_CATEGORIES.map((c) => ({
   value: c.id,
   label: c.label,
 }));
+
+/** Category Race (gainer) field size — fixed at market creation each Monday. */
+export const GAINER_FIELD_SIZE = 5;
+/** Minimum eligible people (movement history + opening baseline) before a category races. */
+export const GAINER_MIN_ELIGIBLE = 5;
+/** Recognizable anchor drawn from highest fame among eligible (not movement-weighted). */
+export const GAINER_ANCHOR_COUNT = 1;
+export const GAINER_MOVER_COUNT = GAINER_FIELD_SIZE - GAINER_ANCHOR_COUNT;
+
+/** Hourly ingest samples in the trailing window required for movement stats + eligibility. */
+export const GAINER_MOVEMENT_MIN_SAMPLES = 24;
+export const GAINER_MOVEMENT_STDDEV_DAYS = 30;
+export const GAINER_MOVEMENT_MOMENTUM_DAYS = 7;
+
+/** Movement-potential score blend (volatility + recent |% change| + mild lower-base tilt). */
+export const GAINER_SCORE_WEIGHT_VOLATILITY = 0.45;
+export const GAINER_SCORE_WEIGHT_MOMENTUM = 0.4;
+export const GAINER_SCORE_WEIGHT_LOWER_BASE = 0.15;

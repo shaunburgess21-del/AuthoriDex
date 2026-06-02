@@ -126,7 +126,13 @@ import { enrichInductionCandidatesWithAvatars, enrichInductionVoteRows } from ".
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
-import { CANONICAL_MARKET_CATEGORIES, getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
+import {
+  CANONICAL_MARKET_CATEGORIES,
+  CANONICAL_CATEGORIES,
+  GAINER_MIN_ELIGIBLE,
+  getMarketCategoryLabel,
+  normalizeMarketCategory,
+} from "@shared/constants";
 import {
   shouldUseColdStart,
   orderRecencyForUser,
@@ -19714,13 +19720,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       ));
 
       const eligibleCategories = Object.entries(byCategory)
-        .filter(([, count]) => count >= 3)
+        .filter(([, count]) => count >= GAINER_MIN_ELIGIBLE)
         .map(([cat]) => cat);
 
       const existingCategorySet = new Set(existingGainers.map(g => normalizeMarketCategory(g.category)));
       const missingCategories = eligibleCategories.filter(cat => !existingCategorySet.has(cat));
       const tooFewCategories = Object.entries(byCategory)
-        .filter(([, count]) => count < 3)
+        .filter(([, count]) => count < GAINER_MIN_ELIGIBLE)
         .map(([cat, count]) => ({ category: cat, count }));
 
       res.json({

@@ -1,7 +1,11 @@
 import { randomUUID } from "crypto";
 import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import {
+  GAINER_MIN_ELIGIBLE,
+  getMarketCategoryLabel,
+  normalizeMarketCategory,
+} from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores, loadOpeningScoreMap } from "../native-markets/openingScores";
 import {
@@ -13,6 +17,8 @@ import { getWeekContext as getUtcWeekContext } from "../native-markets/week-cont
 import { seedAmmMarket } from "../services/amm-house";
 import { applyWarmStartPrior } from "../services/amm-warmstart";
 import { log } from "../log";
+import { loadGainerMovementStats } from "./gainer-movement-stats";
+import { selectGainerField } from "./gainer-selection";
 
 const MARKET_GENERATOR_LOCK_KEY = 5_204;
 const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
@@ -888,19 +894,46 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
   const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
 
   const snapMap = await loadOpeningScoreMap(allIds, db, { asOf: monday });
+  const movementMap = await loadGainerMovementStats(allIds, db, { asOf: monday });
 
   const engine = nativeEngineFor("gainer");
   let created = 0;
   let updated = 0;
   let skippedTooFew = 0;
   for (const [cat, catPeople] of Array.from(byCategory.entries())) {
-    if (catPeople.length < 3) {
-      log(`[MarketGenerator:Gainer] Skipping ${cat}: only ${catPeople.length} people (need ≥3)`);
+    const selection = selectGainerField({
+      people: catPeople.map((p) => ({ id: p.id })),
+      fameById: scoreMap,
+      openingById: snapMap,
+      movementById: movementMap,
+      weekNumber,
+      category: cat,
+    });
+
+    if (!selection.ok) {
+      log(
+        `[MarketGenerator:Gainer] Skipping ${cat}: only ${selection.eligibleCount} eligible ` +
+        `(need ≥${GAINER_MIN_ELIGIBLE} with movement history + opening baseline)`,
+      );
       skippedTooFew++;
       continue;
     }
 
-    const ranked = [...catPeople].sort((a, b) => (scoreMap.get(b.id) ?? 0) - (scoreMap.get(a.id) ?? 0));
+    const fieldById = new Map(catPeople.map((p) => [p.id, p]));
+    const fieldPeople = selection.personIds
+      .map((id) => fieldById.get(id))
+      .filter((p): p is (typeof catPeople)[number] => Boolean(p));
+
+    if (fieldPeople.length !== selection.personIds.length) {
+      log(`[MarketGenerator:Gainer] Skipping ${cat}: selected ids missing from roster`);
+      skippedTooFew++;
+      continue;
+    }
+
+    log(
+      `[MarketGenerator:Gainer] ${cat}: field=${selection.personIds.join(", ")} ` +
+      `(anchor=${selection.anchorId})`,
+    );
 
     if (existingCategories.has(cat)) {
       try {
@@ -922,7 +955,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
           .from(marketEntries)
           .where(eq(marketEntries.marketId, existingMarket.id));
         const existingPersonIds = new Set(currentEntries.map(e => e.personId));
-        const missing = ranked.filter(p => !existingPersonIds.has(p.id));
+        const missing = fieldPeople.filter(p => !existingPersonIds.has(p.id));
 
         if (missing.length > 0) {
           // AMM markets seed their LMSR state with a fixed `outcomeOrder`
@@ -962,7 +995,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
       }
       continue;
     }
-    const openingScores = buildOpeningScores(ranked.map(p => p.id), snapMap);
+    const openingScores = buildOpeningScores(fieldPeople.map(p => p.id), snapMap);
     const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
 
     const title = `Category Race: ${getMarketCategoryLabel(cat)}`;
@@ -994,7 +1027,7 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             metadata: gainerMeta,
             featured: false,
           }).returning();
-          const entryValues = ranked.map((person, idx) => ({
+          const entryValues = fieldPeople.map((person, idx) => ({
             marketId: market.id,
             entryType: "person" as const,
             personId: person.id,
