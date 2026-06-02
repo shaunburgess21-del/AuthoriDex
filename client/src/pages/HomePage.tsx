@@ -81,7 +81,7 @@ function TrendScoreHeaderLabel({ className }: { className?: string }) {
         )}
         data-testid="header-trend-score-info"
       >
-        Trend Score
+        Score
       </span>
     </TouchTooltip>
   );
@@ -185,7 +185,6 @@ function MarketPulseCard({
                       <MoverRowSubtext
                         rank={person.rank}
                         fameIndex={person.fameIndex}
-                        fameIndexLive={person.fameIndexLive}
                         trendScore={person.trendScore}
                       />
                     </div>
@@ -1199,7 +1198,7 @@ export default function HomePage() {
       name: person.name,
       avatar: person.avatar ?? null,
       category: person.category ?? null,
-      rank: ((person as any).liveRank ?? person.rank ?? null) as number | null,
+      rank: (person.rank ?? null) as number | null,
       change24h: person.change24h ?? null,
       rankChange: ((person as any).rankChange ?? null) as number | null,
       hotMover: hotMoverIds.has(person.id),

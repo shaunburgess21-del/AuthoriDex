@@ -84,7 +84,7 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   spotifyFollowers: real("spotify_followers").notNull().default(0),
   searchVolume: real("search_volume").notNull().default(0),
   trendScore: real("trend_score").notNull(),
-  fameIndex: integer("fame_index").default(0), // 0-10,000 normalized score
+  fameIndex: integer("fame_index").default(0), // canonical hourly Fame Index (~100k–800k scale)
   wikiPageviews: real("wiki_pageviews").default(0),
   wikiDelta: real("wiki_delta").default(0),
   newsDelta: real("news_delta").default(0),
@@ -158,11 +158,11 @@ export const trendingPeople = pgTable("trending_people", {
   bio: text("bio"),
   rank: integer("rank").notNull(),
   trendScore: real("trend_score").notNull(),
-  fameIndex: integer("fame_index").default(0), // 0-10,000 normalized score (primary UI number)
-  fameIndexLive: integer("fame_index_live"), // live-ticked score (blended: canonical + internal signals)
-  liveRank: integer("live_rank"), // rank based on fame_index_live
-  liveUpdatedAt: timestamp("live_updated_at"), // when fast-lane last ticked this person
-  liveDampen: real("live_dampen").default(1.0), // dampening factor (0.5 if snap-back detected)
+  fameIndex: integer("fame_index").default(0), // canonical hourly score (primary UI number, ~100k–800k)
+  fameIndexLive: integer("fame_index_live"), // mirrors fame_index; freshness heartbeat only
+  liveRank: integer("live_rank"), // mirrors rank; cosmetic lane only
+  liveUpdatedAt: timestamp("live_updated_at"), // when cosmetic fast-lane last ticked
+  liveDampen: real("live_dampen").default(1.0), // legacy; kept at 1.0 in cosmetic lane
   change24h: real("change_24h"),
   change7d: real("change_7d"),
   category: text("category"),

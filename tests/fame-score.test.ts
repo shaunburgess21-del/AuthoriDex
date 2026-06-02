@@ -3,23 +3,23 @@ import { describe, it } from "node:test";
 import { resolveFameScore } from "../client/src/lib/fameScore";
 
 describe("resolveFameScore", () => {
-  it("prefers fameIndexLive over fameIndex", () => {
+  it("returns canonical fameIndex", () => {
     assert.equal(
-      resolveFameScore({ fameIndexLive: 900, fameIndex: 800, trendScore: 50_000 }),
-      900,
-    );
-  });
-
-  it("falls back to fameIndex when live is null", () => {
-    assert.equal(
-      resolveFameScore({ fameIndexLive: null, fameIndex: 793_009, trendScore: 50_000 }),
+      resolveFameScore({ fameIndex: 793_009, fameIndexLive: 900, trendScore: 50_000 }),
       793_009,
     );
   });
 
-  it("derives from trendScore when index fields are missing", () => {
+  it("ignores fameIndexLive (cosmetic lane only)", () => {
     assert.equal(
-      resolveFameScore({ fameIndex: null, trendScore: 79_300_900 }),
+      resolveFameScore({ fameIndexLive: 900, fameIndex: null, trendScore: 793_009 }),
+      793_009,
+    );
+  });
+
+  it("falls back to trendScore when fameIndex is missing", () => {
+    assert.equal(
+      resolveFameScore({ fameIndex: null, trendScore: 793_009 }),
       793_009,
     );
   });

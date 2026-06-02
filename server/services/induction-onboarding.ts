@@ -163,20 +163,47 @@ export async function runPostInductionOnboarding(args: {
       .limit(1);
 
     if (!hasSnap) {
-      const ts = new Date();
-      await db.insert(trendSnapshots).values({
-        id: randomUUID(),
-        personId,
-        timestamp: ts,
-        newsCount: 0,
-        youtubeViews: 0,
-        spotifyFollowers: 0,
-        searchVolume: 0,
-        trendScore: 0,
-        fameIndex: 0,
-        runId: BASELINE_RUN_ID,
-        snapshotOrigin: "induction_onboard",
-      });
+      // Bootstrap baseline snapshot into the official 'ingest' stream. Two DB
+      // constraints must hold: chk_snapshot_origin_values (origin='ingest') and
+      // chk_ingest_hour_truncated (timestamp on the hour) — otherwise the insert
+      // throws and aborts the rest of onboarding (markets, metrics).
+      //
+      // Seed with the person's real current fame_index when present (e.g.
+      // re-induction). Never write a synthetic 0 into the official stream: a 0
+      // among real ~100k-800k values is a poison outlier that inflates 30-day
+      // volatility (gainer-movement stddev) and skews opening-score medians.
+      // For a brand-new inductee (fame_index still 0) we skip and let the first
+      // real hourly ingest seed them.
+      const [seed] = await db
+        .select({
+          fameIndex: trendingPeople.fameIndex,
+          trendScore: trendingPeople.trendScore,
+        })
+        .from(trendingPeople)
+        .where(eq(trendingPeople.id, personId))
+        .limit(1);
+
+      const seedFame = seed?.fameIndex ?? 0;
+      if (seedFame > 0) {
+        const ts = new Date();
+        ts.setUTCMinutes(0, 0, 0); // hour-truncate → satisfies chk_ingest_hour_truncated
+        await db.insert(trendSnapshots).values({
+          id: randomUUID(),
+          personId,
+          timestamp: ts,
+          newsCount: 0,
+          youtubeViews: 0,
+          spotifyFollowers: 0,
+          searchVolume: 0,
+          trendScore: seed?.trendScore ?? seedFame,
+          fameIndex: seedFame,
+          runId: BASELINE_RUN_ID,
+          snapshotOrigin: "ingest",
+        })
+          // Bulletproof: never let a unique(person_id, timestamp) collision with
+          // an hourly-ingest row for this hour abort the rest of onboarding.
+          .onConflictDoNothing();
+      }
     }
 
     await recomputeCelebrityMetrics(personId).catch((e) =>

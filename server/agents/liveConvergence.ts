@@ -23,6 +23,7 @@ import {
   LOCKIN_GAINER_SIGMA_1D,
   LOCKIN_GAINER_BETA,
 } from "./constants";
+import { OFFICIAL_SNAPSHOT_ORIGIN_SQL } from "../scoring/official-snapshots";
 
 /** |fair − price| above this counts as mispriced (10pp, same as lock-in decisive band). */
 const MISPRICED_GAP_PP = LOCKIN_DECISIVE_PCT;
@@ -489,6 +490,7 @@ export async function fetchLiveGainerConvergence(
     INNER JOIN prediction_markets pm ON pm.id = me.market_id
     INNER JOIN trend_snapshots ts
       ON ts.person_id = me.person_id
+      AND ts.snapshot_origin = ${OFFICIAL_SNAPSHOT_ORIGIN_SQL}
       AND ts.timestamp <= pm.created_at
     WHERE me.market_id IN (${sql.join(marketIds.map((id) => sql`${id}`), sql`, `)})
       AND me.person_id IS NOT NULL

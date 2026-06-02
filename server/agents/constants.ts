@@ -260,7 +260,13 @@ export const NATIVE_ASSESSMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Lock-in fair value (time-aware certainty — May/Jun 2026)
+// Sigma DEFAULT pinned to the legacy 0.109: the recalibration to ~0.115 is a
+// SEPARATE deploy that must land AFTER observing the EMA-relaxed (0.68) score
+// series — never co-deploy EMA + sigma (caveat #3/#6). When ready, raise via
+// LOCKIN_SIGMA_1D env (or bump this default in its own commit).
 // ---------------------------------------------------------------------------
+export const LOCKIN_SIGMA_1D_DEFAULT = 0.109;
+export const LOCKIN_BETA_DEFAULT = 0.36;
 /** Log shadow fair targets without changing bets. */
 export const LOCKIN_FAIR_SHADOW = envFlag(process.env.LOCKIN_FAIR_SHADOW);
 /** Apply fair as confidence floor in computePrediction. */
@@ -303,13 +309,13 @@ export const LOCKIN_H2H_SIGMA_1D = (() => {
   const raw = Number(process.env.LOCKIN_H2H_SIGMA_1D);
   if (Number.isFinite(raw) && raw > 0) return raw;
   const base = Number(process.env.LOCKIN_SIGMA_1D);
-  return Number.isFinite(base) && base > 0 ? base : 0.109;
+  return Number.isFinite(base) && base > 0 ? base : LOCKIN_SIGMA_1D_DEFAULT;
 })();
 export const LOCKIN_H2H_BETA = (() => {
   const raw = Number(process.env.LOCKIN_H2H_BETA);
   if (Number.isFinite(raw) && raw > 0) return raw;
   const base = Number(process.env.LOCKIN_BETA);
-  return Number.isFinite(base) && base > 0 ? base : 0.36;
+  return Number.isFinite(base) && base > 0 ? base : LOCKIN_BETA_DEFAULT;
 })();
 
 /** Runtime read (tests can flip env without re-importing the module). */
@@ -334,13 +340,13 @@ export const LOCKIN_GAINER_SIGMA_1D = (() => {
   const raw = Number(process.env.LOCKIN_GAINER_SIGMA_1D);
   if (Number.isFinite(raw) && raw > 0) return raw;
   const base = Number(process.env.LOCKIN_SIGMA_1D);
-  return Number.isFinite(base) && base > 0 ? base : 0.109;
+  return Number.isFinite(base) && base > 0 ? base : LOCKIN_SIGMA_1D_DEFAULT;
 })();
 export const LOCKIN_GAINER_BETA = (() => {
   const raw = Number(process.env.LOCKIN_GAINER_BETA);
   if (Number.isFinite(raw) && raw > 0) return raw;
   const base = Number(process.env.LOCKIN_BETA);
-  return Number.isFinite(base) && base > 0 ? base : 0.36;
+  return Number.isFinite(base) && base > 0 ? base : LOCKIN_BETA_DEFAULT;
 })();
 
 /** Runtime read (tests can flip env without re-importing the module). */

@@ -321,7 +321,9 @@ export function AdminScoreInspector() {
                         #{audit.currentRanking.rank ?? "—"}
                         {audit.currentRanking.liveRank != null &&
                           audit.currentRanking.liveRank !== audit.currentRanking.rank && (
-                            <span className="text-muted-foreground ml-1">(live #{audit.currentRanking.liveRank})</span>
+                            <span className="text-muted-foreground ml-1" title="Legacy cosmetic lane — should mirror canonical rank">
+                              (cosmetic #{audit.currentRanking.liveRank})
+                            </span>
                           )}
                       </div>
                     </div>

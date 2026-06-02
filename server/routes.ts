@@ -98,7 +98,7 @@ import {
   getHealthSummary,
   getStalenessDecayFactor,
 } from "./scoring/sourceHealth";
-import { getLastFullRefreshAt } from "./jobs/live-tick";
+import { getLastFullRefreshAt, getSurgingPersonIds } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
@@ -1605,7 +1605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             SELECT ${trendingPeople.id} AS id,
               ROW_NUMBER() OVER (
                 PARTITION BY ${trendingPeople.category}
-                ORDER BY COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex}) DESC NULLS LAST, ${trendingPeople.name} ASC
+                ORDER BY ${trendingPeople.fameIndex} DESC NULLS LAST, ${trendingPeople.name} ASC
               ) AS category_rank
             FROM ${trendingPeople}
             WHERE ${trendingPeople.category} = ${person.category}
@@ -4923,7 +4923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
           case 'fame':
           default:
-            orderByColumn = sql`COALESCE(${trendingPeople.fameIndexLive}, ${trendingPeople.fameIndex})`;
+            orderByColumn = trendingPeople.fameIndex;
             break;
         }
 
@@ -4948,6 +4948,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       query = query.limit(limit).offset(offset) as typeof query;
 
       const results = await query;
+
+      const surgingIds =
+        tab === "fame"
+          ? await getSurgingPersonIds(results.map((r) => r.id))
+          : new Set<string>();
 
       let userValueVotes: Record<string, string> = {};
       if (userId && tab === 'value') {
@@ -5012,7 +5017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (tab === 'fame') {
           leaderboardRank = (person.fameIndex === 0 || person.fameIndex === null)
             ? null
-            : (person.liveRank ?? person.rank);
+            : person.rank;
         } else if (tab === 'approval') {
           leaderboardRank = approvalRankById.get(person.id) ?? null;
         } else {
@@ -5022,9 +5027,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return {
           ...person,
           leaderboardRank,
+          isSurging: surgingIds.has(person.id),
           userValueVote: userValueVotes[person.id] || null,
           userApprovalRating: userApprovalRatings[person.id] ?? null,
-          rankChange: prevRank - person.rank,
+          rankChange:
+            leaderboardRank != null && prevRank != null
+              ? prevRank - leaderboardRank
+              : null,
         };
       });
 

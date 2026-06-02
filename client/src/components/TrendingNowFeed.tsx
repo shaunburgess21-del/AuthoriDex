@@ -13,7 +13,6 @@ export interface HotMover {
   category: string | null;
   rank: number;
   fameIndex: number | null;
-  fameIndexLive?: number | null;
   change24h: number | null;
   rankChange: number | null;
 }
@@ -111,7 +110,6 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
                     <MoverRowSubtext
                       rank={person.rank}
                       fameIndex={person.fameIndex}
-                      fameIndexLive={person.fameIndexLive}
                     />
                   </div>
                   {delta && (

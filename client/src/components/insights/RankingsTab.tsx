@@ -27,7 +27,7 @@ const PILL_SOURCES: Array<{ id: InsightsSource; label: string; hint: string }> =
   { id: "wiki_momentum", label: "Wiki Momentum", hint: "Biggest curiosity spike" },
   { id: "velocity", label: "Velocity", hint: "Fastest risers" },
   { id: "mass", label: "Mass", hint: "Established attention" },
-  { id: "fame", label: "Fame Index", hint: "Composite rank score" },
+  { id: "fame", label: "Leaderboard", hint: "Same order as the home leaderboard" },
   { id: "news", label: "News", hint: "Most press attention" },
   { id: "wiki", label: "Wiki", hint: "Most Wikipedia attention" },
   { id: "search_volume", label: "Search Interest", hint: "Most-searched on Google" },
@@ -231,7 +231,7 @@ export function RankingsTab() {
                   <th className="px-4 py-3 font-medium text-right w-24">
                     {SOURCE_DISPLAY[filters.source]}
                   </th>
-                  <th className="px-4 py-3 font-medium text-right w-20">Fame</th>
+                  <th className="px-4 py-3 font-medium text-right w-20">Score</th>
                   <th className="px-4 py-3 font-medium text-right w-20">Δ</th>
                 </tr>
               </thead>
@@ -312,7 +312,7 @@ export function RankingsTab() {
                     {formatSortValue(filters.source, row)}
                   </p>
                   <p className="text-[10px] text-muted-foreground tabular-nums">
-                    FI {row.fameIndex}
+                    {row.fameIndex.toLocaleString()}
                     {row.change24h != null
                       ? ` · ${row.change24h > 0 ? "+" : ""}${row.change24h.toFixed(1)}%`
                       : ""}

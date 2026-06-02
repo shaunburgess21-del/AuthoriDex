@@ -9,7 +9,7 @@ export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
   wiki_momentum: "Wiki momentum",
   velocity: "Velocity",
   mass: "Mass",
-  fame: "Fame Index",
+  fame: "Leaderboard",
   news: "Press (24h)",
   wiki: "Wikipedia",
   search_volume: "Search interest",

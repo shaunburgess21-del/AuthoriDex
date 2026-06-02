@@ -1098,7 +1098,7 @@ export default function PersonDetailPage() {
       name: person.name,
       avatar: person.avatar ?? null,
       category: person.category ?? null,
-      fameIndex: (person as any).fameIndex ?? Math.round(person.trendScore / 100),
+      fameIndex: (person as any).fameIndex ?? Math.round(person.trendScore ?? 0),
       trendScore: person.trendScore,
       approvalPct: (person as any).approvalPct ?? null,
       approvalAvgRating: (person as any).approvalAvgRating ?? null,
@@ -1361,7 +1361,7 @@ export default function PersonDetailPage() {
               <TrendScoreInfoIcon testId="icon-trend-score-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
             </div>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
-              {(person.fameIndex ?? Math.round(person.trendScore / 100)).toLocaleString('en-US')}
+              {(person.fameIndex ?? Math.round(person.trendScore ?? 0)).toLocaleString('en-US')}
             </p>
           </Card>
           <Card className="text-center p-4">
@@ -1714,7 +1714,7 @@ export default function PersonDetailPage() {
               personId={person.id}
               personName={person.name}
               personAvatar={person.avatar || ""}
-              currentScore={person.fameIndex ?? Math.round(person.trendScore / 100)}
+              currentScore={person.fameIndex ?? Math.round(person.trendScore ?? 0)}
               personRank={person.rank ?? null}
             />
           </Suspense>

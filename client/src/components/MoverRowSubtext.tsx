@@ -4,17 +4,15 @@ import { OverallRankPill } from "@/components/OverallRankPill";
 interface MoverRowSubtextProps {
   rank?: number | null;
   fameIndex?: number | null;
-  fameIndexLive?: number | null;
   trendScore?: number | null;
 }
 
 export function MoverRowSubtext({
   rank,
   fameIndex,
-  fameIndexLive,
   trendScore,
 }: MoverRowSubtextProps) {
-  const fameScore = resolveFameScore({ fameIndex, fameIndexLive, trendScore });
+  const fameScore = resolveFameScore({ fameIndex, trendScore });
   const hasRank = typeof rank === "number" && rank > 0;
 
   if (fameScore === 0 && !hasRank) return null;

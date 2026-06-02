@@ -31,6 +31,8 @@ interface ExtendedPerson extends TrendingPerson {
   leaderboardRank?: number;
   approvalVotesCount?: number | null;
   rankChange?: number | null;
+  /** Cosmetic: recent VoxDex votes/views in the last ~10 min (not a competing score). */
+  isSurging?: boolean;
 }
 
 interface LeaderboardRowProps {
@@ -179,8 +181,9 @@ export function LeaderboardRow({
     person.rankChange != null && Math.abs(person.rankChange) >= 2;
   const hasVoted = sentimentScore !== null;
   const showVotePulse = !hasVoted && !hasEverVoted;
-  const rank = person.leaderboardRank ?? (person as any).liveRank ?? person.rank;
+  const rank = person.leaderboardRank ?? person.rank;
   const isColdStart = rank == null || rank === 0;
+  const isSurging = person.isSurging === true;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -251,6 +254,14 @@ export function LeaderboardRow({
                     className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
                     aria-label="Hot Mover"
                   />
+                )}
+                {isSurging && !isHotMover && (
+                  <span
+                    className="text-[10px] font-medium text-amber-600 dark:text-amber-400 shrink-0"
+                    title="Recent activity on VoxDex"
+                  >
+                    Live
+                  </span>
                 )}
               </p>
             );

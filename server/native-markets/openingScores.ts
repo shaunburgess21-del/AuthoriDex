@@ -1,4 +1,8 @@
 import { sql } from "drizzle-orm";
+import {
+  OFFICIAL_SNAPSHOT_ORIGIN_SQL,
+  OFFICIAL_SNAPSHOT_HOURLY_SQL,
+} from "../scoring/official-snapshots";
 
 export type SnapshotScore = {
   score: number;
@@ -68,6 +72,8 @@ export async function loadOpeningScoreMap(
            COUNT(*)::int AS sample_count
     FROM trend_snapshots
     WHERE person_id IN (${idList})
+      AND snapshot_origin = ${OFFICIAL_SNAPSHOT_ORIGIN_SQL}
+      AND ${OFFICIAL_SNAPSHOT_HOURLY_SQL}
       AND timestamp <= ${asOfIso}::timestamptz
       AND timestamp >= ${asOfIso}::timestamptz - INTERVAL '7 days'
     GROUP BY person_id
@@ -99,6 +105,8 @@ export async function loadOpeningScoreMap(
            COUNT(*)::int AS sample_count
     FROM trend_snapshots
     WHERE person_id IN (${missing7dList})
+      AND snapshot_origin = ${OFFICIAL_SNAPSHOT_ORIGIN_SQL}
+      AND ${OFFICIAL_SNAPSHOT_HOURLY_SQL}
       AND timestamp <= ${asOfIso}::timestamptz
       AND timestamp >= ${asOfIso}::timestamptz - INTERVAL '6 hours'
     GROUP BY person_id
@@ -125,6 +133,8 @@ export async function loadOpeningScoreMap(
     SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
     FROM trend_snapshots
     WHERE person_id IN (${missingList})
+      AND snapshot_origin = ${OFFICIAL_SNAPSHOT_ORIGIN_SQL}
+      AND ${OFFICIAL_SNAPSHOT_HOURLY_SQL}
       AND timestamp <= ${asOfIso}::timestamptz
       AND timestamp > ${asOfIso}::timestamptz - INTERVAL '14 days'
     ORDER BY person_id, timestamp DESC

@@ -1,14 +1,13 @@
 import { db, withDbAdvisoryLock } from "../db";
 import { trendingPeople, votes, celebrityValueVotes } from "@shared/schema";
-import { sql, eq, gte, and } from "drizzle-orm";
+import { sql, eq, gte, and, inArray } from "drizzle-orm";
 
-const LIVE_WEIGHT = 0.12;
-const MAX_RANK_DELTA = 3;
-const VOTE_BOOST_POINTS = 150;
-const VIEW_BOOST_POINTS = 30;
-const TICK_INTERVAL_MS = 15 * 60 * 1000;
-const DAMPEN_DECAY_STEP = 0.1;
+/** Scheduler aligns to :00/:10/:20… — not this constant (legacy log only). */
+const TICK_INTERVAL_MS = 10 * 60 * 1000;
 const LIVE_TICK_LOCK_KEY = 5_203;
+
+/** Minimum recent activity to show a cosmetic "surging" cue (votes + profile views). */
+export const SURGE_ACTIVITY_THRESHOLD = 1;
 
 let _lastFullRefreshAt: Date | null = null;
 
@@ -20,7 +19,8 @@ export function getLastFullRefreshAt(): Date | null {
   return _lastFullRefreshAt;
 }
 
-async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, number>> {
+/** Recent celebrity-target votes in the last N minutes (for cosmetic UI + ingest). */
+export async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, number>> {
   const since = new Date(Date.now() - sinceMinutes * 60 * 1000);
   const counts = new Map<string, number>();
 
@@ -33,15 +33,15 @@ async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, nu
       .from(votes)
       .where(and(
         gte(votes.votedAt, since),
-        sql`${votes.targetType} = 'celebrity'`
+        sql`${votes.targetType} = 'celebrity'`,
       ))
       .groupBy(votes.targetId);
 
     for (const row of recentVotes) {
       counts.set(row.targetId, Number(row.count));
     }
-  } catch (e) {
-    // votes table might be empty or not have recent entries
+  } catch {
+    // votes table might be empty
   }
 
   try {
@@ -58,13 +58,47 @@ async function getRecentVoteCounts(sinceMinutes: number): Promise<Map<string, nu
       const existing = counts.get(row.celebrityId) || 0;
       counts.set(row.celebrityId, existing + Number(row.count));
     }
-  } catch (e) {
+  } catch {
     // value votes table might be empty
   }
 
   return counts;
 }
 
+/** Batch surge map for leaderboard rows (cosmetic only). */
+export async function getSurgingPersonIds(
+  personIds: string[],
+  sinceMinutes = 10,
+): Promise<Set<string>> {
+  const surging = new Set<string>();
+  if (personIds.length === 0) return surging;
+
+  const voteCounts = await getRecentVoteCounts(sinceMinutes);
+  for (const id of personIds) {
+    if ((voteCounts.get(id) ?? 0) >= SURGE_ACTIVITY_THRESHOLD) {
+      surging.add(id);
+    }
+  }
+
+  const viewRows = await db
+    .select({ id: trendingPeople.id })
+    .from(trendingPeople)
+    .where(and(
+      inArray(trendingPeople.id, personIds),
+      sql`${trendingPeople.profileViews10m} >= ${SURGE_ACTIVITY_THRESHOLD}`,
+    ));
+  for (const row of viewRows) {
+    surging.add(row.id);
+  }
+
+  return surging;
+}
+
+/**
+ * Fast lane: cosmetic liveliness only. Mirrors canonical fame_index/rank into the
+ * legacy live_* columns (for freshness heartbeat), resets view counters, never
+ * writes trend_snapshots or competes with the hourly official score.
+ */
 async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> {
   const now = new Date();
 
@@ -72,154 +106,61 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
     .select({
       id: trendingPeople.id,
       fameIndex: trendingPeople.fameIndex,
-      fameIndexLive: trendingPeople.fameIndexLive,
       rank: trendingPeople.rank,
-      liveRank: trendingPeople.liveRank,
-      liveDampen: trendingPeople.liveDampen,
       profileViews10m: trendingPeople.profileViews10m,
     })
-    .from(trendingPeople)
-    .orderBy(sql`${trendingPeople.fameIndex} DESC NULLS LAST`);
+    .from(trendingPeople);
 
   if (people.length === 0) return { processed: 0, moved: 0 };
 
   const voteCounts = await getRecentVoteCounts(10);
-
-  const liveScores: Array<{
-    id: string;
-    canonical: number;
-    liveScore: number;
-    dampen: number;
-    views: number;
-    voteCount: number;
-  }> = [];
-
-  for (const p of people) {
-    const canonical = p.fameIndex ?? 0;
-    let dampen = p.liveDampen ?? 1.0;
-    if (dampen < 1.0) {
-      dampen = Math.min(1.0, dampen + DAMPEN_DECAY_STEP);
-    }
-    const views = p.profileViews10m ?? 0;
-    const voteCount = voteCounts.get(p.id) ?? 0;
-
-    const voteBoost = voteCount * VOTE_BOOST_POINTS;
-    const viewBoost = views * VIEW_BOOST_POINTS;
-    const totalBoost = voteBoost + viewBoost;
-
-    const weight = LIVE_WEIGHT * dampen;
-    const liveScore = Math.round(canonical + totalBoost * weight);
-
-    liveScores.push({
-      id: p.id,
-      canonical,
-      liveScore,
-      dampen,
-      views,
-      voteCount,
-    });
-  }
-
-  liveScores.sort((a, b) => b.liveScore - a.liveScore);
-
-  const canonicalRankMap = new Map<string, number>();
-  for (const p of people) {
-    canonicalRankMap.set(p.id, p.rank);
-  }
-
-  const prevLiveMap = new Map<string, { fameIndexLive: number | null; liveRank: number | null; liveDampen: number | null }>();
-  for (const p of people) {
-    prevLiveMap.set(p.id, {
-      fameIndexLive: p.fameIndexLive ?? null,
-      liveRank: p.liveRank,
-      liveDampen: p.liveDampen,
-    });
-  }
-
-  let moved = 0;
   let written = 0;
+  let activeCount = 0;
 
-  // Build the change set first so we can issue one batched UPDATE rather than
-  // N separate UPDATE-WHERE-id statements. Previously, with ~500 tracked
-  // people, a tick could fire 500 sequential SQL round-trips; on a slow DB
-  // this routinely ate the whole 10-minute tick window.
   type LiveUpdate = {
     id: string;
     fameIndexLive: number;
     liveRank: number;
-    liveDampen: number;
+    profileViews10m: number;
   };
   const pendingUpdates: LiveUpdate[] = [];
 
-  for (let i = 0; i < liveScores.length; i++) {
-    const item = liveScores[i];
-    const newLiveRank = i + 1;
-    const canonicalRank = canonicalRankMap.get(item.id) ?? newLiveRank;
+  for (const p of people) {
+    const canonicalScore = p.fameIndex ?? 0;
+    const canonicalRank = p.rank ?? 0;
+    const views = p.profileViews10m ?? 0;
+    const voteCount = voteCounts.get(p.id) ?? 0;
+    if (voteCount > 0 || views > 0) activeCount++;
 
-    let finalRank = newLiveRank;
-    if (canonicalRank === 0) {
-      finalRank = 0;
-    } else {
-      const rankDelta = Math.abs(newLiveRank - canonicalRank);
-      if (rankDelta > MAX_RANK_DELTA) {
-        finalRank = canonicalRank + (newLiveRank > canonicalRank ? MAX_RANK_DELTA : -MAX_RANK_DELTA);
-      }
-    }
-
-    if (finalRank !== canonicalRank) moved++;
-
-    const prev = prevLiveMap.get(item.id);
-    const scoreChanged = !prev || prev.fameIndexLive !== item.liveScore;
-    const rankChanged = !prev || prev.liveRank !== finalRank;
-    const dampenChanged = !prev || Math.abs((prev.liveDampen ?? 1.0) - item.dampen) > 0.001;
-    const viewsNeedReset = item.views > 0;
-
-    if (scoreChanged || rankChanged || dampenChanged || viewsNeedReset) {
-      pendingUpdates.push({
-        id: item.id,
-        fameIndexLive: item.liveScore,
-        liveRank: finalRank,
-        liveDampen: item.dampen,
-      });
-    }
+    pendingUpdates.push({
+      id: p.id,
+      fameIndexLive: canonicalScore,
+      liveRank: canonicalRank,
+      profileViews10m: 0,
+    });
   }
 
   if (pendingUpdates.length > 0) {
-    // One UPDATE per chunk via a VALUES table joined on id. Keeps chunks small
-    // enough to stay under PG parameter limits even on very large fleets.
     const CHUNK = 200;
     for (let i = 0; i < pendingUpdates.length; i += CHUNK) {
       const chunk = pendingUpdates.slice(i, i + CHUNK);
       const valuesSql = sql.join(
-        chunk.map((u) => sql`(${u.id}::varchar, ${u.fameIndexLive}::double precision, ${u.liveRank}::integer, ${u.liveDampen}::double precision)`),
-        sql`, `
+        chunk.map((u) => sql`(${u.id}::varchar, ${u.fameIndexLive}::integer, ${u.liveRank}::integer, ${u.profileViews10m}::integer)`),
+        sql`, `,
       );
       await db.execute(sql`
         UPDATE trending_people AS tp
         SET
           fame_index_live = v.fame_index_live,
           live_rank = v.live_rank,
-          live_dampen = v.live_dampen,
+          live_dampen = 1.0,
           live_updated_at = ${now},
-          profile_views_10m = 0
-        FROM (VALUES ${valuesSql}) AS v(id, fame_index_live, live_rank, live_dampen)
+          profile_views_10m = v.profile_views_10m
+        FROM (VALUES ${valuesSql}) AS v(id, fame_index_live, live_rank, profile_views_10m)
         WHERE tp.id = v.id
       `);
       written += chunk.length;
     }
-  } else {
-    // Heartbeat write: even when no live fields changed, record that the
-    // fast-lane tick ran so freshness UI reflects the 10-minute cadence.
-    await db.execute(sql`
-      UPDATE trending_people
-      SET live_updated_at = ${now}
-      WHERE id = (
-        SELECT id
-        FROM trending_people
-        ORDER BY rank ASC NULLS LAST, id ASC
-        LIMIT 1
-      )
-    `);
   }
 
   if (!_lastFullRefreshAt) {
@@ -235,8 +176,10 @@ async function runLiveTickOnce(): Promise<{ processed: number; moved: number }> 
     }
   }
 
-  console.log(`[LiveTick] Processed ${liveScores.length} people, ${written} rows written, ${moved} rank changes, ${voteCounts.size} with recent votes`);
-  return { processed: liveScores.length, moved };
+  console.log(
+    `[LiveTick] Cosmetic tick: ${people.length} people, ${written} rows synced to canonical, ${activeCount} with recent activity`,
+  );
+  return { processed: people.length, moved: 0 };
 }
 
 export async function runLiveTick(): Promise<{ processed: number; moved: number }> {
@@ -254,50 +197,18 @@ export async function runLiveTick(): Promise<{ processed: number; moved: number 
   return locked.result ?? { processed: 0, moved: 0 };
 }
 
+/** @deprecated Snap-back dampening applied to competing live ranks; canonical-only lane makes this a no-op. */
 export async function applySnapBackDampening(): Promise<number> {
-  const people = await db
-    .select({
-      id: trendingPeople.id,
-      rank: trendingPeople.rank,
-      liveRank: trendingPeople.liveRank,
-      liveDampen: trendingPeople.liveDampen,
-    })
-    .from(trendingPeople);
-
-  let dampened = 0;
-
-  for (const p of people) {
-    const hourlyRank = p.rank;
-    const liveRank = p.liveRank ?? hourlyRank;
-    const diff = Math.abs(hourlyRank - liveRank);
-
-    let newDampen = 1.0;
-    if (diff > 5) {
-      newDampen = 0.5;
-      dampened++;
-    }
-
-    if (newDampen !== (p.liveDampen ?? 1.0)) {
-      await db.update(trendingPeople)
-        .set({ liveDampen: newDampen })
-        .where(eq(trendingPeople.id, p.id));
-    }
-  }
-
-  if (dampened > 0) {
-    console.log(`[LiveTick] Dampened ${dampened} people due to snap-back risk`);
-  }
-
-  return dampened;
+  return 0;
 }
 
-let _tickTimer: ReturnType<typeof setInterval> | null = null;
+let _tickTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function startLiveTickScheduler() {
-  console.log(`[LiveTick] Starting scheduler (every ${TICK_INTERVAL_MS / 60000} min)`);
+  console.log("[LiveTick] Starting scheduler (10-minute boundaries)");
 
   setTimeout(() => {
-    runLiveTick().catch(e => console.error("[LiveTick] Error:", e));
+    runLiveTick().catch((e) => console.error("[LiveTick] Error:", e));
   }, 15000);
 
   function scheduleNext() {
@@ -307,8 +218,6 @@ export function startLiveTickScheduler() {
     const currentMinute = nextTick.getMinutes();
     let nextBoundary = Math.ceil(currentMinute / 10) * 10;
     if (nextBoundary === currentMinute) {
-      // Already at a 10-minute boundary; always advance to the NEXT one.
-      // (Staying at the same boundary would schedule a tick in the past → 1s loop bug)
       nextBoundary = currentMinute + 10;
     }
     if (nextBoundary >= 60) {

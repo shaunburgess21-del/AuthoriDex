@@ -18,6 +18,9 @@ import {
   calculateMomentum,
   generateDrivers,
 } from "./utils";
+import {
+  normalizeEngagementScore,
+} from "./engagement";
 
 // ============================================================================
 // TREND SCORE — raw mass + velocity with cross-snapshot Fame Index EMA.
@@ -126,6 +129,13 @@ export interface TrendInputs {
   newsStalenessFactor?: number;
   /** @deprecated Unused after simplification. Kept for caller compatibility. */
   searchStalenessFactor?: number;
+
+  /** Verified VoxDex votes in the ingest hour window (capped). */
+  engagementVotes?: number;
+  /** Profile view counter accumulated since last live tick (capped). */
+  engagementProfileViews?: number;
+  /** Blend weight 0..ENGAGEMENT_WEIGHT_MAX from fleet volume gate (ingest supplies). */
+  engagementBlendWeight?: number;
 }
 
 /**
@@ -171,6 +181,10 @@ export interface TrendScoreResult {
    * Equals the wiki mass when search volume is absent. May 2026.
    */
   attentionMassScore: number;
+  /** VoxDex engagement sub-score 0..100 (May 2026 — Option C). */
+  engagementScore: number;
+  /** Effective blend weight used this tick (0 when gated off). */
+  engagementBlendWeight: number;
   velocityScore: number;
   /** Equal to velocityScore. Kept for caller compatibility. */
   velocityAdjusted: number;
@@ -239,7 +253,15 @@ function envFlag(value: string | undefined): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }
 
-/** Downside EMA alpha — relax toward raw when `SCORE_EMA_MORE_RAW_ENABLED`. */
+/**
+ * Downside EMA alpha. DEFAULT pinned to the legacy 0.60 so this commit is inert
+ * and safe to push mid-week. The trend-engine truth-unification relaxation to
+ * 0.68 (faster declines for gainer % moves + lock-in convergence) is enabled
+ * deliberately at a Sunday-resolve -> Monday-open boundary via
+ * `FAME_INDEX_EMA_ALPHA_DOWN=0.68` (or `SCORE_EMA_MORE_RAW_ENABLED` → 0.75).
+ * Recalibrate sigma (LOCKIN_SIGMA_1D) only AFTER observing this change — never
+ * co-deploy EMA + sigma.
+ */
 export function getFameIndexEmaAlphaDown(): number {
   if (envFlag(process.env.SCORE_EMA_MORE_RAW_ENABLED)) return 0.75;
   const raw = Number(process.env.FAME_INDEX_EMA_ALPHA_DOWN);
@@ -372,10 +394,20 @@ export function computeTrendScore(
   );
 
   // ---- 3. Composite -------------------------------------------------------
-  // Linear mass + velocity composite, then a cross-snapshot EMA on the
-  // final fameIndex (Apr 2026 trend-engine tuning). Pre-EMA composite is
-  // preserved as `rawFameIndex` for admin diagnostics.
-  const baseScore = (massScore * MASS_ALLOCATION) + (velocityScore * VELOCITY_ALLOCATION);
+  // External mass + velocity, optionally blended with gated VoxDex engagement.
+  const externalComposite =
+    massScore * MASS_ALLOCATION + velocityScore * VELOCITY_ALLOCATION;
+  const engagementScore = normalizeEngagementScore(
+    inputs.engagementVotes ?? 0,
+    inputs.engagementProfileViews ?? 0,
+  );
+  const engagementBlendWeight = Math.min(
+    Math.max(inputs.engagementBlendWeight ?? 0, 0),
+    1,
+  );
+  const baseScore =
+    (1 - engagementBlendWeight) * externalComposite
+    + engagementBlendWeight * engagementScore;
   const rawFameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
   const rawTrendScore = clamp(baseScore * 10000, 0, 1000000);
 
@@ -470,6 +502,8 @@ export function computeTrendScore(
     massScore: Math.round(massScore * 100) / 100,
     searchVolumeMassScore: Math.round(searchVolumeMassScore * 100) / 100,
     attentionMassScore: Math.round(attentionMassScore * 100) / 100,
+    engagementScore: Math.round(engagementScore * 100) / 100,
+    engagementBlendWeight: Math.round(engagementBlendWeight * 10000) / 10000,
     velocityScore: Math.round(velocityScore * 100) / 100,
     velocityAdjusted: Math.round(velocityScore * 100) / 100,
     confidence: Math.round(confidence * 100) / 100,

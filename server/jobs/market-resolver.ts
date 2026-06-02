@@ -19,6 +19,19 @@ import {
 import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
+import { officialSnapshotOriginCondition } from "../scoring/official-snapshots";
+
+/**
+ * Official hourly closes to median for gainer settlement (blunts last-hour
+ * pumps). DEFAULT 1 = legacy single-snapshot close (inert: a 1h window yields
+ * <=1 row, so getGainerCloseSnapshot falls through to getCloseSnapshot). Enable
+ * the trailing median deliberately at the Sunday-resolve -> Monday-open boundary
+ * via GAINER_CLOSE_MEDIAN_HOURS=4. Note: 2 is NOT a no-op (it medians 2 rows).
+ */
+const GAINER_CLOSE_MEDIAN_HOURS = (() => {
+  const raw = Number(process.env.GAINER_CLOSE_MEDIAN_HOURS);
+  return Number.isFinite(raw) && raw >= 1 && raw <= 12 ? Math.floor(raw) : 1;
+})();
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -429,6 +442,7 @@ async function findSnapshotScore(personId: string, rawTargetTime: Date | string,
       .from(trendSnapshots)
       .where(and(
         eq(trendSnapshots.personId, personId),
+        officialSnapshotOriginCondition(),
         lte(trendSnapshots.timestamp, targetTime),
         gte(trendSnapshots.timestamp, new Date(targetTime.getTime() - toleranceMs)),
       ))
@@ -445,6 +459,7 @@ async function findSnapshotScore(personId: string, rawTargetTime: Date | string,
       .from(trendSnapshots)
       .where(and(
         eq(trendSnapshots.personId, personId),
+        officialSnapshotOriginCondition(),
         gte(trendSnapshots.timestamp, targetTime),
         lte(trendSnapshots.timestamp, new Date(targetTime.getTime() + 60 * 60 * 1000)),
       ))
@@ -461,6 +476,46 @@ async function findSnapshotScore(personId: string, rawTargetTime: Date | string,
 async function getCloseSnapshot(personId: string, endAt: Date): Promise<{ score: number; capturedAt: Date } | null> {
   return (await findSnapshotScore(personId, endAt, "before"))
     ?? (await findSnapshotScore(personId, endAt, "after"));
+}
+
+/**
+ * Gainer close: median of the last N official hourly ingest closes at or before
+ * `endAt` (default 4h). Open stays a single stored point (fixed at market
+ * creation); close is median-blunted — asymmetry is intentional. Both legs use
+ * the official `ingest` snapshot stream. Tie band uses GAINER_TIE_EPSILON_PCT on
+ * the resulting % change.
+ */
+async function getGainerCloseSnapshot(
+  personId: string,
+  endAt: Date,
+): Promise<{ score: number; capturedAt: Date; method: "median" | "single" } | null> {
+  const windowStart = new Date(endAt.getTime() - GAINER_CLOSE_MEDIAN_HOURS * 60 * 60 * 1000);
+  const rows = await db
+    .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
+    .from(trendSnapshots)
+    .where(and(
+      eq(trendSnapshots.personId, personId),
+      officialSnapshotOriginCondition(),
+      lte(trendSnapshots.timestamp, endAt),
+      gte(trendSnapshots.timestamp, windowStart),
+    ))
+    .orderBy(desc(trendSnapshots.timestamp))
+    .limit(GAINER_CLOSE_MEDIAN_HOURS);
+
+  const valid = rows.filter((r) => r.fameIndex != null && Number.isFinite(Number(r.fameIndex)));
+  if (valid.length >= 2) {
+    const scores = valid.map((r) => Number(r.fameIndex)).sort((a, b) => a - b);
+    const mid = Math.floor(scores.length / 2);
+    const median = scores.length % 2 === 0
+      ? Math.round((scores[mid - 1]! + scores[mid]!) / 2)
+      : scores[mid]!;
+    const capturedAt = ensureDate(valid[0]!.timestamp)!;
+    return { score: median, capturedAt, method: "median" };
+  }
+
+  const single = await getCloseSnapshot(personId, endAt);
+  if (!single) return null;
+  return { ...single, method: "single" };
 }
 
 async function getOpenSnapshot(personId: string, rawStartAt: Date | string, market: any): Promise<{ score: number; capturedAt: Date } | null> {
@@ -484,6 +539,7 @@ async function getOpenSnapshot(personId: string, rawStartAt: Date | string, mark
     .from(trendSnapshots)
     .where(and(
       eq(trendSnapshots.personId, personId),
+      officialSnapshotOriginCondition(),
       gte(trendSnapshots.timestamp, new Date(startAt.getTime() - 7 * 24 * 60 * 60 * 1000)),
       lte(trendSnapshots.timestamp, new Date(startAt.getTime() + 24 * 60 * 60 * 1000)),
     ))
@@ -673,7 +729,7 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
 
   for (const entry of entriesWithPersonId) {
     const openSnap = await getOpenSnapshot(entry.personId!, market.startAt, market);
-    const closeSnap = await getCloseSnapshot(entry.personId!, market.endAt);
+    const closeSnap = await getGainerCloseSnapshot(entry.personId!, market.endAt);
     if (!openSnap || !closeSnap) continue;
     const pctChange = openSnap.score > 0 ? ((closeSnap.score - openSnap.score) / openSnap.score) * 100 : 0;
     gains.push({ entry, openScore: openSnap.score, closeScore: closeSnap.score, pctChange });

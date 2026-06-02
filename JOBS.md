@@ -59,13 +59,13 @@ VoxDex runs multiple background jobs on the backend service. They are bootstrapp
 **Location:** `server/jobs/live-tick.ts`
 
 ### What it does:
-1. Reads latest snapshot scores from Supabase
-2. Recalculates rankings based on recent vote activity
-3. Writes updated rank positions
-4. Does NOT call any external APIs
+1. Syncs legacy `fame_index_live` / `live_rank` columns to mirror canonical `fame_index` / `rank` (not a competing score)
+2. Tracks recent vote/profile-view activity for cosmetic "Live" cues on the leaderboard
+3. Updates `live_updated_at` heartbeat (used by the freshness pill)
+4. Does NOT call external APIs and does NOT write `trend_snapshots`
 
 ### Purpose:
-Keeps the leaderboard feeling "live" between full hourly ingestions. Captures vote momentum in near real-time.
+Cosmetic liveliness between hourly ingest runs — surge tags and freshness heartbeat, while the one canonical score updates hourly via ingest.
 
 ### Logs to watch:
 ```

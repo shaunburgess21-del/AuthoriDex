@@ -15,6 +15,8 @@ import {
   type CascadeAggregatorStats,
 } from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
+import { computeEngagementBlendWeight } from "../scoring/engagement";
+import { loadEngagementSignalsForIngest } from "../services/engagement-aggregate";
 import {
   appendToRecentSeriesMap,
   smoothLastNTicks,
@@ -1648,6 +1650,21 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     // Fetch 7-day source statistics for normalization
     const sourceStats = await refreshSourceStats();
 
+    const engagementPersonIds = people.map((p) => p.id);
+    const { byPerson: engagementByPerson, fleetTotalEvents } =
+      await loadEngagementSignalsForIngest({
+        hourBucket: hourTimestamp,
+        isBackfill,
+        personIds: engagementPersonIds,
+      });
+    const engagementBlendWeight = computeEngagementBlendWeight(fleetTotalEvents);
+    if (fleetTotalEvents > 0 || isBackfill) {
+      console.log(
+        `${logPrefix} Engagement hour=${hourTimestamp.toISOString()} backfill=${isBackfill} ` +
+          `weight=${engagementBlendWeight.toFixed(4)} fleetEvents=${fleetTotalEvents}`,
+      );
+    }
+
     // Minimal counters retained for the post-ingest health summary.
     // Stabilization/rate-limit/EMA tracking was removed along with the
     // underlying mechanisms — the scorer is now a single raw-math path.
@@ -2653,6 +2670,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           // for post-hoc debugging.
           newsStalenessFactor: Math.min(newsUsedFallback ? newsDecayFactor : 1.0, newsGovernorFactor),
           searchStalenessFactor: Math.min(searchUsedFallback ? searchDecayFactor : 1.0, searchGovernorFactor),
+          engagementVotes: engagementByPerson.get(person.id)?.votes ?? 0,
+          engagementProfileViews: engagementByPerson.get(person.id)?.profileViews ?? 0,
+          engagementBlendWeight,
         };
 
         // Previous scores for 24h/7d change computation + cross-snapshot EMA.
@@ -2803,6 +2823,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 ? { googleSearchVolumeMonthly: svFreshValue!.history }
                 : {}),
             } : {}),
+            engagementVotes: engagementByPerson.get(person.id)?.votes ?? 0,
+            engagementProfileViews: engagementByPerson.get(person.id)?.profileViews ?? 0,
+            engagementBlendWeight,
             ...(hasWebSentimentDiagnostics ? {
               webSentimentPositive: wsPositive,
               webSentimentNegative: wsNegative,
