@@ -1591,7 +1591,7 @@ export default function AdminDashboard() {
   });
   const { data: inductionData } = useQuery<{ data: any[]; totalCount: number }>({
     queryKey: ['/api/admin/induction'],
-    enabled: isAdmin && activeSection === "voting",
+    enabled: isAdmin && (activeSection === "voting" || activeSection === "celebrities"),
   });
   const { data: curateData } = useQuery<{ data: any[]; totalCount: number }>({
     queryKey: ['/api/admin/vote/curate-profile'],
@@ -2162,6 +2162,7 @@ export default function AdminDashboard() {
       setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
       setSeedApprovalLoading(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/trending?sort=rank&limit=100"] });
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
@@ -2788,14 +2789,30 @@ export default function AdminDashboard() {
     !rwMarketSearch.trim() &&
     rwSortBy === "manual";
 
+  const activeInductionNameKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const c of inductionData?.data ?? []) {
+      if (c.isActive !== false) {
+        keys.add(String(c.displayName).trim().toLowerCase());
+      }
+    }
+    return keys;
+  }, [inductionData]);
+
+  const matchesActiveInductionQueue = (c: Celebrity) =>
+    c.status === "induction" &&
+    activeInductionNameKeys.has(c.name.trim().toLowerCase());
+
   const filteredCelebrities = useMemo(() => celebrities?.filter(c => {
-    if (celebrityStatusFilter !== "all" && c.status !== celebrityStatusFilter) return false;
+    if (celebrityStatusFilter === "induction") {
+      if (!matchesActiveInductionQueue(c)) return false;
+    } else if (celebrityStatusFilter !== "all" && c.status !== celebrityStatusFilter) return false;
     if (celebritySearch === "") return true;
     return (
       c.name.toLowerCase().includes(celebritySearch.toLowerCase()) ||
       c.category.toLowerCase().includes(celebritySearch.toLowerCase())
     );
-  }) ?? [], [celebrities, celebritySearch, celebrityStatusFilter]);
+  }) ?? [], [celebrities, celebritySearch, celebrityStatusFilter, activeInductionNameKeys]);
 
   const celebrityStatusCounts = useMemo(() => {
     const counts = { main_leaderboard: 0, induction: 0, all: 0 };
@@ -2803,11 +2820,11 @@ export default function AdminDashboard() {
       for (const c of celebrities) {
         counts.all += 1;
         if (c.status === "main_leaderboard") counts.main_leaderboard += 1;
-        else if (c.status === "induction") counts.induction += 1;
+        else if (matchesActiveInductionQueue(c)) counts.induction += 1;
       }
     }
     return counts;
-  }, [celebrities]);
+  }, [celebrities, activeInductionNameKeys]);
 
   const rwMarkets = useMemo(() => {
     let list = (markets || []).filter(m => m.marketType === "community");
@@ -2925,18 +2942,28 @@ export default function AdminDashboard() {
     setSeedApprovalCounts(DEFAULT_SEED_APPROVAL_COUNTS);
     setPendingCelebrityGalleryFiles([]);
     setEditingCelebrity(celebrity);
+
+    const matchedCandidate = inductionData?.data?.find(
+      (c) =>
+        c.isActive !== false &&
+        String(c.displayName).trim().toLowerCase() === celebrity.name.trim().toLowerCase(),
+    );
+
+    const isInductionShadow = celebrity.status === "induction";
     setCelebrityForm({
       name: celebrity.name,
       category: celebrity.category,
-      status: "main_leaderboard",
-      wikiSlug: celebrity.wikiSlug || "",
-      xHandle: celebrity.xHandle || "",
-      instagramHandle: celebrity.instagramHandle || "",
-      tiktokHandle: celebrity.tiktokHandle || "",
-      youtubeId: celebrity.youtubeId || "",
-      spotifyId: celebrity.spotifyId || "",
-      searchQueryOverride: celebrity.searchQueryOverride || "",
-      googleTrendsTopicId: celebrity.googleTrendsTopicId || "",
+      status: isInductionShadow ? "induction" : (celebrity.status || "main_leaderboard"),
+      wikiSlug: celebrity.wikiSlug || matchedCandidate?.wikiSlug || "",
+      xHandle: celebrity.xHandle || matchedCandidate?.xHandle || "",
+      instagramHandle: celebrity.instagramHandle || matchedCandidate?.instagramHandle || "",
+      tiktokHandle: celebrity.tiktokHandle || matchedCandidate?.tiktokHandle || "",
+      youtubeId: celebrity.youtubeId || matchedCandidate?.youtubeId || "",
+      spotifyId: celebrity.spotifyId || matchedCandidate?.spotifyId || "",
+      searchQueryOverride:
+        celebrity.searchQueryOverride || matchedCandidate?.searchQueryOverride || "",
+      googleTrendsTopicId:
+        celebrity.googleTrendsTopicId || matchedCandidate?.googleTrendsTopicId || "",
     });
     setShowCelebrityModal(true);
     fetchWithAuth(`/api/admin/celebrities/${celebrity.id}/seed-approval-breakdown`)
@@ -3834,6 +3861,10 @@ export default function AdminDashboard() {
                 </SelectContent>
               </Select>
             </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Induction Queue here lists Curate Profile shadow rows tied to active vote-queue candidates.
+              Edit full vote metadata (wiki, social handles, seed votes) in Voting CMS → Induction Queue.
+            </p>
 
             <Card>
               <CardHeader>
@@ -8321,14 +8352,23 @@ export default function AdminDashboard() {
               <Select 
                 value={celebrityForm.status} 
                 onValueChange={(value) => setCelebrityForm({ ...celebrityForm, status: value })}
+                disabled={editingCelebrity?.status === "induction"}
               >
                 <SelectTrigger data-testid="select-celebrity-status">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
+                  {editingCelebrity?.status === "induction" ? (
+                    <SelectItem value="induction">Induction Queue</SelectItem>
+                  ) : null}
                   <SelectItem value="main_leaderboard">Main Leaderboard</SelectItem>
                 </SelectContent>
               </Select>
+              {editingCelebrity?.status === "induction" ? (
+                <p className="text-xs text-muted-foreground">
+                  Induction shadows stay in the queue until approved via Voting CMS → Induction Queue.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="celeb-wiki">Wikipedia Slug (optional)</Label>

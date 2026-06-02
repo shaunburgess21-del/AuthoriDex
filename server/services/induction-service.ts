@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { celebrityMetrics, inductionCandidates, trackedPeople, trendingPeople } from "@shared/schema";
 import { db } from "../db";
 import { runPostInductionOnboarding } from "./induction-onboarding";
+import { buildTrackedPersonBackfillFromCandidate } from "./induction-sync-build";
 
 type DbExecutor = any;
 
@@ -9,10 +10,6 @@ export interface ApproveInductionCandidateResult {
   personId: string;
   candidate: typeof inductionCandidates.$inferSelect;
   message: string;
-}
-
-function isEmptyish(v: string | null | undefined): boolean {
-  return v == null || String(v).trim() === "";
 }
 
 export async function approveInductionCandidate(
@@ -32,10 +29,12 @@ export async function approveInductionCandidate(
     throw Object.assign(new Error("Candidate not found"), { statusCode: 404 });
   }
 
+  const displayName = candidate.displayName.trim();
+
   const existingRows = await executor
     .select()
     .from(trackedPeople)
-    .where(eq(trackedPeople.name, candidate.displayName))
+    .where(eq(trackedPeople.name, displayName))
     .limit(1);
 
   let personId: string;
@@ -43,38 +42,9 @@ export async function approveInductionCandidate(
   if (existingRows.length > 0) {
     const tp = existingRows[0];
     personId = tp.id;
-    const backfillUpdates: Record<string, unknown> = {};
-
-    if (isEmptyish(tp.imageSlug) && !isEmptyish(candidate.imageSlug)) {
-      backfillUpdates.imageSlug = candidate.imageSlug;
-    }
-    if (tp.status !== "main_leaderboard") {
-      backfillUpdates.status = "main_leaderboard";
-    }
-    if (isEmptyish(tp.wikiSlug) && !isEmptyish(candidate.wikiSlug)) {
-      backfillUpdates.wikiSlug = candidate.wikiSlug;
-    }
-    if (isEmptyish(tp.xHandle) && !isEmptyish(candidate.xHandle)) {
-      backfillUpdates.xHandle = candidate.xHandle;
-    }
-    if (isEmptyish(tp.instagramHandle) && !isEmptyish(candidate.instagramHandle)) {
-      backfillUpdates.instagramHandle = candidate.instagramHandle;
-    }
-    if (isEmptyish(tp.tiktokHandle) && !isEmptyish(candidate.tiktokHandle)) {
-      backfillUpdates.tiktokHandle = candidate.tiktokHandle;
-    }
-    if (isEmptyish(tp.youtubeId) && !isEmptyish(candidate.youtubeId)) {
-      backfillUpdates.youtubeId = candidate.youtubeId;
-    }
-    if (isEmptyish(tp.spotifyId) && !isEmptyish(candidate.spotifyId)) {
-      backfillUpdates.spotifyId = candidate.spotifyId;
-    }
-    if (isEmptyish(tp.searchQueryOverride) && !isEmptyish(candidate.searchQueryOverride)) {
-      backfillUpdates.searchQueryOverride = candidate.searchQueryOverride;
-    }
-    if (isEmptyish(tp.googleTrendsTopicId) && !isEmptyish(candidate.googleTrendsTopicId)) {
-      backfillUpdates.googleTrendsTopicId = candidate.googleTrendsTopicId;
-    }
+    const backfillUpdates = buildTrackedPersonBackfillFromCandidate(tp, candidate, {
+      promoteToMainLeaderboard: true,
+    });
 
     if (Object.keys(backfillUpdates).length > 0) {
       await executor
@@ -89,7 +59,7 @@ export async function approveInductionCandidate(
     const [newPerson] = await executor
       .insert(trackedPeople)
       .values({
-        name: candidate.displayName,
+        name: displayName,
         category: candidate.category,
         imageSlug: candidate.imageSlug,
         wikiSlug: candidate.wikiSlug,
@@ -110,7 +80,7 @@ export async function approveInductionCandidate(
       .insert(trendingPeople)
       .values({
         id: personId,
-        name: candidate.displayName,
+        name: displayName,
         category: candidate.category,
         rank: 0,
         trendScore: 0,

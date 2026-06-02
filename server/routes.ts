@@ -127,6 +127,11 @@ import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import { approveInductionCandidate } from "./services/induction-service";
 import {
+  removeOrphanInductionShadows,
+  syncInductionCandidateToShadowTrackedPerson,
+  syncTrackedPersonToInductionCandidate,
+} from "./services/induction-sync";
+import {
   CANONICAL_MARKET_CATEGORIES,
   CANONICAL_CATEGORIES,
   GAINER_MIN_ELIGIBLE,
@@ -12588,6 +12593,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const [updated] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
+      if (updated?.status === "induction") {
+        await syncTrackedPersonToInductionCandidate(updated);
+      }
       res.json(updated);
     } catch (error: any) {
       console.error("Error updating celebrity:", error.message);
@@ -21995,6 +22003,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               });
             }
           }
+
+          const [fullCandidate] = await db
+            .select()
+            .from(inductionCandidates)
+            .where(eq(inductionCandidates.id, candidate.candidateId))
+            .limit(1);
+          if (fullCandidate) {
+            await syncInductionCandidateToShadowTrackedPerson(fullCandidate);
+          }
         }
 
         const personIds = Array.from(new Set(Array.from(trackedByName.values()).map((tp) => tp.id)));
@@ -22664,6 +22681,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const [created] = await db.insert(inductionCandidates).values(insertRow as any).returning();
 
+      await syncInductionCandidateToShadowTrackedPerson(created);
+
       res.json(created);
     } catch (error: any) {
       console.error("Error creating induction candidate:", error);
@@ -22740,46 +22759,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!supabaseUrl) return res.status(503).json({ error: "SUPABASE_URL not configured" });
       const publicUrl = buildCelebrityLargePublicUrl(supabaseUrl, slug, `${slot}.webp`);
 
-      const displayName = candidate.displayName.trim();
-      const [tp] = await db
-        .select({
-          id: trackedPeople.id,
-          status: trackedPeople.status,
-        })
-        .from(trackedPeople)
-        .where(eq(trackedPeople.name, displayName))
-        .limit(1);
-
-      let personId: string | null = null;
-      if (tp?.status === "induction") {
-        personId = tp.id;
-      } else if (!tp) {
-        const resolvedSlug = (candidate.imageSlug?.trim() || generateImageSlug(displayName)) || slug;
-        const insertedTp = await db
-          .insert(trackedPeople)
-          .values({
-            name: displayName,
-            category: candidate.category || "Other",
-            status: "induction",
-            imageSlug: resolvedSlug,
-          })
-          .onConflictDoNothing()
-          .returning({ id: trackedPeople.id, status: trackedPeople.status });
-
-        const row =
-          insertedTp[0] ||
-          (
-            await db
-              .select({ id: trackedPeople.id, status: trackedPeople.status })
-              .from(trackedPeople)
-              .where(eq(trackedPeople.name, displayName))
-              .limit(1)
-          )[0];
-        if (row?.status === "induction") {
-          personId = row.id;
-          await db.insert(celebrityMetrics).values({ celebrityId: row.id }).onConflictDoNothing();
-        }
-      }
+      const syncResult = await syncInductionCandidateToShadowTrackedPerson(candidate, {
+        createIfMissing: candidate.isActive !== false,
+      });
+      const personId = syncResult.personId;
 
       if (personId) {
         const [dup] = await db
@@ -22848,8 +22831,27 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
 
+      const [existing] = await db
+        .select({ displayName: inductionCandidates.displayName })
+        .from(inductionCandidates)
+        .where(eq(inductionCandidates.id, id))
+        .limit(1);
+      if (!existing) return res.status(404).json({ error: "Candidate not found" });
+
       const [updated] = await db.update(inductionCandidates).set(updates).where(eq(inductionCandidates.id, id)).returning();
       if (!updated) return res.status(404).json({ error: "Candidate not found" });
+
+      const previousName = existing.displayName.trim();
+      const nextName = updated.displayName.trim();
+      if (previousName !== nextName) {
+        await removeOrphanInductionShadows({ names: [previousName] });
+      }
+
+      if (updated.isActive) {
+        await syncInductionCandidateToShadowTrackedPerson(updated);
+      } else {
+        await removeOrphanInductionShadows({ names: [nextName] });
+      }
 
       res.json(updated);
     } catch (error: any) {
