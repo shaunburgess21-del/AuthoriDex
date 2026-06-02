@@ -887,8 +887,9 @@ function InsightPanelContent({
         </>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:justify-end min-w-0 w-full">
-        <Button
+      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:justify-end min-w-0 w-full">
+        <div className="flex flex-row gap-2 min-w-0 w-full sm:w-auto">
+          <Button
           variant="outline"
           onClick={() => {
             setLocation(`/person/${person.id}?tab=vote`);
@@ -910,6 +911,7 @@ function InsightPanelContent({
         >
           Predict
         </Button>
+        </div>
         <Button onClick={onViewProfile} className="flex-1 sm:flex-none shrink-0">
           View full profile
         </Button>
