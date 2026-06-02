@@ -78,6 +78,7 @@ import {
 } from "./providers/dataforseo-sentiment";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
+import { MOVERS_PULSE_TOP_N, selectDailyMovers } from "./services/trending/daily-movers";
 import { HOT_MOVERS_CAP, selectHotMovers } from "./services/trending/hot-movers";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
 import { VOTE_TAB_VOTE_TYPES } from "./utils/vote-actions";
@@ -2331,16 +2332,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rankChange: prevRanks.has(p.id) ? (prevRanks.get(p.id)! - p.rank) : null,
       }));
 
-      const TOP_N = 5;
-
       if (type === 'gainers') {
         // Strict sign filter: a "Weekly Gainer" must actually be up over 7d.
-        // If fewer than TOP_N qualify (e.g. uniformly-down week), the card
+        // If fewer than MOVERS_PULSE_TOP_N qualify (e.g. uniformly-down week), the card
         // simply renders fewer rows.
         const gainers = enriched
           .filter(p => typeof p.change7d === "number" && p.change7d > 0)
           .sort((a, b) => (b.change7d as number) - (a.change7d as number))
-          .slice(0, TOP_N);
+          .slice(0, MOVERS_PULSE_TOP_N);
         res.json(gainers);
         return;
       }
@@ -2349,28 +2348,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const droppers = enriched
           .filter(p => typeof p.change7d === "number" && p.change7d < 0)
           .sort((a, b) => (a.change7d as number) - (b.change7d as number))
-          .slice(0, TOP_N);
+          .slice(0, MOVERS_PULSE_TOP_N);
         res.json(droppers);
         return;
       }
 
       if (type === 'daily') {
-        // Pure |change24h| sort. The previous rank-change merge built a
-        // candidate pool from top-N |change24h| ∪ top-N |rankChange| and then
-        // re-sorted only by |change24h|, which made the rank branch a no-op
-        // for ordering. rankChange is still included on each row for any
-        // future "↑ N ranks" badge.
-        const daily = enriched
-          .filter(p => typeof p.change24h === "number")
-          .sort((a, b) =>
-            Math.abs(b.change24h as number) - Math.abs(a.change24h as number)
-          )
-          .slice(0, TOP_N);
+        // Balanced day: up to 3 biggest 24h risers, then up to 3 biggest droppers.
+        // Differs from Hot Movers (positive-only, rank ≤ 100). rankChange is still
+        // included on each row for insight / future badges.
+        const daily = selectDailyMovers(enriched);
         res.json(daily);
         return;
       }
 
-      res.json(enriched.slice(0, TOP_N));
+      res.json(enriched.slice(0, MOVERS_PULSE_TOP_N));
     } catch (error) {
       console.error("Error fetching movers:", error);
       res.status(500).json({ error: "Failed to fetch movers data" });

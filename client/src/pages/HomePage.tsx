@@ -87,6 +87,19 @@ function TrendScoreHeaderLabel({ className }: { className?: string }) {
   );
 }
 
+/** Matches server DAILY_MOVERS_MAX / MOVERS_PULSE_TOP_N for pulse card rows. */
+const PULSE_CARD_ROW_CAP = 6;
+
+function pulseRowChangeValue(
+  person: TrendingPerson,
+  type: "daily" | "gainer" | "dropper",
+): number | null {
+  const v = type === "daily" ? person.change24h : person.change7d;
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  if (type === "daily" && v === 0) return null;
+  return v;
+}
+
 function MarketPulseCard({ 
   title, 
   icon: Icon, 
@@ -109,7 +122,7 @@ function MarketPulseCard({
       iconColor: "text-slate-300",
       cardClass: "pulse-card-blue",
       iconBgClass: "pulse-icon-blue",
-      subtitle: "Movement \u00B7 24h",
+      subtitle: "Risers & fallers \u00B7 24h",
     },
     gainer: {
       iconColor: "text-green-600 dark:text-green-400",
@@ -150,27 +163,53 @@ function MarketPulseCard({
           </div>
         </div>
         
-        {!collapsed && (
+        {!collapsed && (() => {
+          const rows = people
+            .map((person) => ({
+              person,
+              changeValue: pulseRowChangeValue(person, type),
+            }))
+            .filter((row): row is { person: TrendingPerson; changeValue: number } =>
+              row.changeValue !== null,
+            )
+            .slice(0, PULSE_CARD_ROW_CAP);
+
+          if (rows.length === 0) {
+            return (
+              <p className="text-center text-xs text-muted-foreground py-4 mt-4" data-testid={`pulse-empty-${type}`}>
+                No movement data right now
+              </p>
+            );
+          }
+
+          // Daily Movers is two separate ranked lists (risers, fallers), so the
+          // number restarts at 1 for the first faller instead of running 1-6.
+          // A faint per-half tint (same green/red family as the % chips) makes
+          // the two "#1" rows read as deliberate rather than a numbering bug.
+          const riserCount = rows.filter((r) => r.changeValue > 0).length;
+
+          return (
           <div className="space-y-1.5 mt-4">
-            {people
-              .filter((person) => {
-                const v = type === "daily" ? person.change24h : person.change7d;
-                return typeof v === "number" && !isNaN(v);
-              })
-              .slice(0, 5)
-              .map((person, idx) => {
-                const changeValue = (type === "daily" ? person.change24h : person.change7d) as number;
-                const isPositive = changeValue >= 0;
+            {rows.map(({ person, changeValue }, idx) => {
+                const isPositive = changeValue > 0;
+                const displayNum =
+                  type === "daily" && !isPositive ? idx - riserCount + 1 : idx + 1;
+                const rowToneClass =
+                  type !== "daily"
+                    ? "bg-muted/40 dark:bg-slate-800/30"
+                    : isPositive
+                      ? "bg-green-500/[0.05] dark:bg-green-500/[0.05]"
+                      : "bg-red-500/[0.05] dark:bg-red-500/[0.05]";
                 return (
                   <div
                     key={person.id}
-                    className="flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer bg-muted/40 dark:bg-slate-800/30 border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50"
+                    className={`flex items-center gap-2.5 p-2 rounded-lg hover-elevate cursor-pointer border border-border/50 dark:border-slate-700/30 transition-colors hover:border-foreground/20 dark:hover:border-slate-600/50 ${rowToneClass}`}
                     onClick={() => onOpenInsight(person)}
                     data-testid={`pulse-item-${person.id}`}
                   >
                     <div className="relative flex items-center rounded-md overflow-hidden shrink-0">
                       <div className="flex items-center justify-center min-w-[24px] self-stretch rounded-l-md bg-muted dark:bg-[#101318] border-r border-border dark:border-transparent">
-                        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[12px] tabular-nums">{idx + 1}</span>
+                        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[12px] tabular-nums">{displayNum}</span>
                       </div>
                       <PersonAvatar
                         name={person.name}
@@ -201,7 +240,8 @@ function MarketPulseCard({
                 );
               })}
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
