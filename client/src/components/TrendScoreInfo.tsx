@@ -1,25 +1,8 @@
 import { Info, Newspaper, BookOpen, Search } from "lucide-react";
-import { Link } from "wouter";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { useIsMobile } from "@/hooks/use-mobile";
-
-const INSIGHTS_APPROVAL_HREF = "/insights?tab=approval";
-
-function InsightsApprovalLink({ children }: { children: React.ReactNode }) {
-  return (
-    <Link
-      href={INSIGHTS_APPROVAL_HREF}
-      className="font-medium text-primary hover:text-primary/80 underline underline-offset-2"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-    </Link>
-  );
-}
+import { InsightsApprovalLink } from "@/components/ApprovalLeaderboardInfo";
 
 export function TrendScoreInfoContent() {
-  const isMobile = useIsMobile();
-
   return (
     <div className="space-y-3 normal-case tracking-normal">
       <p className="font-semibold text-sm">How Trend Score Works</p>
@@ -44,20 +27,11 @@ export function TrendScoreInfoContent() {
         We combine these signals into a single score that updates as new data comes in. A higher score means more attention recently.
       </p>
       <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
-        Trend Score is total attention—positive and negative—not community approval.{" "}
-        {isMobile ? (
-          <>
-            For approval ratings, see the <InsightsApprovalLink>Insights</InsightsApprovalLink> page.
-          </>
-        ) : (
-          <>
-            For approval ratings, see the Approval column (or the{" "}
-            <InsightsApprovalLink>Insights</InsightsApprovalLink> page).
-          </>
-        )}
+        Trend Score is total attention—positive and negative—not community approval. For approval ratings, see the{" "}
+        <InsightsApprovalLink>Insights</InsightsApprovalLink> page.
       </p>
       <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border/50">
-        API Sources: Mediastack · Wikipedia · SerpApi · CurrentsAPI · APILayer · DataForSEO · OpenAI · Serper
+        API Sources: Mediastack · Wikimedia · SerpApi · CurrentsAPI · APILayer · DataForSEO · OpenAI · Serper · GDELT
       </p>
     </div>
   );

@@ -27,7 +27,7 @@ const PILL_SOURCES: Array<{ id: InsightsSource; label: string; hint: string }> =
   { id: "wiki_momentum", label: "Wiki Momentum", hint: "Biggest curiosity spike" },
   { id: "velocity", label: "Velocity", hint: "Fastest risers" },
   { id: "mass", label: "Mass", hint: "Established attention" },
-  { id: "fame", label: "Leaderboard", hint: "Same order as the home leaderboard" },
+  { id: "fame", label: "Trend Score", hint: "Same ranking as the home leaderboard" },
   { id: "news", label: "News", hint: "Most press attention" },
   { id: "wiki", label: "Wiki", hint: "Most Wikipedia attention" },
   { id: "search_volume", label: "Search Interest", hint: "Most-searched on Google" },
@@ -231,7 +231,7 @@ export function RankingsTab() {
                   <th className="px-4 py-3 font-medium text-right w-24">
                     {SOURCE_DISPLAY[filters.source]}
                   </th>
-                  <th className="px-4 py-3 font-medium text-right w-20">Score</th>
+                  <th className="px-4 py-3 font-medium text-right w-20">Trend Score</th>
                   <th className="px-4 py-3 font-medium text-right w-20">Δ</th>
                 </tr>
               </thead>

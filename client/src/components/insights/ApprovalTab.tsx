@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Star, Users, X, HelpCircle, Vote, Swords, MessageSquare, BarChart3, UserPlus, ImageIcon, ChevronRight } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Loader2, RefreshCw, Star, Users, X } from "lucide-react";
 
+import {
+  ApprovalInfoBody,
+  YourVoteColumnHeaderButton,
+  YourVoteInfoDialog,
+  YourVoteInfoDrawer,
+} from "@/components/ApprovalLeaderboardInfo";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
 import { VotingModal } from "@/components/VotingModal";
 import { SearchBar } from "@/components/SearchBar";
@@ -11,16 +16,12 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
 import { normalizeMarketCategory } from "@shared/constants";
-import { VOTE_HUB_DEEP_LINKS, type VoteHubSectionToggle } from "@/lib/voteHubDeepLinks";
 import type { TrendingPerson } from "@shared/schema";
 
 const PAGE_SIZE = 20;
@@ -32,90 +33,6 @@ interface TrendingResponse {
 }
 
 type SortDirection = "desc" | "asc";
-
-const VOTE_HUB_LINK_ICONS: Record<VoteHubSectionToggle, LucideIcon> = {
-  "Sentiment Polls": MessageSquare,
-  Matchups: Swords,
-  "Opinion Polls": Vote,
-  "Underrated/Overrated": BarChart3,
-  "Induction Queue": UserPlus,
-  "Curate Profile": ImageIcon,
-};
-
-function ApprovalSnapshot() {
-  return (
-    <div>
-      <div className="mb-2 flex items-center gap-2">
-        <Star className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden />
-        <h3 className="text-sm font-semibold">Approval rating</h3>
-      </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        The <span className="font-medium text-foreground">Approval</span> score on each row is an aggregate from the community (shown out of 5).
-      </p>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Use <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote—it feeds into that person&apos;s approval rating.
-      </p>
-    </div>
-  );
-}
-
-function DrawerNavList({ children }: { children: ReactNode }) {
-  return (
-    <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60 bg-card/40">
-      {children}
-    </div>
-  );
-}
-
-function DrawerNavLink({
-  href,
-  label,
-  icon: Icon,
-  onNavigateLink,
-}: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  onNavigateLink: () => void;
-}) {
-  return (
-    <Link
-      href={href}
-      onClick={() => onNavigateLink()}
-      className="flex min-h-10 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-    >
-      <span className="flex min-w-0 items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/40" aria-hidden>
-          <Icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" aria-hidden />
-        </span>
-        <span className="truncate text-sm font-medium">{label}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
-    </Link>
-  );
-}
-
-function ApprovalInfoBody({ onNavigateLink }: { onNavigateLink: () => void }) {
-  return (
-    <>
-      <ApprovalSnapshot />
-      <div className="mt-6 space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">More on Vote</p>
-        <DrawerNavList>
-          {VOTE_HUB_DEEP_LINKS.map(({ label, href, sectionToggle }) => (
-            <DrawerNavLink
-              key={href}
-              href={href}
-              label={label}
-              icon={VOTE_HUB_LINK_ICONS[sectionToggle]}
-              onNavigateLink={onNavigateLink}
-            />
-          ))}
-        </DrawerNavList>
-      </div>
-    </>
-  );
-}
 
 export function ApprovalTab() {
   const [, setLocation] = useLocation();
@@ -306,29 +223,15 @@ export function ApprovalTab() {
                     <div className="text-right w-[120px]">Approval</div>
                     <div className="text-right w-[120px]">Trend Score</div>
                     <div className="flex justify-end w-[88px]">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                        aria-label="About approval rating and Rate on the leaderboard"
-                        data-testid="button-approval-your-vote-info"
-                        onClick={() => setVoteLeaderboardInfoOpen(true)}
-                      >
-                        Your Vote
-                      </Button>
+                      <YourVoteColumnHeaderButton onClick={() => setVoteLeaderboardInfoOpen(true)} />
                     </div>
                   </div>
                 )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="lg:hidden h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-                  aria-label="About approval rating and Rate on the leaderboard"
-                  data-testid="label-mobile-approval-your-vote"
+                <YourVoteColumnHeaderButton
+                  className="lg:hidden"
+                  testId="label-mobile-approval-your-vote"
                   onClick={() => setVoteLeaderboardInfoOpen(true)}
-                >
-                  Your Vote
-                </Button>
+                />
               </div>
               {hasActiveFilters && (
                 <div className="flex items-center gap-2 flex-wrap">
@@ -435,39 +338,19 @@ export function ApprovalTab() {
       </Card>
 
       {isMobile ? (
-        <Drawer open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
-          <DrawerContent className="max-h-[85vh]">
-            <DrawerHeader className="space-y-1.5 text-left">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 shrink-0 text-cyan-500" aria-hidden />
-                <DrawerTitle>Your vote on the leaderboard</DrawerTitle>
-              </div>
-              <DrawerDescription className="text-sm text-muted-foreground">
-                How approval works here, plus jump to a section on Vote.
-              </DrawerDescription>
-            </DrawerHeader>
-            <div className="overflow-y-auto px-4 pb-6 pt-0">
-              <ApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
-            </div>
-          </DrawerContent>
-        </Drawer>
+        <YourVoteInfoDrawer
+          open={voteLeaderboardInfoOpen}
+          onOpenChange={setVoteLeaderboardInfoOpen}
+        >
+          <ApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
+        </YourVoteInfoDrawer>
       ) : (
-        <Dialog open={voteLeaderboardInfoOpen} onOpenChange={setVoteLeaderboardInfoOpen}>
-          <DialogContent className={cn("flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-md")}>
-            <DialogHeader className="shrink-0 space-y-1.5 text-left">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 shrink-0 text-cyan-500" aria-hidden />
-                <DialogTitle>Your vote on the leaderboard</DialogTitle>
-              </div>
-              <DialogDescription className="text-sm text-muted-foreground">
-                How approval works here, plus jump to a section on Vote.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="min-h-0 overflow-y-auto px-4 pb-4 pt-2">
-              <ApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <YourVoteInfoDialog
+          open={voteLeaderboardInfoOpen}
+          onOpenChange={setVoteLeaderboardInfoOpen}
+        >
+          <ApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
+        </YourVoteInfoDialog>
       )}
 
       <VotingModal

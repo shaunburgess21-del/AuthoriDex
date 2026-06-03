@@ -3,6 +3,13 @@ import { WelcomeModal } from "@/components/WelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
+import { VotingModal } from "@/components/VotingModal";
+import {
+  HomeApprovalInfoBody,
+  YourVoteColumnHeaderButton,
+  YourVoteInfoDialog,
+  YourVoteInfoDrawer,
+} from "@/components/ApprovalLeaderboardInfo";
 import { toast } from "sonner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -81,7 +88,7 @@ function TrendScoreHeaderLabel({ className }: { className?: string }) {
         )}
         data-testid="header-trend-score-info"
       >
-        Score
+        Trend Score
       </span>
     </TouchTooltip>
   );
@@ -1046,6 +1053,9 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [votingModalOpen, setVotingModalOpen] = useState(false);
+  const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
+  const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
@@ -1462,17 +1472,20 @@ export default function HomePage() {
                           <div className="flex items-center gap-2">
                             <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
                           </div>
-                          <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap" data-testid="text-leaderboard-freshness">
-                            <TouchTooltip
-                              content={<p>Data refresh from Wikipedia, Mediastack, GDELT, and Google.</p>}
-                              side="bottom"
-                              className="text-xs max-w-[240px]"
-                            >
-                              <span className="inline-flex items-center gap-1 cursor-help">
-                                <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
-                                <span>Data refresh: {systemFreshness?.liveUpdatedAtFormatted || systemFreshness?.fullRefreshAtFormatted || systemFreshness?.lastScoredAtFormatted || "recently"}</span>
+                          <div
+                            className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap"
+                            data-testid="text-leaderboard-freshness"
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
+                              <span>
+                                Data refresh:{" "}
+                                {systemFreshness?.liveUpdatedAtFormatted ||
+                                  systemFreshness?.fullRefreshAtFormatted ||
+                                  systemFreshness?.lastScoredAtFormatted ||
+                                  "recently"}
                               </span>
-                            </TouchTooltip>
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1512,7 +1525,12 @@ export default function HomePage() {
                               <TrendScoreHeaderLabel />
                             </div>
                             <div className="text-right w-[96px]">24h</div>
-                            <div className="text-right w-[72px] lg:w-[84px]">Approval</div>
+                            <div className="flex justify-end w-[88px]">
+                              <YourVoteColumnHeaderButton
+                                testId="button-home-your-vote-info"
+                                onClick={() => setVoteLeaderboardInfoOpen(true)}
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1574,6 +1592,10 @@ export default function HomePage() {
                         activeTab="fame"
                         isHotMover={hotMoverIds.has(person.id)}
                         onOpenInsight={() => openInsightFromTrendingPerson(person)}
+                        onVoteClick={() => {
+                          setVotingPersonId(person.id);
+                          setVotingModalOpen(true);
+                        }}
                       />
                     ))}
                   </div>
@@ -1653,6 +1675,29 @@ export default function HomePage() {
           />
         )}
       </AnimatePresence>
+      {isMobile ? (
+        <YourVoteInfoDrawer
+          open={voteLeaderboardInfoOpen}
+          onOpenChange={setVoteLeaderboardInfoOpen}
+        >
+          <HomeApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
+        </YourVoteInfoDrawer>
+      ) : (
+        <YourVoteInfoDialog
+          open={voteLeaderboardInfoOpen}
+          onOpenChange={setVoteLeaderboardInfoOpen}
+        >
+          <HomeApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
+        </YourVoteInfoDialog>
+      )}
+
+      <VotingModal
+        open={votingModalOpen}
+        onOpenChange={setVotingModalOpen}
+        initialPersonId={votingPersonId}
+        peopleList={allPeople}
+      />
+
       {isMobile ? (
         <Drawer open={!!selectedInsightPerson} onOpenChange={(open) => { if (!open) handleCloseInsightPanel(); }}>
           <DrawerContent>

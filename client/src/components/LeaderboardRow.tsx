@@ -92,6 +92,112 @@ function RankDeltaPill({
   );
 }
 
+function LeaderboardYourVoteCell({
+  person,
+  sentimentScore,
+  hasVoted,
+  showVotePulse,
+  onVoteClick,
+}: {
+  person: ExtendedPerson;
+  sentimentScore: number | null;
+  hasVoted: boolean;
+  showVotePulse: boolean;
+  onVoteClick?: () => void;
+}) {
+  return (
+    <div className="w-[88px] shrink-0 flex justify-end">
+      {hasVoted && sentimentScore != null ? (
+        <Popover modal>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer pr-3"
+              aria-label={`Rated ${person.name} ${sentimentScore}/5`}
+              onClick={(e) => e.stopPropagation()}
+              data-testid={`button-vote-icon-${person.id}`}
+            >
+              <span>
+                <span style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}</span>
+                <span className="text-muted-foreground">/5</span>
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="w-56 p-3 space-y-2"
+            side="left"
+            align="center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium">
+                You rated <span className="font-semibold">{person.name}</span>{" "}
+                <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>
+                  {sentimentScore}/5
+                </span>
+              </p>
+              <PopoverClose asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0"
+                  aria-label="Close"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`button-close-popover-${person.id}`}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </Button>
+              </PopoverClose>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {person.approvalAvgRating != null ? (
+                <>
+                  Community:{" "}
+                  <span className="font-semibold">
+                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>
+                      {person.approvalAvgRating.toFixed(1)}
+                    </span>
+                    <span className="text-muted-foreground">/5</span>
+                  </span>
+                </>
+              ) : (
+                "No community votes yet"
+              )}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onVoteClick?.();
+              }}
+              data-testid={`button-change-vote-${person.id}`}
+            >
+              Change Vote
+            </Button>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE] ${showVotePulse ? "vote-cta-pulse" : ""}`}
+          aria-label={`Rate ${person.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onVoteClick?.();
+          }}
+          data-testid={`button-vote-icon-${person.id}`}
+        >
+          <Star style={{ width: 14, height: 14 }} strokeWidth={1.5} />
+          Rate
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function LeaderboardRow({
   person,
   activeTab = "fame",
@@ -349,24 +455,14 @@ export function LeaderboardRow({
                 </span>
               </TouchTooltip>
             </div>
-            <div className="hidden md:block text-right w-[72px] lg:w-[84px] shrink-0">
-              <TouchTooltip
-                content={person.approvalAvgRating != null ? `${person.name} has a ${person.approvalAvgRating.toFixed(1)}/5 community rating` : "No votes yet"}
-                side="top"
-              >
-                <p className="font-mono font-semibold text-lg tabular-nums cursor-help" data-testid={`sentiment-score-${person.id}`}>
-                  {person.approvalAvgRating != null ? (
-                    <span>
-                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-muted-foreground">/5</span>
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </p>
-              </TouchTooltip>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
-                Approval
-              </p>
+            <div className="hidden md:flex">
+              <LeaderboardYourVoteCell
+                person={person}
+                sentimentScore={sentimentScore}
+                hasVoted={hasVoted}
+                showVotePulse={showVotePulse}
+                onVoteClick={onVoteClick}
+              />
             </div>
           </>
         )}
@@ -405,85 +501,13 @@ export function LeaderboardRow({
                 Trend Score
               </p>
             </div>
-            <div className="w-[88px] shrink-0 flex justify-end">
-              {hasVoted && sentimentScore != null ? (
-                <Popover modal>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="no-default-hover-elevate no-default-active-elevate font-mono font-bold text-lg sm:text-xl tabular-nums cursor-pointer pr-3"
-                      aria-label={`Rated ${person.name} ${sentimentScore}/5`}
-                      onClick={(e) => e.stopPropagation()}
-                      data-testid={`button-vote-icon-${person.id}`}
-                    >
-                      <span>
-                        <span style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}</span>
-                        <span className="text-muted-foreground">/5</span>
-                      </span>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-56 p-3 space-y-2"
-                    side="left"
-                    align="center"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium">
-                        You rated <span className="font-semibold">{person.name}</span>{' '}
-                        <span className="font-bold" style={{ color: getRatingColor(sentimentScore) }}>{sentimentScore}/5</span>
-                      </p>
-                      <PopoverClose asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="no-default-hover-elevate no-default-active-elevate h-5 w-5 shrink-0"
-                          aria-label="Close"
-                          onClick={(e) => e.stopPropagation()}
-                          data-testid={`button-close-popover-${person.id}`}
-                        >
-                          <X style={{ width: 14, height: 14 }} />
-                        </Button>
-                      </PopoverClose>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {person.approvalAvgRating != null ? (
-                        <>Community: <span className="font-semibold"><span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-muted-foreground">/5</span></span></>
-                      ) : (
-                        'No community votes yet'
-                      )}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onVoteClick?.();
-                      }}
-                      data-testid={`button-change-vote-${person.id}`}
-                    >
-                      Change Vote
-                    </Button>
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`no-default-hover-elevate no-default-active-elevate gap-1 text-xs hover:bg-[#22D3EE]/20 hover:border-[#22D3EE]/40 hover:text-[#22D3EE] ${showVotePulse ? "vote-cta-pulse" : ""}`}
-                  aria-label={`Rate ${person.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onVoteClick?.();
-                  }}
-                  data-testid={`button-vote-icon-${person.id}`}
-                >
-                  <Star style={{ width: 14, height: 14 }} strokeWidth={1.5} />
-                  Rate
-                </Button>
-              )}
-            </div>
+            <LeaderboardYourVoteCell
+              person={person}
+              sentimentScore={sentimentScore}
+              hasVoted={hasVoted}
+              showVotePulse={showVotePulse}
+              onVoteClick={onVoteClick}
+            />
           </>
         )}
       </div>
