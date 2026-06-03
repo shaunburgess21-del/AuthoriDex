@@ -1235,7 +1235,7 @@ function UserLookupPanel() {
     queryFn: async () => {
       const res = await apiRequest(
         "GET",
-        `/api/admin/users?search=${encodeURIComponent(searchInput)}`,
+        `/api/admin/users?search=${encodeURIComponent(searchInput)}&page=1&pageSize=50&sort=created_desc`,
       );
       const json = await res.json();
       return Array.isArray(json) ? json : (json.users ?? []);

@@ -75,6 +75,18 @@ export interface UserProfile {
   ledgerSum?: number;
 }
 
+/** Default page size for admin user list endpoints. */
+export const ADMIN_USERS_PAGE_SIZE = 50;
+
+/** Paginated admin user list (`GET /api/admin/users`, drift list). */
+export interface AdminUsersListResponse {
+  users: UserProfile[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export interface PredictionMarket {
   id: string;
   marketType: string;

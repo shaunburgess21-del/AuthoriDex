@@ -25,6 +25,7 @@ import {
   Play,
   Database,
   Camera,
+  ChevronLeft,
   ChevronRight,
   Shield,
   Activity,
@@ -110,6 +111,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
+import { formatDate } from "@/lib/formatDate";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
@@ -123,6 +125,8 @@ import {
   type AdminStats,
   type TrafficStats,
   type UserProfile,
+  type AdminUsersListResponse,
+  ADMIN_USERS_PAGE_SIZE,
   type PredictionMarket,
   type MarketEntryForm,
   type AuditLogEntry,
@@ -1202,6 +1206,9 @@ export default function AdminDashboard() {
   // header "Credit Drift" tile click; also toggleable via a chip in
   // the Users tab header.
   const [userFilter, setUserFilter] = useState<"all" | "drift">("all");
+  const [userCreatedSort, setUserCreatedSort] = useState<"newest" | "oldest">("newest");
+  const [userPage, setUserPage] = useState(1);
+  const [debouncedUserSearch, setDebouncedUserSearch] = useState("");
   const [reconcileDriftTarget, setReconcileDriftTarget] = useState<UserProfile | null>(null);
   const [celebritySearch, setCelebritySearch] = useState("");
   // Status filter for the admin Celebrities list. Default to main_leaderboard so
@@ -1407,27 +1414,67 @@ export default function AdminDashboard() {
   // When `userFilter === "drift"` we swap in /api/admin/credit-drift-users
   // which returns the same UserProfile shape plus `drift` + `ledgerSum`
   // for inline display and the Reconcile action.
-  const { data: users, isLoading: usersLoading } = useQuery<UserProfile[]>({
-    queryKey: ["/api/admin/users", userFilter, searchQuery],
+  const userListSortParam = userCreatedSort === "newest" ? "created_desc" : "created_asc";
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedUserSearch(searchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [debouncedUserSearch, userFilter, userCreatedSort]);
+
+  const { data: usersList, isLoading: usersLoading } = useQuery<AdminUsersListResponse>({
+    queryKey: [
+      "/api/admin/users",
+      userFilter,
+      debouncedUserSearch,
+      userPage,
+      userListSortParam,
+    ],
     queryFn: async () => {
-      if (userFilter === "drift") {
-        const res = await fetchWithAuth("/api/admin/credit-drift-users");
-        if (!res.ok) throw new Error("Failed to fetch credit drift users");
-        const data = (await res.json()) as { users: UserProfile[] };
-        const list = data.users ?? [];
-        if (!searchQuery) return list;
-        const needle = searchQuery.toLowerCase();
-        return list.filter((u) => (u.username ?? "").toLowerCase().includes(needle));
+      const params = new URLSearchParams({
+        page: String(userPage),
+        pageSize: String(ADMIN_USERS_PAGE_SIZE),
+      });
+      if (debouncedUserSearch) params.set("search", debouncedUserSearch);
+      if (userFilter !== "drift") {
+        params.set("sort", userListSortParam);
       }
-      const params = new URLSearchParams();
-      if (searchQuery) params.set("search", searchQuery);
-      const url = `/api/admin/users${params.toString() ? `?${params.toString()}` : ""}`;
-      const res = await fetchWithAuth(url);
-      if (!res.ok) throw new Error("Failed to fetch users");
+      const base =
+        userFilter === "drift"
+          ? "/api/admin/credit-drift-users"
+          : "/api/admin/users";
+      const res = await fetchWithAuth(`${base}?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(
+          userFilter === "drift"
+            ? "Failed to fetch credit drift users"
+            : "Failed to fetch users",
+        );
+      }
       return res.json();
     },
     enabled: isAdmin && activeSection === "users",
   });
+
+  // After deletes or filter changes, the current page can be past the end.
+  useEffect(() => {
+    if (!usersList || usersList.totalPages === 0) return;
+    if (userPage > usersList.totalPages) {
+      setUserPage(usersList.totalPages);
+    }
+  }, [usersList, userPage]);
+
+  const displayUsers = usersList?.users ?? [];
+  const userListStart =
+    usersList && usersList.total > 0
+      ? (usersList.page - 1) * usersList.pageSize + 1
+      : 0;
+  const userListEnd = usersList
+    ? Math.min(usersList.page * usersList.pageSize, usersList.total)
+    : 0;
 
   // Fetch prediction markets - only when admin and on relevant sections
   const { data: markets, isLoading: marketsLoading } = useQuery<PredictionMarket[]>({
@@ -6134,7 +6181,7 @@ export default function AdminDashboard() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by email or username..."
+                  placeholder="Search by username..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -6152,17 +6199,37 @@ export default function AdminDashboard() {
                   ? `Showing credit drift${typeof opsSummary?.driftUserCount === "number" ? ` (${opsSummary.driftUserCount})` : ""} — click to clear`
                   : `Credit drift only${typeof opsSummary?.driftUserCount === "number" ? ` (${opsSummary.driftUserCount})` : ""}`}
               </Button>
+              {userFilter !== "drift" && (
+                <Select
+                  value={userCreatedSort}
+                  onValueChange={(v) => setUserCreatedSort(v as "newest" | "oldest")}
+                >
+                  <SelectTrigger className="w-[200px]" data-testid="select-user-created-sort">
+                    <SelectValue placeholder="Sort by joined" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest accounts first</SelectItem>
+                    <SelectItem value="oldest">Oldest accounts first</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <Card>
               <CardHeader>
                 <CardTitle>{userFilter === "drift" ? "Users with credit drift" : "User Accounts"}</CardTitle>
                 <CardDescription>
-                  {users
-                    ? userFilter === "drift"
-                      ? `${users.length} user${users.length === 1 ? "" : "s"} where wallet ≠ ledger sum`
-                      : `${users.length} users found`
-                    : "Loading users..."}
+                  {usersLoading
+                    ? "Loading users..."
+                    : usersList
+                      ? userFilter === "drift"
+                        ? usersList.total === 0
+                          ? "No users with credit drift"
+                          : `Showing ${userListStart}–${userListEnd} of ${usersList.total} user${usersList.total === 1 ? "" : "s"} where wallet ≠ ledger sum`
+                        : usersList.total === 0
+                          ? "No users found"
+                          : `Showing ${userListStart}–${userListEnd} of ${usersList.total} user${usersList.total === 1 ? "" : "s"}`
+                      : "Loading users..."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -6170,9 +6237,9 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
-                ) : users && users.length > 0 ? (
+                ) : displayUsers.length > 0 ? (
                   <div className="space-y-3">
-                    {users.map((user) => (
+                    {displayUsers.map((user) => (
                       <div
                         key={user.id}
                         className="flex flex-col gap-3 p-3 rounded-lg border sm:flex-row sm:items-center sm:justify-between"
@@ -6195,6 +6262,11 @@ export default function AdminDashboard() {
                               </Badge>
                               <span className="whitespace-nowrap">{user.xpPoints} XP</span>
                               <span className="whitespace-nowrap">{formatVox(user.predictCredits)}</span>
+                              {user.createdAt && (
+                                <span className="whitespace-nowrap" data-testid={`user-joined-${user.id}`}>
+                                  Joined {formatDate(user.createdAt)}
+                                </span>
+                              )}
                               {typeof user.drift === "number" && user.drift !== 0 && (
                                 <Badge
                                   variant="outline"
@@ -6279,6 +6351,36 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     ))}
+                    {usersList && usersList.totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-3 border-t">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={userPage <= 1 || usersLoading}
+                          onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+                          data-testid="button-users-prev-page"
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <span
+                          className="text-xs text-muted-foreground"
+                          data-testid="text-users-page-indicator"
+                        >
+                          Page {usersList.page} of {usersList.totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={userPage >= usersList.totalPages || usersLoading}
+                          onClick={() => setUserPage((p) => p + 1)}
+                          data-testid="button-users-next-page"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">

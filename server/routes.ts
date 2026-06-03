@@ -873,6 +873,28 @@ function parseBoundedInt(value: unknown, fallback: number, min: number, max: num
   return Math.min(max, Math.max(min, parsed));
 }
 
+/** Strip LIKE wildcards so admin username search cannot broaden matches. */
+function sanitizeAdminUserSearch(raw: string): string {
+  return raw.trim().replace(/[%_\\]/g, "");
+}
+
+function parseAdminUsersListQuery(query: Request["query"]) {
+  const search = sanitizeAdminUserSearch((query.search as string) || "");
+  const requestedPage = Math.max(1, parseInt(query.page as string, 10) || 1);
+  const pageSize = parseBoundedInt(query.pageSize, 50, 1, 100);
+  return { search, requestedPage, pageSize };
+}
+
+function clampAdminListPage(
+  requestedPage: number,
+  total: number,
+  pageSize: number,
+): { page: number; totalPages: number; offset: number } {
+  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 0;
+  const page = totalPages > 0 ? Math.min(requestedPage, totalPages) : 1;
+  return { page, totalPages, offset: (page - 1) * pageSize };
+}
+
 async function getSupabaseAuthEmail(userId: string): Promise<string | null> {
   try {
     const result = await supabaseServer.auth.admin.getUserById(userId);
@@ -12111,33 +12133,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     },
   );
 
-  // Get all users (for admin moderation)
+  // Paginated user list for admin moderation (search + created_at sort).
   app.get("/api/admin/users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const search = (req.query.search as string) || "";
-      
-      let users;
-      if (search) {
-        users = await db.select().from(profiles)
-          .where(sql`${profiles.username} ILIKE ${'%' + search + '%'}`)
-          .limit(100);
-      } else {
-        users = await db.select().from(profiles).limit(100);
-      }
-      
-      res.json(users.map(u => ({
-        id: u.id,
-        username: u.username,
-        avatarUrl: u.avatarUrl ?? null,
-        role: u.role,
-        rank: u.rank,
-        xpPoints: u.xpPoints,
-        predictCredits: u.predictCredits,
-        totalVotes: u.totalVotes,
-        totalPredictions: u.totalPredictions,
-        createdAt: u.createdAt,
-        isBanned: u.role === 'banned',
-      })));
+      const { search, requestedPage, pageSize } = parseAdminUsersListQuery(req.query);
+      const sortRaw = (req.query.sort as string) || "created_desc";
+      const sortAsc = sortRaw === "created_asc";
+
+      const whereClause = search
+        ? ilike(profiles.username, `%${search}%`)
+        : undefined;
+
+      const countRows = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(profiles)
+        .where(whereClause);
+
+      const total = Number(countRows[0]?.count) || 0;
+      const { page, totalPages, offset } = clampAdminListPage(
+        requestedPage,
+        total,
+        pageSize,
+      );
+      const order = sortAsc
+        ? [asc(profiles.createdAt), asc(profiles.id)]
+        : [desc(profiles.createdAt), desc(profiles.id)];
+
+      let query = db.select().from(profiles).$dynamic();
+      if (whereClause) query = query.where(whereClause);
+      const users = await query.orderBy(...order).limit(pageSize).offset(offset);
+
+      res.json({
+        users: users.map((u) => ({
+          id: u.id,
+          username: u.username,
+          avatarUrl: u.avatarUrl ?? null,
+          role: u.role,
+          rank: u.rank,
+          xpPoints: u.xpPoints,
+          predictCredits: u.predictCredits,
+          totalVotes: u.totalVotes,
+          totalPredictions: u.totalPredictions,
+          createdAt:
+            u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
+          isBanned: u.role === "banned",
+        })),
+        total,
+        page,
+        pageSize,
+        totalPages,
+      });
     } catch (error: any) {
       console.error("Error fetching users:", error.message);
       res.status(500).json({ error: "Failed to fetch users" });
@@ -21024,6 +21069,35 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // case is on top.
   app.get("/api/admin/credit-drift-users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      const { search, requestedPage, pageSize } = parseAdminUsersListQuery(req.query);
+      const searchPattern = search ? `%${search}%` : null;
+
+      const driftWhere = sql`
+        p.is_agent = false
+        AND p.is_house = false
+        AND p.predict_credits != ls.ledger_sum
+        ${searchPattern ? sql`AND p.username ILIKE ${searchPattern}` : sql``}
+      `;
+
+      const countRows = (await db.execute(sql`
+        WITH ls AS (
+          SELECT user_id, SUM(amount)::bigint AS ledger_sum
+          FROM credit_ledger
+          GROUP BY user_id
+        )
+        SELECT COUNT(*)::int AS count
+        FROM profiles p
+        JOIN ls ON ls.user_id = p.id
+        WHERE ${driftWhere}
+      `)).rows as unknown as [{ count: number }];
+
+      const total = Number(countRows[0]?.count) || 0;
+      const { page, totalPages, offset } = clampAdminListPage(
+        requestedPage,
+        total,
+        pageSize,
+      );
+
       const rows = (await db.execute(sql`
         WITH ls AS (
           SELECT user_id, SUM(amount)::bigint AS ledger_sum
@@ -21037,15 +21111,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           p.role,
           p.xp_points       AS xp_points,
           p.predict_credits AS wallet,
+          p.created_at      AS created_at,
           ls.ledger_sum     AS ledger_sum,
           (p.predict_credits - ls.ledger_sum) AS drift
         FROM profiles p
         JOIN ls ON ls.user_id = p.id
-        WHERE p.is_agent = false
-          AND p.is_house = false
-          AND p.predict_credits != ls.ledger_sum
-        ORDER BY ABS(p.predict_credits - ls.ledger_sum) DESC
-        LIMIT 100
+        WHERE ${driftWhere}
+        ORDER BY ABS(p.predict_credits - ls.ledger_sum) DESC, p.id
+        LIMIT ${pageSize}
+        OFFSET ${offset}
       `)).rows as unknown as Array<{
         id: string;
         username: string | null;
@@ -21053,6 +21127,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         role: string;
         xp_points: number;
         wallet: number;
+        created_at: string | Date;
         ledger_sum: number;
         drift: number;
       }>;
@@ -21065,9 +21140,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           role: r.role,
           xpPoints: Number(r.xp_points),
           predictCredits: Number(r.wallet),
+          createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
           ledgerSum: Number(r.ledger_sum),
           drift: Number(r.drift),
         })),
+        total,
+        page,
+        pageSize,
+        totalPages,
       });
     } catch (err: any) {
       console.error("[GET /api/admin/credit-drift-users] failed:", err);
