@@ -598,7 +598,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let currentsCadence: { shouldRefresh: boolean; lastFetchAt: Date | null; ageMs: number | null; budgetThrottled: boolean } | null = null;
 
     if (newsAggregationMode === "union") {
-      console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Currents + Mediastack + GDELT + Serper News in parallel`);
+      console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Currents + Mediastack + Serper News in parallel (GDELT excluded)`);
       const unionStart = Date.now();
       try {
         const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
@@ -608,9 +608,6 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const canaryNames = new Set(getCanaryNames());
         const canaryIds = new Set(people.filter(p => canaryNames.has(p.name)).map(p => p.id));
         const widenCandidateIds = new Set([...Array.from(top25Ids), ...Array.from(canaryIds)]);
-        const gdeltCandidates = await computeNewsCandidates(people, wikiData);
-        const newsHealth = getCurrentHealthSnapshot().news;
-        const gdeltIsDegraded = newsHealth.state === "DEGRADED" || newsHealth.state === "OUTAGE" || newsHealth.state === "RECOVERY";
 
         const aggResult = await fetchMultiSourceNewsBatch(
           people.map(p => ({
@@ -620,10 +617,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             searchQueryOverride: p.searchQueryOverride,
           })),
           {
-            gdeltCandidates,
             mediastackWidenCandidateIds: widenCandidateIds,
-            gdeltIsDegraded,
-            gdeltTimeBudgetMs: 180000,
             peopleSortedByRank: peopleSortedByRank.map(p => ({
               id: p.id,
               name: p.name,
@@ -658,7 +652,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             : (ps.currents.attempted ? "FAILED" : "SKIPPED");
         sourceStatuses.gdelt = ps.gdelt.succeeded
           ? (ps.gdelt.peopleWithData > 0 ? "OK" : "DEGRADED")
-          : "FAILED";
+          : (ps.gdelt.attempted ? "FAILED" : "SKIPPED");
         sourceStatuses.serper = ps.serper.succeeded
           ? (ps.serper.peopleWithData > 0 ? "OK" : "DEGRADED")
           : "FAILED";
@@ -669,7 +663,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       } catch (err) {
         console.error(`[Ingest] Union aggregator failed, aborting news fetch:`, err);
         sourceStatuses.mediastack = "FAILED";
-        sourceStatuses.gdelt = "FAILED";
+        sourceStatuses.gdelt = "SKIPPED";
         newsData = new Map();
       }
       console.log(`[Ingest] Union aggregation complete in ${((Date.now() - unionStart) / 1000).toFixed(1)}s — ${newsData.size}/${people.length} people with data`);

@@ -324,6 +324,17 @@ export { gdeltUnionAttributionCount } from "./gdelt-parse";
 
 // ── MAIN AGGREGATOR ─────────────────────────────────────────────────────────
 
+/**
+ * GDELT is excluded from the union. Two reasons (confirmed against live data
+ * June 2026):
+ *   1. Its artlist query has no language filter, so it injects foreign-language
+ *      articles (Russian/Arabic/Hindi/Greek/etc.) into an English/US attention
+ *      signal where every other provider is scoped to English.
+ *   2. Its live contribution is negligible — ~6/162 people had any URLs.
+ * Set to true to re-enable. Cascade and tiered modes still use GDELT independently.
+ */
+const UNION_INCLUDE_GDELT = false;
+
 export async function fetchMultiSourceNewsBatch(
   people: AggregatorPerson[],
   options: AggregatorOptions = {},
@@ -384,10 +395,12 @@ export async function fetchMultiSourceNewsBatch(
     timeBudgetMs: options.gdeltTimeBudgetMs ?? 180000,
     isDegraded: options.gdeltIsDegraded ?? false,
   };
-  const gdeltPromise = fetchBatchGdeltNews(
-    people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
-    gdeltOptions,
-  );
+  const gdeltPromise = UNION_INCLUDE_GDELT
+    ? fetchBatchGdeltNews(
+        people.map(p => ({ id: p.id, name: p.name, searchQueryOverride: p.searchQueryOverride })),
+        gdeltOptions,
+      )
+    : Promise.resolve(null);
 
   // 24h-only Serper variant (7d from Serper when available; ingest prefers history)
   // for faster per-tick completion. Previous: (2, 500ms). Now: (4, 300ms).
@@ -420,7 +433,7 @@ export async function fetchMultiSourceNewsBatch(
   const providerSummary: AggregatorStats["providers"] = {
     mediastack: { attempted: mediastackAvailable, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
     currents: { attempted: currentsAvailable, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
-    gdelt: { attempted: true, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
+    gdelt: { attempted: UNION_INCLUDE_GDELT, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
     serper: { attempted: true, succeeded: false, peopleWithData: 0, peopleWithArticles: 0, elapsedMs: 0 },
   };
 
@@ -469,14 +482,14 @@ export async function fetchMultiSourceNewsBatch(
   // ── Unpack GDELT ──────────────────────────────────────────────────────
   let gdeltMap = new Map<string, GdeltNewsData>();
   let gdeltBatchStats: GdeltBatchStats | null = null;
-  if (gdeltSettled.status === "fulfilled") {
+  if (gdeltSettled.status === "fulfilled" && gdeltSettled.value) {
     gdeltMap = gdeltSettled.value.data;
     gdeltBatchStats = gdeltSettled.value.stats;
     providerSummary.gdelt.succeeded = true;
     providerSummary.gdelt.peopleWithData = gdeltMap.size;
     providerSummary.gdelt.peopleWithArticles = Array.from(gdeltMap.values())
       .filter(v => (v.articles?.length ?? 0) > 0).length;
-  } else {
+  } else if (gdeltSettled.status === "rejected") {
     providerSummary.gdelt.error = String(gdeltSettled.reason);
     console.warn("[News Aggregator] GDELT batch failed:", gdeltSettled.reason);
   }
@@ -656,7 +669,7 @@ export async function fetchMultiSourceNewsBatch(
     `[News Aggregator] Providers: ` +
     `mediastack ${providerSummary.mediastack.succeeded ? "OK" : "FAIL"} (${providerSummary.mediastack.peopleWithData} people, ${providerSummary.mediastack.peopleWithArticles} with URLs, ${(providerSummary.mediastack.elapsedMs / 1000).toFixed(1)}s${msLegacy > 0 ? `, ${msLegacy} legacy cache entries` : ""}), ` +
     `currents ${providerSummary.currents.succeeded ? "OK" : "FAIL"} (${providerSummary.currents.peopleWithData} people, ${providerSummary.currents.peopleWithArticles} with URLs, ${(providerSummary.currents.elapsedMs / 1000).toFixed(1)}s${cuEmpty > 0 ? `, ${cuEmpty} cache-only-empty` : ""}), ` +
-    `gdelt ${providerSummary.gdelt.succeeded ? "OK" : "FAIL"} (${providerSummary.gdelt.peopleWithData} people, ${providerSummary.gdelt.peopleWithArticles} with URLs, ${(providerSummary.gdelt.elapsedMs / 1000).toFixed(1)}s), ` +
+    `gdelt ${!providerSummary.gdelt.attempted ? "SKIP" : providerSummary.gdelt.succeeded ? "OK" : "FAIL"} (${providerSummary.gdelt.peopleWithData} people, ${providerSummary.gdelt.peopleWithArticles} with URLs, ${(providerSummary.gdelt.elapsedMs / 1000).toFixed(1)}s), ` +
     `serper ${providerSummary.serper.succeeded ? "OK" : "FAIL"} (${providerSummary.serper.peopleWithData} people, ${providerSummary.serper.peopleWithArticles} with URLs, ${(providerSummary.serper.elapsedMs / 1000).toFixed(1)}s)`,
   );
   if (biggestGainPerson) {
