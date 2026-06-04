@@ -1479,9 +1479,8 @@ export default function HomePage() {
                             <span className="inline-flex items-center gap-1">
                               <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
                               <span>
-                                Data refresh:{" "}
-                                {systemFreshness?.liveUpdatedAtFormatted ||
-                                  systemFreshness?.fullRefreshAtFormatted ||
+                                Scores updated:{" "}
+                                {systemFreshness?.fullRefreshAtFormatted ||
                                   systemFreshness?.lastScoredAtFormatted ||
                                   "recently"}
                               </span>
