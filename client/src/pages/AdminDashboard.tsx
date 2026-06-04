@@ -32,6 +32,7 @@ import {
   Clock,
   UserCheck,
   ArrowUpDown,
+  ArrowDownToLine,
   ThumbsUp,
   Plus,
   Edit,
@@ -1327,6 +1328,7 @@ export default function AdminDashboard() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+  const [demoteCelebrityTarget, setDemoteCelebrityTarget] = useState<Celebrity | null>(null);
   
   // Score Breakdown Modal state
   const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
@@ -2233,6 +2235,34 @@ export default function AdminDashboard() {
     },
     onError: (error: any) => {
       toast.error("Delete Failed", { description: error.message });
+    },
+  });
+
+  const demoteCelebrityMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetchWithAuth(`/api/admin/celebrities/${id}/demote-to-induction`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to demote celebrity");
+      }
+      return res.json();
+    },
+    onSuccess: (data: { message?: string }) => {
+      toast("Demoted to induction queue", {
+        description: data.message ?? "Removed from main leaderboard; active in vote queue.",
+      });
+      setDemoteCelebrityTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/celebrities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/induction"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/trending?sort=rank&limit=100"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Demote failed", { description: error.message });
     },
   });
 
@@ -3976,6 +4006,19 @@ export default function AdminDashboard() {
                           >
                             <Activity className="h-4 w-4" />
                           </Button>
+                          {celebrity.status === "main_leaderboard" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-11 w-11 sm:h-9 sm:w-9"
+                              onClick={() => setDemoteCelebrityTarget(celebrity)}
+                              aria-label="Demote to induction queue"
+                              title="Demote to induction queue"
+                              data-testid={`button-demote-celebrity-${celebrity.id}`}
+                            >
+                              <ArrowDownToLine className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -10167,6 +10210,64 @@ export default function AdminDashboard() {
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
               Delete forever
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Demote to induction queue */}
+      <Dialog
+        open={!!demoteCelebrityTarget}
+        onOpenChange={(open) => {
+          if (!open && !demoteCelebrityMutation.isPending) {
+            setDemoteCelebrityTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Demote to induction queue?</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">
+                    {demoteCelebrityTarget?.name}
+                  </span>{" "}
+                  will be removed from the public main leaderboard immediately.
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Reactivated or added as an active induction candidate (voteable).</li>
+                  <li>Historical trend data stays on the same profile id.</li>
+                  <li>Use the green tick in Voting CMS → Induction Queue to promote again.</li>
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDemoteCelebrityTarget(null)}
+              disabled={demoteCelebrityMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (demoteCelebrityTarget) {
+                  demoteCelebrityMutation.mutate(demoteCelebrityTarget.id);
+                }
+              }}
+              disabled={demoteCelebrityMutation.isPending}
+              data-testid="button-confirm-demote-celebrity"
+            >
+              {demoteCelebrityMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Demoting...
+                </>
+              ) : (
+                "Demote to queue"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

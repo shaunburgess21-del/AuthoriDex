@@ -126,7 +126,10 @@ import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recomput
 import { enrichInductionCandidatesWithAvatars, enrichInductionVoteRows } from "./services/person-images";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
-import { approveInductionCandidate } from "./services/induction-service";
+import {
+  approveInductionCandidate,
+  demoteFromMainLeaderboard,
+} from "./services/induction-service";
 import {
   removeOrphanInductionShadows,
   syncInductionCandidateToShadowTrackedPerson,
@@ -12648,6 +12651,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to update celebrity" });
     }
   });
+
+  app.post(
+    "/api/admin/celebrities/:id/demote-to-induction",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const { id } = req.params;
+        const result = await demoteFromMainLeaderboard(id, {
+          adminId: req.userId!,
+        });
+        res.json({ success: true, ...result });
+      } catch (error: any) {
+        const status = error.statusCode ?? 500;
+        if (status >= 500) {
+          console.error("Error demoting celebrity to induction:", error.message);
+        }
+        res.status(status).json({
+          error:
+            status === 404
+              ? error.message
+              : status === 409
+                ? error.message
+                : "Failed to demote celebrity to induction queue",
+        });
+      }
+    },
+  );
 
   // Google Trends Topic ID suggestions — admin picks the correct entity
   app.post("/api/admin/trends-topic-suggestions", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
