@@ -12,15 +12,30 @@ interface TouchTooltipProps {
   className?: string;
   contentClassName?: string;
   showCloseButton?: boolean;
+  /** Overrides the default "More info" label on touch/popover triggers. */
+  triggerAriaLabel?: string;
 }
 
-export function TouchTooltip({ children, content, side = "top", align = "center", className, contentClassName, showCloseButton = false }: TouchTooltipProps) {
-  const [isTouchDevice, setIsTouchDevice] = React.useState(false);
+function getIsTouchPrimary(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(hover: none), (pointer: coarse)").matches
+    || "ontouchstart" in window
+    || navigator.maxTouchPoints > 0
+  );
+}
+
+export function TouchTooltip({ children, content, side = "top", align = "center", className, contentClassName, showCloseButton = false, triggerAriaLabel }: TouchTooltipProps) {
+  const [isTouchDevice, setIsTouchDevice] = React.useState(getIsTouchPrimary);
   const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    setIsTouchDevice(getIsTouchPrimary());
   }, []);
+
+  const stopRowActivation = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+  };
 
   // Tooltip path: width/typography overrides only — surface skin comes
   // from TooltipContent itself.
@@ -52,8 +67,9 @@ export function TouchTooltip({ children, content, side = "top", align = "center"
             className="relative inline-flex items-center justify-center cursor-help text-inherit before:absolute before:inset-[-12px] before:content-['']"
             role="button"
             tabIndex={0}
-            aria-label="More info"
-            onClick={(e) => e.stopPropagation()}
+            aria-label={triggerAriaLabel ?? "More info"}
+            onClick={stopRowActivation}
+            onPointerDown={stopRowActivation}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();

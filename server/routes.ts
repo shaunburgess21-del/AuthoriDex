@@ -101,7 +101,7 @@ import {
   getHealthSummary,
   getStalenessDecayFactor,
 } from "./scoring/sourceHealth";
-import { getLastFullRefreshAt, getSurgingPersonIds } from "./jobs/live-tick";
+import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
@@ -4908,6 +4908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           liveRank: trendingPeople.liveRank,
           fameIndexLive: trendingPeople.fameIndexLive,
           liveUpdatedAt: trendingPeople.liveUpdatedAt,
+          profileViews10m: trendingPeople.profileViews10m,
           imageSlug: trackedPeople.imageSlug,
           approvalPct: celebrityMetrics.approvalPct,
           approvalAvgRating: celebrityMetrics.approvalAvgRating,
@@ -4967,11 +4968,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       query = query.limit(limit).offset(offset) as typeof query;
 
       const results = await query;
-
-      const surgingIds =
-        tab === "fame"
-          ? await getSurgingPersonIds(results.map((r) => r.id))
-          : new Set<string>();
 
       let userValueVotes: Record<string, string> = {};
       if (userId && tab === 'value') {
@@ -5043,10 +5039,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           leaderboardRank = sortDir === 'asc' ? totalCount - offset - index : offset + index + 1;
         }
 
+        const { profileViews10m, ...personFields } = person;
+
         return {
-          ...person,
+          ...personFields,
           leaderboardRank,
-          isSurging: surgingIds.has(person.id),
+          liveProfileViews:
+            tab === "fame" ? (profileViews10m ?? 0) : 0,
           userValueVote: userValueVotes[person.id] || null,
           userApprovalRating: userApprovalRatings[person.id] ?? null,
           rankChange:

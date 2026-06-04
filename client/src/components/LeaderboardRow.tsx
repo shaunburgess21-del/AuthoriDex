@@ -6,7 +6,7 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/compone
 import { useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { resolveFameScore } from "@/lib/fameScore";
-import { Star, X, Flame } from "lucide-react";
+import { Star, X, Flame, Eye } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,8 +31,8 @@ interface ExtendedPerson extends TrendingPerson {
   leaderboardRank?: number;
   approvalVotesCount?: number | null;
   rankChange?: number | null;
-  /** Cosmetic: recent VoxDex votes/views in the last ~10 min (not a competing score). */
-  isSurging?: boolean;
+  /** Cosmetic: profile views in the current ~10 min window (not a competing score). */
+  liveProfileViews?: number | null;
 }
 
 interface LeaderboardRowProps {
@@ -89,6 +89,36 @@ function RankDeltaPill({
       {isUp ? "\u25B2" : "\u25BC"}
       {Math.abs(rankChange)}
     </span>
+  );
+}
+
+function LiveProfileViewsIndicator({
+  count,
+  size = "desktop",
+}: {
+  count: number;
+  size?: "desktop" | "compact";
+}) {
+  if (count < 1) return null;
+  const compact = size === "compact";
+  return (
+    <TouchTooltip
+      content="Live profile views"
+      triggerAriaLabel={`Live profile views: ${count}`}
+      side={compact ? "bottom" : "top"}
+      showCloseButton={compact}
+    >
+      <span className="inline-flex items-center gap-0.5 shrink-0 text-blue-600 dark:text-blue-400">
+        <Eye
+          className={compact ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5 shrink-0"}
+          strokeWidth={2.25}
+          aria-hidden
+        />
+        <span className="text-[10px] font-medium leading-none tabular-nums translate-y-px">
+          {count}
+        </span>
+      </span>
+    </TouchTooltip>
   );
 }
 
@@ -289,7 +319,8 @@ export function LeaderboardRow({
   const showVotePulse = !hasVoted && !hasEverVoted;
   const rank = person.leaderboardRank ?? person.rank;
   const isColdStart = rank == null || rank === 0;
-  const isSurging = person.isSurging === true;
+  const liveProfileViews = person.liveProfileViews ?? 0;
+  const showLiveProfileViews = liveProfileViews >= 1;
 
   const prevScoreRef = useRef(fameScore);
   const [scoreFlash, setScoreFlash] = useState(false);
@@ -361,39 +392,46 @@ export function LeaderboardRow({
                     aria-label="Hot Mover"
                   />
                 )}
-                {isSurging && !isHotMover && (
-                  <span
-                    className="text-[10px] font-medium text-amber-600 dark:text-amber-400 shrink-0"
-                    title="Recent activity on VoxDex"
-                  >
-                    Live
-                  </span>
+                {showLiveProfileViews && (
+                  <LiveProfileViewsIndicator count={liveProfileViews} />
                 )}
               </p>
             );
           })()}
-          {isHotMover && !person.category && (
-            <p className="hidden md:flex items-center">
-              <Flame
-                className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
-                aria-label="Hot Mover"
-              />
+          {(!person.category && (isHotMover || showLiveProfileViews)) && (
+            <p className="hidden md:flex items-center gap-1.5">
+              {isHotMover && (
+                <Flame
+                  className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+                  aria-label="Hot Mover"
+                />
+              )}
+              {showLiveProfileViews && (
+                <LiveProfileViewsIndicator count={liveProfileViews} />
+              )}
             </p>
           )}
-          {activeTab === "fame" && (hasMobileMovement || isHotMover) && (
+          {activeTab === "fame" && (hasMobileMovement || isHotMover || showLiveProfileViews) && (
             <p className="md:hidden text-[11px] leading-tight truncate mt-0.5">
-              <span className="font-mono inline-flex items-center gap-1">
-                {hasPct ? (
-                  <span className={pctColorClass}>{delta24h}</span>
-                ) : null}
-                {showRankDelta && person.rankChange != null ? (
-                  <RankDeltaPill rankChange={person.rankChange} size="compact" />
-                ) : null}
+              <span className="inline-flex items-center gap-1">
+                {(hasPct || showRankDelta) && (
+                  <span className="font-mono inline-flex items-center gap-1">
+                    {hasPct ? (
+                      <span className={pctColorClass}>{delta24h}</span>
+                    ) : null}
+                    {showRankDelta && person.rankChange != null ? (
+                      <RankDeltaPill rankChange={person.rankChange} size="compact" />
+                    ) : null}
+                  </span>
+                )}
                 {isHotMover && (
                   <Flame
                     className="h-3 w-3 shrink-0 text-orange-600 dark:text-orange-400"
                     aria-label="Hot Mover"
                   />
+                )}
+                {showLiveProfileViews && (
+                  <LiveProfileViewsIndicator count={liveProfileViews} size="compact" />
                 )}
               </span>
             </p>
