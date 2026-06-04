@@ -1758,11 +1758,10 @@ export default function PredictPage() {
     ) || null;
   }, [selectedJackpotPerson, nativeJackpotData]);
 
-  // Server caps jackpot at the top N most-famous people (default 20), frozen
-  // at Monday generation. The picker mirrors that — anyone without an active
-  // OPEN/live jackpot market is filtered out so users can't navigate to a
-  // "no market available" dead end. Eligibility is derived from this week's
-  // jackpot market rows, not the live leaderboard.
+  // Server picks a weekly anchored field (top-10 anchors + momentum movers +
+  // lower-rank wildcards), frozen at Monday generation. The picker mirrors that —
+  // anyone without an active OPEN/live jackpot market is filtered out.
+  // Eligibility is derived from this week's jackpot market rows, not the live leaderboard.
   const jackpotEligiblePeople = useMemo(() => {
     if (!nativeJackpotData) return [];
     const eligibleIds = new Set(

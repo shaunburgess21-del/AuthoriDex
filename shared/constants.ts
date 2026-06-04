@@ -215,3 +215,13 @@ export const GAINER_MOVEMENT_MOMENTUM_DAYS = 7;
 export const GAINER_SCORE_WEIGHT_VOLATILITY = 0.45;
 export const GAINER_SCORE_WEIGHT_MOMENTUM = 0.4;
 export const GAINER_SCORE_WEIGHT_LOWER_BASE = 0.15;
+
+/** Weekly jackpot / updown anchored field — fixed anchors + rotating movers + wildcards. */
+export const ANCHORED_ANCHOR_COUNT = 10;
+export const ANCHORED_MOVER_COUNT = 6;
+export const ANCHORED_WILDCARD_COUNT = 4;
+export const ANCHORED_FIELD_SIZE =
+  ANCHORED_ANCHOR_COUNT + ANCHORED_MOVER_COUNT + ANCHORED_WILDCARD_COUNT;
+/** 1-based inclusive fame ranks for mover / wildcard pools. */
+export const ANCHORED_MOVER_RANK_RANGE = [11, 40] as const;
+export const ANCHORED_WILDCARD_RANK_RANGE = [41, 100] as const;

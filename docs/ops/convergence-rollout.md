@@ -9,7 +9,7 @@ Shipped in commit `05ed297a`. All behavior is **env-flag gated** (default OFF).
 | 1 | `LOCKIN_FAIR_SHADOW=true` | Logs `[LockInFair][shadow]`; no bet changes |
 | 2 | `LOCKIN_FAIR_ENABLED=true` | Keep shadow on; agents use fair floor |
 | 3 | Seed arb + `ARB_COHORT_ENABLED=true` | `POST /api/admin/agents/seed` with `{ "archiveLegacy": false }` |
-| Monday | `NATIVE_FRIDAY_CUTOFF_ENABLED=true`, `UPDOWN_TOP_N_ENABLED=true` | New week generation only for top-N |
+| Monday | `NATIVE_FRIDAY_CUTOFF_ENABLED=true` | Up/Down betting closes Friday 23:59 UTC; jackpot/updown roster uses anchored Monday selection |
 | Optional | `EARLY_WEEK_SETTLEMENT_BONUS_ENABLED`, `SCORE_EMA_MORE_RAW_ENABLED` | EMA requires σ re-calibration |
 
 ### H2H (separate flags — does not affect up/down rollout)

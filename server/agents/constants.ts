@@ -275,12 +275,6 @@ export const LOCKIN_FAIR_ENABLED = envFlag(process.env.LOCKIN_FAIR_ENABLED);
 export const ARB_COHORT_ENABLED = envFlag(process.env.ARB_COHORT_ENABLED);
 /** Friday 23:59 UTC betting cutoff for native AMM up/down (not just jackpot). */
 export const NATIVE_FRIDAY_CUTOFF_ENABLED = envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED);
-/** Weekly up/down only for top N by fameIndex (default 20). */
-export const UPDOWN_TOP_N_ENABLED = envFlag(process.env.UPDOWN_TOP_N_ENABLED);
-export const UPDOWN_TOP_N = (() => {
-  const raw = Number(process.env.UPDOWN_TOP_N);
-  return Number.isInteger(raw) && raw > 0 ? raw : 20;
-})();
 
 /** Arb agents: per-trade budget ceiling (actionWorker). */
 export const ARB_AGENT_MAX_STAKE = (() => {

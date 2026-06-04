@@ -10,7 +10,6 @@ import { eq } from "drizzle-orm";
 import { recomputeCelebrityMetrics } from "./celebrity-metrics-recompute";
 import {
   backfillGainerMarketForInductee,
-  ensureUpDownMarketForInductee,
 } from "../jobs/market-generator";
 import { supabaseServer } from "../supabase";
 import { syncWinningAvatarForPerson } from "../lib/curateAvatar";
@@ -27,7 +26,7 @@ function buildPublicUrl(slug: string, filename: string): string | null {
 
 /**
  * After admin approves an induction candidate: leaderboard rows, baseline trend data,
- * curate images, weekly Up/Down market, gainer backfill, value metrics for O/U deck.
+ * curate images, gainer backfill, value metrics for O/U deck.
  * Errors are logged; core induct should already have succeeded.
  */
 export async function runPostInductionOnboarding(args: {
@@ -209,15 +208,6 @@ export async function runPostInductionOnboarding(args: {
     await recomputeCelebrityMetrics(personId).catch((e) =>
       console.error("[induction-onboarding] recomputeCelebrityMetrics:", e),
     );
-
-    const updown = await ensureUpDownMarketForInductee({
-      id: personId,
-      name: displayName,
-      category,
-    });
-    if (updown === "failed") {
-      console.warn("[induction-onboarding] Up/Down market not created for", personId);
-    }
 
     const gainer = await backfillGainerMarketForInductee({
       id: personId,

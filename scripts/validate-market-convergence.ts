@@ -47,7 +47,7 @@ console.log("\nFlags to enable in order:");
 console.log("  1. LOCKIN_FAIR_SHADOW → validate shadow logs");
 console.log("  2. LOCKIN_FAIR_ENABLED");
 console.log("  3. ARB_COHORT_ENABLED (after POST /api/admin/agents/seed)");
-console.log("  4. NATIVE_FRIDAY_CUTOFF_ENABLED + UPDOWN_TOP_N_ENABLED (next Monday gen)\n");
+console.log("  4. NATIVE_FRIDAY_CUTOFF_ENABLED (next Monday gen)\n");
 console.log("Friday cutoff scope: updown only (see docs/ops/convergence-rollout.md)\n");
 
 const fail = cal.avgGapOnDecided != null && cal.avgGapOnDecided > 0.12;

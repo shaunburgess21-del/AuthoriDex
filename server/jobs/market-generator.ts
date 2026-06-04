@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { db, withDbAdvisoryLock } from "../db";
 import { predictionMarkets, marketEntries, trackedPeople, trendingPeople } from "@shared/schema";
 import {
+  ANCHORED_WILDCARD_RANK_RANGE,
   GAINER_MIN_ELIGIBLE,
   getMarketCategoryLabel,
   normalizeMarketCategory,
@@ -17,6 +18,7 @@ import { getWeekContext as getUtcWeekContext } from "../native-markets/week-cont
 import { seedAmmMarket } from "../services/amm-house";
 import { applyWarmStartPrior } from "../services/amm-warmstart";
 import { log } from "../log";
+import { selectAnchoredField, type AnchoredMarketType } from "./anchored-selection";
 import { loadGainerMovementStats } from "./gainer-movement-stats";
 import { selectGainerField } from "./gainer-selection";
 
@@ -111,54 +113,138 @@ export function decideMissingMarketTypes(
   return order.filter((t) => counts[t] === 0);
 }
 
-function envFlag(value: string | undefined): boolean {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+const ANCHORED_POOL_LIMIT = ANCHORED_WILDCARD_RANK_RANGE[1];
+
+type AnchoredPoolRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  avatar: string | null;
+  fameIndex: number;
+};
+
+async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
+  const rows = await db
+    .select({
+      id: trackedPeople.id,
+      name: trackedPeople.name,
+      category: trackedPeople.category,
+      avatar: trackedPeople.avatar,
+      fameIndex: trendingPeople.fameIndex,
+    })
+    .from(trackedPeople)
+    .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
+    .where(eq(trackedPeople.status, "main_leaderboard"))
+    .orderBy(desc(trendingPeople.fameIndex), trackedPeople.id)
+    .limit(ANCHORED_POOL_LIMIT);
+
+  if (rows.length > 0) {
+    return rows.map((r) => ({ ...r, fameIndex: r.fameIndex ?? 0 }));
+  }
+
+  log(`[MarketGenerator:Anchored] No trackedPeople matched, falling back to trendingPeople top ${ANCHORED_POOL_LIMIT}`);
+  const trending = await db
+    .select({
+      id: trendingPeople.id,
+      name: trendingPeople.name,
+      category: trendingPeople.category,
+      avatar: trendingPeople.avatar,
+      fameIndex: trendingPeople.fameIndex,
+    })
+    .from(trendingPeople)
+    .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id)
+    .limit(ANCHORED_POOL_LIMIT);
+
+  return trending.map((r) => ({ ...r, fameIndex: r.fameIndex ?? 0 }));
 }
 
-const UPDOWN_TOP_N_LIMIT = (() => {
-  if (!envFlag(process.env.UPDOWN_TOP_N_ENABLED)) return null;
-  const raw = Number(process.env.UPDOWN_TOP_N);
-  return Number.isInteger(raw) && raw > 0 ? raw : 20;
-})();
+async function selectAnchoredWeeklyIds(
+  marketType: AnchoredMarketType,
+  weekNumber: number,
+  monday: Date,
+) {
+  const pool = await loadAnchoredPoolFromDb();
+  const fameById = new Map(pool.map((p) => [p.id, p.fameIndex]));
+  const momentumById = await loadGainerMovementStats(
+    pool.map((p) => p.id),
+    db,
+    { asOf: monday },
+  );
+
+  const selection = selectAnchoredField({
+    people: pool.map((p) => ({ id: p.id })),
+    fameById,
+    momentumById,
+    weekNumber,
+    marketType,
+  });
+
+  log(
+    `[MarketGenerator:Anchored] Week ${weekNumber} ${marketType}: ` +
+      `${selection.anchors.length} anchors, ${selection.movers.length} movers, ` +
+      `${selection.wildcards.length} wildcards`,
+  );
+
+  return { selection, pool };
+}
+
+function orderPoolBySelection(pool: AnchoredPoolRow[], selectedIds: string[]): AnchoredPoolRow[] {
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  return selectedIds.map((id) => byId.get(id)).filter((p): p is AnchoredPoolRow => Boolean(p));
+}
+
+async function loadTrackedPeopleInOrder(selectedIds: string[]) {
+  if (selectedIds.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(trackedPeople)
+    .where(inArray(trackedPeople.id, selectedIds));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return selectedIds.map((id) => byId.get(id)).filter((p): p is (typeof rows)[number] => Boolean(p));
+}
 
 export async function generateWeeklyUpDown(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
-  let people = await db.select().from(trackedPeople).where(eq(trackedPeople.status, "main_leaderboard"));
 
-  if (UPDOWN_TOP_N_LIMIT != null) {
-    const ranked = await db
-      .select({
-        id: trackedPeople.id,
-        name: trackedPeople.name,
-        category: trackedPeople.category,
-        avatar: trackedPeople.avatar,
-        displayOrder: trackedPeople.displayOrder,
-        imageSlug: trackedPeople.imageSlug,
-        bio: trackedPeople.bio,
-        youtubeId: trackedPeople.youtubeId,
-        spotifyId: trackedPeople.spotifyId,
-        wikiSlug: trackedPeople.wikiSlug,
-        xHandle: trackedPeople.xHandle,
-        instagramHandle: trackedPeople.instagramHandle,
-        tiktokHandle: trackedPeople.tiktokHandle,
-        searchQueryOverride: trackedPeople.searchQueryOverride,
-        newsQueryWidened: trackedPeople.newsQueryWidened,
-        googleTrendsTopicId: trackedPeople.googleTrendsTopicId,
-        status: trackedPeople.status,
-      })
-      .from(trackedPeople)
-      .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
-      .where(eq(trackedPeople.status, "main_leaderboard"))
-      .orderBy(desc(trendingPeople.fameIndex), trackedPeople.id)
-      .limit(UPDOWN_TOP_N_LIMIT);
-    if (ranked.length > 0) {
-      people = ranked;
-      log(
-        `[MarketGenerator:UpDown] Week ${weekNumber}: top ${UPDOWN_TOP_N_LIMIT} by fameIndex (${people.length} people)`,
-      );
-    }
+  // IDEMPOTENT FAST-PATH: freeze the week's updown roster at first
+  // generation (Monday cron), matching jackpot/H2H. Mid-week promotions
+  // and cron re-runs must not add cards once the week is seeded.
+  const existingOpenUpDown = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.marketType, "updown"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.visibility, ["live", "inactive"]),
+    ));
+
+  if (existingOpenUpDown.length > 0) {
+    log(`[MarketGenerator:UpDown] Week ${weekNumber}: ${existingOpenUpDown.length} markets already open — skipping generation (Monday freeze).`);
+    return 0;
+  }
+
+  const { selection, pool } = await selectAnchoredWeeklyIds("updown", weekNumber, monday);
+  let people = await loadTrackedPeopleInOrder(selection.all);
+
+  if (people.length === 0 && pool.length > 0) {
+    log(`[MarketGenerator:UpDown] Week ${weekNumber}: anchored selection returned no trackedPeople rows; using pool fallback`);
+    people = orderPoolBySelection(pool, selection.all).map((p) => ({
+      ...p,
+      displayOrder: 0,
+      imageSlug: null as string | null,
+      bio: null as string | null,
+      youtubeId: null as string | null,
+      spotifyId: null as string | null,
+      wikiSlug: null as string | null,
+      xHandle: null as string | null,
+      instagramHandle: null as string | null,
+      tiktokHandle: null as string | null,
+      searchQueryOverride: null as string | null,
+      newsQueryWidened: null as string | null,
+      googleTrendsTopicId: null as string | null,
+      status: "main_leaderboard" as const,
+    }));
   }
 
   if (people.length === 0) {
@@ -187,6 +273,8 @@ export async function generateWeeklyUpDown(): Promise<number> {
     }));
     log(`[MarketGenerator:UpDown] Fallback: ${people.length} people from trendingPeople`);
   }
+
+  log(`[MarketGenerator:UpDown] Week ${weekNumber}: generating ${people.length} updown markets (anchored field)`);
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
@@ -468,58 +556,10 @@ export async function generateWeeklyJackpot(): Promise<number> {
     return 0;
   }
 
-  // Cap jackpot eligibility at the top N most-famous people. We previously
-  // generated one market for every main_leaderboard person (~150), which
-  // diluted pari-mutuel pools to ~900 credits of real bets each — too thin
-  // to feel like a meaningful prize. Concentrating to top 20 lifts the
-  // average headline pool ~7x without changing total betting volume.
-  // Override with JACKPOT_TOP_N env var (set to a very large number to
-  // restore the legacy behaviour).
-  const JACKPOT_TOP_N = (() => {
-    const raw = parseInt(process.env.JACKPOT_TOP_N || "20", 10);
-    return Number.isFinite(raw) && raw > 0 ? raw : 20;
-  })();
+  const { selection, pool } = await selectAnchoredWeeklyIds("jackpot", weekNumber, monday);
+  const people = orderPoolBySelection(pool, selection.all);
 
-  type JackpotCandidate = {
-    id: string;
-    name: string;
-    category: string | null;
-    avatar: string | null;
-  };
-
-  // Inner-join trackedPeople against trendingPeople so we can rank by
-  // fame_index. People without a fame index are excluded — they couldn't be
-  // ranked anyway. Order DESC + LIMIT N gives the top N. Secondary sort by
-  // id breaks fame_index ties deterministically.
-  let people: JackpotCandidate[] = await db
-    .select({
-      id: trackedPeople.id,
-      name: trackedPeople.name,
-      category: trackedPeople.category,
-      avatar: trackedPeople.avatar,
-    })
-    .from(trackedPeople)
-    .innerJoin(trendingPeople, eq(trendingPeople.id, trackedPeople.id))
-    .where(eq(trackedPeople.status, "main_leaderboard"))
-    .orderBy(desc(trendingPeople.fameIndex), trackedPeople.id)
-    .limit(JACKPOT_TOP_N);
-
-  if (people.length === 0) {
-    log(`[MarketGenerator:Jackpot] No trackedPeople matched, falling back to trendingPeople top ${JACKPOT_TOP_N}`);
-    people = await db
-      .select({
-        id: trendingPeople.id,
-        name: trendingPeople.name,
-        category: trendingPeople.category,
-        avatar: trendingPeople.avatar,
-      })
-      .from(trendingPeople)
-      .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id)
-      .limit(JACKPOT_TOP_N);
-    log(`[MarketGenerator:Jackpot] Fallback: ${people.length} people from trendingPeople`);
-  }
-
-  log(`[MarketGenerator:Jackpot] Week ${weekNumber}: generating up to ${people.length} jackpot markets (top ${JACKPOT_TOP_N})`);
+  log(`[MarketGenerator:Jackpot] Week ${weekNumber}: generating ${people.length} jackpot markets (anchored field)`);
 
   const existing = await db.select({ personId: predictionMarkets.personId })
     .from(predictionMarkets)
@@ -1156,10 +1196,10 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
       }
 
       // Run only the generators for the missing types. Each generator
-      // is internally idempotent (e.g. H2H and jackpot short-circuit if
-      // any open markets exist for the week, UpDown skips per-person
-      // duplicates) so calling them is safe even if a race put the type
-      // in place; but skipping the call up-front saves wasted work.
+      // is internally idempotent (e.g. H2H, jackpot, and updown short-circuit if
+      // any open markets exist for the week; UpDown skips per-person duplicates)
+      // so calling them is safe even if a race put the type in place; but
+      // skipping the call up-front saves wasted work.
       const generatedTypes: Array<keyof WeeklyNativeCounts> = [];
       for (const type of missing) {
         try {
