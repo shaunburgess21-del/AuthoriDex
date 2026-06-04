@@ -1924,6 +1924,11 @@ export const agentRuntimeState = pgTable("agent_runtime_state", {
   reason: text("reason"),
   pausedAt: timestamp("paused_at"),
   pausedBy: varchar("paused_by"),
+  /** When true, commentWorker + commentVoteWorker skip sweeps; betting/votes continue. */
+  commentsPaused: boolean("comments_paused").notNull().default(false),
+  commentsPauseReason: text("comments_pause_reason"),
+  commentsPausedAt: timestamp("comments_paused_at"),
+  commentsPausedBy: varchar("comments_paused_by"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

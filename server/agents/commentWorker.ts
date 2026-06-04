@@ -33,7 +33,7 @@ import {
   castSentimentPollVoteForUser,
   countAgentVotesThisWeek,
 } from "./voteWorker";
-import { isAgentsPaused } from "./runtime-state";
+import { isAgentCommentsPaused, isAgentsPaused } from "./runtime-state";
 import {
   fetchMatchupParentPool,
   fetchOpenMarketParentPool,
@@ -466,6 +466,22 @@ export async function runCommentSweep(): Promise<{
   // Global "pause all agents" kill switch (admin Agents tab toggle).
   if (await isAgentsPaused()) {
     log("[CommentWorker] Skipping sweep; agents are globally paused");
+    return {
+      posted: 0,
+      replies: 0,
+      replyFallbacks: 0,
+      skipped: 0,
+      llmRejected: 0,
+      capReached: false,
+      voteCapDeflections: 0,
+      voteCapBlocked: 0,
+      bySurface: {} as Record<CommentSurface, number>,
+      nestedReplies: 0,
+    };
+  }
+
+  if (await isAgentCommentsPaused()) {
+    log("[CommentWorker] Skipping sweep; agent commenting is paused");
     return {
       posted: 0,
       replies: 0,

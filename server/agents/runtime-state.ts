@@ -1,22 +1,25 @@
 /**
- * Global "pause all agents" kill switch.
+ * Global agent runtime flags (singleton `agent_runtime_state` row).
  *
- * Backs the admin Agents tab toggle. When the switch is flipped ON, *every*
- * agent worker checks this flag at the top of its tick and exits early:
+ * Two independent kill switches:
  *
- *   - `agentRunner.runAgentBatch`        (prediction sweep, every 30 min)
- *   - `actionWorker.processDueActions`   (executes scheduled bets, every 2 min)
- *   - `commentWorker.runCommentSweep`    (daily comment sweep)
- *   - `commentVoteWorker.runCommentVoteSweep` (daily comment-likes sweep)
- *   - `voteWorker.runVoteSweep`          (daily ratings sweep)
+ * 1. **Pause all agents** (`paused`) — backs the master Agents tab toggle.
+ *    When ON, every agent worker exits early:
  *
- * State is persisted in the `agent_runtime_state` singleton row so toggling
- * doesn't need a deploy and survives restarts. We cache the value in-process
- * for `CACHE_TTL_MS` to avoid hammering the DB on every action-worker tick;
- * the admin can flip the switch and within ~10 seconds every running worker
- * will see the new state.
+ *    - `agentRunner.runAgentBatch`        (prediction sweep, every 30 min)
+ *    - `actionWorker.processDueActions`   (executes scheduled bets, every 2 min)
+ *    - `commentWorker.runCommentSweep`    (comment sweep)
+ *    - `commentVoteWorker.runCommentVoteSweep` (comment-likes sweep)
+ *    - `voteWorker.runVoteSweep`          (daily ratings sweep)
  *
- * IMPORTANT: This switch ONLY affects agent activity. Non-agent LLM features
+ * 2. **Pause agent commenting** (`commentsPaused`) — comments-only toggle.
+ *    When ON, only commentWorker and commentVoteWorker skip. Predictions,
+ *    scheduled bets, and voteWorker keep running.
+ *
+ * State is persisted in the DB so toggling doesn't need a deploy and survives
+ * restarts. Cached in-process for `CACHE_TTL_MS` (~10s).
+ *
+ * IMPORTANT: These switches ONLY affect agent activity. Non-agent LLM features
  * ("why they're trending", resolution summaries, news ingest, induction
  * cycles, market generation/resolution, etc.) are completely unaffected.
  */
@@ -44,6 +47,10 @@ interface CachedState {
   reason: string | null;
   pausedAt: Date | null;
   pausedBy: string | null;
+  commentsPaused: boolean;
+  commentsPauseReason: string | null;
+  commentsPausedAt: Date | null;
+  commentsPausedBy: string | null;
   updatedAt: Date;
   fetchedAt: number;
 }
@@ -67,6 +74,10 @@ async function loadFromDb(): Promise<CachedState> {
     reason: row?.reason ?? null,
     pausedAt: row?.pausedAt ?? null,
     pausedBy: row?.pausedBy ?? null,
+    commentsPaused: row?.commentsPaused ?? false,
+    commentsPauseReason: row?.commentsPauseReason ?? null,
+    commentsPausedAt: row?.commentsPausedAt ?? null,
+    commentsPausedBy: row?.commentsPausedBy ?? null,
     updatedAt: row?.updatedAt ?? new Date(0),
     fetchedAt: Date.now(),
   };
@@ -137,12 +148,30 @@ export async function isAgentsPaused(): Promise<boolean> {
   }
 }
 
+/**
+ * When true, commentWorker and commentVoteWorker skip sweeps. Betting,
+ * predictions, and voteWorker are unaffected. Cached for ~10 seconds.
+ */
+export async function isAgentCommentsPaused(): Promise<boolean> {
+  try {
+    const state = await getState();
+    return state.commentsPaused;
+  } catch (err) {
+    console.error("[AgentRuntimeState] Failed to read comments-pause state:", err);
+    return false;
+  }
+}
+
 /** Returns the full cached state for admin diagnostics. */
 export async function getAgentRuntimeState(): Promise<{
   paused: boolean;
   reason: string | null;
   pausedAt: Date | null;
   pausedBy: string | null;
+  commentsPaused: boolean;
+  commentsPauseReason: string | null;
+  commentsPausedAt: Date | null;
+  commentsPausedBy: string | null;
   updatedAt: Date;
 }> {
   const state = await getState();
@@ -151,18 +180,22 @@ export async function getAgentRuntimeState(): Promise<{
     reason: state.reason,
     pausedAt: state.pausedAt,
     pausedBy: state.pausedBy,
+    commentsPaused: state.commentsPaused,
+    commentsPauseReason: state.commentsPauseReason,
+    commentsPausedAt: state.commentsPausedAt,
+    commentsPausedBy: state.commentsPausedBy,
     updatedAt: state.updatedAt,
   };
 }
 
-interface SetOptions {
+interface SetPauseOptions {
   paused: boolean;
   reason?: string | null;
   actorId?: string | null;
 }
 
 /** Admin-only mutation. Upserts the singleton row and busts the cache. */
-export async function setAgentsPaused(opts: SetOptions): Promise<void> {
+export async function setAgentsPaused(opts: SetPauseOptions): Promise<void> {
   const now = new Date();
   await db
     .insert(agentRuntimeState)
@@ -187,6 +220,30 @@ export async function setAgentsPaused(opts: SetOptions): Promise<void> {
 
   // Bust the cache so the next isAgentsPaused() call (within the same
   // process) sees the new state immediately rather than waiting for TTL.
+  cache = null;
+}
+
+/** Admin-only: pause or resume agent commenting only (text + upvotes). */
+export async function setAgentCommentsPaused(opts: SetPauseOptions): Promise<void> {
+  const now = new Date();
+  const commentsFields = {
+    commentsPaused: opts.paused,
+    commentsPauseReason: opts.paused ? (opts.reason ?? null) : null,
+    commentsPausedAt: opts.paused ? now : null,
+    commentsPausedBy: opts.paused ? opts.actorId ?? null : null,
+    updatedAt: now,
+  };
+  await db
+    .insert(agentRuntimeState)
+    .values({
+      id: SINGLETON_ID,
+      ...commentsFields,
+    })
+    .onConflictDoUpdate({
+      target: agentRuntimeState.id,
+      set: commentsFields,
+    });
+
   cache = null;
 }
 

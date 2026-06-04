@@ -23211,6 +23211,86 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // ============================================================================
+  // PAUSE AGENT COMMENTING (comments-only kill switch)
+  // ----------------------------------------------------------------------------
+  // When `commentsPaused=true`, commentWorker and commentVoteWorker skip.
+  // Predictions, scheduled bets, and voteWorker are unaffected.
+  // ============================================================================
+
+  app.get("/api/admin/agents/comments-pause-state", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    try {
+      const { getAgentRuntimeState } = await import("./agents/runtime-state");
+      const state = await getAgentRuntimeState();
+      res.json({
+        paused: state.commentsPaused,
+        reason: state.commentsPauseReason,
+        pausedAt: state.commentsPausedAt?.toISOString() ?? null,
+        pausedBy: state.commentsPausedBy,
+        updatedAt: state.updatedAt.toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] comments-pause-state fetch failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  app.post("/api/admin/agents/comments-pause", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const paused = req.body?.paused === true;
+      const reason = typeof req.body?.reason === "string" && req.body.reason.trim()
+        ? String(req.body.reason).slice(0, 500)
+        : null;
+      const { setAgentCommentsPaused, getAgentRuntimeState } = await import("./agents/runtime-state");
+
+      const priorState = await getAgentRuntimeState();
+
+      await setAgentCommentsPaused({
+        paused,
+        reason,
+        actorId: req.userId ?? null,
+      });
+      const state = await getAgentRuntimeState();
+      console.log(
+        `[AgentAdmin] Agent commenting ${paused ? "PAUSED" : "RESUMED"} by ${req.userId ?? "unknown"}${reason ? ` (reason: ${reason})` : ""}`,
+      );
+
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: paused ? "agents_comments_pause" : "agents_comments_resume",
+          targetTable: "agent_runtime_state",
+          targetId: "global",
+          previousData: {
+            commentsPaused: priorState.commentsPaused,
+            commentsPauseReason: priorState.commentsPauseReason,
+          },
+          newData: {
+            commentsPaused: state.commentsPaused,
+            commentsPauseReason: state.commentsPauseReason,
+          },
+          metadata: {
+            commentsPausedBy: state.commentsPausedBy,
+          },
+        });
+      } catch (auditErr) {
+        console.error("[AgentAdmin] comments-pause-toggle audit-log insert failed (toggle still committed):", auditErr);
+      }
+
+      res.json({
+        ok: true,
+        paused: state.commentsPaused,
+        reason: state.commentsPauseReason,
+        pausedAt: state.commentsPausedAt?.toISOString() ?? null,
+        pausedBy: state.commentsPausedBy,
+        updatedAt: state.updatedAt.toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[AgentAdmin] comments-pause toggle failed:", err);
+      res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
   // AMM RUNTIME SETTINGS (Phase 4 review pass)
   // ----------------------------------------------------------------------------
   // Admin-tunable AMM knobs that survive restarts and don't require a deploy.

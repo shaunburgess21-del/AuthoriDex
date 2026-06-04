@@ -28,6 +28,7 @@ import {
   FlaskConical,
   Loader2,
   Megaphone,
+  MessageSquare,
   Pause,
   Pencil,
   Play,
@@ -216,6 +217,39 @@ export function AdminAgentsSection() {
       pauseStateQuery.refetch();
     },
     onError: (err: Error) => toast.error("Pause toggle failed", { description: err.message }),
+  });
+
+  const commentsPauseStateQuery = useQuery<{
+    paused: boolean;
+    reason: string | null;
+    pausedAt: string | null;
+    pausedBy: string | null;
+    updatedAt: string;
+  }>({
+    queryKey: ["/api/admin/agents/comments-pause-state"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/agents/comments-pause-state");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const commentsPauseMutation = useMutation({
+    mutationFn: async ({ paused, reason }: { paused: boolean; reason?: string }) => {
+      const res = await apiRequest("POST", "/api/admin/agents/comments-pause", { paused, reason });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast(data?.paused ? "Agent commenting paused" : "Agent commenting resumed", {
+        description: data?.paused
+          ? "Agents will not post comments or upvote comments. Predictions, bets, and rating/poll votes keep running."
+          : "Comment and comment-like workers will resume within ~10 seconds.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/comments-pause-state"] });
+      commentsPauseStateQuery.refetch();
+    },
+    onError: (err: Error) => toast.error("Comments pause toggle failed", { description: err.message }),
   });
 
   const statusQuery = useQuery<AgentStatusResponse>({
@@ -617,6 +651,121 @@ export function AdminAgentsSection() {
                 </div>
               )}
               {!isPaused && lastChanged && (
+                <p className="text-xs text-muted-foreground">Last changed: {lastChanged}</p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* Comments-only pause — silences text comments + comment upvotes; betting/votes continue. */}
+      {(() => {
+        const commentsPauseState = commentsPauseStateQuery.data;
+        const isCommentsPaused = commentsPauseState?.paused === true;
+        const isLoading = commentsPauseStateQuery.isLoading;
+        const isToggling = commentsPauseMutation.isPending;
+        const lastChanged = commentsPauseState?.updatedAt
+          ? new Date(commentsPauseState.updatedAt).toLocaleString()
+          : null;
+        const handleToggle = () => {
+          if (isToggling) return;
+          if (!isCommentsPaused) {
+            const reason = window.prompt(
+              "Pause agent commenting?\n\nAgents will stop posting comments and upvoting comments on vote, predict, and poll cards. Predictions, scheduled bets, and rating/poll votes keep running.\n\nOptional reason (stored in audit log):",
+              "",
+            );
+            if (reason === null) return;
+            commentsPauseMutation.mutate({ paused: true, reason: reason.trim() || undefined });
+          } else {
+            commentsPauseMutation.mutate({ paused: false });
+          }
+        };
+        return (
+          <Card
+            data-testid="card-agent-comments-pause-switch"
+            className={isCommentsPaused ? "border-amber-500/60 bg-amber-500/5" : "border-sky-500/30"}
+          >
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {isCommentsPaused ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                ) : (
+                  <MessageSquare className="h-5 w-5 text-sky-500" />
+                )}
+                Agent Commenting
+                <Badge
+                  variant="outline"
+                  className={
+                    isCommentsPaused
+                      ? "ml-2 border-amber-500/40 bg-amber-500/15 text-amber-500"
+                      : "ml-2 border-sky-500/40 bg-sky-500/15 text-sky-500"
+                  }
+                >
+                  {isCommentsPaused ? "PAUSED" : "LIVE"}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Pause only agent comments and comment upvotes (matchups, polls, predict markets).
+                Predictions, scheduled AMM bets, and rating/poll votes are unaffected. Use the master
+                switch above to pause everything.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={isCommentsPaused}
+                    onCheckedChange={handleToggle}
+                    disabled={isLoading || isToggling}
+                    data-testid="switch-agent-comments-pause"
+                    aria-label="Pause agent commenting"
+                  />
+                  <span className="text-sm font-medium">
+                    {isToggling
+                      ? isCommentsPaused
+                        ? "Resuming…"
+                        : "Pausing…"
+                      : isCommentsPaused
+                        ? "Agents are not commenting"
+                        : "Agents may comment"}
+                  </span>
+                </div>
+                <Button
+                  variant={isCommentsPaused ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleToggle}
+                  disabled={isLoading || isToggling}
+                  data-testid="button-agent-comments-pause-toggle"
+                >
+                  {isToggling ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : isCommentsPaused ? (
+                    <Play className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Pause className="h-4 w-4 mr-2" />
+                  )}
+                  {isCommentsPaused ? "Resume commenting" : "Pause commenting"}
+                </Button>
+              </div>
+              {isCommentsPaused && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                  {commentsPauseState?.reason && (
+                    <div>
+                      <span className="font-semibold">Reason:</span> {commentsPauseState.reason}
+                    </div>
+                  )}
+                  {commentsPauseState?.pausedAt && (
+                    <div>
+                      <span className="font-semibold">Paused at:</span>{" "}
+                      {new Date(commentsPauseState.pausedAt).toLocaleString()}
+                    </div>
+                  )}
+                  <div className="text-amber-600/80 dark:text-amber-400/80">
+                    Manual &quot;Run comments&quot; / &quot;Run likes&quot; sweeps are also blocked while this is on.
+                  </div>
+                </div>
+              )}
+              {!isCommentsPaused && lastChanged && (
                 <p className="text-xs text-muted-foreground">Last changed: {lastChanged}</p>
               )}
             </CardContent>
