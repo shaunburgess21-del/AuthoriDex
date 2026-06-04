@@ -108,7 +108,7 @@ function LiveProfileViewsIndicator({
       side={compact ? "bottom" : "top"}
       showCloseButton={compact}
     >
-      <span className="inline-flex items-center gap-0.5 shrink-0 text-blue-600 dark:text-blue-400">
+      <span className="inline-flex items-center gap-0.5 shrink-0 translate-y-px text-blue-600 dark:text-blue-400">
         <Eye
           className={compact ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5 shrink-0"}
           strokeWidth={2.25}
