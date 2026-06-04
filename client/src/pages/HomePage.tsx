@@ -627,8 +627,8 @@ interface PersonMomentumResponse {
   signals?: {
     news?: { deltaPct?: number };
     wiki?: { deltaPct?: number };
-    momentum?: { deltaPct?: number };
-    wikiMomentum?: { deltaPct?: number };
+    momentum?: { deltaPct?: number; ratio?: number };
+    wikiMomentum?: { deltaPct?: number; ratio?: number };
     trends?: { deltaPct?: number };
   };
   categoryRank?: {
@@ -638,9 +638,15 @@ interface PersonMomentumResponse {
   } | null;
 }
 
-// Chip labels (May 2026): "Momentum" renamed to "News Momentum" for
-// symmetry with "Wiki Momentum". "Search Momentum" = Google Trends relative
-// interest velocity (DataForSEO, May 2026).
+/** Signed % from 24h-vs-baseline ratio (news/wiki momentum chips). */
+function momentumRatioDeltaPct(ratio: number, deadZonePct = 5): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) return 0;
+  const raw = Math.round((ratio - 1) * 100);
+  return Math.abs(raw) <= deadZonePct ? 0 : raw;
+}
+
+// Chip labels: momentum chips use signed deltaPct (not High/Medium/Low).
+// Search Momentum = Google Trends relative interest velocity (DataForSEO).
 interface InsightSignal {
   label: "Wiki" | "News" | "News Momentum" | "Wiki Momentum" | "Search Momentum";
   deltaPct: number;
@@ -1321,8 +1327,8 @@ export default function HomePage() {
     return [
       { label: "Wiki" as const, deltaPct: selectedInsightMomentum.signals.wiki?.deltaPct ?? 0 },
       { label: "News" as const, deltaPct: selectedInsightMomentum.signals.news?.deltaPct ?? 0 },
-      { label: "News Momentum" as const, deltaPct: selectedInsightMomentum.signals.momentum?.deltaPct ?? 0 },
-      { label: "Wiki Momentum" as const, deltaPct: selectedInsightMomentum.signals.wikiMomentum?.deltaPct ?? 0 },
+      { label: "News Momentum" as const, deltaPct: momentumRatioDeltaPct(selectedInsightMomentum.signals.momentum?.ratio ?? 0) },
+      { label: "Wiki Momentum" as const, deltaPct: momentumRatioDeltaPct(selectedInsightMomentum.signals.wikiMomentum?.ratio ?? 0) },
       { label: "Search Momentum" as const, deltaPct: selectedInsightMomentum.signals.trends?.deltaPct ?? 0 },
     ];
   }, [selectedInsightMomentum]);

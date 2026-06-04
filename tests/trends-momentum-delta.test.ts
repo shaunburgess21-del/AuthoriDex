@@ -27,12 +27,12 @@ test("computeTrendsMomentumDeltaPct: sentinel mismatch -> 0", () => {
   assert.equal(computeTrendsMomentumDeltaPct(1.26, false), 0);
 });
 
-test("computeTrendsMomentumDeltaPct: exactly at +10% boundary -> 0", () => {
-  assert.equal(computeTrendsMomentumDeltaPct(1.1, true), 0);
+test("computeTrendsMomentumDeltaPct: exactly at +15% boundary -> 0", () => {
+  assert.equal(computeTrendsMomentumDeltaPct(1.15, true), 0);
 });
 
-test("computeTrendsMomentumDeltaPct: just outside +10% boundary -> 11%", () => {
-  assert.equal(computeTrendsMomentumDeltaPct(1.11, true), 11);
+test("computeTrendsMomentumDeltaPct: just outside +15% boundary -> 16%", () => {
+  assert.equal(computeTrendsMomentumDeltaPct(1.16, true), 16);
 });
 
 test("computeTrendsMomentumDeltaPct: spiky recent peak (ratio 10) clamps to +200%", () => {

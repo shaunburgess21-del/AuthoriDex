@@ -58,6 +58,7 @@ import {
   TRENDS_DFS_WINDOW,
   type TrendsBatchResult,
 } from "../providers/dataforseo-trends";
+import { computeTrendsMomentumRatio } from "../providers/trends-window";
 import {
   fetchSearchVolumeBatch,
   isDataForSeoConfigured,
@@ -2741,11 +2742,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : 0;
         const wikiMomentumLevel = computeMomentumLevel(wikiMomentumRatio);
 
-        // Google Trends diagnostics (May 2026 — `now 1-d` window; UI chip derives
-        // from momentumRatio = current 3h / same-response 24h mean).
-        // `trendsInterest` = mean of last ~3h on the now-1-d series.
-        // `trendsAvg7d` field name is legacy; it now stores the 24h mean of
-        // the same series (intra-day baseline for the dormant momentum ratio).
+        // Google Trends diagnostics (DataForSEO `past_30_days` daily series).
+        // `trendsInterest` = median of last 7 daily points; `trendsAvg7d` stores
+        // the prior-window median baseline (legacy field name).
         const trendsCarried = latestTrendsDiagMap.get(person.id);
         const hasFreshTrendsFetch = !!trends && (trends.currentInterest > 0 || trends.timeseries.length > 0);
         const trendsCarriedForward = !hasFreshTrendsFetch && (trendsCarried?.trendsInterest ?? 0) > 0;
@@ -2769,9 +2768,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           trendsMomentumRatio = trendsCarried.trendsMomentumRatio;
           trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
         } else if (hasFreshTrendsFetch) {
-          trendsMomentumRatio = trendsAvg7d > 0 && trendsInterestLatest > 0
-            ? Math.min(trendsInterestLatest / Math.max(trendsAvg7d, 1), MOMENTUM_RATIO_CAP)
-            : 0;
+          trendsMomentumRatio = computeTrendsMomentumRatio(
+            trendsInterestLatest,
+            trendsAvg7d,
+          );
           trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
         }
 

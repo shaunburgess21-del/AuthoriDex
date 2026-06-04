@@ -3031,9 +3031,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendsMomentumRatio = Number(trendsDiag?.raw?.trendsMomentumRatio ?? 0);
       const trendsMomentumLevel = computeMomentumLevel(trendsMomentumRatio);
 
-      // Google Trends — `now 1-d` window (May 2026). `trendsInterest` = mean of
-      // last ~3h; `deltaPct` = (momentumRatio - 1) × 100 with ±10% dead zone,
-      // where momentumRatio = current3h / same-response 24h mean (no cross-fetch drift).
+      // Google Trends — `past_30_days` daily window (DataForSEO). `trendsInterest`
+      // = median of last 7 days; `deltaPct` = gated recent-vs-baseline ratio with
+      // ±15% dead zone (method sentinel TRENDS_DELTA_METHOD).
       const trendsDeltaMethod = trendsDiag?.raw?.trendsDeltaMethod;
       const trendsHasCurrentMethod = trendsDeltaMethod === TRENDS_DELTA_METHOD;
       const trendsDeltaPct = computeTrendsMomentumDeltaPct(
@@ -3272,8 +3272,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             deltaPct: wikiMomentumDeltaPct,
             level: wikiMomentumLevel,
           },
-          // Google Trends — activity card on `now 1-d` (May 2026 refresh).
-          // `interest` = last ~3h mean; `deltaPct` = vs same-response 24h mean.
+          // Google Trends — Search Momentum card (`past_30_days` daily series).
+          // `interest` = recent 7d median; `deltaPct` = gated ratio vs prior baseline.
           trends: trendsHasCurrentMethod && trendsInterest > 0 && trendsIsFresh ? {
             interest: Math.round(trendsInterest * 10) / 10,
             avg7d: Math.round(trendsAvg7dVal * 10) / 10,

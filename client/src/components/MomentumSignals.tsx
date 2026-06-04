@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 
 type MomentumLevel = "none" | "low" | "medium" | "high";
 
+/** Directional pill for momentum cards (Search / News / Wiki Momentum). */
+type MomentumDirection = "accelerating" | "steady" | "cooling" | "quiet";
+
 interface MomentumData {
   asOf: string | null;
   ageMinutes: number;
@@ -186,17 +189,20 @@ function fallbackLevel(
 const LEVEL_SCALE_COPY =
   "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
 
+const MOMENTUM_DIRECTION_COPY =
+  "Accelerating means attention is climbing vs this person's own recent baseline; Steady means it's holding; Cooling means it's easing. Quiet means there isn't enough recent signal to read a direction yet. The +/–% compares today's volume to their 7-day average.";
+
 const MOMENTUM_LEVEL_COPY =
-  "Level reflects how today's news volume compares to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
+  `News volume compared to this person's own 7-day daily average. ${MOMENTUM_DIRECTION_COPY}`;
 
 const WIKI_MOMENTUM_LEVEL_COPY =
-  "Level reflects how today's Wikipedia pageviews compare to this person's own 7-day daily average — Low = below typical, Medium = around or modestly above typical, High = at least 2× their typical day.";
+  `Wikipedia pageviews compared to this person's own 7-day daily average. ${MOMENTUM_DIRECTION_COPY}`;
 
 const SEARCH_INTEREST_COPY =
   "An estimate of how many times people Googled this person over the last month. Because it's a search count rather than a relative score, you can compare different people directly — High means 500k+ searches, Medium 100k+, and Low is below that. See Search Momentum for whether their attention is rising or falling.";
 
 const SEARCH_MOMENTUM_COPY =
-  "A 0–100 score for how much people are Googling this person lately, where 100 is their own busiest day in the past month. The +/–% shows whether their search attention is rising or falling — we compare the last 7 days against the weeks before. It's a relative interest score provided by Google Trends, not the actual number of searches. For total estimated search volume, see Search Interest.";
+  "Google Trends relative interest (0–100), where 100 is this person's busiest day in the past month — not comparable across people. The pill shows whether search attention is Accelerating, Steady, or Cooling vs their own prior weeks (median of last 7 days vs earlier in the window). For absolute monthly search volume you can compare directly, see Search Interest.";
 
 const WEB_SENTIMENT_COPY =
   "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % and bar split positive vs negative mentions. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
@@ -244,8 +250,85 @@ const LEVEL_STYLES: Record<MomentumLevel, {
   },
 };
 
-function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: string }) {
-  const s = LEVEL_STYLES[level];
+const DIRECTION_STYLES: Record<MomentumDirection, {
+  label: string;
+  dotClass: string;
+  glow: string;
+  text: string;
+  pulse: boolean;
+  cardBg: string;
+  cardBar: string;
+}> = {
+  accelerating: {
+    label: "Accelerating",
+    dotClass: "bg-emerald-500",
+    glow: "shadow-[0_0_12px_2px_rgba(16,185,129,0.55)]",
+    text: "text-emerald-700 dark:text-emerald-400",
+    pulse: true,
+    cardBg: "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]",
+    cardBar: "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent",
+  },
+  steady: {
+    label: "Steady",
+    dotClass: "bg-muted-foreground/70",
+    glow: "",
+    text: "text-muted-foreground",
+    pulse: false,
+    cardBg: "bg-card/60 hover:bg-card/80",
+    cardBar: "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
+  },
+  cooling: {
+    label: "Cooling",
+    dotClass: "bg-transparent ring-2 ring-inset ring-rose-500",
+    glow: "",
+    text: "text-rose-700 dark:text-rose-400",
+    pulse: false,
+    cardBg: "bg-rose-500/[0.04] hover:bg-rose-500/[0.07]",
+    cardBar: "bg-gradient-to-r from-transparent via-rose-500/90 to-transparent",
+  },
+  quiet: {
+    label: "Quiet",
+    dotClass: "bg-muted-foreground/60",
+    glow: "",
+    text: "text-muted-foreground",
+    pulse: false,
+    cardBg: "bg-card/60 hover:bg-card/80",
+    cardBar: "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
+  },
+};
+
+function deriveMomentumDirection(deltaPct: number, hasSignal: boolean): MomentumDirection {
+  if (!hasSignal) return "quiet";
+  if (deltaPct > 0) return "accelerating";
+  if (deltaPct < 0) return "cooling";
+  return "steady";
+}
+
+/** Signed % from a 24h-vs-baseline ratio with dead zone (news/wiki momentum cards). */
+function ratioToDirectionDelta(ratio: number, deadZonePct = 5): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) return 0;
+  const raw = Math.round((ratio - 1) * 100);
+  return Math.abs(raw) <= deadZonePct ? 0 : raw;
+}
+
+/** Map directional momentum to Today's Take magnitude buckets. */
+function directionToTakeLevel(direction: MomentumDirection): MomentumLevel {
+  if (direction === "accelerating") return "high";
+  if (direction === "cooling") return "low";
+  if (direction === "steady") return "medium";
+  return "none";
+}
+
+function LevelIndicator({
+  level,
+  direction,
+  testId,
+}: {
+  level: MomentumLevel;
+  direction?: MomentumDirection;
+  testId?: string;
+}) {
+  const s = direction ? DIRECTION_STYLES[direction] : LEVEL_STYLES[level];
   const pulseClass = s.pulse ? "motion-safe:animate-pulse motion-reduce:animate-none" : "";
   return (
     <div className="flex items-center gap-2.5" data-testid={testId}>
@@ -267,7 +350,15 @@ function LevelIndicator({ level, testId }: { level: MomentumLevel; testId?: stri
 
 type TrendWord = "rising" | "falling" | "steady";
 
-function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
+function DeltaPill({
+  pct,
+  trendWord,
+  suppressTrendWord = false,
+}: {
+  pct: number;
+  trendWord?: TrendWord;
+  suppressTrendWord?: boolean;
+}) {
   // Genuinely missing data (no prior snapshot, fetch failed, undefined) — keep
   // the em-dash so it's visually distinct from a measured-flat reading.
   if (!Number.isFinite(pct)) {
@@ -309,7 +400,7 @@ function DeltaPill({ pct, trendWord }: { pct: number; trendWord?: TrendWord }) {
     >
       <Arrow className="h-3 w-3" />
       <span>{isUp ? "+" : ""}{displayPct}%</span>
-      {trendWord && trendWord !== "steady" && (
+      {trendWord && trendWord !== "steady" && !suppressTrendWord && (
         <span className="text-muted-foreground font-sans font-normal ml-0.5">· {trendWord}</span>
       )}
     </div>
@@ -399,12 +490,16 @@ interface SignalCardProps {
   iconWrapClass?: string;
   title: string;
   level: MomentumLevel;
+  /** When set, pill + card tint follow direction instead of magnitude level. */
+  direction?: MomentumDirection;
   value: string;
   unit: string;
   deltaPct?: number;
   trendWord?: TrendWord;
   /** When true, omit the 24h % change pill (e.g. Google Trends score-only card). */
   hideDelta?: boolean;
+  /** Hide trailing "· rising/falling" on momentum cards (direction pill covers it). */
+  suppressTrendWord?: boolean;
   headerRight?: React.ReactNode;
   footer?: React.ReactNode;
   tooltip?: React.ReactNode;
@@ -416,27 +511,32 @@ function SignalCard({
   iconWrapClass,
   title,
   level,
+  direction,
   value,
   unit,
   deltaPct = 0,
   trendWord,
   hideDelta = false,
+  suppressTrendWord = false,
   headerRight,
   footer,
   tooltip,
   testId,
 }: SignalCardProps) {
+  const theme = direction ? DIRECTION_STYLES[direction] : null;
   return (
     <Card
       className={cn(
         "relative overflow-hidden border-border/50 backdrop-blur-sm transition-colors duration-300",
-        level === "high"
-          ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]"
-          : level === "medium"
-            ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.07]"
-            : level === "low"
-              ? "bg-rose-500/[0.04] hover:bg-rose-500/[0.07]"
-              : "bg-card/60 hover:bg-card/80",
+        theme
+          ? theme.cardBg
+          : level === "high"
+            ? "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]"
+            : level === "medium"
+              ? "bg-amber-500/[0.04] hover:bg-amber-500/[0.07]"
+              : level === "low"
+                ? "bg-rose-500/[0.04] hover:bg-rose-500/[0.07]"
+                : "bg-card/60 hover:bg-card/80",
       )}
       data-testid={testId}
     >
@@ -444,13 +544,12 @@ function SignalCard({
         aria-hidden
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 h-0.5 opacity-90 transition-colors duration-500",
-          level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent"
-            : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/90 to-transparent"
-              : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/90 to-transparent"
-                // "none" level renders a muted/silver gradient (matches Today's
-                // Take's "Steady" treatment) so quiet-state cards still feel
-                // intentional and complete instead of looking unfinished.
-                : "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
+          theme
+            ? theme.cardBar
+            : level === "high" ? "bg-gradient-to-r from-transparent via-emerald-500/90 to-transparent"
+              : level === "medium" ? "bg-gradient-to-r from-transparent via-amber-500/90 to-transparent"
+                : level === "low" ? "bg-gradient-to-r from-transparent via-rose-500/90 to-transparent"
+                  : "bg-gradient-to-r from-transparent via-muted-foreground/40 to-transparent",
         )}
       />
       <CardHeader className="pb-2 pt-3 px-4">
@@ -467,8 +566,18 @@ function SignalCard({
       </CardHeader>
       <CardContent className="pt-1 pb-3 px-4 space-y-0.5">
         <div className="flex items-center gap-3 flex-wrap">
-          <LevelIndicator level={level} testId={`level-${testId ?? title.toLowerCase()}`} />
-          {!hideDelta && <DeltaPill pct={deltaPct} trendWord={trendWord} />}
+          <LevelIndicator
+            level={level}
+            direction={direction}
+            testId={`level-${testId ?? title.toLowerCase()}`}
+          />
+          {!hideDelta && (
+            <DeltaPill
+              pct={deltaPct}
+              trendWord={trendWord}
+              suppressTrendWord={suppressTrendWord}
+            />
+          )}
         </div>
         <div className="text-[11px] text-muted-foreground font-mono">
           <span className="text-foreground/80">{value}</span>
@@ -533,8 +642,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
 
   const newsLevel: MomentumLevel = signals.news.level ?? fallbackLevel("news", signals.news.count);
   const wikiLevel: MomentumLevel = signals.wiki.level ?? fallbackLevel("wiki", signals.wiki.views);
-  const momentumLevel: MomentumLevel = signals.momentum?.level
-    ?? fallbackLevel("momentum", signals.momentum?.ratio ?? 0);
 
   const newsTrend: TrendWord =
     signals.news.deltaPct > 5 ? "rising" : signals.news.deltaPct < -5 ? "falling" : "steady";
@@ -544,11 +651,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         : signals.wiki.deltaPct > 5 ? "rising"
           : signals.wiki.deltaPct < -5 ? "falling"
             : "steady";
-  const momentumTrend: TrendWord = signals.momentum
-    ? (signals.momentum.deltaPct > 5 ? "rising" : signals.momentum.deltaPct < -5 ? "falling" : "steady")
-    : "steady";
-
-  // Three-way display state for the News Momentum card. The engine assigns a
+  // Three-way display state for the News Momentum card.
   // positive score even when the 7-day baseline is empty (uses MOMENTUM_AVG_FLOOR=1
   // internally) so brand-new tracked persons can still rank — but showing the
   // absolute average in that case is misleading because there *is* no baseline
@@ -593,17 +696,20 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )
     : null;
 
-  // ── Wiki Momentum (May 2026 — display-only mirror of News Momentum) ──
+  const newsMomentumHasDirection =
+    showBaseline || (signals.momentum?.ratio ?? 0) > 0;
+  const newsMomentumRatioDelta = ratioToDirectionDelta(signals.momentum?.ratio ?? 0);
+  const newsMomentumDirection = deriveMomentumDirection(
+    newsMomentumRatioDelta,
+    newsMomentumHasDirection,
+  );
+
+  // ── Wiki Momentum (display-only mirror of News Momentum) ──
   // Same warm-up / baseline / no-recent-pageviews state machine as the
   // news momentum card above. Older API responses may omit `wikiMomentum`
   // entirely (deployed before this PR or stale React Query cache); the
   // optional chains below ensure the card still renders cleanly in that
   // case as a quiet/empty state.
-  const wikiMomentumLevel: MomentumLevel = signals.wikiMomentum?.level
-    ?? fallbackLevel("wiki-momentum", signals.wikiMomentum?.ratio ?? 0);
-  const wikiMomentumTrend: TrendWord = signals.wikiMomentum
-    ? (signals.wikiMomentum.deltaPct > 5 ? "rising" : signals.wikiMomentum.deltaPct < -5 ? "falling" : "steady")
-    : "steady";
   const wikiMomentumScore = signals.wikiMomentum?.score ?? 0;
   const wikiMomentumAvg7d = signals.wikiMomentum?.averageDaily7d ?? 0;
   const wikiPageviewsToday = signals.wikiMomentum?.pageviews24h ?? signals.wiki.views ?? 0;
@@ -625,6 +731,14 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         </p>
       )
     : null;
+
+  const wikiMomentumHasDirection =
+    showWikiBaseline || (signals.wikiMomentum?.ratio ?? 0) > 0;
+  const wikiMomentumRatioDelta = ratioToDirectionDelta(signals.wikiMomentum?.ratio ?? 0);
+  const wikiMomentumDirection = deriveMomentumDirection(
+    wikiMomentumRatioDelta,
+    wikiMomentumHasDirection,
+  );
 
   // ── Search Interest (May 2026 — DataForSEO Google Ads search volume) ────
   // Replaces the retired Google Trends card. Absolute monthly Google searches:
@@ -668,15 +782,16 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     </>
   );
 
-  // ── Search Momentum (May 2026 — DataForSEO Google Trends relative interest) ──
+  // ── Search Momentum (DataForSEO Google Trends relative interest) ──
   const trendsInterest = signals.trends?.interest ?? 0;
+  const searchMomentumRatio = signals.trends?.momentumRatio ?? 0;
   const hasSearchMomentum = signals.trends != null && trendsInterest > 0;
-  const searchMomentumLevel: MomentumLevel = hasSearchMomentum
-    ? (signals.trends?.momentumLevel ?? fallbackLevel("trends", trendsInterest))
-    : "none";
+  const searchMomentumHasDirection = hasSearchMomentum && searchMomentumRatio > 0;
   const searchMomentumDeltaPct = signals.trends?.deltaPct ?? 0;
-  const searchMomentumTrend: TrendWord =
-    searchMomentumDeltaPct > 5 ? "rising" : searchMomentumDeltaPct < -5 ? "falling" : "steady";
+  const searchMomentumDirection = deriveMomentumDirection(
+    searchMomentumDeltaPct,
+    searchMomentumHasDirection,
+  );
   const searchMomentumValue = hasSearchMomentum ? String(Math.round(trendsInterest)) : "—";
   const searchMomentumUnit = hasSearchMomentum ? "relative interest (0–100)" : "awaiting data";
   const searchMomentumFooter = !hasSearchMomentum ? (
@@ -760,9 +875,17 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         <MomentumTakeCard
           sources={[
             { name: "News", level: newsLevel, delta: signals.news.deltaPct },
-            { name: "News Momentum", level: momentumLevel, delta: signals.momentum?.deltaPct ?? 0 },
+            {
+              name: "News Momentum",
+              level: directionToTakeLevel(newsMomentumDirection),
+              delta: newsMomentumRatioDelta,
+            },
             { name: "Wikipedia", level: wikiLevel, delta: signals.wiki.deltaPct },
-            { name: "Wiki Momentum", level: wikiMomentumLevel, delta: signals.wikiMomentum?.deltaPct ?? 0 },
+            {
+              name: "Wiki Momentum",
+              level: directionToTakeLevel(wikiMomentumDirection),
+              delta: wikiMomentumRatioDelta,
+            },
           ]}
         />
 
@@ -813,11 +936,13 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           icon={<TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
           title="Search Momentum"
-          level={searchMomentumLevel}
+          level="none"
+          direction={searchMomentumDirection}
           value={searchMomentumValue}
           unit={searchMomentumUnit}
           deltaPct={searchMomentumDeltaPct}
-          trendWord={searchMomentumTrend}
+          hideDelta={!searchMomentumHasDirection}
+          suppressTrendWord
           tooltip={
             <TouchTooltip
               side="top"
@@ -863,11 +988,12 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
           title="News Momentum"
-          level={momentumLevel}
+          level="none"
+          direction={newsMomentumDirection}
           value={momentumValue}
           unit={momentumUnit}
-          deltaPct={signals.momentum?.deltaPct ?? 0}
-          trendWord={momentumTrend}
+          deltaPct={newsMomentumRatioDelta}
+          suppressTrendWord
           tooltip={
             <TouchTooltip
               side="top"
@@ -918,11 +1044,12 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
           iconWrapClass="bg-muted"
           title="Wiki Momentum"
-          level={wikiMomentumLevel}
+          level="none"
+          direction={wikiMomentumDirection}
           value={wikiMomentumValue}
           unit={wikiMomentumUnit}
-          deltaPct={signals.wikiMomentum?.deltaPct ?? 0}
-          trendWord={wikiMomentumTrend}
+          deltaPct={wikiMomentumRatioDelta}
+          suppressTrendWord
           tooltip={
             <TouchTooltip
               side="top"

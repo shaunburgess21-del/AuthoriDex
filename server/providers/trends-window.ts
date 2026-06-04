@@ -33,8 +33,10 @@ export const TRENDS_DFS_WINDOW = "past_30_days";
  * first keyword per chunk).
  * v3: `past_30_days` daily series, recent-7d vs prior baseline (drops the
  * time-of-day-biased "current 3h on past_day" reading). Bump forces re-fetch.
+ * v4: median (not mean) recent/prior windows + min-interest gate so a single
+ * spike off a near-zero baseline no longer reads as extreme acceleration.
  */
-export const TRENDS_DELTA_METHOD = "dfs_recent7d_vs_prior_30d_v3";
+export const TRENDS_DELTA_METHOD = "dfs_recent7d_median_gated_v4";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const CURRENT_WINDOW_HOURS = 3;
@@ -43,6 +45,15 @@ const MS_PER_CURRENT_WINDOW = CURRENT_WINDOW_HOURS * MS_PER_HOUR;
 function meanInterest(points: TrendsTimeseriesPoint[]): number {
   if (points.length === 0) return 0;
   return points.reduce((s, x) => s + x.interest, 0) / points.length;
+}
+
+function medianInterest(points: TrendsTimeseriesPoint[]): number {
+  if (points.length === 0) return 0;
+  const sorted = [...points].map((p) => p.interest).sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
 }
 
 /**
@@ -106,10 +117,11 @@ const TRENDS_RECENT_DAYS = 7;
  * series, daily points carry no time-of-day bias, so the reading is stable
  * regardless of when ingest samples.
  *
- * - `currentInterest`: mean of the most recent `recentDays` daily points — the
+ * - `currentInterest`: median of the most recent `recentDays` daily points —
  *   headline "recent search interest" (0-100, relative to the 30-day peak).
- * - `avgWindowInterest`: mean of the PRIOR days (before the recent window) as a
- *   momentum baseline; falls back to the full-series mean for short series.
+ *   Median resists single-day spikes dominating the reading.
+ * - `avgWindowInterest`: median of the PRIOR days (before the recent window) as
+ *   a momentum baseline; falls back to the full-series median for short series.
  */
 export function computeTrendsDailyMomentum(
   series: TrendsTimeseriesPoint[],
@@ -122,13 +134,49 @@ export function computeTrendsDailyMomentum(
   const recent = sorted.slice(-recentDays);
   const prior = sorted.slice(0, -recentDays);
   return {
-    currentInterest: meanInterest(recent),
-    avgWindowInterest: prior.length > 0 ? meanInterest(prior) : meanInterest(sorted),
+    currentInterest: medianInterest(recent),
+    avgWindowInterest: prior.length > 0 ? medianInterest(prior) : medianInterest(sorted),
   };
 }
 
+/** Minimum recent median interest before we compute a momentum ratio (0-100 scale). */
+export const TRENDS_MOMENTUM_MIN_INTEREST_DEFAULT = 12;
+
+export function getTrendsMomentumMinInterest(): number {
+  const raw = Number(process.env.TRENDS_MOMENTUM_MIN_INTEREST);
+  if (!Number.isFinite(raw) || raw < 0) return TRENDS_MOMENTUM_MIN_INTEREST_DEFAULT;
+  return raw;
+}
+
+/** Matches MOMENTUM_RATIO_CAP in normalize.ts — kept local to avoid a scoring import. */
+export const TRENDS_MOMENTUM_RATIO_CAP = 10;
+
+/**
+ * Gated recent-vs-baseline ratio for Search Momentum display. Returns 0 when
+ * recent median interest is below the gate (insufficient signal).
+ */
+export function computeTrendsMomentumRatio(
+  currentInterest: number,
+  baselineInterest: number,
+  minInterest = getTrendsMomentumMinInterest(),
+): number {
+  if (!Number.isFinite(currentInterest) || currentInterest < minInterest) return 0;
+  const denom = Math.max(baselineInterest, 1);
+  if (!Number.isFinite(denom) || denom <= 0) return 0;
+  return Math.min(currentInterest / denom, TRENDS_MOMENTUM_RATIO_CAP);
+}
+
 /** Default dead zone for UI display: hide +/-% chip when within this band of 1.0. */
-export const TRENDS_MOMENTUM_DEAD_ZONE_PCT = 10;
+export const TRENDS_MOMENTUM_DEAD_ZONE_PCT_DEFAULT = 15;
+
+export function getTrendsMomentumDeadZonePct(): number {
+  const raw = Number(process.env.TRENDS_MOMENTUM_DEAD_ZONE_PCT);
+  if (!Number.isFinite(raw) || raw < 0) return TRENDS_MOMENTUM_DEAD_ZONE_PCT_DEFAULT;
+  return raw;
+}
+
+/** @deprecated use getTrendsMomentumDeadZonePct() — kept for existing imports */
+export const TRENDS_MOMENTUM_DEAD_ZONE_PCT = TRENDS_MOMENTUM_DEAD_ZONE_PCT_DEFAULT;
 
 /**
  * Display cap for the momentum % chip. The peak-normalized daily series can give
@@ -139,18 +187,16 @@ export const TRENDS_MOMENTUM_DEAD_ZONE_PCT = 10;
 export const TRENDS_MOMENTUM_DELTA_CAP_PCT = 200;
 
 /**
- * Convert persisted `momentumRatio` (current 3h mean / same-response 24h mean) to a
- * signed percent delta for pills and chips. Both inputs come from one SerpApi
- * `now 1-d` response, so there is no fetch-over-fetch drift or time-of-day
- * normalization mismatch.
+ * Convert persisted `momentumRatio` (recent median / prior median, gated) to a
+ * signed percent delta for pills and chips.
  *
- * @param momentumRatio - interest / max(avg24hMean, 1), capped at 10× in ingest
+ * @param momentumRatio - recent / max(baseline, 1), capped at 10× in ingest
  * @param hasCurrentMethod - snapshot uses TRENDS_DELTA_METHOD sentinel
  */
 export function computeTrendsMomentumDeltaPct(
   momentumRatio: number,
   hasCurrentMethod: boolean,
-  deadZonePct = TRENDS_MOMENTUM_DEAD_ZONE_PCT,
+  deadZonePct = getTrendsMomentumDeadZonePct(),
 ): number {
   if (!hasCurrentMethod || !Number.isFinite(momentumRatio) || momentumRatio <= 0) {
     return 0;

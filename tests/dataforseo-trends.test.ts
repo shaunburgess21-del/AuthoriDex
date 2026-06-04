@@ -5,7 +5,10 @@ import {
   parseDataForSeoTrendsExploreTask,
   trendsBatchResultFromSeries,
 } from "../server/providers/dataforseo-trends-parse";
-import { computeTrendsDailyMomentum } from "../server/providers/trends-window";
+import {
+  computeTrendsDailyMomentum,
+  computeTrendsMomentumRatio,
+} from "../server/providers/trends-window";
 
 const H = 60 * 60 * 1000;
 
@@ -69,7 +72,7 @@ test("trendsBatchResultFromSeries: wires computeTrendsDailyMomentum", () => {
   assert.equal(result.timeseries.length, series.length);
 });
 
-test("computeTrendsDailyMomentum: recent 7d mean vs prior baseline", () => {
+test("computeTrendsDailyMomentum: recent 7d median vs prior baseline", () => {
   const day = 24 * H;
   const start = Date.parse("2026-05-01T00:00:00.000Z");
   // 20 prior days at 60, then 7 recent days at 90 → rising.
@@ -78,8 +81,29 @@ test("computeTrendsDailyMomentum: recent 7d mean vs prior baseline", () => {
     ...Array.from({ length: 7 }, (_, i) => ({ date: new Date(start + (20 + i) * day).toISOString(), interest: 90 })),
   ];
   const { currentInterest, avgWindowInterest } = computeTrendsDailyMomentum(series);
-  assert.equal(currentInterest, 90); // last 7 days
-  assert.equal(avgWindowInterest, 60); // prior 20 days
+  assert.equal(currentInterest, 90); // median of last 7 days
+  assert.equal(avgWindowInterest, 60); // median of prior 20 days
+});
+
+test("computeTrendsDailyMomentum: median resists single-day spike in recent window", () => {
+  const day = 24 * H;
+  const start = Date.parse("2026-05-01T00:00:00.000Z");
+  const prior = Array.from({ length: 23 }, (_, i) => ({
+    date: new Date(start + i * day).toISOString(),
+    interest: 1,
+  }));
+  const recent = [
+    { date: new Date(start + 23 * day).toISOString(), interest: 1 },
+    { date: new Date(start + 24 * day).toISOString(), interest: 1 },
+    { date: new Date(start + 25 * day).toISOString(), interest: 1 },
+    { date: new Date(start + 26 * day).toISOString(), interest: 2 },
+    { date: new Date(start + 27 * day).toISOString(), interest: 2 },
+    { date: new Date(start + 28 * day).toISOString(), interest: 100 },
+    { date: new Date(start + 29 * day).toISOString(), interest: 2 },
+  ];
+  const { currentInterest, avgWindowInterest } = computeTrendsDailyMomentum([...prior, ...recent]);
+  assert.equal(currentInterest, 2); // median, not mean inflated by 100
+  assert.equal(avgWindowInterest, 1);
 });
 
 test("computeTrendsDailyMomentum: short series falls back to full-series baseline", () => {
@@ -99,4 +123,19 @@ test("trendsBatchResultFromSeries: empty series returns zeros", () => {
     currentInterest: 0,
     avgWindowInterest: 0,
   });
+});
+
+test("computeTrendsMomentumRatio: gates low recent median (Messi-class blip)", () => {
+  assert.equal(computeTrendsMomentumRatio(1, 0.5, 12), 0);
+});
+
+test("computeTrendsMomentumRatio: passes genuine surge (Kohli-class)", () => {
+  const ratio = computeTrendsMomentumRatio(17, 2, 12);
+  assert.ok(ratio > 1);
+  assert.equal(ratio, 8.5);
+});
+
+test("computeTrendsMomentumRatio: steady elevated interest (Sweeney-class)", () => {
+  const ratio = computeTrendsMomentumRatio(54, 47, 12);
+  assert.ok(ratio >= 1 && ratio < 1.2);
 });
