@@ -185,6 +185,18 @@ test("people without momentum are excluded from movers when enough eligible exis
   }
 });
 
+test("empty pool returns empty field without throwing", () => {
+  const result = runSelection({
+    weekNumber: 24,
+    marketType: "jackpot",
+    people: [],
+    fameById: new Map(),
+    momentumById: new Map(),
+  });
+  assert.equal(result.all.length, 0);
+  assert.deepEqual(result.anchors, []);
+});
+
 test("different week changes movers and wildcards", () => {
   const w24 = runSelection({ weekNumber: 24, marketType: "jackpot" });
   const w25 = runSelection({ weekNumber: 25, marketType: "jackpot" });

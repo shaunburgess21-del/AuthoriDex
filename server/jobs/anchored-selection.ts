@@ -125,7 +125,7 @@ export function selectAnchoredField(input: AnchoredSelectionInput): AnchoredSele
     used.add(rankedIds[i]);
   }
 
-  let moverPool = idsInRankRange(rankedIds, used, moverRange);
+  const moverPool = idsInRankRange(rankedIds, used, moverRange);
   const moverEligible = moverPool.filter((id) => hasMomentumForMover(input.momentumById.get(id)));
 
   let moverSource =

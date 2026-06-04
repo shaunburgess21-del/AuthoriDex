@@ -19,7 +19,7 @@ import { seedAmmMarket } from "../services/amm-house";
 import { applyWarmStartPrior } from "../services/amm-warmstart";
 import { log } from "../log";
 import { selectAnchoredField, type AnchoredMarketType } from "./anchored-selection";
-import { loadGainerMovementStats } from "./gainer-movement-stats";
+import { loadGainerMovementStats, type GainerMovementStat } from "./gainer-movement-stats";
 import { selectGainerField } from "./gainer-selection";
 
 const MARKET_GENERATOR_LOCK_KEY = 5_204;
@@ -158,18 +158,41 @@ async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
   return trending.map((r) => ({ ...r, fameIndex: r.fameIndex ?? 0 }));
 }
 
-async function selectAnchoredWeeklyIds(
-  marketType: AnchoredMarketType,
+type AnchoredPoolContext = {
+  weekNumber: number;
+  pool: AnchoredPoolRow[];
+  momentumById: Map<string, GainerMovementStat>;
+};
+
+/** Reused when jackpot + updown generate in the same tick (Monday cron). */
+let anchoredPoolContextCache: AnchoredPoolContext | null = null;
+
+async function getAnchoredPoolContext(
   weekNumber: number,
   monday: Date,
-) {
+): Promise<AnchoredPoolContext> {
+  if (anchoredPoolContextCache?.weekNumber === weekNumber) {
+    return anchoredPoolContextCache;
+  }
+
   const pool = await loadAnchoredPoolFromDb();
-  const fameById = new Map(pool.map((p) => [p.id, p.fameIndex]));
   const momentumById = await loadGainerMovementStats(
     pool.map((p) => p.id),
     db,
     { asOf: monday },
   );
+
+  anchoredPoolContextCache = { weekNumber, pool, momentumById };
+  return anchoredPoolContextCache;
+}
+
+async function selectAnchoredWeeklyIds(
+  marketType: AnchoredMarketType,
+  weekNumber: number,
+  monday: Date,
+) {
+  const { pool, momentumById } = await getAnchoredPoolContext(weekNumber, monday);
+  const fameById = new Map(pool.map((p) => [p.id, p.fameIndex]));
 
   const selection = selectAnchoredField({
     people: pool.map((p) => ({ id: p.id })),
@@ -191,16 +214,6 @@ async function selectAnchoredWeeklyIds(
 function orderPoolBySelection(pool: AnchoredPoolRow[], selectedIds: string[]): AnchoredPoolRow[] {
   const byId = new Map(pool.map((p) => [p.id, p]));
   return selectedIds.map((id) => byId.get(id)).filter((p): p is AnchoredPoolRow => Boolean(p));
-}
-
-async function loadTrackedPeopleInOrder(selectedIds: string[]) {
-  if (selectedIds.length === 0) return [];
-  const rows = await db
-    .select()
-    .from(trackedPeople)
-    .where(inArray(trackedPeople.id, selectedIds));
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  return selectedIds.map((id) => byId.get(id)).filter((p): p is (typeof rows)[number] => Boolean(p));
 }
 
 export async function generateWeeklyUpDown(): Promise<number> {
@@ -225,53 +238,11 @@ export async function generateWeeklyUpDown(): Promise<number> {
   }
 
   const { selection, pool } = await selectAnchoredWeeklyIds("updown", weekNumber, monday);
-  let people = await loadTrackedPeopleInOrder(selection.all);
-
-  if (people.length === 0 && pool.length > 0) {
-    log(`[MarketGenerator:UpDown] Week ${weekNumber}: anchored selection returned no trackedPeople rows; using pool fallback`);
-    people = orderPoolBySelection(pool, selection.all).map((p) => ({
-      ...p,
-      displayOrder: 0,
-      imageSlug: null as string | null,
-      bio: null as string | null,
-      youtubeId: null as string | null,
-      spotifyId: null as string | null,
-      wikiSlug: null as string | null,
-      xHandle: null as string | null,
-      instagramHandle: null as string | null,
-      tiktokHandle: null as string | null,
-      searchQueryOverride: null as string | null,
-      newsQueryWidened: null as string | null,
-      googleTrendsTopicId: null as string | null,
-      status: "main_leaderboard" as const,
-    }));
-  }
+  const people = orderPoolBySelection(pool, selection.all);
 
   if (people.length === 0) {
-    log(`[MarketGenerator:UpDown] No trackedPeople found, falling back to trendingPeople`);
-    const trending = await db
-      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
-      .from(trendingPeople)
-      .orderBy(desc(trendingPeople.fameIndex))
-      .limit(100);
-    people = trending.map(t => ({
-      ...t,
-      category: t.category || "misc",
-      displayOrder: 0,
-      imageSlug: null as string | null,
-      bio: null as string | null,
-      youtubeId: null as string | null,
-      spotifyId: null as string | null,
-      wikiSlug: null as string | null,
-      xHandle: null as string | null,
-      instagramHandle: null as string | null,
-      tiktokHandle: null as string | null,
-      searchQueryOverride: null as string | null,
-      newsQueryWidened: null as string | null,
-      googleTrendsTopicId: null as string | null,
-      status: "main_leaderboard",
-    }));
-    log(`[MarketGenerator:UpDown] Fallback: ${people.length} people from trendingPeople`);
+    log(`[MarketGenerator:UpDown] Week ${weekNumber}: no anchored candidates — skipping`);
+    return 0;
   }
 
   log(`[MarketGenerator:UpDown] Week ${weekNumber}: generating ${people.length} updown markets (anchored field)`);
@@ -383,7 +354,9 @@ export async function generateWeeklyUpDown(): Promise<number> {
 }
 
 /**
- * Ensure the current week's Up/Down market exists for a single inductee (idempotent).
+ * Ensure the current week's Up/Down market exists for a single person (idempotent).
+ * Weekly roster is Monday-frozen via anchored selection — induction onboarding
+ * no longer calls this. Reserved for manual/admin backfill if needed.
  */
 export async function ensureUpDownMarketForInductee(person: {
   id: string;
@@ -558,6 +531,11 @@ export async function generateWeeklyJackpot(): Promise<number> {
 
   const { selection, pool } = await selectAnchoredWeeklyIds("jackpot", weekNumber, monday);
   const people = orderPoolBySelection(pool, selection.all);
+
+  if (people.length === 0) {
+    log(`[MarketGenerator:Jackpot] Week ${weekNumber}: no anchored candidates — skipping`);
+    return 0;
+  }
 
   log(`[MarketGenerator:Jackpot] Week ${weekNumber}: generating ${people.length} jackpot markets (anchored field)`);
 
