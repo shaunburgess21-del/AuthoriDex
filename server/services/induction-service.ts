@@ -172,11 +172,32 @@ export async function demoteFromMainLeaderboard(
   let createdCandidate = false;
 
   await executor.transaction(async (tx: DbExecutor) => {
-    await tx.delete(trendingPeople).where(eq(trendingPeople.id, personId));
-    await tx
+    const [demoted] = await tx
       .update(trackedPeople)
       .set({ status: "induction" })
-      .where(eq(trackedPeople.id, personId));
+      .where(
+        and(
+          eq(trackedPeople.id, personId),
+          eq(trackedPeople.status, "main_leaderboard"),
+        ),
+      )
+      .returning();
+
+    if (!demoted) {
+      throw Object.assign(
+        new Error(
+          "Celebrity is no longer on the main leaderboard (may already be demoted)",
+        ),
+        { statusCode: 409 },
+      );
+    }
+
+    await tx.delete(trendingPeople).where(eq(trendingPeople.id, personId));
+
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${displayName}))`);
+
+    const imageSlug =
+      (demoted.imageSlug?.trim() || generateImageSlug(displayName)) || null;
 
     const [existingCandidate] = await tx
       .select()
@@ -187,28 +208,31 @@ export async function demoteFromMainLeaderboard(
     if (existingCandidate) {
       const [updated] = await tx
         .update(inductionCandidates)
-        .set({ isActive: true, inductionStatus: "Queue" })
+        .set({
+          isActive: true,
+          inductionStatus: "Queue",
+          category: demoted.category,
+          imageSlug: imageSlug ?? existingCandidate.imageSlug,
+        })
         .where(eq(inductionCandidates.id, existingCandidate.id))
         .returning();
       candidate = updated!;
     } else {
-      const imageSlug =
-        (tp.imageSlug?.trim() || generateImageSlug(displayName)) || null;
       const [created] = await tx
         .insert(inductionCandidates)
         .values({
           displayName,
-          category: tp.category,
+          category: demoted.category,
           imageSlug,
           seedVotes: 0,
-          wikiSlug: tp.wikiSlug,
-          xHandle: tp.xHandle,
-          instagramHandle: tp.instagramHandle,
-          tiktokHandle: tp.tiktokHandle,
-          youtubeId: tp.youtubeId,
-          spotifyId: tp.spotifyId,
-          searchQueryOverride: tp.searchQueryOverride,
-          googleTrendsTopicId: tp.googleTrendsTopicId,
+          wikiSlug: demoted.wikiSlug,
+          xHandle: demoted.xHandle,
+          instagramHandle: demoted.instagramHandle,
+          tiktokHandle: demoted.tiktokHandle,
+          youtubeId: demoted.youtubeId,
+          spotifyId: demoted.spotifyId,
+          searchQueryOverride: demoted.searchQueryOverride,
+          googleTrendsTopicId: demoted.googleTrendsTopicId,
           inductionStatus: "Queue",
           isActive: true,
         })

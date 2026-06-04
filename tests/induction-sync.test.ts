@@ -87,10 +87,10 @@ test("buildTrackedPersonBackfillFromCandidate skips non-induction tracked rows f
   assert.equal(updates.category, undefined);
 });
 
-test("buildTrackedPersonBackfillFromCandidate updates imageSlug for induction when candidate slug differs", () => {
+test("buildTrackedPersonBackfillFromCandidate keeps tracked imageSlug when already set (demoted main-board)", () => {
   const updates = buildTrackedPersonBackfillFromCandidate(
     mockTp({ imageSlug: "old-slug" }),
     mockCandidate({ imageSlug: "dave-chappelle" }),
   );
-  assert.equal(updates.imageSlug, "dave-chappelle");
+  assert.equal(updates.imageSlug, undefined);
 });

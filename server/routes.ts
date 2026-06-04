@@ -22157,7 +22157,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         results = candidates
           .map((candidate) => {
             const tracked = trackedByName.get(candidate.name.trim().toLowerCase());
-            if (!tracked) return null;
+            if (!tracked || tracked.status !== "induction") return null;
             return {
               id: tracked.id,
               name: tracked.name,

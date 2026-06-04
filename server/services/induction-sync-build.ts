@@ -19,13 +19,10 @@ export function buildTrackedPersonBackfillFromCandidate(
     updates.status = "main_leaderboard";
   }
 
+  // Prefer existing tracked slug when set (e.g. demoted main-board celebs with
+  // celebrity_images / storage under tp.imageSlug). Only fill from candidate
+  // when tracked has no slug.
   if (isEmptyish(tp.imageSlug) && !isEmptyish(candidate.imageSlug)) {
-    updates.imageSlug = candidate.imageSlug;
-  } else if (
-    tp.status === "induction" &&
-    !isEmptyish(candidate.imageSlug) &&
-    candidate.imageSlug !== tp.imageSlug
-  ) {
     updates.imageSlug = candidate.imageSlug;
   }
 
