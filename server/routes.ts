@@ -16,6 +16,8 @@ import {
   removeCelebrityImageFromStorage,
   syncInductionGalleryForPerson,
 } from "./lib/inductionGalleryStorage";
+import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
+import { handleMulterUploadErrors } from "./lib/multerUploadErrors";
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
@@ -25,7 +27,7 @@ import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, requireMinTier, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
-import multer, { MulterError } from "multer";
+import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
 import { resolveMatchupOptionDisplay } from "./services/matchup-option-images";
@@ -11937,7 +11939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin image upload to Supabase Storage
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = ['image/png', 'image/jpeg', 'image/webp'];
       if (allowed.includes(file.mimetype)) {
@@ -11961,35 +11963,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const slugOrId = (req.body.slugOrId as string) || "unnamed";
       const timestamp = Date.now();
       const filePath = `${moduleName}/${slugOrId}/${timestamp}${optimized.extension}`;
-      const bucketName = "public-images";
 
-      const targetSizeLimit = 5 * 1024 * 1024;
-      const { data: buckets } = await supabaseServer.storage.listBuckets();
-      const existingBucket = buckets?.find(b => b.name === bucketName);
-      if (!existingBucket) {
-        const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: targetSizeLimit,
-        });
-        if (createError) {
-          console.error("Failed to create bucket:", createError);
-          return res.status(500).json({ error: "Failed to create storage bucket" });
-        }
-      } else if (
-        existingBucket.file_size_limit !== undefined &&
-        existingBucket.file_size_limit !== null &&
-        existingBucket.file_size_limit < targetSizeLimit
-      ) {
-        await supabaseServer.storage.updateBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: targetSizeLimit,
-        });
-      }
+      await ensurePublicImagesBucket();
 
       const { data, error } = await supabaseServer.storage
-        .from(bucketName)
+        .from(PUBLIC_IMAGES_BUCKET)
         .upload(filePath, optimized.buffer, {
           contentType: optimized.contentType,
           upsert: false,
@@ -12001,7 +11979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { data: urlData } = supabaseServer.storage
-        .from(bucketName)
+        .from(PUBLIC_IMAGES_BUCKET)
         .getPublicUrl(filePath);
 
       res.json({ url: urlData.publicUrl, path: filePath });
@@ -12009,7 +11987,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Upload error:", error);
       if (
         error.message?.includes('Only PNG') ||
-        error.message?.includes('Could not compress image below')
+        error.message?.includes('Could not compress image below') ||
+        error.message?.includes('Storage unavailable') ||
+        error.message?.includes('Failed to create storage bucket')
       ) {
         return res.status(400).json({ error: error.message });
       }
@@ -12020,46 +12000,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User avatar upload — converts to optimized .webp via sharp and writes
   // to the `avatars` bucket at `${userId}/avatar.webp`. Mirrors the admin
   // upload pipeline so a user-supplied JPEG/PNG ends up at the same
-  // bandwidth/quality profile as a CMS image. The legacy generative
-  // pipeline writes `${userId}/avatar.png`; on a successful WebP upload
-  // we fire-and-forget delete that PNG so the bucket has only the
-  // currently-referenced avatar (the DB `avatarUrl` is the source of
-  // truth, but we keep storage tidy).
-  // Inline error handler for multer rejections on the avatar route.
-  // Multer raises errors *before* the route handler runs (so the
-  // route's try/catch never sees them), and the global error handler
-  // in server/index.ts maps anything without an explicit `status` to
-  // a 500 with the body `{ message: "Internal Server Error" }` —
-  // which strips the actual reason ("File too large" / "Only PNG…").
-  // This middleware intercepts those rejections first and surfaces a
-  // user-friendly 400 with the standard `{ error }` shape so the
-  // client toast can show what actually went wrong.
-  const handleAvatarUploadErrors = (
-    err: unknown,
-    _req: Request,
-    res: Response,
-    next: NextFunction,
-  ) => {
-    if (!err) {
-      return next();
-    }
-    if (err instanceof MulterError) {
-      if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ error: "Image is too large. Max 5 MB." });
-      }
-      return res.status(400).json({ error: err.message });
-    }
-    if (err instanceof Error) {
-      return res.status(400).json({ error: err.message });
-    }
-    return res.status(400).json({ error: "Avatar upload rejected" });
-  };
-
+  // bandwidth/quality profile as a CMS image.
   app.post(
     "/api/me/avatar/upload",
     requireAuth,
     upload.single("file"),
-    handleAvatarUploadErrors,
+    handleMulterUploadErrors,
     async (req: AuthRequest, res: Response) => {
       try {
         const file = req.file;
@@ -22269,13 +22215,28 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // POST /api/admin/vote/curate-profile/:id/images - Add a new image for a celebrity
-  app.post("/api/admin/vote/curate-profile/:id/images", requireAuth, requireAdmin, upload.single('file'), async (req: AuthRequest, res) => {
+  app.post(
+    "/api/admin/vote/curate-profile/:id/images",
+    requireAuth,
+    requireAdmin,
+    upload.single("file"),
+    handleMulterUploadErrors,
+    async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const file = req.file;
 
       if (!file) {
         return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const [person] = await db
+        .select({ id: trackedPeople.id })
+        .from(trackedPeople)
+        .where(eq(trackedPeople.id, id))
+        .limit(1);
+      if (!person) {
+        return res.status(404).json({ error: "Celebrity not found" });
       }
 
       const optimized = await optimizeImage(file.buffer, {
@@ -22288,35 +22249,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const timestamp = Date.now();
       const filePath = `curate-profile/${id}/${timestamp}${optimized.extension}`;
-      const bucketName = "public-images";
 
-      const targetSizeLimit = 5 * 1024 * 1024;
-      const { data: buckets } = await supabaseServer.storage.listBuckets();
-      const existingBucket = buckets?.find(b => b.name === bucketName);
-      if (!existingBucket) {
-        const { error: createError } = await supabaseServer.storage.createBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: targetSizeLimit,
-        });
-        if (createError) {
-          console.error("Failed to create bucket:", createError);
-          return res.status(500).json({ error: "Failed to create storage bucket" });
-        }
-      } else if (
-        existingBucket.file_size_limit !== undefined &&
-        existingBucket.file_size_limit !== null &&
-        existingBucket.file_size_limit < targetSizeLimit
-      ) {
-        await supabaseServer.storage.updateBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-          fileSizeLimit: targetSizeLimit,
-        });
-      }
+      await ensurePublicImagesBucket();
 
       const { error: uploadError } = await supabaseServer.storage
-        .from(bucketName)
+        .from(PUBLIC_IMAGES_BUCKET)
         .upload(filePath, optimized.buffer, {
           contentType: optimized.contentType,
           upsert: false,
@@ -22324,11 +22261,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       if (uploadError) {
         console.error("Supabase upload error:", uploadError);
-        return res.status(500).json({ error: "Failed to upload image" });
+        return res.status(500).json({ error: `Failed to upload image: ${uploadError.message}` });
       }
 
       const { data: urlData } = supabaseServer.storage
-        .from(bucketName)
+        .from(PUBLIC_IMAGES_BUCKET)
         .getPublicUrl(filePath);
 
       const source = (req.body.source as string) || "admin_upload";
@@ -22355,14 +22292,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error adding celebrity image:", error);
       if (
-        error.message?.includes('Only PNG') ||
-        error.message?.includes('Could not compress image below')
+        error.message?.includes("Only PNG") ||
+        error.message?.includes("Could not compress image below") ||
+        error.message?.includes("Storage unavailable") ||
+        error.message?.includes("Failed to create storage bucket")
       ) {
         return res.status(400).json({ error: error.message });
       }
-      res.status(500).json({ error: "Failed to add image" });
+      const detail =
+        error?.code === "23503"
+          ? "Celebrity record is missing or invalid."
+          : error?.message;
+      res.status(500).json({ error: detail ? `Failed to add image: ${detail}` : "Failed to add image" });
     }
-  });
+  },
+  );
 
   // DELETE /api/admin/vote/curate-profile/images/:imageId - Delete a celebrity image
   app.delete("/api/admin/vote/curate-profile/images/:imageId", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
@@ -22803,7 +22747,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // POST /api/admin/induction/:id/images - Stage up to 5 images under celebrity-large/{imageSlug}/
-  app.post("/api/admin/induction/:id/images", requireAuth, requireAdmin, upload.single("file"), async (req: AuthRequest, res) => {
+  app.post(
+    "/api/admin/induction/:id/images",
+    requireAuth,
+    requireAdmin,
+    upload.single("file"),
+    handleMulterUploadErrors,
+    async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const file = req.file;
@@ -22900,7 +22850,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       console.error("Error uploading induction candidate image:", error);
       res.status(500).json({ error: "Failed to upload image" });
     }
-  });
+  },
+  );
 
   // PATCH /api/admin/induction/:id - Admin: update an induction candidate
   app.patch("/api/admin/induction/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {

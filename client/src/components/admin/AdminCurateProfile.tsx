@@ -26,6 +26,26 @@ interface CurateCard {
 
 type CurateSource = "leaderboard" | "induction";
 
+const MAX_CURATE_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+function formatImageSource(source: string): string {
+  if (source === "induction" || source === "induction_storage_upload") return "Induction";
+  if (source === "admin_upload") return "Admin upload";
+  if (source === "curate-profile") return "Curate sync";
+  return source;
+}
+
+async function readUploadError(res: Response): Promise<string> {
+  try {
+    const body = await res.json();
+    if (typeof body?.error === "string" && body.error.trim()) return body.error;
+    if (typeof body?.message === "string" && body.message.trim()) return body.message;
+  } catch {
+    /* non-JSON body */
+  }
+  return `Upload failed (${res.status})`;
+}
+
 interface CelebrityImageData {
   id: string;
   personId: string;
@@ -119,33 +139,41 @@ export function AdminCurateProfile() {
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!editingCard || !e.target.files?.[0]) return;
     const file = e.target.files[0];
+    if (file.size > MAX_CURATE_UPLOAD_BYTES) {
+      toast.error("Image too large", { description: "Please use an image under 10 MB (PNG, JPG, or WebP)." });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('source', 'admin_upload');
+      formData.append("file", file);
+      formData.append("source", "admin_upload");
       const { getSupabase } = await import("@/lib/supabase");
       const supabase = await getSupabase();
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!session?.access_token) {
+        throw new Error("Not authenticated — sign in again and retry.");
+      }
       const res = await fetch(`/api/admin/vote/curate-profile/${editingCard.id}/images`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
         body: formData,
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Upload failed" }));
-        throw new Error(err.error || "Upload failed");
+        throw new Error(await readUploadError(res));
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile', editingCard.id, 'images'] });
-      toast("Image uploaded");
-    } catch (err: any) {
-      toast.error("Upload failed", { description: err.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile", profileSource] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vote/curate-profile", editingCard.id, "images"] });
+      toast.success("Image uploaded");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      toast.error("Upload failed", { description: message });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [editingCard]);
+  }, [editingCard, profileSource]);
 
   const cards = data?.data || [];
   const filteredCards = cards.filter(c => {
@@ -437,7 +465,7 @@ export function AdminCurateProfile() {
                                 <span className="text-muted-foreground">votes</span>
                               </div>
                               {img.source && (
-                                <Badge variant="outline" className="text-[10px]">{img.source}</Badge>
+                                <Badge variant="outline" className="text-[10px]">{formatImageSource(img.source)}</Badge>
                               )}
                             </div>
 
