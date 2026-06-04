@@ -2,6 +2,13 @@ import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import pLimit from "p-limit";
+import {
+  articleMatchesRelevance,
+  buildSerperNewsQuery,
+  buildSerperRelevanceSpec,
+  serperNewsCacheSlug,
+  type SerperRelevanceSpec,
+} from "./serper-news-parse";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev/search";
@@ -475,12 +482,16 @@ const SERPER_NEWS_INTER_PAGE_DELAY_MS = 200;
 interface SerperNewsRawArticle {
   link?: string;
   title?: string;
+  snippet?: string;
   date?: string;
 }
 
+type SerperNewsTimeWindow = "qdr:d" | "qdr:w";
+
 async function fetchSerperNewsPage(
-  name: string,
+  query: string,
   page: number,
+  tbs: SerperNewsTimeWindow = "qdr:d",
 ): Promise<SerperNewsRawArticle[] | null> {
   _serperFallbackCallsAttempted++;
   const response = await serperFetch("https://google.serper.dev/news", {
@@ -490,11 +501,11 @@ async function fetchSerperNewsPage(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      q: `"${name}"`,
+      q: query,
       num: 100,
       gl: "us",
       hl: "en",
-      tbs: "qdr:d",
+      tbs,
       ...(page > 1 ? { page } : {}),
     }),
   });
@@ -503,10 +514,48 @@ async function fetchSerperNewsPage(
   return (data?.news as SerperNewsRawArticle[]) ?? [];
 }
 
-export async function fetchSerperNewsCount(name: string, personId?: string): Promise<SerperNewsCountData | null> {
+function filterSerperNewsArticles(
+  raw: SerperNewsRawArticle[],
+  spec: SerperRelevanceSpec,
+  logLabel?: string,
+): SerperNewsRawArticle[] {
+  if (raw.length === 0) return raw;
+  const filtered = raw.filter((a) =>
+    articleMatchesRelevance(a.title, a.snippet, spec),
+  );
+  const removed = raw.length - filtered.length;
+  if (logLabel && removed > 0 && removed / raw.length > 0.5) {
+    console.log(
+      `[Serper News] Relevance filter for ${logLabel}: kept ${filtered.length}/${raw.length} (${removed} removed)`,
+    );
+  }
+  return filtered;
+}
+
+function mapSerperNewsArticles(
+  articles: SerperNewsRawArticle[],
+): NonNullable<SerperNewsCountData["articles"]> {
+  return articles
+    .filter((a) => !!a.link)
+    .map((a) => ({
+      url: a.link as string,
+      title: a.title as string | undefined,
+      publishedAt: a.date as string | undefined,
+    }));
+}
+
+export async function fetchSerperNewsCount(
+  name: string,
+  personId?: string,
+  searchQueryOverride?: string | null,
+): Promise<SerperNewsCountData | null> {
   if (!SERPER_API_KEY) return null;
 
-  const cacheKey = `serper:newscount:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const query = buildSerperNewsQuery(name, searchQueryOverride);
+  if (!query) return null;
+
+  const relevanceSpec = buildSerperRelevanceSpec(query);
+  const cacheKey = `serper:newscount_v2:${serperNewsCacheSlug(query)}`;
   const CACHE_TTL_HOURS = 2;
 
   try {
@@ -515,20 +564,26 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       return JSON.parse(cached.responseData);
     }
 
+    if (searchQueryOverride?.trim()) {
+      console.log(`[Serper News] Using override query for ${name}: "${query}"`);
+    }
+
     // Cap-detection pagination — see the explanatory comment above
     // SERPER_NEWS_PAGE_SIZE. The 24h count is what flows into the News
     // Activity pill and its 24h delta, so de-capping matters even on
     // this legacy tiered-mode path.
-    const all24h: SerperNewsRawArticle[] = [];
+    const raw24h: SerperNewsRawArticle[] = [];
     for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
       if (page > 1) {
         await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
       }
-      const pageArticles = await fetchSerperNewsPage(name, page);
+      const pageArticles = await fetchSerperNewsPage(query, page, "qdr:d");
       if (!pageArticles || pageArticles.length === 0) break;
-      all24h.push(...pageArticles);
+      raw24h.push(...pageArticles);
       if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
     }
+
+    const all24h = filterSerperNewsArticles(raw24h, relevanceSpec, name);
 
     await new Promise(r => setTimeout(r, 300));
 
@@ -546,7 +601,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: `"${name}"`,
+        q: query,
         num: 100,
         gl: "us",
         hl: "en",
@@ -556,9 +611,11 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
     _serperFallbackCallsAttempted++;
 
     const data7d = response7d.ok ? await response7d.json() : { news: [] };
+    const raw7d = (data7d.news as SerperNewsRawArticle[]) ?? [];
+    const filtered7d = filterSerperNewsArticles(raw7d, relevanceSpec);
 
     const articleCount24h = all24h.length;
-    const rawArticleCount7d = data7d.news?.length || 0;
+    const rawArticleCount7d = filtered7d.length;
     const articleCount7d = Math.round(rawArticleCount7d * 2.5);
     const averageDaily7d = articleCount7d / 7;
     const delta = averageDaily7d > 0
@@ -569,16 +626,10 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
       .slice(0, 3)
       .map((a) => a.title || "");
 
-    const articles = all24h
-      .filter((a) => !!a.link)
-      .map((a) => ({
-        url: a.link as string,
-        title: a.title as string | undefined,
-        publishedAt: a.date as string | undefined,
-      }));
+    const articles = mapSerperNewsArticles(all24h);
 
     const result: SerperNewsCountData = {
-      query: name,
+      query,
       articleCount24h,
       articleCount7d,
       averageDaily7d,
@@ -598,7 +649,7 @@ export async function fetchSerperNewsCount(name: string, personId?: string): Pro
 }
 
 export async function fetchSerperNewsBatch(
-  people: Array<{ id: string; name: string }>,
+  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
   concurrency: number = 2,
   delayMs: number = 500
 ): Promise<Map<string, SerperNewsCountData>> {
@@ -612,7 +663,11 @@ export async function fetchSerperNewsBatch(
       if (index > 0) {
         await new Promise(r => setTimeout(r, delayMs));
       }
-      const result = await fetchSerperNewsCount(person.name, person.id);
+      const result = await fetchSerperNewsCount(
+        person.name,
+        person.id,
+        person.searchQueryOverride,
+      );
       if (result) {
         results.set(person.id, result);
       }
@@ -636,10 +691,18 @@ export async function fetchSerperNewsBatch(
  * Serper's 10-per-page cap — see SERPER_NEWS_PAGE_SIZE above for the full
  * explanation.
  */
-export async function fetchSerperNewsCount24h(name: string, personId?: string): Promise<SerperNewsCountData | null> {
+export async function fetchSerperNewsCount24h(
+  name: string,
+  personId?: string,
+  searchQueryOverride?: string | null,
+): Promise<SerperNewsCountData | null> {
   if (!SERPER_API_KEY) return null;
 
-  const cacheKey = `serper:newscount_24h:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  const query = buildSerperNewsQuery(name, searchQueryOverride);
+  if (!query) return null;
+
+  const relevanceSpec = buildSerperRelevanceSpec(query);
+  const cacheKey = `serper:newscount_24h_v2:${serperNewsCacheSlug(query)}`;
   const CACHE_TTL_HOURS = 2;
 
   try {
@@ -648,37 +711,36 @@ export async function fetchSerperNewsCount24h(name: string, personId?: string): 
       return JSON.parse(cached.responseData);
     }
 
+    if (searchQueryOverride?.trim()) {
+      console.log(`[Serper News 24h] Using override query for ${name}: "${query}"`);
+    }
+
     // Paginate while each page returns the per-page cap, capped at
     // SERPER_NEWS_MAX_PAGES. Most people stop after page 1 (genuine
     // low volume) or page 2 (true count in 11-20 range). Only the
     // highest-volume celebs end up paying the full 3-call cost.
-    const allArticles: SerperNewsRawArticle[] = [];
+    const rawArticles: SerperNewsRawArticle[] = [];
     for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
       if (page > 1) {
         await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
       }
-      const pageArticles = await fetchSerperNewsPage(name, page);
+      const pageArticles = await fetchSerperNewsPage(query, page, "qdr:d");
       if (!pageArticles || pageArticles.length === 0) break;
-      allArticles.push(...pageArticles);
+      rawArticles.push(...pageArticles);
       if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
     }
 
+    const allArticles = filterSerperNewsArticles(rawArticles, relevanceSpec, name);
     const articleCount24h = allArticles.length;
 
     const topHeadlines = allArticles
       .slice(0, 3)
       .map((a) => a.title || "");
 
-    const articles = allArticles
-      .filter((a) => !!a.link)
-      .map((a) => ({
-        url: a.link as string,
-        title: a.title as string | undefined,
-        publishedAt: a.date as string | undefined,
-      }));
+    const articles = mapSerperNewsArticles(allArticles);
 
     const result: SerperNewsCountData = {
-      query: name,
+      query,
       articleCount24h,
       // 7d intentionally zero — the aggregator sources 7d from GDELT.
       articleCount7d: 0,
@@ -699,7 +761,7 @@ export async function fetchSerperNewsCount24h(name: string, personId?: string): 
 }
 
 export async function fetchSerperNewsBatch24h(
-  people: Array<{ id: string; name: string }>,
+  people: Array<{ id: string; name: string; searchQueryOverride?: string | null }>,
   concurrency: number = 4,
   delayMs: number = 300
 ): Promise<Map<string, SerperNewsCountData>> {
@@ -713,7 +775,11 @@ export async function fetchSerperNewsBatch24h(
       if (index > 0) {
         await new Promise(r => setTimeout(r, delayMs));
       }
-      const result = await fetchSerperNewsCount24h(person.name, person.id);
+      const result = await fetchSerperNewsCount24h(
+        person.name,
+        person.id,
+        person.searchQueryOverride,
+      );
       if (result) {
         results.set(person.id, result);
       }

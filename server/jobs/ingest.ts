@@ -848,7 +848,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     };
     if (newsSource === "mediastack" && newsData.size > 0) {
       const ENGLISH_BACKFILL_MAX = 15;
-      const relaxedCandidates: Array<{ id: string; name: string; rank: number }> = [];
+      const relaxedCandidates: Array<{
+        id: string;
+        name: string;
+        rank: number;
+        searchQueryOverride: string | null;
+      }> = [];
 
       const rankRows = await db
         .select({ id: trendingPeople.id, rank: trendingPeople.rank })
@@ -868,6 +873,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           id: person.id,
           name: person.name,
           rank: backfillRankMap.get(person.id) ?? 9999,
+          searchQueryOverride: person.searchQueryOverride,
         });
       }
 
@@ -882,7 +888,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
         try {
           const serperHeadlines = await fetchSerperNewsBatch(
-            selected.map(c => ({ id: c.id, name: c.name })),
+            selected.map(c => ({
+              id: c.id,
+              name: c.name,
+              searchQueryOverride: c.searchQueryOverride,
+            })),
             5,
             300,
           );
@@ -976,7 +986,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         try {
           const serperNewsStart = Date.now();
           const serperNewsData = await fetchSerperNewsBatch(
-            people.map(p => ({ id: p.id, name: p.name })),
+            people.map(p => ({
+              id: p.id,
+              name: p.name,
+              searchQueryOverride: p.searchQueryOverride,
+            })),
             2,
             500
           );
@@ -1537,7 +1551,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         const searchValues = Array.from(serperData.values()).map((s: any) => s?.searchVolume ?? 0).sort((a: number, b: number) => a - b);
         const searchP50 = searchValues.length > 0 ? searchValues[Math.floor(searchValues.length / 2)] : 0;
 
-        const ppCandidates: Array<{ id: string; name: string; rank: number; streak: number }> = [];
+        const ppCandidates: Array<{
+          id: string;
+          name: string;
+          rank: number;
+          streak: number;
+          searchQueryOverride: string | null;
+        }> = [];
         for (const [personId, streak] of Array.from(streakMap.entries())) {
           const person = people.find(p => p.id === personId);
           if (!person) continue;
@@ -1549,7 +1569,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           const isAboveP50 = wikiPv >= wikiP50 || searchVol >= searchP50;
 
           if (isTop25 || isAboveP50) {
-            ppCandidates.push({ id: personId, name: person.name, rank, streak });
+            ppCandidates.push({
+              id: personId,
+              name: person.name,
+              rank,
+              streak,
+              searchQueryOverride: person.searchQueryOverride,
+            });
           } else {
             perPersonFallbackStats.skippedQualified++;
           }
@@ -1592,7 +1618,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           }
 
           const perPersonSerperData = await fetchSerperNewsBatch(
-            eligibleCandidates.map(c => ({ id: c.id, name: c.name })),
+            eligibleCandidates.map(c => ({
+              id: c.id,
+              name: c.name,
+              searchQueryOverride: c.searchQueryOverride,
+            })),
             5,
             300
           );

@@ -405,7 +405,11 @@ export async function fetchMultiSourceNewsBatch(
   // 24h-only Serper variant (7d from Serper when available; ingest prefers history)
   // for faster per-tick completion. Previous: (2, 500ms). Now: (4, 300ms).
   const serperPromise = fetchSerperNewsBatch24h(
-    people.map(p => ({ id: p.id, name: p.name })),
+    people.map(p => ({
+      id: p.id,
+      name: p.name,
+      searchQueryOverride: p.searchQueryOverride,
+    })),
     4,
     300,
   );
@@ -825,7 +829,11 @@ export async function fetchCascadeNewsBatch(
     providerSummary.serper.attempted = true;
     try {
       const snResult = await fetchSerperNewsBatch24h(
-        stillZero.map((p) => ({ id: p.id, name: p.name })),
+        stillZero.map((p) => ({
+          id: p.id,
+          name: p.name,
+          searchQueryOverride: p.searchQueryOverride,
+        })),
         4,
         300,
       );
