@@ -6,7 +6,13 @@ import {
   getFameIndexEmaAlphaDown,
   type TrendInputs,
 } from "../server/scoring/trendScore";
-import { DEFAULT_SOURCE_STATS, MASS_ALLOCATION, VELOCITY_ALLOCATION } from "../server/scoring/normalize";
+import {
+  DEBUTANT_VELOCITY_WEIGHTS,
+  DEFAULT_SOURCE_STATS,
+  MASS_ALLOCATION,
+  PLATFORM_WEIGHTS,
+  VELOCITY_ALLOCATION,
+} from "../server/scoring/normalize";
 
 // Build a minimal valid TrendInputs — the full type has many optional fields,
 // these are the ones that actually drive the core score path.
@@ -92,6 +98,40 @@ test("computeTrendScore: velocityComponents.weights sum to ~1.0 (incl. momentum 
   assert.ok(
     Math.abs(total - 1.0) < 1e-6,
     `velocity weights should sum to 1, got ${total} (search=${search}, news=${news}, wiki=${wiki}, momentum=${momentum})`
+  );
+});
+
+test("computeTrendScore: debutant uses redistributed weights (news .65, momentum 0)", () => {
+  const out = computeTrendScore(baseInputs({ hasPersonalNewsBaseline: false }));
+  const w = out.velocityComponents.weights;
+  assert.equal(w.wiki, DEBUTANT_VELOCITY_WEIGHTS.wiki);
+  assert.equal(w.news, DEBUTANT_VELOCITY_WEIGHTS.news);
+  assert.equal(w.momentum, DEBUTANT_VELOCITY_WEIGHTS.momentum);
+  assert.equal(w.search, DEBUTANT_VELOCITY_WEIGHTS.search);
+});
+
+test("computeTrendScore: established baseline keeps standard velocity weights", () => {
+  const out = computeTrendScore(baseInputs({ hasPersonalNewsBaseline: true }));
+  const w = out.velocityComponents.weights;
+  assert.equal(w.wiki, PLATFORM_WEIGHTS.velocity.wiki);
+  assert.equal(w.news, PLATFORM_WEIGHTS.velocity.news);
+  assert.equal(w.momentum, PLATFORM_WEIGHTS.velocity.momentum);
+});
+
+test("computeTrendScore: debutant with high momentum sub-score ranks lower than established (same inputs)", () => {
+  const shared = baseInputs({
+    newsCount: 120,
+    newsAverageDaily7d: 20,
+  });
+  const debutant = computeTrendScore({ ...shared, hasPersonalNewsBaseline: false });
+  const established = computeTrendScore({ ...shared, hasPersonalNewsBaseline: true });
+  assert.ok(
+    debutant.velocityComponents.momentum > 0,
+    "momentum sub-score should still be computed for diagnostics",
+  );
+  assert.ok(
+    established.fameIndex > debutant.fameIndex,
+    `debutant should not get momentum weight bonus: debut=${debutant.fameIndex} est=${established.fameIndex}`,
   );
 });
 

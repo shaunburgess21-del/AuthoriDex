@@ -2651,6 +2651,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           newsCount: newsCountForScoring,
           searchVolume: searchVolume,
           newsAverageDaily7d: news7dForScoring,
+          hasPersonalNewsBaseline:
+            (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS,
           // Previous values for recovery detection (data returning after API failure)
           // Only pass previous values if current data is FRESH (not fallback)
           // This ensures recovery mode triggers when we get fresh data after using fallback

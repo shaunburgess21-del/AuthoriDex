@@ -55,6 +55,18 @@ export const PLATFORM_WEIGHTS = {
   },
 };
 
+// Velocity weights for entities WITHOUT an established personal news baseline
+// (<PERSONAL_BASELINE_MIN_OBSERVATIONS snapshots). The 0.20 news-momentum slot
+// is redistributed onto the news-count slot: debutants climb on real news
+// volume, but get no acceleration multiplier from a population-p50 baseline.
+// Sums to 1.0 so velocity stays on the same 0..100 scale (no 80% cap).
+export const DEBUTANT_VELOCITY_WEIGHTS = {
+  wiki: 0.35,
+  news: 0.65,
+  momentum: 0,
+  search: 0,
+};
+
 // ============================================================================
 // NEWS MOMENTUM NORMALIZATION (Apr 2026 — PR2 Fix X)
 // ============================================================================

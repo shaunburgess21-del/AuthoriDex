@@ -1,5 +1,6 @@
 import {
   PLATFORM_WEIGHTS,
+  DEBUTANT_VELOCITY_WEIGHTS,
   MASS_ALLOCATION,
   VELOCITY_ALLOCATION,
   ActivePlatforms,
@@ -70,6 +71,16 @@ export interface TrendInputs {
    * the momentum score is 0 — see `normalizeNewsMomentum`.
    */
   newsAverageDaily7d?: number;
+
+  /**
+   * Whether this entity has an established personal news baseline
+   * (>= PERSONAL_BASELINE_MIN_OBSERVATIONS persisted news snapshots). When
+   * false (brand-new inductees / post-gap), the news-momentum velocity slot
+   * is suppressed and its 0.20 weight is redistributed onto the news-count
+   * slot — see DEBUTANT_VELOCITY_WEIGHTS. Defaults to true (full weights) so
+   * existing callers are unaffected.
+   */
+  hasPersonalNewsBaseline?: boolean;
 
   /**
    * Trailing 7-day daily-average Wikipedia pageviews for this entity.
@@ -383,7 +394,9 @@ export function computeTrendScore(
     : 0;
   const trendsMomentumVelocityScore = trendsMomentumNormalized * 100;
 
-  const velocityWeights = PLATFORM_WEIGHTS.velocity;
+  const velocityWeights = inputs.hasPersonalNewsBaseline === false
+    ? DEBUTANT_VELOCITY_WEIGHTS
+    : PLATFORM_WEIGHTS.velocity;
   // NOTE: `wikiMomentumVelocityScore` is intentionally NOT summed here.
   // It's a dormant signal until calibrated — see normalize.ts header.
   const velocityScore = (
