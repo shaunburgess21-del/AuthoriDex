@@ -114,7 +114,11 @@ function LiveProfileViewsIndicator({
           strokeWidth={2.25}
           aria-hidden
         />
-        <span className="text-[10px] font-medium leading-none tabular-nums translate-y-px">
+        <span
+          className={`inline-flex items-center justify-center font-medium leading-none tabular-nums text-[10px] translate-y-px ${
+            compact ? "h-3" : "h-3.5"
+          }`}
+        >
           {count}
         </span>
       </span>
