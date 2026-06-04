@@ -222,6 +222,39 @@ test(
 );
 
 test(
+  "demote: second call returns 409 when already demoted",
+  { skip: !integrationEnabled },
+  async () => {
+    const { db, demoteFromMainLeaderboard } = await loadDeps();
+    const name = `__demote_twice_${Date.now()}__`;
+    await cleanupDemoteTest(db, name);
+
+    try {
+      const [tp] = await db
+        .insert(trackedPeople)
+        .values({
+          name,
+          category: "music",
+          status: "main_leaderboard",
+        })
+        .returning();
+
+      await demoteFromMainLeaderboard(tp.id);
+
+      await assert.rejects(
+        () => demoteFromMainLeaderboard(tp.id),
+        (err: Error & { statusCode?: number }) => {
+          assert.equal(err.statusCode, 409);
+          return true;
+        },
+      );
+    } finally {
+      await cleanupDemoteTest(db, name);
+    }
+  },
+);
+
+test(
   "demote: rejects when person is not on main leaderboard",
   { skip: !integrationEnabled },
   async () => {
