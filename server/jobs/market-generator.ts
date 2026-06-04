@@ -447,6 +447,27 @@ export async function backfillGainerMarketForInductee(person: {
 export async function generateWeeklyJackpot(): Promise<number> {
   const { monday, sunday, weekNumber } = getWeekContext();
 
+  // IDEMPOTENT FAST-PATH: freeze the week's jackpot roster at first
+  // generation (Monday cron), like H2H. Previously this was add-only —
+  // each cron re-run picked the live top-N and created markets for anyone
+  // missing, so mid-week promotions (high seeded fame) could appear same-
+  // day and the list grew past 20 with thin pools. If any OPEN/live (or
+  // inactive) jackpot markets already exist for this week, skip entirely.
+  const existingOpenJackpot = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(and(
+      eq(predictionMarkets.marketType, "jackpot"),
+      eq(predictionMarkets.weekNumber, weekNumber),
+      eq(predictionMarkets.status, "OPEN"),
+      inArray(predictionMarkets.visibility, ["live", "inactive"]),
+    ));
+
+  if (existingOpenJackpot.length > 0) {
+    log(`[MarketGenerator:Jackpot] Week ${weekNumber}: ${existingOpenJackpot.length} markets already open — skipping generation (Monday freeze).`);
+    return 0;
+  }
+
   // Cap jackpot eligibility at the top N most-famous people. We previously
   // generated one market for every main_leaderboard person (~150), which
   // diluted pari-mutuel pools to ~900 credits of real bets each — too thin
@@ -1135,10 +1156,10 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
       }
 
       // Run only the generators for the missing types. Each generator
-      // is internally idempotent (e.g. H2H short-circuits if any open
-      // H2H exists, UpDown skips per-person duplicates) so calling
-      // them is safe even if a race put the type in place; but
-      // skipping the call up-front saves wasted work.
+      // is internally idempotent (e.g. H2H and jackpot short-circuit if
+      // any open markets exist for the week, UpDown skips per-person
+      // duplicates) so calling them is safe even if a race put the type
+      // in place; but skipping the call up-front saves wasted work.
       const generatedTypes: Array<keyof WeeklyNativeCounts> = [];
       for (const type of missing) {
         try {
