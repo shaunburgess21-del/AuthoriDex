@@ -121,7 +121,7 @@ export function webSentimentReadingFromCounts(counts: SentimentCounts): WebSenti
 /** Level tiers for UI (higher positivePct = more positive press). */
 export function webSentimentLevel(positivePct: number | null): "none" | "low" | "medium" | "high" {
   if (positivePct == null || !Number.isFinite(positivePct)) return "none";
-  if (positivePct < 40) return "low";
-  if (positivePct < 60) return "medium";
+  if (positivePct < 25) return "low";
+  if (positivePct < 50) return "medium";
   return "high";
 }

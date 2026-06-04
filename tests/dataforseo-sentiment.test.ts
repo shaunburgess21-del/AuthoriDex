@@ -73,9 +73,9 @@ test("computePositivePct: pos/(pos+neg) on display counts", () => {
 
 test("webSentimentLevel: tier thresholds", () => {
   assert.equal(webSentimentLevel(null), "none");
-  assert.equal(webSentimentLevel(30), "low");
-  assert.equal(webSentimentLevel(50), "medium");
-  assert.equal(webSentimentLevel(70), "high");
+  assert.equal(webSentimentLevel(20), "low");
+  assert.equal(webSentimentLevel(35), "medium");
+  assert.equal(webSentimentLevel(55), "high");
 });
 
 test("webSentimentReadingFromCounts: attaches positivePct", () => {

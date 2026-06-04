@@ -177,8 +177,8 @@ function fallbackLevel(
     return "high";
   }
   if (source === "web-sentiment") {
-    if (value < 40) return "low";
-    if (value < 60) return "medium";
+    if (value < 25) return "low";
+    if (value < 50) return "medium";
     return "high";
   }
   if (value < 500) return "low";
