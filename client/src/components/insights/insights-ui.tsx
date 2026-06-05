@@ -11,12 +11,14 @@ export const SOURCE_DISPLAY: Record<InsightsSource, string> = INSIGHTS_SOURCE_LA
 export function InsightsSection({
   title,
   description,
+  action,
   children,
   className,
   accent = "voxdex",
 }: {
   title: string;
   description?: string;
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
   accent?: "voxdex" | "blue" | "none";
@@ -37,10 +39,15 @@ export function InsightsSection({
       )}
     >
       <div className="px-4 pt-4 pb-2 border-b border-border/30 bg-card/60">
-        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-0.5 max-w-3xl">{description}</p>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+            {description && (
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-3xl">{description}</p>
+            )}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
       </div>
       <div className="p-4">{children}</div>
     </section>

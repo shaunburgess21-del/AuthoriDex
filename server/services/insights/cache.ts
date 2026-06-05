@@ -3,7 +3,8 @@ import { apiCache } from "@shared/schema";
 import { db } from "../../db";
 
 export const INSIGHTS_AGGREGATE_TTL_MS = 90 * 1000;
-export const INSIGHTS_STORY_TTL_MS = 30 * 60 * 60 * 1000;
+/** Briefing cache TTL — must expire before the next 06:00 / 18:00 UTC refresh. */
+export const INSIGHTS_STORY_TTL_MS = 13 * 60 * 60 * 1000;
 
 export async function getInsightsCache<T>(cacheKey: string): Promise<T | null> {
   const [row] = await db

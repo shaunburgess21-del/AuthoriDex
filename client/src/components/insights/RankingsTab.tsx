@@ -7,6 +7,7 @@ import { shareInsightsView } from "@/lib/insights-share";
 import {
   type InsightsFilters,
   type InsightsSource,
+  INSIGHTS_SOURCE_VALUES,
   writeInsightsQuery,
   parseFilters,
 } from "@shared/insights/filters";
@@ -19,19 +20,25 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { InsightsPill, SOURCE_DISPLAY, DRIVER_DISPLAY } from "./insights-ui";
 import { CategoryPill } from "@/components/CategoryPill";
+import { getMarketCategoryLabel } from "@shared/constants";
 import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
 
-const PILL_SOURCES: Array<{ id: InsightsSource; label: string; hint: string }> = [
-  { id: "news_momentum", label: "News Momentum", hint: "Biggest press surge" },
-  { id: "wiki_momentum", label: "Wiki Momentum", hint: "Biggest curiosity spike" },
-  { id: "velocity", label: "Velocity", hint: "Fastest risers" },
-  { id: "mass", label: "Mass", hint: "Established attention" },
-  { id: "fame", label: "Trend Score", hint: "Same ranking as the home leaderboard" },
-  { id: "news", label: "News", hint: "Most press attention" },
-  { id: "wiki", label: "Wiki", hint: "Most Wikipedia attention" },
-  { id: "search_volume", label: "Search Interest", hint: "Most-searched on Google" },
-];
+const PILL_HINTS: Record<InsightsSource, string> = {
+  news_momentum: "Biggest news surge",
+  wiki_momentum: "Biggest curiosity spike",
+  fame: "Same ranking as the home leaderboard",
+  news: "Most news coverage (24h)",
+  wiki: "Most Wikipedia attention",
+  search_volume: "Most-searched on Google",
+};
+
+const PILL_SOURCES: Array<{ id: InsightsSource; label: string; hint: string }> =
+  INSIGHTS_SOURCE_VALUES.map((id) => ({
+    id,
+    label: SOURCE_DISPLAY[id],
+    hint: PILL_HINTS[id],
+  }));
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -46,8 +53,6 @@ function formatSortValue(
     newsMomentum: { ratio: number | null };
     wikiMomentum: { ratio: number | null };
     fameIndex: number;
-    velocityScore: number;
-    massScore: number;
   },
 ): string {
   if (source === "news_momentum" || source === "wiki_momentum") {
@@ -55,13 +60,12 @@ function formatSortValue(
       source === "wiki_momentum" ? row.wikiMomentum.ratio : row.newsMomentum.ratio;
     return ratio != null ? `${ratio.toFixed(2)}×` : "—";
   }
-  if (source === "fame") return String(row.fameIndex);
-  if (source === "velocity") return row.velocityScore.toFixed(1);
-  if (source === "mass") return row.massScore.toFixed(1);
+  if (source === "fame") return row.fameIndex.toLocaleString();
   if (source === "search_volume") {
     return row.sortValue > 0 ? `${formatCompact(row.sortValue)}/mo` : "—";
   }
-  return row.sortValue.toFixed(1);
+  // news / wiki raw counts — whole numbers, compact for the large Wikipedia values.
+  return row.sortValue > 0 ? formatCompact(row.sortValue) : "—";
 }
 
 export function RankingsTab() {
@@ -93,17 +97,25 @@ export function RankingsTab() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / filters.limit)) : 1;
 
+  const windowAffectsMetricOnly =
+    filters.source === "news" ||
+    filters.source === "wiki" ||
+    filters.source === "search_volume" ||
+    filters.source === "fame";
+
   const filterControls = (
     <div className="flex flex-wrap gap-3 items-center text-sm">
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        Window
+        <span title={windowAffectsMetricOnly ? "Changes the % change column only" : undefined}>
+          % change window
+        </span>
         <select
           className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-xs"
           value={filters.window}
           onChange={(e) => patchFilters({ window: e.target.value as InsightsFilters["window"] })}
         >
-          <option value="24h">24h change</option>
-          <option value="7d">7d change</option>
+          <option value="24h">24h</option>
+          <option value="7d">7d</option>
         </select>
       </label>
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -116,7 +128,7 @@ export function RankingsTab() {
           <option value="">All</option>
           {categories.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {getMarketCategoryLabel(c)}
             </option>
           ))}
         </select>
@@ -137,20 +149,6 @@ export function RankingsTab() {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 md:px-4">
-        <p className="text-xs text-muted-foreground">
-          Sorted by{" "}
-          <span className="font-medium text-foreground">{SOURCE_DISPLAY[filters.source]}</span>
-          {activePill ? ` — ${activePill.hint}` : ""}
-          {data?.asOf && (
-            <span className="hidden sm:inline">
-              {" "}
-              · as of {new Date(data.asOf).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          )}
-        </p>
-      </div>
-
       <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
         {PILL_SOURCES.map((pill) => (
           <InsightsPill
@@ -221,6 +219,31 @@ export function RankingsTab() {
 
       {data && data.rows.length > 0 && (
         <>
+          <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 md:px-4">
+            <p className="text-xs text-muted-foreground">
+              Sorted by{" "}
+              <span className="font-medium text-foreground">{SOURCE_DISPLAY[filters.source]}</span>
+              {activePill ? ` — ${activePill.hint}` : ""}
+              {data.asOf && (
+                <span className="hidden sm:inline">
+                  {" "}
+                  · as of{" "}
+                  {new Date(data.asOf).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )}
+            </p>
+            {windowAffectsMetricOnly && (
+              <p className="text-[11px] text-muted-foreground/80 mt-1.5 leading-relaxed">
+                The ranking column stays fixed for this view.{" "}
+                <span className="font-medium text-muted-foreground">% change window</span> only
+                updates the {filters.window === "7d" ? "7D" : "24H"} column.
+              </p>
+            )}
+          </div>
+
           <div className="hidden md:block overflow-hidden rounded-xl border border-border/50">
             <table className="w-full text-sm">
               <thead>
@@ -232,7 +255,9 @@ export function RankingsTab() {
                     {SOURCE_DISPLAY[filters.source]}
                   </th>
                   <th className="px-4 py-3 font-medium text-right w-20">Trend Score</th>
-                  <th className="px-4 py-3 font-medium text-right w-20">Δ</th>
+                  <th className="px-4 py-3 font-medium text-right w-20">
+                    {filters.window === "7d" ? "7D" : "24H"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -268,7 +293,7 @@ export function RankingsTab() {
                       {formatSortValue(filters.source, row)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {row.fameIndex}
+                      {row.fameIndex.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-xs">
                       {row.change24h != null ? (

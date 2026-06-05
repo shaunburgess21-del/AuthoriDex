@@ -1,3 +1,4 @@
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "./db";
 import { trackedPeople } from "@shared/schema";
 import { sql } from "drizzle-orm";
@@ -114,14 +115,14 @@ async function seedCelebrities() {
     try {
       await db.insert(trackedPeople).values({
         name: celeb.name,
-        category: celeb.category,
+        category: canonicalizePersonCategory(celeb.category)!,
         wikiSlug: celeb.wikiSlug,
         xHandle: celeb.xHandle === "null" ? null : celeb.xHandle,
         displayOrder: inserted,
       }).onConflictDoUpdate({
         target: trackedPeople.name,
         set: {
-          category: celeb.category,
+          category: canonicalizePersonCategory(celeb.category)!,
           wikiSlug: celeb.wikiSlug,
           xHandle: celeb.xHandle === "null" ? null : celeb.xHandle,
         }

@@ -1,4 +1,5 @@
 import { type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile, celebrityProfiles, trendingPeople } from "@shared/schema";
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "./db";
 import { eq, asc, sql } from "drizzle-orm";
 
@@ -125,7 +126,7 @@ export class MemStorage implements IStorage {
           .values(batch.map(person => ({
             id: person.id,
             name: person.name,
-            category: person.category,
+            category: canonicalizePersonCategory(person.category) ?? person.category,
             avatar: person.avatar,
             bio: person.bio,
             trendScore: person.trendScore,
@@ -142,6 +143,7 @@ export class MemStorage implements IStorage {
               rank: sql`excluded.rank`,
               change24h: sql`excluded.change_24h`,
               change7d: sql`excluded.change_7d`,
+              category: sql`excluded.category`,
             },
           });
       } catch (error) {

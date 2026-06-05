@@ -1,11 +1,34 @@
 import type { InsightsStoryPayload } from "@shared/insights/types";
+import type { TrendingPerson } from "@shared/schema";
+import { getMarketCategoryLabel } from "@shared/constants";
 import { getCachedTrendingPeople } from "./insights-people-cache";
-import { loadDriversSummary } from "./drivers";
 import {
   getInsightsCache,
   setInsightsCache,
   INSIGHTS_STORY_TTL_MS,
 } from "./cache";
+import { getCachedWhyTrending, fetchWhyTrendingForPerson } from "../why-trending";
+import {
+  HOT_MOVERS_RANK_MAX,
+  selectHotMovers,
+} from "../trending/hot-movers";
+import {
+  BRIEFING_TOP_GAINERS,
+  buildDeterministicHeadline,
+  buildDeterministicParagraphs,
+  nextBriefingRefreshIso,
+  type BriefingInputs,
+  type BriefingPersonInput,
+} from "./story-briefing";
+
+export {
+  BRIEFING_TOP_GAINERS,
+  buildDeterministicHeadline,
+  buildDeterministicParagraphs,
+  nextBriefingRefreshIso,
+  type BriefingInputs,
+  type BriefingPersonInput,
+} from "./story-briefing";
 
 export const STORY_AI_KEY = "insights_story:ai";
 export const STORY_DETERMINISTIC_KEY = "insights_story:deterministic";
@@ -15,47 +38,101 @@ export function isInsightsAiStoryEnabled(): boolean {
   return raw === "true" || raw === "1" || raw === "yes" || raw === "on";
 }
 
-export async function buildDeterministicStory(): Promise<InsightsStoryPayload> {
-  const people = await getCachedTrendingPeople();
-  const driverMix = await loadDriversSummary(20);
+async function enrichPersonForBriefing(
+  person: TrendingPerson,
+  options: { allowPrefetch: boolean },
+): Promise<BriefingPersonInput> {
+  const category = person.category
+    ? getMarketCategoryLabel(person.category)
+    : "Other";
 
-  const topMover = [...people]
-    .filter((p) => (p.change7d ?? 0) !== 0)
-    .sort((a, b) => Math.abs(b.change7d ?? 0) - Math.abs(a.change7d ?? 0))[0];
+  let whyTrending: string | undefined;
+  let topHeadline: string | undefined;
 
-  const topDriver = driverMix.segments[0];
-  const categoryCounts = new Map<string, number>();
-  const top20 = [...people].sort((a, b) => a.rank - b.rank).slice(0, 20);
-  for (const p of top20) {
-    const cat = p.category ?? "Other";
-    categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+  const { payload } = await getCachedWhyTrending(person.id);
+  if (payload?.hasContext && payload.summary) {
+    whyTrending = payload.summary;
+    topHeadline = payload.topHeadline;
+  } else if (options.allowPrefetch) {
+    const generated = await fetchWhyTrendingForPerson(person, true);
+    if (generated.hasContext && generated.summary) {
+      whyTrending = generated.summary;
+      topHeadline = generated.topHeadline;
+    }
   }
-  const leadingCategory = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-
-  const now = new Date();
-  const refreshesAt = new Date(now);
-  refreshesAt.setUTCHours(6, 0, 0, 0);
-  if (refreshesAt <= now) {
-    refreshesAt.setUTCDate(refreshesAt.getUTCDate() + 1);
-  }
-
-  const moverLine = topMover
-    ? `Top mover this week: ${topMover.name} (${topMover.change7d! > 0 ? "+" : ""}${(topMover.change7d ?? 0).toFixed(1)}% over 7d).`
-    : "The board is steady this week with no standout movers.";
-
-  const driverLine = topDriver
-    ? `${topDriver.driver.replace("_", " ")} led ${topDriver.pct}% of the top 20.`
-    : "Signals are mixed across the top 20.";
-
-  const categoryLine = leadingCategory
-    ? `${leadingCategory[0]} accounts for ${Math.round((leadingCategory[1] / 20) * 100)}% of the top 20.`
-    : "";
 
   return {
-    headline: topMover ? `${topMover.name} leads the movers board` : "Today's influence snapshot",
-    body: [moverLine, driverLine, categoryLine].filter(Boolean).join(" "),
+    id: person.id,
+    name: person.name,
+    rank: person.rank ?? 999,
+    change24h: person.change24h!,
+    category,
+    whyTrending,
+    topHeadline,
+  };
+}
+
+/**
+ * @param allowPrefetch When true (cron only), cold top-3 gainers may trigger a
+ *   bounded why-trending generation (<=3 OpenAI calls). MUST stay false on the
+ *   request path so a user's overview never blocks on / pays for OpenAI.
+ */
+export async function buildBriefingInputs(
+  { allowPrefetch = false }: { allowPrefetch?: boolean } = {},
+): Promise<BriefingInputs> {
+  const people = await getCachedTrendingPeople();
+  const hotMovers = selectHotMovers(people);
+  const topGainerCandidates = hotMovers.slice(0, BRIEFING_TOP_GAINERS);
+
+  const topGainers: BriefingPersonInput[] = [];
+  for (const person of topGainerCandidates) {
+    topGainers.push(
+      await enrichPersonForBriefing(person, { allowPrefetch }),
+    );
+  }
+
+  const dropCandidates = people.filter(
+    (p) =>
+      (p.rank ?? 999) <= HOT_MOVERS_RANK_MAX &&
+      typeof p.change24h === "number" &&
+      Number.isFinite(p.change24h) &&
+      p.change24h < 0,
+  );
+  const dropPerson = [...dropCandidates].sort(
+    (a, b) => (a.change24h ?? 0) - (b.change24h ?? 0),
+  )[0];
+
+  let notableDropper: BriefingPersonInput | null = null;
+  if (dropPerson) {
+    notableDropper = await enrichPersonForBriefing(dropPerson, {
+      allowPrefetch: false,
+    });
+  }
+
+  const peopleLinks = [
+    ...topGainers.map((g) => ({ id: g.id, name: g.name })),
+    ...(notableDropper
+      ? [{ id: notableDropper.id, name: notableDropper.name }]
+      : []),
+  ];
+
+  return { topGainers, notableDropper, people: peopleLinks };
+}
+
+export async function buildDeterministicStory(
+  options: { allowPrefetch?: boolean } = {},
+): Promise<InsightsStoryPayload> {
+  const inputs = await buildBriefingInputs(options);
+  const paragraphs = buildDeterministicParagraphs(inputs);
+  const now = new Date();
+
+  return {
+    headline: buildDeterministicHeadline(inputs),
+    body: paragraphs.join(" "),
+    paragraphs,
+    people: inputs.people,
     generatedAt: now.toISOString(),
-    refreshesAt: refreshesAt.toISOString(),
+    refreshesAt: nextBriefingRefreshIso(now),
     mode: "deterministic",
   };
 }
@@ -72,6 +149,8 @@ export async function getInsightsStory(): Promise<InsightsStoryPayload> {
   const detCached = await getInsightsCache<InsightsStoryPayload>(STORY_DETERMINISTIC_KEY);
   if (detCached) return detCached;
 
+  // Request path: no prefetch — never block a user's overview on OpenAI.
+  // Cron warms the cache (and may prefetch cold movers) via runInsightsStoryCronRefresh.
   const story = await buildDeterministicStory();
   await setInsightsCache(
     STORY_DETERMINISTIC_KEY,

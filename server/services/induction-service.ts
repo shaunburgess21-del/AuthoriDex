@@ -10,6 +10,7 @@ import { db } from "../db";
 import { generateImageSlug } from "../lib/imageSlug";
 import { runPostInductionOnboarding } from "./induction-onboarding";
 import { syncTrackedPersonToInductionCandidate } from "./induction-sync";
+import { canonicalizePersonCategory } from "@shared/constants";
 import { buildTrackedPersonBackfillFromCandidate } from "./induction-sync-build";
 
 type DbExecutor = any;
@@ -73,7 +74,7 @@ export async function approveInductionCandidate(
       .values({
         id: personId,
         name: displayName,
-        category: candidate.category,
+        category: canonicalizePersonCategory(candidate.category)!,
         rank: 0,
         trendScore: 0,
         fameIndex: 0,
@@ -87,7 +88,7 @@ export async function approveInductionCandidate(
       .insert(trackedPeople)
       .values({
         name: displayName,
-        category: candidate.category,
+        category: canonicalizePersonCategory(candidate.category)!,
         imageSlug: candidate.imageSlug,
         wikiSlug: candidate.wikiSlug,
         xHandle: candidate.xHandle,
@@ -108,7 +109,7 @@ export async function approveInductionCandidate(
       .values({
         id: personId,
         name: displayName,
-        category: candidate.category,
+        category: canonicalizePersonCategory(candidate.category)!,
         rank: 0,
         trendScore: 0,
         fameIndex: 0,
@@ -211,7 +212,7 @@ export async function demoteFromMainLeaderboard(
         .set({
           isActive: true,
           inductionStatus: "Queue",
-          category: demoted.category,
+          category: canonicalizePersonCategory(demoted.category)!,
           imageSlug: imageSlug ?? existingCandidate.imageSlug,
         })
         .where(eq(inductionCandidates.id, existingCandidate.id))
@@ -222,7 +223,7 @@ export async function demoteFromMainLeaderboard(
         .insert(inductionCandidates)
         .values({
           displayName,
-          category: demoted.category,
+          category: canonicalizePersonCategory(demoted.category)!,
           imageSlug,
           seedVotes: 0,
           wikiSlug: demoted.wikiSlug,

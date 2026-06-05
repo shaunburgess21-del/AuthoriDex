@@ -60,7 +60,7 @@ test("buildTrackedPersonBackfillFromCandidate fills empty shadow fields from can
   assert.equal(updates.wikiSlug, "Dave_Chappelle");
   assert.equal(updates.xHandle, "DaveChappelle");
   assert.equal(updates.instagramHandle, "davechappelle");
-  assert.equal(updates.category, "comedy");
+  assert.equal(updates.category, "Comedy");
   assert.equal(updates.status, undefined);
 });
 

@@ -1,3 +1,4 @@
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "../db";
 import {
   suggestions,
@@ -545,7 +546,7 @@ export async function dispatchApproval(
         .insert(inductionCandidates)
         .values({
           displayName: p.displayName,
-          category: p.category,
+          category: canonicalizePersonCategory(p.category)!,
           imageSlug: p.imageSlug,
           wikiSlug: p.wikiSlug,
           xHandle: p.xHandle,

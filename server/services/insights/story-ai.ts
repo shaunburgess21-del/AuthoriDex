@@ -1,8 +1,11 @@
 import OpenAI from "openai";
 import type { InsightsStoryPayload } from "@shared/insights/types";
-import { buildDeterministicStory } from "./story";
-import { loadDriversSummary } from "./drivers";
-import { getCachedTrendingPeople } from "./insights-people-cache";
+import { buildBriefingInputs } from "./story";
+import {
+  buildDeterministicHeadline,
+  buildDeterministicParagraphs,
+  nextBriefingRefreshIso,
+} from "./story-briefing";
 import { getAiModel, getChatCompletionTokenLimit } from "../../config/ai-models";
 import {
   getInsightsCache,
@@ -22,8 +25,8 @@ function utcDayKey(): string {
 
 function maxAttemptsPerDay(): number {
   const raw = process.env.INSIGHTS_AI_STORY_MAX_PER_DAY;
-  const n = raw ? parseInt(raw, 10) : 4;
-  return Number.isFinite(n) && n > 0 ? n : 4;
+  const n = raw ? parseInt(raw, 10) : 6;
+  return Number.isFinite(n) && n > 0 ? n : 6;
 }
 
 function storyModel(): string {
@@ -70,12 +73,13 @@ async function setCooldown(): Promise<void> {
   await setInsightsCache(COOLDOWN_KEY, "insights_story", { until }, COOLDOWN_MS);
 }
 
-function nextRefreshIso(): string {
-  const now = new Date();
-  const refreshesAt = new Date(now);
-  refreshesAt.setUTCHours(6, 0, 0, 0);
-  if (refreshesAt <= now) refreshesAt.setUTCDate(refreshesAt.getUTCDate() + 1);
-  return refreshesAt.toISOString();
+function normalizeParagraphs(raw: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(raw)) return fallback;
+  const paragraphs = raw
+    .map((p) => String(p).trim())
+    .filter((p) => p.length > 0)
+    .slice(0, 5);
+  return paragraphs.length > 0 ? paragraphs : fallback;
 }
 
 export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | null> {
@@ -93,18 +97,9 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
   const model = storyModel();
   const start = Date.now();
 
-  const people = await getCachedTrendingPeople();
-  const driverMix = await loadDriversSummary(20);
-
-  const withChange = people.filter((p) => (p.change7d ?? 0) !== 0);
-  const biggestClimber = [...withChange]
-    .filter((p) => (p.change7d ?? 0) > 0)
-    .sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0))[0];
-  const biggestDropper = [...withChange]
-    .filter((p) => (p.change7d ?? 0) < 0)
-    .sort((a, b) => (a.change7d ?? 0) - (b.change7d ?? 0))[0];
-
-  const fallback = await buildDeterministicStory();
+  const briefingInputs = await buildBriefingInputs({ allowPrefetch: true });
+  const fallbackParagraphs = buildDeterministicParagraphs(briefingInputs);
+  const fallbackHeadline = buildDeterministicHeadline(briefingInputs);
 
   await logStoryEvent("generate_attempt", { model, day });
   await incrementAttemptCount(day);
@@ -113,40 +108,44 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
     const openai = new OpenAI({ apiKey });
     const response = await openai.chat.completions.create({
       model,
-      ...getChatCompletionTokenLimit(model, 280),
+      ...getChatCompletionTokenLimit(model, 600),
       temperature: 0.3,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content: `You write VoxDex Today's Story — a short daily influence digest for a prediction and trends app.
-Return JSON only: { "headline": string, "body": string }.
+          content: `You write VoxDex's "Today's Briefing" — a short daily editorial on who is gaining attention on the board.
+Return JSON only: { "headline": string, "paragraphs": string[] }.
 Rules:
 - headline: max 100 characters, punchy, no clickbait
-- body: max 2 sentences, max 400 characters total
-- Use ONLY facts from the input JSON
+- paragraphs: 1 lead paragraph plus up to 3 short beats (2-3 sentences each); max 900 characters total across all paragraphs
+- Use ONLY facts from the input JSON (names, % changes, categories, whyTrending summaries, headlines)
 - No speculation or predictions about the future
-- Neutral, energetic tone`,
+- Neutral, energetic tone
+- Never mention internal metrics (velocity, mass, fame index, trend score, driver mix, percentages of signal types)`,
         },
         {
           role: "user",
           content: JSON.stringify({
-            biggestClimber: biggestClimber
+            asOf: new Date().toISOString(),
+            topGainers: briefingInputs.topGainers.map((g) => ({
+              name: g.name,
+              rank: g.rank,
+              change24h: g.change24h,
+              category: g.category,
+              whyTrending: g.whyTrending ?? null,
+              topHeadline: g.topHeadline ?? null,
+            })),
+            notableDropper: briefingInputs.notableDropper
               ? {
-                  name: biggestClimber.name,
-                  change7d: biggestClimber.change7d,
-                  rank: biggestClimber.rank,
+                  name: briefingInputs.notableDropper.name,
+                  rank: briefingInputs.notableDropper.rank,
+                  change24h: briefingInputs.notableDropper.change24h,
+                  category: briefingInputs.notableDropper.category,
+                  whyTrending: briefingInputs.notableDropper.whyTrending ?? null,
                 }
               : null,
-            biggestDropper: biggestDropper
-              ? {
-                  name: biggestDropper.name,
-                  change7d: biggestDropper.change7d,
-                  rank: biggestDropper.rank,
-                }
-              : null,
-            driverMix: driverMix.segments,
-            fallbackHeadline: fallback.headline,
+            fallbackHeadline,
           }),
         },
       ],
@@ -168,9 +167,9 @@ Rules:
       return null;
     }
 
-    let parsed: { headline?: string; body?: string };
+    let parsed: { headline?: string; paragraphs?: unknown; body?: string };
     try {
-      parsed = JSON.parse(text) as { headline?: string; body?: string };
+      parsed = JSON.parse(text) as { headline?: string; paragraphs?: unknown; body?: string };
     } catch {
       await setCooldown();
       await logStoryEvent("generate_fail", {
@@ -183,15 +182,21 @@ Rules:
       return null;
     }
 
-    const headline = String(parsed.headline ?? fallback.headline).slice(0, 100);
-    const body = String(parsed.body ?? fallback.body).slice(0, 400);
+    const headline = String(parsed.headline ?? fallbackHeadline).slice(0, 100);
+    const paragraphs = normalizeParagraphs(
+      parsed.paragraphs ?? parsed.body?.split(/\n\n+/),
+      fallbackParagraphs,
+    );
+    const body = paragraphs.join(" ").slice(0, 1200);
     const now = new Date();
 
     const story: InsightsStoryPayload = {
       headline,
       body,
+      paragraphs,
+      people: briefingInputs.people,
       generatedAt: now.toISOString(),
-      refreshesAt: nextRefreshIso(),
+      refreshesAt: nextBriefingRefreshIso(now),
       mode: "ai",
     };
 
@@ -203,6 +208,7 @@ Rules:
       headline,
       headlineLen: headline.length,
       bodyLen: body.length,
+      paragraphCount: paragraphs.length,
     });
 
     return story;

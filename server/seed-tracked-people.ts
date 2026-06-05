@@ -1,3 +1,4 @@
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "./db";
 import { trackedPeople } from "@shared/schema";
 
@@ -126,7 +127,15 @@ export async function seedTrackedPeople() {
     await db.delete(trackedPeople);
     
     // Insert all 100 people
-    const inserted = await db.insert(trackedPeople).values(TOP_100_PEOPLE).returning();
+    const inserted = await db
+      .insert(trackedPeople)
+      .values(
+        TOP_100_PEOPLE.map((p) => ({
+          ...p,
+          category: canonicalizePersonCategory(p.category)!,
+        })),
+      )
+      .returning();
     
     console.log(`✅ Successfully seeded ${inserted.length} tracked people`);
     return inserted;

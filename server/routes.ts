@@ -141,6 +141,7 @@ import {
   CANONICAL_MARKET_CATEGORIES,
   CANONICAL_CATEGORIES,
   GAINER_MIN_ELIGIBLE,
+  canonicalizePersonCategory,
   getMarketCategoryLabel,
   normalizeMarketCategory,
 } from "@shared/constants";
@@ -12554,7 +12555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updates: any = { ...handleResult.values };
       if (name !== undefined) updates.name = name;
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
       if (status !== undefined) updates.status = status;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (avatar !== undefined) updates.avatar = avatar;
@@ -12563,7 +12564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const trendingUpdates: Record<string, unknown> = {};
       if (name !== undefined) trendingUpdates.name = name;
-      if (category !== undefined) trendingUpdates.category = category;
+      if (category !== undefined) trendingUpdates.category = canonicalizePersonCategory(category)!;
       if (avatar !== undefined) trendingUpdates.avatar = avatar;
 
       await db.transaction(async (tx) => {
@@ -13857,7 +13858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [created] = await db.insert(trackedPeople).values({
         name,
-        category: category || 'Other',
+        category: canonicalizePersonCategory(category || "Other")!,
         status: status || 'main_leaderboard',
         imageSlug: generateImageSlug(name),
         wikiSlug: wikiSlug || null,
@@ -22009,7 +22010,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               .insert(trackedPeople)
               .values({
                 name,
-                category: candidate.category || "Other",
+                category: canonicalizePersonCategory(candidate.category || "Other")!,
                 status: "induction",
                 imageSlug: resolvedSlug,
               })
@@ -22715,7 +22716,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const insertRow: Record<string, unknown> = {
         displayName,
-        category,
+        category: canonicalizePersonCategory(category)!,
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
         seedVotes: sv,
@@ -22866,7 +22867,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const updates: any = {};
       if (displayName !== undefined) updates.displayName = displayName;
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
       if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (seedVotes !== undefined) updates.seedVotes = seedVotes;

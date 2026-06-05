@@ -15,7 +15,7 @@ export async function shareInsightsView(options: {
       ? "/explore"
       : "/insights";
   const url = new URL(window.location.origin + basePath);
-  if (options.tab && options.tab !== "overview") {
+  if (options.tab && options.tab !== "today") {
     url.searchParams.set("tab", options.tab);
   }
   if (options.filters) {

@@ -1,16 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  CartesianGrid,
-  Cell,
-} from "recharts";
 import type {
   InsightsDivergenceType,
   InsightsDiscoverRow,
@@ -22,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Share2 } from "lucide-react";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { shareInsightsView } from "@/lib/insights-share";
-import { writeInsightsQuery } from "@shared/insights/filters";
 import { ChartOrList } from "./ChartOrList";
 import { SentimentMiniBar } from "./SentimentMiniBar";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
+import { QuadrantSection } from "./QuadrantSection";
+import { useInsightsOverview } from "@/lib/insights-hooks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -68,20 +58,6 @@ const PRESS_VS_CROWD_CARDS: Array<{
     description: "Crowd approval is high; online sentiment reads negative",
   },
 ];
-
-const MASS_VELOCITY_LABELS = {
-  dominant_hot: "Dominant & Hot",
-  established_cooling: "Established & Cooling",
-  breakout_watch: "Breakout Watch",
-  under_radar: "Under the Radar",
-} as const;
-
-const MASS_VELOCITY_COLORS = {
-  dominant_hot: "hsl(142 71% 45%)",
-  established_cooling: "hsl(217 91% 60%)",
-  breakout_watch: "hsl(271 81% 56%)",
-  under_radar: "hsl(215 16% 47%)",
-} as const;
 
 type BreakoutRow = {
   id: string;
@@ -282,27 +258,11 @@ function PersonRowLink({
 }
 
 export function DiscoverTab() {
+  const { data: overview } = useInsightsOverview();
 
   const { data: surge, isLoading: surgeLoading } = useQuery({
     queryKey: ["/api/insights/discover/single-source-surge"],
     queryFn: fetchSurge,
-    staleTime: 90_000,
-  });
-
-  const { data: massVelocity, isLoading: mvLoading } = useQuery({
-    queryKey: ["/api/insights/discover/mass-velocity"],
-    queryFn: () => fetchJson<{
-      quadrants: Record<string, Array<{
-        id: string;
-        name: string;
-        avatar: string | null;
-        rank: number;
-        massScore: number;
-        velocityScore: number;
-        quadrant: keyof typeof MASS_VELOCITY_LABELS;
-      }>>;
-      medians: { mass: number; velocity: number };
-    }>("/api/insights/discover/mass-velocity"),
     staleTime: 90_000,
   });
 
@@ -373,18 +333,6 @@ export function DiscoverTab() {
     staleTime: 90_000,
   });
 
-  const allQuadrantPoints = massVelocity
-    ? (Object.entries(massVelocity.quadrants) as [keyof typeof MASS_VELOCITY_LABELS, typeof massVelocity.quadrants.dominant_hot][])
-        .flatMap(([quadrant, items]) =>
-          items.slice(0, 12).map((p) => ({
-            ...p,
-            quadrant,
-            x: p.velocityScore,
-            y: p.massScore,
-          })),
-        )
-    : [];
-
   const handleShareDiscover = async () => {
     try {
       const result = await shareInsightsView({
@@ -399,11 +347,6 @@ export function DiscoverTab() {
     } catch {
       /* user cancelled */
     }
-  };
-
-  const goToRankings = (source: "velocity" | "mass") => {
-    logInsightsEvent("discover", "quadrant_click", { source });
-    writeInsightsQuery({ tab: "rankings", filters: { source, page: 1 } });
   };
 
   return (
@@ -432,6 +375,10 @@ export function DiscoverTab() {
           ))}
         </div>
       </InsightsSection>
+
+      {overview && overview.quadrantPoints.length > 0 && (
+        <QuadrantSection points={overview.quadrantPoints} meta={overview.quadrantMeta} />
+      )}
 
       <InsightsSection
         title="Web vs Crowd"
@@ -476,93 +423,6 @@ export function DiscoverTab() {
         </ul>
       </InsightsSection>
 
-      <InsightsSection
-        title="Engine views"
-        description="Mass × velocity quadrant — who dominates attention vs who is accelerating."
-        accent="voxdex"
-      >
-        {mvLoading && <Skeleton className="h-64 w-full" />}
-        {!mvLoading && massVelocity && allQuadrantPoints.length === 0 && (
-          <InsightsEmptyState message="Snapshot data is still loading — check back after the next ingest." />
-        )}
-        {!mvLoading && massVelocity && allQuadrantPoints.length > 0 && (
-          <ChartOrList
-            chart={
-              <div className="h-[320px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 12, right: 12, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                    <XAxis
-                      type="number"
-                      dataKey="x"
-                      name="Velocity"
-                      tick={{ fontSize: 10 }}
-                      label={{ value: "Velocity", position: "bottom", fontSize: 10, offset: 0 }}
-                    />
-                    <YAxis
-                      type="number"
-                      dataKey="y"
-                      name="Mass"
-                      tick={{ fontSize: 10 }}
-                      label={{ value: "Mass", angle: -90, position: "insideLeft", fontSize: 10 }}
-                    />
-                    <ReferenceLine x={massVelocity.medians.velocity} stroke="hsl(var(--border))" strokeDasharray="4 4" />
-                    <ReferenceLine y={massVelocity.medians.mass} stroke="hsl(var(--border))" strokeDasharray="4 4" />
-                    <Tooltip
-                      cursor={{ strokeDasharray: "3 3" }}
-                      formatter={(_v, _n, item) => {
-                        const p = item.payload as { name: string; rank: number };
-                        return [`#${p.rank}`, p.name];
-                      }}
-                    />
-                    <Scatter data={allQuadrantPoints} fill="hsl(217 91% 60%)">
-                      {allQuadrantPoints.map((p) => (
-                        <Cell key={p.id} fill={MASS_VELOCITY_COLORS[p.quadrant]} />
-                      ))}
-                    </Scatter>
-                  </ScatterChart>
-                </ResponsiveContainer>
-              </div>
-            }
-            list={
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(Object.keys(MASS_VELOCITY_LABELS) as (keyof typeof MASS_VELOCITY_LABELS)[]).map((q) => (
-                  <details key={q} className="rounded-lg border border-border/40 p-3" open>
-                    <summary className="text-sm font-medium cursor-pointer list-none flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full" style={{ background: MASS_VELOCITY_COLORS[q] }} />
-                      {MASS_VELOCITY_LABELS[q]}
-                      <button
-                        type="button"
-                        className="ml-auto text-[10px] text-blue-600"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          goToRankings(q === "breakout_watch" ? "velocity" : "mass");
-                        }}
-                      >
-                        Rankings →
-                      </button>
-                    </summary>
-                    <ul className="mt-2 space-y-1">
-                      {(massVelocity.quadrants[q] ?? []).slice(0, 5).map((p) => (
-                        <li key={p.id}>
-                          <PersonRowLink
-                            id={p.id}
-                            name={p.name}
-                            avatar={p.avatar}
-                            meta={`#${p.rank}`}
-                            onClick={() => logInsightsEvent("discover", "mass_velocity_row", { quadrant: q, personId: p.id })}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                ))}
-              </div>
-            }
-          />
-        )}
-      </InsightsSection>
-
       <InsightsSection title="Movement" description="Breakout radar and fame volatility (30d)." accent="blue">
         {breakoutLoading && <Skeleton className="h-40 w-full" />}
         {!breakoutLoading && breakout && (
@@ -603,7 +463,8 @@ export function DiscoverTab() {
         {!volLoading && volatility && (
           <div className="grid gap-4 md:grid-cols-2 mt-4">
             <div>
-              <h4 className="text-sm font-medium mb-2">Most volatile</h4>
+              <h4 className="text-sm font-medium">Most volatile</h4>
+              <p className="text-[11px] text-muted-foreground mb-2">Biggest day-to-day Trend Score swings (30d).</p>
               <ul className="space-y-1">
                 {volatility.volatile.map((p) => (
                   <li key={p.id}>
@@ -611,7 +472,7 @@ export function DiscoverTab() {
                       id={p.id}
                       name={p.name}
                       avatar={p.avatar}
-                      meta={`σ ${p.stddev.toFixed(1)}`}
+                      meta={`Swing ${Math.round(p.stddev).toLocaleString()}`}
                       onClick={() => logInsightsEvent("discover", "volatility_row", { kind: "volatile", personId: p.id })}
                     />
                   </li>
@@ -624,7 +485,8 @@ export function DiscoverTab() {
               </ul>
             </div>
             <div>
-              <h4 className="text-sm font-medium mb-2">Most stable</h4>
+              <h4 className="text-sm font-medium">Most stable</h4>
+              <p className="text-[11px] text-muted-foreground mb-2">Steadiest Trend Score over the last 30 days.</p>
               <ul className="space-y-1">
                 {volatility.stable.map((p) => (
                   <li key={p.id}>
@@ -632,7 +494,7 @@ export function DiscoverTab() {
                       id={p.id}
                       name={p.name}
                       avatar={p.avatar}
-                      meta={`σ ${p.stddev.toFixed(1)}`}
+                      meta={`Swing ${Math.round(p.stddev).toLocaleString()}`}
                       onClick={() => logInsightsEvent("discover", "volatility_row", { kind: "stable", personId: p.id })}
                     />
                   </li>

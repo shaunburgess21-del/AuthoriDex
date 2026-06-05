@@ -16,7 +16,6 @@ import { loadDivergence, loadSingleSourceSurge } from "../services/insights/disc
 import { loadDriversSummary } from "../services/insights/drivers";
 import { getInsightsStory } from "../services/insights/story";
 import { withDiscoverCache } from "../services/insights/discover-cache";
-import { loadMassVelocityQuadrant } from "../services/insights/mass-velocity";
 import { loadBreakoutRadar } from "../services/insights/breakout";
 import { loadPolarisation } from "../services/insights/polarisation";
 import { loadVolatility } from "../services/insights/volatility";
@@ -122,16 +121,6 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] single-source-surge", error);
       res.status(500).json({ error: "Failed to load single-source surge" });
-    }
-  });
-
-  app.get("/api/insights/discover/mass-velocity", async (_req, res) => {
-    try {
-      const data = await withDiscoverCache("mass-velocity", loadMassVelocityQuadrant);
-      res.json({ data });
-    } catch (error) {
-      console.error("[insights] mass-velocity", error);
-      res.status(500).json({ error: "Failed to load mass-velocity quadrant" });
     }
   });
 

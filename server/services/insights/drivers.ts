@@ -56,8 +56,6 @@ export async function loadPersonSignals(
       newsLevel,
       wikiLevel,
       searchLevel,
-      velocityScore,
-      massScore,
     );
 
     out.set(person.id, {

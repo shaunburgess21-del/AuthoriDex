@@ -1,6 +1,7 @@
 ﻿import fs from "fs";
 import path from "path";
 import pRetry from "p-retry";
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db, pool } from "../db";
 import { inductionCandidates } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -80,8 +81,9 @@ async function main() {
         if (cols.length < header.length) continue;
         const displayName = cols[iName]?.trim();
         if (!displayName) continue;
-        const category = cols[iCat]?.trim();
-        if (!category) continue;
+        const rawCategory = cols[iCat]?.trim();
+        if (!rawCategory) continue;
+        const category = canonicalizePersonCategory(rawCategory)!;
         const wikiSlug = cols[iWiki]?.trim() || null;
         const xHandle = normalizeXHandle(cols[iX] || "");
         const seedVotes = Math.max(0, parseInt(String(cols[iSeed] ?? "0"), 10) || 0);

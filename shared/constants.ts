@@ -153,6 +153,14 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
   "food & drink": "food-drink",
   lifestyle: "lifestyle",
   misc: "misc",
+  other: "misc",
+};
+
+/** Display labels for legacy person categories not in the canonical 12. */
+const PERSON_CATEGORY_LEGACY_LABELS: Record<string, string> = {
+  media: "Media",
+  streaming: "Streaming",
+  "media-and-podcast": "Media & Podcast",
 };
 
 function normalizeCategoryLookupKey(category: string) {
@@ -185,12 +193,23 @@ export function getMarketCategoryLabel(category: string | null | undefined): str
   if (normalized in MARKET_CATEGORY_LABELS) {
     return MARKET_CATEGORY_LABELS[normalized as CanonicalMarketCategory];
   }
+  if (normalized in PERSON_CATEGORY_LEGACY_LABELS) {
+    return PERSON_CATEGORY_LEGACY_LABELS[normalized]!;
+  }
 
   return normalized
     .split("-")
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ") || "Misc";
+}
+
+/** Title Case display label for person tables; leaves null/empty unchanged. */
+export function canonicalizePersonCategory(
+  category: string | null | undefined,
+): string | null | undefined {
+  if (category == null || !String(category).trim()) return category;
+  return getMarketCategoryLabel(category);
 }
 
 export const MARKET_CATEGORY_OPTIONS = CANONICAL_CATEGORIES.map((c) => ({

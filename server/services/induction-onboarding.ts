@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "../db";
 import {
   celebrityImages,
@@ -140,7 +141,7 @@ export async function runPostInductionOnboarding(args: {
       .values({
         id: personId,
         name: tp.name,
-        category: tp.category,
+        category: canonicalizePersonCategory(tp.category)!,
         avatar: resolvedAvatar,
         rank: 0,
         trendScore: 0,
@@ -150,7 +151,7 @@ export async function runPostInductionOnboarding(args: {
         target: trendingPeople.id,
         set: {
           name: tp.name,
-          category: tp.category,
+          category: canonicalizePersonCategory(tp.category)!,
           ...(resolvedAvatar ? { avatar: resolvedAvatar } : {}),
         },
       });

@@ -84,7 +84,7 @@ export async function loadBreakoutRadar(): Promise<BreakoutResponse> {
     if (haveSignals && person.rank > 50 && velocity > velocityThreshold) {
       lowRank.push({
         ...base,
-        highlight: `Rank #${person.rank} · velocity ${velocity.toFixed(1)} (median ×1.5)`,
+        highlight: `Rank #${person.rank} · fast momentum (${velocity.toFixed(1)}, above median)`,
       });
     }
 
@@ -107,7 +107,7 @@ export async function loadBreakoutRadar(): Promise<BreakoutResponse> {
     ) {
       quietGiants.push({
         ...base,
-        highlight: `Top 20 · strong mass · +${(change7d ?? 0).toFixed(1)}% 7d`,
+        highlight: `Top 20 · broad attention · +${(change7d ?? 0).toFixed(1)}% 7d`,
       });
     }
 

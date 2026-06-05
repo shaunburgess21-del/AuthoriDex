@@ -1,22 +1,12 @@
+import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  ReferenceLine,
-  CartesianGrid,
-} from "recharts";
-import { Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { Minus, Sparkles, Star, TrendingDown, TrendingUp } from "lucide-react";
 import { useInsightsOverview } from "@/lib/insights-hooks";
-import { ChartOrList } from "./ChartOrList";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { writeInsightsQuery } from "@shared/insights/filters";
-import type { InsightsQuadrantPoint } from "@shared/insights/types";
+import type { InsightsWindow, InsightsSource } from "@shared/insights/filters";
+import type { InsightsPrimaryDriver } from "@shared/insights/types";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -24,76 +14,135 @@ import {
   DRIVER_DISPLAY,
   InsightsEmptyState,
 } from "./insights-ui";
-const QUADRANT_LABELS: Record<InsightsQuadrantPoint["quadrant"], string> = {
-  beloved_giants: "Beloved Giants",
-  hated_giants: "Hated Giants",
-  cult_favourites: "Cult Favourites",
-  unknown_critics: "Unknown Critics",
-};
+import { CategoryPill } from "@/components/CategoryPill";
+import { Button } from "@/components/ui/button";
+import { navigateToLogin } from "@/lib/authReturn";
+import { INSIGHTS_DRIVER_LEGEND } from "@shared/insights/constants";
+import type { InsightsFavouriteHighlight } from "@shared/insights/types";
+import { cn } from "@/lib/utils";
 
-const QUADRANT_COLORS: Record<InsightsQuadrantPoint["quadrant"], string> = {
-  beloved_giants: "hsl(142 71% 45%)",
-  hated_giants: "hsl(0 84% 60%)",
-  cult_favourites: "hsl(217 91% 60%)",
-  unknown_critics: "hsl(271 81% 56%)",
-};
+/** Strip combining diacritical marks so "Mbappé" matches a stored "Mbappe". */
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
 
-function QuadrantTooltip({
-  active,
-  payload,
+function buildNormalized(text: string): { normalized: string; map: number[] } {
+  let normalized = "";
+  const map: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const norm = stripDiacritics(text[i]!).toLowerCase();
+    for (let j = 0; j < norm.length; j++) {
+      normalized += norm[j];
+      map.push(i);
+    }
+  }
+  return { normalized, map };
+}
+
+/**
+ * Linkify any `people` names found in `text`, accent- and case-insensitively,
+ * while rendering the original spelling. Longest names win on overlap.
+ */
+function linkifyBriefingText(
+  text: string,
+  people: Array<{ id: string; name: string }>,
+): ReactNode[] {
+  if (people.length === 0) return [text];
+
+  const { normalized, map } = buildNormalized(text);
+  const candidates = people
+    .map((p) => ({ person: p, norm: stripDiacritics(p.name).toLowerCase() }))
+    .filter((c) => c.norm.length > 0)
+    .sort((a, b) => b.norm.length - a.norm.length);
+
+  const nodes: ReactNode[] = [];
+  let normPos = 0;
+  let origPos = 0;
+  let key = 0;
+
+  while (normPos < normalized.length) {
+    let best: { idx: number; len: number; person: { id: string; name: string } } | null = null;
+    for (const c of candidates) {
+      const idx = normalized.indexOf(c.norm, normPos);
+      if (idx !== -1 && (best === null || idx < best.idx)) {
+        best = { idx, len: c.norm.length, person: c.person };
+      }
+    }
+    if (!best) break;
+
+    const origStart = map[best.idx]!;
+    const origEnd = map[best.idx + best.len - 1]! + 1;
+
+    if (origStart > origPos) nodes.push(text.slice(origPos, origStart));
+    nodes.push(
+      <Link
+        key={`${best.person.id}-${key++}`}
+        href={`/person/${best.person.id}`}
+        className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+      >
+        {text.slice(origStart, origEnd)}
+      </Link>,
+    );
+
+    normPos = best.idx + best.len;
+    origPos = origEnd;
+  }
+
+  if (origPos < text.length) nodes.push(text.slice(origPos));
+  return nodes;
+}
+
+function BriefingBody({
+  paragraphs,
+  body,
+  people,
 }: {
-  active?: boolean;
-  payload?: Array<{ payload: InsightsQuadrantPoint }>;
+  paragraphs?: string[];
+  body: string;
+  people?: Array<{ id: string; name: string }>;
 }) {
-  if (!active || !payload?.[0]) return null;
-  const p = payload[0].payload;
+  const blocks = paragraphs?.length ? paragraphs : [body];
+  const linkPeople = people ?? [];
+
   return (
-    <div className="rounded-lg border border-border/60 bg-popover px-3 py-2 text-xs shadow-md">
-      <p className="font-medium">{p.name}</p>
-      <p className="text-muted-foreground mt-0.5">
-        Fame {p.fameIndex} · Approval {Math.round(p.approvalPct)}%
-      </p>
+    <div className="mt-2 space-y-3">
+      {blocks.map((paragraph, i) => (
+        <p key={i} className="text-sm text-muted-foreground leading-relaxed">
+          {linkifyBriefingText(paragraph, linkPeople)}
+        </p>
+      ))}
     </div>
   );
 }
 
-function QuadrantMobileLists({ points }: { points: InsightsQuadrantPoint[] }) {
-  const groups = (Object.keys(QUADRANT_LABELS) as InsightsQuadrantPoint["quadrant"][]).map((q) => ({
-    quadrant: q,
-    items: points.filter((p) => p.quadrant === q).slice(0, 5),
-  }));
-
+function MoversWindowToggle({
+  value,
+  onChange,
+}: {
+  value: InsightsWindow;
+  onChange: (window: InsightsWindow) => void;
+}) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {groups.map(({ quadrant, items }) => (
-        <details
-          key={quadrant}
-          className="rounded-lg border border-border/40 bg-background/40 p-3"
-          open={items.length > 0}
+    <div
+      className="inline-flex rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
+      role="group"
+      aria-label="Movers time window"
+    >
+      {(["24h", "7d"] as const).map((w) => (
+        <button
+          key={w}
+          type="button"
+          aria-pressed={value === w}
+          onClick={() => onChange(w)}
+          className={cn(
+            "px-3 py-1.5 rounded-md transition-colors tabular-nums",
+            value === w
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
         >
-          <summary className="font-medium text-sm cursor-pointer list-none flex items-center gap-2">
-            <span
-              className="h-2 w-2 rounded-full shrink-0"
-              style={{ background: QUADRANT_COLORS[quadrant] }}
-            />
-            {QUADRANT_LABELS[quadrant]}
-            <span className="text-muted-foreground font-normal">({items.length})</span>
-          </summary>
-          <ul className="mt-2 space-y-2">
-            {items.map((p) => (
-              <li key={p.id}>
-                <Link href={`/person/${p.id}`} className="flex items-center gap-2 text-sm">
-                  <PersonAvatar name={p.name} avatar={p.avatar} size="xs" />
-                  <span className="truncate flex-1">{p.name}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">FI {p.fameIndex}</span>
-                </Link>
-              </li>
-            ))}
-            {items.length === 0 && (
-              <li className="text-xs text-muted-foreground">No names in this quadrant.</li>
-            )}
-          </ul>
-        </details>
+          {w}
+        </button>
       ))}
     </div>
   );
@@ -102,47 +151,198 @@ function QuadrantMobileLists({ points }: { points: InsightsQuadrantPoint[] }) {
 function MoverList({
   items,
   positive,
+  window,
 }: {
   items: Array<{
     id: string;
     name: string;
     avatar: string | null;
     category: string | null;
+    change24h: number | null;
     change7d: number | null;
     rank: number;
   }>;
   positive: boolean;
+  window: InsightsWindow;
 }) {
+  const changeField = window === "24h" ? "change24h" : "change7d";
+  const emptyMessage =
+    window === "24h"
+      ? positive
+        ? "No climbers in the last 24 hours."
+        : "No droppers in the last 24 hours."
+      : positive
+        ? "No climbers this week."
+        : "No droppers this week.";
+
   if (items.length === 0) {
-    return <InsightsEmptyState message={positive ? "No climbers this week." : "No droppers this week."} />;
+    return <InsightsEmptyState message={emptyMessage} />;
   }
+
   return (
     <div className="space-y-1.5">
-      {items.map((m) => (
-        <Link
-          key={m.id}
-          href={`/person/${m.id}`}
-          className="flex items-center gap-2.5 text-sm p-2.5 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
-        >
-          <span className="text-[10px] font-mono text-muted-foreground w-6">#{m.rank}</span>
-          <PersonAvatar name={m.name} avatar={m.avatar} size="xs" />
-          <span className="truncate flex-1 font-medium">{m.name}</span>
-          <span
-            className={`tabular-nums text-xs font-semibold ${positive ? "text-green-600 dark:text-green-400" : "text-red-500"}`}
+      {items.map((m) => {
+        const change = m[changeField] ?? 0;
+        return (
+          <Link
+            key={m.id}
+            href={`/person/${m.id}`}
+            className="flex items-center gap-2.5 text-sm p-2.5 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
           >
-            {positive ? "+" : ""}
-            {(m.change7d ?? 0).toFixed(1)}%
-          </span>
-        </Link>
-      ))}
+            <span className="text-[10px] font-mono text-muted-foreground w-6">#{m.rank}</span>
+            <PersonAvatar name={m.name} avatar={m.avatar} size="xs" />
+            <span className="truncate flex-1 font-medium">{m.name}</span>
+            <span
+              className={`tabular-nums text-xs font-semibold ${positive ? "text-green-600 dark:text-green-400" : "text-red-500"}`}
+            >
+              {positive ? "+" : ""}
+              {change.toFixed(1)}%
+            </span>
+          </Link>
+        );
+      })}
     </div>
+  );
+}
+
+/** Gradient per driver so the Attention mix reads at a glance. */
+const DRIVER_BAR_GRADIENT: Record<InsightsPrimaryDriver, string> = {
+  NEWS: "from-blue-600/80 to-blue-400/60",
+  WIKI: "from-purple-600/80 to-purple-400/60",
+  SEARCH: "from-amber-500/80 to-amber-300/60",
+  MIXED: "from-slate-500/70 to-slate-400/50",
+};
+
+/** Drivers that map cleanly to a ranking source (MIXED has no single source). */
+const DRIVER_TO_SOURCE: Partial<Record<InsightsPrimaryDriver, InsightsSource>> = {
+  NEWS: "news_momentum",
+  WIKI: "wiki_momentum",
+  SEARCH: "search_volume",
+};
+
+function FavouriteHighlightRow({ item }: { item: InsightsFavouriteHighlight }) {
+  const change = item.change24h;
+  const driverLabel = item.primaryDriver ? DRIVER_DISPLAY[item.primaryDriver] : null;
+
+  return (
+    <Link
+      href={`/person/${item.personId}`}
+      className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
+    >
+      <PersonAvatar name={item.name} avatar={item.avatar} size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-sm truncate">{item.name}</p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+          {item.category && <CategoryPill category={item.category} size="sm" />}
+          <span className="text-[10px] text-muted-foreground tabular-nums">#{item.rank}</span>
+          {driverLabel && (
+            <span className="text-[10px] text-muted-foreground">· {driverLabel}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 shrink-0 tabular-nums text-sm font-semibold">
+        {change > 0 ? (
+          <TrendingUp className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+        ) : change < 0 ? (
+          <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+        ) : (
+          <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+        <span
+          className={cn(
+            change > 0 && "text-green-600 dark:text-green-400",
+            change < 0 && "text-red-500",
+            change === 0 && "text-muted-foreground",
+          )}
+        >
+          {change > 0 ? "+" : ""}
+          {change.toFixed(1)}%
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function FavouritesPanel({
+  isLoggedIn,
+  favouritesSignals,
+}: {
+  isLoggedIn: boolean;
+  favouritesSignals?: {
+    favouriteCount: number;
+    highlights: InsightsFavouriteHighlight[];
+  };
+}) {
+  const [, setLocation] = useLocation();
+
+  if (!isLoggedIn) {
+    return (
+      <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-5 text-center">
+        <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground/70" />
+        <p className="text-sm font-medium">Sign in to track favourites</p>
+        <p className="text-xs text-muted-foreground mt-1 mb-4 leading-relaxed">
+          Favourite people on the leaderboard and see how they&apos;re moving here.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Button size="sm" onClick={() => navigateToLogin(setLocation)}>
+            Sign in
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setLocation("/")}>
+            Browse leaderboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!favouritesSignals || favouritesSignals.favouriteCount === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-5 text-center">
+        <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground/70" />
+        <p className="text-sm font-medium">No favourites yet</p>
+        <p className="text-xs text-muted-foreground mt-1 mb-4 leading-relaxed">
+          Tap the heart on anyone in the leaderboard to track them here.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => setLocation("/")}>
+          Browse leaderboard
+        </Button>
+      </div>
+    );
+  }
+
+  if (favouritesSignals.highlights.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        Your {favouritesSignals.favouriteCount}{" "}
+        {favouritesSignals.favouriteCount === 1 ? "favourite is" : "favourites are"} steady today
+        — no big 24h moves yet.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {favouritesSignals.highlights.map((h) => (
+        <li key={h.personId}>
+          <FavouriteHighlightRow item={h} />
+        </li>
+      ))}
+      <li className="pt-1">
+        <Link
+          href="/me/favorites"
+          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          View full watchlist →
+        </Link>
+      </li>
+    </ul>
   );
 }
 
 export function OverviewTab() {
   const { isLoggedIn } = useAuth();
-  const [, setLocation] = useLocation();
   const { data, isLoading, isError } = useInsightsOverview();
+  const [moversWindow, setMoversWindow] = useState<InsightsWindow>("24h");
 
   if (isLoading) {
     return (
@@ -152,7 +352,7 @@ export function OverviewTab() {
           <Skeleton className="h-64 w-full rounded-xl" />
           <Skeleton className="h-64 w-full rounded-xl" />
         </div>
-        <Skeleton className="h-80 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
     );
   }
@@ -160,7 +360,8 @@ export function OverviewTab() {
     return <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>;
   }
 
-  const { story, movers, driverMix, quadrantPoints, quadrantMeta, favouritesSignals } = data;
+  const { story, movers, driverMix, favouritesSignals } = data;
+  const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -172,12 +373,16 @@ export function OverviewTab() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-                Today&apos;s story
+                Today&apos;s Briefing
               </p>
               <h2 className="text-lg md:text-xl font-serif font-semibold mt-1 leading-snug">
                 {story.headline}
               </h2>
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{story.body}</p>
+              <BriefingBody
+                paragraphs={story.paragraphs}
+                body={story.body}
+                people={story.people}
+              />
               <p className="text-[10px] text-muted-foreground/70 mt-3">
                 {story.mode === "ai" ? "AI summary" : "Live data snapshot"} · next refresh{" "}
                 {new Date(story.refreshesAt).toLocaleString(undefined, {
@@ -193,152 +398,113 @@ export function OverviewTab() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
-          title="Board movers"
-          description="Biggest 7-day climbers and droppers on the Fame Index."
+          title="Movers"
+          description={
+            moversWindow === "24h"
+              ? "Biggest 24-hour climbers and droppers on the leaderboard."
+              : "Biggest 7-day climbers and droppers on the leaderboard."
+          }
           accent="blue"
+          action={<MoversWindowToggle value={moversWindow} onChange={setMoversWindow} />}
         >
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                 <TrendingUp className="h-3.5 w-3.5 text-green-600" /> Climbers
               </p>
-              <MoverList items={movers.climbers.slice(0, 8)} positive />
+              <MoverList
+                items={windowMovers.climbers.slice(0, 8)}
+                positive
+                window={moversWindow}
+              />
             </div>
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
                 <TrendingDown className="h-3.5 w-3.5 text-red-500" /> Droppers
               </p>
-              <MoverList items={movers.droppers.slice(0, 8)} positive={false} />
+              <MoverList
+                items={windowMovers.droppers.slice(0, 8)}
+                positive={false}
+                window={moversWindow}
+              />
             </div>
           </div>
         </InsightsSection>
 
-        {isLoggedIn && favouritesSignals && (
-          <InsightsSection title="Your favourites" description="Signals from people you follow.">
-            <p className="text-sm text-muted-foreground leading-relaxed">{favouritesSignals.summary}</p>
-            <ul className="mt-3 space-y-2">
-              {favouritesSignals.highlights.map((h) => (
-                <li key={h.personId}>
-                  <Link
-                    href={`/person/${h.personId}`}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {h.message}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </InsightsSection>
-        )}
+        <InsightsSection
+          title="Your favourites"
+          description={
+            isLoggedIn
+              ? "How the people you follow are moving today."
+              : "Sign in to see movement from people you track."
+          }
+        >
+          <FavouritesPanel isLoggedIn={isLoggedIn} favouritesSignals={favouritesSignals} />
+        </InsightsSection>
       </div>
 
       <InsightsSection
-        title="Approval × Fame"
-        description={`${quadrantMeta.includedCount} people with ≥${quadrantMeta.minVotes} votes. Median split shown on desktop.`}
-        accent="voxdex"
-      >
-        <ChartOrList
-          chart={
-            <div className="h-[300px] md:h-[420px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 12, right: 24, bottom: 24, left: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                  <XAxis
-                    type="number"
-                    dataKey="fameIndex"
-                    name="Fame"
-                    tick={{ fontSize: 11 }}
-                    label={{ value: "Fame Index", position: "bottom", offset: 0, fontSize: 11 }}
-                  />
-                  <YAxis
-                    type="number"
-                    dataKey="approvalPct"
-                    name="Approval"
-                    tick={{ fontSize: 11 }}
-                    domain={[0, 100]}
-                    label={{
-                      value: "Approval %",
-                      angle: -90,
-                      position: "insideLeft",
-                      fontSize: 11,
-                    }}
-                  />
-                  <ReferenceLine
-                    x={quadrantMeta.medianFame}
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.5}
-                  />
-                  <ReferenceLine
-                    y={quadrantMeta.medianApproval}
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.5}
-                  />
-                  <Tooltip content={<QuadrantTooltip />} />
-                  <Scatter
-                    data={quadrantPoints}
-                    onClick={(pt) => {
-                      const p = pt as InsightsQuadrantPoint;
-                      logInsightsEvent("overview", "quadrant_click", { personId: p.id });
-                      setLocation(`/person/${p.id}`);
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    {quadrantPoints.map((p) => (
-                      <Cell key={p.id} fill={QUADRANT_COLORS[p.quadrant]} fillOpacity={0.85} />
-                    ))}
-                  </Scatter>
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-          }
-          list={<QuadrantMobileLists points={quadrantPoints} />}
-        />
-      </InsightsSection>
-
-      <InsightsSection
-        title={`Driver mix · top ${driverMix.topN}`}
-        description="What is leading attention right now — tap a bar to open matching rankings."
+        title="Attention mix"
+        description={`What's driving attention across the top ${driverMix.topN} right now.`}
       >
         <div className="space-y-3 max-w-2xl">
-          {driverMix.segments.map((seg) => (
-            <button
-              key={seg.driver}
-              type="button"
-              className="w-full text-left group"
-              onClick={() => {
-                logInsightsEvent("overview", "driver_slice_click", { driver: seg.driver });
-                const sourceMap: Record<string, string> = {
-                  NEWS: "news_momentum",
-                  WIKI: "wiki_momentum",
-                  // Search-led → Most Searched ranking (Google Trends retired).
-                  SEARCH: "search_volume",
-                  VELOCITY: "velocity",
-                  MASS: "mass",
-                  MIXED: "news_momentum",
-                };
-                writeInsightsQuery({
-                  tab: "rankings",
-                  filters: { source: (sourceMap[seg.driver] ?? "news_momentum") as never },
-                });
-              }}
-            >
-              <div className="flex justify-between text-xs mb-1.5">
-                <span className="font-medium group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {DRIVER_DISPLAY[seg.driver] ?? seg.driver}
-                </span>
-                <span className="text-muted-foreground tabular-nums">{seg.pct}%</span>
+          {driverMix.segments.map((seg) => {
+            const source = DRIVER_TO_SOURCE[seg.driver];
+            const barInner = (
+              <>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span
+                    className={cn(
+                      "font-medium transition-colors",
+                      source && "group-hover:text-blue-600 dark:group-hover:text-blue-400",
+                    )}
+                  >
+                    {DRIVER_DISPLAY[seg.driver] ?? seg.driver}
+                  </span>
+                  <span className="text-muted-foreground tabular-nums">{seg.pct}%</span>
+                </div>
+                <div className="h-2.5 rounded-full bg-muted/80 overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full bg-gradient-to-r transition-all",
+                      DRIVER_BAR_GRADIENT[seg.driver] ?? DRIVER_BAR_GRADIENT.MIXED,
+                    )}
+                    style={{ width: `${Math.max(seg.pct, 2)}%` }}
+                  />
+                </div>
+              </>
+            );
+
+            return source ? (
+              <button
+                key={seg.driver}
+                type="button"
+                className="w-full text-left group"
+                title={`Open ${DRIVER_DISPLAY[seg.driver]} rankings`}
+                onClick={() => {
+                  logInsightsEvent("overview", "driver_slice_click", { driver: seg.driver });
+                  writeInsightsQuery({ tab: "rankings", filters: { source } });
+                }}
+              >
+                {barInner}
+              </button>
+            ) : (
+              <div key={seg.driver} className="w-full">
+                {barInner}
               </div>
-              <div className="h-2.5 rounded-full bg-muted/80 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-600/80 to-blue-400/60 transition-all"
-                  style={{ width: `${Math.max(seg.pct, 2)}%` }}
-                />
-              </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
+        <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/80">
+          {(Object.keys(INSIGHTS_DRIVER_LEGEND) as InsightsPrimaryDriver[]).map((driver, i, arr) => (
+            <span key={driver}>
+              <span className="font-medium text-muted-foreground">{DRIVER_DISPLAY[driver]}</span>
+              {" = "}
+              {INSIGHTS_DRIVER_LEGEND[driver]}
+              {i < arr.length - 1 ? " · " : ""}
+            </span>
+          ))}
+        </p>
       </InsightsSection>
     </div>
   );

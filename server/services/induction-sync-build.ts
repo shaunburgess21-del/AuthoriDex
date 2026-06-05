@@ -1,4 +1,5 @@
 import type { InductionCandidate, TrackedPerson } from "@shared/schema";
+import { canonicalizePersonCategory } from "@shared/constants";
 
 export function isEmptyish(v: string | null | undefined): boolean {
   return v == null || String(v).trim() === "";
@@ -31,7 +32,7 @@ export function buildTrackedPersonBackfillFromCandidate(
     candidate.category &&
     candidate.category !== tp.category
   ) {
-    updates.category = candidate.category;
+    updates.category = canonicalizePersonCategory(candidate.category)!;
   }
 
   if (isEmptyish(tp.wikiSlug) && !isEmptyish(candidate.wikiSlug)) {

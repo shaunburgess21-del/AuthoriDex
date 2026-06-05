@@ -1124,7 +1124,8 @@ function startWhyTrendingRefreshScheduler() {
   }, 3 * 60 * 1000);
 }
 
-const INSIGHTS_STORY_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const INSIGHTS_STORY_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const INSIGHTS_STORY_REFRESH_UTC_HOURS = [6, 18] as const;
 
 function msUntilNextUtcHour(targetHour: number): number {
   const now = new Date();
@@ -1134,6 +1135,11 @@ function msUntilNextUtcHour(targetHour: number): number {
     next.setUTCDate(next.getUTCDate() + 1);
   }
   return next.getTime() - now.getTime();
+}
+
+function msUntilNextUtcHours(targetHours: number[]): number {
+  const delays = targetHours.map((h) => msUntilNextUtcHour(h));
+  return Math.min(...delays);
 }
 
 async function runScheduledInsightsStoryRefresh(): Promise<void> {
@@ -1148,8 +1154,10 @@ async function runScheduledInsightsStoryRefresh(): Promise<void> {
 
 function startInsightsStoryRefreshScheduler() {
   if (SERVERLESS_MODE) return;
-  const initialDelay = msUntilNextUtcHour(6);
-  log(`[InsightsStoryRefresh] Starting (daily ~06:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`);
+  const initialDelay = msUntilNextUtcHours([...INSIGHTS_STORY_REFRESH_UTC_HOURS]);
+  log(
+    `[InsightsStoryRefresh] Starting (twice daily ~06:00 & ~18:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`,
+  );
   setTimeout(() => {
     void runScheduledInsightsStoryRefresh();
     setInterval(() => void runScheduledInsightsStoryRefresh(), INSIGHTS_STORY_REFRESH_INTERVAL_MS);

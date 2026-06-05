@@ -1,5 +1,6 @@
-import type { InsightsOverviewResponse } from "@shared/insights/types";
-import { INSIGHTS_DRIVER_LABELS, QUADRANT_MIN_VOTES } from "@shared/insights/constants";
+import type { InsightsOverviewResponse, InsightsMoverItem } from "@shared/insights/types";
+import type { TrendingPerson } from "@shared/schema";
+import { QUADRANT_MIN_VOTES } from "@shared/insights/constants";
 import { db } from "../../db";
 import { celebrityMetrics, userFavourites } from "@shared/schema";
 import { eq, gte } from "drizzle-orm";
@@ -10,6 +11,39 @@ import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import { withDiscoverCache } from "./discover-cache";
 
 const MOVER_PAGE_SIZE = 20;
+
+function toMoverItem(p: TrendingPerson): InsightsMoverItem {
+  return {
+    id: p.id,
+    name: p.name,
+    avatar: p.avatar ?? null,
+    category: p.category ?? null,
+    rank: p.rank,
+    fameIndex: p.fameIndex ?? null,
+    change24h: p.change24h ?? null,
+    change7d: p.change7d ?? null,
+    rankChange: null,
+  };
+}
+
+function buildMoversForWindow(
+  peopleList: TrendingPerson[],
+  field: "change24h" | "change7d",
+): { climbers: InsightsMoverItem[]; droppers: InsightsMoverItem[] } {
+  const climbers = [...peopleList]
+    .filter((p) => (p[field] ?? 0) > 0)
+    .sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0))
+    .slice(0, MOVER_PAGE_SIZE)
+    .map(toMoverItem);
+
+  const droppers = [...peopleList]
+    .filter((p) => (p[field] ?? 0) < 0)
+    .sort((a, b) => (a[field] ?? 0) - (b[field] ?? 0))
+    .slice(0, MOVER_PAGE_SIZE)
+    .map(toMoverItem);
+
+  return { climbers, droppers };
+}
 
 function assignQuadrant(
   fameIndex: number,
@@ -68,7 +102,9 @@ async function loadInsightsOverviewInner(
 
   const quadrantPoints = eligible.map((m) => {
     const person = peopleMap.get(m.celebrityId);
-    const fame = m.fameIndex ?? person?.fameIndex ?? 0;
+    // Prefer the live trending Trend Score so the quadrant matches the profile,
+    // rankings, and movers (celebrityMetrics.fameIndex can lag behind ingest).
+    const fame = person?.fameIndex ?? m.fameIndex ?? 0;
     const approval = m.approvalPct ?? 0;
     return {
       id: m.celebrityId,
@@ -83,70 +119,47 @@ async function loadInsightsOverviewInner(
     };
   });
 
-  const climbers = [...peopleList]
-    .filter((p) => (p.change7d ?? 0) > 0)
-    .sort((a, b) => (b.change7d ?? 0) - (a.change7d ?? 0))
-    .slice(0, MOVER_PAGE_SIZE)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      avatar: p.avatar ?? null,
-      category: p.category ?? null,
-      rank: p.rank,
-      fameIndex: p.fameIndex ?? null,
-      change24h: p.change24h ?? null,
-      change7d: p.change7d ?? null,
-      rankChange: null as number | null,
-    }));
-
-  const droppers = [...peopleList]
-    .filter((p) => (p.change7d ?? 0) < 0)
-    .sort((a, b) => (a.change7d ?? 0) - (b.change7d ?? 0))
-    .slice(0, MOVER_PAGE_SIZE)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      avatar: p.avatar ?? null,
-      category: p.category ?? null,
-      rank: p.rank,
-      fameIndex: p.fameIndex ?? null,
-      change24h: p.change24h ?? null,
-      change7d: p.change7d ?? null,
-      rankChange: null as number | null,
-    }));
+  const movers24h = buildMoversForWindow(peopleList, "change24h");
+  const movers7d = buildMoversForWindow(peopleList, "change7d");
 
   let favouritesSignals: InsightsOverviewResponse["favouritesSignals"];
-  if (userId && favRows.length > 0) {
+  if (userId) {
     const favIds = new Set(favRows.map((f) => f.personId));
     const favTrending = peopleList.filter((p) => favIds.has(p.id));
 
     let newsDrivenCount = 0;
     let top50CrossedCount = 0;
-
     for (const p of favTrending) {
       const sig = signals.get(p.id);
       if (sig?.primaryDriver === "NEWS") newsDrivenCount++;
       if (p.rank <= 50 && (p.change7d ?? 0) > 2) top50CrossedCount++;
     }
 
-    const highlights: NonNullable<InsightsOverviewResponse["favouritesSignals"]>["highlights"] =
-      [];
-    const biggest = [...favTrending]
-      .filter((p) => typeof p.change24h === "number")
-      .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))[0];
+    const movedFavourites = favTrending
+      .filter((p) => typeof p.change24h === "number" && Math.abs(p.change24h ?? 0) >= 0.1)
+      .sort((a, b) => Math.abs(b.change24h ?? 0) - Math.abs(a.change24h ?? 0))
+      .slice(0, 4);
 
-    if (biggest) {
-      const sig = signals.get(biggest.id);
-      const driverSuffix = sig ? ` — ${INSIGHTS_DRIVER_LABELS[sig.primaryDriver]}` : "";
-      highlights.push({
-        personId: biggest.id,
-        name: biggest.name,
-        message: `${biggest.name} moved ${(biggest.change24h ?? 0) > 0 ? "+" : ""}${(biggest.change24h ?? 0).toFixed(1)}% today${driverSuffix}.`,
+    const highlights: NonNullable<InsightsOverviewResponse["favouritesSignals"]>["highlights"] =
+      movedFavourites.map((p) => {
+        const sig = signals.get(p.id);
+        return {
+          personId: p.id,
+          name: p.name,
+          avatar: p.avatar ?? null,
+          category: p.category ?? null,
+          rank: p.rank,
+          change24h: p.change24h ?? 0,
+          primaryDriver: sig?.primaryDriver ?? null,
+        };
       });
-    }
 
     favouritesSignals = {
-      summary: `${newsDrivenCount} of your favourites are news-driven today. ${top50CrossedCount} just crossed into momentum territory.`,
+      summary:
+        favTrending.length > 0
+          ? `How the ${favTrending.length} ${favTrending.length === 1 ? "person" : "people"} you follow are moving today.`
+          : "",
+      favouriteCount: favTrending.length,
       highlights,
       newsDrivenCount,
       top50CrossedCount,
@@ -163,7 +176,10 @@ async function loadInsightsOverviewInner(
       minVotes: QUADRANT_MIN_VOTES,
     },
     driverMix,
-    movers: { climbers, droppers },
+    movers: {
+      "24h": movers24h,
+      "7d": movers7d,
+    },
     story,
     favouritesSignals,
   };

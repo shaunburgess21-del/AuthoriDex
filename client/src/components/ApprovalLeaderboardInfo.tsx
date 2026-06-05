@@ -18,7 +18,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { cn } from "@/lib/utils";
 import { VOTE_HUB_DEEP_LINKS, type VoteHubSectionToggle } from "@/lib/voteHubDeepLinks";
 
-export const INSIGHTS_APPROVAL_HREF = "/insights?tab=approval";
+export const INSIGHTS_APPROVAL_HREF = "/insights?tab=crowd";
 
 export function InsightsApprovalLink({ children }: { children: React.ReactNode }) {
   return (

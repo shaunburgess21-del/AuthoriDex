@@ -1,3 +1,4 @@
+import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "../db";
 import { trackedPeople, trendSnapshots, trendingPeople, celebrityImages, ingestionRuns, apiCache } from "@shared/schema";
 import { desc, eq, sql, gte, and, inArray } from "drizzle-orm";
@@ -3112,7 +3113,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         fameIndex: score.fameIndex,
         change24h: score.change24h,
         change7d: score.change7d,
-        category: person.category,
+        category: canonicalizePersonCategory(person.category) ?? person.category,
       }));
 
       const TRENDING_PEOPLE_BATCH_SIZE = 50;
@@ -3651,7 +3652,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
           fameIndex: row.fame_index,
           change24h: null,
           change7d: null,
-          category: row.category,
+          category: canonicalizePersonCategory(row.category) ?? row.category,
         }).onConflictDoUpdate({
           target: trendingPeople.id,
           set: {
@@ -3661,7 +3662,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
             rank: i + 1,
             trendScore: row.trend_score,
             fameIndex: row.fame_index,
-            category: row.category,
+            category: canonicalizePersonCategory(row.category) ?? row.category,
           },
         });
       }

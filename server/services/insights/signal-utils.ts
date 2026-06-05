@@ -63,15 +63,11 @@ export function classifyPrimaryDriver(
   newsLevel: MomentumLevel,
   wikiLevel: MomentumLevel,
   searchLevel: MomentumLevel,
-  velocityScore: number,
-  massScore: number,
 ): InsightsPrimaryDriver {
   const scores: Array<{ driver: InsightsPrimaryDriver; weight: number }> = [
     { driver: "NEWS", weight: levelWeight(newsLevel) },
     { driver: "WIKI", weight: levelWeight(wikiLevel) },
     { driver: "SEARCH", weight: levelWeight(searchLevel) },
-    { driver: "VELOCITY", weight: velocityScore },
-    { driver: "MASS", weight: massScore * 0.5 },
   ];
 
   scores.sort((a, b) => b.weight - a.weight);
@@ -115,10 +111,6 @@ export function sortValueForSource(
       return row.newsMomentumRatio;
     case "wiki_momentum":
       return row.wikiMomentumRatio;
-    case "velocity":
-      return row.velocityScore;
-    case "mass":
-      return row.massScore;
     case "fame":
       return row.fameIndex;
     case "news":

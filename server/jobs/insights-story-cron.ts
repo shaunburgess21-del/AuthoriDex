@@ -27,7 +27,7 @@ export async function runInsightsStoryCronRefresh(): Promise<InsightsStoryCronRe
       };
     }
 
-    const deterministic = await buildDeterministicStory();
+    const deterministic = await buildDeterministicStory({ allowPrefetch: true });
     await setInsightsCache(
       STORY_DETERMINISTIC_KEY,
       "insights_story",
@@ -41,7 +41,7 @@ export async function runInsightsStoryCronRefresh(): Promise<InsightsStoryCronRe
     };
   }
 
-  const story = await buildDeterministicStory();
+  const story = await buildDeterministicStory({ allowPrefetch: true });
   await setInsightsCache(STORY_DETERMINISTIC_KEY, "insights_story", story, INSIGHTS_STORY_TTL_MS);
 
   return {

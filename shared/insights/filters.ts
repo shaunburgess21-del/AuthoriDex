@@ -6,14 +6,14 @@
 export const INSIGHTS_SOURCE_VALUES = [
   "news_momentum",
   "wiki_momentum",
-  "velocity",
-  "mass",
   "fame",
   "news",
   "wiki",
   // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
   // (Google Trends `trends` source was removed; old ?source=trends links fall
   // back to the default ranking via parseSource.)
+  // velocity / mass sources were removed; old ?source=velocity|mass links fall
+  // back to the default ranking via parseSource.
   "search_volume",
 ] as const;
 
@@ -23,12 +23,10 @@ export const INSIGHTS_WINDOW_VALUES = ["24h", "7d"] as const;
 export type InsightsWindow = (typeof INSIGHTS_WINDOW_VALUES)[number];
 
 export const INSIGHTS_TAB_VALUES = [
-  "overview",
+  "today",
   "rankings",
   "discover",
-  "compare",
-  "markets",
-  "approval",
+  "crowd",
 ] as const satisfies readonly string[];
 export type InsightsTab = (typeof INSIGHTS_TAB_VALUES)[number];
 
@@ -148,24 +146,70 @@ export function canonicalCacheKey(prefix: string, filters: InsightsFilters): str
   return parts.join("|");
 }
 
+/** Legacy ?tab= values from the 6-tab IA → canonical tab id (`today` → omit ?tab=). */
+const LEGACY_INSIGHTS_TAB_URL: Record<string, InsightsTab> = {
+  you: "today",
+  overview: "today",
+  approval: "crowd",
+  compare: "rankings",
+};
+
+/**
+ * Rewrites legacy `?tab=` values in the address bar to the 4-tab IA.
+ * No-op for `markets` (InsightsPage redirects to /predict).
+ */
+export function canonicalizeInsightsTabUrl(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const url = new URL(window.location.href);
+  const raw = url.searchParams.get("tab");
+  if (!raw || raw === "markets") return false;
+
+  if ((INSIGHTS_TAB_VALUES as readonly string[]).includes(raw)) {
+    return false;
+  }
+
+  const mapped = LEGACY_INSIGHTS_TAB_URL[raw];
+  if (mapped === undefined) {
+    url.searchParams.delete("tab");
+    window.history.replaceState({}, "", url.toString());
+    return true;
+  }
+
+  if (mapped === "today") {
+    url.searchParams.delete("tab");
+  } else {
+    url.searchParams.set("tab", mapped);
+  }
+  window.history.replaceState({}, "", url.toString());
+  return true;
+}
+
 export function parseTab(search: string | URLSearchParams): InsightsTab {
   const params =
     typeof search === "string"
       ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
       : search;
   const tab = params.get("tab");
-  // Legacy deep links to the removed "you" tab land on overview.
-  if (tab === "you") {
-    return "overview";
+  // Legacy deep links (pre–4-tab IA).
+  if (tab === "you" || tab === "overview") {
+    return "today";
   }
+  if (tab === "approval") {
+    return "crowd";
+  }
+  if (tab === "compare") {
+    return "rankings";
+  }
+  // markets → page-level redirect to /predict (see InsightsPage).
   if (tab && (INSIGHTS_TAB_VALUES as readonly string[]).includes(tab)) {
     return tab as InsightsTab;
   }
-  // Deep links with filter params should land on Rankings, not Overview.
+  // Deep links with filter params should land on Rankings, not Today.
   if (params.get("source") || params.get("category") || params.get("fav") === "1") {
     return "rankings";
   }
-  return "overview";
+  return "today";
 }
 
 export function writeInsightsQuery(patch: {
@@ -174,7 +218,7 @@ export function writeInsightsQuery(patch: {
 }): void {
   const url = new URL(window.location.href);
   if (patch.tab !== undefined) {
-    if (patch.tab === null || patch.tab === "overview") {
+    if (patch.tab === null || patch.tab === "today") {
       url.searchParams.delete("tab");
     } else {
       url.searchParams.set("tab", patch.tab);

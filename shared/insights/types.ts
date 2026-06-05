@@ -1,4 +1,4 @@
-import type { InsightsSource } from "./filters";
+import type { InsightsSource, InsightsWindow } from "./filters";
 
 export type MomentumLevel = "none" | "low" | "medium" | "high";
 
@@ -6,8 +6,6 @@ export type InsightsPrimaryDriver =
   | "NEWS"
   | "WIKI"
   | "SEARCH"
-  | "VELOCITY"
-  | "MASS"
   | "MIXED";
 
 export interface InsightsMomentumLens {
@@ -73,18 +71,29 @@ export interface InsightsMoverItem {
 export interface InsightsStoryPayload {
   headline: string;
   body: string;
+  /** Multi-paragraph editorial; preferred over `body` when present. */
+  paragraphs?: string[];
+  /** Names to linkify in the briefing copy. */
+  people?: Array<{ id: string; name: string }>;
   generatedAt: string;
   refreshesAt: string;
   mode: "deterministic" | "ai";
 }
 
+export interface InsightsFavouriteHighlight {
+  personId: string;
+  name: string;
+  avatar: string | null;
+  category: string | null;
+  rank: number;
+  change24h: number;
+  primaryDriver: InsightsPrimaryDriver | null;
+}
+
 export interface InsightsFavouritesSignals {
   summary: string;
-  highlights: Array<{
-    personId: string;
-    name: string;
-    message: string;
-  }>;
+  favouriteCount: number;
+  highlights: InsightsFavouriteHighlight[];
   newsDrivenCount: number;
   top50CrossedCount: number;
 }
@@ -102,10 +111,10 @@ export interface InsightsOverviewResponse {
     topN: number;
     segments: InsightsDriverMixSegment[];
   };
-  movers: {
-    climbers: InsightsMoverItem[];
-    droppers: InsightsMoverItem[];
-  };
+  movers: Record<
+    InsightsWindow,
+    { climbers: InsightsMoverItem[]; droppers: InsightsMoverItem[] }
+  >;
   story: InsightsStoryPayload;
   favouritesSignals?: InsightsFavouritesSignals;
 }

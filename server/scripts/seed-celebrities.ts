@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { canonicalizePersonCategory } from '@shared/constants';
 import { db } from '../db';
 import { trackedPeople, trendingPeople, trendSnapshots, apiCache, platformInsights, insightItems } from '@shared/schema';
 import { sql } from 'drizzle-orm';
@@ -79,7 +80,7 @@ async function seedCelebrities() {
   
   const celebrities = data.map((row, index) => ({
     name: row.Name.trim(),
-    category: row.Category.trim(),
+    category: canonicalizePersonCategory(row.Category.trim())!,
     displayOrder: index + 1,
     wikiSlug: row.Wiki_Slug?.trim() || null,
     xHandle: row.X_Handle?.trim() || null,

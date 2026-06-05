@@ -7,21 +7,26 @@ export const QUADRANT_MIN_VOTES = 20;
 export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
   news_momentum: "News momentum",
   wiki_momentum: "Wiki momentum",
-  velocity: "Velocity",
-  mass: "Mass",
   fame: "Trend Score",
-  news: "Press (24h)",
+  news: "News (24h)",
   wiki: "Wikipedia",
   search_volume: "Search interest",
 };
 
+/** User-facing driver labels (aligned with profile Attention Signals). */
 export const INSIGHTS_DRIVER_LABELS: Record<InsightsPrimaryDriver, string> = {
-  NEWS: "Press-led",
-  WIKI: "Wiki-led",
-  SEARCH: "Search-led",
-  VELOCITY: "Velocity-led",
-  MASS: "Mass-led",
+  NEWS: "News Activity",
+  WIKI: "Wikipedia Activity",
+  SEARCH: "Search Activity",
   MIXED: "Mixed signals",
+};
+
+/** One-line explainer for the Today tab Attention mix legend. */
+export const INSIGHTS_DRIVER_LEGEND: Record<InsightsPrimaryDriver, string> = {
+  NEWS: "recent news headlines",
+  WIKI: "Wikipedia page traffic",
+  SEARCH: "Google search interest",
+  MIXED: "more than one signal at once",
 };
 
 export const INSIGHTS_DIVERGENCE_LABELS: Record<string, string> = {

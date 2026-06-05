@@ -1,3 +1,4 @@
+import { getMarketCategoryLabel } from "@shared/constants";
 import { getCachedTrendingPeople } from "./insights-people-cache";
 
 export interface CategoryHeatmapRow {
@@ -31,7 +32,9 @@ export async function loadCategoryHeatmap(): Promise<{ rows: CategoryHeatmapRow[
   >();
 
   for (const person of people) {
-    const cat = person.category?.trim() || "Other";
+    const cat = person.category?.trim()
+      ? getMarketCategoryLabel(person.category)
+      : "Other";
     const bucket = byCategory.get(cat) ?? { changes24: [], changes7: [], members: [] };
     if (person.change24h != null) bucket.changes24.push(person.change24h);
     if (person.change7d != null) bucket.changes7.push(person.change7d);

@@ -6,6 +6,7 @@ import {
   type InductionCandidate,
 } from "@shared/schema";
 import type { TrackedPerson } from "@shared/schema";
+import { canonicalizePersonCategory } from "@shared/constants";
 import { generateImageSlug } from "../lib/imageSlug";
 import { db } from "../db";
 import {
@@ -64,7 +65,7 @@ export async function syncInductionCandidateToShadowTrackedPerson(
     .insert(trackedPeople)
     .values({
       name,
-      category: candidate.category || "Other",
+      category: canonicalizePersonCategory(candidate.category || "Other")!,
       status: "induction",
       imageSlug,
       wikiSlug: candidate.wikiSlug,
@@ -175,7 +176,7 @@ export async function syncTrackedPersonToInductionCandidate(
     updates.googleTrendsTopicId = tp.googleTrendsTopicId;
   }
   if (tp.category && tp.category !== candidate.category) {
-    updates.category = tp.category;
+    updates.category = canonicalizePersonCategory(tp.category)!;
   }
   if (!isEmptyish(tp.imageSlug) && tp.imageSlug !== candidate.imageSlug) {
     updates.imageSlug = tp.imageSlug;

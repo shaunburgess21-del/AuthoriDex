@@ -190,7 +190,7 @@ export function ApprovalTab() {
                   </CardTitle>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground/70 max-w-xl">
-                  Ranked by community approval. Tap <span className="font-medium text-foreground">Rate</span> on any row to cast a 1–5 vote.
+                  Ranked by VoxDex community approval. Tap <span className="font-medium text-foreground">Rate</span> on any row to cast a 1–5 vote.
                 </p>
               </div>
             </div>
