@@ -18,6 +18,7 @@ export interface InsightsRankingRow {
   name: string;
   avatar: string | null;
   category: string | null;
+  /** Board rank — the person's position on the main leaderboard (Trend Score). */
   rank: number;
   fameIndex: number;
   velocityScore: number;
@@ -28,7 +29,20 @@ export interface InsightsRankingRow {
   breakdownPct: Record<string, number> | null;
   change24h: number | null;
   change7d: number | null;
+  /** Value used for sort (window- and source-aware). */
   sortValue: number;
+  /** Signed % delta shown in the trailing column (window-aware; MoM for search). */
+  metricDelta: number | null;
+  /**
+   * Origin of `metricDelta` — UI uses this to render the column header
+   * ("24H" / "7D" / "MoM").
+   */
+  metricDeltaKind: "change24h" | "change7d" | "mom";
+  /**
+   * Hint for the metric column: `"weekly_estimate"` when the value is
+   * `dailyAvg × 7` (News only). UI shows a small "(est.)" suffix + tooltip.
+   */
+  metricKind?: "raw" | "weekly_estimate" | "weekly_sum" | "monthly";
 }
 
 export interface InsightsRankingsResponse {
@@ -96,6 +110,10 @@ export interface InsightsFavouritesSignals {
   highlights: InsightsFavouriteHighlight[];
   newsDrivenCount: number;
   top50CrossedCount: number;
+  /** Live native markets (h2h/updown) referencing at least one favourite. */
+  pendingMarketsCount: number;
+  /** Live opinion polls + matchups + trending polls referencing favourites. */
+  pendingPollsCount: number;
 }
 
 export interface InsightsOverviewResponse {

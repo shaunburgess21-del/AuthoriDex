@@ -1,12 +1,27 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Minus, Sparkles, Star, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  ArrowRight,
+  Flame,
+  Minus,
+  Sparkles,
+  Star,
+  TrendingDown,
+  TrendingUp,
+  Vote,
+  LineChart as LineChartIcon,
+} from "lucide-react";
 import { useInsightsOverview } from "@/lib/insights-hooks";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { PersonInsightModal, type InsightPerson } from "@/components/PersonInsightModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { writeInsightsQuery } from "@shared/insights/filters";
 import type { InsightsWindow, InsightsSource } from "@shared/insights/filters";
-import type { InsightsPrimaryDriver } from "@shared/insights/types";
+import type {
+  InsightsFavouriteHighlight,
+  InsightsFavouritesSignals,
+  InsightsPrimaryDriver,
+} from "@shared/insights/types";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -18,7 +33,6 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { navigateToLogin } from "@/lib/authReturn";
 import { INSIGHTS_DRIVER_LEGEND } from "@shared/insights/constants";
-import type { InsightsFavouriteHighlight } from "@shared/insights/types";
 import { cn } from "@/lib/utils";
 
 /** Strip combining diacritical marks so "Mbappé" matches a stored "Mbappe". */
@@ -148,22 +162,26 @@ function MoversWindowToggle({
   );
 }
 
+interface MoverItem {
+  id: string;
+  name: string;
+  avatar: string | null;
+  category: string | null;
+  change24h: number | null;
+  change7d: number | null;
+  rank: number;
+}
+
 function MoverList({
   items,
   positive,
   window,
+  onSelect,
 }: {
-  items: Array<{
-    id: string;
-    name: string;
-    avatar: string | null;
-    category: string | null;
-    change24h: number | null;
-    change7d: number | null;
-    rank: number;
-  }>;
+  items: MoverItem[];
   positive: boolean;
   window: InsightsWindow;
+  onSelect: (item: MoverItem) => void;
 }) {
   const changeField = window === "24h" ? "change24h" : "change7d";
   const emptyMessage =
@@ -184,10 +202,11 @@ function MoverList({
       {items.map((m) => {
         const change = m[changeField] ?? 0;
         return (
-          <Link
+          <button
             key={m.id}
-            href={`/person/${m.id}`}
-            className="flex items-center gap-2.5 text-sm p-2.5 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
+            type="button"
+            onClick={() => onSelect(m)}
+            className="w-full flex items-center gap-2.5 text-sm p-2.5 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors text-left"
           >
             <span className="text-[10px] font-mono text-muted-foreground w-6">#{m.rank}</span>
             <PersonAvatar name={m.name} avatar={m.avatar} size="xs" />
@@ -198,7 +217,7 @@ function MoverList({
               {positive ? "+" : ""}
               {change.toFixed(1)}%
             </span>
-          </Link>
+          </button>
         );
       })}
     </div>
@@ -222,7 +241,6 @@ const DRIVER_TO_SOURCE: Partial<Record<InsightsPrimaryDriver, InsightsSource>> =
 
 function FavouriteHighlightRow({ item }: { item: InsightsFavouriteHighlight }) {
   const change = item.change24h;
-  const driverLabel = item.primaryDriver ? DRIVER_DISPLAY[item.primaryDriver] : null;
 
   return (
     <Link
@@ -235,9 +253,6 @@ function FavouriteHighlightRow({ item }: { item: InsightsFavouriteHighlight }) {
         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
           {item.category && <CategoryPill category={item.category} size="sm" />}
           <span className="text-[10px] text-muted-foreground tabular-nums">#{item.rank}</span>
-          {driverLabel && (
-            <span className="text-[10px] text-muted-foreground">· {driverLabel}</span>
-          )}
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0 tabular-nums text-sm font-semibold">
@@ -263,15 +278,109 @@ function FavouriteHighlightRow({ item }: { item: InsightsFavouriteHighlight }) {
   );
 }
 
+function FavouriteHeroCard({ item }: { item: InsightsFavouriteHighlight }) {
+  const up = item.change24h > 0;
+  const down = item.change24h < 0;
+  const changeAbs = Math.abs(item.change24h);
+
+  return (
+    <Link
+      href={`/person/${item.personId}`}
+      className="group relative block overflow-hidden rounded-lg border border-border/60 bg-gradient-to-br from-blue-500/[0.06] via-background to-background hover:from-blue-500/[0.08] transition-colors"
+      data-testid="favourites-hero-card"
+    >
+      <div className="absolute inset-y-0 right-0 w-1/2 opacity-[0.04] pointer-events-none">
+        <div className="h-full w-full bg-gradient-to-l from-blue-500/40 to-transparent" />
+      </div>
+
+      <div className="relative p-4 flex items-start gap-3">
+        <div className="relative shrink-0">
+          <PersonAvatar name={item.name} avatar={item.avatar} size="md" />
+          <div className="absolute -bottom-1 -right-1 rounded-full bg-background border border-border/60 p-0.5">
+            <Flame className="h-3 w-3 text-orange-500" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
+            Biggest mover · 24h
+          </p>
+          <p className="text-base md:text-lg font-semibold truncate mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+            {item.name}
+          </p>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {item.category && <CategoryPill category={item.category} size="sm" />}
+            <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
+              #{item.rank}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums",
+                up && "text-green-600 dark:text-green-400",
+                down && "text-red-500",
+                !up && !down && "text-muted-foreground",
+              )}
+            >
+              {up && <TrendingUp className="h-3.5 w-3.5" />}
+              {down && <TrendingDown className="h-3.5 w-3.5" />}
+              {!up && !down && <Minus className="h-3.5 w-3.5" />}
+              {up ? "+" : down ? "-" : ""}
+              {changeAbs.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-foreground transition-colors hidden sm:block" />
+      </div>
+    </Link>
+  );
+}
+
+function FavouriteActivityStrip({
+  pendingMarketsCount,
+  pendingPollsCount,
+}: {
+  pendingMarketsCount: number;
+  pendingPollsCount: number;
+}) {
+  if (pendingMarketsCount === 0 && pendingPollsCount === 0) return null;
+
+  return (
+    <Link
+      href="/me/favorites"
+      className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-muted/30 hover:bg-muted/50 px-3 py-2 transition-colors"
+      data-testid="favourites-activity-strip"
+    >
+      <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+        {pendingMarketsCount > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            <LineChartIcon className="h-3.5 w-3.5 text-blue-500" />
+            <span className="text-foreground font-medium tabular-nums">{pendingMarketsCount}</span>
+            <span>{pendingMarketsCount === 1 ? "live market" : "live markets"}</span>
+          </span>
+        )}
+        {pendingMarketsCount > 0 && pendingPollsCount > 0 && (
+          <span className="text-muted-foreground/40">·</span>
+        )}
+        {pendingPollsCount > 0 && (
+          <span className="inline-flex items-center gap-1.5">
+            <Vote className="h-3.5 w-3.5 text-purple-500" />
+            <span className="text-foreground font-medium tabular-nums">{pendingPollsCount}</span>
+            <span>{pendingPollsCount === 1 ? "active vote" : "active votes"}</span>
+          </span>
+        )}
+      </div>
+      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+    </Link>
+  );
+}
+
 function FavouritesPanel({
   isLoggedIn,
   favouritesSignals,
 }: {
   isLoggedIn: boolean;
-  favouritesSignals?: {
-    favouriteCount: number;
-    highlights: InsightsFavouriteHighlight[];
-  };
+  favouritesSignals?: InsightsFavouritesSignals;
 }) {
   const [, setLocation] = useLocation();
 
@@ -310,39 +419,76 @@ function FavouritesPanel({
     );
   }
 
+  const hero = favouritesSignals.highlights[0];
+  const restHighlights = favouritesSignals.highlights.slice(1);
+
   if (favouritesSignals.highlights.length === 0) {
+    // No 24h movement, but the user has favourites — still show activity if any.
     return (
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        Your {favouritesSignals.favouriteCount}{" "}
-        {favouritesSignals.favouriteCount === 1 ? "favourite is" : "favourites are"} steady today
-        — no big 24h moves yet.
-      </p>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Your {favouritesSignals.favouriteCount}{" "}
+          {favouritesSignals.favouriteCount === 1 ? "favourite is" : "favourites are"} steady today
+          — no big 24h moves yet.
+        </p>
+        <FavouriteActivityStrip
+          pendingMarketsCount={favouritesSignals.pendingMarketsCount}
+          pendingPollsCount={favouritesSignals.pendingPollsCount}
+        />
+        <Link
+          href="/me/favorites"
+          className="inline-block text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          View full watchlist →
+        </Link>
+      </div>
     );
   }
 
   return (
-    <ul className="space-y-2">
-      {favouritesSignals.highlights.map((h) => (
-        <li key={h.personId}>
-          <FavouriteHighlightRow item={h} />
-        </li>
-      ))}
-      <li className="pt-1">
-        <Link
-          href="/me/favorites"
-          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-        >
-          View full watchlist →
-        </Link>
-      </li>
-    </ul>
+    <div className="space-y-3">
+      {hero && <FavouriteHeroCard item={hero} />}
+      {restHighlights.length > 0 && (
+        <ul className="space-y-2">
+          {restHighlights.map((h) => (
+            <li key={h.personId}>
+              <FavouriteHighlightRow item={h} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <FavouriteActivityStrip
+        pendingMarketsCount={favouritesSignals.pendingMarketsCount}
+        pendingPollsCount={favouritesSignals.pendingPollsCount}
+      />
+      <Link
+        href="/me/favorites"
+        className="inline-block text-xs text-blue-600 dark:text-blue-400 hover:underline"
+      >
+        View full watchlist →
+      </Link>
+    </div>
   );
+}
+
+function moverToInsightPerson(m: MoverItem): InsightPerson {
+  return {
+    id: m.id,
+    name: m.name,
+    avatar: m.avatar,
+    category: m.category,
+    rank: m.rank ?? null,
+    change24h: m.change24h ?? null,
+    rankChange: null,
+    hotMover: false,
+  };
 }
 
 export function OverviewTab() {
   const { isLoggedIn } = useAuth();
   const { data, isLoading, isError } = useInsightsOverview();
   const [moversWindow, setMoversWindow] = useState<InsightsWindow>("24h");
+  const [selectedMover, setSelectedMover] = useState<InsightPerson | null>(null);
 
   if (isLoading) {
     return (
@@ -363,6 +509,16 @@ export function OverviewTab() {
   const { story, movers, driverMix, favouritesSignals } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
+  // Hybrid briefing: the editorial prose refreshes twice daily, but the
+  // headline + the live strip below are driven by the CURRENT 24h climbers so
+  // they never go stale vs the Movers card.
+  const liveClimbers = movers["24h"]?.climbers ?? [];
+  const liveLeader = liveClimbers[0];
+  const liveHeadline = liveLeader
+    ? `${liveLeader.name} leads today's movers`
+    : story.headline;
+  const liveTop3 = liveClimbers.slice(0, 3);
+
   return (
     <div className="space-y-6 md:space-y-8">
       <section className="relative overflow-hidden rounded-xl pulse-card-voxdex border border-border/50">
@@ -376,20 +532,39 @@ export function OverviewTab() {
                 Today&apos;s Briefing
               </p>
               <h2 className="text-lg md:text-xl font-serif font-semibold mt-1 leading-snug">
-                {story.headline}
+                {liveHeadline}
               </h2>
               <BriefingBody
                 paragraphs={story.paragraphs}
                 body={story.body}
                 people={story.people}
               />
+
+              {liveTop3.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-green-600 dark:text-green-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                    Live
+                  </span>
+                  {liveTop3.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedMover(moverToInsightPerson(m))}
+                      className="inline-flex items-center gap-1 text-xs hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    >
+                      <span className="font-medium">{m.name}</span>
+                      <span className="tabular-nums text-green-600 dark:text-green-400 font-semibold">
+                        +{(m.change24h ?? 0).toFixed(1)}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <p className="text-[10px] text-muted-foreground/70 mt-3">
-                {story.mode === "ai" ? "AI summary" : "Live data snapshot"} · next refresh{" "}
-                {new Date(story.refreshesAt).toLocaleString(undefined, {
-                  weekday: "short",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {story.mode === "ai" ? "AI editorial" : "Auto-generated"} · refreshed twice daily ·
+                movement is live
               </p>
             </div>
           </div>
@@ -416,6 +591,7 @@ export function OverviewTab() {
                 items={windowMovers.climbers.slice(0, 8)}
                 positive
                 window={moversWindow}
+                onSelect={(m) => setSelectedMover(moverToInsightPerson(m))}
               />
             </div>
             <div>
@@ -426,6 +602,7 @@ export function OverviewTab() {
                 items={windowMovers.droppers.slice(0, 8)}
                 positive={false}
                 window={moversWindow}
+                onSelect={(m) => setSelectedMover(moverToInsightPerson(m))}
               />
             </div>
           </div>
@@ -445,58 +622,76 @@ export function OverviewTab() {
 
       <InsightsSection
         title="Attention mix"
-        description={`What's driving attention across the top ${driverMix.topN} right now.`}
+        description={`Of the top ${driverMix.topN}, the share led by each signal right now.`}
       >
         <div className="space-y-3 max-w-2xl">
-          {driverMix.segments.map((seg) => {
-            const source = DRIVER_TO_SOURCE[seg.driver];
-            const barInner = (
-              <>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span
-                    className={cn(
-                      "font-medium transition-colors",
-                      source && "group-hover:text-blue-600 dark:group-hover:text-blue-400",
-                    )}
-                  >
-                    {DRIVER_DISPLAY[seg.driver] ?? seg.driver}
-                  </span>
-                  <span className="text-muted-foreground tabular-nums">{seg.pct}%</span>
-                </div>
-                <div className="h-2.5 rounded-full bg-muted/80 overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full bg-gradient-to-r transition-all",
-                      DRIVER_BAR_GRADIENT[seg.driver] ?? DRIVER_BAR_GRADIENT.MIXED,
-                    )}
-                    style={{ width: `${Math.max(seg.pct, 2)}%` }}
-                  />
-                </div>
-              </>
-            );
+          {(() => {
+            // "Mixed signals" is too ambiguous to surface — show only the three
+            // concrete signals. Re-normalise their shares so the bars read as
+            // "share among News / Wikipedia / Search" and fill the track,
+            // rather than three stubby bars summing to whatever's left after
+            // Mixed is removed.
+            const concrete = driverMix.segments.filter((seg) => seg.driver !== "MIXED");
+            const concreteTotal = concrete.reduce((sum, seg) => sum + seg.pct, 0) || 1;
+            if (concrete.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground">
+                  Attention is spread across mixed signals right now — no single source is
+                  clearly leading.
+                </p>
+              );
+            }
+            return concrete.map((seg) => {
+              const sharePct = Math.round((seg.pct / concreteTotal) * 100);
+              const source = DRIVER_TO_SOURCE[seg.driver];
+              const barInner = (
+                <>
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span
+                      className={cn(
+                        "font-medium transition-colors",
+                        source && "group-hover:text-blue-600 dark:group-hover:text-blue-400",
+                      )}
+                    >
+                      {DRIVER_DISPLAY[seg.driver] ?? seg.driver}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">{sharePct}%</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-muted/80 overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full bg-gradient-to-r transition-all",
+                        DRIVER_BAR_GRADIENT[seg.driver] ?? DRIVER_BAR_GRADIENT.MIXED,
+                      )}
+                      style={{ width: `${Math.max(sharePct, 2)}%` }}
+                    />
+                  </div>
+                </>
+              );
 
-            return source ? (
-              <button
-                key={seg.driver}
-                type="button"
-                className="w-full text-left group"
-                title={`Open ${DRIVER_DISPLAY[seg.driver]} rankings`}
-                onClick={() => {
-                  logInsightsEvent("overview", "driver_slice_click", { driver: seg.driver });
-                  writeInsightsQuery({ tab: "rankings", filters: { source } });
-                }}
-              >
-                {barInner}
-              </button>
-            ) : (
-              <div key={seg.driver} className="w-full">
-                {barInner}
-              </div>
-            );
-          })}
+              return source ? (
+                <button
+                  key={seg.driver}
+                  type="button"
+                  className="w-full text-left group"
+                  title={`Open ${DRIVER_DISPLAY[seg.driver]} rankings`}
+                  onClick={() => {
+                    logInsightsEvent("overview", "driver_slice_click", { driver: seg.driver });
+                    writeInsightsQuery({ tab: "rankings", filters: { source } });
+                  }}
+                >
+                  {barInner}
+                </button>
+              ) : (
+                <div key={seg.driver} className="w-full">
+                  {barInner}
+                </div>
+              );
+            });
+          })()}
         </div>
         <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/80">
-          {(Object.keys(INSIGHTS_DRIVER_LEGEND) as InsightsPrimaryDriver[]).map((driver, i, arr) => (
+          {(["NEWS", "WIKI", "SEARCH"] as const).map((driver, i, arr) => (
             <span key={driver}>
               <span className="font-medium text-muted-foreground">{DRIVER_DISPLAY[driver]}</span>
               {" = "}
@@ -506,6 +701,8 @@ export function OverviewTab() {
           ))}
         </p>
       </InsightsSection>
+
+      <PersonInsightModal person={selectedMover} onClose={() => setSelectedMover(null)} />
     </div>
   );
 }

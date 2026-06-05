@@ -86,3 +86,53 @@ async function loadLatestSnapshotsByPersonUncached(): Promise<Map<string, Latest
 export async function loadLatestSnapshotsByPerson(): Promise<Map<string, LatestSnapshotRow>> {
   return memoizeAsync(SNAPSHOTS_MEMO_KEY, INSIGHTS_REQUEST_MEMO_TTL_MS, loadLatestSnapshotsByPersonUncached);
 }
+
+const WIKI_7D_MEMO_KEY = "insights:trailing-7d-wiki-by-person";
+
+/**
+ * Trailing 7-day Wikipedia pageview SUM per person.
+ *
+ * Wiki pageviews are stored once per ingest snapshot but report a stable
+ * "yesterday" daily total, so multiple hourly snapshots on the same UTC day
+ * all carry the same value. To get the true weekly sum we take `MAX(pageviews)`
+ * per (person, day) — collapsing duplicates — then SUM those daily maxes
+ * across the last 7 UTC days.
+ *
+ * This is the *honest* 7d total. (News uses a `dailyAvg × 7` estimate because
+ * `news_count` is a rolling 24h count, summing it over hours double-counts.)
+ *
+ * Performance: one bulk query (~27k rows in a 7d window grouped by person),
+ * memoized for the standard 60s insights window.
+ */
+export async function loadTrailing7dWikiByPerson(): Promise<Map<string, number>> {
+  return memoizeAsync(WIKI_7D_MEMO_KEY, INSIGHTS_REQUEST_MEMO_TTL_MS, async () => {
+    const result = await db.execute(sql`
+      SELECT person_id AS "personId", SUM(daily_max)::float AS "weekSum"
+      FROM (
+        SELECT
+          person_id,
+          DATE_TRUNC('day', timestamp) AS day,
+          MAX(wiki_pageviews) AS daily_max
+        FROM trend_snapshots
+        WHERE timestamp >= NOW() - INTERVAL '7 days'
+          AND snapshot_origin = 'ingest'
+          AND wiki_pageviews IS NOT NULL
+        GROUP BY person_id, day
+      ) per_day
+      GROUP BY person_id
+    `);
+
+    const rows = (Array.isArray(result) ? result : (result as { rows: unknown[] }).rows) as Array<{
+      personId: string;
+      weekSum: number | string | null;
+    }>;
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      const sum = Number(row.weekSum ?? 0);
+      if (Number.isFinite(sum) && sum > 0) {
+        map.set(row.personId, sum);
+      }
+    }
+    return map;
+  });
+}

@@ -1839,11 +1839,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
       const category = (req.query.category as string || "").toLowerCase();
+      // Optional ?direction=asc surfaces the LOWEST approval ratings — used by
+      // the Insights Vote tab's "Polarising" tile. Default remains descending.
+      const direction = (req.query.direction as string || "desc").toLowerCase();
+      // Minimum votes gate (default 20). Required so the "lowest approval"
+      // mode doesn't surface profiles with one stray 1-star rating.
+      const minVotes = Math.max(parseInt(req.query.minVotes as string) || 0, 0);
 
       const conditions: SQL[] = [gt(celebrityMetrics.approvalAvgRating, 0)];
       if (category && category !== "all") {
         conditions.push(sql`lower(${trendingPeople.category}) = ${category}`);
       }
+      if (minVotes > 0) {
+        conditions.push(gte(celebrityMetrics.approvalVotesCount, minVotes));
+      }
+
+      const orderBy = direction === "asc"
+        ? celebrityMetrics.approvalAvgRating
+        : desc(celebrityMetrics.approvalAvgRating);
 
       const rows = await db
         .select({
@@ -1857,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(trendingPeople)
         .innerJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
         .where(and(...conditions))
-        .orderBy(desc(celebrityMetrics.approvalAvgRating))
+        .orderBy(orderBy)
         .limit(limit);
 
       const personIds = rows.map((r) => r.id);

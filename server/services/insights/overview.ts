@@ -2,13 +2,92 @@ import type { InsightsOverviewResponse, InsightsMoverItem } from "@shared/insigh
 import type { TrendingPerson } from "@shared/schema";
 import { QUADRANT_MIN_VOTES } from "@shared/insights/constants";
 import { db } from "../../db";
-import { celebrityMetrics, userFavourites } from "@shared/schema";
-import { eq, gte } from "drizzle-orm";
+import {
+  celebrityMetrics,
+  marketEntries,
+  matchups,
+  opinionPollOptions,
+  opinionPolls,
+  predictionMarkets,
+  trendingPolls,
+  userFavourites,
+} from "@shared/schema";
+import { and, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { getCachedTrendingPeople } from "./insights-people-cache";
 import { loadDriversSummary, loadPersonSignals } from "./drivers";
 import { getInsightsStory } from "./story";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import { withDiscoverCache } from "./discover-cache";
+
+async function countFavouriteActivity(
+  favPersonIds: string[],
+): Promise<{ pendingMarketsCount: number; pendingPollsCount: number }> {
+  if (favPersonIds.length === 0) {
+    return { pendingMarketsCount: 0, pendingPollsCount: 0 };
+  }
+
+  // Run all four counts in parallel — each is a small indexed lookup keyed
+  // by personId. Native markets need DISTINCT marketId because a market may
+  // reference two favourites at once (h2h).
+  const [marketsRow, matchupsRow, opinionRow, trendingRow] = await Promise.all([
+    db
+      .select({ n: sql<number>`COUNT(DISTINCT ${predictionMarkets.id})::int` })
+      .from(marketEntries)
+      .innerJoin(
+        predictionMarkets,
+        eq(predictionMarkets.id, marketEntries.marketId),
+      )
+      .where(
+        and(
+          inArray(marketEntries.personId, favPersonIds),
+          eq(predictionMarkets.status, "OPEN"),
+          inArray(predictionMarkets.marketType, ["h2h", "updown"]),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(matchups)
+      .where(
+        and(
+          or(
+            inArray(matchups.personAId, favPersonIds),
+            inArray(matchups.personBId, favPersonIds),
+          ),
+          eq(matchups.visibility, "live"),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`COUNT(DISTINCT ${opinionPolls.id})::int` })
+      .from(opinionPollOptions)
+      .innerJoin(
+        opinionPolls,
+        eq(opinionPolls.id, opinionPollOptions.pollId),
+      )
+      .where(
+        and(
+          inArray(opinionPollOptions.personId, favPersonIds),
+          eq(opinionPolls.visibility, "live"),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(trendingPolls)
+      .where(
+        and(
+          inArray(trendingPolls.personId, favPersonIds),
+          eq(trendingPolls.visibility, "live"),
+        ),
+      ),
+  ]);
+
+  return {
+    pendingMarketsCount: Number(marketsRow[0]?.n ?? 0),
+    pendingPollsCount:
+      Number(matchupsRow[0]?.n ?? 0) +
+      Number(opinionRow[0]?.n ?? 0) +
+      Number(trendingRow[0]?.n ?? 0),
+  };
+}
 
 const MOVER_PAGE_SIZE = 20;
 
@@ -154,6 +233,14 @@ async function loadInsightsOverviewInner(
         };
       });
 
+    // Compute markets / polls counts in parallel with the rest of the
+    // overview. We skip this when the user has no favourites since both
+    // queries would always return 0.
+    const activity =
+      favTrending.length > 0
+        ? await countFavouriteActivity(favTrending.map((p) => p.id))
+        : { pendingMarketsCount: 0, pendingPollsCount: 0 };
+
     favouritesSignals = {
       summary:
         favTrending.length > 0
@@ -163,6 +250,8 @@ async function loadInsightsOverviewInner(
       highlights,
       newsDrivenCount,
       top50CrossedCount,
+      pendingMarketsCount: activity.pendingMarketsCount,
+      pendingPollsCount: activity.pendingPollsCount,
     };
   }
 

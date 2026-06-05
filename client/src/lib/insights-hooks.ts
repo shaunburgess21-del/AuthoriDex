@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, keepPreviousData } from "@tanstack/react-query";
 import { getAuthHeaders } from "./queryClient";
 import type {
   InsightsOverviewResponse,
@@ -16,12 +16,31 @@ async function fetchInsightsJson<T>(path: string): Promise<T> {
   return json.data as T;
 }
 
+/**
+ * Paginated rankings via infinite scroll. The server returns `total` so we
+ * stop requesting once all rows are loaded. The cache key includes the
+ * non-page filter signature so source / window / category / favourites
+ * changes start a fresh list.
+ */
 export function useInsightsRankings(filters: InsightsFilters) {
-  const qs = serializeFilters(filters).toString();
-  return useQuery({
-    queryKey: ["/api/insights/rankings", qs],
-    queryFn: () => fetchInsightsJson<InsightsRankingsResponse>(`/api/insights/rankings?${qs}`),
+  // Strip page from the cache signature — pages stack inside one query.
+  const baseFilters = { ...filters, page: 1 };
+  const baseQs = serializeFilters(baseFilters).toString();
+
+  return useInfiniteQuery<InsightsRankingsResponse>({
+    queryKey: ["/api/insights/rankings", baseQs],
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const page = (pageParam as number) ?? 1;
+      const qs = serializeFilters({ ...baseFilters, page }).toString();
+      return fetchInsightsJson<InsightsRankingsResponse>(`/api/insights/rankings?${qs}`);
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, p) => sum + p.rows.length, 0);
+      return loaded < lastPage.total ? allPages.length + 1 : undefined;
+    },
     staleTime: 90_000,
+    placeholderData: keepPreviousData,
   });
 }
 

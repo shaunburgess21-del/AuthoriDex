@@ -117,9 +117,10 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
           content: `You write VoxDex's "Today's Briefing" — a short daily editorial on who is gaining attention on the board.
 Return JSON only: { "headline": string, "paragraphs": string[] }.
 Rules:
-- headline: max 100 characters, punchy, no clickbait
+- headline: max 100 characters, punchy, no clickbait. Do NOT include exact percentages or "leads with X%" — the headline must stay true for ~12 hours as the leaderboard shifts.
 - paragraphs: 1 lead paragraph plus up to 3 short beats (2-3 sentences each); max 900 characters total across all paragraphs
-- Use ONLY facts from the input JSON (names, % changes, categories, whyTrending summaries, headlines)
+- Use ONLY facts from the input JSON (names, categories, whyTrending summaries, headlines)
+- Do NOT quote specific percentage moves or rankings in prose — these change hourly and the page shows live figures separately. Describe WHY people are in the news, not by how much they moved.
 - No speculation or predictions about the future
 - Neutral, energetic tone
 - Never mention internal metrics (velocity, mass, fame index, trend score, driver mix, percentages of signal types)`,
@@ -128,10 +129,10 @@ Rules:
           role: "user",
           content: JSON.stringify({
             asOf: new Date().toISOString(),
+            // Deliberately omit change24h — the prose must stay number-light
+            // so it doesn't go stale; live figures render separately.
             topGainers: briefingInputs.topGainers.map((g) => ({
               name: g.name,
-              rank: g.rank,
-              change24h: g.change24h,
               category: g.category,
               whyTrending: g.whyTrending ?? null,
               topHeadline: g.topHeadline ?? null,
@@ -139,8 +140,6 @@ Rules:
             notableDropper: briefingInputs.notableDropper
               ? {
                   name: briefingInputs.notableDropper.name,
-                  rank: briefingInputs.notableDropper.rank,
-                  change24h: briefingInputs.notableDropper.change24h,
                   category: briefingInputs.notableDropper.category,
                   whyTrending: briefingInputs.notableDropper.whyTrending ?? null,
                 }

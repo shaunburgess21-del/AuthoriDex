@@ -23,6 +23,7 @@ import { loadStreaks } from "../services/insights/streaks";
 import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
 import { loadMarketsAnalytics } from "../services/insights/markets-analytics";
+import { loadCrowdWebSentiment } from "../services/insights/crowd-web-sentiment";
 
 const insightsEventSchema = z.object({
   surface: z.string().min(1).max(64),
@@ -191,6 +192,16 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] markets analytics", error);
       res.status(500).json({ error: "Failed to load markets analytics" });
+    }
+  });
+
+  app.get("/api/insights/crowd/web-sentiment", async (_req, res) => {
+    try {
+      const data = await withDiscoverCache("crowd-web-sentiment", loadCrowdWebSentiment);
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] crowd web-sentiment", error);
+      res.status(500).json({ error: "Failed to load web sentiment leaderboard" });
     }
   });
 

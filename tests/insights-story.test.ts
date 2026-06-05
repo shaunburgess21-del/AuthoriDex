@@ -21,7 +21,7 @@ describe("nextBriefingRefreshIso", () => {
 });
 
 describe("buildDeterministicParagraphs", () => {
-  it("builds a lead and per-gainer beats from 24h movers", () => {
+  it("builds a number-light lead and per-gainer beats from 24h movers", () => {
     const paragraphs = buildDeterministicParagraphs({
       topGainers: [
         {
@@ -54,16 +54,15 @@ describe("buildDeterministicParagraphs", () => {
       ],
     });
 
-    assert.ok(paragraphs.length >= 4);
-    assert.match(paragraphs[0]!, /Alice/);
-    assert.match(paragraphs[0]!, /\+9\.4%/);
-    assert.equal(paragraphs[1], "Alice headlines a new tour announcement.");
-    assert.match(paragraphs[2]!, /Bob/);
+    assert.ok(paragraphs.length >= 3);
+    // Lead uses the lead gainer's whyTrending summary verbatim.
+    assert.equal(paragraphs[0], "Alice headlines a new tour announcement.");
+    assert.match(paragraphs[1]!, /Bob/);
     assert.ok(paragraphs.some((p) => p.includes("Carol")));
-    assert.equal(
-      paragraphs.filter((p) => p.includes("Alice")).length,
-      2,
-      "lead line + whyTrending beat only (no redundant generic for #1)",
+    // Evergreen: no exact percentages baked into the prose (they go stale).
+    assert.ok(
+      paragraphs.every((p) => !p.includes("%")),
+      "prose must be number-light so it doesn't contradict live figures",
     );
   });
 

@@ -16,7 +16,19 @@ export interface InsightsCacheCronResult {
 }
 
 const WARM_TASKS: Array<{ name: string; run: () => Promise<unknown> }> = [
+  // Trend Score (default) plus the two momentum tabs users hit most — warming
+  // them avoids the cold ~160-person signal compute on the request path.
   { name: "rankings", run: () => loadInsightsRankings(DEFAULT_INSIGHTS_FILTERS, null) },
+  {
+    name: "rankings:news_momentum",
+    run: () =>
+      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "news_momentum" }, null),
+  },
+  {
+    name: "rankings:wiki_momentum",
+    run: () =>
+      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "wiki_momentum" }, null),
+  },
   { name: "markets", run: () => loadMarketsAnalytics() },
   { name: "volatility", run: () => withDiscoverCache("volatility", loadVolatility) },
   { name: "overview", run: () => loadInsightsOverview(null) },

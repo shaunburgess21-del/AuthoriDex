@@ -393,13 +393,13 @@ export function DiscoverTab() {
       </InsightsSection>
 
       <InsightsSection
-        title="Single-Source Surge"
-        description="One signal is hot while the others stay quiet — a uniquely multi-source view."
+        title="Single-source surge"
+        description="People where one signal — news, Wikipedia, or search — is hot while the others stay quiet. A uniquely multi-source view."
         accent="blue"
       >
         {surgeLoading && <Skeleton className="h-32 w-full" />}
         {!surgeLoading && (surge?.rows.length ?? 0) === 0 && (
-          <InsightsEmptyState message="No single-source surges on the board right now." />
+          <InsightsEmptyState message="No single-source surges right now — attention looks balanced across news, Wikipedia, and search." />
         )}
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {surge?.rows.map((row) => (
@@ -479,7 +479,7 @@ export function DiscoverTab() {
                 ))}
                 {volatility.volatile.length === 0 && (
                   <li className="text-xs text-muted-foreground">
-                    Need ≥{volatility.sampleFloor} hourly samples per person.
+                    Not enough recent data yet.
                   </li>
                 )}
               </ul>
@@ -639,46 +639,74 @@ export function DiscoverTab() {
         </p>
       </InsightsSection>
 
-      <InsightsSection title="Category heatmap" description="Median movers by category." accent="none">
+      <InsightsSection
+        title="Category heatmap"
+        description="7-day median movement per category — green is heating up, red is cooling."
+        accent="none"
+      >
         {heatmapLoading && <Skeleton className="h-40 w-full" />}
-        {!heatmapLoading && heatmap && (
+        {!heatmapLoading && heatmap && heatmap.rows.length === 0 && (
+          <InsightsEmptyState message="No category data yet — needs at least a week of snapshots." />
+        )}
+        {!heatmapLoading && heatmap && heatmap.rows.length > 0 && (
           <ChartOrList
             chart={
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                {heatmap.rows.map((row) => (
-                  <div
-                    key={row.category}
-                    className={cn(
-                      "rounded-lg border p-3 text-center",
-                      row.median7d > 2
-                        ? "border-green-500/40 bg-green-500/10"
-                        : row.median7d < -2
-                          ? "border-red-500/40 bg-red-500/10"
-                          : "border-border/40 bg-muted/20",
-                    )}
-                  >
-                    <p className="text-xs font-medium truncate">{row.category}</p>
-                    <p className="text-lg font-semibold tabular-nums mt-1">
-                      {row.median7d >= 0 ? "+" : ""}
-                      {row.median7d.toFixed(1)}%
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">7d median</p>
-                    {row.hottest && (
-                      <Link
-                        href={`/person/${row.hottest.id}`}
-                        className="text-[10px] mt-2 truncate block hover:underline"
-                        onClick={() =>
-                          logInsightsEvent("discover", "heatmap_person", {
-                            category: row.category,
-                            personId: row.hottest!.id,
-                          })
-                        }
-                      >
-                        {row.hottest.name}
-                      </Link>
-                    )}
-                  </div>
-                ))}
+                {heatmap.rows.map((row) => {
+                  // Diverging 5-band scale: strong red → light red → neutral
+                  // → light green → strong green. Reads cleanly at a glance.
+                  const tier =
+                    row.median7d >= 10
+                      ? "strong-green"
+                      : row.median7d >= 3
+                        ? "light-green"
+                        : row.median7d <= -10
+                          ? "strong-red"
+                          : row.median7d <= -3
+                            ? "light-red"
+                            : "neutral";
+                  const tone = {
+                    "strong-green":
+                      "border-green-500/60 bg-green-500/20 text-green-700 dark:text-green-300",
+                    "light-green":
+                      "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300",
+                    neutral: "border-border/40 bg-muted/20 text-foreground",
+                    "light-red":
+                      "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+                    "strong-red":
+                      "border-red-500/60 bg-red-500/20 text-red-600 dark:text-red-400",
+                  }[tier];
+
+                  return (
+                    <div
+                      key={row.category}
+                      className={cn("rounded-lg border p-3 text-center", tone)}
+                    >
+                      <p className="text-xs font-medium truncate text-foreground/90">
+                        {row.category}
+                      </p>
+                      <p className="text-lg font-semibold tabular-nums mt-1">
+                        {row.median7d >= 0 ? "+" : ""}
+                        {row.median7d.toFixed(1)}%
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">7d median</p>
+                      {row.hottest && (
+                        <Link
+                          href={`/person/${row.hottest.id}`}
+                          className="text-[10px] mt-2 truncate block hover:underline text-foreground/80"
+                          onClick={() =>
+                            logInsightsEvent("discover", "heatmap_person", {
+                              category: row.category,
+                              personId: row.hottest!.id,
+                            })
+                          }
+                        >
+                          {row.hottest.name}
+                        </Link>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             }
             list={
@@ -690,7 +718,14 @@ export function DiscoverTab() {
                   >
                     <span className="text-muted-foreground w-5 tabular-nums">{i + 1}</span>
                     <span className="flex-1 font-medium">{row.category}</span>
-                    <span className="tabular-nums text-muted-foreground">
+                    <span
+                      className={cn(
+                        "tabular-nums font-semibold",
+                        row.median7d > 0 && "text-green-600 dark:text-green-400",
+                        row.median7d < 0 && "text-red-500",
+                        row.median7d === 0 && "text-muted-foreground",
+                      )}
+                    >
                       {row.median7d >= 0 ? "+" : ""}
                       {row.median7d.toFixed(1)}% 7d
                     </span>

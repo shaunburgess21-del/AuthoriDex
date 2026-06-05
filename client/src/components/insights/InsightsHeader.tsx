@@ -1,6 +1,14 @@
 import type { ComponentType, SVGProps } from "react";
-import { BarChart3, Compass, Sparkles, Users } from "lucide-react";
+import {
+  BarChart3,
+  Compass,
+  LineChart as LineChartIcon,
+  Sparkles,
+  Users,
+  Vote as VoteIcon,
+} from "lucide-react";
 import { type InsightsTab, writeInsightsQuery } from "@shared/insights/filters";
+import { cn } from "@/lib/utils";
 
 const INSIGHTS_TABS: Array<{
   id: InsightsTab;
@@ -11,6 +19,8 @@ const INSIGHTS_TABS: Array<{
   { id: "today", label: "Today", icon: Sparkles, accent: "#3C83F6" },
   { id: "rankings", label: "Rankings", icon: BarChart3, accent: "#6366F1" },
   { id: "discover", label: "Discover", icon: Compass, accent: "#8B5CF6" },
+  { id: "vote", label: "Vote", icon: VoteIcon, accent: "#A855F7" },
+  { id: "predict", label: "Predict", icon: LineChartIcon, accent: "#F59E0B" },
   { id: "crowd", label: "Crowd", icon: Users, accent: "#22D3EE" },
 ];
 
@@ -24,9 +34,18 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
       className="sticky top-16 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md"
       data-testid="insights-tab-bar"
     >
-      <div className="container mx-auto px-4 max-w-7xl py-2.5 md:py-3">
-        <div className="max-w-xl mx-auto" data-testid="insights-segmented-tabs">
-          <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide">
+      <div className="container mx-auto px-3 sm:px-4 max-w-7xl py-2.5 md:py-3">
+        {/*
+         * 6 tabs is too many for a single row at very narrow widths, so we
+         * collapse to icons-only with a horizontally scrollable, snap-aligned
+         * row at < sm. Active tab still shows its label so the user always
+         * sees where they are. Desktop keeps all labels visible.
+         */}
+        <div
+          className="mx-auto max-w-3xl"
+          data-testid="insights-segmented-tabs"
+        >
+          <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
             {INSIGHTS_TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
@@ -34,17 +53,21 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => writeInsightsQuery({ tab: tab.id })}
-                  className={`
-                    relative flex items-center justify-center gap-1.5 flex-1
-                    whitespace-nowrap px-2.5 sm:px-4 py-[11px] rounded-md text-[13px] sm:text-[14px] font-medium transition-all
-                    min-w-fit
-                    ${isActive
+                  onClick={() => writeInsightsQuery({ tab: tab.id, clearFilters: true })}
+                  className={cn(
+                    "relative flex items-center justify-center gap-1.5",
+                    "whitespace-nowrap px-2.5 sm:px-4 py-[10px] sm:py-[11px]",
+                    "rounded-md text-[12px] sm:text-[14px] font-medium transition-all snap-start",
+                    // Mobile: equal-width icon-only tabs (label shows when active).
+                    // Desktop: each tab grows to fill the bar and shows its label.
+                    "flex-1 min-w-fit",
+                    isActive
                       ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                    }
-                  `}
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
                   data-testid={`insights-tab-${tab.id}`}
+                  aria-label={tab.label}
+                  aria-pressed={isActive}
                 >
                   {isActive && (
                     <span
@@ -53,10 +76,12 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                     />
                   )}
                   <Icon
-                    className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px]"
+                    className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] shrink-0"
                     style={isActive ? { color: tab.accent } : undefined}
                   />
-                  {tab.label}
+                  <span className={cn(isActive ? "inline" : "hidden sm:inline")}>
+                    {tab.label}
+                  </span>
                 </button>
               );
             })}

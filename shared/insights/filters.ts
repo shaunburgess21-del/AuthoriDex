@@ -4,9 +4,11 @@
  */
 
 export const INSIGHTS_SOURCE_VALUES = [
+  // Trend Score is the "home leaderboard" ranking — leads the pills so users
+  // see the most familiar view first when they open Rankings.
+  "fame",
   "news_momentum",
   "wiki_momentum",
-  "fame",
   "news",
   "wiki",
   // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
@@ -26,6 +28,8 @@ export const INSIGHTS_TAB_VALUES = [
   "today",
   "rankings",
   "discover",
+  "vote",
+  "predict",
   "crowd",
 ] as const satisfies readonly string[];
 export type InsightsTab = (typeof INSIGHTS_TAB_VALUES)[number];
@@ -40,7 +44,9 @@ export interface InsightsFilters {
 }
 
 export const DEFAULT_INSIGHTS_FILTERS: InsightsFilters = {
-  source: "news_momentum",
+  // Default ranking matches the home leaderboard so first-time visitors see a
+  // familiar list. Old bookmarks with explicit ?source=... still resolve.
+  source: "fame",
   category: null,
   window: "24h",
   favouritesOnly: false,
@@ -146,24 +152,31 @@ export function canonicalCacheKey(prefix: string, filters: InsightsFilters): str
   return parts.join("|");
 }
 
-/** Legacy ?tab= values from the 6-tab IA → canonical tab id (`today` → omit ?tab=). */
+/**
+ * Legacy `?tab=` values mapped to their canonical post-Phase-4 IA equivalent.
+ *
+ *  - `you` / `overview`    → `today`    (pre-Phase-2 names)
+ *  - `approval`            → `crowd`    (pre-Phase-2 names)
+ *  - `compare`             → `rankings` (Compare tab was removed in Phase 2)
+ *  - `markets`             → `predict`  (Markets moved into the in-Insights
+ *                                        Predict tab in Phase 4; previously it
+ *                                        redirected out to /predict)
+ */
 const LEGACY_INSIGHTS_TAB_URL: Record<string, InsightsTab> = {
   you: "today",
   overview: "today",
   approval: "crowd",
   compare: "rankings",
+  markets: "predict",
 };
 
-/**
- * Rewrites legacy `?tab=` values in the address bar to the 4-tab IA.
- * No-op for `markets` (InsightsPage redirects to /predict).
- */
+/** Rewrites legacy `?tab=` values in the address bar to the current IA. */
 export function canonicalizeInsightsTabUrl(): boolean {
   if (typeof window === "undefined") return false;
 
   const url = new URL(window.location.href);
   const raw = url.searchParams.get("tab");
-  if (!raw || raw === "markets") return false;
+  if (!raw) return false;
 
   if ((INSIGHTS_TAB_VALUES as readonly string[]).includes(raw)) {
     return false;
@@ -191,17 +204,11 @@ export function parseTab(search: string | URLSearchParams): InsightsTab {
       ? new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
       : search;
   const tab = params.get("tab");
-  // Legacy deep links (pre–4-tab IA).
-  if (tab === "you" || tab === "overview") {
-    return "today";
+
+  // Legacy aliases (single source of truth — see LEGACY_INSIGHTS_TAB_URL).
+  if (tab && tab in LEGACY_INSIGHTS_TAB_URL) {
+    return LEGACY_INSIGHTS_TAB_URL[tab]!;
   }
-  if (tab === "approval") {
-    return "crowd";
-  }
-  if (tab === "compare") {
-    return "rankings";
-  }
-  // markets → page-level redirect to /predict (see InsightsPage).
   if (tab && (INSIGHTS_TAB_VALUES as readonly string[]).includes(tab)) {
     return tab as InsightsTab;
   }
@@ -215,6 +222,13 @@ export function parseTab(search: string | URLSearchParams): InsightsTab {
 export function writeInsightsQuery(patch: {
   tab?: InsightsTab | null;
   filters?: Partial<InsightsFilters> | null;
+  /**
+   * Strip all Rankings-only filter params (source/category/window/fav/page/
+   * limit). Required when navigating between top-level tabs — otherwise stale
+   * `?source=…` params make `parseTab` resolve back to Rankings, so e.g.
+   * clicking "Today" from a Rankings sub-tab appears to do nothing.
+   */
+  clearFilters?: boolean;
 }): void {
   const url = new URL(window.location.href);
   if (patch.tab !== undefined) {
@@ -222,6 +236,11 @@ export function writeInsightsQuery(patch: {
       url.searchParams.delete("tab");
     } else {
       url.searchParams.set("tab", patch.tab);
+    }
+  }
+  if (patch.clearFilters) {
+    for (const key of ["source", "category", "window", "fav", "page", "limit"]) {
+      url.searchParams.delete(key);
     }
   }
   if (patch.filters) {

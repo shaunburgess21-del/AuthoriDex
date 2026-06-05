@@ -1,21 +1,15 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { canonicalizeInsightsTabUrl, parseTab } from "@shared/insights/filters";
 import type { InsightsTab } from "@shared/insights/filters";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
 import { OverviewTab } from "@/components/insights/OverviewTab";
 import { RankingsTab } from "@/components/insights/RankingsTab";
 import { DiscoverTab } from "@/components/insights/DiscoverTab";
-import { ApprovalTab } from "@/components/insights/ApprovalTab";
+import { CrowdTab } from "@/components/insights/CrowdTab";
+import { VoteTab } from "@/components/insights/VoteTab";
+import { PredictTab } from "@/components/insights/PredictTab";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { SiteHeader } from "@/components/SiteHeader";
-
-function shouldRedirectMarketsTab(search: string): boolean {
-  const params = new URLSearchParams(
-    search.startsWith("?") ? search.slice(1) : search,
-  );
-  return params.get("tab") === "markets";
-}
 
 function readTabFromLocation(): InsightsTab {
   canonicalizeInsightsTabUrl();
@@ -23,27 +17,14 @@ function readTabFromLocation(): InsightsTab {
 }
 
 export default function InsightsPage() {
-  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<InsightsTab>(() => readTabFromLocation());
 
-  useLayoutEffect(() => {
-    if (shouldRedirectMarketsTab(window.location.search)) {
-      setLocation("/predict");
-    }
-  }, [setLocation]);
-
   useEffect(() => {
-    const syncFromUrl = () => {
-      if (shouldRedirectMarketsTab(window.location.search)) {
-        setLocation("/predict");
-        return;
-      }
-      setTab(readTabFromLocation());
-    };
+    const syncFromUrl = () => setTab(readTabFromLocation());
     syncFromUrl();
     window.addEventListener("popstate", syncFromUrl);
     return () => window.removeEventListener("popstate", syncFromUrl);
-  }, [setLocation]);
+  }, []);
 
   useEffect(() => {
     document.title = "Insights | VoxDex";
@@ -78,7 +59,9 @@ export default function InsightsPage() {
         {tab === "today" && <OverviewTab />}
         {tab === "rankings" && <RankingsTab />}
         {tab === "discover" && <DiscoverTab />}
-        {tab === "crowd" && <ApprovalTab />}
+        {tab === "vote" && <VoteTab />}
+        {tab === "predict" && <PredictTab />}
+        {tab === "crowd" && <CrowdTab />}
       </main>
     </div>
   );

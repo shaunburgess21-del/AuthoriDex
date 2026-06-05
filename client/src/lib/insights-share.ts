@@ -1,4 +1,8 @@
-import { serializeFilters, type InsightsFilters } from "@shared/insights/filters";
+import {
+  DEFAULT_INSIGHTS_FILTERS,
+  serializeFilters,
+  type InsightsFilters,
+} from "@shared/insights/filters";
 import { logInsightsEvent } from "./insights-telemetry";
 
 export async function shareInsightsView(options: {
@@ -19,13 +23,11 @@ export async function shareInsightsView(options: {
     url.searchParams.set("tab", options.tab);
   }
   if (options.filters) {
+    // Fall back to the canonical defaults so we stay in lock-step if the
+    // default source / window / limit ever changes (Phase 4 moved the
+    // default source from `news_momentum` to `fame`).
     const serialized = serializeFilters({
-      source: "news_momentum",
-      category: null,
-      window: "24h",
-      favouritesOnly: false,
-      page: 1,
-      limit: 25,
+      ...DEFAULT_INSIGHTS_FILTERS,
       ...options.filters,
     });
     serialized.forEach((value, key) => url.searchParams.set(key, value));

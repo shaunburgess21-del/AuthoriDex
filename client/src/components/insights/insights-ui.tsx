@@ -16,7 +16,8 @@ export function InsightsSection({
   className,
   accent = "voxdex",
 }: {
-  title: string;
+  /** Section title — strings render in a default heading; ReactNode lets tiles inline icons. */
+  title: ReactNode;
   description?: string;
   action?: ReactNode;
   children: ReactNode;

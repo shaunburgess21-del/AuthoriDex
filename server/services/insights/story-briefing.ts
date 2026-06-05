@@ -18,10 +18,12 @@ export interface BriefingInputs {
   people: Array<{ id: string; name: string }>;
 }
 
-function formatChange24h(change: number): string {
-  const sign = change > 0 ? "+" : "";
-  return `${sign}${change.toFixed(1)}%`;
-}
+/**
+ * The briefing prose is regenerated only twice daily, but the 24h leaderboard
+ * churns hourly — so the copy must stay valid for ~12h. We keep it
+ * number-light (no exact "+9.4%" that goes stale within an hour); the live
+ * headline + mover strip on the client carry the current figures.
+ */
 
 /** Next 06:00 or 18:00 UTC refresh boundary (whichever is sooner). */
 export function nextBriefingRefreshIso(from: Date = new Date()): string {
@@ -45,7 +47,7 @@ export function buildDeterministicHeadline(inputs: BriefingInputs): string {
 
 function beatForGainer(gainer: BriefingPersonInput): string {
   if (gainer.whyTrending) return gainer.whyTrending;
-  return `${gainer.name} is up ${formatChange24h(gainer.change24h)} in ${gainer.category} today.`;
+  return `${gainer.name} is climbing the leaderboard in ${gainer.category}.`;
 }
 
 export function buildDeterministicParagraphs(inputs: BriefingInputs): string[] {
@@ -53,12 +55,12 @@ export function buildDeterministicParagraphs(inputs: BriefingInputs): string[] {
 
   if (inputs.topGainers.length > 0) {
     const lead = inputs.topGainers[0]!;
-    paragraphs.push(
-      `${lead.name} (${formatChange24h(lead.change24h)}) leads today's movers on the board.`,
-    );
-
+    // Number-light lead so it doesn't contradict the live figures shown
+    // alongside it once the leaderboard shifts.
     if (lead.whyTrending) {
       paragraphs.push(lead.whyTrending);
+    } else {
+      paragraphs.push(`${lead.name} is among the names gaining attention today.`);
     }
 
     for (const gainer of inputs.topGainers.slice(1)) {
@@ -73,9 +75,7 @@ export function buildDeterministicParagraphs(inputs: BriefingInputs): string[] {
     if (d.whyTrending) {
       paragraphs.push(`Meanwhile, ${d.whyTrending}`);
     } else {
-      paragraphs.push(
-        `Meanwhile, ${d.name} is down ${formatChange24h(d.change24h)} over the last day.`,
-      );
+      paragraphs.push(`Meanwhile, ${d.name} is cooling off after a recent run.`);
     }
   }
 

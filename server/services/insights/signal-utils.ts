@@ -93,18 +93,38 @@ function levelWeight(level: MomentumLevel): number {
   }
 }
 
+export interface SourceSortInputs {
+  fameIndex: number;
+  velocityScore: number;
+  massScore: number;
+  newsMomentumRatio: number;
+  wikiMomentumRatio: number;
+  /** Today's 24h rolling article count. */
+  newsCount: number;
+  /** 7-day daily average articles (from diagnostics.raw.news7d). */
+  newsDailyAvg7d: number;
+  /** Today's Wikipedia pageviews (latest snapshot value). */
+  wikiPageviews: number;
+  /** True 7-day Wikipedia pageview SUM (from loadTrailing7dWikiByPerson). */
+  wiki7dSum: number;
+  /** Trailing-12-month average monthly Google searches. */
+  searchVolume: number;
+}
+
+/**
+ * Source-aware, window-aware sort value.
+ *
+ * - `news` 7d → uses `newsDailyAvg7d × 7` (honest estimate; news_count is a
+ *   24h rolling count and can't be summed cleanly).
+ * - `wiki` 7d → uses true 7d pageview SUM.
+ * - `search_volume` ignores window (DataForSEO is monthly only).
+ * - Momentum ratios are inherently 7d-normalised; window has no effect.
+ * - `fame` uses fameIndex; the % delta column varies with window.
+ */
 export function sortValueForSource(
   source: string,
-  row: {
-    fameIndex: number;
-    velocityScore: number;
-    massScore: number;
-    newsMomentumRatio: number;
-    wikiMomentumRatio: number;
-    newsCount: number;
-    wikiPageviews: number;
-    searchVolume: number;
-  },
+  row: SourceSortInputs,
+  window: "24h" | "7d" = "24h",
 ): number {
   switch (source) {
     case "news_momentum":
@@ -114,12 +134,12 @@ export function sortValueForSource(
     case "fame":
       return row.fameIndex;
     case "news":
-      return row.newsCount;
+      return window === "7d" ? row.newsDailyAvg7d * 7 : row.newsCount;
     case "wiki":
-      return row.wikiPageviews;
+      return window === "7d" ? row.wiki7dSum : row.wikiPageviews;
     case "search_volume":
       return row.searchVolume;
     default:
-      return row.newsMomentumRatio;
+      return row.fameIndex;
   }
 }
