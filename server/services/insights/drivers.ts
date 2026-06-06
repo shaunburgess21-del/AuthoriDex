@@ -85,29 +85,51 @@ export async function loadDriversSummary(
 }> {
   const people = prefetched?.people ?? (await getCachedTrendingPeople());
   const topPeople = [...people].sort((a, b) => a.rank - b.rank).slice(0, topN);
-  const signals =
-    prefetched?.signals ??
-    (await loadPersonSignals(
-      prefetched?.snapshots ? { snapshots: prefetched.snapshots } : undefined,
-    ));
+  const snapshots = prefetched?.snapshots ?? (await loadLatestSnapshotsByPerson());
 
-  const counts = new Map<InsightsPrimaryDriver, string[]>();
+  // Attention mix = the share of *Trend Score movement* driven by each signal
+  // across the top-N, computed from the raw velocity components rather than a
+  // per-person "primary driver" bucket. Only News and Wikipedia are real
+  // drivers — Search carries 0 weight in the velocity composite
+  // (see server/scoring/normalize.ts), so it's excluded entirely. This makes
+  // the two bars sum to a meaningful 100% that matches the caption.
+  let newsTotal = 0;
+  let wikiTotal = 0;
+  const newsContrib: Array<{ id: string; v: number }> = [];
+  const wikiContrib: Array<{ id: string; v: number }> = [];
+
   for (const p of topPeople) {
-    const sig = signals.get(p.id);
-    const driver = sig?.primaryDriver ?? "MIXED";
-    const list = counts.get(driver) ?? [];
-    list.push(p.id);
-    counts.set(driver, list);
+    const diag = snapshots.get(p.id)?.diagnostics as Record<string, any> | null | undefined;
+    const vc = diag?.velocityComponents as Record<string, number> | undefined;
+    if (!vc) continue;
+    // News component = base news velocity + news momentum; Wikipedia component
+    // = base wiki velocity + wiki momentum. Clamp negatives to 0 so a cooling
+    // signal can't produce a nonsensical negative contribution share.
+    const news = Math.max(0, Number(vc.news ?? 0)) + Math.max(0, Number(vc.momentum ?? 0));
+    const wiki = Math.max(0, Number(vc.wiki ?? 0)) + Math.max(0, Number(vc.wikiMomentum ?? 0));
+    newsTotal += news;
+    wikiTotal += wiki;
+    if (news > 0) newsContrib.push({ id: p.id, v: news });
+    if (wiki > 0) wikiContrib.push({ id: p.id, v: wiki });
   }
 
-  const total = topPeople.length || 1;
-  const segments: InsightsDriverMixSegment[] = Array.from(counts.entries())
-    .map(([driver, sampleIds]) => ({
-      driver,
-      pct: Math.round((sampleIds.length / total) * 100),
-      sampleIds: sampleIds.slice(0, 5),
-    }))
-    .sort((a, b) => b.pct - a.pct);
+  const grand = newsTotal + wikiTotal;
+  const segments: InsightsDriverMixSegment[] = [];
+  if (grand > 0) {
+    const newsPct = Math.round((newsTotal / grand) * 100);
+    segments.push({
+      driver: "NEWS",
+      pct: newsPct,
+      sampleIds: newsContrib.sort((a, b) => b.v - a.v).slice(0, 5).map((x) => x.id),
+    });
+    segments.push({
+      // Force the pair to sum to exactly 100 (avoid a rounding gap in the UI).
+      driver: "WIKI",
+      pct: 100 - newsPct,
+      sampleIds: wikiContrib.sort((a, b) => b.v - a.v).slice(0, 5).map((x) => x.id),
+    });
+    segments.sort((a, b) => b.pct - a.pct);
+  }
 
   return { topN, segments };
 }

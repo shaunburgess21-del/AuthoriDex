@@ -41,7 +41,7 @@ export async function loadBreakoutRadar(): Promise<BreakoutResponse> {
     .map((p) => snapshots.get(p.id)?.velocityScore ?? 0)
     .filter((v) => v > 0);
   const medianVelocity = median(velocities);
-  const velocityThreshold = medianVelocity * 1.5;
+  const velocityThreshold = medianVelocity * 1.25;
 
   const masses = people
     .map((p) => snapshots.get(p.id)?.massScore ?? 0)
@@ -122,8 +122,38 @@ export async function loadBreakoutRadar(): Promise<BreakoutResponse> {
   const sortByRank = (a: BreakoutPerson, b: BreakoutPerson) => a.rank - b.rank;
   const cap = (arr: BreakoutPerson[]) => arr.sort(sortByRank).slice(0, 10);
 
+  // Fallback: if the threshold-based list came up empty (common — high velocity
+  // outside the top 50 is rare), surface the highest-momentum people ranked
+  // outside the top 50 so the card always has content. Ordered by momentum
+  // (not rank) so the "fastest movers" framing reads correctly.
+  let lowRankFinal: BreakoutPerson[];
+  if (lowRank.length > 0) {
+    lowRankFinal = cap(lowRank);
+  } else if (haveSignals) {
+    lowRankFinal = people
+      .filter((p) => p.rank > 50 && (snapshots.get(p.id)?.velocityScore ?? 0) > 0)
+      .map((person) => {
+        const snap = snapshots.get(person.id);
+        return {
+          id: person.id,
+          name: person.name,
+          avatar: person.avatar ?? null,
+          category: person.category ?? null,
+          rank: person.rank,
+          change7d: person.change7d ?? null,
+          velocityScore: snap?.velocityScore ?? 0,
+          massScore: snap?.massScore ?? 0,
+          highlight: `Rank #${person.rank} · highest momentum outside the top 50`,
+        };
+      })
+      .sort((a, b) => b.velocityScore - a.velocityScore)
+      .slice(0, 10);
+  } else {
+    lowRankFinal = [];
+  }
+
   return {
-    lowRank: cap(lowRank),
+    lowRank: lowRankFinal,
     newEntrants: cap(newEntrants),
     quietGiants: cap(quietGiants),
     coolingTop: cap(coolingTop),

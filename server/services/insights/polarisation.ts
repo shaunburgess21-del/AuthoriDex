@@ -12,9 +12,21 @@ export interface PolarisationItem {
   label: string;
 }
 
-export interface PolarisationResponse {
+export interface PolarisationKindLists {
   lopsided: PolarisationItem[];
   evenlySplit: PolarisationItem[];
+}
+
+export interface PolarisationResponse {
+  /** Merged top-5 across polls + face-offs (used by Discover). */
+  lopsided: PolarisationItem[];
+  evenlySplit: PolarisationItem[];
+  /**
+   * Per-kind lists so consumers can show poll-only / face-off-only views
+   * without the merged top-5 slice dropping one kind entirely (Vote tab).
+   */
+  polls: PolarisationKindLists;
+  faceOffs: PolarisationKindLists;
 }
 
 function mapPollRows(
@@ -219,19 +231,23 @@ export async function loadPolarisation(): Promise<PolarisationResponse> {
   const extract = (result: unknown) =>
     (Array.isArray(result) ? result : (result as { rows: Record<string, unknown>[] }).rows) ?? [];
 
-  const lopsided = [
-    ...mapPollRows(extract(pollLopsided), "opinion_poll"),
-    ...mapPollRows(extract(faceLopsided), "face_off"),
-  ]
+  const pollLopsidedRows = mapPollRows(extract(pollLopsided), "opinion_poll");
+  const pollEvenRows = mapPollRows(extract(pollEven), "opinion_poll");
+  const faceLopsidedRows = mapPollRows(extract(faceLopsided), "face_off");
+  const faceEvenRows = mapPollRows(extract(faceEven), "face_off");
+
+  const lopsided = [...pollLopsidedRows, ...faceLopsidedRows]
     .sort((a, b) => b.maxPct - a.maxPct)
     .slice(0, 5);
 
-  const evenlySplit = [
-    ...mapPollRows(extract(pollEven), "opinion_poll"),
-    ...mapPollRows(extract(faceEven), "face_off"),
-  ]
+  const evenlySplit = [...pollEvenRows, ...faceEvenRows]
     .sort((a, b) => (a.spreadStddev ?? 999) - (b.spreadStddev ?? 999))
     .slice(0, 5);
 
-  return { lopsided, evenlySplit };
+  return {
+    lopsided,
+    evenlySplit,
+    polls: { lopsided: pollLopsidedRows, evenlySplit: pollEvenRows },
+    faceOffs: { lopsided: faceLopsidedRows, evenlySplit: faceEvenRows },
+  };
 }

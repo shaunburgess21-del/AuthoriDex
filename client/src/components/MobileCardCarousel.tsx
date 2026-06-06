@@ -63,9 +63,18 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
 
     const modules = useMemo(() => (autoHeight ? [A11y] : [A11y, Virtual]), [autoHeight]);
 
-    const refreshAutoHeight = useCallback(() => {
-      requestAnimationFrame(() => swiperRef.current?.updateAutoHeight());
+    // Guard against calling updateAutoHeight() on a destroyed / not-yet-
+    // initialised Swiper — that throws "Cannot read properties of undefined
+    // (reading 'slidesPerView')" when the instance is torn down mid-rAF.
+    const safeUpdateAutoHeight = useCallback((s: SwiperType | null | undefined) => {
+      if (s && !s.destroyed && s.params) {
+        s.updateAutoHeight();
+      }
     }, []);
+
+    const refreshAutoHeight = useCallback(() => {
+      requestAnimationFrame(() => safeUpdateAutoHeight(swiperRef.current));
+    }, [safeUpdateAutoHeight]);
 
     const slideToIndex = useCallback((idx: number) => {
       setActiveIndex(idx);
@@ -145,7 +154,7 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
           onSlideChange={(s) => {
             setActiveIndex(s.activeIndex);
             userOrParentControlledRef.current = true;
-            if (autoHeight) s.updateAutoHeight();
+            if (autoHeight) safeUpdateAutoHeight(s);
             (document.activeElement as HTMLElement | undefined)?.blur?.();
           }}
           a11y={{

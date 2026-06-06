@@ -7,7 +7,7 @@ export const QUADRANT_MIN_VOTES = 20;
 export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
   news_momentum: "News momentum",
   wiki_momentum: "Wiki momentum",
-  fame: "Trend Score",
+  fame: "Movers",
   news: "News (24h)",
   wiki: "Wikipedia",
   search_volume: "Search interest",

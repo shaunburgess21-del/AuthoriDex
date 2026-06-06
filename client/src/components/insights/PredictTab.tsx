@@ -10,8 +10,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
-import { ChartOrList } from "./ChartOrList";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { useInsightsQuery } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { formatVox, formatVoxCompact } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -327,10 +327,13 @@ function ContestedRow({ market }: { market: ContestedMarket }) {
             ? `/predict/race/${market.marketId}`
             : `/markets/${market.slug}`;
 
-  const pctFrom50 =
+  // Unified "distance from an even split" so AMM and parimutuel markets read
+  // on one scale (0% = perfectly even, higher = more lopsided). The engine is
+  // never surfaced — users see the market-type badge instead.
+  const pctFromEven =
     market.engine === "amm"
       ? Math.round(market.score * 200)
-      : Math.round((1 - market.score) * 100);
+      : Math.round(market.score * 100);
 
   return (
     <li>
@@ -351,7 +354,7 @@ function ContestedRow({ market }: { market: ContestedMarket }) {
           </Badge>
         </div>
         <p className="text-[10px] text-muted-foreground mt-1">
-          {market.engine === "amm" ? `${pctFrom50}% from 50/50` : `${pctFrom50}% even split`}
+          {pctFromEven}% from an even split
         </p>
         {market.topPair.length > 0 && (
           <p className="text-xs text-muted-foreground mt-2">
@@ -364,72 +367,42 @@ function ContestedRow({ market }: { market: ContestedMarket }) {
 }
 
 function ContestedTile() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/insights/markets/analytics"],
-    queryFn: () =>
-      fetchJson<{ data: InsightsMarketsAnalytics }>("/api/insights/markets/analytics"),
-    staleTime: 90_000,
-  });
+  const { data, isLoading } = useInsightsQuery<InsightsMarketsAnalytics>(
+    "/api/insights/markets/analytics",
+  );
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
-  const contested = data?.data.contested;
-  const combined = [...(contested?.amm ?? []), ...(contested?.parimutuel ?? [])];
+  const contested = data?.contested;
+
+  // Merge both engines into one list ranked by closeness to an even split.
+  // Distance is normalised so AMM (abs(price-0.5), 0..0.5) and parimutuel
+  // (max-min stake share, 0..1) compare on the same 0..1 scale.
+  const evennessDistance = (m: ContestedMarket) =>
+    m.engine === "amm" ? m.score * 2 : m.score;
+  const combined = [...(contested?.amm ?? []), ...(contested?.parimutuel ?? [])].sort(
+    (a, b) => evennessDistance(a) - evennessDistance(b),
+  );
 
   if (combined.length === 0) {
     return <InsightsEmptyState message="No contested markets right now." />;
   }
 
   return (
-    <ChartOrList
-      chart={
-        <div className="grid md:grid-cols-2 gap-4">
-          {(contested?.amm ?? []).length > 0 && (
-            <div>
-              <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 font-semibold">
-                AMM — near 50%
-              </h4>
-              <ul className="space-y-2">
-                {(contested?.amm ?? []).slice(0, 4).map((m) => (
-                  <ContestedRow key={m.marketId} market={m} />
-                ))}
-              </ul>
-            </div>
-          )}
-          {(contested?.parimutuel ?? []).length > 0 && (
-            <div>
-              <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 font-semibold">
-                Parimutuel — even split
-              </h4>
-              <ul className="space-y-2">
-                {(contested?.parimutuel ?? []).slice(0, 4).map((m) => (
-                  <ContestedRow key={m.marketId} market={m} />
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      }
-      list={
-        <ul className="space-y-2">
-          {combined.slice(0, 6).map((m) => (
-            <ContestedRow key={m.marketId} market={m} />
-          ))}
-        </ul>
-      }
-    />
+    <ul className="grid gap-2 sm:grid-cols-2">
+      {combined.slice(0, 6).map((m) => (
+        <ContestedRow key={m.marketId} market={m} />
+      ))}
+    </ul>
   );
 }
 
 function OpenInterestTile() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/insights/markets/analytics"],
-    queryFn: () =>
-      fetchJson<{ data: InsightsMarketsAnalytics }>("/api/insights/markets/analytics"),
-    staleTime: 90_000,
-  });
+  const { data, isLoading } = useInsightsQuery<InsightsMarketsAnalytics>(
+    "/api/insights/markets/analytics",
+  );
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
-  const openInterest = data?.data.openInterest;
+  const openInterest = data?.openInterest;
   const rows = openInterest?.byMarketType ?? [];
 
   if (rows.length === 0) {

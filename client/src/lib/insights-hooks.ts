@@ -61,3 +61,25 @@ export function useInsightsStory() {
     staleTime: 90_000,
   });
 }
+
+/**
+ * Shared, typed query for any `/api/insights/*` endpoint. It ALWAYS unwraps the
+ * `{ data }` envelope, so every tab caches the same shape under a given key.
+ * This eliminates the enveloped-vs-unwrapped cache-shape mismatch that
+ * previously crashed tabs sharing a key (e.g. Discover + Vote on
+ * `/api/insights/discover/polarisation`).
+ *
+ * The query key defaults to `[path]`; pass an explicit `queryKey` only when two
+ * surfaces must deliberately share a cache entry.
+ */
+export function useInsightsQuery<T>(
+  path: string,
+  options?: { queryKey?: unknown[]; staleTime?: number; enabled?: boolean },
+) {
+  return useQuery<T>({
+    queryKey: options?.queryKey ?? [path],
+    queryFn: () => fetchInsightsJson<T>(path),
+    staleTime: options?.staleTime ?? 90_000,
+    enabled: options?.enabled,
+  });
+}

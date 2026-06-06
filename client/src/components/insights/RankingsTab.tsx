@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Drawer } from "vaul";
-import { Filter, Share2 } from "lucide-react";
+import { Filter, RefreshCw, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { shareInsightsView } from "@/lib/insights-share";
 import {
@@ -15,6 +16,8 @@ import {
 import { useInsightsRankings } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { useScrollDirection } from "@/hooks/useScrollDirection";
+import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverallRankPill } from "@/components/OverallRankPill";
 import { Button } from "@/components/ui/button";
@@ -30,7 +33,7 @@ import { cn } from "@/lib/utils";
 import type { InsightsRankingRow } from "@shared/insights/types";
 
 const PILL_HINTS: Record<InsightsSource, string> = {
-  fame: "Same ranking as the home leaderboard",
+  fame: "Biggest Trend Score gainers & fallers",
   news_momentum: "Biggest news surge",
   wiki_momentum: "Biggest curiosity spike",
   news: "Most news coverage",
@@ -89,11 +92,6 @@ function metricColumnLabel(source: InsightsSource, window: InsightsWindow): stri
   return SOURCE_DISPLAY[source];
 }
 
-function deltaColumnLabel(row: InsightsRankingRow | undefined, window: InsightsWindow): string {
-  if (row?.metricDeltaKind === "mom") return "MoM";
-  return window === "7d" ? "7D" : "24H";
-}
-
 function DeltaCell({ value, className }: { value: number | null; className?: string }) {
   if (value == null || !Number.isFinite(value)) {
     return <span className={cn("text-muted-foreground", className)}>—</span>;
@@ -113,6 +111,36 @@ function DeltaCell({ value, className }: { value: number | null; className?: str
   );
 }
 
+/**
+ * Joined rank-cell + avatar container, ported from the home LeaderboardRow so
+ * Rankings rows get the same cohesive "rank tile glued to the avatar" look.
+ */
+function RankAvatarUnit({
+  rank,
+  name,
+  avatar,
+}: {
+  rank: number;
+  name: string;
+  avatar: string | null;
+}) {
+  return (
+    <div className="relative flex items-center rounded-lg overflow-hidden shrink-0">
+      <div className="flex items-center justify-center min-w-[30px] sm:min-w-[34px] h-12 rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
+        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[15px] sm:text-[16px] tabular-nums">
+          {rank}
+        </span>
+      </div>
+      <PersonAvatar
+        name={name}
+        avatar={avatar}
+        size="md"
+        className="h-12 w-12 rounded-none rounded-r-md"
+      />
+    </div>
+  );
+}
+
 function MetricCell({ row, source }: { row: InsightsRankingRow; source: InsightsSource }) {
   const { suffix, tooltip } = metricSuffix(row);
   return (
@@ -125,12 +153,37 @@ function MetricCell({ row, source }: { row: InsightsRankingRow; source: Insights
   );
 }
 
+/** Label for the window <select>, contextual to the active source. */
+function windowControlLabel(source: InsightsSource): string {
+  if (source === "fame") return "Movers window";
+  // For News / Wikipedia the window changes the totals shown (24h vs 7d
+  // article / pageview counts), not a percentage — so "% change window"
+  // would be misleading.
+  return "Time window";
+}
+
 export function RankingsTab() {
   const { isLoggedIn } = useAuth();
   const [filterOpen, setFilterOpen] = useState(false);
   const [, setUrlTick] = useState(0);
   const categorySet = useLeaderboardCategories();
   const categories = categorySet ? Array.from(categorySet).sort() : [];
+
+  // Mirror the home leaderboard freshness pill so Rankings reflects the same
+  // "Updated Xm ago" cadence rather than a precise (and for Wiki/Search,
+  // misleading) clock time.
+  const { data: systemFreshness } = useQuery<{
+    lastScoredAtFormatted: string;
+    fullRefreshAtFormatted: string | null;
+  }>({
+    queryKey: ["/api/system/freshness"],
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+  });
+  const freshnessLabel =
+    systemFreshness?.fullRefreshAtFormatted ||
+    systemFreshness?.lastScoredAtFormatted ||
+    "recently";
 
   useEffect(() => {
     const onUrl = () => setUrlTick((t) => t + 1);
@@ -173,7 +226,6 @@ export function RankingsTab() {
     [data],
   );
   const total = data?.pages[0]?.total ?? 0;
-  const asOf = data?.pages[0]?.asOf ?? null;
 
   const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver<HTMLDivElement>({
     enabled: hasNextPage && !isFetchingNextPage,
@@ -189,7 +241,7 @@ export function RankingsTab() {
     <div className="flex flex-wrap gap-3 items-center text-sm">
       {showWindowControl && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          % change window
+          {windowControlLabel(filters.source)}
           <select
             className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-xs"
             value={filters.window}
@@ -229,23 +281,95 @@ export function RankingsTab() {
     </div>
   );
 
-  // Only the Trend Score tab carries a % delta column — for the other tabs
-  // the single metric column is the whole story (no Trend Score / delta).
-  const showDelta = filters.source === "fame";
+  // Column model:
+  // - Movers (fame): primary column is the windowed % change (the board is
+  //   sorted by it); Trend Score is shown as a secondary context column.
+  // - Search interest: primary column is monthly volume; MoM % change is the
+  //   secondary column.
+  // - Everything else: a single metric column tells the whole story.
+  const isMovers = filters.source === "fame";
+  const isSearch = filters.source === "search_volume";
+  const hasSecondaryCol = isMovers || isSearch;
+
+  const primaryColLabel = isMovers
+    ? `${filters.window === "7d" ? "7D" : "24H"} change`
+    : metricColumnLabel(filters.source, filters.window);
+  const secondaryColLabel = isMovers ? "Trend Score" : isSearch ? "MoM" : "";
+
+  const renderPrimary = (row: InsightsRankingRow) =>
+    isMovers ? (
+      <DeltaCell value={row.metricDelta} />
+    ) : (
+      <MetricCell row={row} source={filters.source} />
+    );
+  const renderSecondary = (row: InsightsRankingRow) =>
+    isMovers ? (
+      <span className="tabular-nums text-muted-foreground">
+        {row.fameIndex.toLocaleString()}
+      </span>
+    ) : isSearch ? (
+      <DeltaCell value={row.metricDelta} />
+    ) : null;
+
+  const scrollDir = useScrollDirection();
+
+  // Keep the active source pill visible in the scroll-masked row.
+  const activePillRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    activePillRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [filters.source]);
+
+  // The pills stick directly below the (separately-rendered) main insights tab
+  // bar. Measure that bar's height at runtime rather than hardcoding an offset,
+  // so the pills never tuck underneath it across breakpoints / font scaling.
+  // SiteHeader is h-16 (64px) and the tab bar sticks at top-16.
+  const [pillStickyTop, setPillStickyTop] = useState(128);
+  useEffect(() => {
+    const bar = document.querySelector<HTMLElement>('[data-testid="insights-tab-bar"]');
+    if (!bar) return;
+    const update = () => setPillStickyTop(64 + bar.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(bar);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   return (
     <div className="space-y-4 md:space-y-5">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1">
-        {PILL_SOURCES.map((pill) => (
-          <InsightsPill
-            key={pill.id}
-            active={filters.source === pill.id}
-            title={pill.hint}
-            onClick={() => setSource(pill.id)}
-          >
-            {pill.label}
-          </InsightsPill>
-        ))}
+      {/* Source pills — semi-sticky below the main insights tab bar (top-16).
+          Reveals on scroll-up, hides on scroll-down so the board reads cleanly
+          on mobile. The element keeps its flow space (sticky), so hiding it
+          just slides it up behind the opaque tab bar without layout jump. */}
+      <div
+        className={cn(
+          "sticky z-30 -mx-1 px-1 py-1.5",
+          "bg-background/90 backdrop-blur-md transition-transform duration-200",
+          scrollDir === "down" ? "-translate-y-[200%]" : "translate-y-0",
+        )}
+        style={{ top: pillStickyTop }}
+        data-testid="rankings-source-pills"
+      >
+        <ScrollMaskedChipRow>
+          {PILL_SOURCES.map((pill) => (
+            <span
+              key={pill.id}
+              ref={filters.source === pill.id ? activePillRef : undefined}
+              className="inline-flex shrink-0"
+            >
+              <InsightsPill
+                active={filters.source === pill.id}
+                title={pill.hint}
+                onClick={() => setSource(pill.id)}
+              >
+                {pill.label}
+              </InsightsPill>
+            </span>
+          ))}
+        </ScrollMaskedChipRow>
       </div>
 
       <Drawer.Root open={filterOpen} onOpenChange={setFilterOpen}>
@@ -253,6 +377,9 @@ export function RankingsTab() {
           <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50" />
           <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-background p-4 pb-24 max-h-[85vh]">
             <Drawer.Title className="font-semibold mb-4">Filters</Drawer.Title>
+            <Drawer.Description className="sr-only">
+              Filter and sort the rankings by window, category, and favourites.
+            </Drawer.Description>
             <div className="space-y-4">{filterControls}</div>
           </Drawer.Content>
         </Drawer.Portal>
@@ -291,17 +418,14 @@ export function RankingsTab() {
                       {SOURCE_DISPLAY[filters.source]}
                     </span>
                     {activePill ? ` — ${activePill.hint}` : ""}
-                    {asOf && (
-                      <span className="hidden sm:inline">
-                        {" "}
-                        · as of{" "}
-                        {new Date(asOf).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    )}
                   </p>
+                  <div
+                    className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60"
+                    data-testid="rankings-freshness"
+                  >
+                    <RefreshCw className="h-3 w-3 shrink-0" aria-hidden />
+                    <span>Updated: {freshnessLabel}</span>
+                  </div>
                   {filters.source === "search_volume" && (
                     <p className="text-[11px] text-muted-foreground/70 mt-1.5 leading-relaxed">
                       Google search interest is reported monthly — the change shown is
@@ -359,14 +483,13 @@ export function RankingsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <th className="pl-4 pr-2 py-3 font-medium w-12" aria-label="Rank" />
-                    <th className="px-2 py-3 font-medium" aria-label="Person" />
+                    <th className="pl-4 px-2 py-3 font-medium" aria-label="Person" />
                     <th className="px-4 py-3 font-medium text-right w-36">
-                      {metricColumnLabel(filters.source, filters.window)}
+                      {primaryColLabel}
                     </th>
-                    {showDelta && (
-                      <th className="px-4 py-3 font-medium text-right w-20">
-                        {deltaColumnLabel(allRows[0], filters.window)}
+                    {hasSecondaryCol && (
+                      <th className="px-4 py-3 font-medium text-right w-24">
+                        {secondaryColLabel}
                       </th>
                     )}
                   </tr>
@@ -377,16 +500,13 @@ export function RankingsTab() {
                       key={row.id}
                       className="border-b border-border/30 hover:bg-muted/30 transition-colors"
                     >
-                      <td className="pl-4 pr-2 py-3 text-center font-semibold text-base tabular-nums text-muted-foreground">
-                        {idx + 1}
-                      </td>
-                      <td className="px-2 py-3">
+                      <td className="pl-4 px-2 py-3">
                         <Link
                           href={`/person/${row.id}`}
                           onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
                           className="flex items-center gap-3 group"
                         >
-                          <PersonAvatar name={row.name} avatar={row.avatar} size="md" />
+                          <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
                           <div className="min-w-0">
                             <p className="font-medium truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
                               {row.name}
@@ -399,11 +519,11 @@ export function RankingsTab() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                        <MetricCell row={row} source={filters.source} />
+                        {renderPrimary(row)}
                       </td>
-                      {showDelta && (
-                        <td className="px-4 py-3 text-right text-xs">
-                          <DeltaCell value={row.metricDelta} />
+                      {hasSecondaryCol && (
+                        <td className="px-4 py-3 text-right text-xs tabular-nums">
+                          {renderSecondary(row)}
                         </td>
                       )}
                     </tr>
@@ -421,10 +541,7 @@ export function RankingsTab() {
                   onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
                   className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors"
                 >
-                  <span className="text-base font-semibold text-muted-foreground w-6 shrink-0 text-center tabular-nums">
-                    {idx + 1}
-                  </span>
-                  <PersonAvatar name={row.name} avatar={row.avatar} size="md" />
+                  <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{row.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -434,11 +551,16 @@ export function RankingsTab() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold tabular-nums">
-                      <MetricCell row={row} source={filters.source} />
+                      {renderPrimary(row)}
                     </p>
-                    {showDelta && (
+                    {hasSecondaryCol && (
                       <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
-                        <DeltaCell value={row.metricDelta} className="text-[10px]" />
+                        {secondaryColLabel}:{" "}
+                        {isMovers ? (
+                          <span className="tabular-nums">{row.fameIndex.toLocaleString()}</span>
+                        ) : (
+                          <DeltaCell value={row.metricDelta} className="text-[10px]" />
+                        )}
                       </p>
                     )}
                   </div>

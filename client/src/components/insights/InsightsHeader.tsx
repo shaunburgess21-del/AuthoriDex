@@ -1,4 +1,4 @@
-import type { ComponentType, SVGProps } from "react";
+import { useEffect, useRef, type ComponentType, type SVGProps } from "react";
 import {
   BarChart3,
   Compass,
@@ -16,11 +16,11 @@ const INSIGHTS_TABS: Array<{
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   accent: string;
 }> = [
-  { id: "today", label: "Today", icon: Sparkles, accent: "#3C83F6" },
-  { id: "rankings", label: "Rankings", icon: BarChart3, accent: "#6366F1" },
-  { id: "discover", label: "Discover", icon: Compass, accent: "#8B5CF6" },
-  { id: "vote", label: "Vote", icon: VoteIcon, accent: "#A855F7" },
-  { id: "predict", label: "Predict", icon: LineChartIcon, accent: "#F59E0B" },
+  { id: "today", label: "Today", icon: Sparkles, accent: "#94A3B8" },
+  { id: "rankings", label: "Rankings", icon: BarChart3, accent: "#3B82F6" },
+  { id: "discover", label: "Discover", icon: Compass, accent: "#F97316" },
+  { id: "vote", label: "Vote", icon: VoteIcon, accent: "#22D3EE" },
+  { id: "predict", label: "Predict", icon: LineChartIcon, accent: "#8B5CF6" },
   { id: "crowd", label: "Crowd", icon: Users, accent: "#22D3EE" },
 ];
 
@@ -29,6 +29,18 @@ interface InsightsHeaderProps {
 }
 
 export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
+  const activeBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Keep the active tab visible in the horizontally-scrollable row (mobile),
+  // so users always see which tab they're on without scrolling manually.
+  useEffect(() => {
+    activeBtnRef.current?.scrollIntoView({
+      inline: "center",
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [activeTab]);
+
   return (
     <div
       className="sticky top-16 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md"
@@ -52,6 +64,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
               return (
                 <button
                   key={tab.id}
+                  ref={isActive ? activeBtnRef : undefined}
                   type="button"
                   onClick={() => writeInsightsQuery({ tab: tab.id, clearFilters: true })}
                   className={cn(

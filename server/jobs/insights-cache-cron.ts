@@ -8,6 +8,7 @@ import { loadMarketsAnalytics } from "../services/insights/markets-analytics";
 import { loadInsightsOverview } from "../services/insights/overview";
 import { loadVolatility } from "../services/insights/volatility";
 import { withDiscoverCache } from "../services/insights/discover-cache";
+import { maybeHardRefreshInsightsStory } from "./insights-story-cron";
 
 export interface InsightsCacheCronResult {
   warmed: string[];
@@ -32,6 +33,9 @@ const WARM_TASKS: Array<{ name: string; run: () => Promise<unknown> }> = [
   { name: "markets", run: () => loadMarketsAnalytics() },
   { name: "volatility", run: () => withDiscoverCache("volatility", loadVolatility) },
   { name: "overview", run: () => loadInsightsOverview(null) },
+  // Hard-refresh the briefing if a new live #1 gainer isn't named in it yet
+  // (rate-limited to once per scheduled slot inside the helper).
+  { name: "story:hard-refresh", run: () => maybeHardRefreshInsightsStory() },
 ];
 
 export async function runInsightsCacheCronRefresh(): Promise<InsightsCacheCronResult> {

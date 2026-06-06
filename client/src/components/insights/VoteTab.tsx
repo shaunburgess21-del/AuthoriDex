@@ -4,6 +4,7 @@ import { Star, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
+import { useInsightsQuery } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import type {
   InsightsDiscoverRow,
@@ -78,20 +79,6 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json();
 }
 
-/**
- * Fetch + unwrap the `{ data: ... }` envelope used by /api/insights/*.
- *
- * IMPORTANT: insights queries that share a React Query key with DiscoverTab
- * (e.g. /api/insights/discover/polarisation) MUST cache the same unwrapped
- * shape, or whichever tab loads first poisons the other's cache and crashes.
- */
-async function fetchInsightsData<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: "include" });
-  if (!res.ok) throw new Error(`Failed: ${path}`);
-  const json = await res.json();
-  return json.data as T;
-}
-
 function pollHref(item: PolarisationRow): string | null {
   if (!item.slug) return null;
   return item.kind === "opinion_poll"
@@ -115,19 +102,22 @@ function PolarisationTile({
 }: {
   variant: "knife-edge" | "landslide";
 }) {
-  const { data, isLoading } = useQuery({
-    // Shares this key with DiscoverTab — must cache the SAME unwrapped shape.
-    queryKey: ["/api/insights/discover/polarisation"],
-    queryFn: () =>
-      fetchInsightsData<{ lopsided: PolarisationRow[]; evenlySplit: PolarisationRow[] }>(
-        "/api/insights/discover/polarisation",
-      ),
-    staleTime: 90_000,
-  });
+  // Shares the default key (["/api/insights/discover/polarisation"]) with
+  // DiscoverTab — useInsightsQuery guarantees both cache the SAME unwrapped shape.
+  const { data, isLoading } = useInsightsQuery<{
+    lopsided: PolarisationRow[];
+    evenlySplit: PolarisationRow[];
+    polls: { lopsided: PolarisationRow[]; evenlySplit: PolarisationRow[] };
+    faceOffs: { lopsided: PolarisationRow[]; evenlySplit: PolarisationRow[] };
+  }>("/api/insights/discover/polarisation");
 
-  const list = variant === "knife-edge"
-    ? (data?.evenlySplit ?? []).filter((r) => r.kind === "face_off")
-    : (data?.lopsided ?? []).filter((r) => r.kind === "opinion_poll");
+  // Use the per-kind lists (not the merged top-5) so neither kind gets crowded
+  // out: knife-edge shows the most evenly-split face-offs; landslide shows the
+  // most lopsided opinion polls.
+  const list =
+    variant === "knife-edge"
+      ? (data?.faceOffs.evenlySplit ?? [])
+      : (data?.polls.lopsided ?? []);
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (list.length === 0) {
@@ -248,16 +238,12 @@ function MostVotedPollsTile() {
 }
 
 function DivergenceTile() {
-  const { data, isLoading } = useQuery({
-    // Distinct 3-element key (DiscoverTab uses a 2-element key) so no cache
-    // collision; still unwrap the envelope for consistency.
-    queryKey: ["/api/insights/discover/divergence", "underrated_gaining", 3],
-    queryFn: () =>
-      fetchInsightsData<{ rows: InsightsDiscoverRow[]; total: number }>(
-        "/api/insights/discover/divergence?type=underrated_gaining&limit=3",
-      ),
-    staleTime: 90_000,
-  });
+  // Distinct 3-element key (DiscoverTab uses a 2-element key) so no cache
+  // collision; still unwrap the envelope for consistency.
+  const { data, isLoading } = useInsightsQuery<{ rows: InsightsDiscoverRow[]; total: number }>(
+    "/api/insights/discover/divergence?type=underrated_gaining&limit=3",
+    { queryKey: ["/api/insights/discover/divergence", "underrated_gaining", 3] },
+  );
 
   const rows = data?.rows ?? [];
 
@@ -469,7 +455,7 @@ export function VoteTab() {
         <InsightsSection
           title={
             <span className="inline-flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-green-600" /> Most loved
+              <TrendingUp className="h-3.5 w-3.5 text-green-600" /> Highest approval
             </span>
           }
           description="Highest VoxDex approval ratings (min 20 votes)."
@@ -480,7 +466,7 @@ export function VoteTab() {
         <InsightsSection
           title={
             <span className="inline-flex items-center gap-1.5">
-              <TrendingDown className="h-3.5 w-3.5 text-red-500" /> Most polarising
+              <TrendingDown className="h-3.5 w-3.5 text-red-500" /> Lowest approval
             </span>
           }
           description="Lowest VoxDex approval ratings (min 20 votes)."

@@ -137,6 +137,8 @@ async function loadInsightsRankingsInner(
       wikiPageviews: snap?.wikiPageviews ?? 0,
       wiki7dSum: wiki7dByPerson.get(person.id) ?? 0,
       searchVolume: Number.isFinite(searchVolume) ? searchVolume : 0,
+      change24h: person.change24h ?? null,
+      change7d: person.change7d ?? null,
     };
 
     const sortValue = sortValueForSource(filters.source, sortRow, filters.window);

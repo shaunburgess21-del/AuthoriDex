@@ -563,8 +563,8 @@ export function OverviewTab() {
               )}
 
               <p className="text-[10px] text-muted-foreground/70 mt-3">
-                {story.mode === "ai" ? "AI editorial" : "Auto-generated"} · refreshed twice daily ·
-                movement is live
+                {story.mode === "ai" ? "AI-summarized" : "Auto-generated"} · refreshed twice daily ·
+                movement updates hourly
               </p>
             </div>
           </div>
@@ -622,27 +622,23 @@ export function OverviewTab() {
 
       <InsightsSection
         title="Attention mix"
-        description={`Of the top ${driverMix.topN}, the share led by each signal right now.`}
+        description={`Of the top ${driverMix.topN}, the share of Trend Score movement driven by each signal.`}
       >
         <div className="space-y-3 max-w-2xl">
           {(() => {
-            // "Mixed signals" is too ambiguous to surface — show only the three
-            // concrete signals. Re-normalise their shares so the bars read as
-            // "share among News / Wikipedia / Search" and fill the track,
-            // rather than three stubby bars summing to whatever's left after
-            // Mixed is removed.
-            const concrete = driverMix.segments.filter((seg) => seg.driver !== "MIXED");
-            const concreteTotal = concrete.reduce((sum, seg) => sum + seg.pct, 0) || 1;
-            if (concrete.length === 0) {
+            // The backend returns only the two real Trend Score drivers — News
+            // and Wikipedia — already summing to 100% (Search carries 0 weight
+            // in the velocity composite, so it's excluded). No re-normalisation
+            // needed; the bars reflect actual contribution shares.
+            if (driverMix.segments.length === 0) {
               return (
                 <p className="text-sm text-muted-foreground">
-                  Attention is spread across mixed signals right now — no single source is
-                  clearly leading.
+                  Not enough signal data to break down attention right now.
                 </p>
               );
             }
-            return concrete.map((seg) => {
-              const sharePct = Math.round((seg.pct / concreteTotal) * 100);
+            return driverMix.segments.map((seg) => {
+              const sharePct = seg.pct;
               const source = DRIVER_TO_SOURCE[seg.driver];
               const barInner = (
                 <>
@@ -691,7 +687,7 @@ export function OverviewTab() {
           })()}
         </div>
         <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/80">
-          {(["NEWS", "WIKI", "SEARCH"] as const).map((driver, i, arr) => (
+          {(["NEWS", "WIKI"] as const).map((driver, i, arr) => (
             <span key={driver}>
               <span className="font-medium text-muted-foreground">{DRIVER_DISPLAY[driver]}</span>
               {" = "}

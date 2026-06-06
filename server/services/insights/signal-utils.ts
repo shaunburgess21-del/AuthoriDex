@@ -109,6 +109,10 @@ export interface SourceSortInputs {
   wiki7dSum: number;
   /** Trailing-12-month average monthly Google searches. */
   searchVolume: number;
+  /** Trend Score % change over the last 24h (null when unknown). */
+  change24h: number | null;
+  /** Trend Score % change over the last 7d (null when unknown). */
+  change7d: number | null;
 }
 
 /**
@@ -119,8 +123,13 @@ export interface SourceSortInputs {
  * - `wiki` 7d → uses true 7d pageview SUM.
  * - `search_volume` ignores window (DataForSEO is monthly only).
  * - Momentum ratios are inherently 7d-normalised; window has no effect.
- * - `fame` uses fameIndex; the % delta column varies with window.
+ * - `fame` is the Movers board: it sorts by the windowed Trend Score % change
+ *   (24h default, 7d when toggled) so the board reorders. The Trend Score
+ *   itself is kept as a context column on the row. People with an unknown
+ *   change sink to the bottom.
  */
+const UNKNOWN_CHANGE_SENTINEL = -1e9;
+
 export function sortValueForSource(
   source: string,
   row: SourceSortInputs,
@@ -131,8 +140,10 @@ export function sortValueForSource(
       return row.newsMomentumRatio;
     case "wiki_momentum":
       return row.wikiMomentumRatio;
-    case "fame":
-      return row.fameIndex;
+    case "fame": {
+      const change = window === "7d" ? row.change7d : row.change24h;
+      return change != null && Number.isFinite(change) ? change : UNKNOWN_CHANGE_SENTINEL;
+    }
     case "news":
       return window === "7d" ? row.newsDailyAvg7d * 7 : row.newsCount;
     case "wiki":

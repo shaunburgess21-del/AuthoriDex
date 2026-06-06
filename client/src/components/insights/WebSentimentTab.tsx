@@ -19,6 +19,7 @@ interface WebSentimentRow {
   positive: number;
   negative: number;
   total: number;
+  carriedForward: boolean;
 }
 
 interface WebSentimentResponse {
@@ -128,6 +129,14 @@ export function WebSentimentTab() {
                       <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
                         #{row.rank}
                       </span>
+                      {row.carriedForward && (
+                        <span
+                          className="text-[10px] text-muted-foreground/70 italic"
+                          title="No fresh web citations this cycle — showing the last available reading."
+                        >
+                          carried forward
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="hidden sm:block w-32 shrink-0">

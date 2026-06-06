@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import type {
   InsightsDivergenceType,
@@ -15,7 +14,7 @@ import { ChartOrList } from "./ChartOrList";
 import { SentimentMiniBar } from "./SentimentMiniBar";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
 import { QuadrantSection } from "./QuadrantSection";
-import { useInsightsOverview } from "@/lib/insights-hooks";
+import { useInsightsOverview, useInsightsQuery } from "@/lib/insights-hooks";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -76,27 +75,6 @@ type PolarisationRow = {
   kind: string;
 };
 
-async function fetchDivergence(type: InsightsDivergenceType) {
-  const res = await fetch(`/api/insights/discover/divergence?type=${type}&limit=5`);
-  if (!res.ok) throw new Error("divergence failed");
-  const json = await res.json();
-  return json.data as { rows: InsightsDiscoverRow[]; total: number };
-}
-
-async function fetchSurge() {
-  const res = await fetch("/api/insights/discover/single-source-surge?limit=8");
-  if (!res.ok) throw new Error("surge failed");
-  const json = await res.json();
-  return json.data as { rows: InsightsSingleSourceSurgeRow[]; total: number };
-}
-
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`Failed ${path}`);
-  const json = await res.json();
-  return json.data as T;
-}
-
 function polarisationHref(item: { kind: string; slug: string | null }): string | null {
   if (!item.slug) return null;
   return item.kind === "opinion_poll"
@@ -113,11 +91,10 @@ function DivergenceCard({
   title: string;
   description: string;
 }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/insights/discover/divergence", type],
-    queryFn: () => fetchDivergence(type),
-    staleTime: 90_000,
-  });
+  const { data, isLoading } = useInsightsQuery<{ rows: InsightsDiscoverRow[]; total: number }>(
+    `/api/insights/discover/divergence?type=${type}&limit=5`,
+    { queryKey: ["/api/insights/discover/divergence", type] },
+  );
 
   return (
     <div className="rounded-lg border border-border/40 bg-background/40 p-3 h-full flex flex-col">
@@ -155,11 +132,10 @@ function PressVsCrowdCard({
   title: string;
   description: string;
 }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/insights/discover/divergence", type],
-    queryFn: () => fetchDivergence(type),
-    staleTime: 90_000,
-  });
+  const { data, isLoading } = useInsightsQuery<{ rows: InsightsDiscoverRow[]; total: number }>(
+    `/api/insights/discover/divergence?type=${type}&limit=5`,
+    { queryKey: ["/api/insights/discover/divergence", type] },
+  );
 
   return (
     <div className="rounded-lg border border-border/40 bg-background/40 p-3 h-full flex flex-col">
@@ -260,78 +236,49 @@ function PersonRowLink({
 export function DiscoverTab() {
   const { data: overview } = useInsightsOverview();
 
-  const { data: surge, isLoading: surgeLoading } = useQuery({
+  const { data: surge, isLoading: surgeLoading } = useInsightsQuery<{
+    rows: InsightsSingleSourceSurgeRow[];
+    total: number;
+  }>("/api/insights/discover/single-source-surge?limit=8", {
     queryKey: ["/api/insights/discover/single-source-surge"],
-    queryFn: fetchSurge,
-    staleTime: 90_000,
   });
 
-  const { data: breakout, isLoading: breakoutLoading } = useQuery({
-    queryKey: ["/api/insights/discover/breakout"],
-    queryFn: () =>
-      fetchJson<{
-        lowRank: BreakoutRow[];
-        newEntrants: BreakoutRow[];
-        quietGiants: BreakoutRow[];
-        coolingTop: BreakoutRow[];
-      }>("/api/insights/discover/breakout"),
-    staleTime: 90_000,
-  });
+  const { data: breakout, isLoading: breakoutLoading } = useInsightsQuery<{
+    lowRank: BreakoutRow[];
+    newEntrants: BreakoutRow[];
+    quietGiants: BreakoutRow[];
+    coolingTop: BreakoutRow[];
+  }>("/api/insights/discover/breakout");
 
-  const { data: volatility, isLoading: volLoading } = useQuery({
-    queryKey: ["/api/insights/discover/volatility"],
-    queryFn: () =>
-      fetchJson<{
-        volatile: Array<{ id: string; name: string; avatar: string | null; stddev: number; rank: number }>;
-        stable: Array<{ id: string; name: string; avatar: string | null; stddev: number; rank: number }>;
-        sampleFloor: number;
-      }>("/api/insights/discover/volatility"),
-    staleTime: 90_000,
-  });
+  const { data: volatility, isLoading: volLoading } = useInsightsQuery<{
+    volatile: Array<{ id: string; name: string; avatar: string | null; stddev: number; rank: number }>;
+    stable: Array<{ id: string; name: string; avatar: string | null; stddev: number; rank: number }>;
+    sampleFloor: number;
+  }>("/api/insights/discover/volatility");
 
-  const { data: polarisation, isLoading: polLoading } = useQuery({
-    queryKey: ["/api/insights/discover/polarisation"],
-    queryFn: () =>
-      fetchJson<{
-        lopsided: PolarisationRow[];
-        evenlySplit: PolarisationRow[];
-      }>("/api/insights/discover/polarisation"),
-    staleTime: 90_000,
-  });
+  const { data: polarisation, isLoading: polLoading } = useInsightsQuery<{
+    lopsided: PolarisationRow[];
+    evenlySplit: PolarisationRow[];
+  }>("/api/insights/discover/polarisation");
 
-  const { data: discussed, isLoading: discussedLoading } = useQuery({
-    queryKey: ["/api/insights/discover/most-discussed"],
-    queryFn: () =>
-      fetchJson<{
-        rows: Array<{ id: string; name: string; avatar: string | null; insightCount: number; rank: number }>;
-      }>("/api/insights/discover/most-discussed"),
-    staleTime: 90_000,
-  });
+  const { data: discussed, isLoading: discussedLoading } = useInsightsQuery<{
+    rows: Array<{ id: string; name: string; avatar: string | null; insightCount: number; rank: number }>;
+  }>("/api/insights/discover/most-discussed");
 
-  const { data: streaks, isLoading: streaksLoading } = useQuery({
-    queryKey: ["/api/insights/discover/streaks"],
-    queryFn: () =>
-      fetchJson<{
-        firstTimeTop10: Array<{ id: string; name: string; avatar: string | null; rank: number; firstTop10At: string | null }>;
-        longestStreaks: Array<{ id: string; name: string; avatar: string | null; streakHours: number; rank: number }>;
-        retentionDays: number;
-      }>("/api/insights/discover/streaks"),
-    staleTime: 90_000,
-  });
+  const { data: streaks, isLoading: streaksLoading } = useInsightsQuery<{
+    firstTimeTop10: Array<{ id: string; name: string; avatar: string | null; rank: number; firstTop10At: string | null }>;
+    longestStreaks: Array<{ id: string; name: string; avatar: string | null; streakHours: number; rank: number }>;
+    retentionDays: number;
+  }>("/api/insights/discover/streaks");
 
-  const { data: heatmap, isLoading: heatmapLoading } = useQuery({
-    queryKey: ["/api/insights/discover/category-heatmap"],
-    queryFn: () =>
-      fetchJson<{
-        rows: Array<{
-          category: string;
-          median24h: number;
-          median7d: number;
-          hottest: { id: string; name: string; avatar: string | null; change7d: number | null } | null;
-        }>;
-      }>("/api/insights/discover/category-heatmap"),
-    staleTime: 90_000,
-  });
+  const { data: heatmap, isLoading: heatmapLoading } = useInsightsQuery<{
+    rows: Array<{
+      category: string;
+      median24h: number;
+      median7d: number;
+      hottest: { id: string; name: string; avatar: string | null; change7d: number | null } | null;
+    }>;
+  }>("/api/insights/discover/category-heatmap");
 
   const handleShareDiscover = async () => {
     try {
