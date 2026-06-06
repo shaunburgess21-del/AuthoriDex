@@ -5,7 +5,7 @@ import {
   normalizeSiteBannerLinkDisplay,
   resolveSiteBannerLinkLabel,
   siteBannerStatus,
-} from "../server/services/site-banner";
+} from "../server/services/site-banner-logic";
 
 test("resolveSiteBannerLinkLabel falls back to Learn more", () => {
   assert.equal(resolveSiteBannerLinkLabel(null), "Learn more");

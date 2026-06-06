@@ -5,6 +5,7 @@ import {
   type SiteBannerStyle,
   type SiteBannerLinkDisplay,
 } from "@shared/schema";
+import { normalizeSiteBannerLinkDisplay } from "./site-banner-logic";
 
 export type PublicSiteBanner = {
   id: string;
@@ -16,16 +17,7 @@ export type PublicSiteBanner = {
   dismissible: boolean;
 };
 
-export function resolveSiteBannerLinkLabel(linkLabel: string | null | undefined): string {
-  const trimmed = linkLabel?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : "Learn more";
-}
-
-export function normalizeSiteBannerLinkDisplay(
-  linkDisplay: string | null | undefined,
-): SiteBannerLinkDisplay {
-  return linkDisplay === "inline_link" ? "inline_link" : "cta_chevron";
-}
+export { normalizeSiteBannerLinkDisplay, siteBannerStatus } from "./site-banner-logic";
 
 export async function getActiveSiteBanner(): Promise<PublicSiteBanner | null> {
   const now = new Date();
@@ -66,16 +58,3 @@ export async function getActiveSiteBanner(): Promise<PublicSiteBanner | null> {
   };
 }
 
-export function siteBannerStatus(
-  row: {
-    isEnabled: boolean;
-    startsAt: Date;
-    endsAt: Date | null;
-  },
-  now = new Date(),
-): "disabled" | "scheduled" | "live" | "ended" {
-  if (!row.isEnabled) return "disabled";
-  if (row.startsAt > now) return "scheduled";
-  if (row.endsAt && row.endsAt < now) return "ended";
-  return "live";
-}
