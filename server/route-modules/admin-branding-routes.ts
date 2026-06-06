@@ -46,10 +46,13 @@ const previewQuerySchema = z.object({
 });
 
 const siteBannerStyleSchema = z.enum(["info", "promo", "warning"]);
+const siteBannerLinkDisplaySchema = z.enum(["cta_chevron", "inline_link"]);
 
 const siteBannerBodySchema = z.object({
   message: z.string().min(1).max(200),
   href: z.string().max(500).optional().nullable(),
+  linkLabel: z.string().max(40).optional().nullable(),
+  linkDisplay: siteBannerLinkDisplaySchema.default("cta_chevron"),
   style: siteBannerStyleSchema.default("promo"),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime().optional().nullable(),
@@ -132,11 +135,17 @@ export function registerAdminBrandingRoutes(app: Express): void {
         const d = parsed.data;
         const href =
           typeof d.href === "string" && d.href.trim().length > 0 ? d.href.trim() : null;
+        const linkLabel =
+          href && typeof d.linkLabel === "string" && d.linkLabel.trim().length > 0
+            ? d.linkLabel.trim()
+            : null;
         const [row] = await db
           .insert(siteAnnouncements)
           .values({
             message: d.message.trim(),
             href,
+            linkLabel,
+            linkDisplay: d.linkDisplay,
             style: d.style,
             startsAt: new Date(d.startsAt),
             endsAt: d.endsAt ? new Date(d.endsAt) : null,
@@ -201,6 +210,13 @@ export function registerAdminBrandingRoutes(app: Express): void {
           patch.href =
             typeof d.href === "string" && d.href.trim().length > 0 ? d.href.trim() : null;
         }
+        if (d.linkLabel !== undefined) {
+          patch.linkLabel =
+            typeof d.linkLabel === "string" && d.linkLabel.trim().length > 0
+              ? d.linkLabel.trim()
+              : null;
+        }
+        if (d.linkDisplay !== undefined) patch.linkDisplay = d.linkDisplay;
         if (d.style !== undefined) patch.style = d.style;
         if (d.startsAt !== undefined) patch.startsAt = new Date(d.startsAt);
         if (d.endsAt !== undefined) patch.endsAt = d.endsAt ? new Date(d.endsAt) : null;

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { SiteBannerStyle } from "@shared/schema";
+import type { SiteBannerStyle, SiteBannerLinkDisplay } from "@shared/schema";
 
 type BannerStatus = "disabled" | "scheduled" | "live" | "ended";
 
@@ -26,6 +26,8 @@ interface SiteBannerRow {
   id: string;
   message: string;
   href: string | null;
+  linkLabel: string | null;
+  linkDisplay: SiteBannerLinkDisplay;
   style: SiteBannerStyle;
   startsAt: string;
   endsAt: string | null;
@@ -33,6 +35,9 @@ interface SiteBannerRow {
   dismissible: boolean;
   status: BannerStatus;
 }
+
+const LINK_LABEL_PRESETS = ["Learn more", "View details", "Get started", "Predict now"];
+const CUSTOM_LABEL = "__custom__";
 
 const STATUS_VARIANT: Record<BannerStatus, "default" | "secondary" | "outline" | "destructive"> = {
   live: "default",
@@ -69,6 +74,9 @@ export function AdminSiteBannerCard() {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const [href, setHref] = useState("");
+  const [linkLabelMode, setLinkLabelMode] = useState<string>(LINK_LABEL_PRESETS[0]);
+  const [linkLabelCustom, setLinkLabelCustom] = useState("");
+  const [linkDisplay, setLinkDisplay] = useState<SiteBannerLinkDisplay>("cta_chevron");
   const [style, setStyle] = useState<SiteBannerStyle>("promo");
   const [startsAt, setStartsAt] = useState(defaultStarts);
   const [endsAt, setEndsAt] = useState("");
@@ -85,9 +93,12 @@ export function AdminSiteBannerCard() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const hasHref = href.trim().length > 0;
       const res = await apiRequest("POST", "/api/admin/site-banner", {
         message: message.trim(),
-        href: href.trim() || null,
+        href: hasHref ? href.trim() : null,
+        linkLabel: hasHref ? effectiveLinkLabel || null : null,
+        linkDisplay: hasHref ? linkDisplay : "cta_chevron",
         style,
         startsAt: localToIso(startsAt),
         endsAt: endsAt ? localToIso(endsAt) : null,
@@ -102,6 +113,9 @@ export function AdminSiteBannerCard() {
       toast.success("Site banner created");
       setMessage("");
       setHref("");
+      setLinkLabelMode(LINK_LABEL_PRESETS[0]);
+      setLinkLabelCustom("");
+      setLinkDisplay("cta_chevron");
     },
     onError: (e: unknown) => {
       const { title, description } = parseApiError(e, "Failed to create banner");
@@ -148,23 +162,37 @@ export function AdminSiteBannerCard() {
     },
   });
 
+  const effectiveLinkLabel =
+    linkLabelMode === CUSTOM_LABEL ? linkLabelCustom.trim() : linkLabelMode;
+
   const previewStrip = useMemo(() => {
     if (!message.trim()) return null;
+    const label = effectiveLinkLabel || "Learn more";
+    const hasHref = href.trim().length > 0;
     return (
       <div
         className={cn(
-          "rounded-md px-3 py-2 text-sm font-medium flex items-center gap-2",
+          "rounded-md px-3 py-2 text-sm font-medium flex items-center justify-center gap-2 text-center",
           PREVIEW_STYLE[style],
         )}
         data-testid="site-banner-admin-preview"
       >
-        <span className="flex-1">{message.trim()}</span>
-        {href.trim() && (
-          <span className="text-xs opacity-80 shrink-0">Learn more →</span>
+        {hasHref && linkDisplay === "inline_link" ? (
+          <span>
+            {message.trim()}{" "}
+            <span className="font-semibold underline underline-offset-2">{label}</span>
+          </span>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-1 sm:flex-row sm:gap-2">
+            <span className="break-words">{message.trim()}</span>
+            {hasHref && (
+              <span className="text-xs opacity-80 shrink-0">{label} →</span>
+            )}
+          </div>
         )}
       </div>
     );
-  }, [message, href, style]);
+  }, [message, href, style, linkDisplay, effectiveLinkLabel]);
 
   const handleCreate = () => {
     if (!message.trim()) {
@@ -177,6 +205,14 @@ export function AdminSiteBannerCard() {
     }
     if (endsAt && new Date(endsAt) <= new Date(startsAt)) {
       toast.error("End must be after start");
+      return;
+    }
+    if (
+      href.trim() &&
+      linkLabelMode === CUSTOM_LABEL &&
+      !linkLabelCustom.trim()
+    ) {
+      toast.error("Custom link text is required");
       return;
     }
     createMutation.mutate();
@@ -223,6 +259,49 @@ export function AdminSiteBannerCard() {
               data-testid="input-site-banner-href"
             />
           </div>
+          {href.trim() && (
+            <>
+              <div className="space-y-2">
+                <Label>Link text</Label>
+                <Select value={linkLabelMode} onValueChange={setLinkLabelMode}>
+                  <SelectTrigger data-testid="select-site-banner-link-label">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LINK_LABEL_PRESETS.map((preset) => (
+                      <SelectItem key={preset} value={preset}>
+                        {preset}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={CUSTOM_LABEL}>Custom…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {linkLabelMode === CUSTOM_LABEL && (
+                  <Input
+                    value={linkLabelCustom}
+                    onChange={(e) => setLinkLabelCustom(e.target.value.slice(0, 40))}
+                    placeholder="Custom link text (max 40)"
+                    data-testid="input-site-banner-link-label-custom"
+                  />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label>Link style</Label>
+                <Select
+                  value={linkDisplay}
+                  onValueChange={(v) => setLinkDisplay(v as SiteBannerLinkDisplay)}
+                >
+                  <SelectTrigger data-testid="select-site-banner-link-display">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cta_chevron">Separate CTA (chevron)</SelectItem>
+                    <SelectItem value="inline_link">Inline link (Railway)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
           <div className="space-y-2">
             <Label>Style</Label>
             <Select value={style} onValueChange={(v) => setStyle(v as SiteBannerStyle)}>
@@ -316,8 +395,18 @@ export function AdminSiteBannerCard() {
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} data-testid={`row-site-banner-${row.id}`}>
-                      <td className="p-2 max-w-[200px] truncate" title={row.message}>
-                        {row.message}
+                      <td className="p-2 max-w-[220px]">
+                        <div className="truncate" title={row.message}>
+                          {row.message}
+                        </div>
+                        {row.href && (
+                          <div className="mt-0.5 text-xs text-muted-foreground truncate">
+                            {(row.linkLabel?.trim() || "Learn more")} ·{" "}
+                            {(row.linkDisplay ?? "cta_chevron") === "inline_link"
+                              ? "inline"
+                              : "chevron"}
+                          </div>
+                        )}
                       </td>
                       <td className="p-2">
                         <Badge variant={STATUS_VARIANT[row.status]}>{row.status}</Badge>

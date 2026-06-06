@@ -1,14 +1,31 @@
-import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "../db";
-import { siteAnnouncements, type SiteBannerStyle } from "@shared/schema";
+import {
+  siteAnnouncements,
+  type SiteBannerStyle,
+  type SiteBannerLinkDisplay,
+} from "@shared/schema";
 
 export type PublicSiteBanner = {
   id: string;
   message: string;
   href: string | null;
+  linkLabel: string | null;
+  linkDisplay: SiteBannerLinkDisplay;
   style: SiteBannerStyle;
   dismissible: boolean;
 };
+
+export function resolveSiteBannerLinkLabel(linkLabel: string | null | undefined): string {
+  const trimmed = linkLabel?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "Learn more";
+}
+
+export function normalizeSiteBannerLinkDisplay(
+  linkDisplay: string | null | undefined,
+): SiteBannerLinkDisplay {
+  return linkDisplay === "inline_link" ? "inline_link" : "cta_chevron";
+}
 
 export async function getActiveSiteBanner(): Promise<PublicSiteBanner | null> {
   const now = new Date();
@@ -17,6 +34,8 @@ export async function getActiveSiteBanner(): Promise<PublicSiteBanner | null> {
       id: siteAnnouncements.id,
       message: siteAnnouncements.message,
       href: siteAnnouncements.href,
+      linkLabel: siteAnnouncements.linkLabel,
+      linkDisplay: siteAnnouncements.linkDisplay,
       style: siteAnnouncements.style,
       dismissible: siteAnnouncements.dismissible,
     })
@@ -40,6 +59,8 @@ export async function getActiveSiteBanner(): Promise<PublicSiteBanner | null> {
     id: row.id,
     message: row.message,
     href: row.href,
+    linkLabel: row.linkLabel,
+    linkDisplay: normalizeSiteBannerLinkDisplay(row.linkDisplay),
     style: validStyles.includes(style) ? style : "promo",
     dismissible: row.dismissible,
   };

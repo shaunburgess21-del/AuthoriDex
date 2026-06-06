@@ -2375,6 +2375,8 @@ export const siteAnnouncements = pgTable("site_announcements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   message: text("message").notNull(),
   href: text("href"),
+  linkLabel: text("link_label"),
+  linkDisplay: text("link_display").notNull().default("cta_chevron"),
   style: text("style").notNull().default("promo"),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }),
@@ -2393,6 +2395,7 @@ export type SiteAnnouncement = typeof siteAnnouncements.$inferSelect;
 export type InsertSiteAnnouncement = typeof siteAnnouncements.$inferInsert;
 
 export type SiteBannerStyle = "info" | "promo" | "warning";
+export type SiteBannerLinkDisplay = "cta_chevron" | "inline_link";
 
 /** Product telemetry for Insights surfaces (pill clicks, quadrant taps, etc.). */
 export const insightsEvents = pgTable("insights_events", {
