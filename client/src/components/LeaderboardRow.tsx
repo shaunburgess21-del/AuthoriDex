@@ -10,6 +10,7 @@ import { Star, X, Flame, Eye } from "lucide-react";
 import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -101,6 +102,8 @@ function LiveProfileViewsIndicator({
 }) {
   if (count < 1) return null;
   const compact = size === "compact";
+  const box = compact ? "h-3" : "h-3.5";
+  const iconSize = compact ? "size-3" : "size-3.5";
   return (
     <TouchTooltip
       content="Live profile views"
@@ -108,17 +111,14 @@ function LiveProfileViewsIndicator({
       side={compact ? "bottom" : "top"}
       showCloseButton={compact}
     >
-      <span className="inline-flex items-center gap-0.5 shrink-0 translate-y-px text-blue-600 dark:text-blue-400">
-        <Eye
-          className={compact ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5 shrink-0"}
-          strokeWidth={2.25}
-          aria-hidden
-        />
-        <span
-          className={`inline-flex items-center justify-center font-medium leading-none tabular-nums text-[10px] translate-y-px ${
-            compact ? "h-3" : "h-3.5"
-          }`}
-        >
+      <span
+        className={cn(
+          "inline-flex items-center gap-0.5 shrink-0 text-blue-600 dark:text-blue-400 [&_svg]:block",
+          box,
+        )}
+      >
+        <Eye className={cn(iconSize, "shrink-0")} strokeWidth={2.25} aria-hidden />
+        <span className="text-[10px] font-medium leading-none tabular-nums">
           {count}
         </span>
       </span>
