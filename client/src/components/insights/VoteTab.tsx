@@ -116,8 +116,8 @@ function PolarisationTile({
   // most lopsided opinion polls.
   const list =
     variant === "knife-edge"
-      ? (data?.faceOffs.evenlySplit ?? [])
-      : (data?.polls.lopsided ?? []);
+      ? (data?.faceOffs?.evenlySplit ?? [])
+      : (data?.polls?.lopsided ?? []);
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (list.length === 0) {

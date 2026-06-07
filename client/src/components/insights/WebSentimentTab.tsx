@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +6,8 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { SentimentMiniBar } from "./SentimentMiniBar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
+import { useInsightsQuery } from "@/lib/insights-hooks";
+import { formatRelativeTime } from "@/lib/formatDate";
 import { cn } from "@/lib/utils";
 
 interface WebSentimentRow {
@@ -22,13 +23,11 @@ interface WebSentimentRow {
   carriedForward: boolean;
 }
 
-interface WebSentimentResponse {
-  data: {
-    rows: WebSentimentRow[];
-    total: number;
-    asOf: string | null;
-    minOpinionated: number;
-  };
+interface WebSentimentPayload {
+  rows: WebSentimentRow[];
+  total: number;
+  asOf: string | null;
+  minOpinionated: number;
 }
 
 function sentimentBand(pct: number): string {
@@ -39,17 +38,10 @@ function sentimentBand(pct: number): string {
 }
 
 export function WebSentimentTab() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["/api/insights/crowd/web-sentiment"],
-    queryFn: async () => {
-      const res = await fetch("/api/insights/crowd/web-sentiment", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed");
-      return res.json() as Promise<WebSentimentResponse>;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data, isLoading, isError } = useInsightsQuery<WebSentimentPayload>(
+    "/api/insights/crowd/web-sentiment",
+    { staleTime: 5 * 60 * 1000 },
+  );
 
   if (isError) {
     return (
@@ -61,7 +53,8 @@ export function WebSentimentTab() {
     );
   }
 
-  const rows = data?.data.rows ?? [];
+  const rows = data?.rows ?? [];
+  const hasCarriedForward = rows.some((r) => r.carriedForward);
 
   return (
     <Card className="overflow-visible">
@@ -80,7 +73,7 @@ export function WebSentimentTab() {
               How positive the open web is about each profile, based on{" "}
               <span className="font-medium text-foreground">DataForSEO</span> content
               analysis. Profiles with fewer than{" "}
-              {data?.data.minOpinionated ?? 50} opinionated citations are hidden.
+              {data?.minOpinionated ?? 50} opinionated citations are hidden.
             </p>
           </div>
         </CardHeader>
@@ -165,18 +158,15 @@ export function WebSentimentTab() {
           </ul>
         )}
 
-        {data?.data.asOf && (
+        {data?.asOf && (
           <div className="border-t border-border/40 p-3 text-center">
-            <p className="text-[10px] text-muted-foreground">
-              Updated{" "}
-              {new Date(data.data.asOf).toLocaleString(undefined, {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              · refreshed weekly
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Updated {formatRelativeTime(data.asOf)}
+              {hasCarriedForward
+                ? " · some rows carry forward the last available web reading"
+                : ""}
+              {" · "}
+              DataForSEO ingest runs weekly
             </p>
           </div>
         )}

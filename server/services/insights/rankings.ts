@@ -178,7 +178,13 @@ async function loadInsightsRankingsInner(
     };
   });
 
-  rows.sort((a, b) => b.sortValue - a.sortValue);
+  rows.sort((a, b) => {
+    const primary = b.sortValue - a.sortValue;
+    if (primary !== 0) return primary;
+    // Stable tie-breakers so pagination and re-renders don't shuffle rows.
+    if (filters.source === "fame") return b.fameIndex - a.fameIndex;
+    return a.rank - b.rank;
+  });
 
   const total = rows.length;
   const offset = (filters.page - 1) * filters.limit;

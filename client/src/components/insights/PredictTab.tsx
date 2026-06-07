@@ -26,7 +26,7 @@ import type {
  * Tiles:
  *  - Hottest markets by volume (top across all native + community)
  *  - Closing soon (cutoff/end within ~48h)
- *  - Contested 50/50 (lifted from MarketsTab)
+ *  - Most contested markets (merged AMM + parimutuel, closest to even split)
  *  - Open interest by type (lifted)
  *  - Live bet feed (/api/predict/recent-activity)
  *  - Top predictors this week (/api/leaderboard/users?period=week)
@@ -623,10 +623,10 @@ export function PredictTab() {
       <InsightsSection
         title={
           <span className="inline-flex items-center gap-1.5">
-            <Zap className="h-4 w-4 text-blue-500" /> Contested lines
+            <Zap className="h-4 w-4 text-blue-500" /> Most contested markets
           </span>
         }
-        description="Markets where the crowd is most split."
+        description="Native and community markets closest to an even split."
         accent="voxdex"
       >
         <ContestedTile />

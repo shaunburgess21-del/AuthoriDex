@@ -13,7 +13,6 @@ import {
   INSIGHTS_STORY_TTL_MS,
 } from "../services/insights/cache";
 import { getCachedTrendingPeople } from "../services/insights/insights-people-cache";
-import { selectHotMovers } from "../services/trending/hot-movers";
 
 export interface InsightsStoryCronResult {
   mode: "deterministic" | "ai" | "skipped";
@@ -98,7 +97,11 @@ export async function maybeHardRefreshInsightsStory(): Promise<InsightsStoryHard
   if (!story) return { refreshed: false, reason: "no-cached-story" };
 
   const people = await getCachedTrendingPeople();
-  const topGainer = selectHotMovers(people)[0];
+  // Match the Today tab live headline/ticker: global #1 by 24h % change (no rank
+  // cap). selectHotMovers is rank-limited and used only when building prose.
+  const topGainer = [...people]
+    .filter((p) => p.change24h != null && Number.isFinite(p.change24h) && p.change24h > 0)
+    .sort((a, b) => (b.change24h ?? 0) - (a.change24h ?? 0))[0];
   if (!topGainer) return { refreshed: false, reason: "no-top-gainer" };
 
   // If the live #1 gainer is already named in the briefing, there's no drift —

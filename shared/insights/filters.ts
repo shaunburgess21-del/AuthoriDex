@@ -4,8 +4,8 @@
  */
 
 export const INSIGHTS_SOURCE_VALUES = [
-  // Trend Score is the "home leaderboard" ranking — leads the pills so users
-  // see the most familiar view first when they open Rankings.
+  // Movers board (Trend Score % change) — default Rankings view when no
+  // ?source= is present.
   "fame",
   "news_momentum",
   "wiki_momentum",
@@ -44,8 +44,8 @@ export interface InsightsFilters {
 }
 
 export const DEFAULT_INSIGHTS_FILTERS: InsightsFilters = {
-  // Default ranking matches the home leaderboard so first-time visitors see a
-  // familiar list. Old bookmarks with explicit ?source=... still resolve.
+  // Default Rankings view is the Movers board (24h % change). Old bookmarks
+  // with explicit ?source=... still resolve.
   source: "fame",
   category: null,
   window: "24h",
