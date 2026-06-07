@@ -1,4 +1,9 @@
-export const BRIEFING_TOP_GAINERS = 3;
+import type { TrendingPerson } from "@shared/schema";
+import { selectHotMovers } from "../trending/hot-movers";
+
+export const BRIEFING_ANCHOR_COUNT = 3;
+export const BRIEFING_MOVER_COUNT = 3;
+export const BRIEFING_PREFETCH_MAX = 6;
 
 const STORY_REFRESH_UTC_HOURS = [6, 18] as const;
 
@@ -13,8 +18,8 @@ export interface BriefingPersonInput {
 }
 
 export interface BriefingInputs {
-  topGainers: BriefingPersonInput[];
-  notableDropper: BriefingPersonInput | null;
+  anchors: BriefingPersonInput[];
+  movers: BriefingPersonInput[];
   people: Array<{ id: string; name: string }>;
 }
 
@@ -40,43 +45,72 @@ export function nextBriefingRefreshIso(from: Date = new Date()): string {
   return candidates[0]!.toISOString();
 }
 
+/** Hot-mover top 3 — rank ≤ 100, positive 24h change (Why Trending coverage). */
+export function selectBriefingMovers(people: TrendingPerson[]): TrendingPerson[] {
+  return selectHotMovers(people).slice(0, BRIEFING_MOVER_COUNT);
+}
+
+/**
+ * Ordered anchor candidates from top 10 by rank: movers excluded, prefer
+ * outside hot-mover top 6, sort by news activity then rank. Caller walks this
+ * list and keeps the first N with Why Trending `hasContext`.
+ */
+export function selectBriefingAnchorCandidates(
+  people: TrendingPerson[],
+  moverIds: Set<string>,
+  hotMoverTop6Ids: Set<string>,
+  newsCountByPersonId: Map<string, number>,
+): TrendingPerson[] {
+  const top10 = [...people]
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+    .slice(0, 10)
+    .filter((p) => !moverIds.has(p.id));
+
+  const newsCount = (id: string) => newsCountByPersonId.get(id) ?? 0;
+  const sortByNewsThenRank = (a: TrendingPerson, b: TrendingPerson) => {
+    const newsDiff = newsCount(b.id) - newsCount(a.id);
+    if (newsDiff !== 0) return newsDiff;
+    return (a.rank ?? 999) - (b.rank ?? 999);
+  };
+
+  const preferred = top10
+    .filter((p) => !hotMoverTop6Ids.has(p.id))
+    .sort(sortByNewsThenRank);
+
+  const backfill = top10
+    .filter((p) => hotMoverTop6Ids.has(p.id))
+    .sort(sortByNewsThenRank);
+
+  return [...preferred, ...backfill];
+}
+
 export function buildDeterministicHeadline(inputs: BriefingInputs): string {
-  const lead = inputs.topGainers[0];
+  const lead = inputs.movers[0];
   return lead ? `${lead.name} leads today's movers` : "Today's influence snapshot";
 }
 
-function beatForGainer(gainer: BriefingPersonInput): string {
-  if (gainer.whyTrending) return gainer.whyTrending;
-  return `${gainer.name} is climbing the leaderboard in ${gainer.category}.`;
+function beatForPerson(person: BriefingPersonInput, fallback: string): string {
+  if (person.whyTrending) return person.whyTrending;
+  return fallback;
 }
 
 export function buildDeterministicParagraphs(inputs: BriefingInputs): string[] {
   const paragraphs: string[] = [];
 
-  if (inputs.topGainers.length > 0) {
-    const lead = inputs.topGainers[0]!;
-    // Number-light lead so it doesn't contradict the live figures shown
-    // alongside it once the leaderboard shifts.
-    if (lead.whyTrending) {
-      paragraphs.push(lead.whyTrending);
-    } else {
-      paragraphs.push(`${lead.name} is among the names gaining attention today.`);
-    }
-
-    for (const gainer of inputs.topGainers.slice(1)) {
-      paragraphs.push(beatForGainer(gainer));
-    }
-  } else {
-    paragraphs.push("The board is steady today with no standout 24-hour movers.");
+  for (const anchor of inputs.anchors) {
+    paragraphs.push(
+      beatForPerson(anchor, `${anchor.name} is in the news across ${anchor.category}.`),
+    );
   }
 
-  if (inputs.notableDropper) {
-    const d = inputs.notableDropper;
-    if (d.whyTrending) {
-      paragraphs.push(`Meanwhile, ${d.whyTrending}`);
-    } else {
-      paragraphs.push(`Meanwhile, ${d.name} is cooling off after a recent run.`);
-    }
+  for (const mover of inputs.movers) {
+    paragraphs.push(
+      beatForPerson(mover, `${mover.name} is climbing the leaderboard in ${mover.category}.`),
+    );
+  }
+
+  if (paragraphs.length === 0) {
+    paragraphs.push("The board is steady today with no standout stories to highlight.");
   }
 
   return paragraphs;

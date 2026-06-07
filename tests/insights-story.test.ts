@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
 } from "../server/services/insights/story-briefing";
@@ -21,13 +22,23 @@ describe("nextBriefingRefreshIso", () => {
 });
 
 describe("buildDeterministicParagraphs", () => {
-  it("builds a number-light lead and per-gainer beats from 24h movers", () => {
+  it("emits anchor beats then mover beats from whyTrending", () => {
     const paragraphs = buildDeterministicParagraphs({
-      topGainers: [
+      anchors: [
+        {
+          id: "anchor",
+          name: "Donald Trump",
+          rank: 2,
+          change24h: -1.2,
+          category: "Politics",
+          whyTrending: "Donald Trump is in the news over a policy announcement.",
+        },
+      ],
+      movers: [
         {
           id: "a",
           name: "Alice",
-          rank: 1,
+          rank: 49,
           change24h: 9.4,
           category: "Music",
           whyTrending: "Alice headlines a new tour announcement.",
@@ -35,31 +46,22 @@ describe("buildDeterministicParagraphs", () => {
         {
           id: "b",
           name: "Bob",
-          rank: 4,
+          rank: 64,
           change24h: 4.2,
           category: "Film & TV",
         },
       ],
-      notableDropper: {
-        id: "c",
-        name: "Carol",
-        rank: 12,
-        change24h: -3.1,
-        category: "Sports",
-      },
       people: [
+        { id: "anchor", name: "Donald Trump" },
         { id: "a", name: "Alice" },
         { id: "b", name: "Bob" },
-        { id: "c", name: "Carol" },
       ],
     });
 
-    assert.ok(paragraphs.length >= 3);
-    // Lead uses the lead gainer's whyTrending summary verbatim.
-    assert.equal(paragraphs[0], "Alice headlines a new tour announcement.");
-    assert.match(paragraphs[1]!, /Bob/);
-    assert.ok(paragraphs.some((p) => p.includes("Carol")));
-    // Evergreen: no exact percentages baked into the prose (they go stale).
+    assert.equal(paragraphs.length, 3);
+    assert.equal(paragraphs[0], "Donald Trump is in the news over a policy announcement.");
+    assert.equal(paragraphs[1], "Alice headlines a new tour announcement.");
+    assert.match(paragraphs[2]!, /Bob/);
     assert.ok(
       paragraphs.every((p) => !p.includes("%")),
       "prose must be number-light so it doesn't contradict live figures",
@@ -67,26 +69,28 @@ describe("buildDeterministicParagraphs", () => {
   });
 
   it("produces deterministic story shape (headline + non-empty paragraphs)", () => {
-    const paragraphs = buildDeterministicParagraphs({
-      topGainers: [
+    const inputs = {
+      anchors: [],
+      movers: [
         {
           id: "a",
           name: "Alice",
-          rank: 1,
+          rank: 49,
           change24h: 5,
           category: "Music",
         },
       ],
-      notableDropper: null,
       people: [{ id: "a", name: "Alice" }],
-    });
+    };
+    const paragraphs = buildDeterministicParagraphs(inputs);
 
-    const headline = "Alice leads today's movers";
+    const headline = buildDeterministicHeadline(inputs);
     const body = paragraphs.join(" ");
 
     assert.ok(headline.length > 0);
     assert.ok(paragraphs.length > 0);
     assert.equal(body, paragraphs.join(" "));
     assert.match(paragraphs[0]!, /Alice/);
+    assert.equal(headline, "Alice leads today's movers");
   });
 });

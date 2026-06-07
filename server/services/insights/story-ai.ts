@@ -5,6 +5,7 @@ import {
   buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
+  type BriefingPersonInput,
 } from "./story-briefing";
 import { getAiModel, getChatCompletionTokenLimit } from "../../config/ai-models";
 import {
@@ -73,12 +74,21 @@ async function setCooldown(): Promise<void> {
   await setInsightsCache(COOLDOWN_KEY, "insights_story", { until }, COOLDOWN_MS);
 }
 
+function mapBriefingPersonForAi(person: BriefingPersonInput) {
+  return {
+    name: person.name,
+    category: person.category,
+    whyTrending: person.whyTrending ?? null,
+    topHeadline: person.topHeadline ?? null,
+  };
+}
+
 function normalizeParagraphs(raw: unknown, fallback: string[]): string[] {
   if (!Array.isArray(raw)) return fallback;
   const paragraphs = raw
     .map((p) => String(p).trim())
     .filter((p) => p.length > 0)
-    .slice(0, 5);
+    .slice(0, 6);
   return paragraphs.length > 0 ? paragraphs : fallback;
 }
 
@@ -108,7 +118,7 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
     const openai = new OpenAI({ apiKey });
     const response = await openai.chat.completions.create({
       model,
-      ...getChatCompletionTokenLimit(model, 600),
+      ...getChatCompletionTokenLimit(model, 800),
       temperature: 0.3,
       response_format: { type: "json_object" },
       messages: [
@@ -118,7 +128,7 @@ export async function generateAiInsightsStory(): Promise<InsightsStoryPayload | 
 Return JSON only: { "headline": string, "paragraphs": string[] }.
 Rules:
 - headline: max 100 characters, punchy, no clickbait. Do NOT include exact percentages or "leads with X%" — the headline must stay true for ~12 hours as the leaderboard shifts.
-- paragraphs: 1 lead paragraph plus up to 3 short beats (2-3 sentences each); max 900 characters total across all paragraphs
+- paragraphs: one short beat (2-3 sentences) per person — all anchors first (in array order), then all movers (in array order); up to 6 total; max 1300 characters across all paragraphs
 - Use ONLY facts from the input JSON (names, categories, whyTrending summaries, headlines)
 - Do NOT quote specific percentage moves or rankings in prose — these change hourly and the page shows live figures separately. Describe WHY people are in the news, not by how much they moved.
 - No speculation or predictions about the future
@@ -131,19 +141,8 @@ Rules:
             asOf: new Date().toISOString(),
             // Deliberately omit change24h — the prose must stay number-light
             // so it doesn't go stale; live figures render separately.
-            topGainers: briefingInputs.topGainers.map((g) => ({
-              name: g.name,
-              category: g.category,
-              whyTrending: g.whyTrending ?? null,
-              topHeadline: g.topHeadline ?? null,
-            })),
-            notableDropper: briefingInputs.notableDropper
-              ? {
-                  name: briefingInputs.notableDropper.name,
-                  category: briefingInputs.notableDropper.category,
-                  whyTrending: briefingInputs.notableDropper.whyTrending ?? null,
-                }
-              : null,
+            anchors: briefingInputs.anchors.map(mapBriefingPersonForAi),
+            movers: briefingInputs.movers.map(mapBriefingPersonForAi),
             fallbackHeadline,
           }),
         },
@@ -186,7 +185,7 @@ Rules:
       parsed.paragraphs ?? parsed.body?.split(/\n\n+/),
       fallbackParagraphs,
     );
-    const body = paragraphs.join(" ").slice(0, 1200);
+    const body = paragraphs.join(" ").slice(0, 1400);
     const now = new Date();
 
     const story: InsightsStoryPayload = {
@@ -208,6 +207,8 @@ Rules:
       headlineLen: headline.length,
       bodyLen: body.length,
       paragraphCount: paragraphs.length,
+      anchorCount: briefingInputs.anchors.length,
+      moverCount: briefingInputs.movers.length,
     });
 
     return story;

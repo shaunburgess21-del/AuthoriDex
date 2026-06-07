@@ -2,30 +2,35 @@ import type { InsightsStoryPayload } from "@shared/insights/types";
 import type { TrendingPerson } from "@shared/schema";
 import { getMarketCategoryLabel } from "@shared/constants";
 import { getCachedTrendingPeople } from "./insights-people-cache";
+import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import {
   getInsightsCache,
   setInsightsCache,
   INSIGHTS_STORY_TTL_MS,
 } from "./cache";
 import { getCachedWhyTrending, fetchWhyTrendingForPerson } from "../why-trending";
+import { selectHotMovers } from "../trending/hot-movers";
 import {
-  HOT_MOVERS_RANK_MAX,
-  selectHotMovers,
-} from "../trending/hot-movers";
-import {
-  BRIEFING_TOP_GAINERS,
+  BRIEFING_ANCHOR_COUNT,
+  BRIEFING_MOVER_COUNT,
+  BRIEFING_PREFETCH_MAX,
   buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
+  selectBriefingAnchorCandidates,
   type BriefingInputs,
   type BriefingPersonInput,
 } from "./story-briefing";
 
 export {
-  BRIEFING_TOP_GAINERS,
+  BRIEFING_ANCHOR_COUNT,
+  BRIEFING_MOVER_COUNT,
+  BRIEFING_PREFETCH_MAX,
   buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
+  selectBriefingAnchorCandidates,
+  selectBriefingMovers,
   type BriefingInputs,
   type BriefingPersonInput,
 } from "./story-briefing";
@@ -40,7 +45,10 @@ export function isInsightsAiStoryEnabled(): boolean {
 
 async function enrichPersonForBriefing(
   person: TrendingPerson,
-  options: { allowPrefetch: boolean },
+  options: {
+    allowPrefetch: boolean;
+    prefetchBudget: { remaining: number };
+  },
 ): Promise<BriefingPersonInput> {
   const category = person.category
     ? getMarketCategoryLabel(person.category)
@@ -53,7 +61,8 @@ async function enrichPersonForBriefing(
   if (payload?.hasContext && payload.summary) {
     whyTrending = payload.summary;
     topHeadline = payload.topHeadline;
-  } else if (options.allowPrefetch) {
+  } else if (options.allowPrefetch && options.prefetchBudget.remaining > 0) {
+    options.prefetchBudget.remaining -= 1;
     const generated = await fetchWhyTrendingForPerson(person, true);
     if (generated.hasContext && generated.summary) {
       whyTrending = generated.summary;
@@ -65,7 +74,7 @@ async function enrichPersonForBriefing(
     id: person.id,
     name: person.name,
     rank: person.rank ?? 999,
-    change24h: person.change24h!,
+    change24h: person.change24h ?? 0,
     category,
     whyTrending,
     topHeadline,
@@ -73,50 +82,64 @@ async function enrichPersonForBriefing(
 }
 
 /**
- * @param allowPrefetch When true (cron only), cold top-3 gainers may trigger a
- *   bounded why-trending generation (<=3 OpenAI calls). MUST stay false on the
- *   request path so a user's overview never blocks on / pays for OpenAI.
+ * @param allowPrefetch When true (cron only), cold picks may trigger bounded
+ *   why-trending generation (up to BRIEFING_PREFETCH_MAX OpenAI calls). MUST
+ *   stay false on the request path so a user's overview never blocks on / pays
+ *   for OpenAI.
  */
 export async function buildBriefingInputs(
   { allowPrefetch = false }: { allowPrefetch?: boolean } = {},
 ): Promise<BriefingInputs> {
-  const people = await getCachedTrendingPeople();
-  const hotMovers = selectHotMovers(people);
-  const topGainerCandidates = hotMovers.slice(0, BRIEFING_TOP_GAINERS);
+  const [people, snapshots] = await Promise.all([
+    getCachedTrendingPeople(),
+    loadLatestSnapshotsByPerson(),
+  ]);
 
-  const topGainers: BriefingPersonInput[] = [];
-  for (const person of topGainerCandidates) {
-    topGainers.push(
-      await enrichPersonForBriefing(person, { allowPrefetch }),
-    );
-  }
-
-  const dropCandidates = people.filter(
-    (p) =>
-      (p.rank ?? 999) <= HOT_MOVERS_RANK_MAX &&
-      typeof p.change24h === "number" &&
-      Number.isFinite(p.change24h) &&
-      p.change24h < 0,
+  const newsCountByPersonId = new Map<string, number>(
+    [...snapshots.entries()].map(([id, snap]) => [id, snap.newsCount ?? 0]),
   );
-  const dropPerson = [...dropCandidates].sort(
-    (a, b) => (a.change24h ?? 0) - (b.change24h ?? 0),
-  )[0];
 
-  let notableDropper: BriefingPersonInput | null = null;
-  if (dropPerson) {
-    notableDropper = await enrichPersonForBriefing(dropPerson, {
-      allowPrefetch: false,
-    });
+  const hotMoverPool = selectHotMovers(people);
+  const hotMoverTop6Ids = new Set(hotMoverPool.map((p) => p.id));
+
+  const prefetchBudget = { remaining: allowPrefetch ? BRIEFING_PREFETCH_MAX : 0 };
+  const enrichOpts = { allowPrefetch, prefetchBudget };
+
+  // Walk the full hot-mover pool (up to 6) so we can backfill when a top-3
+  // pick lacks Why Trending context even after prefetch.
+  const movers: BriefingPersonInput[] = [];
+  for (const person of hotMoverPool) {
+    if (movers.length >= BRIEFING_MOVER_COUNT) break;
+    const enriched = await enrichPersonForBriefing(person, enrichOpts);
+    if (!enriched.whyTrending) continue;
+    movers.push(enriched);
   }
 
-  const peopleLinks = [
-    ...topGainers.map((g) => ({ id: g.id, name: g.name })),
-    ...(notableDropper
-      ? [{ id: notableDropper.id, name: notableDropper.name }]
-      : []),
-  ];
+  const moverIds = new Set(movers.map((m) => m.id));
+  const anchorCandidates = selectBriefingAnchorCandidates(
+    people,
+    moverIds,
+    hotMoverTop6Ids,
+    newsCountByPersonId,
+  );
 
-  return { topGainers, notableDropper, people: peopleLinks };
+  const anchors: BriefingPersonInput[] = [];
+  for (const person of anchorCandidates) {
+    if (anchors.length >= BRIEFING_ANCHOR_COUNT) break;
+    const enriched = await enrichPersonForBriefing(person, enrichOpts);
+    if (!enriched.whyTrending) continue;
+    anchors.push(enriched);
+  }
+
+  const peopleLinks: Array<{ id: string; name: string }> = [];
+  const seenPeople = new Set<string>();
+  for (const pick of [...anchors, ...movers]) {
+    if (seenPeople.has(pick.id)) continue;
+    seenPeople.add(pick.id);
+    peopleLinks.push({ id: pick.id, name: pick.name });
+  }
+
+  return { anchors, movers, people: peopleLinks };
 }
 
 export async function buildDeterministicStory(
