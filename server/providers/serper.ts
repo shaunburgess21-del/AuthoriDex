@@ -9,6 +9,9 @@ import {
   serperNewsCacheSlug,
   type SerperRelevanceSpec,
 } from "./serper-news-parse";
+import { getSerperNewsCacheTtlHours } from "./serper-news-cache-ttl";
+
+export { getSerperNewsCacheTtlHours } from "./serper-news-cache-ttl";
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY;
 const SERPER_BASE_URL = "https://google.serper.dev/search";
@@ -556,7 +559,7 @@ export async function fetchSerperNewsCount(
 
   const relevanceSpec = buildSerperRelevanceSpec(query);
   const cacheKey = `serper:newscount_v2:${serperNewsCacheSlug(query)}`;
-  const CACHE_TTL_HOURS = 2;
+  const cacheTtlHours = getSerperNewsCacheTtlHours();
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -639,7 +642,7 @@ export async function fetchSerperNewsCount(
       articles,
     };
 
-    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), CACHE_TTL_HOURS);
+    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), cacheTtlHours);
 
     return result;
   } catch (error) {
@@ -703,7 +706,7 @@ export async function fetchSerperNewsCount24h(
 
   const relevanceSpec = buildSerperRelevanceSpec(query);
   const cacheKey = `serper:newscount_24h_v2:${serperNewsCacheSlug(query)}`;
-  const CACHE_TTL_HOURS = 2;
+  const cacheTtlHours = getSerperNewsCacheTtlHours();
 
   try {
     const cached = await getCachedResponse(cacheKey);
@@ -751,7 +754,7 @@ export async function fetchSerperNewsCount24h(
       articles,
     };
 
-    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), CACHE_TTL_HOURS);
+    await setCachedResponse(cacheKey, "serper_news", JSON.stringify(result), cacheTtlHours);
 
     return result;
   } catch (error) {

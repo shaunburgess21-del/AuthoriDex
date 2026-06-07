@@ -2,6 +2,7 @@ import { db } from "../db";
 import { apiCache } from "@shared/schema";
 import { eq, and, gt, sql } from "drizzle-orm";
 import pLimit from "p-limit";
+import { resolveMediastackRefreshIntervalMinutes } from "./news-refresh-intervals";
 
 const MEDIASTACK_API_KEY = process.env.MEDIASTACK_API_KEY;
 const MEDIASTACK_BASE_URL = "https://api.mediastack.com/v1/news";
@@ -718,11 +719,7 @@ const LAST_FETCH_KEY = "system:mediastack:last_fetch_at";
 // Drop to MEDIASTACK_REFRESH_INTERVAL_MINUTES=120 only after upgrading to a
 // higher tier. The cycle-aware budget check below will throttle automatically
 // if projected usage approaches the BUDGET_HARD_STOP_PCT ceiling.
-const MEDIASTACK_REFRESH_INTERVAL_MINUTES = (() => {
-  const raw = parseInt(process.env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "180", 10);
-  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 180;
-  return raw;
-})();
+const MEDIASTACK_REFRESH_INTERVAL_MINUTES = resolveMediastackRefreshIntervalMinutes();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 
 // Cache TTL is pinned exactly to the refresh interval. Previously TTL was

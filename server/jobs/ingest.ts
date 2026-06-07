@@ -48,6 +48,9 @@ import {
 import {
   shouldApplyNews24hDecayFloor,
   shouldUseRawNewsCountForScoring,
+  shouldSmoothUnionNewsForScoring,
+  getUnionNewsSmoothingMode,
+  isUnionNewsSmoothingEnabled,
 } from "../scoring/news-smoothing";
 import {
   fetchDataForSeoTrendsBatch,
@@ -601,6 +604,11 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
     if (newsAggregationMode === "union") {
       console.log(`[Ingest] NEWS_AGGREGATION_MODE=union — calling Currents + Mediastack + Serper News in parallel (GDELT excluded)`);
+      if (isUnionNewsSmoothingEnabled()) {
+        console.log(
+          `[Ingest] UNION_NEWS_SMOOTHING_ENABLED=true — 3-tick scoring smoothing active (mode=${getUnionNewsSmoothingMode()})`,
+        );
+      }
       const unionStart = Date.now();
       try {
         const leaderboardRanks = await db.select({ name: trendingPeople.name, rank: trendingPeople.rank }).from(trendingPeople);
@@ -2569,7 +2577,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           newsUsedFallback,
           newsNeedsOutageFallback,
         });
-        const newsCountForScoring = newsProviderHealthy
+        const applyUnionSmoothing = shouldSmoothUnionNewsForScoring({
+          newsSource,
+          newsProviderHealthy,
+          mediastackTotal: news?.mediastackPaginationTotal,
+          unionCount: news?.unionCount,
+        });
+        const newsCountForScoring = newsProviderHealthy && !applyUnionSmoothing
           ? newsCount
           : (smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount);
 
@@ -2899,6 +2913,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
                 contributingProviders: news.contributingProviders ?? [],
                 perSourceCounts: news.perSourceCounts ?? null,
                 uniqueContributed: news.uniqueContributed ?? null,
+              },
+            } : {}),
+            ...(applyUnionSmoothing && isDiagnosticsVerbose() ? {
+              newsSmoothingForScoring: {
+                applied: true,
+                mode: getUnionNewsSmoothingMode(),
+                mediastackTotal: news?.mediastackPaginationTotal ?? 0,
+                unionCount: news?.unionCount ?? 0,
+                rawNewsCount: newsCount,
+                smoothedNewsCount: newsCountForScoring,
               },
             } : {}),
             ...(newsSource === "cascade" && isDiagnosticsVerbose() ? {

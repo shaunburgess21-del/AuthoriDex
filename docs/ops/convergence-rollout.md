@@ -63,3 +63,28 @@ Thick `b` (legacy `targetMaxLoss=5000`) markets are **left to grind** via lock-i
 ## Rollback
 
 Flip flags off; next agent sweep picks up. Positions settle normally.
+
+## Union news saw-tooth stabilization
+
+Reduces hourly fame flicker in `NEWS_AGGREGATION_MODE=union` when Serper dominates the URL union (Bad Bunny / Drake / Kohli class). Serper news cache TTL aligns with paid-provider refresh cadence on deploy (no flag). Smoothing is env-gated (default OFF).
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| Deploy | (none required) | Serper news cache TTL → ~3h at default Mediastack/Currents cadence; behavior unchanged until smoothing flag is set |
+| After Sunday resolve | `UNION_NEWS_SMOOTHING_ENABLED=true` | 3-tick mean on healthy union path for scoring only (`trend_snapshots.news_count` stays raw) |
+| Default mode | omit or `UNION_NEWS_SMOOTHING_MODE=serper_dominant` | Smooth only when `mediastackTotal < unionCount × 0.2` |
+| Escalation | `UNION_NEWS_SMOOTHING_MODE=all` | Blanket union smoothing if saw-tooth persists on Mediastack-heavy people |
+| Optional tuning | `UNION_NEWS_SMOOTHING_MEDIASTACK_RATIO` | Default `0.2` |
+| TTL rollback | `SERPER_NEWS_CACHE_TTL_HOURS=2` | Revert Serper news cache to 2h without redeploy |
+
+**Do not change** `LOCKIN_SIGMA_1D`, fame EMA, or agent lock-in flags when enabling smoothing.
+
+### Validation
+
+```bash
+npx tsx server/diagnostics/audit-news-smoothing.ts 3a5bbf27-b9c2-4315-a4dc-7944d9878d0d
+```
+
+1. Bad Bunny — smoothed column closer to rolling mean; smaller hourly fame jumps.
+2. Mediastack-heavy person — with `serper_dominant` mode, `newsSmoothingForScoring.applied` should be false (requires verbose diagnostics).
+3. New Serper news cache rows — `api_cache.expires_at` ~3h ahead of fetch time after deploy.

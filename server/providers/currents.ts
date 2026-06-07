@@ -18,6 +18,7 @@ import {
   type CurrentsRateLimitSnapshot,
   type CurrentsSearchResponseBody,
 } from "./currents-parse";
+import { resolveCurrentsRefreshIntervalMinutes } from "./news-refresh-intervals";
 
 export type { CurrentsRateLimitSnapshot } from "./currents-parse";
 export {
@@ -63,11 +64,7 @@ export interface CurrentsBatchStats {
   nonZeroCoveragePct: number;
 }
 
-const CURRENTS_REFRESH_INTERVAL_MINUTES = (() => {
-  const raw = parseInt(process.env.CURRENTS_REFRESH_INTERVAL_MINUTES ?? "120", 10);
-  if (!Number.isFinite(raw) || raw < 60 || raw > 360) return 120;
-  return raw;
-})();
+const CURRENTS_REFRESH_INTERVAL_MINUTES = resolveCurrentsRefreshIntervalMinutes();
 
 const CURRENTS_REFRESH_INTERVAL_MS = CURRENTS_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 const CURRENTS_CACHE_TTL_HOURS = CURRENTS_REFRESH_INTERVAL_MINUTES / 60;
