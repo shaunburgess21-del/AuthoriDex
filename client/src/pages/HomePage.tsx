@@ -1010,7 +1010,7 @@ export default function HomePage() {
                             data-testid="text-leaderboard-freshness"
                           >
                             <span className="inline-flex items-center gap-1">
-                              <RefreshCw className="h-3 w-3 shrink-0 full-refresh-icon-shine" aria-hidden />
+                              <RefreshCw className="h-3 w-3 shrink-0" aria-hidden />
                               <span>
                                 Updated:{" "}
                                 {systemFreshness?.fullRefreshAtFormatted ||
