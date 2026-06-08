@@ -313,7 +313,7 @@ export function RankingsTab() {
   const rankingsFilterCategories = useMemo(() => {
     const pinned = [
       { value: "all", label: "All Categories" },
-      ...(isLoggedIn ? [{ value: "favorites", label: "Favorites" }] : []),
+      { value: "favorites", label: "Favorites" },
     ];
     const dynamic = categories
       .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
@@ -331,11 +331,12 @@ export function RankingsTab() {
       });
     }
     return [...pinned, ...dynamic];
-  }, [categories, filters.category, isLoggedIn]);
+  }, [categories, filters.category]);
 
-  const filterDropdownValue = filters.favouritesOnly
-    ? "favorites"
-    : filters.category ?? "all";
+  const filterDropdownValue = useMemo(() => {
+    const raw = filters.favouritesOnly ? "favorites" : filters.category ?? "all";
+    return rankingsFilterCategories.some((c) => c.value === raw) ? raw : "all";
+  }, [filters.favouritesOnly, filters.category, rankingsFilterCategories]);
 
   const handleFilterChange = (value: string) => {
     if (value === "all") {
@@ -390,11 +391,6 @@ export function RankingsTab() {
       {hasSecondaryCol && <col className="w-24" />}
     </colgroup>
   );
-
-  const metricHeaderClass =
-    "w-36 px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
-  const secondaryHeaderClass =
-    "w-24 px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
 
   const renderPrimary = (row: InsightsRankingRow) =>
     isMovers ? (
@@ -541,13 +537,16 @@ export function RankingsTab() {
             </CardHeader>
           </div>
 
-          {/* Mobile toolbar — filters + primary column header */}
-          <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:hidden">
+          {/* Toolbar — keep outside <table>; Radix dropdowns inside <th> crash in some browsers */}
+          <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">{filterToolbar}</div>
-              <span className="shrink-0 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                {primaryColLabel}
-              </span>
+              <div className="flex shrink-0 items-center gap-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span className="text-right">{primaryColLabel}</span>
+                {hasSecondaryCol && (
+                  <span className="hidden md:block w-24 text-right">{secondaryColLabel}</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -562,17 +561,6 @@ export function RankingsTab() {
             <div className="hidden md:block">
               <table className="w-full table-fixed text-sm">
                 {rankingsMetricColgroup}
-                <thead className="bg-muted/30">
-                  <tr className="border-b border-border/60">
-                    <th className="pl-4 pr-2 py-3 text-left align-middle font-normal">
-                      {filterToolbar}
-                    </th>
-                    <th className={metricHeaderClass}>{primaryColLabel}</th>
-                    {hasSecondaryCol && (
-                      <th className={secondaryHeaderClass}>{secondaryColLabel}</th>
-                    )}
-                  </tr>
-                </thead>
                 <tbody>
                   {allRows.map((row, idx) => (
                     <tr
