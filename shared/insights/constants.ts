@@ -21,6 +21,9 @@ export const INSIGHTS_DRIVER_LABELS: Record<InsightsPrimaryDriver, string> = {
   MIXED: "Mixed signals",
 };
 
+/** Today-tab Attention mix — off until we have more velocity drivers (e.g. X mentions). */
+export const INSIGHTS_ATTENTION_MIX_ENABLED = false;
+
 /** One-line explainer for the Today tab Attention mix legend. */
 export const INSIGHTS_DRIVER_LEGEND: Record<InsightsPrimaryDriver, string> = {
   NEWS: "recent news headlines",

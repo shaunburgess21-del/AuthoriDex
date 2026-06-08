@@ -32,7 +32,10 @@ import {
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { navigateToLogin } from "@/lib/authReturn";
-import { INSIGHTS_DRIVER_LEGEND } from "@shared/insights/constants";
+import {
+  INSIGHTS_ATTENTION_MIX_ENABLED,
+  INSIGHTS_DRIVER_LEGEND,
+} from "@shared/insights/constants";
 import { cn } from "@/lib/utils";
 
 /** Strip combining diacritical marks so "Mbappé" matches a stored "Mbappe". */
@@ -506,18 +509,15 @@ export function OverviewTab() {
     return <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>;
   }
 
-  const { story, movers, driverMix, favouritesSignals } = data;
+  const { story, movers, favouritesSignals } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
-  // Hybrid briefing: the editorial prose refreshes twice daily, but the
-  // headline + the live strip below are driven by the CURRENT 24h climbers so
-  // they never go stale vs the Movers card.
-  const liveClimbers = movers["24h"]?.climbers ?? [];
-  const liveLeader = liveClimbers[0];
+  // Hybrid briefing: editorial prose refreshes twice daily; headline stays
+  // tied to the current 24h leader so it doesn't go stale vs the Movers card.
+  const liveLeader = movers["24h"]?.climbers[0];
   const liveHeadline = liveLeader
     ? `${liveLeader.name} leads today's movers`
     : story.headline;
-  const liveTop3 = liveClimbers.slice(0, 3);
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -540,31 +540,8 @@ export function OverviewTab() {
                 people={story.people}
               />
 
-              {liveTop3.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-green-600 dark:text-green-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                    Live
-                  </span>
-                  {liveTop3.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setSelectedMover(moverToInsightPerson(m))}
-                      className="inline-flex items-center gap-1 text-xs hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                    >
-                      <span className="font-medium">{m.name}</span>
-                      <span className="tabular-nums text-green-600 dark:text-green-400 font-semibold">
-                        +{(m.change24h ?? 0).toFixed(1)}%
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
               <p className="text-[10px] text-muted-foreground/70 mt-3">
-                {story.mode === "ai" ? "AI-summarized" : "Auto-generated"} · refreshed twice daily ·
-                movement updates hourly
+                {story.mode === "ai" ? "AI-summarized" : "Auto-generated"}
               </p>
             </div>
           </div>
@@ -620,9 +597,10 @@ export function OverviewTab() {
         </InsightsSection>
       </div>
 
+      {INSIGHTS_ATTENTION_MIX_ENABLED && (
       <InsightsSection
         title="Attention mix"
-        description={`Of the top ${driverMix.topN}, the share of Trend Score movement driven by each signal.`}
+        description={`Of the top ${data.driverMix.topN}, the share of Trend Score movement driven by each signal.`}
       >
         <div className="space-y-3 max-w-2xl">
           {(() => {
@@ -630,14 +608,14 @@ export function OverviewTab() {
             // and Wikipedia — already summing to 100% (Search carries 0 weight
             // in the velocity composite, so it's excluded). No re-normalisation
             // needed; the bars reflect actual contribution shares.
-            if (driverMix.segments.length === 0) {
+            if (data.driverMix.segments.length === 0) {
               return (
                 <p className="text-sm text-muted-foreground">
                   Not enough signal data to break down attention right now.
                 </p>
               );
             }
-            return driverMix.segments.map((seg) => {
+            return data.driverMix.segments.map((seg) => {
               const sharePct = seg.pct;
               const source = DRIVER_TO_SOURCE[seg.driver];
               const barInner = (
@@ -697,6 +675,7 @@ export function OverviewTab() {
           ))}
         </p>
       </InsightsSection>
+      )}
 
       <PersonInsightModal person={selectedMover} onClose={() => setSelectedMover(null)} />
     </div>
