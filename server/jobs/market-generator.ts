@@ -168,6 +168,27 @@ type AnchoredPoolContext = {
 /** Reused when jackpot + updown generate in the same tick (Monday cron). */
 let anchoredPoolContextCache: AnchoredPoolContext | null = null;
 
+async function applyWeeklyNativeMarketEligibility<T extends { id: string }>(
+  people: T[],
+  monday: Date,
+  logLabel: string,
+): Promise<T[]> {
+  if (people.length === 0) return people;
+
+  const eligibleIds = await filterPersonIdsEligibleForWeeklyNativeMarkets(
+    people.map((p) => p.id),
+    monday,
+  );
+  const filtered = people.filter((p) => eligibleIds.has(p.id));
+  if (filtered.length < people.length) {
+    log(
+      `[MarketGenerator:${logLabel}] Excluded ${people.length - filtered.length} people ` +
+        `(insufficient recent ingest samples for weekly native markets)`,
+    );
+  }
+  return filtered;
+}
+
 async function getAnchoredPoolContext(
   weekNumber: number,
   monday: Date,
@@ -177,17 +198,7 @@ async function getAnchoredPoolContext(
   }
 
   const rawPool = await loadAnchoredPoolFromDb();
-  const eligibleIds = await filterPersonIdsEligibleForWeeklyNativeMarkets(
-    rawPool.map((p) => p.id),
-    monday,
-  );
-  const pool = rawPool.filter((p) => eligibleIds.has(p.id));
-  if (pool.length < rawPool.length) {
-    log(
-      `[MarketGenerator:Anchored] Excluded ${rawPool.length - pool.length} people ` +
-        `(insufficient recent ingest samples for weekly native markets)`,
-    );
-  }
+  const pool = await applyWeeklyNativeMarketEligibility(rawPool, monday, "Anchored");
 
   const momentumById = await loadGainerMovementStats(
     pool.map((p) => p.id),
@@ -398,12 +409,7 @@ export async function ensureUpDownMarketForInductee(person: {
     return "skipped";
   }
 
-  const eligible = await filterPersonIdsEligibleForWeeklyNativeMarkets([person.id], monday);
-  if (!eligible.has(person.id)) {
-    log(
-      `[MarketGenerator] ensureUpDown blocked for ${person.name}: ` +
-        `insufficient ingest history for weekly native markets`,
-    );
+  if ((await applyWeeklyNativeMarketEligibility([{ id: person.id }], monday, "ensureUpDown")).length === 0) {
     return "skipped";
   }
 
@@ -513,12 +519,7 @@ export async function backfillGainerMarketForInductee(person: {
   avatar?: string | null;
 }): Promise<"added" | "skipped" | "no_market"> {
   const { monday, weekNumber } = getWeekContext();
-  const eligible = await filterPersonIdsEligibleForWeeklyNativeMarkets([person.id], monday);
-  if (!eligible.has(person.id)) {
-    log(
-      `[MarketGenerator] gainer backfill skipped for ${person.name}: ` +
-        `insufficient ingest history for weekly native markets`,
-    );
+  if ((await applyWeeklyNativeMarketEligibility([{ id: person.id }], monday, "gainerBackfill")).length === 0) {
     return "skipped";
   }
 
@@ -816,10 +817,12 @@ export async function generateWeeklyH2H(): Promise<number> {
   // Secondary sort by id breaks fame_index ties deterministically — without
   // it, two people with identical fame would swap positions across runs and
   // produce non-deterministic pairings. Rare in practice but free to fix.
-  const allPeople = await db
+  const allPeopleRaw = await db
     .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
     .from(trendingPeople)
     .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id);
+
+  const allPeople = await applyWeeklyNativeMarketEligibility(allPeopleRaw, monday, "H2H");
 
   if (allPeople.length < 2) return 0;
 
@@ -967,6 +970,8 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
     usedFallback = true;
     log(`[MarketGenerator:Gainer] Fallback: ${people.length} people from trendingPeople`);
   }
+
+  people = await applyWeeklyNativeMarketEligibility(people, monday, "Gainer");
 
   const byCategory = new Map<string, typeof people>();
   for (const person of people) {
