@@ -3,6 +3,9 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  // Tab pulse skins are chosen at runtime via getInsightsTabCardClass() in
+  // shared/ — without literals under client/src, Tailwind drops their CSS in prod.
+  safelist: ["pulse-card-cyan", "pulse-card-purple"],
   // Tailwind v3.4 opt-in (default in v4): `hover:` only matches on devices
   // that actually support hover (`@media (hover: hover)`). Without this, a
   // tap on a touchscreen briefly applies `:hover` and the state sticks until

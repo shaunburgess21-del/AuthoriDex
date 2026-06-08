@@ -12,9 +12,9 @@ export const DRIVER_DISPLAY: Record<InsightsPrimaryDriver, string> = INSIGHTS_DR
 
 export const SOURCE_DISPLAY: Record<InsightsSource, string> = INSIGHTS_SOURCE_LABELS;
 
-/** Pulse-card classes for shadcn Card — clears default border/shadow so tab tint wins. */
+/** Pulse-card classes for shadcn Card — pulse-card sets border/glow; drop Card shadow only. */
 export function insightsTabShadcnCardClass(tab: InsightsTab, ...extra: Parameters<typeof cn>) {
-  return cn("border-0 shadow-none", getInsightsTabCardClass(tab), ...extra);
+  return cn("shadow-none", getInsightsTabCardClass(tab), ...extra);
 }
 
 export function InsightsSection({
