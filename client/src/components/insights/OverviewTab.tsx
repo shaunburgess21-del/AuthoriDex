@@ -536,13 +536,10 @@ export function OverviewTab() {
               </p>
               {briefingHeadlines.length > 0 && (
                 <div className="mt-1 space-y-0.5" aria-label="Briefing headlines">
-                  {briefingHeadlines.map((line, index) => (
+                  {briefingHeadlines.map((line) => (
                     <p
                       key={line}
-                      className={cn(
-                        "text-sm md:text-base leading-snug",
-                        index === 0 ? "font-medium text-foreground" : "text-muted-foreground",
-                      )}
+                      className="text-sm md:text-base font-medium text-foreground leading-snug"
                     >
                       {line}
                     </p>
