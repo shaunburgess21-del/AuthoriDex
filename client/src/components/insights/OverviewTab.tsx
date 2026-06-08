@@ -518,7 +518,8 @@ export function OverviewTab() {
   const liveLeader = movers["24h"]?.climbers[0];
   const briefingHeadlines = buildBriefingDisplayHeadlines({
     liveMover: liveLeader ? { id: liveLeader.id, name: liveLeader.name } : null,
-    leadAnchor: story.leadAnchor,
+    // people[] is anchors-then-movers; use as fallback until cache picks up leadAnchor.
+    leadAnchor: story.leadAnchor ?? story.people?.[0] ?? null,
     fallbackHeadline: story.headline,
   });
 
