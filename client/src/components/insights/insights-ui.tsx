@@ -5,7 +5,7 @@ import {
 } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
-import type { InsightsSource, InsightsTab } from "@shared/insights/filters";
+import type { InsightsSource, InsightsTab, InsightsWindow } from "@shared/insights/filters";
 import {
   getInsightsTabCardClass,
   INSIGHTS_DRIVER_LABELS,
@@ -58,6 +58,41 @@ export function InsightsSection({
       </div>
       <div className="p-4">{children}</div>
     </section>
+  );
+}
+
+export function InsightsWindowToggle({
+  value,
+  onChange,
+  ariaLabel = "Time window",
+}: {
+  value: InsightsWindow;
+  onChange: (window: InsightsWindow) => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <div
+      className="inline-flex shrink-0 rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {(["24h", "7d"] as const).map((w) => (
+        <button
+          key={w}
+          type="button"
+          aria-pressed={value === w}
+          onClick={() => onChange(w)}
+          className={cn(
+            "rounded-md px-3 py-1.5 transition-colors tabular-nums",
+            value === w
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {w}
+        </button>
+      ))}
+    </div>
   );
 }
 

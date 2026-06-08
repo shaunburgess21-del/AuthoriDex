@@ -26,7 +26,12 @@ import { BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { InsightsPill, SOURCE_DISPLAY, insightsTabShadcnCardClass } from "./insights-ui";
+import {
+  InsightsPill,
+  InsightsWindowToggle,
+  SOURCE_DISPLAY,
+  insightsTabShadcnCardClass,
+} from "./insights-ui";
 import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
 import { getMarketCategoryLabel } from "@shared/constants";
 import { cn } from "@/lib/utils";
@@ -87,8 +92,10 @@ function metricSuffix(row: InsightsRankingRow): { suffix: string; tooltip?: stri
 }
 
 function metricColumnLabel(source: InsightsSource, window: InsightsWindow): string {
-  if (source === "news") return window === "7d" ? "News (7d est.)" : "News (24h)";
-  if (source === "wiki") return window === "7d" ? "Wikipedia (7d)" : "Wikipedia (24h)";
+  if (source === "news_momentum" || source === "wiki_momentum") return "Momentum";
+  if (source === "search_volume") return "Searches";
+  if (source === "news") return window === "7d" ? "Articles 7d" : "Articles 24h";
+  if (source === "wiki") return window === "7d" ? "Views 7d" : "Views 24h";
   return SOURCE_DISPLAY[source];
 }
 
@@ -217,15 +224,6 @@ function MetricCell({ row, source }: { row: InsightsRankingRow; source: Insights
   );
 }
 
-/** Label for the window <select>, contextual to the active source. */
-function windowControlLabel(source: InsightsSource): string {
-  if (source === "fame") return "Movers window";
-  // For News / Wikipedia the window changes the totals shown (24h vs 7d
-  // article / pageview counts), not a percentage — so "% change window"
-  // would be misleading.
-  return "Time window";
-}
-
 export function RankingsTab() {
   const { isLoggedIn } = useAuth();
   const [filterOpen, setFilterOpen] = useState(false);
@@ -273,6 +271,8 @@ export function RankingsTab() {
     filters.source !== "search_volume" &&
     filters.source !== "news_momentum" &&
     filters.source !== "wiki_momentum";
+  const windowToggleAriaLabel =
+    filters.source === "fame" ? "Movers time window" : "Time window";
 
   const setSource = (source: InsightsSource) => {
     logInsightsEvent("rankings", "pill_change", { source });
@@ -301,21 +301,16 @@ export function RankingsTab() {
     }
   }, [isIntersecting, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  const windowToggle = showWindowControl ? (
+    <InsightsWindowToggle
+      value={filters.window}
+      onChange={(window) => patchFilters({ window })}
+      ariaLabel={windowToggleAriaLabel}
+    />
+  ) : null;
+
   const filterControls = (
     <div className="flex flex-wrap gap-3 items-center text-sm">
-      {showWindowControl && (
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          {windowControlLabel(filters.source)}
-          <select
-            className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-xs"
-            value={filters.window}
-            onChange={(e) => patchFilters({ window: e.target.value as InsightsFilters["window"] })}
-          >
-            <option value="24h">24h</option>
-            <option value="7d">7d</option>
-          </select>
-        </label>
-      )}
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         Category
         <select
@@ -414,6 +409,7 @@ export function RankingsTab() {
   }, []);
 
   return (
+    <Drawer.Root open={filterOpen} onOpenChange={setFilterOpen}>
     <div className="space-y-4 md:space-y-5">
       {/* Source pills — sticky below the main insights tab bar. */}
       <div
@@ -439,19 +435,6 @@ export function RankingsTab() {
           ))}
         </ScrollMaskedChipRow>
       </div>
-
-      <Drawer.Root open={filterOpen} onOpenChange={setFilterOpen}>
-        <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50" />
-          <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-background p-4 pb-24 max-h-[85vh]">
-            <Drawer.Title className="font-semibold mb-4">Filters</Drawer.Title>
-            <Drawer.Description className="sr-only">
-              Filter and sort the rankings by window, category, and favourites.
-            </Drawer.Description>
-            <div className="space-y-4">{filterControls}</div>
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
 
       {isLoading && (
         <div className="space-y-2">
@@ -528,15 +511,16 @@ export function RankingsTab() {
           {/* Mobile toolbar — filters + primary column header */}
           <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:hidden">
             <div className="flex items-center justify-between gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFilterOpen(true)}
-              >
-                <Filter className="h-4 w-4 mr-1.5" />
-                Filters
-              </Button>
-              <span className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-2">
+                <Drawer.Trigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Filter className="h-4 w-4 mr-1.5" />
+                    Filters
+                  </Button>
+                </Drawer.Trigger>
+                {windowToggle}
+              </div>
+              <span className="shrink-0 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 {primaryColLabel}
               </span>
             </div>
@@ -550,7 +534,10 @@ export function RankingsTab() {
                 <thead className="bg-muted/30">
                   <tr className="border-b border-border/60">
                     <th className="pl-4 pr-2 py-3 text-left align-middle font-normal">
-                      {filterControls}
+                      <div className="flex flex-wrap items-center gap-3">
+                        {windowToggle}
+                        {filterControls}
+                      </div>
                     </th>
                     <th className={metricHeaderClass}>{primaryColLabel}</th>
                     {hasSecondaryCol && (
@@ -647,5 +634,16 @@ export function RankingsTab() {
         </p>
       )}
     </div>
+    <Drawer.Portal>
+      <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50" />
+      <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-background p-4 pb-24 max-h-[85vh]">
+        <Drawer.Title className="font-semibold mb-4">Filters</Drawer.Title>
+        <Drawer.Description className="sr-only">
+          Filter and sort the rankings by category and favourites.
+        </Drawer.Description>
+        <div className="space-y-4">{filterControls}</div>
+      </Drawer.Content>
+    </Drawer.Portal>
+    </Drawer.Root>
   );
 }

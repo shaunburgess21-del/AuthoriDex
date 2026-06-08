@@ -27,6 +27,7 @@ import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   InsightsSection,
+  InsightsWindowToggle,
   DRIVER_DISPLAY,
   InsightsEmptyState,
 } from "./insights-ui";
@@ -144,39 +145,6 @@ function BriefingBody({
         <p key={i} className="text-sm text-muted-foreground leading-relaxed">
           {linkifyBriefingText(paragraph, linkPeople)}
         </p>
-      ))}
-    </div>
-  );
-}
-
-function MoversWindowToggle({
-  value,
-  onChange,
-}: {
-  value: InsightsWindow;
-  onChange: (window: InsightsWindow) => void;
-}) {
-  return (
-    <div
-      className="inline-flex rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
-      role="group"
-      aria-label="Movers time window"
-    >
-      {(["24h", "7d"] as const).map((w) => (
-        <button
-          key={w}
-          type="button"
-          aria-pressed={value === w}
-          onClick={() => onChange(w)}
-          className={cn(
-            "px-3 py-1.5 rounded-md transition-colors tabular-nums",
-            value === w
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {w}
-        </button>
       ))}
     </div>
   );
@@ -582,7 +550,13 @@ export function OverviewTab() {
               ? "Biggest 24-hour climbers and droppers on the leaderboard."
               : "Biggest 7-day climbers and droppers on the leaderboard."
           }
-          action={<MoversWindowToggle value={moversWindow} onChange={setMoversWindow} />}
+          action={
+            <InsightsWindowToggle
+              value={moversWindow}
+              onChange={setMoversWindow}
+              ariaLabel="Movers time window"
+            />
+          }
         >
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
