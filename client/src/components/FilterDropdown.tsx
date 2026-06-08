@@ -37,6 +37,8 @@ interface FilterDropdownProps {
   testId?: string;
   sortDirection?: SortDirection;
   onSortDirectionChange?: (direction: SortDirection) => void;
+  /** When set, overrides the default category-only active styling. */
+  isActive?: boolean;
 }
 
 export function FilterDropdown({
@@ -47,8 +49,9 @@ export function FilterDropdown({
   testId = "button-filter",
   sortDirection,
   onSortDirectionChange,
+  isActive,
 }: FilterDropdownProps) {
-  const isFiltered = value.toLowerCase() !== allValue.toLowerCase();
+  const isFiltered = isActive ?? value.toLowerCase() !== allValue.toLowerCase();
   const showSortSection = sortDirection !== undefined && onSortDirectionChange !== undefined;
 
   return (

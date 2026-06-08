@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { Drawer } from "vaul";
-import { Filter, RefreshCw, Share2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { RefreshCw, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { shareInsightsView } from "@/lib/insights-share";
 import {
@@ -26,6 +25,8 @@ import { BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
+import { FilterDropdown } from "@/components/FilterDropdown";
+import { navigateToLogin } from "@/lib/authReturn";
 import {
   InsightsPill,
   InsightsWindowToggle,
@@ -38,11 +39,11 @@ import { cn } from "@/lib/utils";
 import type { InsightsRankingRow } from "@shared/insights/types";
 
 const PILL_HINTS: Record<InsightsSource, string> = {
-  fame: "Biggest Trend Score gainers & fallers",
-  news_momentum: "Biggest news surge",
-  wiki_momentum: "Biggest curiosity spike",
+  fame: "Biggest Trend Score change",
+  news_momentum: "News coverage is higher than their typical day",
+  wiki_momentum: "Wikipedia page views are higher than their typical day",
   news: "Most news coverage",
-  wiki: "Most Wikipedia attention",
+  wiki: "Most Wikipedia page views",
   search_volume: "Most-searched on Google",
 };
 
@@ -226,7 +227,7 @@ function MetricCell({ row, source }: { row: InsightsRankingRow; source: Insights
 
 export function RankingsTab() {
   const { isLoggedIn } = useAuth();
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const [, setUrlTick] = useState(0);
   const categorySet = useLeaderboardCategories();
   const categories = categorySet ? Array.from(categorySet).sort() : [];
@@ -309,34 +310,61 @@ export function RankingsTab() {
     />
   ) : null;
 
-  const filterControls = (
-    <div className="flex flex-wrap gap-3 items-center text-sm">
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        Category
-        <select
-          className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-xs max-w-[140px]"
-          value={filters.category ?? ""}
-          onChange={(e) => patchFilters({ category: e.target.value || null })}
-        >
-          <option value="">All</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {getMarketCategoryLabel(c)}
-            </option>
-          ))}
-        </select>
-      </label>
-      {isLoggedIn && (
-        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-          <input
-            type="checkbox"
-            className="rounded border-border"
-            checked={filters.favouritesOnly}
-            onChange={(e) => patchFilters({ favouritesOnly: e.target.checked })}
-          />
-          Favourites only
-        </label>
-      )}
+  const rankingsFilterCategories = useMemo(() => {
+    const pinned = [
+      { value: "all", label: "All Categories" },
+      ...(isLoggedIn ? [{ value: "favorites", label: "Favorites" }] : []),
+    ];
+    const dynamic = categories
+      .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
+      .map((id) => ({ value: id, label: getMarketCategoryLabel(id) }));
+    const currentCategory = filters.category;
+    if (
+      currentCategory &&
+      currentCategory !== "all" &&
+      currentCategory !== "favorites" &&
+      !dynamic.some((c) => c.value === currentCategory)
+    ) {
+      dynamic.unshift({
+        value: currentCategory,
+        label: getMarketCategoryLabel(currentCategory),
+      });
+    }
+    return [...pinned, ...dynamic];
+  }, [categories, filters.category, isLoggedIn]);
+
+  const filterDropdownValue = filters.favouritesOnly
+    ? "favorites"
+    : filters.category ?? "all";
+
+  const handleFilterChange = (value: string) => {
+    if (value === "all") {
+      patchFilters({ category: null, favouritesOnly: false });
+      return;
+    }
+    if (value === "favorites") {
+      if (!isLoggedIn) {
+        navigateToLogin(setLocation);
+        return;
+      }
+      patchFilters({ category: null, favouritesOnly: true });
+      return;
+    }
+    patchFilters({ category: value, favouritesOnly: false });
+  };
+
+  const filterToolbar = (
+    <div className="flex items-center gap-2">
+      <FilterDropdown
+        value={filterDropdownValue}
+        onChange={handleFilterChange}
+        categories={rankingsFilterCategories}
+        sortDirection={filters.sortDir}
+        onSortDirectionChange={(sortDir) => patchFilters({ sortDir })}
+        isActive={filterDropdownValue !== "all" || filters.sortDir !== "desc"}
+        testId="rankings-filter"
+      />
+      {windowToggle}
     </div>
   );
 
@@ -409,7 +437,6 @@ export function RankingsTab() {
   }, []);
 
   return (
-    <Drawer.Root open={filterOpen} onOpenChange={setFilterOpen}>
     <div className="space-y-4 md:space-y-5">
       {/* Source pills — sticky below the main insights tab bar. */}
       <div
@@ -447,7 +474,7 @@ export function RankingsTab() {
         <p className="text-sm text-destructive">Could not load rankings. Try again shortly.</p>
       )}
 
-      {data && allRows.length > 0 && (
+      {data && (
         <Card className={insightsTabShadcnCardClass("rankings", "overflow-hidden")}>
           <div className="relative isolate overflow-hidden rounded-t-xl">
             <CardHeader className="relative z-[2] gap-3 space-y-0 bg-card/95 pb-4 pt-5">
@@ -462,7 +489,13 @@ export function RankingsTab() {
                     <span className="font-medium text-foreground">
                       {SOURCE_DISPLAY[filters.source]}
                     </span>
-                    {activePill ? ` — ${activePill.hint}` : ""}
+                    {activePill
+                      ? ` ${
+                          filters.source === "news_momentum" || filters.source === "wiki_momentum"
+                            ? "="
+                            : "—"
+                        } ${activePill.hint}`
+                      : ""}
                   </p>
                   <div
                     className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60"
@@ -511,15 +544,7 @@ export function RankingsTab() {
           {/* Mobile toolbar — filters + primary column header */}
           <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:hidden">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <Drawer.Trigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Filter className="h-4 w-4 mr-1.5" />
-                    Filters
-                  </Button>
-                </Drawer.Trigger>
-                {windowToggle}
-              </div>
+              <div className="flex min-w-0 items-center gap-2">{filterToolbar}</div>
               <span className="shrink-0 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 {primaryColLabel}
               </span>
@@ -527,6 +552,12 @@ export function RankingsTab() {
           </div>
 
           <CardContent className="p-0">
+            {allRows.length === 0 ? (
+              <p className="px-4 py-12 text-center text-sm text-muted-foreground">
+                No results for these filters.
+              </p>
+            ) : (
+            <>
             {/* DESKTOP — single table so filter/header cells share column widths with data */}
             <div className="hidden md:block">
               <table className="w-full table-fixed text-sm">
@@ -534,10 +565,7 @@ export function RankingsTab() {
                 <thead className="bg-muted/30">
                   <tr className="border-b border-border/60">
                     <th className="pl-4 pr-2 py-3 text-left align-middle font-normal">
-                      <div className="flex flex-wrap items-center gap-3">
-                        {windowToggle}
-                        {filterControls}
-                      </div>
+                      {filterToolbar}
                     </th>
                     <th className={metricHeaderClass}>{primaryColLabel}</th>
                     {hasSecondaryCol && (
@@ -624,26 +652,11 @@ export function RankingsTab() {
                 </p>
               )}
             </div>
+            </>
+            )}
           </CardContent>
         </Card>
       )}
-
-      {data && allRows.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-12 rounded-xl border border-dashed border-border/50">
-          No results for these filters.
-        </p>
-      )}
     </div>
-    <Drawer.Portal>
-      <Drawer.Overlay className="fixed inset-0 bg-black/40 z-50" />
-      <Drawer.Content className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-background p-4 pb-24 max-h-[85vh]">
-        <Drawer.Title className="font-semibold mb-4">Filters</Drawer.Title>
-        <Drawer.Description className="sr-only">
-          Filter and sort the rankings by category and favourites.
-        </Drawer.Description>
-        <div className="space-y-4">{filterControls}</div>
-      </Drawer.Content>
-    </Drawer.Portal>
-    </Drawer.Root>
   );
 }

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseTab } from "../shared/insights/filters";
+import {
+  canonicalCacheKey,
+  DEFAULT_INSIGHTS_FILTERS,
+  parseFilters,
+  parseTab,
+  serializeFilters,
+} from "../shared/insights/filters";
 
 describe("parseTab", () => {
   it("defaults to today with no params", () => {
@@ -42,5 +48,51 @@ describe("parseTab", () => {
     // leak through, an explicit ?tab=today must still resolve to today
     // (not fall back to rankings via the filter-param heuristic).
     assert.equal(parseTab("?tab=today&source=news_momentum&window=7d"), "today");
+  });
+
+  it("lands on rankings when sortDir=asc is present", () => {
+    assert.equal(parseTab("?sortDir=asc"), "rankings");
+  });
+});
+
+describe("parseFilters sortDir", () => {
+  it("defaults to desc", () => {
+    assert.equal(parseFilters("").sortDir, "desc");
+    assert.equal(parseFilters("?sortDir=desc").sortDir, "desc");
+  });
+
+  it("parses asc", () => {
+    assert.equal(parseFilters("?sortDir=asc").sortDir, "asc");
+  });
+});
+
+describe("serializeFilters sortDir", () => {
+  it("omits desc by default and serializes asc", () => {
+    const descQs = serializeFilters(DEFAULT_INSIGHTS_FILTERS);
+    assert.equal(descQs.get("sortDir"), null);
+
+    const ascQs = serializeFilters({ ...DEFAULT_INSIGHTS_FILTERS, sortDir: "asc" });
+    assert.equal(ascQs.get("sortDir"), "asc");
+  });
+
+  it("round-trips category, favourites, and sort", () => {
+    const filters = {
+      ...DEFAULT_INSIGHTS_FILTERS,
+      category: "politics",
+      favouritesOnly: true,
+      sortDir: "asc" as const,
+    };
+    const roundTrip = parseFilters(`?${serializeFilters(filters).toString()}`);
+    assert.equal(roundTrip.category, "politics");
+    assert.equal(roundTrip.favouritesOnly, true);
+    assert.equal(roundTrip.sortDir, "asc");
+  });
+
+  it("includes sortDir in canonical cache key", () => {
+    const key = canonicalCacheKey("rankings", {
+      ...DEFAULT_INSIGHTS_FILTERS,
+      sortDir: "asc",
+    });
+    assert.match(key, /sortDir=asc/);
   });
 });

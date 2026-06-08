@@ -179,11 +179,18 @@ async function loadInsightsRankingsInner(
   });
 
   rows.sort((a, b) => {
-    const primary = b.sortValue - a.sortValue;
+    const primary =
+      filters.sortDir === "asc"
+        ? a.sortValue - b.sortValue
+        : b.sortValue - a.sortValue;
     if (primary !== 0) return primary;
     // Stable tie-breakers so pagination and re-renders don't shuffle rows.
-    if (filters.source === "fame") return b.fameIndex - a.fameIndex;
-    return a.rank - b.rank;
+    if (filters.source === "fame") {
+      return filters.sortDir === "asc"
+        ? a.fameIndex - b.fameIndex
+        : b.fameIndex - a.fameIndex;
+    }
+    return filters.sortDir === "asc" ? b.rank - a.rank : a.rank - b.rank;
   });
 
   const total = rows.length;

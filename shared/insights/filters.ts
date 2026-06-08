@@ -7,10 +7,10 @@ export const INSIGHTS_SOURCE_VALUES = [
   // Movers board (Trend Score % change) — default Rankings view when no
   // ?source= is present.
   "fame",
-  "news_momentum",
-  "wiki_momentum",
   "news",
   "wiki",
+  "news_momentum",
+  "wiki_momentum",
   // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
   // (Google Trends `trends` source was removed; old ?source=trends links fall
   // back to the default ranking via parseSource.)
@@ -23,6 +23,9 @@ export type InsightsSource = (typeof INSIGHTS_SOURCE_VALUES)[number];
 
 export const INSIGHTS_WINDOW_VALUES = ["24h", "7d"] as const;
 export type InsightsWindow = (typeof INSIGHTS_WINDOW_VALUES)[number];
+
+export const INSIGHTS_SORT_DIR_VALUES = ["asc", "desc"] as const;
+export type InsightsSortDir = (typeof INSIGHTS_SORT_DIR_VALUES)[number];
 
 export const INSIGHTS_TAB_VALUES = [
   "today",
@@ -39,6 +42,7 @@ export interface InsightsFilters {
   category: string | null;
   window: InsightsWindow;
   favouritesOnly: boolean;
+  sortDir: InsightsSortDir;
   page: number;
   limit: number;
 }
@@ -50,6 +54,7 @@ export const DEFAULT_INSIGHTS_FILTERS: InsightsFilters = {
   category: null,
   window: "24h",
   favouritesOnly: false,
+  sortDir: "desc",
   page: 1,
   limit: 25,
 };
@@ -59,6 +64,7 @@ const FILTER_PARAM_ORDER = [
   "category",
   "window",
   "fav",
+  "sortDir",
   "page",
   "limit",
 ] as const;
@@ -73,6 +79,11 @@ function parseSource(raw: string | null): InsightsSource {
 function parseWindow(raw: string | null): InsightsWindow {
   if (raw === "7d") return "7d";
   return "24h";
+}
+
+function parseSortDir(raw: string | null): InsightsSortDir {
+  if (raw === "asc") return "asc";
+  return "desc";
 }
 
 export function parseFilters(
@@ -91,6 +102,7 @@ export function parseFilters(
     category: params.get("category") || null,
     window: parseWindow(params.get("window")),
     favouritesOnly: params.get("fav") === "1" || params.get("favouritesOnly") === "true",
+    sortDir: parseSortDir(params.get("sortDir")),
     page: Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1,
     limit: Number.isFinite(limitRaw) && limitRaw >= 1 && limitRaw <= 100 ? limitRaw : DEFAULT_INSIGHTS_FILTERS.limit,
   };
@@ -111,6 +123,9 @@ export function serializeFilters(filters: InsightsFilters): URLSearchParams {
   }
   if (f.favouritesOnly) {
     params.set("fav", "1");
+  }
+  if (f.sortDir !== DEFAULT_INSIGHTS_FILTERS.sortDir) {
+    params.set("sortDir", f.sortDir);
   }
   if (f.page !== 1) {
     params.set("page", String(f.page));
@@ -138,6 +153,9 @@ export function canonicalCacheKey(prefix: string, filters: InsightsFilters): str
         break;
       case "fav":
         parts.push(`fav=${filters.favouritesOnly ? "1" : "0"}`);
+        break;
+      case "sortDir":
+        parts.push(`sortDir=${filters.sortDir}`);
         break;
       case "page":
         parts.push(`page=${filters.page}`);
@@ -213,7 +231,12 @@ export function parseTab(search: string | URLSearchParams): InsightsTab {
     return tab as InsightsTab;
   }
   // Deep links with filter params should land on Rankings, not Today.
-  if (params.get("source") || params.get("category") || params.get("fav") === "1") {
+  if (
+    params.get("source") ||
+    params.get("category") ||
+    params.get("fav") === "1" ||
+    params.get("sortDir") === "asc"
+  ) {
     return "rankings";
   }
   return "today";
@@ -223,8 +246,8 @@ export function writeInsightsQuery(patch: {
   tab?: InsightsTab | null;
   filters?: Partial<InsightsFilters> | null;
   /**
-   * Strip all Rankings-only filter params (source/category/window/fav/page/
-   * limit). Required when navigating between top-level tabs — otherwise stale
+   * Strip all Rankings-only filter params (source/category/window/fav/sortDir/
+   * page/limit). Required when navigating between top-level tabs — otherwise stale
    * `?source=…` params make `parseTab` resolve back to Rankings, so e.g.
    * clicking "Today" from a Rankings sub-tab appears to do nothing.
    */
@@ -239,7 +262,7 @@ export function writeInsightsQuery(patch: {
     }
   }
   if (patch.clearFilters) {
-    for (const key of ["source", "category", "window", "fav", "page", "limit"]) {
+    for (const key of ["source", "category", "window", "fav", "sortDir", "page", "limit"]) {
       url.searchParams.delete(key);
     }
   }
@@ -247,7 +270,7 @@ export function writeInsightsQuery(patch: {
     const current = parseFilters(url.search);
     const merged = { ...current, ...patch.filters };
     const serialized = serializeFilters(merged);
-    for (const key of ["source", "category", "window", "fav", "page", "limit"]) {
+    for (const key of ["source", "category", "window", "fav", "sortDir", "page", "limit"]) {
       url.searchParams.delete(key);
     }
     serialized.forEach((value, key) => {
