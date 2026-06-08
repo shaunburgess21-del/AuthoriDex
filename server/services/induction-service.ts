@@ -12,6 +12,7 @@ import { runPostInductionOnboarding } from "./induction-onboarding";
 import { syncTrackedPersonToInductionCandidate } from "./induction-sync";
 import { canonicalizePersonCategory } from "@shared/constants";
 import { buildTrackedPersonBackfillFromCandidate } from "./induction-sync-build";
+import { voidOpenNativeMarketsForPerson } from "./roster-market-safeguards";
 
 type DbExecutor = any;
 
@@ -25,6 +26,7 @@ export interface DemoteFromMainLeaderboardResult {
   personId: string;
   candidateId: string;
   createdCandidate: boolean;
+  voidedMarkets: number;
   message: string;
 }
 
@@ -270,12 +272,20 @@ export async function demoteFromMainLeaderboard(
     });
   }
 
+  const { voided: voidedMarkets } = await voidOpenNativeMarketsForPerson(personId, "roster_demotion");
+
+  const voidSuffix =
+    voidedMarkets > 0
+      ? `; ${voidedMarkets} open prediction market(s) voided and refunded`
+      : "";
+
   return {
     personId,
     candidateId: candidate.id,
     createdCandidate,
-    message: createdCandidate
+    voidedMarkets,
+    message: (createdCandidate
       ? "Celebrity demoted; new induction candidate created"
-      : "Celebrity demoted; induction candidate reactivated",
+      : "Celebrity demoted; induction candidate reactivated") + voidSuffix,
   };
 }

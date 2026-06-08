@@ -9,6 +9,7 @@ import {
 } from "@shared/constants";
 import { eq, and, desc, inArray, sql, gte } from "drizzle-orm";
 import { buildOpeningScores, loadOpeningScoreMap } from "../native-markets/openingScores";
+import { filterPersonIdsEligibleForWeeklyNativeMarkets } from "../services/roster-market-safeguards";
 import {
   getMarketBettingCutoff,
   getWeeklyBettingCutoff as getWeeklyBettingCutoffForEndAt,
@@ -175,7 +176,19 @@ async function getAnchoredPoolContext(
     return anchoredPoolContextCache;
   }
 
-  const pool = await loadAnchoredPoolFromDb();
+  const rawPool = await loadAnchoredPoolFromDb();
+  const eligibleIds = await filterPersonIdsEligibleForWeeklyNativeMarkets(
+    rawPool.map((p) => p.id),
+    monday,
+  );
+  const pool = rawPool.filter((p) => eligibleIds.has(p.id));
+  if (pool.length < rawPool.length) {
+    log(
+      `[MarketGenerator:Anchored] Excluded ${rawPool.length - pool.length} people ` +
+        `(insufficient recent ingest samples for weekly native markets)`,
+    );
+  }
+
   const momentumById = await loadGainerMovementStats(
     pool.map((p) => p.id),
     db,
@@ -364,6 +377,36 @@ export async function ensureUpDownMarketForInductee(person: {
   category: string;
 }): Promise<"created" | "skipped" | "failed"> {
   const { monday, sunday, weekNumber } = getWeekContext();
+
+  const [weekFrozen] = await db
+    .select({ id: predictionMarkets.id })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.marketType, "updown"),
+        eq(predictionMarkets.weekNumber, weekNumber),
+        eq(predictionMarkets.status, "OPEN"),
+        inArray(predictionMarkets.visibility, ["live", "inactive"]),
+      ),
+    )
+    .limit(1);
+  if (weekFrozen) {
+    log(
+      `[MarketGenerator] ensureUpDown blocked for ${person.name}: ` +
+        `week ${weekNumber} updown roster is Monday-frozen`,
+    );
+    return "skipped";
+  }
+
+  const eligible = await filterPersonIdsEligibleForWeeklyNativeMarkets([person.id], monday);
+  if (!eligible.has(person.id)) {
+    log(
+      `[MarketGenerator] ensureUpDown blocked for ${person.name}: ` +
+        `insufficient ingest history for weekly native markets`,
+    );
+    return "skipped";
+  }
+
   const [already] = await db
     .select({ id: predictionMarkets.id })
     .from(predictionMarkets)
@@ -469,7 +512,16 @@ export async function backfillGainerMarketForInductee(person: {
   category: string;
   avatar?: string | null;
 }): Promise<"added" | "skipped" | "no_market"> {
-  const { weekNumber } = getWeekContext();
+  const { monday, weekNumber } = getWeekContext();
+  const eligible = await filterPersonIdsEligibleForWeeklyNativeMarkets([person.id], monday);
+  if (!eligible.has(person.id)) {
+    log(
+      `[MarketGenerator] gainer backfill skipped for ${person.name}: ` +
+        `insufficient ingest history for weekly native markets`,
+    );
+    return "skipped";
+  }
+
   const cat = normalizeMarketCategory(person.category || "misc");
 
   const [existingMarket] = await db

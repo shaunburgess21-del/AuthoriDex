@@ -20,6 +20,11 @@ import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
 import { officialSnapshotOriginCondition } from "../scoring/official-snapshots";
+import {
+  ensureDate,
+  getCloseSnapshot,
+  getOpenSnapshot,
+} from "./market-snapshot-resolution";
 
 /**
  * Official hourly closes to median for gainer settlement (blunts last-hour
@@ -35,7 +40,6 @@ const GAINER_CLOSE_MEDIAN_HOURS = (() => {
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
-const SNAPSHOT_TOLERANCE_HOURS = 3;
 const MARKET_RESOLVER_LOCK_KEY = 5_202;
 const LEGACY_BLOCK_AUTO_VOID_DAYS = 14;
 
@@ -401,83 +405,6 @@ export async function voidMarketBets(marketId: string): Promise<number> {
   return refundedCount;
 }
 
-function ensureDate(val: unknown): Date | null {
-  if (val instanceof Date) return val;
-  if (val == null) return null;
-  const d = new Date(val as string | number);
-  if (isNaN(d.getTime())) return null;
-  return d;
-}
-
-function getStoredOpeningScore(market: any, personId: string): { score: number; capturedAt: Date } | null {
-  const meta = market.metadata;
-  if (!meta) return null;
-
-  if (meta.openingScore && meta.openingScore.personId === personId) {
-    const capturedAt = ensureDate(meta.openingScore.snapshotAt);
-    if (!capturedAt) return null;
-    return { score: meta.openingScore.score, capturedAt };
-  }
-
-  if (Array.isArray(meta.openingScores)) {
-    const match = meta.openingScores.find((s: any) => s.personId === personId);
-    if (match) {
-      const capturedAt = ensureDate(match.snapshotAt);
-      if (!capturedAt) return null;
-      return { score: match.score, capturedAt };
-    }
-  }
-
-  return null;
-}
-
-async function findSnapshotScore(personId: string, rawTargetTime: Date | string, direction: "before" | "after"): Promise<{ score: number; capturedAt: Date } | null> {
-  const targetTime = ensureDate(rawTargetTime);
-  if (!targetTime) return null;
-  const toleranceMs = SNAPSHOT_TOLERANCE_HOURS * 60 * 60 * 1000;
-
-  if (direction === "before") {
-    const rows = await db
-      .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
-      .from(trendSnapshots)
-      .where(and(
-        eq(trendSnapshots.personId, personId),
-        officialSnapshotOriginCondition(),
-        lte(trendSnapshots.timestamp, targetTime),
-        gte(trendSnapshots.timestamp, new Date(targetTime.getTime() - toleranceMs)),
-      ))
-      .orderBy(desc(trendSnapshots.timestamp))
-      .limit(1);
-    if (rows.length > 0 && rows[0].fameIndex != null) {
-      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp)! };
-    }
-  }
-
-  if (direction === "after") {
-    const rows = await db
-      .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
-      .from(trendSnapshots)
-      .where(and(
-        eq(trendSnapshots.personId, personId),
-        officialSnapshotOriginCondition(),
-        gte(trendSnapshots.timestamp, targetTime),
-        lte(trendSnapshots.timestamp, new Date(targetTime.getTime() + 60 * 60 * 1000)),
-      ))
-      .orderBy(asc(trendSnapshots.timestamp))
-      .limit(1);
-    if (rows.length > 0 && rows[0].fameIndex != null) {
-      return { score: rows[0].fameIndex, capturedAt: ensureDate(rows[0].timestamp)! };
-    }
-  }
-
-  return null;
-}
-
-async function getCloseSnapshot(personId: string, endAt: Date): Promise<{ score: number; capturedAt: Date } | null> {
-  return (await findSnapshotScore(personId, endAt, "before"))
-    ?? (await findSnapshotScore(personId, endAt, "after"));
-}
-
 /**
  * Gainer close: median of the last N official hourly ingest closes at or before
  * `endAt` (default 4h). Open stays a single stored point (fixed at market
@@ -518,40 +445,7 @@ async function getGainerCloseSnapshot(
   return { ...single, method: "single" };
 }
 
-async function getOpenSnapshot(personId: string, rawStartAt: Date | string, market: any): Promise<{ score: number; capturedAt: Date } | null> {
-  const stored = getStoredOpeningScore(market, personId);
-  if (stored) return stored;
-
-  const startAt = ensureDate(rawStartAt);
-  if (!startAt) return null;
-  const result = (await findSnapshotScore(personId, startAt, "after"))
-    ?? (await findSnapshotScore(personId, startAt, "before"));
-  if (result) return result;
-
-  const hasMetadataScores = market.metadata?.openingScore || market.metadata?.openingScores;
-  if (hasMetadataScores) {
-    return null;
-  }
-
-  log(`[MarketResolver] Using wide-tolerance fallback for legacy market ${market.id}`);
-  const wideRows = await db
-    .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
-    .from(trendSnapshots)
-    .where(and(
-      eq(trendSnapshots.personId, personId),
-      officialSnapshotOriginCondition(),
-      gte(trendSnapshots.timestamp, new Date(startAt.getTime() - 7 * 24 * 60 * 60 * 1000)),
-      lte(trendSnapshots.timestamp, new Date(startAt.getTime() + 24 * 60 * 60 * 1000)),
-    ))
-    .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${trendSnapshots.timestamp} - ${startAt}::timestamp))`)
-    .limit(1);
-  if (wideRows.length > 0 && wideRows[0].fameIndex != null) {
-    return { score: wideRows[0].fameIndex, capturedAt: ensureDate(wideRows[0].timestamp)! };
-  }
-  return null;
-}
-
-async function resolveUpDown(market: any): Promise<"resolved" | "voided" | "blocked"> {
+export async function resolveUpDownMarket(market: any): Promise<"resolved" | "voided" | "blocked"> {
   // Parimutuel sunset: AMM-only path. Tie always voids — LMSR has no
   // way to break a tie at settlement (the marginal price on a 50/50
   // doesn't tell us which entry "should" win), so we refund net credits
@@ -1154,7 +1048,7 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
         let outcome: "resolved" | "voided" | "blocked" | null = null;
         switch (market.marketType) {
           case "updown":
-            outcome = await resolveUpDown(market);
+            outcome = await resolveUpDownMarket(market);
             break;
           case "h2h":
             outcome = await resolveH2H(market);

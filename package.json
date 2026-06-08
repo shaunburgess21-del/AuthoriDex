@@ -43,7 +43,8 @@
     "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts",
     "amm:reconcile-house-ledger": "tsx ops/reconcile-house-ledger-drift.ts",
     "world:calibrate": "tsx scripts/world-market-calibration.ts",
-    "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts"
+    "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts",
+    "settle:week23-updown": "tsx --env-file=.env server/scripts/settle-week23-stranded-updown.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
