@@ -18,11 +18,16 @@ export function classifyPredictionResult(
   if (row.marketStatus === "RESOLVED") {
     if (
       row.betStatus === "won" ||
-      (row.betStatus === "active" && row.entryResolutionStatus === "winner")
+      (row.betStatus === "active" && row.entryResolutionStatus === "winner") ||
+      (row.betStatus === "settled" && row.entryResolutionStatus === "winner")
     ) {
       result = "won";
       payout = row.payoutAmount ?? row.potentialPayout ?? 0;
-    } else if (row.betStatus === "lost" || row.betStatus === "active") {
+    } else if (
+      row.betStatus === "lost" ||
+      row.betStatus === "active" ||
+      row.betStatus === "settled"
+    ) {
       result = "lost";
     }
   } else if (row.marketStatus === "VOID") {

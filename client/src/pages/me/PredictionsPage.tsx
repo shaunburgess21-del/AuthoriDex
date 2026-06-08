@@ -258,24 +258,6 @@ export default function PredictionsPage() {
   const visibility = useItemVisibility();
   const profileIsPrivate = profile ? profile.isPublic === false : false;
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="p-8 text-center max-w-md">
-          <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h2 className="text-xl font-semibold mb-2">Sign in to view your predictions</h2>
-          <Button
-            onClick={() => navigateToLogin(setLocation)}
-            className="mt-4"
-            data-testid="button-sign-in"
-          >
-            Sign In
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
   const { predictions, stats } = rawData
     ? normalizeResponse(rawData)
     : { predictions: [], stats: null };
@@ -328,6 +310,24 @@ export default function PredictionsPage() {
       })),
     [predictions],
   );
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
+          <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Sign in to view your predictions</h2>
+          <Button
+            onClick={() => navigateToLogin(setLocation)}
+            className="mt-4"
+            data-testid="button-sign-in"
+          >
+            Sign In
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   const handleToggleVisibility = (prediction: UserPrediction, hidden: boolean) => {
     visibility.mutate({ itemType: "market_bet", itemId: String(prediction.betId), hidden });

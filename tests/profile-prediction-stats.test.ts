@@ -58,6 +58,26 @@ test("classifyPredictionResult: open market pending", () => {
   assert.equal(payout, 0);
 });
 
+test("classifyPredictionResult: RESOLVED AMM sell row (settled) on winner entry", () => {
+  const { result } = classifyPredictionResult({
+    marketStatus: "RESOLVED",
+    betStatus: "settled",
+    entryResolutionStatus: "winner",
+    stakeAmount: -44,
+  });
+  assert.equal(result, "won");
+});
+
+test("classifyPredictionResult: RESOLVED AMM sell row (settled) on loser entry", () => {
+  const { result } = classifyPredictionResult({
+    marketStatus: "RESOLVED",
+    betStatus: "settled",
+    entryResolutionStatus: "loser",
+    stakeAmount: -109,
+  });
+  assert.equal(result, "lost");
+});
+
 test("roundWinRatePercent: 8/19 -> 42.1", () => {
   assert.equal(roundWinRatePercent(8, 11), 42.1);
 });
