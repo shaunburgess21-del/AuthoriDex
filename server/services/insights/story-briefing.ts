@@ -1,8 +1,6 @@
-import { formatBriefingMoverHeadline, pickLeadAnchor } from "@shared/insights/briefing-headlines";
+import { formatBriefingMoverHeadline } from "@shared/insights/briefing-headlines";
 import type { TrendingPerson } from "@shared/schema";
 import { selectHotMovers } from "../trending/hot-movers";
-
-export { pickLeadAnchor } from "@shared/insights/briefing-headlines";
 
 export const BRIEFING_ANCHOR_COUNT = 3;
 export const BRIEFING_MOVER_COUNT = 3;
@@ -54,20 +52,21 @@ export function selectBriefingMovers(people: TrendingPerson[]): TrendingPerson[]
 }
 
 /**
- * Ordered anchor candidates from top 10 by rank: movers excluded, prefer
- * outside hot-mover top 6, sort by news activity then rank. Caller walks this
- * list and keeps the first N with Why Trending `hasContext`.
+ * Ordered anchor candidates from top 10 by rank (movers excluded).
+ * Slot 1: board #1 when not already a mover. Slots 2–3: top news among the
+ * rest. When board #1 is also top-news, fall back to top 3 by news in the pool.
+ * Caller walks this list and keeps the first N with Why Trending `hasContext`.
  */
 export function selectBriefingAnchorCandidates(
   people: TrendingPerson[],
   moverIds: Set<string>,
-  hotMoverTop6Ids: Set<string>,
   newsCountByPersonId: Map<string, number>,
 ): TrendingPerson[] {
-  const top10 = [...people]
+  const top10ByRank = [...people]
     .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
-    .slice(0, 10)
-    .filter((p) => !moverIds.has(p.id));
+    .slice(0, 10);
+
+  const pool = top10ByRank.filter((p) => !moverIds.has(p.id));
 
   const newsCount = (id: string) => newsCountByPersonId.get(id) ?? 0;
   const sortByNewsThenRank = (a: TrendingPerson, b: TrendingPerson) => {
@@ -76,15 +75,25 @@ export function selectBriefingAnchorCandidates(
     return (a.rank ?? 999) - (b.rank ?? 999);
   };
 
-  const preferred = top10
-    .filter((p) => !hotMoverTop6Ids.has(p.id))
-    .sort(sortByNewsThenRank);
+  const byNews = [...pool].sort(sortByNewsThenRank);
 
-  const backfill = top10
-    .filter((p) => hotMoverTop6Ids.has(p.id))
-    .sort(sortByNewsThenRank);
+  const boardLeader = top10ByRank[0];
+  const canForceBoardLeader =
+    boardLeader != null &&
+    !moverIds.has(boardLeader.id) &&
+    pool.some((p) => p.id === boardLeader.id);
 
-  return [...preferred, ...backfill];
+  if (!canForceBoardLeader) {
+    return byNews.slice(0, BRIEFING_ANCHOR_COUNT);
+  }
+
+  const topNews = byNews[0];
+  if (topNews?.id === boardLeader.id) {
+    return byNews.slice(0, BRIEFING_ANCHOR_COUNT);
+  }
+
+  const newsPicks = byNews.filter((p) => p.id !== boardLeader.id).slice(0, 2);
+  return [boardLeader, ...newsPicks];
 }
 
 export function buildDeterministicHeadline(inputs: BriefingInputs): string {

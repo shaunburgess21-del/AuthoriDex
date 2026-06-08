@@ -3,9 +3,9 @@ export function formatBriefingMoverHeadline(name: string): string {
   return `${name} leads today's biggest movers`;
 }
 
-/** Cached anchor line — tied to briefing prose (twice-daily refresh). */
-export function formatBriefingAnchorHeadline(name: string): string {
-  return `${name} leads today's news coverage`;
+/** Live board-leader line — recomputed on each overview load from rank #1. */
+export function formatBriefingBoardHeadline(name: string): string {
+  return `${name} tops the leaderboard`;
 }
 
 export interface BriefingHeadlinePerson {
@@ -16,13 +16,13 @@ export interface BriefingHeadlinePerson {
 /** Build the 1–2 display lines for the Today tab briefing header. */
 export function buildBriefingDisplayHeadlines(params: {
   liveMover?: BriefingHeadlinePerson | null;
-  leadAnchor?: BriefingHeadlinePerson | null;
+  boardLeader?: BriefingHeadlinePerson | null;
   /** Used when no live climber is available (e.g. thin movers board). */
   fallbackHeadline?: string;
 }): string[] {
-  const { liveMover, leadAnchor, fallbackHeadline } = params;
+  const { liveMover, boardLeader, fallbackHeadline } = params;
   const samePerson =
-    liveMover && leadAnchor && liveMover.id === leadAnchor.id;
+    liveMover && boardLeader && liveMover.id === boardLeader.id;
 
   const lines: string[] = [];
 
@@ -32,17 +32,9 @@ export function buildBriefingDisplayHeadlines(params: {
     lines.push(fallbackHeadline);
   }
 
-  if (leadAnchor && !samePerson) {
-    lines.push(formatBriefingAnchorHeadline(leadAnchor.name));
+  if (boardLeader && !samePerson) {
+    lines.push(formatBriefingBoardHeadline(boardLeader.name));
   }
 
   return lines;
-}
-
-export function pickLeadAnchor(
-  anchors: Array<{ id: string; name: string }>,
-): BriefingHeadlinePerson | undefined {
-  const lead = anchors[0];
-  if (!lead) return undefined;
-  return { id: lead.id, name: lead.name };
 }

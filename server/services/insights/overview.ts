@@ -255,6 +255,10 @@ async function loadInsightsOverviewInner(
     };
   }
 
+  const boardLeaderPerson = [...peopleList].sort(
+    (a, b) => (a.rank ?? 999) - (b.rank ?? 999),
+  )[0];
+
   return {
     quadrantPoints,
     quadrantMeta: {
@@ -269,6 +273,9 @@ async function loadInsightsOverviewInner(
       "24h": movers24h,
       "7d": movers7d,
     },
+    boardLeader: boardLeaderPerson
+      ? { id: boardLeaderPerson.id, name: boardLeaderPerson.name }
+      : null,
     story,
     favouritesSignals,
   };

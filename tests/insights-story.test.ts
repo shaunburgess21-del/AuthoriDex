@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildBriefingDisplayHeadlines,
-  formatBriefingAnchorHeadline,
+  formatBriefingBoardHeadline,
   formatBriefingMoverHeadline,
 } from "../shared/insights/briefing-headlines";
 import {
   buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
-  pickLeadAnchor,
 } from "../server/services/insights/story-briefing";
 
 describe("nextBriefingRefreshIso", () => {
@@ -102,39 +101,31 @@ describe("buildDeterministicParagraphs", () => {
 });
 
 describe("briefing display headlines", () => {
-  it("formats mover and anchor lines", () => {
+  it("formats mover and board lines", () => {
     assert.equal(
       formatBriefingMoverHeadline("Tim Cook"),
       "Tim Cook leads today's biggest movers",
     );
     assert.equal(
-      formatBriefingAnchorHeadline("Donald Trump"),
-      "Donald Trump leads today's news coverage",
+      formatBriefingBoardHeadline("Alexander Zverev"),
+      "Alexander Zverev tops the leaderboard",
     );
   });
 
-  it("picks lead anchor from first briefing anchor", () => {
-    assert.deepEqual(
-      pickLeadAnchor([{ id: "a", name: "Donald Trump", rank: 2, change24h: 0, category: "Politics" }]),
-      { id: "a", name: "Donald Trump" },
-    );
-    assert.equal(pickLeadAnchor([]), undefined);
-  });
-
-  it("shows both lines and dedupes when mover equals anchor", () => {
+  it("shows both lines and dedupes when mover equals board leader", () => {
     const person = { id: "x", name: "Kim Kardashian" };
     assert.deepEqual(
       buildBriefingDisplayHeadlines({
         liveMover: person,
-        leadAnchor: { id: "a", name: "Donald Trump" },
+        boardLeader: { id: "a", name: "Alexander Zverev" },
       }),
       [
         "Kim Kardashian leads today's biggest movers",
-        "Donald Trump leads today's news coverage",
+        "Alexander Zverev tops the leaderboard",
       ],
     );
     assert.deepEqual(
-      buildBriefingDisplayHeadlines({ liveMover: person, leadAnchor: person }),
+      buildBriefingDisplayHeadlines({ liveMover: person, boardLeader: person }),
       ["Kim Kardashian leads today's biggest movers"],
     );
   });
@@ -142,10 +133,10 @@ describe("briefing display headlines", () => {
   it("falls back to cached headline when no live mover", () => {
     assert.deepEqual(
       buildBriefingDisplayHeadlines({
-        leadAnchor: { id: "a", name: "Donald Trump" },
+        boardLeader: { id: "a", name: "Alexander Zverev" },
         fallbackHeadline: "Today's influence snapshot",
       }),
-      ["Today's influence snapshot", "Donald Trump leads today's news coverage"],
+      ["Today's influence snapshot", "Alexander Zverev tops the leaderboard"],
     );
   });
 });

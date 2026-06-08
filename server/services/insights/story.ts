@@ -17,7 +17,6 @@ import {
   buildDeterministicHeadline,
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
-  pickLeadAnchor,
   selectBriefingAnchorCandidates,
   type BriefingInputs,
   type BriefingPersonInput,
@@ -101,7 +100,6 @@ export async function buildBriefingInputs(
   );
 
   const hotMoverPool = selectHotMovers(people);
-  const hotMoverTop6Ids = new Set(hotMoverPool.map((p) => p.id));
 
   const prefetchBudget = { remaining: allowPrefetch ? BRIEFING_PREFETCH_MAX : 0 };
   const enrichOpts = { allowPrefetch, prefetchBudget };
@@ -120,7 +118,6 @@ export async function buildBriefingInputs(
   const anchorCandidates = selectBriefingAnchorCandidates(
     people,
     moverIds,
-    hotMoverTop6Ids,
     newsCountByPersonId,
   );
 
@@ -155,7 +152,6 @@ export async function buildDeterministicStory(
     body: paragraphs.join(" "),
     paragraphs,
     people: inputs.people,
-    leadAnchor: pickLeadAnchor(inputs.anchors),
     generatedAt: now.toISOString(),
     refreshesAt: nextBriefingRefreshIso(now),
     mode: "deterministic",

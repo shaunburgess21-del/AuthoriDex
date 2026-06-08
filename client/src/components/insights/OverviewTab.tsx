@@ -511,15 +511,14 @@ export function OverviewTab() {
     return <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>;
   }
 
-  const { story, movers, favouritesSignals } = data;
+  const { story, movers, boardLeader, favouritesSignals } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
-  // Mover line: live 24h climber. Anchor line: cached lead anchor (twice daily).
+  // Mover line: live 24h climber. Board line: live rank #1.
   const liveLeader = movers["24h"]?.climbers[0];
   const briefingHeadlines = buildBriefingDisplayHeadlines({
     liveMover: liveLeader ? { id: liveLeader.id, name: liveLeader.name } : null,
-    // people[] is anchors-then-movers; use as fallback until cache picks up leadAnchor.
-    leadAnchor: story.leadAnchor ?? story.people?.[0] ?? null,
+    boardLeader,
     fallbackHeadline: story.headline,
   });
 

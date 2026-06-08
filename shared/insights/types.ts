@@ -89,8 +89,6 @@ export interface InsightsStoryPayload {
   paragraphs?: string[];
   /** Names to linkify in the briefing copy. */
   people?: Array<{ id: string; name: string }>;
-  /** Top news anchor in the cached briefing (first anchor beat). */
-  leadAnchor?: { id: string; name: string };
   generatedAt: string;
   refreshesAt: string;
   mode: "deterministic" | "ai";
@@ -135,6 +133,8 @@ export interface InsightsOverviewResponse {
     InsightsWindow,
     { climbers: InsightsMoverItem[]; droppers: InsightsMoverItem[] }
   >;
+  /** Live #1 on the main leaderboard (for Today's Briefing board headline). */
+  boardLeader: { id: string; name: string } | null;
   story: InsightsStoryPayload;
   favouritesSignals?: InsightsFavouritesSignals;
 }

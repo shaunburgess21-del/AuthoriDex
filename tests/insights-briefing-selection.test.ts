@@ -57,70 +57,80 @@ describe("selectBriefingAnchorCandidates", () => {
       person("m1", "Mover1", 48, 50),
     ];
     const moverIds = new Set(["m1"]);
-    const hot6 = new Set(["m1"]);
     const news = new Map([
       ["t1", 10],
       ["t2", 5],
       ["m1", 100],
     ]);
 
-    const candidates = selectBriefingAnchorCandidates(people, moverIds, hot6, news);
+    const candidates = selectBriefingAnchorCandidates(people, moverIds, news);
     assert.deepEqual(
       candidates.map((p) => p.id),
       ["t1", "t2"],
     );
   });
 
-  it("prefers top-10 candidates outside hot-mover top 6, sorted by newsCount", () => {
+  it("forces board #1 then top 2 news when board leader is not top news", () => {
     const people = [
-      person("t1", "AnchorA", 1, 1),
-      person("t2", "AnchorB", 2, 2),
-      person("t3", "AnchorC", 3, 3),
-      person("h1", "Hot1", 48, 50),
-      person("h2", "Hot2", 49, 40),
-      person("h3", "Hot3", 50, 30),
-      person("h4", "Hot4", 51, 20),
-      person("h5", "Hot5", 52, 15),
-      person("h6", "Hot6", 53, 10),
+      person("board", "BoardLeader", 1, 1),
+      person("news1", "NewsTop", 2, 2),
+      person("news2", "NewsSecond", 3, 3),
+      person("other", "Other", 4, 4),
     ];
     const moverIds = new Set<string>();
-    const hot6 = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
     const news = new Map([
-      ["t1", 5],
-      ["t2", 20],
-      ["t3", 10],
-      ["h1", 100],
-      ["h6", 50],
+      ["board", 5],
+      ["news1", 50],
+      ["news2", 30],
+      ["other", 10],
     ]);
 
-    const candidates = selectBriefingAnchorCandidates(people, moverIds, hot6, news);
-    // Preferred (outside hot6): t2 (20 news), t3 (10), t1 (5)
-    assert.deepEqual(
-      candidates.slice(0, 3).map((p) => p.id),
-      ["t2", "t3", "t1"],
-    );
-    // Backfill (inside hot6) follows, sorted by newsCount
-    assert.equal(candidates[3]?.id, "h1");
-  });
-
-  it("backfills from hot-6 when preferred pool is thin", () => {
-    const people = [
-      person("h1", "Hot1", 48, 50),
-      person("h2", "Hot2", 49, 40),
-      person("h3", "Hot3", 50, 30),
-    ];
-    const moverIds = new Set<string>();
-    const hot6 = new Set(["h1", "h2", "h3"]);
-    const news = new Map([
-      ["h1", 30],
-      ["h2", 20],
-      ["h3", 10],
-    ]);
-
-    const candidates = selectBriefingAnchorCandidates(people, moverIds, hot6, news);
+    const candidates = selectBriefingAnchorCandidates(people, moverIds, news);
     assert.deepEqual(
       candidates.map((p) => p.id),
-      ["h1", "h2", "h3"],
+      ["board", "news1", "news2"],
+    );
+  });
+
+  it("falls back to top 3 by news when board #1 is also top news", () => {
+    const people = [
+      person("board", "BoardLeader", 1, 1),
+      person("news2", "NewsSecond", 2, 2),
+      person("news3", "NewsThird", 3, 3),
+    ];
+    const moverIds = new Set<string>();
+    const news = new Map([
+      ["board", 100],
+      ["news2", 50],
+      ["news3", 25],
+    ]);
+
+    const candidates = selectBriefingAnchorCandidates(people, moverIds, news);
+    assert.deepEqual(
+      candidates.map((p) => p.id),
+      ["board", "news2", "news3"],
+    );
+  });
+
+  it("uses top 3 by news when board #1 is a mover", () => {
+    const people = [
+      person("board", "BoardLeader", 1, 50),
+      person("news1", "NewsTop", 2, 2),
+      person("news2", "NewsSecond", 3, 3),
+      person("news3", "NewsThird", 4, 1),
+    ];
+    const moverIds = new Set(["board"]);
+    const news = new Map([
+      ["board", 10],
+      ["news1", 80],
+      ["news2", 60],
+      ["news3", 40],
+    ]);
+
+    const candidates = selectBriefingAnchorCandidates(people, moverIds, news);
+    assert.deepEqual(
+      candidates.map((p) => p.id),
+      ["news1", "news2", "news3"],
     );
   });
 });
