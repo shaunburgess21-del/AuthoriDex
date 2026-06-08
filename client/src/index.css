@@ -568,6 +568,8 @@
   .pulse-card-green,
   .pulse-card-red,
   .pulse-card-orange,
+  .pulse-card-cyan,
+  .pulse-card-purple,
   .pulse-card-voxdex {
     position: relative;
     border-radius: 0.75rem;
@@ -580,6 +582,8 @@
   .pulse-card-green::before,
   .pulse-card-red::before,
   .pulse-card-orange::before,
+  .pulse-card-cyan::before,
+  .pulse-card-purple::before,
   .pulse-card-voxdex::before {
     content: '';
     position: absolute;
@@ -595,6 +599,8 @@
   .pulse-card-green::after,
   .pulse-card-red::after,
   .pulse-card-orange::after,
+  .pulse-card-cyan::after,
+  .pulse-card-purple::after,
   .pulse-card-voxdex::after {
     content: '';
     position: absolute;
@@ -610,6 +616,8 @@
   .pulse-card-green > *,
   .pulse-card-red > *,
   .pulse-card-orange > *,
+  .pulse-card-cyan > *,
+  .pulse-card-purple > *,
   .pulse-card-voxdex > * {
     position: relative;
     z-index: 2;
@@ -733,6 +741,58 @@
     background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
   }
 
+  /* ===== CYAN (Vote / Crowd) ===== */
+  .pulse-card-cyan {
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    box-shadow:
+      0 4px 20px -4px rgba(34, 211, 238, 0.15),
+      0 0 40px -10px rgba(34, 211, 238, 0.1);
+  }
+  .pulse-card-cyan::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(34, 211, 238) 50%, transparent 100%);
+  }
+  .pulse-card-cyan::after {
+    background: radial-gradient(ellipse at top right, rgba(34, 211, 238, 0.14) 0%, transparent 60%);
+  }
+  .pulse-card-cyan:hover {
+    transform: translateY(-2px);
+    border-color: rgba(34, 211, 238, 0.28);
+    box-shadow:
+      0 8px 30px -4px rgba(34, 211, 238, 0.175),
+      0 0 50px -10px rgba(34, 211, 238, 0.14);
+  }
+  .pulse-icon-cyan {
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0.1) 100%);
+  }
+
+  /* ===== PURPLE (Predict) ===== */
+  .pulse-card-purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    box-shadow:
+      0 4px 20px -4px rgba(139, 92, 246, 0.15),
+      0 0 40px -10px rgba(139, 92, 246, 0.1);
+  }
+  .pulse-card-purple::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(139, 92, 246) 50%, transparent 100%);
+  }
+  .pulse-card-purple::after {
+    background: radial-gradient(ellipse at top right, rgba(139, 92, 246, 0.14) 0%, transparent 60%);
+  }
+  .pulse-card-purple:hover {
+    transform: translateY(-2px);
+    border-color: rgba(139, 92, 246, 0.28);
+    box-shadow:
+      0 8px 30px -4px rgba(139, 92, 246, 0.175),
+      0 0 50px -10px rgba(139, 92, 246, 0.14);
+  }
+  .pulse-icon-purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%);
+  }
+
   /* ===== VOXDEX BLUE (Vox Pulse) — same glow *weights* as .pulse-card-blue / market pulse row (blue-tinted) ===== */
   .pulse-card-voxdex {
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, transparent 40%),
@@ -826,6 +886,40 @@
   :root:not(.dark) .pulse-card-orange:hover {
     border-color: rgba(249, 115, 22, 0.4);
     box-shadow: 0 4px 16px -4px rgba(249, 115, 22, 0.15), 0 0 0 1px rgba(249, 115, 22, 0.1);
+  }
+
+  :root:not(.dark) .pulse-card-cyan {
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(190 40% 96%) 100%);
+    border-color: rgba(34, 211, 238, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(34, 211, 238, 0.1), 0 0 0 1px rgba(34, 211, 238, 0.06);
+  }
+  :root:not(.dark) .pulse-card-cyan::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(34, 211, 238) 50%, transparent 100%);
+  }
+  :root:not(.dark) .pulse-card-cyan::after {
+    background: radial-gradient(ellipse at top right, rgba(34, 211, 238, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-cyan:hover {
+    border-color: rgba(34, 211, 238, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(34, 211, 238, 0.15), 0 0 0 1px rgba(34, 211, 238, 0.1);
+  }
+
+  :root:not(.dark) .pulse-card-purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(260 40% 96%) 100%);
+    border-color: rgba(139, 92, 246, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(139, 92, 246, 0.1), 0 0 0 1px rgba(139, 92, 246, 0.06);
+  }
+  :root:not(.dark) .pulse-card-purple::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(139, 92, 246) 50%, transparent 100%);
+  }
+  :root:not(.dark) .pulse-card-purple::after {
+    background: radial-gradient(ellipse at top right, rgba(139, 92, 246, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-purple:hover {
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.1);
   }
 
   :root:not(.dark) .pulse-card-voxdex {

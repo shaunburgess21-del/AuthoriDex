@@ -26,7 +26,7 @@ import { BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { InsightsPill, SOURCE_DISPLAY } from "./insights-ui";
+import { InsightsPill, SOURCE_DISPLAY, insightsTabShadcnCardClass } from "./insights-ui";
 import { CategoryPill } from "@/components/CategoryPill";
 import { getMarketCategoryLabel } from "@shared/constants";
 import { cn } from "@/lib/utils";
@@ -397,14 +397,8 @@ export function RankingsTab() {
       )}
 
       {data && allRows.length > 0 && (
-        <Card className="overflow-hidden">
-          {/* Grey top strip — matches Daily Movers (neutral), not the blue
-              home leaderboard or cyan approval leaderboard. */}
+        <Card className={insightsTabShadcnCardClass("rankings", "overflow-hidden")}>
           <div className="relative isolate overflow-hidden rounded-t-xl">
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgba(148,163,184,0.6)_50%,transparent_100%)]"
-              aria-hidden
-            />
             <CardHeader className="relative z-[2] gap-3 space-y-0 bg-card/95 pb-4 pt-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

@@ -1,5 +1,23 @@
-import type { InsightsSource } from "./filters";
+import type { InsightsSource, InsightsTab } from "./filters";
 import type { InsightsPrimaryDriver } from "./types";
+
+/** Tab bar underline + section card border styling (single source of truth). */
+export const INSIGHTS_TAB_ACCENTS = {
+  today: { hex: "#3B82F6", cardClass: "pulse-card-voxdex" },
+  rankings: { hex: "#94A3B8", cardClass: "pulse-card-blue" },
+  discover: { hex: "#F97316", cardClass: "pulse-card-orange" },
+  vote: { hex: "#22D3EE", cardClass: "pulse-card-cyan" },
+  predict: { hex: "#8B5CF6", cardClass: "pulse-card-purple" },
+  crowd: { hex: "#22D3EE", cardClass: "pulse-card-cyan" },
+} as const satisfies Record<InsightsTab, { hex: string; cardClass: string }>;
+
+export function getInsightsTabCardClass(tab: InsightsTab): string {
+  return INSIGHTS_TAB_ACCENTS[tab].cardClass;
+}
+
+export function getInsightsTabAccentHex(tab: InsightsTab): string {
+  return INSIGHTS_TAB_ACCENTS[tab].hex;
+}
 
 /** Minimum approval votes to appear on the Approval × Fame quadrant. */
 export const QUADRANT_MIN_VOTES = 20;

@@ -33,6 +33,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { navigateToLogin } from "@/lib/authReturn";
 import {
+  getInsightsTabCardClass,
   INSIGHTS_ATTENTION_MIX_ENABLED,
   INSIGHTS_DRIVER_LEGEND,
 } from "@shared/insights/constants";
@@ -521,7 +522,7 @@ export function OverviewTab() {
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <section className="relative overflow-hidden rounded-xl pulse-card-voxdex border border-border/50">
+      <section className={cn("relative overflow-hidden rounded-xl", getInsightsTabCardClass("today"))}>
         <div className="p-5 md:p-6">
           <div className="flex items-start gap-3">
             <div className="rounded-lg bg-blue-500/15 p-2 shrink-0">
@@ -550,13 +551,13 @@ export function OverviewTab() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
+          tab="today"
           title="Movers"
           description={
             moversWindow === "24h"
               ? "Biggest 24-hour climbers and droppers on the leaderboard."
               : "Biggest 7-day climbers and droppers on the leaderboard."
           }
-          accent="blue"
           action={<MoversWindowToggle value={moversWindow} onChange={setMoversWindow} />}
         >
           <div className="grid sm:grid-cols-2 gap-4">
@@ -586,6 +587,7 @@ export function OverviewTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="today"
           title="Your favourites"
           description={
             isLoggedIn
@@ -599,6 +601,7 @@ export function OverviewTab() {
 
       {INSIGHTS_ATTENTION_MIX_ENABLED && (
       <InsightsSection
+        tab="today"
         title="Attention mix"
         description={`Of the top ${data.driverMix.topN}, the share of Trend Score movement driven by each signal.`}
       >

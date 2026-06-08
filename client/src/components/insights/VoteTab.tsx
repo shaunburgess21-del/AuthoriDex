@@ -424,14 +424,15 @@ export function VoteTab() {
     <div className="space-y-6 md:space-y-8">
       <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
+          tab="vote"
           title="Knife-edge matchups"
           description="Head-to-head votes that could go either way."
-          accent="blue"
         >
           <PolarisationTile variant="knife-edge" />
         </InsightsSection>
 
         <InsightsSection
+          tab="vote"
           title="Landslide opinion polls"
           description="Polls where the crowd has clearly picked a side."
         >
@@ -439,6 +440,7 @@ export function VoteTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="vote"
           title="Most-voted opinion polls"
           description="Where the community is showing up to weigh in."
         >
@@ -446,6 +448,7 @@ export function VoteTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="vote"
           title="Underrated & gaining"
           description="Profiles the crowd thinks are underrated while their attention rises."
         >
@@ -453,6 +456,7 @@ export function VoteTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="vote"
           title={
             <span className="inline-flex items-center gap-1.5">
               <TrendingUp className="h-3.5 w-3.5 text-green-600" /> Highest approval
@@ -464,6 +468,7 @@ export function VoteTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="vote"
           title={
             <span className="inline-flex items-center gap-1.5">
               <TrendingDown className="h-3.5 w-3.5 text-red-500" /> Lowest approval
@@ -476,9 +481,9 @@ export function VoteTab() {
       </div>
 
       <InsightsSection
+        tab="vote"
         title="Sentiment pulse"
         description="Trending topics where support and opposition are closest to 50/50."
-        accent="voxdex"
       >
         <SentimentPulseTile />
       </InsightsSection>

@@ -312,9 +312,9 @@ export function DiscoverTab() {
       </div>
 
       <InsightsSection
+        tab="discover"
         title="Crowd vs Data Divergence"
         description="Stories only VoxDex can tell — where votes and signals disagree."
-        accent="voxdex"
       >
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
           {DIVERGENCE_CARDS.map((card) => (
@@ -328,9 +328,9 @@ export function DiscoverTab() {
       )}
 
       <InsightsSection
+        tab="discover"
         title="Web vs Crowd"
         description="Where organic web sentiment and crowd Approval pull in opposite directions."
-        accent="voxdex"
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {PRESS_VS_CROWD_CARDS.map((card) => (
@@ -340,9 +340,9 @@ export function DiscoverTab() {
       </InsightsSection>
 
       <InsightsSection
+        tab="discover"
         title="Single-source surge"
         description="People where one signal — news, Wikipedia, or search — is hot while the others stay quiet. A uniquely multi-source view."
-        accent="blue"
       >
         {surgeLoading && <Skeleton className="h-32 w-full" />}
         {!surgeLoading && (surge?.rows.length ?? 0) === 0 && (
@@ -370,7 +370,7 @@ export function DiscoverTab() {
         </ul>
       </InsightsSection>
 
-      <InsightsSection title="Movement" description="Breakout radar and fame volatility (30d)." accent="blue">
+      <InsightsSection tab="discover" title="Movement" description="Breakout radar and fame volatility (30d).">
         {breakoutLoading && <Skeleton className="h-40 w-full" />}
         {!breakoutLoading && breakout && (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -452,7 +452,7 @@ export function DiscoverTab() {
         )}
       </InsightsSection>
 
-      <InsightsSection title="Crowd dynamics" description="Polarised votes and community discussion." accent="voxdex">
+      <InsightsSection tab="discover" title="Crowd dynamics" description="Polarised votes and community discussion.">
         {polLoading && <Skeleton className="h-32 w-full" />}
         {!polLoading && polarisation && (
           <div className="grid gap-4 md:grid-cols-2">
@@ -544,9 +544,9 @@ export function DiscoverTab() {
       </InsightsSection>
 
       <InsightsSection
+        tab="discover"
         title="History"
         description="First-time top-10 entries and longest top-10 streaks."
-        accent="blue"
       >
         {streaksLoading && <Skeleton className="h-32 w-full" />}
         {!streaksLoading && streaks && (
@@ -587,9 +587,9 @@ export function DiscoverTab() {
       </InsightsSection>
 
       <InsightsSection
+        tab="discover"
         title="Category heatmap"
         description="7-day median movement per category — green is heating up, red is cooling."
-        accent="none"
       >
         {heatmapLoading && <Skeleton className="h-40 w-full" />}
         {!heatmapLoading && heatmap && heatmap.rows.length === 0 && (

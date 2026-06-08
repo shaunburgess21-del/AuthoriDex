@@ -102,9 +102,9 @@ export function QuadrantSection({
 
   return (
     <InsightsSection
+      tab="discover"
       title="Approval × Trend Score"
       description={`Where attention meets sentiment. ${meta.includedCount} people with ≥${meta.minVotes} votes; median split shown on desktop.`}
-      accent="voxdex"
     >
       <ChartOrList
         chart={

@@ -23,6 +23,7 @@ import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { normalizeMarketCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
+import { insightsTabShadcnCardClass } from "./insights-ui";
 
 const PAGE_SIZE = 20;
 
@@ -161,7 +162,7 @@ export function ApprovalTab() {
 
   if (error) {
     return (
-      <Card>
+      <Card className={insightsTabShadcnCardClass("crowd")}>
         <CardContent className="p-8 text-center">
           <p className="text-muted-foreground">Failed to load approval leaderboard.</p>
           <Button className="mt-4" onClick={() => window.location.reload()}>
@@ -174,12 +175,8 @@ export function ApprovalTab() {
 
   return (
     <>
-      <Card className="overflow-visible">
+      <Card className={insightsTabShadcnCardClass("crowd", "overflow-visible")}>
         <div className="relative isolate overflow-hidden rounded-t-xl">
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(34,211,238)_50%,transparent_100%)]"
-            aria-hidden
-          />
           <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">

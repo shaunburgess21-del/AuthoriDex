@@ -597,18 +597,19 @@ export function PredictTab() {
     <div className="space-y-6 md:space-y-8">
       <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
+          tab="predict"
           title={
             <span className="inline-flex items-center gap-1.5">
               <Flame className="h-4 w-4 text-orange-500" /> Hottest markets
             </span>
           }
           description="Where prediction credits are flowing right now."
-          accent="blue"
         >
           <HottestMarketsTile />
         </InsightsSection>
 
         <InsightsSection
+          tab="predict"
           title={
             <span className="inline-flex items-center gap-1.5">
               <AlarmClock className="h-4 w-4 text-amber-500" /> Closing soon
@@ -621,19 +622,20 @@ export function PredictTab() {
       </div>
 
       <InsightsSection
+        tab="predict"
         title={
           <span className="inline-flex items-center gap-1.5">
             <Zap className="h-4 w-4 text-blue-500" /> Most contested markets
           </span>
         }
         description="Native and community markets closest to an even split."
-        accent="voxdex"
       >
         <ContestedTile />
       </InsightsSection>
 
       <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
+          tab="predict"
           title={
             <span className="inline-flex items-center gap-1.5">
               <LineChartIcon className="h-4 w-4 text-amber-500" /> Open interest
@@ -645,6 +647,7 @@ export function PredictTab() {
         </InsightsSection>
 
         <InsightsSection
+          tab="predict"
           title={
             <span className="inline-flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-500" /> Top predictors · 7d
@@ -657,6 +660,7 @@ export function PredictTab() {
       </div>
 
       <InsightsSection
+        tab="predict"
         title="Live bet feed"
         description="Latest activity across all prediction markets."
       >

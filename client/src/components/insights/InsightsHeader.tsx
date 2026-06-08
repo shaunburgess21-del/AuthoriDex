@@ -8,20 +8,20 @@ import {
   Vote as VoteIcon,
 } from "lucide-react";
 import { type InsightsTab, writeInsightsQuery } from "@shared/insights/filters";
+import { getInsightsTabAccentHex } from "@shared/insights/constants";
 import { cn } from "@/lib/utils";
 
 const INSIGHTS_TABS: Array<{
   id: InsightsTab;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
-  accent: string;
 }> = [
-  { id: "today", label: "Today", icon: Sparkles, accent: "#94A3B8" },
-  { id: "rankings", label: "Rankings", icon: BarChart3, accent: "#3B82F6" },
-  { id: "discover", label: "Discover", icon: Compass, accent: "#F97316" },
-  { id: "vote", label: "Vote", icon: VoteIcon, accent: "#22D3EE" },
-  { id: "predict", label: "Predict", icon: LineChartIcon, accent: "#8B5CF6" },
-  { id: "crowd", label: "Crowd", icon: Users, accent: "#22D3EE" },
+  { id: "today", label: "Today", icon: Sparkles },
+  { id: "rankings", label: "Rankings", icon: BarChart3 },
+  { id: "discover", label: "Discover", icon: Compass },
+  { id: "vote", label: "Vote", icon: VoteIcon },
+  { id: "predict", label: "Predict", icon: LineChartIcon },
+  { id: "crowd", label: "Crowd", icon: Users },
 ];
 
 interface InsightsHeaderProps {
@@ -61,6 +61,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
             {INSIGHTS_TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
+              const accent = getInsightsTabAccentHex(tab.id);
               return (
                 <button
                   key={tab.id}
@@ -85,12 +86,12 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                   {isActive && (
                     <span
                       className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full"
-                      style={{ backgroundColor: tab.accent }}
+                      style={{ backgroundColor: accent }}
                     />
                   )}
                   <Icon
                     className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] shrink-0"
-                    style={isActive ? { color: tab.accent } : undefined}
+                    style={isActive ? { color: accent } : undefined}
                   />
                   <span className={cn(isActive ? "inline" : "hidden sm:inline")}>
                     {tab.label}

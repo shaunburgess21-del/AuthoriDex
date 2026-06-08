@@ -1,12 +1,21 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
-import type { InsightsSource } from "@shared/insights/filters";
-import { INSIGHTS_DRIVER_LABELS, INSIGHTS_SOURCE_LABELS } from "@shared/insights/constants";
+import type { InsightsSource, InsightsTab } from "@shared/insights/filters";
+import {
+  getInsightsTabCardClass,
+  INSIGHTS_DRIVER_LABELS,
+  INSIGHTS_SOURCE_LABELS,
+} from "@shared/insights/constants";
 
 export const DRIVER_DISPLAY: Record<InsightsPrimaryDriver, string> = INSIGHTS_DRIVER_LABELS;
 
 export const SOURCE_DISPLAY: Record<InsightsSource, string> = INSIGHTS_SOURCE_LABELS;
+
+/** Pulse-card classes for shadcn Card — clears default border/shadow so tab tint wins. */
+export function insightsTabShadcnCardClass(tab: InsightsTab, ...extra: Parameters<typeof cn>) {
+  return cn("border-0 shadow-none", getInsightsTabCardClass(tab), ...extra);
+}
 
 export function InsightsSection({
   title,
@@ -14,7 +23,7 @@ export function InsightsSection({
   action,
   children,
   className,
-  accent = "voxdex",
+  tab,
 }: {
   /** Section title — strings render in a default heading; ReactNode lets tiles inline icons. */
   title: ReactNode;
@@ -22,20 +31,13 @@ export function InsightsSection({
   action?: ReactNode;
   children: ReactNode;
   className?: string;
-  accent?: "voxdex" | "blue" | "none";
+  tab: InsightsTab;
 }) {
-  const cardClass =
-    accent === "voxdex"
-      ? "pulse-card-voxdex"
-      : accent === "blue"
-        ? "pulse-card-blue"
-        : "";
-
   return (
     <section
       className={cn(
-        "rounded-xl border border-border/50 bg-card/40 overflow-hidden",
-        cardClass,
+        "rounded-xl bg-card/40 overflow-hidden",
+        getInsightsTabCardClass(tab),
         className,
       )}
     >
