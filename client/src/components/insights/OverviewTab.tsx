@@ -15,6 +15,7 @@ import { useInsightsOverview } from "@/lib/insights-hooks";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { PersonInsightModal, type InsightPerson } from "@/components/PersonInsightModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buildBriefingDisplayHeadlines } from "@shared/insights/briefing-headlines";
 import { writeInsightsQuery } from "@shared/insights/filters";
 import type { InsightsWindow, InsightsSource } from "@shared/insights/filters";
 import type {
@@ -513,12 +514,13 @@ export function OverviewTab() {
   const { story, movers, favouritesSignals } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
-  // Hybrid briefing: editorial prose refreshes twice daily; headline stays
-  // tied to the current 24h leader so it doesn't go stale vs the Movers card.
+  // Mover line: live 24h climber. Anchor line: cached lead anchor (twice daily).
   const liveLeader = movers["24h"]?.climbers[0];
-  const liveHeadline = liveLeader
-    ? `${liveLeader.name} leads today's movers`
-    : story.headline;
+  const briefingHeadlines = buildBriefingDisplayHeadlines({
+    liveMover: liveLeader ? { id: liveLeader.id, name: liveLeader.name } : null,
+    leadAnchor: story.leadAnchor,
+    fallbackHeadline: story.headline,
+  });
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -532,9 +534,21 @@ export function OverviewTab() {
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
                 Today&apos;s Briefing
               </p>
-              <h2 className="text-lg md:text-xl font-serif font-semibold mt-1 leading-snug">
-                {liveHeadline}
-              </h2>
+              {briefingHeadlines.length > 0 && (
+                <div className="mt-1 space-y-0.5" aria-label="Briefing headlines">
+                  {briefingHeadlines.map((line, index) => (
+                    <p
+                      key={line}
+                      className={cn(
+                        "text-sm md:text-base leading-snug",
+                        index === 0 ? "font-medium text-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              )}
               <BriefingBody
                 paragraphs={story.paragraphs}
                 body={story.body}

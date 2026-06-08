@@ -1,5 +1,8 @@
+import { formatBriefingMoverHeadline, pickLeadAnchor } from "@shared/insights/briefing-headlines";
 import type { TrendingPerson } from "@shared/schema";
 import { selectHotMovers } from "../trending/hot-movers";
+
+export { pickLeadAnchor } from "@shared/insights/briefing-headlines";
 
 export const BRIEFING_ANCHOR_COUNT = 3;
 export const BRIEFING_MOVER_COUNT = 3;
@@ -86,7 +89,7 @@ export function selectBriefingAnchorCandidates(
 
 export function buildDeterministicHeadline(inputs: BriefingInputs): string {
   const lead = inputs.movers[0];
-  return lead ? `${lead.name} leads today's movers` : "Today's influence snapshot";
+  return lead ? formatBriefingMoverHeadline(lead.name) : "Today's influence snapshot";
 }
 
 function beatForPerson(person: BriefingPersonInput, fallback: string): string {

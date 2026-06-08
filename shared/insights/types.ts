@@ -89,6 +89,8 @@ export interface InsightsStoryPayload {
   paragraphs?: string[];
   /** Names to linkify in the briefing copy. */
   people?: Array<{ id: string; name: string }>;
+  /** Top news anchor in the cached briefing (first anchor beat). */
+  leadAnchor?: { id: string; name: string };
   generatedAt: string;
   refreshesAt: string;
   mode: "deterministic" | "ai";

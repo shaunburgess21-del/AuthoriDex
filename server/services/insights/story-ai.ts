@@ -6,6 +6,7 @@ import {
   buildDeterministicParagraphs,
   nextBriefingRefreshIso,
   type BriefingPersonInput,
+  pickLeadAnchor,
 } from "./story-briefing";
 import { getAiModel, getChatCompletionTokenLimit } from "../../config/ai-models";
 import {
@@ -193,6 +194,7 @@ Rules:
       body,
       paragraphs,
       people: briefingInputs.people,
+      leadAnchor: pickLeadAnchor(briefingInputs.anchors),
       generatedAt: now.toISOString(),
       refreshesAt: nextBriefingRefreshIso(now),
       mode: "ai",
