@@ -111,6 +111,21 @@ function linkifyBriefingText(
   return nodes;
 }
 
+function BriefingLiveSubline({ text }: { text: string }) {
+  return (
+    <li className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs md:text-sm leading-snug text-muted-foreground">
+      <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-green-600 dark:text-green-400">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"
+          aria-hidden
+        />
+        Live
+      </span>
+      <span className="font-normal">{text}</span>
+    </li>
+  );
+}
+
 function BriefingBody({
   paragraphs,
   body,
@@ -124,7 +139,7 @@ function BriefingBody({
   const linkPeople = people ?? [];
 
   return (
-    <div className="mt-2 space-y-3">
+    <div className="mt-3 space-y-3">
       {blocks.map((paragraph, i) => (
         <p key={i} className="text-sm text-muted-foreground leading-relaxed">
           {linkifyBriefingText(paragraph, linkPeople)}
@@ -526,37 +541,35 @@ export function OverviewTab() {
     <div className="space-y-6 md:space-y-8">
       <section className={cn("relative overflow-hidden rounded-xl", getInsightsTabCardClass("today"))}>
         <div className="p-5 md:p-6">
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-3">
             <div className="rounded-lg bg-blue-500/15 p-2 shrink-0">
               <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">
-                Today&apos;s Briefing
-              </p>
-              {briefingHeadlines.length > 0 && (
-                <div className="mt-1 space-y-0.5" aria-label="Briefing headlines">
-                  {briefingHeadlines.map((line) => (
-                    <p
-                      key={line}
-                      className="text-sm md:text-base font-medium text-foreground leading-snug"
-                    >
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              )}
-              <BriefingBody
-                paragraphs={story.paragraphs}
-                body={story.body}
-                people={story.people}
-              />
-
-              <p className="text-[10px] text-muted-foreground/70 mt-3">
-                {story.mode === "ai" ? "AI-summarized" : "Auto-generated"}
-              </p>
-            </div>
+            <h2 className="text-base md:text-lg font-semibold tracking-tight leading-tight">
+              Today&apos;s Briefing
+            </h2>
           </div>
+
+          {briefingHeadlines.length > 0 && (
+            <ul
+              className="mt-3 space-y-1.5 list-none"
+              aria-label="Live briefing headlines"
+            >
+              {briefingHeadlines.map((line) => (
+                <BriefingLiveSubline key={line} text={line} />
+              ))}
+            </ul>
+          )}
+
+          <BriefingBody
+            paragraphs={story.paragraphs}
+            body={story.body}
+            people={story.people}
+          />
+
+          <p className="text-[10px] text-muted-foreground/70 mt-3">
+            {story.mode === "ai" ? "AI-summarized" : "Auto-generated"}
+          </p>
         </div>
       </section>
 
