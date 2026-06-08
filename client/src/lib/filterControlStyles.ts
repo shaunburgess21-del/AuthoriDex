@@ -15,5 +15,9 @@ export const FILTER_INACTIVE_PILL_PREDICT =
 export const FILTER_INACTIVE_SECTION_TOGGLE =
   "bg-background text-muted-foreground hover:bg-muted/40 border border-border/60";
 
+/** Active section-style pills — Insights Rankings source row (slate / tab silver). */
+export const FILTER_ACTIVE_PILL_RANKINGS =
+  "bg-slate-500/25 dark:bg-slate-400/20 text-slate-600 dark:text-slate-300 border border-slate-400/50 dark:border-slate-400/40 shadow-sm shadow-slate-400/30 dark:shadow-slate-400/20";
+
 /** Compose onto shadcn Input in filter rows — replaces strong border-input. */
 export const FILTER_ROW_SEARCH_INPUT = "border-border/60 shadow-none";

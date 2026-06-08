@@ -346,7 +346,7 @@ export function RankingsTab() {
           just slides it up behind the opaque tab bar without layout jump. */}
       <div
         className={cn(
-          "sticky z-30 -mx-1 px-1 py-1.5",
+          "sticky z-30 -mx-1 px-1 py-2",
           "bg-background/90 backdrop-blur-md transition-transform duration-200",
           scrollDir === "down" ? "-translate-y-[200%]" : "translate-y-0",
         )}

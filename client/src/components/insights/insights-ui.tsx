@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+import {
+  FILTER_ACTIVE_PILL_RANKINGS,
+  FILTER_INACTIVE_SECTION_TOGGLE,
+} from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
 import type { InsightsSource, InsightsTab } from "@shared/insights/filters";
@@ -73,11 +77,11 @@ export function InsightsPill({
       type="button"
       title={title}
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border",
-        active
-          ? "bg-blue-500/25 text-blue-600 dark:text-blue-300 border-blue-500/50 shadow-sm"
-          : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted/70 hover:text-foreground",
+        "flex min-w-fit items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all sm:px-4",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        active ? FILTER_ACTIVE_PILL_RANKINGS : FILTER_INACTIVE_SECTION_TOGGLE,
       )}
     >
       {children}
