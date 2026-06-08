@@ -7,6 +7,7 @@ import type {
 } from "@shared/insights/types";
 import type { InsightsFilters } from "@shared/insights/filters";
 import { serializeFilters } from "@shared/insights/filters";
+import { mergeDedupedRankingRows } from "@shared/insights/rankings-pagination";
 
 async function fetchInsightsJson<T>(path: string): Promise<T> {
   const headers = await getAuthHeaders();
@@ -36,8 +37,12 @@ export function useInsightsRankings(filters: InsightsFilters) {
       return fetchInsightsJson<InsightsRankingsResponse>(`/api/insights/rankings?${qs}`);
     },
     getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((sum, p) => sum + p.rows.length, 0);
-      return loaded < lastPage.total ? allPages.length + 1 : undefined;
+      if (lastPage.rows.length === 0) return undefined;
+      const loaded = mergeDedupedRankingRows(allPages).length;
+      if (loaded >= lastPage.total) return undefined;
+      const loadedBeforeLast = mergeDedupedRankingRows(allPages.slice(0, -1)).length;
+      if (loaded === loadedBeforeLast) return undefined;
+      return allPages.length + 1;
     },
     staleTime: 90_000,
     placeholderData: keepPreviousData,

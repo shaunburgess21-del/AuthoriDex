@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Drawer } from "vaul";
@@ -14,9 +14,9 @@ import {
   parseFilters,
 } from "@shared/insights/filters";
 import { useInsightsRankings } from "@/lib/insights-hooks";
+import { mergeDedupedRankingRows } from "@shared/insights/rankings-pagination";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
-import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverallRankPill } from "@/components/OverallRankPill";
@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { InsightsPill, SOURCE_DISPLAY, insightsTabShadcnCardClass } from "./insights-ui";
-import { CategoryPill } from "@/components/CategoryPill";
+import { CategoryPill, getCategoryTextColor } from "@/components/CategoryPill";
 import { getMarketCategoryLabel } from "@shared/constants";
 import { cn } from "@/lib/utils";
 import type { InsightsRankingRow } from "@shared/insights/types";
@@ -126,8 +126,8 @@ function RankAvatarUnit({
 }) {
   return (
     <div className="relative flex items-center rounded-lg overflow-hidden shrink-0">
-      <div className="flex items-center justify-center min-w-[30px] sm:min-w-[34px] h-12 rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
-        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[15px] sm:text-[16px] tabular-nums">
+      <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
+        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[16px] sm:text-[18px] tabular-nums">
           {rank}
         </span>
       </div>
@@ -137,6 +137,70 @@ function RankAvatarUnit({
         size="md"
         className="h-12 w-12 rounded-none rounded-r-md"
       />
+    </div>
+  );
+}
+
+function RankingsPersonMeta({
+  category,
+  rank,
+}: {
+  category: string | null;
+  rank: number;
+}) {
+  return (
+    <div className="mt-0.5 min-w-0">
+      <div className="hidden items-center gap-1.5 md:flex flex-wrap">
+        {category && <CategoryPill category={category} size="sm" />}
+        <OverallRankPill rank={rank} size="xs" />
+      </div>
+      <p className="truncate text-[11px] leading-tight md:hidden">
+        <span className="inline-flex min-w-0 items-center gap-1">
+          {category && (
+            <span className={cn("truncate", getCategoryTextColor(category))}>
+              {getMarketCategoryLabel(category)}
+            </span>
+          )}
+          {category && rank > 0 && (
+            <span className="shrink-0 text-muted-foreground/60">·</span>
+          )}
+          {rank > 0 && <OverallRankPill rank={rank} size="mover" />}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function RankingsMobileMetricColumn({
+  row,
+  hasSecondaryCol,
+  isMovers,
+  isSearch,
+  renderPrimary,
+}: {
+  row: InsightsRankingRow;
+  hasSecondaryCol: boolean;
+  isMovers: boolean;
+  isSearch: boolean;
+  renderPrimary: (row: InsightsRankingRow) => ReactNode;
+}) {
+  const mobileSecondaryLabel = isMovers ? "Score" : isSearch ? "MoM" : "";
+
+  return (
+    <div className="min-w-[4.5rem] max-w-[5.75rem] shrink-0 text-right sm:max-w-[6.5rem]">
+      <p className="truncate text-sm font-mono font-semibold tabular-nums leading-none">
+        {renderPrimary(row)}
+      </p>
+      {hasSecondaryCol && (
+        <p className="mt-0.5 truncate text-[10px] leading-tight text-muted-foreground tabular-nums">
+          {mobileSecondaryLabel}{" "}
+          {isMovers ? (
+            <span className="tabular-nums">{row.fameIndex.toLocaleString()}</span>
+          ) : (
+            <DeltaCell value={row.metricDelta} className="text-[10px]" />
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -221,8 +285,8 @@ export function RankingsTab() {
   };
 
   // Flatten pages into one continuous list.
-  const allRows = useMemo<InsightsRankingRow[]>(
-    () => data?.pages.flatMap((p) => p.rows) ?? [],
+  const allRows = useMemo(
+    () => mergeDedupedRankingRows(data?.pages),
     [data],
   );
   const total = data?.pages[0]?.total ?? 0;
@@ -296,6 +360,19 @@ export function RankingsTab() {
     : metricColumnLabel(filters.source, filters.window);
   const secondaryColLabel = isMovers ? "Trend Score" : isSearch ? "MoM" : "";
 
+  const rankingsMetricColgroup = (
+    <colgroup>
+      <col />
+      <col className="w-36" />
+      {hasSecondaryCol && <col className="w-24" />}
+    </colgroup>
+  );
+
+  const metricHeaderClass =
+    "w-36 px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+  const secondaryHeaderClass =
+    "w-24 px-4 py-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground";
+
   const renderPrimary = (row: InsightsRankingRow) =>
     isMovers ? (
       <DeltaCell value={row.metricDelta} />
@@ -310,8 +387,6 @@ export function RankingsTab() {
     ) : isSearch ? (
       <DeltaCell value={row.metricDelta} />
     ) : null;
-
-  const scrollDir = useScrollDirection();
 
   // Keep the active source pill visible in the scroll-masked row.
   const activePillRef = useRef<HTMLSpanElement | null>(null);
@@ -340,16 +415,9 @@ export function RankingsTab() {
 
   return (
     <div className="space-y-4 md:space-y-5">
-      {/* Source pills — semi-sticky below the main insights tab bar (top-16).
-          Reveals on scroll-up, hides on scroll-down so the board reads cleanly
-          on mobile. The element keeps its flow space (sticky), so hiding it
-          just slides it up behind the opaque tab bar without layout jump. */}
+      {/* Source pills — sticky below the main insights tab bar. */}
       <div
-        className={cn(
-          "sticky z-30 -mx-1 px-1 py-2",
-          "bg-background/90 backdrop-blur-md transition-transform duration-200",
-          scrollDir === "down" ? "-translate-y-[200%]" : "translate-y-0",
-        )}
+        className="sticky z-30 -mx-1 bg-background/90 px-1 py-2 backdrop-blur-md"
         style={{ top: pillStickyTop }}
         data-testid="rankings-source-pills"
       >
@@ -457,34 +525,36 @@ export function RankingsTab() {
             </CardHeader>
           </div>
 
-          {/* Toolbar — filters (desktop inline / mobile drawer) */}
-          <div className="border-b border-border/60 bg-muted/30 px-4 py-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setFilterOpen(true)}
-            >
-              <Filter className="h-4 w-4 mr-1.5" />
-              Filters
-            </Button>
-            <div className="hidden md:block">{filterControls}</div>
+          {/* Mobile toolbar — filters + primary column header */}
+          <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilterOpen(true)}
+              >
+                <Filter className="h-4 w-4 mr-1.5" />
+                Filters
+              </Button>
+              <span className="text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {primaryColLabel}
+              </span>
+            </div>
           </div>
 
           <CardContent className="p-0">
-            {/* DESKTOP — table */}
+            {/* DESKTOP — single table so filter/header cells share column widths with data */}
             <div className="hidden md:block">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <th className="pl-4 px-2 py-3 font-medium" aria-label="Person" />
-                    <th className="px-4 py-3 font-medium text-right w-36">
-                      {primaryColLabel}
+              <table className="w-full table-fixed text-sm">
+                {rankingsMetricColgroup}
+                <thead className="bg-muted/30">
+                  <tr className="border-b border-border/60">
+                    <th className="pl-4 pr-2 py-3 text-left align-middle font-normal">
+                      {filterControls}
                     </th>
+                    <th className={metricHeaderClass}>{primaryColLabel}</th>
                     {hasSecondaryCol && (
-                      <th className="px-4 py-3 font-medium text-right w-24">
-                        {secondaryColLabel}
-                      </th>
+                      <th className={secondaryHeaderClass}>{secondaryColLabel}</th>
                     )}
                   </tr>
                 </thead>
@@ -502,21 +572,21 @@ export function RankingsTab() {
                         >
                           <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
                           <div className="min-w-0">
-                            <p className="font-medium truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                            <p className="truncate text-sm font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400">
                               {row.name}
                             </p>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              {row.category && <CategoryPill category={row.category} size="sm" />}
-                              <OverallRankPill rank={row.rank} size="xs" />
-                            </div>
+                            <RankingsPersonMeta
+                              category={row.category}
+                              rank={row.rank}
+                            />
                           </div>
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                      <td className="w-36 px-4 py-3 text-right font-semibold tabular-nums">
                         {renderPrimary(row)}
                       </td>
                       {hasSecondaryCol && (
-                        <td className="px-4 py-3 text-right text-xs tabular-nums">
+                        <td className="w-24 px-4 py-3 text-right text-xs tabular-nums">
                           {renderSecondary(row)}
                         </td>
                       )}
@@ -533,31 +603,20 @@ export function RankingsTab() {
                   key={row.id}
                   href={`/person/${row.id}`}
                   onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
-                  className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors"
+                  className="flex items-center gap-3 pl-2 pr-2 py-3.5 hover:bg-muted/30 transition-colors"
                 >
                   <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{row.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {row.category && <CategoryPill category={row.category} size="sm" />}
-                      <OverallRankPill rank={row.rank} size="xs" />
-                    </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{row.name}</p>
+                    <RankingsPersonMeta category={row.category} rank={row.rank} />
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {renderPrimary(row)}
-                    </p>
-                    {hasSecondaryCol && (
-                      <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
-                        {secondaryColLabel}:{" "}
-                        {isMovers ? (
-                          <span className="tabular-nums">{row.fameIndex.toLocaleString()}</span>
-                        ) : (
-                          <DeltaCell value={row.metricDelta} className="text-[10px]" />
-                        )}
-                      </p>
-                    )}
-                  </div>
+                  <RankingsMobileMetricColumn
+                    row={row}
+                    hasSecondaryCol={hasSecondaryCol}
+                    isMovers={isMovers}
+                    isSearch={isSearch}
+                    renderPrimary={renderPrimary}
+                  />
                 </Link>
               ))}
             </div>
