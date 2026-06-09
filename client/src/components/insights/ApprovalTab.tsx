@@ -23,7 +23,7 @@ import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { normalizeMarketCategory } from "@shared/constants";
 import type { TrendingPerson } from "@shared/schema";
-import { insightsTabShadcnCardClass } from "./insights-ui";
+import { insightsCrowdBoardCardClass, InsightsCrowdTopAccentBar } from "./insights-ui";
 
 const PAGE_SIZE = 20;
 
@@ -162,7 +162,7 @@ export function ApprovalTab() {
 
   if (error) {
     return (
-      <Card className={insightsTabShadcnCardClass("crowd")}>
+      <Card className={insightsCrowdBoardCardClass()}>
         <CardContent className="p-8 text-center">
           <p className="text-muted-foreground">Failed to load approval leaderboard.</p>
           <Button className="mt-4" onClick={() => window.location.reload()}>
@@ -175,8 +175,9 @@ export function ApprovalTab() {
 
   return (
     <>
-      <Card className={insightsTabShadcnCardClass("crowd", "overflow-visible")}>
+      <Card className={insightsCrowdBoardCardClass()}>
         <div className="relative isolate overflow-hidden rounded-t-xl">
+          <InsightsCrowdTopAccentBar />
           <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
@@ -198,7 +199,7 @@ export function ApprovalTab() {
           className="border-b border-border/60 bg-card/95"
           data-testid="approval-leaderboard-toolbar"
         >
-          <div className="pl-3 pr-4 sm:pr-6 py-4 bg-muted/30">
+          <div className="pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <FilterDropdown

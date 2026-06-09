@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { InsightsPrimaryDriver } from "@shared/insights/types";
 import type { InsightsSource, InsightsTab, InsightsWindow } from "@shared/insights/filters";
 import {
+  getInsightsTabAccentHex,
   getInsightsTabCardClass,
   INSIGHTS_DRIVER_LABELS,
   INSIGHTS_SOURCE_LABELS,
@@ -19,6 +20,24 @@ export const SOURCE_DISPLAY: Record<InsightsSource, string> = INSIGHTS_SOURCE_LA
 /** Pulse-card classes for shadcn Card — pulse-card sets border/glow; drop Card shadow only. */
 export function insightsTabShadcnCardClass(tab: InsightsTab, ...extra: Parameters<typeof cn>) {
   return cn("shadow-none", getInsightsTabCardClass(tab), ...extra);
+}
+
+/** Crowd Approval / Web Sentiment boards — plain card like Home leaderboard (top accent bar only). */
+export function insightsCrowdBoardCardClass(...extra: Parameters<typeof cn>) {
+  return cn("shadow-none overflow-visible", ...extra);
+}
+
+export function InsightsCrowdTopAccentBar() {
+  const accent = getInsightsTabAccentHex("crowd");
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px]"
+      style={{
+        background: `linear-gradient(90deg, transparent 0%, ${accent} 50%, transparent 100%)`,
+      }}
+      aria-hidden
+    />
+  );
 }
 
 export function InsightsSection({

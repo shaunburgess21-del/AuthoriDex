@@ -5023,15 +5023,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalRankQuery = approvalRankQuery.where(and(...nonSearchConditions)) as typeof approvalRankQuery;
         }
 
-        if (sortDir === 'asc') {
-          approvalRankQuery = approvalRankQuery.orderBy(
-            sql`${celebrityMetrics.approvalAvgRating} ASC NULLS LAST, ${celebrityMetrics.approvalVotesCount} ASC NULLS LAST, ${trendingPeople.name} ASC`
-          ) as typeof approvalRankQuery;
-        } else {
-          approvalRankQuery = approvalRankQuery.orderBy(
-            sql`${celebrityMetrics.approvalAvgRating} DESC NULLS LAST, ${celebrityMetrics.approvalVotesCount} DESC NULLS LAST, ${trendingPeople.name} ASC`
-          ) as typeof approvalRankQuery;
-        }
+        // Canonical approval rank (1 = highest approval) — always DESC so the rank
+        // tile matches Home: list order follows sortDir, but the number shown is
+        // position when sorted best-first within the active category filter.
+        approvalRankQuery = approvalRankQuery.orderBy(
+          sql`${celebrityMetrics.approvalAvgRating} DESC NULLS LAST, ${celebrityMetrics.approvalVotesCount} DESC NULLS LAST, ${trendingPeople.name} ASC`
+        ) as typeof approvalRankQuery;
 
         const approvalRankRows = await approvalRankQuery;
         approvalRankById = new Map(

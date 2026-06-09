@@ -1,15 +1,30 @@
-import { Link } from "wouter";
-import { Globe } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { Globe, Loader2, X } from "lucide-react";
+import {
+  SentimentColumnHeaderButton,
+  SentimentInfoBody,
+  SentimentInfoDialog,
+  SentimentInfoDrawer,
+} from "@/components/WebSentimentLeaderboardInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { PersonAvatar } from "@/components/PersonAvatar";
-import { SentimentMiniBar } from "./SentimentMiniBar";
-import { CategoryPill } from "@/components/CategoryPill";
-import { logInsightsEvent } from "@/lib/insights-telemetry";
-import { useInsightsQuery } from "@/lib/insights-hooks";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SearchBar } from "@/components/SearchBar";
+import { FilterDropdown } from "@/components/FilterDropdown";
+import { WebSentimentLeaderboardRow } from "./WebSentimentLeaderboardRow";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { formatRelativeTime } from "@/lib/formatDate";
-import { cn } from "@/lib/utils";
-import { insightsTabShadcnCardClass } from "./insights-ui";
+import { insightsCrowdBoardCardClass, InsightsCrowdTopAccentBar } from "./insights-ui";
+import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
+import { useAuth } from "@/contexts/AuthContext";
+import { navigateToLogin } from "@/lib/authReturn";
+import { normalizeMarketCategory } from "@shared/constants";
+import type { WebSentimentSortDir } from "@shared/insights/web-sentiment-filters";
+
+const PAGE_SIZE = 20;
 
 interface WebSentimentRow {
   id: string;
@@ -22,31 +37,144 @@ interface WebSentimentRow {
   negative: number;
   total: number;
   carriedForward: boolean;
+  leaderboardRank: number;
 }
 
-interface WebSentimentPayload {
+interface WebSentimentPagePayload {
   rows: WebSentimentRow[];
   total: number;
+  hasMore: boolean;
   asOf: string | null;
   minOpinionated: number;
 }
 
-function sentimentBand(pct: number): string {
-  if (pct >= 75) return "text-green-600 dark:text-green-400";
-  if (pct >= 50) return "text-emerald-600 dark:text-emerald-400";
-  if (pct >= 25) return "text-amber-600 dark:text-amber-400";
-  return "text-red-500";
-}
-
 export function WebSentimentTab() {
-  const { data, isLoading, isError } = useInsightsQuery<WebSentimentPayload>(
-    "/api/insights/crowd/web-sentiment",
-    { staleTime: 5 * 60 * 1000 },
+  const [, setLocation] = useLocation();
+  const isMobile = useIsMobile();
+  const { isLoggedIn } = useAuth();
+  const leaderboardCategories = useLeaderboardCategories();
+  const categoryRegistry = useCategoryRegistry();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState(() => {
+    if (typeof window === "undefined") return "all";
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("category");
+    if (!raw) return "all";
+    const lowered = raw.toLowerCase();
+    if (lowered === "trending") return "all";
+    if (lowered === "all" || lowered === "favorites") return lowered;
+    return normalizeMarketCategory(raw);
+  });
+  const [sortDirection, setSortDirection] = useState<WebSentimentSortDir>("desc");
+  const [sentimentInfoOpen, setSentimentInfoOpen] = useState(false);
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+  } = useInfiniteQuery<WebSentimentPagePayload>({
+    queryKey: ["/api/insights/crowd/web-sentiment", searchQuery, category, sortDirection],
+    queryFn: async ({ pageParam = 0 }) => {
+      const queryParams = new URLSearchParams();
+      if (searchQuery) queryParams.set("search", searchQuery);
+      if (category !== "all") queryParams.set("category", category);
+      queryParams.set("sortDir", sortDirection);
+      queryParams.set("limit", String(PAGE_SIZE));
+      queryParams.set("offset", String(pageParam));
+
+      const response = await fetch(`/api/insights/crowd/web-sentiment?${queryParams}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch");
+      const json = await response.json();
+      return json.data as WebSentimentPagePayload;
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.rows.length, 0);
+      return loadedCount < lastPage.total ? loadedCount : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+
+  const allRows = useMemo(() => data?.pages.flatMap((page) => page.rows) ?? [], [data]);
+  const totalCount = data?.pages[0]?.total ?? 0;
+  const minOpinionated = data?.pages[0]?.minOpinionated ?? 50;
+  const asOf = data?.pages[0]?.asOf ?? null;
+  const hasCarriedForward = allRows.some((r) => r.carriedForward);
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const sentinel = document.getElementById("web-sentiment-infinite-sentinel");
+    if (!sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        fetchNextPage();
+      }
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, allRows.length]);
+
+  const resolveCategoryLabel = useCallback(
+    (id: string): string => {
+      const registryHit = categoryRegistry.byId.get(id);
+      if (registryHit?.label) return registryHit.label;
+      return categoryRegistry.getDisplayLabel(id);
+    },
+    [categoryRegistry],
   );
+
+  const leaderboardFilterCategories = useMemo(() => {
+    const pinned = [
+      { value: "all", label: "All Categories" },
+      { value: "favorites", label: "Favorites" },
+    ];
+    const dynamic = Array.from(leaderboardCategories ?? [])
+      .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
+      .sort((a, b) => resolveCategoryLabel(a).localeCompare(resolveCategoryLabel(b)))
+      .map((id) => ({ value: id, label: resolveCategoryLabel(id) }));
+    if (
+      category !== "all" &&
+      category !== "favorites" &&
+      category !== "trending" &&
+      !dynamic.some((c) => c.value === category)
+    ) {
+      dynamic.unshift({ value: category, label: resolveCategoryLabel(category) });
+    }
+    return [...pinned, ...dynamic];
+  }, [leaderboardCategories, category, resolveCategoryLabel]);
+
+  const activeCategoryLabel = useMemo(() => {
+    if (category === "all") return "All Categories";
+    if (category === "favorites") return "Favorites";
+    return resolveCategoryLabel(category);
+  }, [category, resolveCategoryLabel]);
+
+  const handleCategoryChange = (value: string) => {
+    if (value === "favorites" && !isLoggedIn) {
+      navigateToLogin(setLocation);
+      return;
+    }
+    setCategory(value);
+  };
+
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setCategory("all");
+  };
+
+  const hasActiveFilters = !!searchQuery || category !== "all";
+  const hasAnyRows = totalCount > 0;
 
   if (isError) {
     return (
-      <Card className={insightsTabShadcnCardClass("crowd")}>
+      <Card className={insightsCrowdBoardCardClass()}>
         <CardContent className="p-8 text-center text-sm text-muted-foreground">
           Failed to load the web sentiment leaderboard.
         </CardContent>
@@ -54,120 +182,166 @@ export function WebSentimentTab() {
     );
   }
 
-  const rows = data?.rows ?? [];
-  const hasCarriedForward = rows.some((r) => r.carriedForward);
-
   return (
-    <Card className={insightsTabShadcnCardClass("crowd", "overflow-visible")}>
-      <div className="relative isolate overflow-hidden rounded-t-xl">
-        <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
-          <div className="flex-1">
-            <CardTitle className="text-2xl font-serif flex items-center gap-2">
-              <Globe className="h-5 w-5 text-[#22D3EE]" aria-hidden />
-              Web Sentiment
-            </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground/70 max-w-xl">
-              How positive the open web is about each profile, based on{" "}
-              <span className="font-medium text-foreground">DataForSEO</span> content
-              analysis. Profiles with fewer than{" "}
-              {data?.minOpinionated ?? 50} opinionated citations are hidden.
-            </p>
-          </div>
-        </CardHeader>
-      </div>
+    <>
+      <Card className={insightsCrowdBoardCardClass()}>
+        <div className="relative isolate overflow-hidden rounded-t-xl">
+          <InsightsCrowdTopAccentBar />
+          <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
+            <div className="flex-1">
+              <CardTitle className="text-2xl font-serif flex items-center gap-2">
+                <Globe className="h-5 w-5 text-[#22D3EE]" aria-hidden />
+                Web Sentiment
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground/70 max-w-xl">
+                Open-web positivity from DataForSEO. Profiles under{" "}
+                {minOpinionated} opinionated citations are hidden.
+              </p>
+            </div>
+          </CardHeader>
+        </div>
 
-      <CardContent className="p-0">
-        {isLoading && rows.length === 0 && (
-          <div className="p-4 space-y-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
-            ))}
-          </div>
-        )}
-
-        {!isLoading && rows.length === 0 && (
-          <div className="p-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              No profiles have enough opinionated web citations yet.
-            </p>
-          </div>
-        )}
-
-        {rows.length > 0 && (
-          <ul className="divide-y divide-border/40">
-            {rows.map((row, idx) => (
-              <li key={row.id}>
-                <Link
-                  href={`/person/${row.id}`}
-                  onClick={() =>
-                    logInsightsEvent("crowd", "web_sentiment_row_click", {
-                      personId: row.id,
-                    })
-                  }
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-                >
-                  <span className="text-sm font-mono text-muted-foreground tabular-nums w-8 shrink-0">
-                    {idx + 1}
-                  </span>
-                  <PersonAvatar name={row.name} avatar={row.avatar} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{row.name}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {row.category && (
-                        <CategoryPill category={row.category} size="sm" />
-                      )}
-                      <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
-                        #{row.rank}
-                      </span>
-                      {row.carriedForward && (
-                        <span
-                          className="text-[10px] text-muted-foreground/70 italic"
-                          title="No fresh web citations this cycle — showing the last available reading."
-                        >
-                          carried forward
-                        </span>
-                      )}
+        <div
+          className="border-b border-border/60 bg-card/95"
+          data-testid="web-sentiment-toolbar"
+        >
+          <div className="pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <FilterDropdown
+                  value={category}
+                  onChange={handleCategoryChange}
+                  categories={leaderboardFilterCategories}
+                  sortDirection={sortDirection}
+                  onSortDirectionChange={setSortDirection}
+                  isActive={category !== "all" || sortDirection !== "desc"}
+                  testId="web-sentiment-filter"
+                />
+                <div className="flex-1 min-w-0 lg:max-w-[400px]">
+                  <SearchBar onSearch={setSearchQuery} placeholder="Search..." />
+                </div>
+                {allRows.length > 0 && (
+                  <div
+                    className="hidden lg:flex items-center gap-5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground ml-auto shrink-0"
+                    data-testid="web-sentiment-column-header"
+                  >
+                    <div className="w-[96px] text-right">Breakdown</div>
+                    <div className="flex justify-end w-[120px]">
+                      <SentimentColumnHeaderButton onClick={() => setSentimentInfoOpen(true)} />
                     </div>
+                    <div className="text-right w-[100px]">Mentions</div>
                   </div>
-                  <div className="hidden sm:block w-32 shrink-0">
-                    <SentimentMiniBar
-                      positive={row.positive}
-                      negative={row.negative}
-                      showCounts={false}
-                    />
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={cn(
-                        "text-base font-semibold tabular-nums",
-                        sentimentBand(row.positivePct),
-                      )}
-                    >
-                      {row.positivePct}%
-                    </p>
-                    <p className="text-[10px] text-muted-foreground tabular-nums">
-                      {(row.positive + row.negative).toLocaleString()} mentions
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {data?.asOf && (
-          <div className="border-t border-border/40 p-3 text-center">
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Updated {formatRelativeTime(data.asOf)}
-              {hasCarriedForward
-                ? " · some rows carry forward the last available web reading"
-                : ""}
-              {" · "}
-              DataForSEO ingest runs weekly
-            </p>
+                )}
+                <SentimentColumnHeaderButton
+                  className="lg:hidden"
+                  testId="label-mobile-web-sentiment"
+                  onClick={() => setSentimentInfoOpen(true)}
+                />
+              </div>
+              {hasActiveFilters && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-muted-foreground">Active filters:</span>
+                  {searchQuery && (
+                    <Badge variant="secondary" className="gap-1">
+                      Search: {searchQuery}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setSearchQuery("")} />
+                    </Badge>
+                  )}
+                  {category !== "all" && (
+                    <Badge variant="secondary" className="gap-1">
+                      Category: {activeCategoryLabel}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setCategory("all")} />
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={handleClearFilters} className="h-6 text-xs">
+                    Clear all
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+
+        <CardContent className="p-0">
+          {isLoading && allRows.length === 0 ? (
+            <div className="p-12 text-center">
+              <Loader2 className="h-6 w-6 text-muted-foreground/50 mx-auto animate-spin" />
+              <p className="mt-3 text-sm text-muted-foreground">Loading web sentiment…</p>
+            </div>
+          ) : !hasAnyRows && !isLoading ? (
+            <div className="p-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters
+                  ? "No results found"
+                  : "No profiles have enough opinionated web citations yet."}
+              </p>
+              {hasActiveFilters && (
+                <Button variant="outline" size="sm" className="mt-3" onClick={handleClearFilters}>
+                  Clear filters
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              {allRows.map((row) => (
+                <WebSentimentLeaderboardRow
+                  key={row.id}
+                  row={row}
+                  displayRank={row.leaderboardRank}
+                />
+              ))}
+
+              {hasNextPage && (
+                <div
+                  id="web-sentiment-infinite-sentinel"
+                  className="p-6 border-t text-center"
+                  data-testid="web-sentiment-infinite-scroll-trigger"
+                >
+                  {isFetchingNextPage ? (
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading more...</span>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground text-sm">
+                      Showing {allRows.length} of {totalCount}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!hasNextPage && allRows.length > 0 && (
+                <div className="p-4 border-t text-center text-muted-foreground text-sm">
+                  Showing all {allRows.length} results
+                </div>
+              )}
+            </>
+          )}
+
+          {asOf && (
+            <div className="border-t border-border/40 p-3 text-center">
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Updated {formatRelativeTime(asOf)}
+                {hasCarriedForward
+                  ? " · some rows carry forward the last available web reading"
+                  : ""}
+                {" · "}
+                DataForSEO ingest runs weekly
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {isMobile ? (
+        <SentimentInfoDrawer open={sentimentInfoOpen} onOpenChange={setSentimentInfoOpen}>
+          <SentimentInfoBody />
+        </SentimentInfoDrawer>
+      ) : (
+        <SentimentInfoDialog open={sentimentInfoOpen} onOpenChange={setSentimentInfoOpen}>
+          <SentimentInfoBody />
+        </SentimentInfoDialog>
+      )}
+    </>
   );
 }

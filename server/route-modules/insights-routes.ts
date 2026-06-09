@@ -8,8 +8,9 @@ import {
 } from "@shared/insights/filters";
 import type { InsightsDivergenceType } from "@shared/insights/types";
 import { optionalAuth, type AuthRequest } from "../auth-middleware";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { insightsEvents } from "@shared/schema";
+import { insightsEvents, userFavourites } from "@shared/schema";
 import { loadInsightsRankings } from "../services/insights/rankings";
 import { loadInsightsOverview } from "../services/insights/overview";
 import { loadDivergence, loadSingleSourceSurge } from "../services/insights/discover";
@@ -23,7 +24,10 @@ import { loadStreaks } from "../services/insights/streaks";
 import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
 import { loadMarketsAnalytics } from "../services/insights/markets-analytics";
-import { loadCrowdWebSentiment } from "../services/insights/crowd-web-sentiment";
+import {
+  loadCrowdWebSentimentPage,
+  WEB_SENTIMENT_DEFAULT_PAGE_SIZE,
+} from "../services/insights/crowd-web-sentiment";
 
 const insightsEventSchema = z.object({
   surface: z.string().min(1).max(64),
@@ -195,9 +199,35 @@ export function registerInsightsRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/insights/crowd/web-sentiment", async (_req, res) => {
+  app.get("/api/insights/crowd/web-sentiment", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const data = await withDiscoverCache("crowd-web-sentiment", loadCrowdWebSentiment);
+      const search = typeof req.query.search === "string" ? req.query.search : "";
+      const category =
+        typeof req.query.category === "string" && req.query.category ? req.query.category : "all";
+      const sortDir = req.query.sortDir === "asc" ? "asc" : "desc";
+      const limit = Math.min(
+        Math.max(parseInt(String(req.query.limit ?? WEB_SENTIMENT_DEFAULT_PAGE_SIZE), 10) || WEB_SENTIMENT_DEFAULT_PAGE_SIZE, 1),
+        100,
+      );
+      const offset = Math.max(parseInt(String(req.query.offset ?? 0), 10) || 0, 0);
+
+      let favoriteIds = new Set<string>();
+      if (category === "favorites" && req.userId) {
+        const favRows = await db
+          .select({ personId: userFavourites.personId })
+          .from(userFavourites)
+          .where(eq(userFavourites.userId, req.userId));
+        favoriteIds = new Set(favRows.map((row) => row.personId).filter(Boolean));
+      }
+
+      const data = await loadCrowdWebSentimentPage({
+        search,
+        category,
+        favoriteIds,
+        sortDir,
+        limit,
+        offset,
+      });
       res.json({ data });
     } catch (error) {
       console.error("[insights] crowd web-sentiment", error);

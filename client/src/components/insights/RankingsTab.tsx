@@ -17,7 +17,7 @@ import { mergeDedupedRankingRows } from "@shared/insights/rankings-pagination";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
-import { PersonAvatar } from "@/components/PersonAvatar";
+import { LeaderboardRankAvatar } from "@/components/LeaderboardRankAvatar";
 import { OverallRankPill } from "@/components/OverallRankPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,36 +116,6 @@ function DeltaCell({ value, className }: { value: number | null; className?: str
       {value > 0 ? "+" : ""}
       {value.toFixed(1)}%
     </span>
-  );
-}
-
-/**
- * Joined rank-cell + avatar container, ported from the home LeaderboardRow so
- * Rankings rows get the same cohesive "rank tile glued to the avatar" look.
- */
-function RankAvatarUnit({
-  rank,
-  name,
-  avatar,
-}: {
-  rank: number;
-  name: string;
-  avatar: string | null;
-}) {
-  return (
-    <div className="relative flex items-center rounded-lg overflow-hidden shrink-0">
-      <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
-        <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[16px] sm:text-[18px] tabular-nums">
-          {rank}
-        </span>
-      </div>
-      <PersonAvatar
-        name={name}
-        avatar={avatar}
-        size="md"
-        className="h-12 w-12 rounded-none rounded-r-md"
-      />
-    </div>
   );
 }
 
@@ -573,7 +543,7 @@ export function RankingsTab() {
                           onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
                           className="flex items-center gap-3 group"
                         >
-                          <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
+                          <LeaderboardRankAvatar rank={idx + 1} name={row.name} avatar={row.avatar} />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400">
                               {row.name}
@@ -608,7 +578,7 @@ export function RankingsTab() {
                   onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
                   className="flex items-center gap-3 pl-2 pr-2 py-3.5 hover:bg-muted/30 transition-colors"
                 >
-                  <RankAvatarUnit rank={idx + 1} name={row.name} avatar={row.avatar} />
+                  <LeaderboardRankAvatar rank={idx + 1} name={row.name} avatar={row.avatar} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{row.name}</p>
                     <RankingsPersonMeta category={row.category} rank={row.rank} />

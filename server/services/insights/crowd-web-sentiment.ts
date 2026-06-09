@@ -1,4 +1,10 @@
+import {
+  buildWebSentimentLeaderboardRankMap,
+  filterWebSentimentRows,
+} from "@shared/insights/web-sentiment-filters";
+import type { WebSentimentSortDir } from "@shared/insights/web-sentiment-filters";
 import { getCachedTrendingPeople } from "./insights-people-cache";
+import { withDiscoverCache } from "./discover-cache";
 import { loadLatestSnapshotsByPerson } from "./snapshot-batch";
 import {
   displayWebSentimentFromRaw,
@@ -16,6 +22,8 @@ export interface WebSentimentRow {
   negative: number;
   total: number;
   carriedForward: boolean;
+  /** Position when sorted best-first (highest %) within active filters. */
+  leaderboardRank?: number;
 }
 
 export interface WebSentimentLeaderboardResponse {
@@ -25,12 +33,22 @@ export interface WebSentimentLeaderboardResponse {
   minOpinionated: number;
 }
 
-/**
- * Web Sentiment leaderboard. Sourced from `trend_snapshots.diagnostics.raw.*`
- * — no new ingest required. People with fewer than the opinionated-citation
- * minimum are excluded (their headline % isn't meaningful).
- */
-export async function loadCrowdWebSentiment(): Promise<WebSentimentLeaderboardResponse> {
+export interface WebSentimentPageResponse extends WebSentimentLeaderboardResponse {
+  hasMore: boolean;
+}
+
+export interface WebSentimentPageQuery {
+  search?: string;
+  category?: string;
+  favoriteIds?: ReadonlySet<string>;
+  sortDir?: WebSentimentSortDir;
+  limit: number;
+  offset: number;
+}
+
+export const WEB_SENTIMENT_DEFAULT_PAGE_SIZE = 20;
+
+async function buildCrowdWebSentimentRows(): Promise<WebSentimentLeaderboardResponse> {
   const [people, snapshots] = await Promise.all([
     getCachedTrendingPeople(),
     loadLatestSnapshotsByPerson(),
@@ -83,5 +101,51 @@ export async function loadCrowdWebSentiment(): Promise<WebSentimentLeaderboardRe
     total: rows.length,
     asOf: latestTs?.toISOString() ?? null,
     minOpinionated: WEB_SENTIMENT_MIN_OPINIONATED,
+  };
+}
+
+async function loadCrowdWebSentimentCached(): Promise<WebSentimentLeaderboardResponse> {
+  return withDiscoverCache("crowd-web-sentiment", buildCrowdWebSentimentRows);
+}
+
+/**
+ * Web Sentiment leaderboard. Sourced from `trend_snapshots.diagnostics.raw.*`
+ * — no new ingest required. People with fewer than the opinionated-citation
+ * minimum are excluded (their headline % isn't meaningful).
+ */
+export async function loadCrowdWebSentiment(): Promise<WebSentimentLeaderboardResponse> {
+  return loadCrowdWebSentimentCached();
+}
+
+export async function loadCrowdWebSentimentPage(
+  query: WebSentimentPageQuery,
+): Promise<WebSentimentPageResponse> {
+  const base = await loadCrowdWebSentimentCached();
+  const filterOpts = {
+    search: query.search ?? "",
+    category: query.category ?? "all",
+    favoriteIds: query.favoriteIds ?? new Set(),
+  };
+  const filtered = filterWebSentimentRows(base.rows, {
+    ...filterOpts,
+    sortDir: query.sortDir ?? "desc",
+  });
+  const descFiltered = filterWebSentimentRows(base.rows, {
+    ...filterOpts,
+    sortDir: "desc",
+  });
+  const rankById = buildWebSentimentLeaderboardRankMap(descFiltered);
+
+  const rows = filtered.slice(query.offset, query.offset + query.limit).map((row) => ({
+    ...row,
+    leaderboardRank: rankById.get(row.id) ?? 0,
+  }));
+
+  return {
+    rows,
+    total: filtered.length,
+    hasMore: query.offset + rows.length < filtered.length,
+    asOf: base.asOf,
+    minOpinionated: base.minOpinionated,
   };
 }
