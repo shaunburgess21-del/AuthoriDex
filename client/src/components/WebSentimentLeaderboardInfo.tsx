@@ -1,25 +1,30 @@
 import type { ReactNode } from "react";
-import { Globe } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 
-export const WEB_SENTIMENT_LEADERBOARD_COPY =
-  "How English-language news sites, blogs, and forums talk about each person online (DataForSEO web citations). The headline % and bar split positive vs negative mentions. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
+export const WEB_SENTIMENT_PROFILE_TOOLTIP_COPY =
+  "We scan recent English-language news sites, blogs, and forums for mentions of this person. Automated analysis sorts each mention as positive or negative — the headline % is the share that's positive, and the bar shows the split. Mentions is the total count of opinionated mentions found.\n\nThis is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab) — it reflects what the wider web is saying, not the VoxDex crowd. Updates about weekly.";
 
 export function SentimentInfoBody() {
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-2">
-        <Globe className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden />
-        <h3 className="text-sm font-semibold">Web sentiment</h3>
-      </div>
-      <p className="text-xs leading-relaxed text-muted-foreground">{WEB_SENTIMENT_LEADERBOARD_COPY}</p>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Profiles with too few opinionated citations are hidden because the headline percentage
-        would not be meaningful.
+    <div className="space-y-2">
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        We scan recent English-language news sites, blogs, and forums for mentions of each person.
+        Automated analysis sorts each mention as positive or negative — the headline % is the share
+        that's positive, and the bar shows the split. Mentions is the total count of opinionated
+        mentions found.
+      </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab) — it reflects
+        what the wider web is saying, not the VoxDex crowd. Updates about weekly.
+      </p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Profiles with too few opinionated mentions are hidden because the percentage wouldn't be
+        meaningful. Sentiment detection is automated, so individual mentions are occasionally
+        misread and may not always be 100% accurate.
       </p>
     </div>
   );
@@ -42,7 +47,7 @@ export function SentimentColumnHeaderButton({
         "h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
         className,
       )}
-      aria-label="About web sentiment on the leaderboard"
+      aria-label="About Web Sentiment on the leaderboard"
       data-testid={testId}
       onClick={onClick}
     >
@@ -51,8 +56,8 @@ export function SentimentColumnHeaderButton({
   );
 }
 
-export const sentimentInfoDialogTitle = "Web sentiment on the leaderboard";
-export const sentimentInfoDialogDescription = "How open-web positivity is measured.";
+export const sentimentInfoDialogTitle = "Web Sentiment on the leaderboard";
+export const sentimentInfoDialogDescription = "How positive vs negative web coverage is measured.";
 
 const sentimentDialogContentClass =
   "flex max-h-[85vh] flex-col gap-0 overflow-hidden sm:max-w-sm";

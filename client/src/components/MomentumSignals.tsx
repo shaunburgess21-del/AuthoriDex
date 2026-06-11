@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp, Globe } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
+import { WEB_SENTIMENT_PROFILE_TOOLTIP_COPY } from "@/components/WebSentimentLeaderboardInfo";
 import { SentimentMiniBar } from "@/components/insights/SentimentMiniBar";
 import { cn } from "@/lib/utils";
 
@@ -203,9 +204,6 @@ const SEARCH_INTEREST_COPY =
 
 const SEARCH_MOMENTUM_COPY =
   "Google Trends relative interest (0–100), where 100 is this person's busiest day in the past month — not comparable across people. The pill shows whether search attention is Accelerating, Steady, or Cooling vs their own prior weeks (median of last 7 days vs earlier in the window). For absolute monthly search volume you can compare directly, see Search Interest.";
-
-const WEB_SENTIMENT_COPY =
-  "How English-language news sites, blogs, and forums talk about this person online (DataForSEO web citations). The headline % and bar split positive vs negative mentions. This is not crowd Approval (the 1–5 rating from VoxDex users in the Vote tab). Updates about weekly.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -901,8 +899,8 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           tooltip={
             <TouchTooltip
               side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={WEB_SENTIMENT_COPY}
+              contentClassName="max-w-[260px] whitespace-pre-line text-xs normal-case tracking-normal"
+              content={WEB_SENTIMENT_PROFILE_TOOLTIP_COPY}
             >
               <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-web-sentiment-tooltip" />
             </TouchTooltip>

@@ -104,7 +104,6 @@ export function WebSentimentTab() {
 
   const allRows = useMemo(() => data?.pages.flatMap((page) => page.rows) ?? [], [data]);
   const totalCount = data?.pages[0]?.total ?? 0;
-  const minOpinionated = data?.pages[0]?.minOpinionated ?? 50;
   const asOf = data?.pages[0]?.asOf ?? null;
   const hasCarriedForward = allRows.some((r) => r.carriedForward);
 
@@ -194,8 +193,7 @@ export function WebSentimentTab() {
                 Web Sentiment
               </CardTitle>
               <p className="mt-1 text-xs text-muted-foreground/70 max-w-xl">
-                Open-web positivity from DataForSEO. Profiles under{" "}
-                {minOpinionated} opinionated citations are hidden.
+                The balance of positive vs negative mentions across news sites, blogs, and forums.
               </p>
             </div>
           </CardHeader>
