@@ -239,7 +239,7 @@ export function InductionLeaderboardSlice({
 
   return (
     <Card 
-      className="p-4 bg-slate-900/60 border border-slate-700/40 backdrop-blur-sm"
+      className="p-4 bg-slate-900/60 dark:bg-[#11151D] border border-slate-700/40 backdrop-blur-sm"
       data-testid="induction-leaderboard-slice"
     >
       <div className="flex items-center justify-between mb-4">
