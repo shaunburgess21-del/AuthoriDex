@@ -1845,44 +1845,98 @@ export default function VotePage() {
     [opinionSlugList, setLocation, activeSection],
   );
 
+  // Snap view always shows the full category chip row, so each snap source
+  // applies the section's search + my-votes filters but NOT the active
+  // category chip (otherwise the snap row collapses to All + selected).
+  const matchupSnapSource = useMemo(() => {
+    const base = matchups.filter((f) => {
+      const matchesSearch =
+        (f.title ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+        (f.optionAText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+        (f.optionBText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase());
+      return matchesSearch && f.isActive;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((m) => !!matchupUserVotes[m.id])
+        : base.filter((m) => !matchupUserVotes[m.id]);
+  }, [matchups, matchupsSearchQuery, myVotesFilter, matchupUserVotes]);
+
   const matchupSnapItems: SnapItem[] = useMemo(
     () =>
-      displayMatchups
-        .filter((m) => m.isActive)
-        .map((m) => ({
-          id: m.id,
-          slug: m.slug || m.id,
-          category: m.category,
-          title: m.title,
-        })),
-    [displayMatchups],
+      matchupSnapSource.map((m) => ({
+        id: m.id,
+        slug: m.slug || m.id,
+        category: m.category,
+        title: m.title,
+      })),
+    [matchupSnapSource],
   );
+
+  const sentimentSnapSource = useMemo(() => {
+    const base = dbPolls.filter((t: any) => {
+      const matchesSearch =
+        (t.headline ?? "").toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
+        (t.description || "").toLowerCase().includes(topicsSearchQuery.toLowerCase());
+      return matchesSearch;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((t: any) => !!t.userVote)
+        : base.filter((t: any) => !t.userVote);
+  }, [dbPolls, topicsSearchQuery, myVotesFilter]);
 
   const sentimentSnapItems: SnapItem[] = useMemo(
     () =>
-      displayTopics.map((t: any) => ({
+      sentimentSnapSource.map((t: any) => ({
         id: t.id,
         slug: t.slug || t.id,
         category: t.category || "misc",
         title: t.headline || t.title || "",
       })),
-    [displayTopics],
+    [sentimentSnapSource],
   );
+
+  const opinionSnapSource = useMemo(() => {
+    const base = opinionPolls.filter((p: any) => {
+      const matchesSearch =
+        (p.title || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
+        (p.description || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
+      return matchesSearch;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((p: any) => !!p.userVote)
+        : base.filter((p: any) => !p.userVote);
+  }, [opinionPolls, opinionPollsSearchQuery, myVotesFilter]);
 
   const opinionSnapItems: SnapItem[] = useMemo(
     () =>
-      displayOpinionPolls.map((p: any) => ({
+      opinionSnapSource.map((p: any) => ({
         id: p.id,
         slug: p.slug || p.id,
         category: p.category || "misc",
         title: p.title || "",
       })),
-    [displayOpinionPolls],
+    [opinionSnapSource],
+  );
+
+  const valueSnapSource = useMemo(
+    () =>
+      valueCelebrities.filter(
+        (c) =>
+          !valuePerceptionSearchQuery ||
+          c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase()),
+      ),
+    [valueCelebrities, valuePerceptionSearchQuery],
   );
 
   const valueSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredValueCelebrities.map((person: any) => ({
+      valueSnapSource.map((person: any) => ({
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
@@ -1890,18 +1944,26 @@ export default function VotePage() {
         personId: person.id,
         personName: person.name,
       })),
-    [filteredValueCelebrities],
+    [valueSnapSource],
+  );
+
+  const inductionSnapSource = useMemo(
+    () =>
+      enrichedCandidates.filter((c) =>
+        c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase()),
+      ),
+    [enrichedCandidates, inductionSearchQuery],
   );
 
   const inductionSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredCandidates.map((c: any) => ({
+      inductionSnapSource.map((c: any) => ({
         id: c.id,
         slug: c.id,
         category: c.category || "misc",
         title: c.name || "",
       })),
-    [filteredCandidates],
+    [inductionSnapSource],
   );
 
   const { data: curateTrendingData } = useQuery<{ data: Array<{ id: string; name: string; category: string }> } | Array<{ id: string; name: string; category: string }>>({
@@ -2018,9 +2080,16 @@ export default function VotePage() {
     if (!curateCategoryOptions.some((c) => c.value === curateCategoryFilter)) setCurateCategoryFilter("all");
   }, [curateCategoryFilter, curateCategoryOptions]);
 
+  const curateSnapSource = useMemo(() => {
+    const search = curateSearchQuery.trim().toLowerCase();
+    return curateTrendingCelebrities.filter(
+      (p: any) => !search || p.name.toLowerCase().includes(search),
+    );
+  }, [curateTrendingCelebrities, curateSearchQuery]);
+
   const curateSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredCurateCelebrities.map((person: any) => ({
+      curateSnapSource.map((person: any) => ({
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
@@ -2028,7 +2097,7 @@ export default function VotePage() {
         personId: person.id,
         personName: person.name,
       })),
-    [filteredCurateCelebrities],
+    [curateSnapSource],
   );
 
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {

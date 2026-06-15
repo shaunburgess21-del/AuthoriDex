@@ -24,6 +24,7 @@ const ACTIVE_HEX: Record<string, string> = {
 };
 
 function getHexColor(category: string): string {
+  if (category === "All") return "#22D3EE";
   const style = getCategoryStyle(category);
   const match = style.text.match(/\[([#\w]+)\]/);
   if (match) return match[1];
