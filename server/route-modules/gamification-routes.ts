@@ -6,7 +6,6 @@ import { requireAuth, type AuthRequest } from "../auth-middleware";
 import { gamificationService } from "../services/gamification";
 import { awardStreakMilestoneBadge } from "../services/badges";
 import {
-  STREAK_GRACE_PERIOD_DAYS,
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
   streakMilestoneActionKey,
@@ -132,8 +131,7 @@ export function registerGamificationRoutes(app: Express): void {
   //   * profiles.current_streak  — the headline counter
   //   * profiles.longest_streak  — peak ever reached (lazily promoted)
   //   * profiles.last_login_date — authoritative gate for the next
-  //                                consecutive-day / grace / reset
-  //                                decision
+  //                                consecutive-day / reset decision
   //   * xp_ledger entries for daily_login (always), streak_bonus
   //     (consecutive day, non-milestone), and streak_milestone_<n>
   //     (lifetime once-per-milestone)
@@ -146,7 +144,6 @@ export function registerGamificationRoutes(app: Express): void {
     try {
       const today = utcDateString();
       const yesterday = utcDateOffset(1);
-      const dayBeforeYesterday = utcDateOffset(1 + STREAK_GRACE_PERIOD_DAYS);
 
       const [profile] = await db
         .select({
@@ -178,22 +175,12 @@ export function registerGamificationRoutes(app: Express): void {
         });
       }
 
-      // Decide the next streak value from the calendar gap. Only three
-      // outcomes:
-      //   - yesterday          → +1 (normal consecutive)
-      //   - within grace window → +1 (the user "saved" their streak)
+      // Decide the next streak value from the calendar gap:
+      //   - yesterday → +1 (consecutive)
       //   - anything else (older, or null) → reset to 1
       let nextStreak: number;
-      let graceUsed = false;
       if (profile.lastLoginDate === yesterday) {
         nextStreak = profile.currentStreak + 1;
-      } else if (
-        profile.lastLoginDate &&
-        profile.lastLoginDate >= dayBeforeYesterday &&
-        profile.lastLoginDate < yesterday
-      ) {
-        nextStreak = profile.currentStreak + 1;
-        graceUsed = true;
       } else {
         nextStreak = 1;
       }
@@ -298,7 +285,7 @@ export function registerGamificationRoutes(app: Express): void {
             userId,
             "streak_bonus",
             `streak_bonus_${today}_${userId}`,
-            { date: today, streak: nextStreak, graceUsed },
+            { date: today, streak: nextStreak },
           );
           if (result.success) {
             bonusXpAwarded = result.xpAwarded;
@@ -319,7 +306,6 @@ export function registerGamificationRoutes(app: Express): void {
         creditsAwarded,
         isMilestone: milestoneHit !== null,
         milestoneDay: milestoneHit ?? undefined,
-        graceUsed,
         bonusActionKey,
         alreadyCheckedIn: false,
       });

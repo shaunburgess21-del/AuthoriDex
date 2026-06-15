@@ -49,16 +49,6 @@ export const STREAK_MILESTONE_XP: Record<StreakMilestone, number> = {
 };
 
 /**
- * Number of consecutive missed UTC days a streak survives before
- * resetting to 1. Today the rule is: missing exactly one day still
- * counts (the user gets a "grace day"); missing two in a row resets.
- *
- * The grace window is intentionally tight — the goal is to forgive a
- * single travel/illness day, not to let the streak idle for a week.
- */
-export const STREAK_GRACE_PERIOD_DAYS = 1;
-
-/**
  * Length of the visible dot row on the streak toast (last node is the
  * gift). Drives the "next milestone" pacing on the in-toast timeline.
  */

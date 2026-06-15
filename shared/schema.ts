@@ -934,9 +934,8 @@ export const profiles = pgTable("profiles", {
   longestStreak: integer("longest_streak").notNull().default(0),
   // ISO date string (YYYY-MM-DD, UTC) for the last day this user
   // completed daily check-in. Authoritative input to the streak state
-  // machine: today => idempotent, yesterday => increment, two days ago
-  // => grace-day increment, older => reset to 1. Nullable for accounts
-  // that have never checked in.
+  // machine: today => idempotent, yesterday => increment, older => reset
+  // to 1. Nullable for accounts that have never checked in.
   lastLoginDate: text("last_login_date"),
   // Referral funnel — see migrations/0059_referral_system.sql.
   // referralCode: stable per-user share token ("VX" + 6 chars) shown

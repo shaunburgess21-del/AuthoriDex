@@ -22,8 +22,6 @@ interface StreakToastProps {
   isMilestone?: boolean;
   /** When isMilestone, which milestone level was hit. */
   milestoneDay?: number;
-  /** True when the daily-checkin used the grace-period rule today. */
-  graceUsed?: boolean;
   /** Sonner-supplied dismiss handler. Wired to the close button. */
   onClose: () => void;
 }
@@ -105,7 +103,6 @@ export function StreakToast({
   reason,
   isMilestone = false,
   milestoneDay,
-  graceUsed = false,
   onClose,
 }: StreakToastProps) {
   const { start, end, giftDay, pastTopTier } = buildTimeline(currentStreak);
@@ -157,11 +154,6 @@ export function StreakToast({
                 +{xpAwarded} XP
               </span>{" "}
               · {reason}
-            </p>
-          )}
-          {graceUsed && !isMilestone && (
-            <p className="text-[11px] text-muted-foreground/80">
-              Grace day used — your streak is safe.
             </p>
           )}
         </div>

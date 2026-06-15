@@ -54,7 +54,6 @@ import {
   Zap,
 } from "lucide-react";
 import {
-  STREAK_GRACE_PERIOD_DAYS,
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
   STREAK_TARGET_DAYS,
@@ -1092,14 +1091,7 @@ function StreaksPanel() {
 
       <Card className="p-4">
         <h4 className="font-semibold mb-2">Current Configuration</h4>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3 text-sm">
-          <div>
-            <p className="text-xs text-muted-foreground">Grace period</p>
-            <p className="font-semibold">
-              {STREAK_GRACE_PERIOD_DAYS} day
-              {STREAK_GRACE_PERIOD_DAYS === 1 ? "" : "s"}
-            </p>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">Target days</p>
             <p className="font-semibold">{STREAK_TARGET_DAYS}</p>

@@ -1,7 +1,6 @@
 /**
  * Client-side streak toast configuration. The numeric / behavioural
- * constants (cycle length, milestone days, milestone XP, grace
- * period) are owned by `shared/streak-config.ts` so the server, the
+ * constants (cycle length, milestone days, milestone XP) are owned by `shared/streak-config.ts` so the server, the
  * notifications cron, and the UI cannot drift apart. This module only
  * adds UI-flavoured timing and copy.
  */
@@ -9,7 +8,6 @@
 export {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
-  STREAK_GRACE_PERIOD_DAYS,
   STREAK_TARGET_DAYS,
   getNextMilestone,
   streakMilestoneActionKey,

@@ -55,7 +55,6 @@ interface DailyCheckinResponse {
   xpAwarded: number;
   isMilestone: boolean;
   milestoneDay?: number;
-  graceUsed?: boolean;
   bonusActionKey?: string | null;
   alreadyCheckedIn: boolean;
 }
@@ -270,7 +269,6 @@ export function useDailyCheckin(enabled: boolean = true) {
                   reason,
                   isMilestone: data.isMilestone,
                   milestoneDay: data.milestoneDay,
-                  graceUsed: data.graceUsed ?? false,
                   onClose: () => toast.dismiss(id),
                 }),
               {

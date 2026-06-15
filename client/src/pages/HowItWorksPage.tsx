@@ -455,10 +455,8 @@ function StreakExplainer() {
               on VoxDex.
             </li>
             <li>
-              Miss a day? You get one grace day — your streak survives a
-              single missed day.
+              Miss a day and your streak resets to 1.
             </li>
-            <li>Miss two days in a row and your streak resets to 1.</li>
           </ul>
         </div>
       </div>
