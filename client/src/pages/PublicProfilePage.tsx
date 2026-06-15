@@ -26,7 +26,7 @@ import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { appendShareAttribution } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/ui/CountryFlag";
-import { getCountryName } from "@shared/countries";
+import { getCountryName, resolveCountryCode } from "@shared/countries";
 import { getEthnicityLabel } from "@shared/ethnicity";
 import { CURRENCY, formatVox } from "@/lib/currency";
 
@@ -1129,12 +1129,14 @@ function ProfileAboutStrip({
     other: "Other",
   };
 
+  const originCode = resolveCountryCode(profile.countryOfOrigin ?? null);
+  const residenceCode = resolveCountryCode(profile.countryOfResidence ?? null);
   const originName =
-    getCountryName(profile.countryOfOrigin ?? null) ??
+    getCountryName(originCode) ??
     profile.countryOfOrigin ??
     null;
   const residenceName =
-    getCountryName(profile.countryOfResidence ?? null) ??
+    getCountryName(residenceCode) ??
     profile.countryOfResidence ??
     null;
   const sameCountry =
@@ -1149,7 +1151,7 @@ function ProfileAboutStrip({
         className="inline-flex items-center gap-1.5"
         title="Country of origin"
       >
-        <CountryFlag code={profile.countryOfOrigin} title={originName} />
+        <CountryFlag code={originCode ?? profile.countryOfOrigin} title={originName} />
         <span>{originName}</span>
         {!sameCountry && residenceName && (
           <span className="text-muted-foreground">(origin)</span>
@@ -1165,7 +1167,7 @@ function ProfileAboutStrip({
         className="inline-flex items-center gap-1.5"
         title="Country of residence"
       >
-        <CountryFlag code={profile.countryOfResidence} title={residenceName} />
+        <CountryFlag code={residenceCode ?? profile.countryOfResidence} title={residenceName} />
         <span>{residenceName}</span>
         <span className="text-muted-foreground">(resides)</span>
       </span>,
