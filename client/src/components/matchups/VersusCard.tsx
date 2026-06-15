@@ -1,4 +1,4 @@
-import { type MouseEvent } from "react";
+import { type MouseEvent, useState } from "react";
 import { Link } from "wouter";
 import { Users, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,8 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { handleImageError } from "@/lib/imageResolver";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useMatchupHelpDismissed } from "@/hooks/useMatchupHelpDismissed";
+import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
+import { DiscussionButton } from "@/components/comments/DiscussionButton";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -35,6 +37,7 @@ export interface VersusCardMatchup {
   personAId?: string | null;
   personBId?: string | null;
   relatedPersonIds?: string[];
+  commentCount?: number;
 }
 
 export function VersusCard({
@@ -47,6 +50,7 @@ export function VersusCard({
   leaderboardCategories,
   onNavigateToDetail,
   onBrowseFullScreen,
+  enableDiscussion = false,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -57,12 +61,15 @@ export function VersusCard({
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
+  enableDiscussion?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
   const { dismissed: helpDismissed, dismissHelp } = useMatchupHelpDismissed();
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+  const showDiscussion = enableDiscussion && !!matchup.slug;
 
   return (
     <div className="relative group h-full">
@@ -98,18 +105,18 @@ export function VersusCard({
               <button
                 type="button"
                 onClick={onNavigateToDetail}
-                className={`text-sm font-semibold transition-colors ${hasVoted ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" : "text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"}`}
+                className="text-sm font-semibold transition-colors text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"
                 data-testid={`link-matchup-${matchup.id}`}
               >
-                {hasVoted ? "View details →" : matchup.promptText || "Who do you prefer?"}
+                {matchup.promptText || "Who do you prefer?"}
               </button>
             ) : matchup.slug ? (
               <Link
                 href={`/vote/matchups/${matchup.slug}`}
-                className={`text-sm font-semibold transition-colors ${hasVoted ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300" : "text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"}`}
+                className="text-sm font-semibold transition-colors text-foreground/80 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400"
                 data-testid={`link-matchup-${matchup.id}`}
               >
-                {hasVoted ? "View details →" : matchup.promptText || "Who do you prefer?"}
+                {matchup.promptText || "Who do you prefer?"}
               </Link>
             ) : (
               <span className="text-sm font-semibold text-foreground/80 dark:text-slate-300">
@@ -277,22 +284,64 @@ export function VersusCard({
             </div>
           </div>
 
-          <div className="px-4 mt-2 min-h-7 flex items-center justify-center">
+          <div className="px-4 mt-2 min-h-7 flex items-center">
             {hasVoted ? (
-              <div className="flex items-center justify-center gap-2">
-                <span className="text-[10px] text-slate-500/70">Tap an image or VS to change your vote</span>
-                <span className="text-[10px] text-slate-500/40">|</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveVote(matchup.id)}
-                  className="text-[10px] text-slate-500/70 hover:text-red-600/80 dark:hover:text-red-400/80 transition-colors"
-                  data-testid={`button-remove-vote-${matchup.id}`}
-                >
-                  Remove vote
-                </button>
+              <div className="flex items-center gap-2 w-full">
+                <div className="flex-1 min-w-0 flex items-center">
+                  {showDiscussion ? (
+                    <DiscussionButton
+                      count={matchup.commentCount}
+                      onClick={() => setDiscussionOpen(true)}
+                      testId={`button-discussion-matchup-${matchup.id}`}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveVote(matchup.id)}
+                      className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
+                      data-testid={`button-remove-vote-${matchup.id}`}
+                    >
+                      Remove vote
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 flex items-center justify-center">
+                  {matchup.slug && onNavigateToDetail ? (
+                    <button
+                      type="button"
+                      onClick={onNavigateToDetail}
+                      className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate"
+                      data-testid={`button-view-details-${matchup.id}`}
+                    >
+                      View details
+                    </button>
+                  ) : matchup.slug ? (
+                    <Link
+                      href={`/vote/matchups/${matchup.slug}`}
+                      className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate"
+                      data-testid={`button-view-details-${matchup.id}`}
+                    >
+                      View details
+                    </Link>
+                  ) : null}
+                </div>
+                <div className="flex-1 min-w-0 flex items-center justify-end">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium border truncate max-w-full ${
+                      votedA
+                        ? "border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400"
+                        : votedB
+                          ? "border-amber-500/50 dark:border-amber-500/40 text-amber-600 dark:text-amber-400"
+                          : "border-slate-400/50 dark:border-slate-500/40 text-slate-500 dark:text-slate-400"
+                    }`}
+                    data-testid={`badge-voted-matchup-${matchup.id}`}
+                  >
+                    {votedA ? matchup.optionAText : votedB ? matchup.optionBText : "Neutral"}
+                  </span>
+                </div>
               </div>
             ) : !helpDismissed ? (
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500/70">
+              <div className="flex w-full items-center justify-center gap-2 text-xs text-slate-500/70">
                 <span className="font-medium">Tap an image to vote or VS to remain Neutral</span>
                 <button
                   type="button"
@@ -312,6 +361,15 @@ export function VersusCard({
           </div>
         </div>
       </Card>
+      {showDiscussion && matchup.slug ? (
+        <CardCommentsFocusOverlay
+          open={discussionOpen}
+          onClose={() => setDiscussionOpen(false)}
+          entityType="matchup"
+          slug={matchup.slug}
+          contextTitle={matchup.title}
+        />
+      ) : null}
     </div>
   );
 }

@@ -558,6 +558,35 @@ export function CardComments({
   );
 }
 
+/**
+ * Standalone full-screen discussion overlay for the same thread used on detail
+ * pages. Reuses CommentsFocusShell + CardCommentsFocusInner (same query key per
+ * slug), so comments posted here mirror the detail page and vice versa.
+ */
+export function CardCommentsFocusOverlay({
+  open,
+  onClose,
+  entityType,
+  slug,
+  contextTitle,
+  placeholder = "Share your thoughts...",
+}: {
+  open: boolean;
+  onClose: () => void;
+  entityType: CommentEntityType;
+  slug: string;
+  contextTitle?: string | null;
+  placeholder?: string;
+}) {
+  return (
+    <CommentsFocusShell open={open} onClose={onClose} contextTitle={contextTitle}>
+      {open ? (
+        <CardCommentsFocusInner entityType={entityType} slug={slug} placeholder={placeholder} />
+      ) : null}
+    </CommentsFocusShell>
+  );
+}
+
 function SignInToComment({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="text-center py-3 border-t border-border/20">
