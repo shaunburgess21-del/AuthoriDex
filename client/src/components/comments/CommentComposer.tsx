@@ -6,6 +6,7 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
+const DEFAULT_COMMENT_MAX_LENGTH = 5000;
 
 const TEXTAREA_BASE_CLASS =
   "text-foreground caret-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30";
@@ -26,6 +27,8 @@ export interface CommentComposerProps {
   supportsFullscreen?: boolean;
   parentExpanded?: boolean;
   variant?: "card" | "inline";
+  /** Hard character cap; mirrors the server limit. */
+  maxLength?: number;
   testIds?: {
     input?: string;
     inputFullscreen?: string;
@@ -50,6 +53,7 @@ export function CommentComposer({
   supportsFullscreen = true,
   parentExpanded = false,
   variant = "card",
+  maxLength = DEFAULT_COMMENT_MAX_LENGTH,
   testIds,
 }: CommentComposerProps) {
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
@@ -63,7 +67,9 @@ export function CommentComposer({
   const isFullscreenComposer = composerMode === "fullscreen";
 
   const showButtons = isFocused || value.length > 0;
-  const submitDisabled = disabled || !value.trim() || isPending;
+  const overLimit = value.length > maxLength;
+  const nearLimit = value.length > maxLength - 200;
+  const submitDisabled = disabled || !value.trim() || isPending || overLimit;
 
   const resizeAutoComposer = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -180,6 +186,14 @@ export function CommentComposer({
     const isFullscreen = idSuffix === "-fullscreen";
     return (
       <div className={buttonRowClass} aria-hidden={!showButtons}>
+        <div className="mr-auto flex items-center gap-2 text-[11px] text-muted-foreground/80">
+          <span className="hidden sm:inline">Ctrl + Enter to post</span>
+          {nearLimit && (
+            <span className={overLimit ? "text-rose-500" : "text-amber-500"}>
+              {value.length}/{maxLength}
+            </span>
+          )}
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -239,6 +253,7 @@ export function CommentComposer({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           onKeyDown={handleKeyDown}
+          maxLength={maxLength}
           className={`h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base ${TEXTAREA_BASE_CLASS}`}
           data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
         />
@@ -291,6 +306,7 @@ export function CommentComposer({
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
+                maxLength={maxLength}
                 className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none ${TEXTAREA_BASE_CLASS}${isManualComposer ? " h-40 overflow-y-auto" : ""}`}
                 rows={1}
                 data-testid={testIds?.input ?? "input-comment"}

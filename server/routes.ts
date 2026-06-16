@@ -3793,6 +3793,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let isNewVote = false;
       if (existingVote.length > 0) {
+        const previousVoteType = existingVote[0]?.voteType ?? null;
+        if (previousVoteType === voteType) {
+          // Toggle off: repeat tap on the same vote removes it. Mirrors the
+          // unified comment vote endpoint so the UI's optimistic toggle and the
+          // server agree (no highlight flicker on second tap). Counts are
+          // derived via COUNT over insight_votes, so no counter to maintain.
+          await db
+            .delete(insightVotes)
+            .where(and(
+              eq(insightVotes.insightId, id),
+              eq(insightVotes.userId, userId)
+            ));
+          await appendVoteAction(db, {
+            userId,
+            voteType: "insight_vote",
+            targetType: "community_insight",
+            targetId: id,
+            actionKind: "remove",
+            prevValue: previousVoteType,
+            source: "community-insight-vote",
+          });
+          return res.json({ success: true, vote: null, userVote: null, xp: null });
+        }
         await db
           .update(insightVotes)
           .set({ voteType })
@@ -3806,7 +3829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           targetType: "community_insight",
           targetId: id,
           actionKind: "update",
-          prevValue: existingVote[0]?.voteType ?? null,
+          prevValue: previousVoteType,
           nextValue: voteType,
           source: "community-insight-vote",
         });
