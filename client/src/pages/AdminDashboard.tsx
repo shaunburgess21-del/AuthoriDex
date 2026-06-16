@@ -118,7 +118,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
-import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS } from "@shared/constants";
+import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import {
   EMPTY_CELEBRITY_FORM,
   DEFAULT_SEED_APPROVAL_COUNTS,
@@ -503,7 +503,7 @@ function CreateMarketModal({
   }, [editMarket, open]);
 
   const addEntry = () => {
-    if (entries.length < 20) {
+    if (entries.length < OPINION_POLL_MAX_OPTIONS) {
       setEntries([...entries, { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" }]);
     }
   };
@@ -676,7 +676,7 @@ function CreateMarketModal({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="binary">Binary (Yes / No)</SelectItem>
-                <SelectItem value="multi">Multi-Option (3-20 choices)</SelectItem>
+                <SelectItem value="multi">Multi-Option (3-{OPINION_POLL_MAX_OPTIONS} choices)</SelectItem>
                 <SelectItem value="updown">Up/Down (Above / Below strike)</SelectItem>
               </SelectContent>
             </Select>
@@ -1024,7 +1024,7 @@ function CreateMarketModal({
                   variant="outline" 
                   size="sm" 
                   onClick={addEntry}
-                  disabled={entries.length >= 20}
+                  disabled={entries.length >= OPINION_POLL_MAX_OPTIONS}
                   data-testid="button-add-entry"
                 >
                   <Plus className="h-3 w-3 mr-1" />
@@ -1035,7 +1035,7 @@ function CreateMarketModal({
             <p className="text-xs text-muted-foreground">
               {openMarketType === "binary" ? "Binary markets always have exactly 2 outcomes (Yes/No)." :
                openMarketType === "updown" ? "Up/Down markets always have exactly 2 outcomes (Above/Below)." :
-               `Multi-option: ${entries.length} of 3-20 outcomes.`}
+               `Multi-option: ${entries.length} of 3-${OPINION_POLL_MAX_OPTIONS} outcomes.`}
             </p>
             {entries.map((entry, idx) => (
               <div key={idx} className="space-y-0">
@@ -3361,7 +3361,7 @@ export default function AdminDashboard() {
   };
 
   const addOpinionOption = () => {
-    if (opinionPollForm.options.length >= 20) return;
+    if (opinionPollForm.options.length >= OPINION_POLL_MAX_OPTIONS) return;
     setOpinionPollForm(prev => ({
       ...prev,
       options: [...prev.options, { name: "", imageUrl: "", personId: "", seedCount: 0 }],
@@ -9631,13 +9631,13 @@ export default function AdminDashboard() {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Options ({opinionPollForm.options.length}/20)</Label>
+                <Label>Options ({opinionPollForm.options.length}/{OPINION_POLL_MAX_OPTIONS})</Label>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={addOpinionOption}
-                  disabled={opinionPollForm.options.length >= 20}
+                  disabled={opinionPollForm.options.length >= OPINION_POLL_MAX_OPTIONS}
                   data-testid="button-add-opinion-option"
                 >
                   <Plus className="h-3 w-3 mr-1" />

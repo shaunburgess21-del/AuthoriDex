@@ -62,7 +62,7 @@ export const CATEGORIES_LEADERBOARD = CANONICAL_CATEGORIES.filter(c => c.id !== 
 
 // ── Opinion Poll options constraints ──────────────────────────────────────────
 export const OPINION_POLL_MIN_OPTIONS = 3;
-export const OPINION_POLL_MAX_OPTIONS = 20;
+export const OPINION_POLL_MAX_OPTIONS = 30;
 
 /**
  * For filter bars that also need the "all"/"favorites"/"trending" UI-only entries.

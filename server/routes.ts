@@ -144,6 +144,8 @@ import {
   canonicalizePersonCategory,
   getMarketCategoryLabel,
   normalizeMarketCategory,
+  OPINION_POLL_MIN_OPTIONS,
+  OPINION_POLL_MAX_OPTIONS,
 } from "@shared/constants";
 import {
   shouldUseColdStart,
@@ -16536,8 +16538,8 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Title, slug, and category are required" });
       }
 
-      if (!options || !Array.isArray(options) || options.length < 3 || options.length > 20) {
-        return res.status(400).json({ error: "Between 3 and 20 options are required" });
+      if (!options || !Array.isArray(options) || options.length < OPINION_POLL_MIN_OPTIONS || options.length > OPINION_POLL_MAX_OPTIONS) {
+        return res.status(400).json({ error: `Between ${OPINION_POLL_MIN_OPTIONS} and ${OPINION_POLL_MAX_OPTIONS} options are required` });
       }
 
       const [maxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(opinionPolls);
@@ -16618,6 +16620,9 @@ Target length: about 90-150 words.`;
       const [updated] = await db.update(opinionPolls).set(updates).where(eq(opinionPolls.id, id)).returning();
 
       if (options && Array.isArray(options)) {
+        if (options.length < OPINION_POLL_MIN_OPTIONS || options.length > OPINION_POLL_MAX_OPTIONS) {
+          return res.status(400).json({ error: `Between ${OPINION_POLL_MIN_OPTIONS} and ${OPINION_POLL_MAX_OPTIONS} options are required` });
+        }
         await db.delete(opinionPollOptions).where(eq(opinionPollOptions.pollId, id));
         if (options.length > 0) {
           await db.insert(opinionPollOptions).values(
@@ -17279,8 +17284,8 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Binary markets must have exactly 2 entries" });
       }
 
-      if (openMarketType === "multi" && (entryList.length < 3 || entryList.length > 20)) {
-        return res.status(400).json({ error: "Multi markets must have 3-20 entries" });
+      if (openMarketType === "multi" && (entryList.length < OPINION_POLL_MIN_OPTIONS || entryList.length > OPINION_POLL_MAX_OPTIONS)) {
+        return res.status(400).json({ error: `Multi markets must have ${OPINION_POLL_MIN_OPTIONS}-${OPINION_POLL_MAX_OPTIONS} entries` });
       }
 
       if (openMarketType === "updown") {
@@ -17962,7 +17967,7 @@ Target length: about 90-150 words.`;
             if (e.label?.trim()) entries.push({ label: e.label.trim(), description: e.description || undefined });
           }
         } else {
-          for (let o = 1; o <= 20; o++) {
+          for (let o = 1; o <= OPINION_POLL_MAX_OPTIONS; o++) {
             const label = row[`option${o}`]?.toString().trim();
             if (label) entries.push({ label });
           }
@@ -17991,7 +17996,7 @@ Target length: about 90-150 words.`;
 
         if (entries.length === 0) { msgs.push({ severity: "error", field: "entries", message: "At least one entry is required" }); hasError = true; }
         else if (openMarketType === "binary" && entries.length !== 2) { msgs.push({ severity: "error", field: "entries", message: "Binary markets must have exactly 2 entries" }); hasError = true; }
-        else if (openMarketType === "multi" && (entries.length < 3 || entries.length > 20)) { msgs.push({ severity: "error", field: "entries", message: "Multi markets must have 3-20 entries" }); hasError = true; }
+        else if (openMarketType === "multi" && (entries.length < OPINION_POLL_MIN_OPTIONS || entries.length > OPINION_POLL_MAX_OPTIONS)) { msgs.push({ severity: "error", field: "entries", message: `Multi markets must have ${OPINION_POLL_MIN_OPTIONS}-${OPINION_POLL_MAX_OPTIONS} entries` }); hasError = true; }
         else if (openMarketType === "updown" && entries.length !== 2) { msgs.push({ severity: "error", field: "entries", message: "Up/Down markets must have exactly 2 entries" }); hasError = true; }
 
         if (openMarketType === "updown") {

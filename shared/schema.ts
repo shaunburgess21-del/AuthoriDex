@@ -1800,7 +1800,7 @@ export type IngestionRun = typeof ingestionRuns.$inferSelect;
 export type InsertIngestionRun = z.infer<typeof insertIngestionRunSchema>;
 
 // ============================================================================
-// OPINION POLLS — Multi-option polls (3–20 options, single-select vote)
+// OPINION POLLS — Multi-option polls (3–30 options, single-select vote)
 // ============================================================================
 
 export const opinionPolls = pgTable("opinion_polls", {

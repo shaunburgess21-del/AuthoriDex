@@ -404,8 +404,8 @@ async function main(): Promise<void> {
     } else if (payload.type === "binary" && payload.entries.length !== 2) {
       msgs.push({ severity: "error", field: "entries", message: "Binary markets must have exactly 2 entries" });
       hasError = true;
-    } else if (payload.type === "multi" && (payload.entries.length < 3 || payload.entries.length > 20)) {
-      msgs.push({ severity: "error", field: "entries", message: "Multi markets must have 3-20 entries" });
+    } else if (payload.type === "multi" && (payload.entries.length < 3 || payload.entries.length > 30)) {
+      msgs.push({ severity: "error", field: "entries", message: "Multi markets must have 3-30 entries" });
       hasError = true;
     } else if (payload.type === "updown" && payload.entries.length !== 2) {
       msgs.push({ severity: "error", field: "entries", message: "Up/Down markets must have exactly 2 entries" });
