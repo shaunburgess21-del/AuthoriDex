@@ -5,7 +5,16 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   // Tab pulse skins are chosen at runtime via getInsightsTabCardClass() in
   // shared/ — without literals under client/src, Tailwind drops their CSS in prod.
-  safelist: ["pulse-card-cyan", "pulse-card-purple"],
+  safelist: [
+    "pulse-card-blue",
+    "pulse-card-green",
+    "pulse-card-orange",
+    "pulse-card-amber",
+    "pulse-card-cyan",
+    "pulse-card-purple",
+    "pulse-card-voxdex",
+    "pulse-card-flush",
+  ],
   // Tailwind v3.4 opt-in (default in v4): `hover:` only matches on devices
   // that actually support hover (`@media (hover: hover)`). Without this, a
   // tap on a touchscreen briefly applies `:hover` and the state sticks until

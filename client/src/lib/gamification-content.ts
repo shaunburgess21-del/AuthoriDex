@@ -50,6 +50,26 @@ export const KNOWLEDGE_TABS: KnowledgeTab[] = [
   { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },
 ];
 
+/**
+ * Maps each knowledge tab to the matching `.pulse-card-*` glow skin defined in
+ * client/src/index.css (the same premium glow used on the Insights page). Five
+ * of the six map onto existing variants; Vox uses the amber variant added for
+ * the currency accent. These literals live under client/src so Tailwind's
+ * content scan retains the CSS in production.
+ */
+export const KNOWLEDGE_TAB_GLOW: Record<KnowledgeTabId, string> = {
+  xp: "pulse-card-blue",
+  ranks: "pulse-card-voxdex",
+  credits: "pulse-card-amber",
+  badges: "pulse-card-green",
+  vote: "pulse-card-cyan",
+  predict: "pulse-card-purple",
+};
+
+export function glowClassFor(id: KnowledgeTabId): string {
+  return KNOWLEDGE_TAB_GLOW[id];
+}
+
 export interface XpActionRow {
   actionKey: string;
   displayName: string;

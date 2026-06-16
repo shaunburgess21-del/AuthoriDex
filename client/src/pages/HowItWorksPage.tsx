@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation, useSearch } from "wouter";
 import { ArrowLeft, BookOpen, ChevronRight, Flame, Info, Sparkles } from "lucide-react";
 import {
   STREAK_MILESTONES,
@@ -19,6 +19,7 @@ import {
   CAPABILITY_GATES,
   VOTE_SURFACES,
   PREDICT_SURFACES,
+  glowClassFor,
   type KnowledgeTab,
   type KnowledgeTabId,
   type XpActionRow,
@@ -106,29 +107,46 @@ function accentFor(id: KnowledgeTabId): string {
   return KNOWLEDGE_TABS.find((tab) => tab.id === id)!.accent;
 }
 
+/**
+ * Glowing hero container that opens each tab. Carries the per-tab pulse-card
+ * glow (color keyed to the active tab, mirroring the Insights page) and
+ * optionally wraps lead content like the stat-pill row. Uses pulse-card-flush
+ * so the large static header glows without the small-tile hover lift.
+ */
 function SectionHeading({
   id,
   title,
   subtitle,
+  children,
 }: {
   id: KnowledgeTabId;
   title: string;
   subtitle: string;
+  children?: ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <h2
-        className={
-          id === "xp"
-            ? "text-2xl font-semibold tracking-tight text-slate-700 dark:text-white"
-            : "text-2xl font-semibold tracking-tight"
-        }
-        style={id === "xp" ? undefined : { color: accentFor(id) }}
-      >
-        {title}
-      </h2>
-      <p className="text-sm text-muted-foreground">{subtitle}</p>
-    </div>
+    <section
+      className={cn(
+        "space-y-4 rounded-xl p-4 sm:p-5",
+        glowClassFor(id),
+        "pulse-card-flush",
+      )}
+    >
+      <div className="space-y-1">
+        <h2
+          className={
+            id === "xp"
+              ? "text-2xl font-semibold tracking-tight text-slate-700 dark:text-white"
+              : "text-2xl font-semibold tracking-tight"
+          }
+          style={id === "xp" ? undefined : { color: accentFor(id) }}
+        >
+          {title}
+        </h2>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -287,30 +305,30 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
         id="xp"
         title="XP — Experience Points"
         subtitle="The headline progression metric. Earned from almost every meaningful interaction. Drives your rank."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatPill
-          label="Ways to earn"
-          value={String(userFacingActions.length)}
-          variant="xp-chrome"
-        />
-        <StatPill
-          label="Daily maximum"
-          value={`${maxDaily.toLocaleString()} XP`}
-          variant="xp-chrome"
-        />
-        <StatPill
-          label="Milestone bonus"
-          value="+500 XP"
-          sublabel="Day 100 streak"
-          variant="xp-chrome"
-        />
-      </div>
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatPill
+            label="Ways to earn"
+            value={String(userFacingActions.length)}
+            variant="xp-chrome"
+          />
+          <StatPill
+            label="Daily maximum"
+            value={`${maxDaily.toLocaleString()} XP`}
+            variant="xp-chrome"
+          />
+          <StatPill
+            label="Milestone bonus"
+            value="+500 XP"
+            sublabel="Day 100 streak"
+            variant="xp-chrome"
+          />
+        </div>
+      </SectionHeading>
 
       <RankLadderStrip onJumpToRanks={() => onJumpToTab?.("ranks")} />
 
-      <Card className="space-y-3 p-4">
+      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("xp"), "pulse-card-flush")}>
         <h3 className="font-semibold">How XP is awarded</h3>
         <p className="text-sm text-muted-foreground">
           Every action you take on VoxDex that contributes to the community
@@ -541,7 +559,7 @@ function RanksSection() {
         ))}
       </div>
 
-      <Card className="space-y-3 p-4">
+      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("ranks"), "pulse-card-flush")}>
         <h3 className="font-semibold">Capabilities unlocked by tier</h3>
         <p className="text-sm text-muted-foreground">
           Each rank unlocks a specific set of platform actions. Hit the
@@ -600,17 +618,17 @@ function CreditsSection() {
         id="credits"
         title="Vox — The Prediction Currency"
         subtitle="Virtual currency you spend to place predictions. Easier to spend than to earn — that's by design."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatPill
-          label="Signup grant"
-          value={formatVox(SIGNUP_CREDIT_GRANT)}
-          accent={accent}
-        />
-        <StatPill label="Spend on" value="Predictions" accent={accent} />
-        <StatPill label="Earn back via" value="Wins + Engagement" accent={accent} />
-      </div>
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatPill
+            label="Signup grant"
+            value={formatVox(SIGNUP_CREDIT_GRANT)}
+            accent={accent}
+          />
+          <StatPill label="Spend on" value="Predictions" accent={accent} />
+          <StatPill label="Earn back via" value="Wins + Engagement" accent={accent} />
+        </div>
+      </SectionHeading>
 
       <Card className="space-y-3 p-4">
         <h3 className="font-semibold">Why virtual currency?</h3>
@@ -702,13 +720,7 @@ function CreditEarnTable({ accent }: { accent: string }) {
   })();
 
   return (
-    <Card
-      className="space-y-3 p-4"
-      style={{
-        borderColor: `${accent}66`,
-        backgroundColor: `${accent}0F`,
-      }}
-    >
+    <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("credits"), "pulse-card-flush")}>
       <h3 className="font-semibold">Earn Vox by participating</h3>
       <p className="text-sm text-muted-foreground">
         Engagement actions earn small daily-capped top-ups. Approved
@@ -985,7 +997,7 @@ function VoteSection({
         for full earn rates and daily limits.
       </p>
 
-      <Card className="space-y-3 p-4">
+      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("vote"), "pulse-card-flush")}>
         <h3 className="font-semibold">Vote surfaces</h3>
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
@@ -1197,7 +1209,7 @@ function PredictSection({
         </ul>
       </Card>
 
-      <Card className="space-y-3 p-4">
+      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>
         <h3 className="font-semibold">Predict surfaces</h3>
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
@@ -1325,14 +1337,140 @@ const SECTION_BY_TAB: Record<KnowledgeTabId, SectionRenderer> = {
   predict: ({ onJumpToTab }) => <PredictSection onJumpToTab={onJumpToTab} />,
 };
 
+const KNOWLEDGE_TAB_IDS = new Set<string>(KNOWLEDGE_TABS.map((tab) => tab.id));
+
+/** Resolve the active tab from the `?tab=` query string (default: xp). */
+function parseKnowledgeTab(search: string): KnowledgeTabId {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const tab = params.get("tab");
+  if (tab && KNOWLEDGE_TAB_IDS.has(tab)) return tab as KnowledgeTabId;
+  return "xp";
+}
+
+/**
+ * Reflect the active tab into the address bar so a tab can be shared and
+ * deep-linked (e.g. /how-it-works?tab=ranks). Mirrors the Insights page
+ * pattern: replaceState (no history spam on tab switches) + a popstate so
+ * wouter's useSearch picks up the change. The default XP tab drops the param.
+ */
+function writeKnowledgeTabQuery(tab: KnowledgeTabId): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (tab === "xp") url.searchParams.delete("tab");
+  else url.searchParams.set("tab", tab);
+  // A shared #streak hash should not stick once the user navigates tabs.
+  if (url.hash.replace(/^#/, "") === "streak") url.hash = "";
+  window.history.replaceState({}, "", url.toString());
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+/**
+ * Compact "you are here" header for signed-in users: current rank, total XP,
+ * and progress toward the next tier. Reads the live RANKS ladder so thresholds
+ * stay in lockstep with the Ranks tab. Hidden for logged-out visitors, who see
+ * the canonical intro card instead.
+ */
+function ProgressHeader() {
+  const { isLoggedIn } = useAuth();
+  const { data: stats } = useUserStats(isLoggedIn);
+  const rank = stats?.rank;
+  if (!isLoggedIn || !rank) return null;
+
+  const xp = stats?.xpPoints ?? 0;
+  const nextRank = RANKS.find((r) => r.tier === rank.tier + 1) ?? null;
+  const toNext = nextRank ? Math.max(0, nextRank.minXp - xp) : 0;
+  const pct = nextRank
+    ? Math.min(
+        100,
+        Math.max(
+          0,
+          ((xp - rank.minXp) / Math.max(1, nextRank.minXp - rank.minXp)) * 100,
+        ),
+      )
+    : 100;
+
+  return (
+    <Card className="space-y-3 p-4" data-testid="how-it-works-progress">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+            style={{ backgroundColor: rank.color }}
+          >
+            {rank.tier}
+          </span>
+          <div className="leading-tight">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Your rank
+            </div>
+            <div className="font-semibold">{rank.name}</div>
+          </div>
+        </div>
+        <div className="text-right leading-tight">
+          <div className="font-mono text-sm font-semibold">
+            {xp.toLocaleString()} XP
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {nextRank
+              ? `${toNext.toLocaleString()} XP to ${nextRank.name}`
+              : "Top tier reached"}
+          </div>
+        </div>
+      </div>
+      {nextRank && (
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={Math.round(pct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${pct}%`, backgroundColor: rank.color }}
+          />
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function HowItWorksPage() {
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState<KnowledgeTabId>("xp");
+  const search = useSearch();
 
+  const [activeTab, setActiveTab] = useState<KnowledgeTabId>(() => {
+    if (typeof window === "undefined") return "xp";
+    // A #streak deep-link lands on the XP tab (the streak explainer lives there).
+    if (window.location.hash.replace(/^#/, "") === "streak") return "xp";
+    return parseKnowledgeTab(window.location.search);
+  });
+
+  // Keep state in lockstep with the URL so shared links and browser
+  // back/forward resolve to the right tab.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const hash = window.location.hash.replace(/^#/, "");
-    if (hash === "streak") setActiveTab("xp");
+    const fromUrl = parseKnowledgeTab(search);
+    setActiveTab((prev) => (prev === fromUrl ? prev : fromUrl));
+  }, [search]);
+
+  const selectTab = useCallback((tab: KnowledgeTabId) => {
+    writeKnowledgeTabQuery(tab);
+    // Scroll the new section to the top of the viewport (just under the
+    // sticky header) so a long previous tab doesn't leave the reader
+    // mid-page. Skipped implicitly for #streak loads — that path runs
+    // through useScrollToHash on mount, not this click handler.
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const tabsSection = document.getElementById("profile-tabs-section");
+        const headerOffset = 56; // sticky header height (h-14)
+        const top = tabsSection
+          ? Math.max(0, tabsSection.getBoundingClientRect().top + window.scrollY - headerOffset)
+          : 0;
+        window.scrollTo({ top, behavior: "smooth" });
+      });
+    }
   }, []);
 
   useScrollToHash([activeTab]);
@@ -1374,7 +1512,7 @@ export default function HowItWorksPage() {
           <KnowledgeTabsBar
             tabs={KNOWLEDGE_TABS}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={selectTab}
           />
         </div>
       </div>
@@ -1390,7 +1528,9 @@ export default function HowItWorksPage() {
           </p>
         </Card>
 
-        <ActiveSection onJumpToTab={setActiveTab} />
+        <ProgressHeader />
+
+        <ActiveSection onJumpToTab={selectTab} />
 
         <Separator />
 

@@ -18,11 +18,10 @@ export function DiscussionButton({ count, onClick, testId }: DiscussionButtonPro
       type="button"
       onClick={onClick}
       aria-label="Discussion"
-      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline truncate"
+      className="inline-flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline truncate"
       data-testid={testId}
     >
       <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-      <span className="hidden md:inline truncate">Discussion</span>
       {showCount ? <span className="tabular-nums">{count}</span> : null}
     </button>
   );

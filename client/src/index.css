@@ -568,6 +568,7 @@
   .pulse-card-green,
   .pulse-card-red,
   .pulse-card-orange,
+  .pulse-card-amber,
   .pulse-card-cyan,
   .pulse-card-purple,
   .pulse-card-voxdex {
@@ -582,6 +583,7 @@
   .pulse-card-green::before,
   .pulse-card-red::before,
   .pulse-card-orange::before,
+  .pulse-card-amber::before,
   .pulse-card-cyan::before,
   .pulse-card-purple::before,
   .pulse-card-voxdex::before {
@@ -599,6 +601,7 @@
   .pulse-card-green::after,
   .pulse-card-red::after,
   .pulse-card-orange::after,
+  .pulse-card-amber::after,
   .pulse-card-cyan::after,
   .pulse-card-purple::after,
   .pulse-card-voxdex::after {
@@ -616,11 +619,19 @@
   .pulse-card-green > *,
   .pulse-card-red > *,
   .pulse-card-orange > *,
+  .pulse-card-amber > *,
   .pulse-card-cyan > *,
   .pulse-card-purple > *,
   .pulse-card-voxdex > * {
     position: relative;
     z-index: 2;
+  }
+
+  /* Flush modifier: keep the glow but drop the hover lift. Large static
+     reference containers (How It Works section heroes / callout cards) read
+     better without the translateY bounce designed for small market tiles. */
+  .pulse-card-flush:hover {
+    transform: none;
   }
 
   /* ===== NEUTRAL WHITE (Daily Movers) ===== */
@@ -739,6 +750,32 @@
   }
   .pulse-icon-orange {
     background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
+  }
+
+  /* ===== AMBER (Vox / currency) ===== */
+  .pulse-card-amber {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    box-shadow:
+      0 4px 20px -4px rgba(245, 158, 11, 0.15),
+      0 0 40px -10px rgba(245, 158, 11, 0.1);
+  }
+  .pulse-card-amber::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(245, 158, 11) 50%, transparent 100%);
+  }
+  .pulse-card-amber::after {
+    background: radial-gradient(ellipse at top right, rgba(245, 158, 11, 0.14) 0%, transparent 60%);
+  }
+  .pulse-card-amber:hover {
+    transform: translateY(-2px);
+    border-color: rgba(245, 158, 11, 0.28);
+    box-shadow:
+      0 8px 30px -4px rgba(245, 158, 11, 0.175),
+      0 0 50px -10px rgba(245, 158, 11, 0.14);
+  }
+  .pulse-icon-amber {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
   }
 
   /* ===== CYAN (Vote / Crowd) ===== */
@@ -886,6 +923,23 @@
   :root:not(.dark) .pulse-card-orange:hover {
     border-color: rgba(249, 115, 22, 0.4);
     box-shadow: 0 4px 16px -4px rgba(249, 115, 22, 0.15), 0 0 0 1px rgba(249, 115, 22, 0.1);
+  }
+
+  :root:not(.dark) .pulse-card-amber {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.06) 0%, transparent 40%),
+                linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(40 40% 96%) 100%);
+    border-color: rgba(245, 158, 11, 0.25);
+    box-shadow: 0 2px 8px -2px rgba(245, 158, 11, 0.1), 0 0 0 1px rgba(245, 158, 11, 0.06);
+  }
+  :root:not(.dark) .pulse-card-amber::before {
+    background: linear-gradient(90deg, transparent 0%, rgb(245, 158, 11) 50%, transparent 100%);
+  }
+  :root:not(.dark) .pulse-card-amber::after {
+    background: radial-gradient(ellipse at top right, rgba(245, 158, 11, 0.08) 0%, transparent 60%);
+  }
+  :root:not(.dark) .pulse-card-amber:hover {
+    border-color: rgba(245, 158, 11, 0.4);
+    box-shadow: 0 4px 16px -4px rgba(245, 158, 11, 0.15), 0 0 0 1px rgba(245, 158, 11, 0.1);
   }
 
   :root:not(.dark) .pulse-card-cyan {
