@@ -240,7 +240,7 @@ export function OpinionPollCard({
   return (
     <div className="relative group h-full overflow-visible">
       <Card
-        className="relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+        className={`relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "md:pb-[10px]" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -357,7 +357,7 @@ export function OpinionPollCard({
         )}
 
         {(hasVoted || remainingCount > 0) && (
-          <div className="mt-2.5 flex items-center gap-2">
+          <div className={`${hasVoted ? "mt-auto pt-2.5" : "mt-2.5"} flex items-center gap-2`}>
             <div className="flex-1 min-w-0 flex items-center">
               {hasVoted && showDiscussion ? (
                 <DiscussionButton

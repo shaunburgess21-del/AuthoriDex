@@ -77,7 +77,7 @@ export function VersusCard({
       <Card className="relative overflow-visible bg-card dark:bg-[#11151D] border border-border/40 dark:border-0 md:border md:border-border/40 dark:md:border-transparent shadow-sm dark:shadow-none md:shadow-sm group-hover:shadow-lg dark:md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] md:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
-        <div className="relative pt-4 pb-4 flex flex-col flex-1">
+        <div className={`relative pt-4 pb-4 ${hasVoted ? "md:pb-[10px]" : ""} flex flex-col flex-1`}>
           <div className="absolute top-3 right-3 z-10">
             <InteractiveCategoryPill
               category={matchup.category}
@@ -100,7 +100,7 @@ export function VersusCard({
             </div>
           </div>
 
-          <div className="rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
+          <div className="rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
             {matchup.slug && onNavigateToDetail ? (
               <button
                 type="button"
@@ -158,7 +158,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className="px-2 py-2 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <div className="px-2 py-2 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
                 <span className={`font-semibold text-sm truncate block ${votedA ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                   {matchup.optionAText}
                 </span>
@@ -219,7 +219,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className="px-2 py-2 bg-muted/60 dark:bg-slate-900/80 backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <div className="px-2 py-2 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
                 <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
                   {matchup.optionBText}
                 </span>

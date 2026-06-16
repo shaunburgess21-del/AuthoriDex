@@ -818,7 +818,7 @@ function DiscourseCard({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className={`relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "md:pb-[10px]" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
+      className={`relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "md:pb-[14px]" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
@@ -1003,7 +1003,7 @@ function DiscourseCard({
                   <button
                     type="button"
                     onClick={onNavigateToPollDetail}
-                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline"
+                    className="text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
                     More details
@@ -1011,7 +1011,7 @@ function DiscourseCard({
                 ) : (
                   <Link
                     href={`/polls/${topic.slug}`}
-                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
+                    className="text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
                     More details
