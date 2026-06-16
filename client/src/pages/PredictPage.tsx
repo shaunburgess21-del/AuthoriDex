@@ -1702,13 +1702,6 @@ export default function PredictPage() {
   
   const [selectedJackpotPerson, setSelectedJackpotPerson] = useState<TrendingPerson | null>(null);
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
-  
-  useEffect(() => {
-    if (trendingPeople.length > 0 && !selectedJackpotPerson) {
-      const rank1Person = trendingPeople.find(p => p.rank === 1) || trendingPeople[0];
-      setSelectedJackpotPerson(rank1Person);
-    }
-  }, [trendingPeople, selectedJackpotPerson]);
 
   const predictLoadErrors = useMemo(
     () =>
@@ -1781,21 +1774,37 @@ export default function PredictPage() {
     return (trendingPeople || []).filter((p) => eligibleIds.has(p.id));
   }, [nativeJackpotData, trendingPeople]);
 
-  // Defensive: if the previously-selected person dropped out of eligibility,
-  // clear the selection so the UI doesn't silently show a stale picker target.
+  // Keep jackpot selection in sync with the anchored weekly field. Both
+  // `/api/trending` and `/api/native-markets/jackpot` must resolve first —
+  // picking from the full leaderboard before jackpot markets load, then
+  // clearing ineligible picks, caused a visible dropdown flicker.
   useEffect(() => {
-    if (!selectedJackpotPerson) return;
-    // Don't validate against the eligibility list until the jackpot
-    // markets query has actually resolved — otherwise the empty default
-    // `jackpotEligiblePeople` clears the just-picked rank-1 person and
-    // races with the initializer effect above, producing a visible
-    // flicker on first page load while `/api/trending` and
-    // `/api/native-markets/jackpot` arrive at different times.
-    if (!nativeJackpotData) return;
-    if (!jackpotEligiblePeople.some((p) => p.id === selectedJackpotPerson.id)) {
-      setSelectedJackpotPerson(null);
+    if (nativeJackpotData === undefined || trendingPeople.length === 0) return;
+
+    if (selectedJackpotPerson) {
+      const stillEligible = jackpotEligiblePeople.find((p) => p.id === selectedJackpotPerson.id);
+      if (stillEligible) {
+        if (
+          stillEligible.rank !== selectedJackpotPerson.rank ||
+          stillEligible.trendScore !== selectedJackpotPerson.trendScore ||
+          stillEligible.avatar !== selectedJackpotPerson.avatar ||
+          stillEligible.name !== selectedJackpotPerson.name
+        ) {
+          setSelectedJackpotPerson(stillEligible);
+        }
+        return;
+      }
     }
-  }, [selectedJackpotPerson, jackpotEligiblePeople, nativeJackpotData]);
+
+    if (jackpotEligiblePeople.length === 0) {
+      if (selectedJackpotPerson !== null) setSelectedJackpotPerson(null);
+      return;
+    }
+
+    const defaultPerson =
+      jackpotEligiblePeople.find((p) => p.rank === 1) ?? jackpotEligiblePeople[0];
+    setSelectedJackpotPerson(defaultPerson);
+  }, [nativeJackpotData, trendingPeople, jackpotEligiblePeople, selectedJackpotPerson]);
 
   // Sync global category filter to all section filters
   useEffect(() => {

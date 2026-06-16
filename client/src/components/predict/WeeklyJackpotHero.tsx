@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +142,40 @@ export type WeeklyJackpotHeroProps = {
   onRulesClick: () => void;
 } & (BrowseProps | ProfileProps);
 
+const JackpotPersonPicker = memo(function JackpotPersonPicker({
+  selectedPerson,
+  isLoadingPeople,
+  onOpen,
+}: {
+  selectedPerson: TrendingPerson | null;
+  isLoadingPeople: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full max-w-md flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/50 dark:border-amber-500/40 bg-background hover:border-amber-500/70 dark:hover:border-amber-500/60 transition-colors"
+      data-testid="dropdown-jackpot-person"
+    >
+      <div className="flex items-center gap-3">
+        {selectedPerson ? (
+          <>
+            <PersonAvatar name={selectedPerson.name} avatar={selectedPerson.avatar || ""} size="sm" />
+            <div className="text-left">
+              <p className="font-semibold">{selectedPerson.name}</p>
+              <p className="text-xs text-muted-foreground">{selectedPerson.rank ? `Rank #${selectedPerson.rank}` : "New"}</p>
+            </div>
+          </>
+        ) : (
+          <span className="text-muted-foreground">{isLoadingPeople ? "Loading..." : "Select a celebrity"}</span>
+        )}
+      </div>
+      <ChevronDown className="h-5 w-5 text-amber-500 shrink-0" />
+    </button>
+  );
+});
+
 export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
   const {
     onEnterJackpot,
@@ -159,6 +193,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
   const isLoadingPeople = !isProfile ? props.isLoading : false;
 
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const openPersonSearch = useCallback(() => setSearchModalOpen(true), []);
   const { session, loading: authLoading } = useAuth();
   const marketId = jackpotMarket?.id ?? null;
   const isAuthReady = !!session?.access_token && !authLoading;
@@ -255,27 +290,11 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
       </div>
     </div>
   ) : (
-    <button
-      type="button"
-      onClick={() => setSearchModalOpen(true)}
-      className="w-full max-w-md flex items-center justify-between gap-2 px-4 py-3 rounded-lg border-2 border-amber-500/50 dark:border-amber-500/40 bg-background/80 backdrop-blur-sm hover:border-amber-500/70 dark:hover:border-amber-500/60 transition-colors"
-      data-testid="dropdown-jackpot-person"
-    >
-      <div className="flex items-center gap-3">
-        {selectedPerson ? (
-          <>
-            <PersonAvatar name={selectedPerson.name} avatar={selectedPerson.avatar || ""} size="sm" />
-            <div className="text-left">
-              <p className="font-semibold">{selectedPerson.name}</p>
-              <p className="text-xs text-muted-foreground">{selectedPerson.rank ? `Rank #${selectedPerson.rank}` : "New"}</p>
-            </div>
-          </>
-        ) : (
-          <span className="text-muted-foreground">{isLoadingPeople ? "Loading..." : "Select a celebrity"}</span>
-        )}
-      </div>
-      <ChevronDown className="h-5 w-5 text-amber-500 shrink-0" />
-    </button>
+    <JackpotPersonPicker
+      selectedPerson={selectedPerson}
+      isLoadingPeople={isLoadingPeople}
+      onOpen={openPersonSearch}
+    />
   );
 
   return (
