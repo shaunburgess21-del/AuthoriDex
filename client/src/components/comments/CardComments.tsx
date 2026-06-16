@@ -10,9 +10,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { CommentActionDrawer } from "./CommentActionDrawer";
 import { CommentSortHeader } from "./CommentSortHeader";
 import { CommentList } from "./CommentList";
+import { CommentSkeleton } from "./CommentSkeleton";
 import { CommentComposer } from "./CommentComposer";
 import { useCommentThread } from "./useCommentThread";
 import { useCommentThreadInfinite } from "./useCommentThreadInfinite";
+import { useCommentDeepLink } from "./useCommentDeepLink";
 import { DeleteContentDialog } from "./DeleteContentDialog";
 import { CommentsFocusShell } from "./CommentsFocusShell";
 import type { CommentAdapter, CommentItem, CommentEntityType } from "./types";
@@ -73,8 +75,9 @@ function createCardCommentsAdapter(args: {
   entityType: CommentEntityType;
   onModalClose: () => void;
   includePaged: boolean;
+  onPosted?: (item: CommentItem) => void;
 }): CommentAdapter {
-  const { parentType, slug, queryKey, base, entityType, onModalClose, includePaged } = args;
+  const { parentType, slug, queryKey, base, entityType, onModalClose, includePaged, onPosted } = args;
   const adapter: CommentAdapter = {
     queryKey,
     fetchList: async () => {
@@ -106,8 +109,10 @@ function createCardCommentsAdapter(args: {
       const res = await apiRequest("POST", `/api/comments/${commentId}/report`, { reason });
       return res.json();
     },
-    onPostSuccess: () => {
+    onPostSuccess: (data) => {
       toast("Comment Posted");
+      const item = data as CommentItem | undefined;
+      if (item?.id) onPosted?.(item);
     },
     onReportSuccess: () => {
       onModalClose();
@@ -194,6 +199,11 @@ function CardCommentsEmbedded({
     [parentType, slug],
   );
 
+  const postedHighlightRef = useRef<(id: string) => void>(() => {});
+  const handlePosted = useCallback((item: CommentItem) => {
+    postedHighlightRef.current(item.id);
+  }, []);
+
   const adapter = useMemo(
     () =>
       createCardCommentsAdapter({
@@ -207,11 +217,14 @@ function CardCommentsEmbedded({
           setDeleteTarget(null);
         },
         includePaged: false,
+        onPosted: handlePosted,
       }),
-    [parentType, slug, queryKey, base, entityType],
+    [parentType, slug, queryKey, base, entityType, handlePosted],
   );
 
   const thread = useCommentThread(adapter);
+  const { highlightedId, highlight } = useCommentDeepLink(!thread.isLoading && thread.comments.length > 0);
+  postedHighlightRef.current = highlight;
   const isAuthenticated = isLoggedIn || !!user;
 
   return (
@@ -232,9 +245,7 @@ function CardCommentsEmbedded({
           <>
             <div className="flex-1 min-h-0 overflow-y-auto">
               {thread.isLoading ? (
-                <div className="flex justify-center py-12 text-muted-foreground">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
+                <CommentSkeleton />
               ) : (
                 <CommentList
                   threaded={thread.threaded}
@@ -244,6 +255,7 @@ function CardCommentsEmbedded({
                   onVote={thread.vote}
                   onReply={thread.startReply}
                   onOpenActions={setDrawerComment}
+                  highlightId={highlightedId}
                 />
               )}
             </div>
@@ -276,6 +288,7 @@ function CardCommentsEmbedded({
               onVote={thread.vote}
               onReply={thread.startReply}
               onOpenActions={setDrawerComment}
+              highlightId={highlightedId}
             />
             {isAuthenticated ? (
               <CommentComposer
@@ -359,6 +372,11 @@ function CardCommentsFocusInner({
     [parentType, slug],
   );
 
+  const postedHighlightRef = useRef<(id: string) => void>(() => {});
+  const handlePosted = useCallback((item: CommentItem) => {
+    postedHighlightRef.current(item.id);
+  }, []);
+
   const adapter = useMemo(
     () =>
       createCardCommentsAdapter({
@@ -372,11 +390,14 @@ function CardCommentsFocusInner({
           setDeleteTarget(null);
         },
         includePaged: true,
+        onPosted: handlePosted,
       }),
-    [parentType, slug, queryKey, base, entityType],
+    [parentType, slug, queryKey, base, entityType, handlePosted],
   );
 
   const thread = useCommentThreadInfinite(adapter);
+  const { highlightedId, highlight } = useCommentDeepLink(!thread.isLoading && thread.comments.length > 0);
+  postedHighlightRef.current = highlight;
 
   useEffect(() => {
     if (!thread.hasNextPage) return;
@@ -412,9 +433,7 @@ function CardCommentsFocusInner({
         />
         <div ref={listScrollRef} className="flex-1 min-h-0 overflow-y-auto">
           {thread.isLoading ? (
-            <div className="flex justify-center py-12 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
+            <CommentSkeleton rows={5} />
           ) : thread.isError ? (
             <div className="flex flex-col items-center justify-center gap-3 py-12 px-4 text-center">
               <p className="text-sm text-muted-foreground">
@@ -447,6 +466,7 @@ function CardCommentsFocusInner({
                 onVote={thread.vote}
                 onReply={thread.startReply}
                 onOpenActions={setDrawerComment}
+                highlightId={highlightedId}
               />
               <div ref={sentinelRef} className="flex min-h-10 justify-center py-3">
                 {thread.isFetchingNextPage ? (
@@ -555,6 +575,35 @@ export function CardComments({
         </CommentsFocusShell>
       )}
     </>
+  );
+}
+
+/**
+ * Standalone full-screen discussion overlay for the same thread used on detail
+ * pages. Reuses CommentsFocusShell + CardCommentsFocusInner (same query key per
+ * slug), so comments posted here mirror the detail page and vice versa.
+ */
+export function CardCommentsFocusOverlay({
+  open,
+  onClose,
+  entityType,
+  slug,
+  contextTitle,
+  placeholder = "Share your thoughts...",
+}: {
+  open: boolean;
+  onClose: () => void;
+  entityType: CommentEntityType;
+  slug: string;
+  contextTitle?: string | null;
+  placeholder?: string;
+}) {
+  return (
+    <CommentsFocusShell open={open} onClose={onClose} contextTitle={contextTitle}>
+      {open ? (
+        <CardCommentsFocusInner entityType={entityType} slug={slug} placeholder={placeholder} />
+      ) : null}
+    </CommentsFocusShell>
   );
 }
 

@@ -6,6 +6,7 @@ import { parseApiError } from "@/lib/queryClient";
 import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
 import type { CommentSort } from "./CommentSortHeader";
 import { buildThreadedComments } from "./buildThreadedComments";
+import { useStableCommentOrder } from "./useStableCommentOrder";
 
 type CommentsInfinitePage = { items: CommentItem[]; nextCursor: string | null };
 
@@ -139,7 +140,11 @@ export function useCommentThreadInfinite(adapter: CommentAdapter): UseCommentThr
     }));
   }, [rawComments, userVotesMap]);
 
-  const threaded = useMemo<ThreadedComment[]>(() => buildThreadedComments(comments, sort), [comments, sort]);
+  const topOrder = useStableCommentOrder(comments, sort);
+  const threaded = useMemo<ThreadedComment[]>(
+    () => buildThreadedComments(comments, sort, topOrder),
+    [comments, sort, topOrder],
+  );
 
   const visibleCount = useMemo(() => comments.filter((c) => !c.deletedAt).length, [comments]);
 

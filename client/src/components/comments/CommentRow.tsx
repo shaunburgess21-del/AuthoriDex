@@ -16,6 +16,8 @@ export interface CommentRowProps {
   onVote: (voteType: VoteType) => void;
   onReply?: () => void;
   onOpenActions: () => void;
+  /** Transient highlight when the row is the target of a deep link. */
+  isHighlighted?: boolean;
   testIds?: {
     root?: string;
     upvote?: string;
@@ -31,6 +33,7 @@ export function CommentRow({
   onVote,
   onReply,
   onOpenActions,
+  isHighlighted = false,
   testIds,
 }: CommentRowProps) {
   const isDeleted = Boolean(comment.deletedAt);
@@ -43,7 +46,7 @@ export function CommentRow({
   return (
     <div
       id={`comment-${comment.id}`}
-      className={`flex gap-3 py-3 ${isNested ? "pl-3 border-l-2 border-border/20" : ""}`}
+      className={`flex gap-3 py-3 rounded-lg motion-safe:transition-[background-color,box-shadow] motion-safe:duration-500 ${isNested ? "pl-3 border-l-2 border-border/20" : ""} ${isHighlighted ? "bg-cyan-500/5 ring-2 ring-cyan-500/40" : "ring-0"}`}
       style={indentRem > 0 ? { marginLeft: `${indentRem}rem` } : undefined}
       data-testid={testIds?.root ?? `comment-${comment.id}`}
     >
@@ -64,7 +67,10 @@ export function CommentRow({
             >
               {isDeleted ? "[deleted user]" : comment.username || "Anonymous"}
             </span>
-            <span className="text-xs text-muted-foreground shrink-0">
+            <span
+              className="text-xs text-muted-foreground shrink-0"
+              title={new Date(comment.createdAt).toLocaleString()}
+            >
               {formatTimeAgo(comment.createdAt)}
             </span>
             {!isDeleted && <VoteLabel label={comment.parentVoteLabel ?? null} />}
@@ -78,12 +84,13 @@ export function CommentRow({
             onClick={onOpenActions}
             className="shrink-0 p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             data-interactive="true"
+            aria-label="Comment actions"
           >
             <MoreVertical className="h-4 w-4" />
           </button>
         </div>
         <p
-          className={`text-sm text-muted-foreground mt-1 whitespace-pre-wrap ${isDeleted ? "italic" : ""}`}
+          className={`text-sm mt-1 whitespace-pre-wrap ${isDeleted ? "italic text-muted-foreground" : "text-foreground/90"}`}
           data-testid={`text-comment-body-${comment.id}`}
         >
           {isDeleted ? "[deleted]" : comment.body}
@@ -94,7 +101,9 @@ export function CommentRow({
               <button
                 onClick={() => onVote("up")}
                 onPointerUp={(event) => event.currentTarget.blur()}
-                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                aria-pressed={hasUpvoted}
+                aria-label={`${hasUpvoted ? "Liked" : "Like"}, ${comment.upvotes || 0} ${(comment.upvotes || 0) === 1 ? "like" : "likes"}`}
+                className={`flex items-center gap-1 -m-1 p-1 text-xs rounded transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   hasUpvoted
                     ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                     : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
@@ -121,7 +130,7 @@ export function CommentRow({
               {netVotes > 0 ? `+${netVotes}` : netVotes}
             </span>
           )}
-          {!isDeleted && netVotes !== 0 && (
+          {!isDeleted && (comment.downvotes || 0) > 0 && netVotes !== 0 && (
             <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-rose-600 dark:text-rose-400"}`}>
               {netVotes > 0 ? `+${netVotes}` : netVotes}
             </span>

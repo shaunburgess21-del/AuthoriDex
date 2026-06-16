@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { MessageSquare } from "lucide-react";
 import { CommentRow } from "./CommentRow";
 import type { CommentItem, CommentTreeNode, ThreadedComment, VoteType } from "./types";
 import type { CommentSort } from "./CommentSortHeader";
@@ -16,6 +17,8 @@ export interface CommentListProps {
   onVote: (input: { commentId: string; voteType: VoteType }) => void;
   onReply?: (comment: CommentItem) => void;
   onOpenActions: (comment: CommentItem) => void;
+  /** Id of the comment to transiently highlight (deep-link target). */
+  highlightId?: string | null;
   getRowTestIds?: (comment: CommentItem) => {
     root?: string;
     upvote?: string;
@@ -30,6 +33,7 @@ interface SharedHandlers {
   onVote: (input: { commentId: string; voteType: VoteType }) => void;
   onReply?: (comment: CommentItem) => void;
   onOpenActions: (comment: CommentItem) => void;
+  highlightId?: string | null;
   getRowTestIds?: CommentListProps["getRowTestIds"];
 }
 
@@ -43,6 +47,7 @@ function NestedChildrenList({
   onVote,
   onReply,
   onOpenActions,
+  highlightId,
   getRowTestIds,
 }: SharedHandlers & {
   parentCommentId: string;
@@ -73,6 +78,7 @@ function NestedChildrenList({
           onVote={onVote}
           onReply={onReply}
           onOpenActions={onOpenActions}
+          highlightId={highlightId}
           getRowTestIds={getRowTestIds}
         />
       ))}
@@ -99,6 +105,7 @@ function CommentBranch({
   onVote,
   onReply,
   onOpenActions,
+  highlightId,
   getRowTestIds,
 }: SharedHandlers & {
   node: CommentTreeNode;
@@ -116,6 +123,7 @@ function CommentBranch({
         onVote={(voteType) => onVote({ commentId: comment.id, voteType })}
         onReply={onReply ? () => onReply(comment) : undefined}
         onOpenActions={() => onOpenActions(comment)}
+        isHighlighted={highlightId === comment.id}
         testIds={getRowTestIds?.(comment)}
       />
       <NestedChildrenList
@@ -128,6 +136,7 @@ function CommentBranch({
         onVote={onVote}
         onReply={onReply}
         onOpenActions={onOpenActions}
+        highlightId={highlightId}
         getRowTestIds={getRowTestIds}
       />
     </div>
@@ -139,11 +148,12 @@ export function CommentList({
   sort,
   variant: _variant = "card",
   maxHeight = "500px",
-  emptyMessage = "No comments yet. Be the first to share your thoughts!",
+  emptyMessage = "No comments yet",
   showReplies = true,
   onVote,
   onReply,
   onOpenActions,
+  highlightId,
   getRowTestIds,
 }: CommentListProps) {
   const [expandedParents, setExpandedParents] = useState<Set<string>>(() => new Set());
@@ -162,9 +172,13 @@ export function CommentList({
 
   if (threaded.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-6">
-        {emptyMessage}
-      </p>
+      <div className="flex flex-col items-center gap-2 text-center py-8">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+          <MessageSquare className="h-5 w-5 text-muted-foreground/70" />
+        </div>
+        <p className="text-sm font-medium text-foreground/80">{emptyMessage}</p>
+        <p className="text-xs text-muted-foreground">Be the first to share your take.</p>
+      </div>
     );
   }
 
@@ -177,6 +191,7 @@ export function CommentList({
     onVote,
     onReply,
     onOpenActions,
+    highlightId,
     getRowTestIds,
   };
 
@@ -199,6 +214,7 @@ export function CommentList({
                 onVote={(voteType) => onVote({ commentId: root.id, voteType })}
                 onReply={onReply ? () => onReply(root) : undefined}
                 onOpenActions={() => onOpenActions(root)}
+                isHighlighted={highlightId === root.id}
                 testIds={getRowTestIds?.(root)}
               />
               {showReplies && (

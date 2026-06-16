@@ -36,9 +36,13 @@ export function CommentActionDrawer({
   entitySlug,
 }: CommentActionDrawerProps) {
   const [showReportPicker, setShowReportPicker] = useState(false);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
 
   useEffect(() => {
-    if (!open) setShowReportPicker(false);
+    if (!open) {
+      setShowReportPicker(false);
+      setReportSubmitted(false);
+    }
   }, [open]);
 
   const { user } = useAuth();
@@ -70,7 +74,11 @@ export function CommentActionDrawer({
   }, [commentId, entitySlug, onClose, user?.id]);
 
   const handleReport = useCallback((reason: string) => {
-    onReport?.(reason);
+    setReportSubmitted((already) => {
+      if (already) return already;
+      onReport?.(reason);
+      return true;
+    });
   }, [onReport]);
 
   const handleDelete = useCallback(() => {
@@ -132,7 +140,8 @@ export function CommentActionDrawer({
               <button
                 key={reason}
                 onClick={() => handleReport(reason)}
-                className="flex items-center w-full px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                disabled={reportSubmitted}
+                className="flex items-center w-full px-4 py-3 rounded-xl hover:bg-muted/50 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
               >
                 {reason}
               </button>

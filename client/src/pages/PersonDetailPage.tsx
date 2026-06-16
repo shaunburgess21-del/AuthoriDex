@@ -67,6 +67,7 @@ import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
+  getSentimentPollVotedPillStyle,
 } from "@/lib/sentimentPollVoteDisplay";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
@@ -608,8 +609,8 @@ function FeaturedPollCard({
               </div>
               <div className="flex-1 min-w-0 flex justify-end">
                 <div
-                  className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 border-white/20"
-                  style={{ color: voted ? getSentimentPollChoiceColor(voted) : undefined }}
+                  className="px-2 py-0.5 rounded-full text-xs font-medium border border-white/20"
+                  style={getSentimentPollVotedPillStyle(voted)}
                   data-testid={`badge-voted-poll-${poll.id}`}
                 >
                   {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}

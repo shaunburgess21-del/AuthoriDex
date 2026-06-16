@@ -2874,15 +2874,19 @@ export default function PredictPage() {
     selectedType === "h2h" ||
     selectedType === "gainer";
 
+  // Snap view shows the full category chip row, so it must receive items
+  // across every category — not the main page's category-filtered list.
+  // getCommunityMarketsForCategory("all") keeps search + my-positions but
+  // drops the category chip filter.
   const worldMarketSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredCommunity.map((m: any) => ({
+      getCommunityMarketsForCategory("all").map((m: any) => ({
         id: String(m.id),
         slug: m.slug || String(m.id),
         category: m.category || "misc",
         title: m.title || "",
       })),
-    [filteredCommunity],
+    [getCommunityMarketsForCategory],
   );
 
   const renderCommunityMarketCard = useCallback(
@@ -2929,9 +2933,24 @@ export default function PredictPage() {
     ],
   );
 
+  // Category-unfiltered source for snap view: same search + my-positions
+  // filters as filteredUpDown, but without the active category chip so the
+  // snap category row is always complete.
+  const updownSnapSource = useMemo(
+    () =>
+      hydratedMarkets.filter(
+        (m) =>
+          (!updownSearch ||
+            m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
+          passesMyPositionsFilter(m.id),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- passesMyPositionsFilter closes over myPositionsFilter/userBetsByMarket which are listed
+    [hydratedMarkets, updownSearch, myPositionsFilter, userBetsByMarket],
+  );
+
   const updownSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredUpDown.map((m: any) => ({
+      updownSnapSource.map((m: any) => ({
         id: String(m.id),
         slug: String(m.id),
         category: m.category || "misc",
@@ -2939,7 +2958,7 @@ export default function PredictPage() {
         personId: m.personId,
         personName: m.personName,
       })),
-    [filteredUpDown],
+    [updownSnapSource],
   );
 
   useEffect(() => {

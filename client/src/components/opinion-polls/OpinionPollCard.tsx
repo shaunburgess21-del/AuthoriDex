@@ -22,6 +22,8 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
+import { DiscussionButton } from "@/components/comments/DiscussionButton";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -60,6 +62,7 @@ export interface OpinionPollCardPoll {
     votes?: number;
     orderIndex?: number;
   }>;
+  commentCount?: number;
 }
 
 type OpinionPollOption = NonNullable<OpinionPollCardPoll["options"]>[number];
@@ -74,6 +77,7 @@ export function OpinionPollCard({
   leaderboardCategories,
   onNavigateToDetail,
   onBrowseFullScreen,
+  enableDiscussion = false,
 }: {
   poll: OpinionPollCardPoll;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
@@ -83,9 +87,11 @@ export function OpinionPollCard({
   leaderboardCategories?: Set<string>;
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
+  enableDiscussion?: boolean;
 }) {
   const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
@@ -220,6 +226,7 @@ export function OpinionPollCard({
   };
 
   const hasVoted = !!voted;
+  const showDiscussion = enableDiscussion && !!poll.slug;
   const totalVotes = poll.totalVotes || 0;
   const maxPercent = Math.max(
     ...visibleOptions.map((o) => (totalVotes > 0 ? Math.round(((o.votes ?? 0) / totalVotes) * 100) : 0)),
@@ -233,7 +240,7 @@ export function OpinionPollCard({
   return (
     <div className="relative group h-full overflow-visible">
       <Card
-        className="relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+        className={`relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "md:pb-[10px]" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:ring-inset md:ring-1 md:ring-transparent md:transition-[box-shadow,ring-color] md:group-hover:ring-[#EFEFEF]/50 md:group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -350,9 +357,15 @@ export function OpinionPollCard({
         )}
 
         {(hasVoted || remainingCount > 0) && (
-          <div className="mt-2.5 flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              {hasVoted && (
+          <div className={`${hasVoted ? "mt-auto pt-2.5" : "mt-2.5"} flex items-center gap-2`}>
+            <div className="flex-1 min-w-0 flex items-center">
+              {hasVoted && showDiscussion ? (
+                <DiscussionButton
+                  count={poll.commentCount}
+                  onClick={() => setDiscussionOpen(true)}
+                  testId={`button-discussion-opinion-${poll.id}`}
+                />
+              ) : hasVoted ? (
                 <button
                   type="button"
                   onClick={handleRemoveVote}
@@ -361,9 +374,9 @@ export function OpinionPollCard({
                 >
                   Remove vote
                 </button>
-              )}
+              ) : null}
             </div>
-            <div className="flex-1 min-w-0 text-center">
+            <div className="flex-1 min-w-0 flex items-center justify-center">
               {remainingCount > 0 && (
                 <button
                   type="button"
@@ -375,7 +388,7 @@ export function OpinionPollCard({
                 </button>
               )}
             </div>
-            <div className="flex-1 min-w-0 flex justify-end">
+            <div className="flex-1 min-w-0 flex items-center justify-end">
               {hasVoted && (
                 <span
                   className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 shrink-0"
@@ -536,6 +549,16 @@ export function OpinionPollCard({
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+
+      {showDiscussion ? (
+        <CardCommentsFocusOverlay
+          open={discussionOpen}
+          onClose={() => setDiscussionOpen(false)}
+          entityType="opinion-poll"
+          slug={poll.slug}
+          contextTitle={poll.title}
+        />
+      ) : null}
     </div>
   );
 }

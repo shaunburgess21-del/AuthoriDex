@@ -19,6 +19,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useUserStats } from "@/hooks/useGamification";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
+import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
+import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { 
   Plus, 
   Vote,
@@ -115,6 +117,7 @@ import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
+  getSentimentPollVotedPillStyle,
   SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
   SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
@@ -759,6 +762,7 @@ function DiscourseCard({
   leaderboardCategories,
   onNavigateToPollDetail,
   onBrowseFullScreen,
+  enableDiscussion = false,
 }: {
   topic: any;
   onVote: (choice: 'support' | 'neutral' | 'oppose') => Promise<void>;
@@ -768,9 +772,12 @@ function DiscourseCard({
   /** When set, detail links use history voteList + client navigation (Vote page). */
   onNavigateToPollDetail?: () => void;
   onBrowseFullScreen?: () => void;
+  enableDiscussion?: boolean;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+  const showDiscussion = enableDiscussion && !!topic.slug;
 
   useEffect(() => {
     setVoted(topic.userVote ?? null);
@@ -812,7 +819,7 @@ function DiscourseCard({
     <div className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
     <Card 
-      className="relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+      className={`relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "md:pb-[14px]" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="absolute top-3 right-3">
@@ -972,24 +979,32 @@ function DiscourseCard({
           </div>
         </div>
 
-        <div className="mt-auto md:mt-2 flex items-center gap-2 pt-3 border-t border-white/10">
-            <div className="flex-1 min-w-0">
-              <button
-                type="button"
-                onClick={handleChangeVote}
-                className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                data-testid={`button-change-vote-${topic.id}`}
-              >
-                Remove vote
-              </button>
+        <div className="mt-auto md:mt-2 flex items-center gap-2 pt-3 md:pt-[22px] border-t border-white/10">
+            <div className="flex-1 min-w-0 flex items-center">
+              {showDiscussion ? (
+                <DiscussionButton
+                  count={topic.commentCount}
+                  onClick={() => setDiscussionOpen(true)}
+                  testId={`button-discussion-${topic.id}`}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleChangeVote}
+                  className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
+                  data-testid={`button-change-vote-${topic.id}`}
+                >
+                  Remove vote
+                </button>
+              )}
             </div>
-            <div className="flex-1 min-w-0 text-center">
+            <div className="flex-1 min-w-0 flex items-center justify-center">
               {topic.slug &&
                 (onNavigateToPollDetail ? (
                   <button
                     type="button"
                     onClick={onNavigateToPollDetail}
-                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline"
+                    className="text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
                     More details
@@ -997,17 +1012,17 @@ function DiscourseCard({
                 ) : (
                   <Link
                     href={`/polls/${topic.slug}`}
-                    className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
+                    className="text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
                     More details
                   </Link>
                 ))}
             </div>
-            <div className="flex-1 min-w-0 flex justify-end">
+            <div className="flex-1 min-w-0 flex items-center justify-end">
               <div
-                className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/5 border-white/20"
-                style={{ color: voted ? getSentimentPollChoiceColor(voted) : undefined }}
+                className="px-2 py-0.5 rounded-full text-xs font-medium border border-white/20"
+                style={getSentimentPollVotedPillStyle(voted)}
                 data-testid={`badge-voted-${topic.id}`}
               >
                 {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
@@ -1036,6 +1051,15 @@ function DiscourseCard({
         />
       </div>
     )}
+    {showDiscussion && topic.slug ? (
+      <CardCommentsFocusOverlay
+        open={discussionOpen}
+        onClose={() => setDiscussionOpen(false)}
+        entityType="poll"
+        slug={topic.slug}
+        contextTitle={topic.headline}
+      />
+    ) : null}
     </div>
   );
 }
@@ -1845,44 +1869,98 @@ export default function VotePage() {
     [opinionSlugList, setLocation, activeSection],
   );
 
+  // Snap view always shows the full category chip row, so each snap source
+  // applies the section's search + my-votes filters but NOT the active
+  // category chip (otherwise the snap row collapses to All + selected).
+  const matchupSnapSource = useMemo(() => {
+    const base = matchups.filter((f) => {
+      const matchesSearch =
+        (f.title ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+        (f.optionAText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
+        (f.optionBText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase());
+      return matchesSearch && f.isActive;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((m) => !!matchupUserVotes[m.id])
+        : base.filter((m) => !matchupUserVotes[m.id]);
+  }, [matchups, matchupsSearchQuery, myVotesFilter, matchupUserVotes]);
+
   const matchupSnapItems: SnapItem[] = useMemo(
     () =>
-      displayMatchups
-        .filter((m) => m.isActive)
-        .map((m) => ({
-          id: m.id,
-          slug: m.slug || m.id,
-          category: m.category,
-          title: m.title,
-        })),
-    [displayMatchups],
+      matchupSnapSource.map((m) => ({
+        id: m.id,
+        slug: m.slug || m.id,
+        category: m.category,
+        title: m.title,
+      })),
+    [matchupSnapSource],
   );
+
+  const sentimentSnapSource = useMemo(() => {
+    const base = dbPolls.filter((t: any) => {
+      const matchesSearch =
+        (t.headline ?? "").toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
+        (t.description || "").toLowerCase().includes(topicsSearchQuery.toLowerCase());
+      return matchesSearch;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((t: any) => !!t.userVote)
+        : base.filter((t: any) => !t.userVote);
+  }, [dbPolls, topicsSearchQuery, myVotesFilter]);
 
   const sentimentSnapItems: SnapItem[] = useMemo(
     () =>
-      displayTopics.map((t: any) => ({
+      sentimentSnapSource.map((t: any) => ({
         id: t.id,
         slug: t.slug || t.id,
         category: t.category || "misc",
         title: t.headline || t.title || "",
       })),
-    [displayTopics],
+    [sentimentSnapSource],
   );
+
+  const opinionSnapSource = useMemo(() => {
+    const base = opinionPolls.filter((p: any) => {
+      const matchesSearch =
+        (p.title || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
+        (p.description || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
+      return matchesSearch;
+    });
+    return myVotesFilter === "all"
+      ? base
+      : myVotesFilter === "show-mine"
+        ? base.filter((p: any) => !!p.userVote)
+        : base.filter((p: any) => !p.userVote);
+  }, [opinionPolls, opinionPollsSearchQuery, myVotesFilter]);
 
   const opinionSnapItems: SnapItem[] = useMemo(
     () =>
-      displayOpinionPolls.map((p: any) => ({
+      opinionSnapSource.map((p: any) => ({
         id: p.id,
         slug: p.slug || p.id,
         category: p.category || "misc",
         title: p.title || "",
       })),
-    [displayOpinionPolls],
+    [opinionSnapSource],
+  );
+
+  const valueSnapSource = useMemo(
+    () =>
+      valueCelebrities.filter(
+        (c) =>
+          !valuePerceptionSearchQuery ||
+          c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase()),
+      ),
+    [valueCelebrities, valuePerceptionSearchQuery],
   );
 
   const valueSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredValueCelebrities.map((person: any) => ({
+      valueSnapSource.map((person: any) => ({
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
@@ -1890,18 +1968,26 @@ export default function VotePage() {
         personId: person.id,
         personName: person.name,
       })),
-    [filteredValueCelebrities],
+    [valueSnapSource],
+  );
+
+  const inductionSnapSource = useMemo(
+    () =>
+      enrichedCandidates.filter((c) =>
+        c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase()),
+      ),
+    [enrichedCandidates, inductionSearchQuery],
   );
 
   const inductionSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredCandidates.map((c: any) => ({
+      inductionSnapSource.map((c: any) => ({
         id: c.id,
         slug: c.id,
         category: c.category || "misc",
         title: c.name || "",
       })),
-    [filteredCandidates],
+    [inductionSnapSource],
   );
 
   const { data: curateTrendingData } = useQuery<{ data: Array<{ id: string; name: string; category: string }> } | Array<{ id: string; name: string; category: string }>>({
@@ -2018,9 +2104,16 @@ export default function VotePage() {
     if (!curateCategoryOptions.some((c) => c.value === curateCategoryFilter)) setCurateCategoryFilter("all");
   }, [curateCategoryFilter, curateCategoryOptions]);
 
+  const curateSnapSource = useMemo(() => {
+    const search = curateSearchQuery.trim().toLowerCase();
+    return curateTrendingCelebrities.filter(
+      (p: any) => !search || p.name.toLowerCase().includes(search),
+    );
+  }, [curateTrendingCelebrities, curateSearchQuery]);
+
   const curateSnapItems: SnapItem[] = useMemo(
     () =>
-      filteredCurateCelebrities.map((person: any) => ({
+      curateSnapSource.map((person: any) => ({
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
@@ -2028,7 +2121,7 @@ export default function VotePage() {
         personId: person.id,
         personName: person.name,
       })),
-    [filteredCurateCelebrities],
+    [curateSnapSource],
   );
 
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
@@ -2811,6 +2904,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 </div>
               ))}
@@ -2922,6 +3016,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 </div>
               ))}
@@ -3030,6 +3125,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 </div>
               ))}
@@ -3974,6 +4070,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 ))}
               </div>
@@ -4036,6 +4133,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 ))}
               </div>
@@ -4097,6 +4195,7 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onNavigateToDetail={poll.slug ? () => goOpinionDetail(poll.slug) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
+                    enableDiscussion
                   />
                 ))}
               </div>

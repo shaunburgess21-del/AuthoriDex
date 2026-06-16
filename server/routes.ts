@@ -3793,6 +3793,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let isNewVote = false;
       if (existingVote.length > 0) {
+        const previousVoteType = existingVote[0]?.voteType ?? null;
+        if (previousVoteType === voteType) {
+          // Toggle off: repeat tap on the same vote removes it. Mirrors the
+          // unified comment vote endpoint so the UI's optimistic toggle and the
+          // server agree (no highlight flicker on second tap). Counts are
+          // derived via COUNT over insight_votes, so no counter to maintain.
+          await db
+            .delete(insightVotes)
+            .where(and(
+              eq(insightVotes.insightId, id),
+              eq(insightVotes.userId, userId)
+            ));
+          await appendVoteAction(db, {
+            userId,
+            voteType: "insight_vote",
+            targetType: "community_insight",
+            targetId: id,
+            actionKind: "remove",
+            prevValue: previousVoteType,
+            source: "community-insight-vote",
+          });
+          return res.json({ success: true, vote: null, userVote: null, xp: null });
+        }
         await db
           .update(insightVotes)
           .set({ voteType })
@@ -3806,7 +3829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           targetType: "community_insight",
           targetId: id,
           actionKind: "update",
-          prevValue: existingVote[0]?.voteType ?? null,
+          prevValue: previousVoteType,
           nextValue: voteType,
           source: "community-insight-vote",
         });
@@ -6175,6 +6198,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const relatedMap = await getRelatedPeopleForCards("matchup", matchupIds);
 
+      const commentCountMap = new Map<string, number>();
+      if (matchupIds.length > 0) {
+        const commentResults = await db
+          .select({ parentId: unifiedComments.parentId, cnt: count() })
+          .from(unifiedComments)
+          .where(and(eq(unifiedComments.parentType, "matchup"), inArray(unifiedComments.parentId, matchupIds), isNull(unifiedComments.deletedAt)))
+          .groupBy(unifiedComments.parentId);
+        for (const row of commentResults) {
+          commentCountMap.set(row.parentId, Number(row.cnt));
+        }
+      }
+
       const matchupsWithVotes = matchupList.map((matchup) => {
         const counts = voteCountsMap.get(matchup.id) || { option_a: 0, option_b: 0, neutral: 0 };
         const displayAVotes = counts.option_a + (matchup.seedVotesA || 0);
@@ -6224,6 +6259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           neutralPercent,
           relatedPersonIds: (relatedMap[matchup.id] || []).map(p => p.id),
           relatedPeople: relatedMap[matchup.id] || [],
+          commentCount: commentCountMap.get(matchup.id) || 0,
         };
       });
       
@@ -15019,6 +15055,18 @@ Target length: about 90-150 words.`;
       const pollIds = polls.map(p => p.id);
       const relatedMap = await getRelatedPeopleForCards("sentiment_poll", pollIds);
 
+      const commentCountMap = new Map<string, number>();
+      if (pollIds.length > 0) {
+        const commentResults = await db
+          .select({ parentId: unifiedComments.parentId, cnt: count() })
+          .from(unifiedComments)
+          .where(and(eq(unifiedComments.parentType, "trending_poll"), inArray(unifiedComments.parentId, pollIds), isNull(unifiedComments.deletedAt)))
+          .groupBy(unifiedComments.parentId);
+        for (const row of commentResults) {
+          commentCountMap.set(row.parentId, Number(row.cnt));
+        }
+      }
+
       const userVoteMap: Record<string, string> = {};
       if (userId && pollIds.length > 0) {
         const userVotes = await db
@@ -15053,6 +15101,7 @@ Target length: about 90-150 words.`;
           relatedPersonIds: (relatedMap[p.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[p.id] || [],
           userVote: userVoteMap[p.id] || null,
+          commentCount: commentCountMap.get(p.id) || 0,
         };
       });
 
@@ -16048,7 +16097,7 @@ Target length: about 90-150 words.`;
         return res.json([]);
       }
 
-      const [relatedMap, optionRows, voteCounts, userVotes] = await Promise.all([
+      const [relatedMap, optionRows, voteCounts, userVotes, commentCounts] = await Promise.all([
         getRelatedPeopleForCards("opinion_poll", opPollIds),
         db
           .select({
@@ -16088,7 +16137,14 @@ Target length: about 90-150 words.`;
               inArray(opinionPollVotes.pollId, opPollIds),
             ))
           : Promise.resolve([]),
+        db
+          .select({ parentId: unifiedComments.parentId, cnt: count() })
+          .from(unifiedComments)
+          .where(and(eq(unifiedComments.parentType, "opinion_poll"), inArray(unifiedComments.parentId, opPollIds), isNull(unifiedComments.deletedAt)))
+          .groupBy(unifiedComments.parentId),
       ]);
+
+      const commentCountByPollId = new Map(commentCounts.map(c => [c.parentId, Number(c.cnt)]));
 
       const optionsByPollId = new Map<string, typeof optionRows>();
       for (const option of optionRows) {
@@ -16130,6 +16186,7 @@ Target length: about 90-150 words.`;
           userVote,
           relatedPersonIds: (relatedMap[poll.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[poll.id] || [],
+          commentCount: commentCountByPollId.get(poll.id) || 0,
         };
       });
 

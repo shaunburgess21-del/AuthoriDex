@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { parseApiError } from "@/lib/queryClient";
 import type { CommentAdapter, CommentItem, ThreadedComment, VoteType } from "./types";
 import { buildThreadedComments } from "./buildThreadedComments";
+import { useStableCommentOrder } from "./useStableCommentOrder";
 
 export type CommentSort = "top" | "newest";
 
@@ -59,7 +60,11 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
     }));
   }, [rawComments, userVotesMap]);
 
-  const threaded = useMemo<ThreadedComment[]>(() => buildThreadedComments(comments, sort), [comments, sort]);
+  const topOrder = useStableCommentOrder(comments, sort);
+  const threaded = useMemo<ThreadedComment[]>(
+    () => buildThreadedComments(comments, sort, topOrder),
+    [comments, sort, topOrder],
+  );
 
   // Count of publicly visible comments (excludes soft-deleted). Matches collapsed UI:
   // hidden replies still count toward N.
@@ -103,6 +108,9 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
     mutationFn: (input: { commentId: string; voteType: VoteType }) => adapter.voteComment(input),
     onMutate: async ({ commentId, voteType }) => {
       await queryClient.cancelQueries({ queryKey });
+      if (adapter.fetchUserVotes) {
+        await queryClient.cancelQueries({ queryKey: userVotesKey });
+      }
       const previousComments = queryClient.getQueryData<CommentItem[]>(queryKey);
 
       queryClient.setQueryData<CommentItem[]>(queryKey, (current) => {

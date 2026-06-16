@@ -268,6 +268,34 @@ const COUNTRY_BY_CODE = new Map<string, Country>(
   COUNTRIES.map((c) => [c.code, c]),
 );
 
+// Reverse lookup: full country name (and search-term aliases) -> ISO code.
+// Lets legacy free-text values (e.g. "South Africa", "UK") resolve back to a
+// canonical code so flags render even for pre-ISO-migration data.
+const CODE_BY_NAME = new Map<string, string>();
+for (const c of COUNTRIES) {
+  CODE_BY_NAME.set(c.name.toLowerCase(), c.code);
+  for (const t of c.searchTerms ?? []) {
+    CODE_BY_NAME.set(t.toLowerCase(), c.code);
+  }
+}
+
+/**
+ * Resolves an arbitrary stored country value to a canonical ISO 3166-1
+ * alpha-2 code. Accepts an existing 2-letter code, a full country name, or a
+ * known search-term alias (case-insensitive). Returns null when nothing
+ * matches.
+ */
+export function resolveCountryCode(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (/^[A-Za-z]{2}$/.test(v) && COUNTRY_BY_CODE.has(v.toUpperCase())) {
+    return v.toUpperCase();
+  }
+  return CODE_BY_NAME.get(v.toLowerCase()) ?? null;
+}
+
 export function getCountryByCode(code: string | null | undefined): Country | undefined {
   if (!code) return undefined;
   return COUNTRY_BY_CODE.get(code.toUpperCase());

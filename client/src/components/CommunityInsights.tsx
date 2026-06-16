@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { CommentsFocusShell } from "@/components/comments/CommentsFocusShell";
 import {
   Loader2,
+  MessageSquare,
   MoreVertical,
   Reply,
   ThumbsUp,
@@ -20,8 +21,10 @@ import { PostOverlayModal } from "./PostOverlayModal";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
 import { CommentComposer } from "./comments/CommentComposer";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
+import { CommentSkeleton } from "./comments/CommentSkeleton";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useCommentThread } from "./comments/useCommentThread";
+import { useCommentDeepLink } from "./comments/useCommentDeepLink";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import type {
   CommentAdapter,
@@ -32,8 +35,7 @@ import type {
 
 const PAGE_SIZE = 4;
 
-const EMPTY_DISCUSSION_MESSAGE =
-  "No comments yet. Be the first to share your thoughts!";
+const EMPTY_DISCUSSION_MESSAGE = "No comments yet";
 
 function getSentimentColor(vote: number): string {
   const colors = [
@@ -108,6 +110,7 @@ export function CommunityInsights({
   // CommentItem in thread.comments and are mutated optimistically by
   // useCommentThread. See InsightCard's render-boundary comment.
   const insightsCacheRef = useRef<Record<string, CommunityInsight>>({});
+  const postedHighlightRef = useRef<(id: string) => void>(() => {});
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
@@ -189,6 +192,8 @@ export function CommunityInsights({
       if (xp?.xpAwarded) {
         triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
       }
+      const id = (data as { id?: string } | null)?.id;
+      if (id) postedHighlightRef.current(id);
     },
     onVoteSuccess: (data: unknown) => {
       const xp = (data as { xp?: { xpAwarded?: number; reason?: string } } | null)?.xp;
@@ -204,6 +209,8 @@ export function CommunityInsights({
   }), [personId, triggerXpBurst]);
 
   const thread = useCommentThread(adapter);
+  const { highlightedId, highlight } = useCommentDeepLink(!thread.isLoading && thread.comments.length > 0);
+  postedHighlightRef.current = highlight;
   const isAuthenticated = isLoggedIn || !!user;
 
   const variant = compact ? "inline" : "card";
@@ -296,9 +303,13 @@ export function CommunityInsights({
   const listSection = (
     <>
       {totalCount === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">
-          {EMPTY_DISCUSSION_MESSAGE}
-        </p>
+        <div className="flex flex-col items-center gap-2 text-center py-8">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+            <MessageSquare className="h-5 w-5 text-muted-foreground/70" />
+          </div>
+          <p className="text-sm font-medium text-foreground/80">{EMPTY_DISCUSSION_MESSAGE}</p>
+          <p className="text-xs text-muted-foreground">Be the first to share your take.</p>
+        </div>
       ) : (
         <div className="divide-y divide-border/10">
           {displayedThread.map(({ root }, idx) => {
@@ -312,6 +323,7 @@ export function CommunityInsights({
                 insight={insightsCacheRef.current[root.id]}
                 isTopComment={isTopComment}
                 isExpanded={expandedPosts.has(root.id)}
+                isHighlighted={highlightedId === root.id}
                 onToggleExpanded={() => toggleExpanded(root.id)}
                 onOpenOverlay={() => setSelectedInsightId(root.id)}
                 onVote={(voteType) => {
@@ -369,6 +381,7 @@ export function CommunityInsights({
       supportsFullscreen
       parentExpanded={parentExpanded}
       variant={variant}
+      maxLength={2500}
     />
   ) : (
     <SignInToDiscuss onLogin={() => navigateToLogin(setLocation)} />
@@ -380,11 +393,8 @@ export function CommunityInsights({
         className={rootClass}
         data-testid="section-community-insights"
       >
-        <div
-          className={`flex items-center justify-center py-8 ${variant === "inline" ? "flex-1" : ""}`}
-        >
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-muted-foreground">Loading...</span>
+        <div className={variant === "inline" ? "flex-1" : ""}>
+          <CommentSkeleton />
         </div>
       </div>
     );
@@ -488,6 +498,7 @@ interface InsightCardProps {
   insight: CommunityInsight | undefined;
   isTopComment: boolean;
   isExpanded: boolean;
+  isHighlighted?: boolean;
   onToggleExpanded: () => void;
   onOpenOverlay: () => void;
   onVote: (voteType: VoteType) => void;
@@ -500,6 +511,7 @@ function InsightCard({
   insight,
   isTopComment,
   isExpanded,
+  isHighlighted = false,
   onToggleExpanded,
   onOpenOverlay,
   onVote,
@@ -520,7 +532,7 @@ function InsightCard({
   return (
     <div
       id={`insight-${comment.id}`}
-      className="flex gap-3 py-3"
+      className={`flex gap-3 py-3 rounded-lg motion-safe:transition-[background-color,box-shadow] motion-safe:duration-500 ${isHighlighted ? "bg-cyan-500/5 ring-2 ring-cyan-500/40" : "ring-0"}`}
       data-testid={`card-insight-${comment.id}`}
     >
       {!isDeleted && (
@@ -542,6 +554,7 @@ function InsightCard({
             </span>
             <span
               className="text-xs text-muted-foreground shrink-0"
+              title={new Date(comment.createdAt).toLocaleString()}
               data-testid={`text-timestamp-${comment.id}`}
             >
               {formatTimeAgo(comment.createdAt)}
@@ -581,7 +594,7 @@ function InsightCard({
           </button>
         </div>
         <p
-          className={`text-sm text-muted-foreground mt-1 whitespace-pre-wrap ${isDeleted ? "italic" : ""}`}
+          className={`text-sm mt-1 whitespace-pre-wrap ${isDeleted ? "italic text-muted-foreground" : "text-foreground/90"}`}
           data-testid={`text-content-${comment.id}`}
         >
           {isDeleted ? preview : isExpanded ? comment.body : preview}
@@ -603,7 +616,9 @@ function InsightCard({
                 onClick={() => onVote("up")}
                 onPointerUp={(event) => event.currentTarget.blur()}
                 disabled={disabled}
-                className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                aria-pressed={hasUpvoted}
+                aria-label={`${hasUpvoted ? "Liked" : "Like"}, ${upvotes} ${upvotes === 1 ? "like" : "likes"}`}
+                className={`flex items-center gap-1 -m-1 p-1 text-xs rounded transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   hasUpvoted
                     ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
                     : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
@@ -629,7 +644,7 @@ function InsightCard({
               </button>
             </>
           )}
-          {netVotes !== 0 && (
+          {netVotes !== 0 && (isDeleted || downvotes > 0) && (
             <span
               className={isDeleted
                 ? "text-xs text-muted-foreground"
