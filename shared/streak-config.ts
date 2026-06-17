@@ -49,10 +49,70 @@ export const STREAK_MILESTONE_XP: Record<StreakMilestone, number> = {
 };
 
 /**
- * Length of the visible dot row on the streak toast (last node is the
- * gift). Drives the "next milestone" pacing on the in-toast timeline.
+ * Length of the visible dot row on the streak toast. In rolling mode the
+ * row shows this many recent streak days ending at today; in milestone
+ * sprint mode it spans the final week before the next reward.
  */
 export const STREAK_TARGET_DAYS = 7;
+
+/** Dot-row layout returned by {@link getStreakToastTimeline}. */
+export interface StreakToastTimeline {
+  start: number;
+  end: number;
+  giftDay: number | null;
+  showGift: boolean;
+  pastTopTier: boolean;
+}
+
+/**
+ * Computes the streak-toast dot row. Rolling mode shows recent days ending
+ * at today; milestone sprint mode anchors to the next reward in the
+ * final STREAK_TARGET_DAYS-day window.
+ */
+export function getStreakToastTimeline(currentStreak: number): StreakToastTimeline {
+  const milestones = STREAK_MILESTONES as readonly number[];
+  const pastTopTier = currentStreak > milestones[milestones.length - 1];
+  const isOnMilestone = milestones.includes(currentStreak);
+  const nextMilestone = getNextMilestone(currentStreak);
+
+  if (isOnMilestone) {
+    const end = currentStreak;
+    const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
+    return {
+      start,
+      end,
+      giftDay: currentStreak,
+      showGift: true,
+      pastTopTier,
+    };
+  }
+
+  if (pastTopTier) {
+    const end = currentStreak;
+    const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
+    return { start, end, giftDay: null, showGift: false, pastTopTier: true };
+  }
+
+  const inMilestoneSprint =
+    nextMilestone !== null &&
+    currentStreak >= nextMilestone - (STREAK_TARGET_DAYS - 1);
+
+  if (inMilestoneSprint) {
+    const end = nextMilestone!;
+    const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
+    return {
+      start,
+      end,
+      giftDay: end,
+      showGift: true,
+      pastTopTier: false,
+    };
+  }
+
+  const end = currentStreak;
+  const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
+  return { start, end, giftDay: null, showGift: false, pastTopTier: false };
+}
 
 /**
  * Pure helper — returns the next upcoming milestone day strictly

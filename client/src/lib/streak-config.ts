@@ -10,8 +10,10 @@ export {
   STREAK_MILESTONE_XP,
   STREAK_TARGET_DAYS,
   getNextMilestone,
+  getStreakToastTimeline,
   streakMilestoneActionKey,
   type StreakMilestone,
+  type StreakToastTimeline,
 } from "@shared/streak-config";
 
 import { STREAK_MILESTONES } from "@shared/streak-config";

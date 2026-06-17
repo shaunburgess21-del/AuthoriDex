@@ -1,9 +1,8 @@
-import { CalendarCheck, Check, Gift, Sparkles, Trophy, X } from "lucide-react";
+import { CalendarCheck, Check, Gift, Sparkles, X } from "lucide-react";
 import {
-  STREAK_MILESTONES,
   STREAK_REWARD_TEASE,
-  STREAK_TARGET_DAYS,
   getNextMilestone,
+  getStreakToastTimeline,
 } from "@/lib/streak-config";
 
 const toastWidth =
@@ -43,48 +42,13 @@ function titleFor({
   return `Day ${currentStreak} streak`;
 }
 
-/**
- * Visible window of dots shown on the toast timeline. The cycle no
- * longer hard-wraps every 7 days (pre-overhaul behaviour); instead
- * the window slides so the user always sees their current position
- * relative to the next milestone. This keeps the timeline meaningful
- * for streaks deep into double or triple digits.
- *
- * Strategy:
- *   - Anchor the right edge to the next milestone (or the current
- *     day if past the last milestone).
- *   - Show STREAK_TARGET_DAYS slots leading up to it.
- */
-function buildTimeline(currentStreak: number): {
-  start: number;
-  end: number;
-  giftDay: number;
-  pastTopTier: boolean;
-} {
-  const milestones = STREAK_MILESTONES as readonly number[];
-  const topMilestone = milestones[milestones.length - 1];
-  const pastTopTier = currentStreak > topMilestone;
-  // On a milestone-hit toast, anchor the gift to today so the celebration
-  // row is fully completed instead of pivoting to an empty next-window.
-  const isOnMilestone = milestones.includes(currentStreak);
-  // Past the top milestone, anchor to current day so the trophy slot
-  // renders at the end of the visible window.
-  const next = pastTopTier
-    ? currentStreak
-    : isOnMilestone
-      ? currentStreak
-      : (getNextMilestone(currentStreak) ?? topMilestone);
-  const giftDay = next;
-  const end = Math.max(giftDay, currentStreak);
-  const start = Math.max(1, end - (STREAK_TARGET_DAYS - 1));
-  return { start, end, giftDay, pastTopTier };
-}
-
 function timelineAriaLabel(
   slots: number[],
-  giftDay: number,
   currentStreak: number,
+  giftDay: number | null,
+  showGift: boolean,
   pastTopTier: boolean,
+  nextMilestone: ReturnType<typeof getNextMilestone>,
 ): string {
   const range =
     slots.length === 1
@@ -92,8 +56,12 @@ function timelineAriaLabel(
       : `days ${slots[0]} through ${slots[slots.length - 1]}`;
   const tail = pastTopTier
     ? "you have reached the top tier"
-    : `day ${giftDay} is the next milestone`;
-  return `Streak progress: ${range}, currently day ${currentStreak}, ${tail}`;
+    : showGift && giftDay !== null
+      ? `day ${giftDay} is the next milestone`
+      : nextMilestone !== null
+        ? `next milestone is day ${nextMilestone}`
+        : "";
+  return `Streak progress: ${range}, currently day ${currentStreak}${tail ? `, ${tail}` : ""}`;
 }
 
 export function StreakToast({
@@ -105,13 +73,14 @@ export function StreakToast({
   milestoneDay,
   onClose,
 }: StreakToastProps) {
-  const { start, end, giftDay, pastTopTier } = buildTimeline(currentStreak);
+  const { start, end, giftDay, showGift, pastTopTier } = getStreakToastTimeline(currentStreak);
   const slots: number[] = [];
   for (let d = start; d <= end; d += 1) slots.push(d);
 
   const beatsBest = longestStreak !== undefined && currentStreak >= longestStreak && currentStreak > 1;
   const nextMilestone = getNextMilestone(currentStreak);
   const daysToNext = nextMilestone ? nextMilestone - currentStreak : null;
+  const isToday = (day: number) => !showGift && day === currentStreak;
 
   const iconPillClasses =
     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3C83F6]/15 text-[#3C83F6] dark:bg-[#3C83F6]/20 dark:text-[#93C5FD]";
@@ -161,11 +130,18 @@ export function StreakToast({
 
       <div
         className="mt-3.5 mb-1 flex items-start gap-0"
-        aria-label={timelineAriaLabel(slots, giftDay, currentStreak, pastTopTier)}
+        aria-label={timelineAriaLabel(
+          slots,
+          currentStreak,
+          giftDay,
+          showGift,
+          pastTopTier,
+          nextMilestone,
+        )}
       >
         {slots.map((dayNumber, idx) => {
           const isLastSlot = idx === slots.length - 1;
-          const isGift = dayNumber === giftDay;
+          const isGift = showGift && giftDay !== null && dayNumber === giftDay;
           const isCompleted = dayNumber <= currentStreak;
           const nextCompleted = dayNumber + 1 <= currentStreak;
           const connectorActive = isCompleted && nextCompleted;
@@ -175,10 +151,12 @@ export function StreakToast({
               ? "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.25)]"
               : "bg-muted text-muted-foreground"
             : isCompleted
-              ? "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.18)]"
+              ? isToday(dayNumber)
+                ? "bg-[#3C83F6] text-white ring-2 ring-[#3C83F6]/40 shadow-[0_0_0_3px_rgba(60,131,246,0.18)]"
+                : "bg-[#3C83F6] text-white shadow-[0_0_0_3px_rgba(60,131,246,0.18)]"
               : "bg-muted text-muted-foreground/70";
 
-          const giftLabel = pastTopTier ? "Top tier" : `Day ${giftDay}`;
+          const giftLabel = `Day ${giftDay}`;
 
           return (
             <div
@@ -191,11 +169,7 @@ export function StreakToast({
                   data-testid={`streak-dot-${dayNumber}${isGift ? "-gift" : ""}`}
                 >
                   {isGift ? (
-                    pastTopTier ? (
-                      <Trophy className="h-3.5 w-3.5" />
-                    ) : (
-                      <Gift className="h-3.5 w-3.5" />
-                    )
+                    <Gift className="h-3.5 w-3.5" />
                   ) : isCompleted ? (
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
                   ) : null}
