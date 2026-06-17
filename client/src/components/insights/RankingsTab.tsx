@@ -20,8 +20,7 @@ import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { LeaderboardRankAvatar } from "@/components/LeaderboardRankAvatar";
 import { OverallRankPill } from "@/components/OverallRankPill";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3 } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -446,11 +445,7 @@ export function RankingsTab() {
             <CardHeader className="relative z-[2] gap-3 space-y-0 bg-card/95 pb-4 pt-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <CardTitle className="text-2xl font-serif flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 text-muted-foreground" aria-hidden />
-                    Rankings
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground/80">
+                  <p className="text-xs text-muted-foreground/80">
                     Sorted by{" "}
                     <span className="font-medium text-foreground">
                       {SOURCE_DISPLAY[filters.source]}
