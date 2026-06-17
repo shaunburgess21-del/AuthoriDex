@@ -347,6 +347,7 @@ function SectionFilterBar({
         onSearchChange={onSearchChange}
         placeholder={searchPlaceholder}
         testId={`${testIdPrefix}-search`}
+        variant="predict"
       >
         {filters.map((cat) => {
           const IconComponent = CATEGORY_ICONS[cat.id] || LayoutGrid;
