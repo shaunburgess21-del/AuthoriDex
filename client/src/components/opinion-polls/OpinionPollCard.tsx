@@ -384,7 +384,7 @@ export function OpinionPollCard({
                   className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate"
                   data-testid={`link-more-options-${poll.id}`}
                 >
-                  +{remainingCount} more options
+                  +{remainingCount} more
                 </button>
               )}
             </div>
