@@ -20,8 +20,6 @@ const DRAG_LIMIT_PX = 100;
 export const SWIPE_CLICK_GUARD_PX = 10;
 /** Delete affordance begins fading in after this much left/right drag (px). */
 const DELETE_REVEAL_START_PX = 10;
-/** Width of the red delete strip revealed beside the row. */
-const DELETE_STRIP_WIDTH_PX = 64;
 
 type SwipeAction = "read" | "delete";
 
@@ -104,15 +102,17 @@ export function NotificationSwipeableRow({
         className="absolute inset-0 flex justify-between pointer-events-none"
         aria-hidden="true"
       >
-        {leftAction === "delete" ? (
-          <DeleteStrip reveal={leftReveal} side="left" />
-        ) : (
-          <ReadStrip reveal={leftReveal} side="left" isUnread={isUnread} />
-        )}
+        {/* Revealed on swipe-right (row moves right, exposes left edge) */}
         {rightAction === "delete" ? (
-          <DeleteStrip reveal={rightReveal} side="right" />
+          <DeleteStrip reveal={rightReveal} side="left" />
         ) : (
-          <ReadStrip reveal={rightReveal} side="right" isUnread={isUnread} />
+          <ReadStrip reveal={rightReveal} side="left" isUnread={isUnread} />
+        )}
+        {/* Revealed on swipe-left (row moves left, exposes right edge) */}
+        {leftAction === "delete" ? (
+          <DeleteStrip reveal={leftReveal} side="right" />
+        ) : (
+          <ReadStrip reveal={leftReveal} side="right" isUnread={isUnread} />
         )}
       </div>
 
@@ -144,20 +144,23 @@ function DeleteStrip({
 
   return (
     <motion.div
-      style={{ opacity: reveal, width: DELETE_STRIP_WIDTH_PX }}
+      style={{ opacity: reveal }}
       className={cn(
-        "flex shrink-0 items-center justify-center bg-red-600 dark:bg-red-700",
-        side === "left" ? "order-first" : "order-last",
+        "flex flex-1 items-center px-4 min-w-[72px] bg-red-600 dark:bg-red-700",
+        side === "left" ? "justify-start" : "justify-end",
       )}
     >
       <motion.div
         style={{ scale: iconScale }}
-        className="flex flex-col items-center gap-0.5 text-white"
+        className={cn(
+          "flex items-center gap-1.5 text-white",
+          side === "right" && "flex-row-reverse",
+        )}
       >
-        <Trash2 className="h-6 w-6" aria-hidden="true" />
+        <Trash2 className="h-5 w-5 shrink-0" aria-hidden="true" />
         <motion.span
           style={{ opacity: labelOpacity }}
-          className="text-[10px] font-semibold leading-none"
+          className="text-xs font-semibold"
         >
           Delete
         </motion.span>
