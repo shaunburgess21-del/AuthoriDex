@@ -16,7 +16,6 @@ import {
   KNOWLEDGE_TABS,
   XP_ACTIONS,
   RANKS,
-  CAPABILITY_GATES,
   VOTE_SURFACES,
   PREDICT_SURFACES,
   glowClassFor,
@@ -32,8 +31,18 @@ import {
   type CreditCategory,
 } from "@shared/credit-config";
 import { BADGES, type BadgeCategory } from "@shared/badge-config";
+import {
+  PROFILE_BANNER_MIN_TIER,
+  PROFILE_THEME_MIN_TIER,
+} from "@shared/profile-theme-config";
 import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
+
+/**
+ * Tier at which a member's rank qualifier starts appearing inline on their
+ * comments and insights — mirrors RANK_QUALIFIER_MIN_TIER in CommentRow.
+ */
+const RANK_QUALIFIER_MIN_TIER = 3;
 
 /**
  * Local tab bar mirroring ProfileTabs visually (muted track, raised active
@@ -514,6 +523,20 @@ function StreakExplainer() {
   );
 }
 
+/**
+ * Short summary of the status / visibility unlocks a tier carries. Tier
+ * thresholds are the same ones enforced elsewhere: the inline rank
+ * qualifier on comments (Tier 3+), the custom profile banner
+ * (PROFILE_BANNER_MIN_TIER), and the profile accent theme
+ * (PROFILE_THEME_MIN_TIER).
+ */
+function rankStatusSummary(tier: number): string {
+  if (tier >= PROFILE_THEME_MIN_TIER) return "Qualifier · Banner · Theme";
+  if (tier >= PROFILE_BANNER_MIN_TIER) return "Qualifier · Banner";
+  if (tier >= RANK_QUALIFIER_MIN_TIER) return "Rank qualifier";
+  return "Standard profile";
+}
+
 function RanksSection() {
   const accent = accentFor("ranks");
   return (
@@ -521,12 +544,39 @@ function RanksSection() {
       <SectionHeading
         id="ranks"
         title="Ranks — Your VoxDex Reputation"
-        subtitle="Eight tiers that signal your standing, unlock platform capabilities, and mark your journey from newcomer to legend."
+        subtitle="Everyone can do everything. Rank amplifies it."
       />
+
+      <Card className="space-y-2 p-4">
+        <h3 className="font-semibold">How rank actually works</h3>
+        <p className="text-sm text-muted-foreground">
+          Every feature — voting, predicting, commenting, posting insights,
+          curating images, nominating inductions — is open to everyone from
+          day one. Climbing the ladder doesn&apos;t unlock buttons; it{" "}
+          <strong className="text-foreground">amplifies</strong> what you
+          already do:
+        </p>
+        <ul className="space-y-1 text-sm text-muted-foreground">
+          <li>
+            <strong className="text-foreground">Earn rate</strong> — a per-tier
+            multiplier on the XP and Vox you earn from engagement.
+          </li>
+          <li>
+            <strong className="text-foreground">Curatorial influence</strong> —
+            how much your Induction and Curate votes count toward picking
+            winners (everyone&apos;s vote still shows as one vote).
+          </li>
+          <li>
+            <strong className="text-foreground">Status</strong> — visible
+            markers: a rank qualifier on your comments, then a custom profile
+            banner, then a profile accent theme at the very top.
+          </li>
+        </ul>
+      </Card>
 
       <div className="grid gap-3 md:grid-cols-2">
         {RANKS.map((rank) => (
-          <Card key={rank.tier} className="space-y-2 p-4">
+          <Card key={rank.tier} className="space-y-3 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span
@@ -555,57 +605,38 @@ function RanksSection() {
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">{rank.description}</p>
+            <div className="grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-center">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Earn rate
+                </div>
+                <div className="font-mono text-sm font-semibold">
+                  {rank.earnMultiplier.toFixed(2)}×
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Curatorial
+                </div>
+                <div className="font-mono text-sm font-semibold">
+                  {rank.curatorialWeight > 1
+                    ? `${rank.curatorialWeight.toFixed(2)}×`
+                    : "Standard"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Status
+                </div>
+                <div className="text-[11px] font-medium leading-tight">
+                  {rankStatusSummary(rank.tier)}
+                </div>
+              </div>
+            </div>
           </Card>
         ))}
       </div>
 
-      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("ranks"), "pulse-card-flush")}>
-        <h3 className="font-semibold">Capabilities unlocked by tier</h3>
-        <p className="text-sm text-muted-foreground">
-          Each rank unlocks a specific set of platform actions. Hit the
-          threshold and the capabilities below open up automatically — no
-          claim flow, no waiting.
-        </p>
-        <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Capability</th>
-                <th className="px-3 py-2 font-medium">Unlocks at</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CAPABILITY_GATES.map((gate) => {
-                const tierRank = RANKS.find((r) => r.tier === gate.minTier);
-                return (
-                  <tr key={gate.capability} className="border-t border-border/60">
-                    <td className="px-3 py-2">
-                      <div className="font-medium">{gate.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {gate.description}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] whitespace-nowrap"
-                        style={{
-                          borderColor: tierRank
-                            ? `${tierRank.color}66`
-                            : `${accent}66`,
-                          color: tierRank ? tierRank.color : accent,
-                        }}
-                      >
-                        Tier {gate.minTier} · {tierRank?.name ?? ""}
-                      </Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </section>
   );
 }
