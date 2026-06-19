@@ -45,14 +45,32 @@ export function UserRankBadge({ rank, size = "md", className = "" }: UserRankBad
         : "gap-1.5 px-3 py-1";
   const iconClass = size === "xs" ? "h-2.5 w-2.5" : "h-3 w-3";
 
+  // Per-tier visual treatment (Phase 5). CSS-only so it works on every
+  // surface the badge already renders on:
+  //   - Tier 5 (Expert): subtle pulse to mark "serious participant".
+  //   - Tier 6-8: a progressively stronger accent glow (Maven < Hall of
+  //     Famer < VoxMax Legend) so the top of the ladder reads as rare.
+  // Disabled at `xs` so the inline comment qualifier stays calm in dense
+  // comment threads.
+  const decorate = size !== "xs";
+  const glowAlpha =
+    config.tier >= 8 ? 0.6 : config.tier === 7 ? 0.5 : config.tier === 6 ? 0.4 : 0;
+  const boxShadow =
+    decorate && glowAlpha > 0
+      ? `0 0 ${config.tier >= 8 ? 14 : 9}px ${hexToRgba(config.color, glowAlpha)}`
+      : undefined;
+  const pulseClass =
+    decorate && config.tier === 5 ? "motion-safe:animate-pulse" : "";
+
   return (
     <Badge
       variant="outline"
-      className={`${sizeClass} ${className}`}
+      className={`${sizeClass} ${pulseClass} ${className}`}
       style={{
         backgroundColor: tintBg,
         borderColor: tintBorder,
         color: config.color,
+        boxShadow,
       }}
     >
       <Icon className={iconClass} />

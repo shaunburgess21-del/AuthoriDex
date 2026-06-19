@@ -57,7 +57,13 @@ import {
 } from "@/components/ui/popover";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
-import { uploadAvatarFile, uploadGeneratedAvatar } from "@/lib/avatar/upload";
+import { uploadAvatarFile, uploadGeneratedAvatar, uploadBannerFile } from "@/lib/avatar/upload";
+import { getRankByName } from "@shared/rank-config";
+import {
+  PROFILE_BANNER_MIN_TIER,
+  PROFILE_THEME_MIN_TIER,
+  PROFILE_THEMES,
+} from "@shared/profile-theme-config";
 import { PasswordCard } from "./PasswordCard";
 import {
   InputOTP,
@@ -387,6 +393,7 @@ function ProfileTab() {
   const displayName = username || user?.email?.split("@")[0] || "User";
 
   return (
+    <div className="space-y-6">
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
         <User className="h-5 w-5 text-muted-foreground" />
@@ -555,6 +562,215 @@ function ProfileTab() {
         currentSeed={profile?.avatarSeed ?? undefined}
         onSave={onSaveAvatar}
       />
+    </Card>
+    <RankRewardsCard />
+    </div>
+  );
+}
+
+/**
+ * Per-tier profile visual unlocks (Phase 5). Custom banner unlocks at
+ * Maven (Tier 6+), the accent theme at VoxMax Legend (Tier 8). Below
+ * those tiers we show a locked teaser so the rewards are discoverable
+ * without touching the public profile. Writes go through
+ * PATCH /api/profile/me, which re-checks the tier server-side.
+ */
+function RankRewardsCard() {
+  const { user, profile, refreshProfile } = useAuth();
+  const tier = getRankByName(profile?.rank ?? "")?.tier ?? 1;
+  const canBanner = tier >= PROFILE_BANNER_MIN_TIER;
+  const canTheme = tier >= PROFILE_THEME_MIN_TIER;
+  const [bannerBusy, setBannerBusy] = useState(false);
+  const [themeBusy, setThemeBusy] = useState(false);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  const bannerUrl = profile?.profileBannerUrl ?? null;
+  const activeTheme = profile?.profileTheme ?? null;
+
+  const onBannerFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setBannerBusy(true);
+    try {
+      const userId = profile?.id || user!.id;
+      const { url } = await uploadBannerFile(userId, file);
+      await apiRequest("PATCH", "/api/profile/me", { profileBannerUrl: url });
+      await refreshProfile();
+      toast("Banner updated", { description: "Your profile is looking elite." });
+    } catch (err) {
+      toast.error("Could not upload banner", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setBannerBusy(false);
+    }
+  };
+
+  const onRemoveBanner = async () => {
+    setBannerBusy(true);
+    try {
+      await apiRequest("PATCH", "/api/profile/me", { profileBannerUrl: null });
+      await refreshProfile();
+      toast("Banner removed");
+    } catch (err) {
+      toast.error("Could not remove banner", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setBannerBusy(false);
+    }
+  };
+
+  const onSelectTheme = async (key: string | null) => {
+    setThemeBusy(true);
+    try {
+      await apiRequest("PATCH", "/api/profile/me", { profileTheme: key });
+      await refreshProfile();
+      toast(key ? "Theme applied" : "Theme cleared");
+    } catch (err) {
+      toast.error("Could not update theme", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setThemeBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Sparkles className="h-5 w-5 text-muted-foreground" />
+        <h2 className="font-semibold">Rank rewards</h2>
+      </div>
+      <p className="text-xs text-muted-foreground mb-6">
+        Visual unlocks earned by climbing the ranks. They show on your
+        public profile while you hold the rank.
+      </p>
+
+      {/* Banner — Maven (Tier 6+) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Profile banner</Label>
+          {!canBanner && (
+            <Badge variant="outline" className="text-[10px]">
+              Unlocks at Maven (Tier {PROFILE_BANNER_MIN_TIER})
+            </Badge>
+          )}
+        </div>
+        {canBanner ? (
+          <div className="space-y-3">
+            <div className="relative h-28 w-full overflow-hidden rounded-lg border bg-muted/40">
+              {bannerUrl ? (
+                <img
+                  src={bannerUrl}
+                  alt="Profile banner preview"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                  No banner yet
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bannerBusy}
+                onClick={() => bannerInputRef.current?.click()}
+              >
+                {bannerBusy ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4 mr-2" />
+                )}
+                {bannerUrl ? "Replace banner" : "Upload banner"}
+              </Button>
+              {bannerUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={bannerBusy}
+                  onClick={onRemoveBanner}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+            <input
+              ref={bannerInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={onBannerFile}
+            />
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Reach Maven to add a custom banner to your profile.
+          </p>
+        )}
+      </div>
+
+      {/* Theme — VoxMax Legend (Tier 8) */}
+      <div className="mt-6 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Profile theme</Label>
+          {!canTheme && (
+            <Badge variant="outline" className="text-[10px]">
+              Unlocks at VoxMax Legend (Tier {PROFILE_THEME_MIN_TIER})
+            </Badge>
+          )}
+        </div>
+        {canTheme ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={themeBusy}
+              onClick={() => onSelectTheme(null)}
+              className={cn(
+                "h-12 w-16 rounded-lg border text-[10px] font-medium transition-colors",
+                activeTheme === null
+                  ? "border-foreground ring-2 ring-foreground/30"
+                  : "border-border hover:border-foreground/40",
+              )}
+            >
+              None
+            </button>
+            {PROFILE_THEMES.map((theme) => (
+              <button
+                key={theme.key}
+                type="button"
+                disabled={themeBusy}
+                onClick={() => onSelectTheme(theme.key)}
+                title={theme.label}
+                className={cn(
+                  "relative h-12 w-16 overflow-hidden rounded-lg border transition-colors",
+                  activeTheme === theme.key
+                    ? "border-foreground ring-2 ring-foreground/30"
+                    : "border-border hover:border-foreground/40",
+                )}
+                style={{
+                  background: `linear-gradient(135deg, ${theme.gradient[0]}, ${theme.gradient[1]})`,
+                }}
+              >
+                <span
+                  className="absolute bottom-1 left-1 h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: theme.accent }}
+                />
+                <span className="absolute bottom-0.5 right-1 text-[9px] font-medium text-white/90">
+                  {theme.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Reach VoxMax Legend to theme your profile page.
+          </p>
+        )}
+      </div>
     </Card>
   );
 }

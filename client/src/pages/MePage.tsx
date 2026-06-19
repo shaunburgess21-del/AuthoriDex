@@ -12,6 +12,12 @@ import { UserRankBadge } from "@/components/UserRankBadge";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
 import { formatVox } from "@/lib/currency";
+import { getRankByName } from "@shared/rank-config";
+import {
+  getProfileTheme,
+  PROFILE_BANNER_MIN_TIER,
+  PROFILE_THEME_MIN_TIER,
+} from "@shared/profile-theme-config";
 
 export default function MePage() {
   const { user, profile, profileLoading, isAdmin, signOut, refreshProfile } = useAuth();
@@ -22,6 +28,15 @@ export default function MePage() {
   }, [user, refreshProfile]);
 
   const displayName = profile?.username || user?.email?.split("@")[0] || "User";
+
+  // Per-tier profile visual unlocks (Phase 5). /api/profile/me returns the
+  // raw stored values (not tier-gated like the public endpoint), so gate on
+  // the owner's CURRENT rank tier here — a demotion hides, never deletes.
+  const ownerTier = getRankByName(profile?.rank ?? "")?.tier ?? 1;
+  const banner =
+    ownerTier >= PROFILE_BANNER_MIN_TIER ? profile?.profileBannerUrl ?? null : null;
+  const theme =
+    ownerTier >= PROFILE_THEME_MIN_TIER ? getProfileTheme(profile?.profileTheme) : null;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
@@ -39,7 +54,22 @@ export default function MePage() {
             </Card>
           ) : (
           <div className="space-y-6">
-            <Card className="p-6">
+            <Card
+              className="overflow-hidden p-6"
+              style={
+                theme
+                  ? {
+                      backgroundImage: `linear-gradient(180deg, ${theme.gradient[0]}26, transparent 55%)`,
+                      borderColor: `${theme.accent}55`,
+                    }
+                  : undefined
+              }
+            >
+              {banner && (
+                <div className="-mx-6 -mt-6 mb-6 h-28 overflow-hidden bg-muted sm:h-32">
+                  <img src={banner} alt="" className="h-full w-full object-cover" />
+                </div>
+              )}
               <div className="flex items-start gap-4 mb-6">
                 <UserProfileAvatar
                   displayName={displayName}

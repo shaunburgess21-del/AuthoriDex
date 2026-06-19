@@ -1087,6 +1087,17 @@ export const profiles = pgTable("profiles", {
   // they're released into the rest of the app.
   onboardingStep: integer("onboarding_step").notNull().default(0),
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+  // Per-tier profile visual unlocks (Phase 5 rank redesign). Stored
+  // unconditionally but rendered conditionally on the user's CURRENT
+  // rank tier, so a (hypothetical) demotion hides the treatment without
+  // destroying the saved value:
+  //   - profileBannerUrl: custom profile banner image. Earned at Maven
+  //     (Tier 6+). Server rejects writes below Tier 6.
+  //   - profileTheme: named accent theme preset for the profile page.
+  //     Earned at VoxMax Legend (Tier 8). Server rejects writes below
+  //     Tier 8. One of the keys in shared/profile-theme-config.
+  profileBannerUrl: text("profile_banner_url"),
+  profileTheme: text("profile_theme"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

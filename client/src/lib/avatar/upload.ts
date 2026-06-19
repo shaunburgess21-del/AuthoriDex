@@ -43,6 +43,11 @@ import { renderAvatarToBlob } from './render';
 const BUCKET = 'avatars';
 const GENERATED_FILENAME = 'avatar.png';
 const UPLOADED_FILENAME = 'avatar.webp';
+// Phase 5 profile banner (Maven Tier 6+). Stored alongside the avatar in
+// the user's own folder so the existing per-user storage RLS applies.
+// Fixed path (no extension) + upsert keeps a single file per user — a
+// re-upload overwrites, no orphans across formats.
+const BANNER_FILENAME = 'banner';
 
 // User-uploaded photos are converted to WebP server-side, so we accept
 // a wider input pool and let the server do the heavy lifting. The cap
@@ -183,5 +188,51 @@ export async function uploadAvatarFile(file: File): Promise<UploadedAvatarFile> 
   }
 
   const { url, path } = (await res.json()) as { url: string; path: string };
+  return { url, path };
+}
+
+/**
+ * Upload a user-supplied image as the profile banner (Phase 5, Maven
+ * Tier 6+). Uploads directly to the user's folder in the `avatars`
+ * bucket at a fixed `{userId}/banner` path (upsert), mirroring the
+ * generated-avatar client-upload path so no new bucket/RLS is needed.
+ * Returns the cache-busted public URL; the caller persists it via
+ * PATCH /api/profile/me { profileBannerUrl }.
+ */
+export async function uploadBannerFile(
+  userId: string,
+  file: File,
+): Promise<UploadedAvatarFile> {
+  if (!userId) throw new Error('uploadBannerFile: userId required');
+  if (!file) throw new Error('uploadBannerFile: file required');
+
+  if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
+    throw new Error('Please upload a PNG, JPG, or WEBP image.');
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error('Image is too large. Max 5 MB.');
+  }
+
+  const supabase = await getSupabase();
+  const path = `${userId}/${BANNER_FILENAME}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, file, {
+      contentType: file.type,
+      upsert: true,
+      cacheControl: '3600',
+    });
+
+  if (uploadError) {
+    throw new Error(`Banner upload failed: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    throw new Error('Banner upload succeeded but public URL resolution failed');
+  }
+
+  const url = `${data.publicUrl}?v=${Date.now()}`;
   return { url, path };
 }

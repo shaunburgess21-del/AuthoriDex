@@ -58,6 +58,12 @@ import {
 } from "./services/recovery-email-verification";
 import { SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { formatVox } from "@shared/currency";
+import { getRankByName } from "@shared/rank-config";
+import {
+  PROFILE_BANNER_MIN_TIER,
+  PROFILE_THEME_MIN_TIER,
+  isValidProfileThemeKey,
+} from "@shared/profile-theme-config";
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
@@ -7193,6 +7199,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         occupationPublic,
         onboardingStep,
         onboardingCompletedAt,
+        profileBannerUrl,
+        profileTheme,
       } = req.body;
 
       // Build update object with only provided fields
@@ -7373,6 +7381,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData.onboardingCompletedAt = parsed;
         } else {
           return res.status(400).json({ error: "invalid_onboarding_completed_at" });
+        }
+      }
+
+      // Per-tier profile visual unlocks (Phase 5). Banner = Maven
+      // (Tier 6+), theme = VoxMax Legend (Tier 8). Writes are gated on
+      // the user's CURRENT rank tier so the API can't grant a treatment
+      // the rank doesn't earn; `null`/empty clears and is always allowed.
+      if (profileBannerUrl !== undefined || profileTheme !== undefined) {
+        const [self] = await db
+          .select({ rank: profiles.rank })
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1);
+        const currentTier = getRankByName(self?.rank ?? "")?.tier ?? 1;
+
+        if (profileBannerUrl !== undefined) {
+          if (profileBannerUrl === null) {
+            updateData.profileBannerUrl = null;
+          } else if (typeof profileBannerUrl === "string") {
+            const trimmed = profileBannerUrl.trim();
+            if (trimmed.length === 0) {
+              updateData.profileBannerUrl = null;
+            } else if (currentTier < PROFILE_BANNER_MIN_TIER) {
+              return res.status(403).json({
+                error: "rank_too_low_for_banner",
+                requiredTier: PROFILE_BANNER_MIN_TIER,
+              });
+            } else if (!/^https?:\/\//i.test(trimmed) || trimmed.length > 2048) {
+              return res.status(400).json({ error: "invalid_banner_url" });
+            } else {
+              updateData.profileBannerUrl = trimmed;
+            }
+          } else {
+            return res.status(400).json({ error: "invalid_banner_url" });
+          }
+        }
+
+        if (profileTheme !== undefined) {
+          if (profileTheme === null) {
+            updateData.profileTheme = null;
+          } else if (isValidProfileThemeKey(profileTheme)) {
+            if (currentTier < PROFILE_THEME_MIN_TIER) {
+              return res.status(403).json({
+                error: "rank_too_low_for_theme",
+                requiredTier: PROFILE_THEME_MIN_TIER,
+              });
+            }
+            updateData.profileTheme = profileTheme;
+          } else {
+            return res.status(400).json({ error: "invalid_profile_theme" });
+          }
         }
       }
 
@@ -8043,11 +8102,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Per-tier profile visual unlocks (Phase 5) are gated on the
+      // owner's CURRENT rank tier at read time, so a demotion hides the
+      // treatment everywhere without us having to clear the stored value.
+      const ownerTier = getRankByName(baseProfile.rank ?? "")?.tier ?? 1;
+
       res.json({
         userId: baseProfile.id,
         username: baseProfile.username,
         avatarUrl: baseProfile.avatarUrl,
         rank: baseProfile.rank,
+        profileBannerUrl:
+          ownerTier >= PROFILE_BANNER_MIN_TIER
+            ? baseProfile.profileBannerUrl ?? null
+            : null,
+        profileTheme:
+          ownerTier >= PROFILE_THEME_MIN_TIER
+            ? baseProfile.profileTheme ?? null
+            : null,
         xpPoints: baseProfile.xpPoints,
         totalVotes: visibleTotalVotes,
         totalPredictions: visibleTotalPredictions,

@@ -41,6 +41,10 @@ export interface UserProfile {
   occupationIndustry?: string | null;
   socialHandlesPublic?: boolean;
   occupationPublic?: boolean;
+  // Per-tier profile visual unlocks (Phase 5). Banner = Maven (Tier 6+),
+  // theme = VoxMax Legend (Tier 8). Rendered conditionally on current tier.
+  profileBannerUrl?: string | null;
+  profileTheme?: string | null;
   // Account tab.
   recoveryEmail?: string | null;
   recoveryEmailVerified?: boolean;

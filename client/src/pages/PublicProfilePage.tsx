@@ -22,6 +22,7 @@ import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
+import { getProfileTheme } from "@shared/profile-theme-config";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { appendShareAttribution } from "@/lib/share";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,9 @@ interface PublicProfile {
   username: string;
   avatarUrl?: string | null;
   rank?: string;
+  /** Per-tier visual unlocks (Phase 5) — already tier-gated server-side. */
+  profileBannerUrl?: string | null;
+  profileTheme?: string | null;
   xpPoints?: number;
   totalVotes?: number;
   totalPredictions?: number;
@@ -1019,17 +1023,39 @@ function ProfileIdentityCard({
   pnl: number;
   predictions: number;
 }) {
+  // Per-tier visual unlocks (Phase 5). Both are already tier-gated by
+  // the API (it nulls them out when the owner's current rank no longer
+  // qualifies), so we render whatever the server sends.
+  const theme = getProfileTheme(profile.profileTheme);
+  const banner = profile.profileBannerUrl;
+
   return (
-    <Card className="p-6">
-      <div className="flex items-start gap-4 mb-6">
+    <Card
+      className="overflow-hidden p-0"
+      style={theme ? { borderColor: `${theme.accent}55` } : undefined}
+    >
+      {banner && (
+        <div className="h-32 w-full bg-muted sm:h-40">
+          <img src={banner} alt="" className="h-full w-full object-cover" />
+        </div>
+      )}
+      <div
+        className="p-6"
+        style={
+          theme
+            ? { background: `linear-gradient(180deg, ${theme.gradient[0]}26, transparent 55%)` }
+            : undefined
+        }
+      >
+      <div className={`flex items-start gap-4 mb-6 ${banner ? "-mt-14 sm:-mt-16" : ""}`}>
         <UserProfileAvatar
           displayName={displayName}
           avatarUrl={profile.avatarUrl}
-          className="h-20 w-20"
+          className={`h-20 w-20 ${banner ? "rounded-full ring-4 ring-background" : ""}`}
           fallbackClassName="text-2xl"
         />
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold truncate">{displayName}</h1>
+          <h1 className={`text-2xl font-bold truncate ${banner ? "mt-14 sm:mt-16" : ""}`}>{displayName}</h1>
           <p className="text-muted-foreground">@{profile.username}</p>
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <UserRankBadge rank={profile.rank || "Citizen"} />
@@ -1103,6 +1129,7 @@ function ProfileIdentityCard({
           )}
         </div>
       )}
+      </div>
     </Card>
   );
 }
