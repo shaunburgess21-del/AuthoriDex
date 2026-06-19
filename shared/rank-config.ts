@@ -25,6 +25,13 @@ export interface RankConfig {
   /** null = open-ended top tier. */
   maxXp: number | null;
   voteMultiplier: number;
+  /**
+   * Per-tier earn-rate multiplier applied to BOTH XP and credit awards
+   * at the awardXp / adjustCredits chokepoints. Gentle curve
+   * (1.00x -> 1.50x) so loyalty is rewarded without runaway compounding.
+   * Distinct from curatorialWeight.
+   */
+  earnMultiplier: number;
   /** Hex string used by RankBadge / RankLadderStrip / RankUpModal. */
   color: string;
   /** Lucide icon name (string), resolved client-side. */
@@ -50,6 +57,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 0,
     maxXp: 999,
     voteMultiplier: 1.0,
+    earnMultiplier: 1.0,
     color: "#6B7280",
     icon: "user",
     description:
@@ -61,6 +69,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 1000,
     maxXp: 4999,
     voteMultiplier: 1.0,
+    earnMultiplier: 1.05,
     color: "#10B981",
     icon: "trending-up",
     description:
@@ -72,6 +81,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 5000,
     maxXp: 14999,
     voteMultiplier: 1.25,
+    earnMultiplier: 1.1,
     color: "#3B82F6",
     icon: "eye",
     description:
@@ -83,6 +93,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 15000,
     maxXp: 34999,
     voteMultiplier: 1.5,
+    earnMultiplier: 1.15,
     color: "#8B5CF6",
     icon: "bar-chart",
     description:
@@ -94,6 +105,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 35000,
     maxXp: 74999,
     voteMultiplier: 1.75,
+    earnMultiplier: 1.2,
     color: "#F59E0B",
     icon: "award",
     description:
@@ -105,6 +117,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 75000,
     maxXp: 149999,
     voteMultiplier: 2.0,
+    earnMultiplier: 1.3,
     color: "#EF4444",
     icon: "star",
     description:
@@ -116,6 +129,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 150000,
     maxXp: 399999,
     voteMultiplier: 2.5,
+    earnMultiplier: 1.4,
     color: "#FFD700",
     icon: "crown",
     description:
@@ -127,6 +141,7 @@ export const RANKS: readonly RankConfig[] = [
     minXp: 400000,
     maxXp: null,
     voteMultiplier: 3.0,
+    earnMultiplier: 1.5,
     color: "#E5E4E2",
     icon: "sparkles",
     description:

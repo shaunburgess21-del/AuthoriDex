@@ -89,6 +89,7 @@ interface RankRow {
   minXp: number;
   maxXp: number | null;
   voteMultiplier: number;
+  earnMultiplier: number;
   color: string;
   icon: string | null;
   description: string | null;

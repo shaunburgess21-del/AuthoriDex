@@ -12,7 +12,7 @@ import {
   type Rank
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
-import { canAccessCapability, computeCreditBalance, type Capability } from "./gamification-utils";
+import { canAccessCapability, computeCreditBalance, scaleEarnedValue, type Capability } from "./gamification-utils";
 import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
@@ -87,6 +87,30 @@ class GamificationService {
   private ranksCache: Rank[] = [];
   private cacheExpiry: number = 0;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  // Phase 2: action keys exempt from the per-tier earn multiplier.
+  // These are bookkeeping ledger rows, not earned participation, so
+  // they always write their face value regardless of rank.
+  private readonly UNSCALED_XP_ACTIONS = new Set<string>([
+    "legacy_migration",
+    "admin_adjustment",
+  ]);
+  private readonly UNSCALED_CREDIT_ACTIONS = new Set<string>([
+    "admin_adjustment",
+    "signup_grant",
+  ]);
+
+  /**
+   * Per-tier earn-rate multiplier for a rank name. Reads the live
+   * ranksCache so admin edits to earn_multiplier propagate on the next
+   * cache refresh. Defaults to 1.0 for unknown / null ranks so a stale
+   * profiles.rank value can never zero out (or shrink) an award.
+   */
+  private earnMultiplierForRank(rankName: string | null | undefined): number {
+    if (!rankName) return 1.0;
+    const rank = this.ranksCache.find((r) => r.name === rankName);
+    return rank?.earnMultiplier ?? 1.0;
+  }
 
   private async getProfile(userId: string): Promise<Profile | null> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
@@ -174,8 +198,11 @@ class GamificationService {
       };
     }
 
+    // Daily-cap window starts at UTC midnight — standardised with
+    // adjustCredits() so XP and credit caps roll over at the same instant
+    // for a globally distributed user base.
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     // Track rank promotion across the transaction so we can fire a
     // `rank_up` notification after the DB commit. We only emit if the
@@ -263,10 +290,20 @@ class GamificationService {
         };
       }
 
+      // Per-tier earn multiplier (Phase 2). Applied AFTER the daily-cap
+      // check (caps stay rank-blind — everyone gets the same number of
+      // opportunities) but BEFORE the ledger write so the stored xpDelta
+      // and the denormalised total agree. Bookkeeping actions are never
+      // scaled. XP is integer: round half-up.
+      const earnMultiplier = this.UNSCALED_XP_ACTIONS.has(actionType)
+        ? 1.0
+        : this.earnMultiplierForRank(profile.rank);
+      const effectiveXp = scaleEarnedValue(action.xpValue, earnMultiplier);
+
       const insertedLedger = await tx.insert(xpLedger).values({
         userId,
         actionType,
-        xpDelta: action.xpValue,
+        xpDelta: effectiveXp,
         idempotencyKey,
         source: 'user_action',
         metadata: metadata || null
@@ -286,7 +323,7 @@ class GamificationService {
         };
       }
 
-      const newTotalXp = profile.xpPoints + action.xpValue;
+      const newTotalXp = profile.xpPoints + effectiveXp;
       const nextRank = resolveRankForXp(this.ranksCache, newTotalXp);
 
       // Promotion + highest_rank lazy promotion both decided in one
@@ -329,12 +366,12 @@ class GamificationService {
 
       return {
         success: true,
-        xpAwarded: action.xpValue,
+        xpAwarded: effectiveXp,
         newTotalXp,
         newRank: nextRank?.name ?? profile.rank ?? null,
         dailyCount: dailyCount + 1,
         dailyCap: action.dailyCap,
-        message: `Awarded ${action.xpValue} XP for ${action.displayName}`
+        message: `Awarded ${effectiveXp} XP for ${action.displayName}`
       };
     });
 
@@ -458,11 +495,11 @@ class GamificationService {
         : resolved.row.proposedCredits;
     const dailyCap =
       resolved.source === "db" ? resolved.row.dailyCap : resolved.row.dailyCap;
-    const amount = options?.amount ?? proposedCredits;
+    const baseAmount = options?.amount ?? proposedCredits;
 
     // Zero-amount actions (e.g. admin_adjustment with no override)
     // are a no-op — silently skip rather than write an empty row.
-    if (amount === 0) {
+    if (baseAmount === 0) {
       return {
         awarded: false,
         amount: 0,
@@ -495,7 +532,7 @@ class GamificationService {
       }
 
       const [profile] = await tx
-        .select({ predictCredits: profiles.predictCredits })
+        .select({ predictCredits: profiles.predictCredits, rank: profiles.rank })
         .from(profiles)
         .where(eq(profiles.id, userId))
         .limit(1);
@@ -513,7 +550,7 @@ class GamificationService {
       // Daily cap check. Count UTC-today's ledger rows with the
       // matching txnType. At or above the cap, return awarded:false
       // silently — caller swallows the result and continues.
-      if (dailyCap !== null && dailyCap !== undefined && amount > 0) {
+      if (dailyCap !== null && dailyCap !== undefined && baseAmount > 0) {
         const utcToday = new Date();
         utcToday.setUTCHours(0, 0, 0, 0);
 
@@ -538,6 +575,20 @@ class GamificationService {
           };
         }
       }
+
+      // Per-tier earn multiplier (Phase 2). Only the engagement earn
+      // loop is scaled: call sites that pass an explicit signed `amount`
+      // (stake / payout / refund) keep their exact value, bookkeeping
+      // keys (admin_adjustment, signup_grant) are exempt, and deductions
+      // (baseAmount < 0) are never scaled. Applied after the daily-cap
+      // check so caps stay rank-blind. Round half-up; credits are integer.
+      const shouldScale =
+        options?.amount === undefined &&
+        baseAmount > 0 &&
+        !this.UNSCALED_CREDIT_ACTIONS.has(actionKey);
+      const amount = shouldScale
+        ? scaleEarnedValue(baseAmount, this.earnMultiplierForRank(profile.rank))
+        : baseAmount;
 
       const newBalance = computeCreditBalance(profile.predictCredits, amount);
 

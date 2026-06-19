@@ -141,6 +141,7 @@ async function seedRanks() {
           minXp: rank.minXp,
           maxXp: rank.maxXp,
           voteMultiplier: rank.voteMultiplier,
+          earnMultiplier: rank.earnMultiplier,
           color: rank.color,
           icon: rank.icon,
           description: rank.description,

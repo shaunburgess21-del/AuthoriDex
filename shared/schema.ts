@@ -423,6 +423,10 @@ export const ranks = pgTable("ranks", {
   minXp: integer("min_xp").notNull(),
   maxXp: integer("max_xp"),
   voteMultiplier: real("vote_multiplier").notNull().default(1.0),
+  // Per-tier earn-rate multiplier applied to XP + credit awards at the
+  // gamificationService chokepoints (awardXp / adjustCredits). Distinct
+  // from curatorialWeight. 1.0 = no boost.
+  earnMultiplier: real("earn_multiplier").notNull().default(1.0),
   color: text("color").notNull(),
   icon: text("icon"),
   description: text("description"),

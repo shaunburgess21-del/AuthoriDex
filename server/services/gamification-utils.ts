@@ -32,3 +32,15 @@ export function computeCreditBalance(currentBalance: number, amount: number): nu
   const nextBalance = currentBalance + amount;
   return nextBalance < 0 ? null : nextBalance;
 }
+
+/**
+ * Apply a per-tier earn multiplier to a base XP / credit value and round
+ * to an integer. XP and credits are always whole numbers in our ledgers,
+ * so we round half-up (`Math.round`) consistently across both paths.
+ * Pulled out as a pure helper so the multiplier rounding is unit-testable
+ * without a DB transaction. Callers decide WHETHER to scale (exempt
+ * bookkeeping actions pass `multiplier = 1.0`).
+ */
+export function scaleEarnedValue(baseValue: number, multiplier: number): number {
+  return Math.round(baseValue * multiplier);
+}
