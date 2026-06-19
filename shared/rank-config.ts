@@ -53,7 +53,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#6B7280",
     icon: "user",
     description:
-      "Every VoxMaxxer starts here. Cast your first votes and stake your first predictions — your journey starts now.",
+      "Welcome to VoxDex. Every vote you cast and every prediction you make shapes the public sentiment we're indexing.",
   },
   {
     name: "Aspirant",
@@ -64,7 +64,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#10B981",
     icon: "trending-up",
     description:
-      "You've found your footing. Your votes now count on the induction board and your takes are starting to shape the leaderboard.",
+      "You've found your rhythm. Your earn rate is starting to climb as you keep showing up.",
   },
   {
     name: "Insider",
@@ -75,7 +75,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#3B82F6",
     icon: "eye",
     description:
-      "You know how VoxDex works — and it shows. Your perspective carries real signal in the community.",
+      "Your voice now carries curatorial weight. Your votes on who joins VoxDex and how they're represented count for more, and your rank shows on your takes.",
   },
   {
     name: "Analyst",
@@ -86,7 +86,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#8B5CF6",
     icon: "bar-chart",
     description:
-      "Sharp reads, consistent takes. You've earned credibility and your votes carry genuine weight in the room.",
+      "A credible voice. Your earn rate is up, your curatorial influence grows, and your perspective helps shape what gets added.",
   },
   {
     name: "Expert",
@@ -97,7 +97,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#F59E0B",
     icon: "award",
     description:
-      "Deep knowledge, consistent conviction. Others track your calls and follow your lead on the leaderboard.",
+      "Recognised as a serious participant. Your status is publicly visible, your contributions earn faster, and your curatorial influence is meaningful.",
   },
   {
     name: "Maven",
@@ -108,7 +108,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#EF4444",
     icon: "star",
     description:
-      "Elite tier. Your predictions set the pace and your track record speaks for itself.",
+      "Elite contributor. Your profile carries a custom banner, your comments stand out, and your curation shapes the index in real ways.",
   },
   {
     name: "Hall of Famer",
@@ -119,7 +119,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#FFD700",
     icon: "crown",
     description:
-      "Legendary. You've shaped VoxDex in ways others aspire to. A true veteran of the arena.",
+      "Legendary status. You're part of VoxDex's identity now, with permanent recognition on your profile.",
   },
   {
     name: "VoxMax Legend",
@@ -130,7 +130,7 @@ export const RANKS: readonly RankConfig[] = [
     color: "#E5E4E2",
     icon: "sparkles",
     description:
-      "The summit. The rarest status on VoxDex — earned by those who've committed to the game at the highest level.",
+      "The rarest tier on VoxDex. A custom themed profile, top-tier earning, and maximum curatorial weight. You don't just participate — you set the pace.",
   },
 ] as const;
 
@@ -143,29 +143,20 @@ export const RANKS: readonly RankConfig[] = [
  * unlocked, which makes the matrix easier to scan when grepping.
  */
 export type Capability =
-  // Tier 1 — open to everyone (voting is never rank-gated; we want new
-  // Citizens to be able to vote on every card surface from day one).
+  // Every capability is open to every authenticated user. Rank no
+  // longer gates engagement — higher tiers AMPLIFY participation (earn
+  // rate, curatorial vote weight, status markers) rather than unlocking
+  // actions. The dead tier-gated capabilities (can_suggest_*,
+  // can_access_*, can_feature_insights, can_flag_content,
+  // can_voxmax_profile) were removed in the rank redesign; voting,
+  // posting, and commenting are all Tier-1 baseline now.
   | "can_vote_sentiment"
   | "can_vote_matchup"
   | "can_predict"
   | "can_vote_induction"
   | "can_vote_curation"
-  // Tier 2 — Aspirant
   | "can_post_insight"
-  | "can_comment"
-  // Tier 3 — Insider
-  | "can_suggest_matchup"
-  // Tier 4 — Analyst
-  | "can_suggest_induction"
-  | "can_access_advanced_markets"
-  // Tier 5 — Expert
-  | "can_access_beta"
-  // Tier 6 — Maven
-  | "can_feature_insights"
-  // Tier 7 — Hall of Famer
-  | "can_flag_content"
-  // Tier 8 — VoxMax Legend
-  | "can_voxmax_profile";
+  | "can_comment";
 
 /**
  * Tier-1 baseline capabilities — open to every authenticated user.
@@ -179,6 +170,12 @@ export const TIER_1_CAPABILITIES = [
   "can_predict",
   "can_vote_induction",
   "can_vote_curation",
+  // Ungated in the rank redesign — every Citizen can post insights and
+  // comment anywhere from day one. Kept in the capability map (as
+  // always-true) rather than deleted so existing client reads of
+  // `capabilities.can_post_insight` / `.can_comment` keep working.
+  "can_post_insight",
+  "can_comment",
 ] as const satisfies readonly Capability[];
 
 export interface CapabilityGate {
@@ -201,74 +198,16 @@ export interface CapabilityGate {
  * (they'd show as "Tier 1+" with no gating signal).
  */
 export const CAPABILITY_GATES: readonly CapabilityGate[] = [
-  // Tier 2 — Aspirant. The trust-gated baseline that protects the
-  // comments / insights surfaces from cold-start spam. Voting on any
-  // card (induction, curation, sentiment, matchup, opinion poll) is
-  // intentionally NOT gated — see TIER_1_CAPABILITIES.
-  {
-    capability: "can_post_insight",
-    minTier: 2,
-    label: "Post insights",
-    description: "Share top-level commentary on leaderboard cards.",
-  },
-  {
-    capability: "can_comment",
-    minTier: 2,
-    label: "Comment on insights",
-    description: "Reply to insights and join the conversation.",
-  },
-  // Tier 3 — Insider
-  {
-    capability: "can_suggest_matchup",
-    minTier: 3,
-    label: "Suggest matchups and opinion polls",
-    description:
-      "Propose head-to-head matchups and poll topics for admin review.",
-  },
-  // Tier 4 — Analyst
-  {
-    capability: "can_suggest_induction",
-    minTier: 4,
-    label: "Suggest induction candidates",
-    description: "Nominate public figures for the main leaderboard.",
-  },
-  {
-    capability: "can_access_advanced_markets",
-    minTier: 4,
-    label: "Access advanced prediction markets",
-    description:
-      "Higher-stakes markets unlocked for credentialed predictors.",
-  },
-  // Tier 5 — Expert
-  {
-    capability: "can_access_beta",
-    minTier: 5,
-    label: "Early access to new features",
-    description:
-      "Beta features and new surfaces before general release.",
-  },
-  // Tier 6 — Maven
-  {
-    capability: "can_feature_insights",
-    minTier: 6,
-    label: "Featured insights",
-    description:
-      "Your commentary surfaces on leaderboard cards for wider platform visibility.",
-  },
-  // Tier 7 — Hall of Famer
-  {
-    capability: "can_flag_content",
-    minTier: 7,
-    label: "Content moderation flags",
-    description: "Flag low-quality content for admin review.",
-  },
-  // Tier 8 — VoxMax Legend
-  {
-    capability: "can_voxmax_profile",
-    minTier: 8,
-    label: "VoxMax Legend profile treatment",
-    description: "Exclusive visual identity across the platform.",
-  },
+  // Intentionally empty. The rank redesign moved VoxDex from
+  // "rank unlocks features" to "rank amplifies participation": every
+  // engagement action (voting, posting insights, commenting,
+  // suggesting, reporting) is available to every authenticated user.
+  //
+  // What rank now changes — earn-rate multiplier, curatorial vote
+  // weight on Induction/Curate, an inline comment qualifier, and
+  // profile visual unlocks — is NOT capability gating and is not
+  // represented here. The Ranks tab renders those rewards directly
+  // from the RANKS ladder, not from this array.
 ] as const;
 
 /**

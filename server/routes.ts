@@ -24,7 +24,7 @@ import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormal
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
-import { requireAuth, requireAdmin, optionalAuth, requireMinTier, type AuthRequest } from "./auth-middleware";
+import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
 import OpenAI from "openai";
 import { createHash, randomUUID } from "crypto";
 import multer from "multer";
@@ -172,7 +172,6 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { minTierForCapability } from "./services/gamification-utils";
 import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
@@ -3645,7 +3644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new community insight (protected route)
-  app.post("/api/community-insights", requireAuth, requireMinTier("can_post_insight"), async (req: AuthRequest, res) => {
+  app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
     try {
       // Defense in depth: client must not supply author identity. We resolve it
       // server-side from the authenticated profile and attach it to the response.
@@ -5546,18 +5545,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendBadRequest(res, "Invalid comment body");
       }
 
-      // can_comment (tier 2+) applies to community insights only; poll/matchup
-      // discussion is open to every authenticated Citizen (same as voting).
-      if (parsed.parentType === "community_insight") {
-        const allowed = await gamificationService.checkPermission(req.userId!, "can_comment");
-        if (!allowed) {
-          return res.status(403).json({
-            error: "Insufficient rank",
-            required: minTierForCapability("can_comment"),
-            capability: "can_comment",
-          });
-        }
-      }
+      // Commenting is open to every authenticated user (rank redesign):
+      // posting and commenting are no longer tier-gated. Poll/matchup/
+      // insight discussion all behave identically.
 
       const resolvedParentId = await resolveUnifiedCommentParent(parsed);
       if (!resolvedParentId) return res.status(404).json({ error: "Comment parent not found" });

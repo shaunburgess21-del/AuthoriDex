@@ -891,38 +891,42 @@ function RanksPanel() {
       <Card className="p-4">
         <h4 className="font-semibold">Capability Unlocks</h4>
         <p className="text-xs text-muted-foreground mt-1">
-          Capability gates are configured in{" "}
-          <code>shared/rank-config.ts</code> — contact a developer to modify.
+          Engagement is no longer rank-gated. Every authenticated user can
+          vote, predict, post insights, and comment from Tier 1 — rank
+          amplifies participation (earn rate, curatorial vote weight, status)
+          rather than unlocking actions.
         </p>
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                <th className="px-2 py-1">Capability</th>
-                <th className="px-2 py-1">Min tier</th>
-                <th className="px-2 py-1">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CAPABILITY_GATES.map((g) => {
-                const rank = RANKS.find((r) => r.tier === g.minTier);
-                return (
-                  <tr key={g.capability} className="border-b last:border-0">
-                    <td className="px-2 py-1 font-mono text-xs">
-                      {g.capability}
-                    </td>
-                    <td className="px-2 py-1">
-                      Tier {g.minTier} — {rank?.name ?? "?"}
-                    </td>
-                    <td className="px-2 py-1 text-muted-foreground">
-                      {g.description}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {CAPABILITY_GATES.length > 0 && (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                  <th className="px-2 py-1">Capability</th>
+                  <th className="px-2 py-1">Min tier</th>
+                  <th className="px-2 py-1">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CAPABILITY_GATES.map((g) => {
+                  const rank = RANKS.find((r) => r.tier === g.minTier);
+                  return (
+                    <tr key={g.capability} className="border-b last:border-0">
+                      <td className="px-2 py-1 font-mono text-xs">
+                        {g.capability}
+                      </td>
+                      <td className="px-2 py-1">
+                        Tier {g.minTier} — {rank?.name ?? "?"}
+                      </td>
+                      <td className="px-2 py-1 text-muted-foreground">
+                        {g.description}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {editing && (
