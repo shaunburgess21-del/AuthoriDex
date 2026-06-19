@@ -16,6 +16,8 @@ export interface CommentItem {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  /** Author's rank name (e.g. "Expert"). Drives the inline rank qualifier — rendered only for Tier 3+. */
+  authorRank?: string | null;
   body: string;
   parentId: string | null;
   upvotes: number;

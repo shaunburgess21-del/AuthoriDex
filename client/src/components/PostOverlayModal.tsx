@@ -24,6 +24,7 @@ interface InsightCommentResponse {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  authorRank?: string | null;
   body: string;
   createdAt: string;
   upvotes: number;
@@ -63,6 +64,7 @@ function toCommentItem(comment: InsightCommentResponse): CommentItem {
     userId: comment.userId,
     username: comment.username,
     avatarUrl: comment.avatarUrl,
+    authorRank: comment.authorRank ?? null,
     body: comment.body,
     parentId: comment.parentCommentId,
     upvotes: comment.upvotes ?? 0,

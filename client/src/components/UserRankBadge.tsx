@@ -4,8 +4,12 @@ import { getRankConfig } from "@/lib/gamification-content";
 interface UserRankBadgeProps {
   /** Rank name as stored on `profiles.rank`. Unknown values fall back to Citizen. */
   rank: string;
-  /** Use a slightly smaller text scale for tight surfaces (e.g. user menu). */
-  size?: "sm" | "md";
+  /**
+   * - `xs`: ultra-compact inline qualifier for comment/insight bylines.
+   * - `sm`: slightly smaller text scale for tight surfaces (e.g. user menu).
+   * - `md`: default standalone badge.
+   */
+  size?: "xs" | "sm" | "md";
   className?: string;
 }
 
@@ -33,17 +37,25 @@ export function UserRankBadge({ rank, size = "md", className = "" }: UserRankBad
   const tintBg = hexToRgba(config.color, 0.18);
   const tintBorder = hexToRgba(config.color, 0.4);
 
+  const sizeClass =
+    size === "xs"
+      ? "gap-1 text-[10px] leading-none px-1.5 py-0.5"
+      : size === "sm"
+        ? "gap-1.5 text-xs px-2 py-0.5"
+        : "gap-1.5 px-3 py-1";
+  const iconClass = size === "xs" ? "h-2.5 w-2.5" : "h-3 w-3";
+
   return (
     <Badge
       variant="outline"
-      className={`gap-1.5 ${size === "sm" ? "text-xs px-2 py-0.5" : "px-3 py-1"} ${className}`}
+      className={`${sizeClass} ${className}`}
       style={{
         backgroundColor: tintBg,
         borderColor: tintBorder,
         color: config.color,
       }}
     >
-      <Icon className="h-3 w-3" />
+      <Icon className={iconClass} />
       <span className="font-medium">{config.name}</span>
     </Badge>
   );

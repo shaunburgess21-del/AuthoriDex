@@ -10,7 +10,9 @@ import {
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { UserRankBadge } from "@/components/UserRankBadge";
 import { VoteLabel } from "@/components/VoteLabel";
+import { getRankByName } from "@shared/rank-config";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -65,6 +67,8 @@ interface CommunityInsight {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  /** Author's rank name — drives the inline qualifier (Tier 3+ only). */
+  authorRank?: string | null;
   content: string;
   sentimentVote?: number | null;
   deletedAt: string | null;
@@ -150,6 +154,7 @@ export function CommunityInsights({
         userId: i.userId,
         username: i.username,
         avatarUrl: i.avatarUrl,
+        authorRank: i.authorRank ?? null,
         body: i.content,
         parentId: null,
         upvotes: i.upvotes ?? 0,
@@ -273,6 +278,7 @@ export function CommunityInsights({
       ...cached,
       username: live.username,
       avatarUrl: live.avatarUrl,
+      authorRank: live.authorRank ?? cached.authorRank ?? null,
       content: live.body,
       deletedAt: live.deletedAt ?? cached.deletedAt ?? null,
       upvotes: live.upvotes,
@@ -529,6 +535,12 @@ function InsightCard({
     ? { preview: "[deleted]", isTruncated: false }
     : truncateText(comment.body, 280);
 
+  // Inline rank qualifier — Tier 3+ only (same threshold as CommentRow).
+  const authorTier = comment.authorRank
+    ? getRankByName(comment.authorRank)?.tier ?? 0
+    : 0;
+  const showRankQualifier = !isDeleted && !!comment.authorRank && authorTier >= 3;
+
   return (
     <div
       id={`insight-${comment.id}`}
@@ -552,6 +564,13 @@ function InsightCard({
             >
               {isDeleted ? "[deleted user]" : comment.username || "Anonymous"}
             </span>
+            {showRankQualifier && (
+              <UserRankBadge
+                rank={comment.authorRank!}
+                size="xs"
+                className="shrink-0"
+              />
+            )}
             <span
               className="text-xs text-muted-foreground shrink-0"
               title={new Date(comment.createdAt).toLocaleString()}

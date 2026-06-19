@@ -202,21 +202,26 @@ type CommentAuthorJoin = {
   authorId: string | null;
   authorUsername: string | null;
   authorAvatarUrl: string | null;
+  authorRank: string | null;
 };
 const DELETED_COMMENT_AUTHOR_USERNAME = "[deleted user]";
 const commentAuthorSelect = {
   authorId: profiles.id,
   authorUsername: profiles.username,
   authorAvatarUrl: profiles.avatarUrl,
+  // Rank name powers the inline rank qualifier on comments/insights
+  // (Phase 4). Client decides whether to render it (Tier 3+ only).
+  authorRank: profiles.rank,
 };
 function formatCommentAuthor(author: CommentAuthorJoin) {
   if (!author.authorId) {
-    return { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null };
+    return { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null };
   }
 
   return {
     username: author.authorUsername,
     avatarUrl: author.authorAvatarUrl,
+    authorRank: author.authorRank,
   };
 }
 
@@ -756,14 +761,14 @@ function toUnifiedCommentItem(row: {
   createdAt: Date;
   updatedAt: Date;
 } & CommentAuthorJoin, userVote: CommentVoteState = null, parentVoteLabel: ParentVoteLabel = null) {
-  const { authorId, authorUsername, authorAvatarUrl, ...comment } = row;
+  const { authorId, authorUsername, authorAvatarUrl, authorRank, ...comment } = row;
   const isDeleted = Boolean(comment.deletedAt);
   return {
     ...comment,
     body: isDeleted ? "" : comment.body,
     ...(isDeleted
-      ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
-      : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
+      ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null }
+      : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl, authorRank })),
     userVote,
     parentVoteLabel: isDeleted ? null : parentVoteLabel,
   };
@@ -3639,6 +3644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           profiles.id,
           profiles.username,
           profiles.avatarUrl,
+          profiles.rank,
         )
         .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
 
@@ -3647,14 +3653,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         insights,
       });
 
-      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, ...insight }) => {
+      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, authorRank, ...insight }) => {
         const isDeleted = Boolean(insight.deletedAt);
         return {
           ...insight,
           content: isDeleted ? "" : insight.content,
           ...(isDeleted
-            ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null }
-            : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl })),
+            ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null }
+            : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl, authorRank })),
           parentVoteLabel: isDeleted ? null : parentVoteLabelMap.get(insight.id) ?? null,
         };
       }));
@@ -3726,6 +3732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           authorId: null,
           authorUsername: null,
           authorAvatarUrl: null,
+          authorRank: null,
         }),
         upvotes: 0,
         downvotes: 0,
@@ -5701,6 +5708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             authorId: null,
             authorUsername: null,
             authorAvatarUrl: null,
+            authorRank: null,
           }),
         }),
         xp: xpResult ?? null,

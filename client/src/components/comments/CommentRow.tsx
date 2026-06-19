@@ -1,11 +1,20 @@
 import { ThumbsUp, Reply, MoreVertical } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { UserRankBadge } from "@/components/UserRankBadge";
 import { VoteLabel } from "@/components/VoteLabel";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { getRankByName } from "@shared/rank-config";
 import type { CommentItem, VoteType } from "./types";
 
 const MAX_COMMENT_VISUAL_DEPTH = 5;
+
+/**
+ * The inline rank qualifier next to a comment author's name only shows
+ * from Tier 3 (Insider) up — that's the threshold where rank starts
+ * carrying curatorial weight and becomes a meaningful status signal.
+ */
+const RANK_QUALIFIER_MIN_TIER = 3;
 
 export interface CommentRowProps {
   comment: CommentItem;
@@ -39,6 +48,11 @@ export function CommentRow({
   const isDeleted = Boolean(comment.deletedAt);
   const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
+  const authorTier = comment.authorRank
+    ? getRankByName(comment.authorRank)?.tier ?? 0
+    : 0;
+  const showRankQualifier =
+    !isDeleted && !!comment.authorRank && authorTier >= RANK_QUALIFIER_MIN_TIER;
   const isNested = depth > 0;
   const visualDepth = Math.min(depth, MAX_COMMENT_VISUAL_DEPTH);
   const indentRem = isNested ? visualDepth * 1.75 : 0;
@@ -67,6 +81,13 @@ export function CommentRow({
             >
               {isDeleted ? "[deleted user]" : comment.username || "Anonymous"}
             </span>
+            {showRankQualifier && (
+              <UserRankBadge
+                rank={comment.authorRank!}
+                size="xs"
+                className="shrink-0"
+              />
+            )}
             <span
               className="text-xs text-muted-foreground shrink-0"
               title={new Date(comment.createdAt).toLocaleString()}
