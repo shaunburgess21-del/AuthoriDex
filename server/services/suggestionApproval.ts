@@ -551,6 +551,7 @@ export async function dispatchApproval(
           wikiSlug: p.wikiSlug,
           xHandle: p.xHandle,
           seedVotes: p.seedVotes,
+          weightedScore: p.seedVotes,
           inductionStatus: p.inductionStatus,
           isActive: p.isActive,
         })

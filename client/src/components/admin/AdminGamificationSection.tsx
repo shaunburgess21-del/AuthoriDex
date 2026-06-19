@@ -88,7 +88,7 @@ interface RankRow {
   tier: number;
   minXp: number;
   maxXp: number | null;
-  voteMultiplier: number;
+  curatorialWeight: number;
   earnMultiplier: number;
   color: string;
   icon: string | null;
@@ -815,7 +815,7 @@ function RanksPanel() {
       tier: number;
       minXp?: number;
       maxXp?: number | null;
-      voteMultiplier?: number;
+      curatorialWeight?: number;
       description?: string;
     }) => {
       const { tier, ...body } = payload;
@@ -858,9 +858,14 @@ function RanksPanel() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="font-semibold truncate">{rank.name}</p>
-                  <Badge variant="outline" className="text-[10px]">
-                    x{rank.voteMultiplier.toFixed(2)}
-                  </Badge>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Badge variant="outline" className="text-[10px]" title="Earn-rate multiplier (XP + credits)">
+                      earn x{rank.earnMultiplier.toFixed(2)}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]" title="Curatorial vote weight (Induction + Curate)">
+                      curate x{rank.curatorialWeight.toFixed(2)}
+                    </Badge>
+                  </div>
                 </div>
                 <p className="font-mono text-xs text-muted-foreground">
                   {rank.minXp.toLocaleString()} XP
@@ -956,14 +961,14 @@ function RankEditDialog({
   onSave: (payload: {
     tier: number;
     minXp: number;
-    voteMultiplier: number;
+    curatorialWeight: number;
     description: string;
   }) => void;
   isSaving: boolean;
 }) {
   const [minXp, setMinXp] = useState(String(row.minXp));
-  const [voteMultiplier, setVoteMultiplier] = useState(
-    row.voteMultiplier.toFixed(2),
+  const [curatorialWeight, setCuratorialWeight] = useState(
+    row.curatorialWeight.toFixed(2),
   );
   const [description, setDescription] = useState(row.description ?? "");
 
@@ -1003,17 +1008,21 @@ function RankEditDialog({
             </p>
           </div>
           <div>
-            <Label htmlFor="rank-multiplier">Vote multiplier (1.0 - 3.0)</Label>
+            <Label htmlFor="rank-multiplier">Curatorial weight (1.0 - 3.0)</Label>
             <Input
               id="rank-multiplier"
               type="number"
               min={1}
               max={3}
-              step={0.25}
-              value={voteMultiplier}
-              onChange={(e) => setVoteMultiplier(e.target.value)}
+              step={0.1}
+              value={curatorialWeight}
+              onChange={(e) => setCuratorialWeight(e.target.value)}
               data-testid="input-rank-multiplier"
             />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Applies to Induction Queue + Curate Profile votes only. Earn
+              multiplier is seeded from <code>shared/rank-config.ts</code>.
+            </p>
           </div>
           <div>
             <Label htmlFor="rank-description">Description</Label>
@@ -1034,7 +1043,7 @@ function RankEditDialog({
               onSave({
                 tier: row.tier,
                 minXp: Number(minXp),
-                voteMultiplier: Number(voteMultiplier),
+                curatorialWeight: Number(curatorialWeight),
                 description,
               })
             }

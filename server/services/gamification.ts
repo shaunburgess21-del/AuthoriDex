@@ -684,6 +684,21 @@ class GamificationService {
     return canAccessCapability(tier, capability);
   }
 
+  /**
+   * Curatorial vote weight for a user — applied ONLY to Induction Queue
+   * and Curate Profile Image votes (the platform-shaping surfaces).
+   * Reads the live ranksCache so admin edits to curatorial_weight take
+   * effect on the next refresh. Returns 1.0 for unknown users / ranks so
+   * a missing profile can never zero out a vote's contribution.
+   */
+  async getCuratorialWeight(userId: string): Promise<number> {
+    await this.ensureCache();
+    const profile = await this.getProfile(userId);
+    if (!profile) return 1.0;
+    const rank = this.ranksCache.find((r) => r.name === profile.rank);
+    return rank?.curatorialWeight ?? 1.0;
+  }
+
   async getUserStats(userId: string): Promise<UserStats | null> {
     await this.ensureCache();
 
@@ -719,27 +734,6 @@ class GamificationService {
       lastLoginDate: profile.lastLoginDate,
       capabilities
     };
-  }
-
-  /**
-   * @deprecated Not currently wired into vote handlers. The voteMultiplier
-   * column exists in the ranks table but all votes use weight 1.0. Keeping
-   * this method for potential future use; remove if vote weighting by rank
-   * is explicitly ruled out.
-   */
-  async getVoteMultiplier(userId: string, voteType: string): Promise<number> {
-    if (voteType === 'face_off' || voteType === 'poll') {
-      return 1.0;
-    }
-
-    await this.ensureCache();
-
-    const profile = await this.getProfile(userId);
-
-    if (!profile) return 1.0;
-
-    const userRank = this.ranksCache.find(r => r.name === profile.rank);
-    return userRank?.voteMultiplier || 1.0;
   }
 
   async getXpHistory(userId: string, limit: number = 20): Promise<typeof xpLedger.$inferSelect[]> {

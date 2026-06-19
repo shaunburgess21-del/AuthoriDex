@@ -422,7 +422,10 @@ export const ranks = pgTable("ranks", {
   tier: integer("tier").notNull().unique(),
   minXp: integer("min_xp").notNull(),
   maxXp: integer("max_xp"),
-  voteMultiplier: real("vote_multiplier").notNull().default(1.0),
+  // Curatorial vote weight applied ONLY to Induction Queue + Curate
+  // Profile Image votes. Replaced the legacy vote_multiplier column in
+  // the rank redesign. 1.0 = flat (Tiers 1-2); rises to 2.0 at Tier 8.
+  curatorialWeight: real("curatorial_weight").notNull().default(1.0),
   // Per-tier earn-rate multiplier applied to XP + credit awards at the
   // gamificationService chokepoints (awardXp / adjustCredits). Distinct
   // from curatorialWeight. 1.0 = no boost.
@@ -497,7 +500,12 @@ export const inductionCandidates = pgTable("induction_candidates", {
   displayName: text("display_name").notNull(),
   category: text("category").notNull(),
   imageSlug: text("image_slug"),
+  // Raw, unweighted vote count — the public "X votes" display stat.
   seedVotes: integer("seed_votes").notNull().default(0),
+  // Curatorial-weighted accumulator used ONLY to pick the cycle winner
+  // (Phase 3). Each vote adds the caster's rank curatorialWeight; the
+  // raw seedVotes stays the headline number users see.
+  weightedScore: real("weighted_score").notNull().default(0),
   wikiSlug: text("wiki_slug"),
   xHandle: text("x_handle"),
   instagramHandle: text("instagram_handle"),
@@ -524,8 +532,12 @@ export const celebrityImages = pgTable("celebrity_images", {
   imageUrl: text("image_url").notNull(),
   source: text("source"),
   isPrimary: boolean("is_primary").notNull().default(false),
+  // Raw, unweighted upvote count — the public display stat.
   votesUp: integer("votes_up").notNull().default(0),
   votesDown: integer("votes_down").notNull().default(0),
+  // Curatorial-weighted accumulator used ONLY to choose the winning
+  // image (Phase 3). Each upvote adds the caster's rank curatorialWeight.
+  weightedScore: real("weighted_score").notNull().default(0),
   addedAt: timestamp("added_at").notNull().defaultNow(),
 }, (table) => ({
   personIdx: index("celebrity_images_person_idx").on(table.personId),
@@ -536,6 +548,7 @@ export const insertCelebrityImageSchema = createInsertSchema(celebrityImages).om
   addedAt: true,
   votesUp: true,
   votesDown: true,
+  weightedScore: true,
 });
 
 export type CelebrityImage = typeof celebrityImages.$inferSelect;
@@ -547,6 +560,10 @@ export const imageVotes = pgTable("image_votes", {
   imageId: varchar("image_id").notNull().references(() => celebrityImages.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
   direction: text("direction").notNull(),
+  // Curatorial weight captured at cast time (caster's rank
+  // curatorialWeight, 1.0 for anon / Tier 1-2). Stored per-row so a
+  // vote swap / removal can subtract the exact contributed weight.
+  weight: real("weight").notNull().default(1.0),
   votedAt: timestamp("voted_at").notNull().defaultNow(),
 }, (table) => ({
   userImageUnique: unique("image_votes_user_image_uniq").on(table.userId, table.imageId),
@@ -589,6 +606,10 @@ export const inductionVotes = pgTable("induction_votes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   candidateId: varchar("candidate_id").notNull().references(() => inductionCandidates.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
+  // Curatorial weight captured at cast time (caster's rank
+  // curatorialWeight, 1.0 for anon / Tier 1-2). Stored per-row so the
+  // post-close subtraction can remove the exact contributed weight.
+  weight: real("weight").notNull().default(1.0),
   votedAt: timestamp("voted_at").notNull().defaultNow(),
 }, (table) => ({
   userCandidateUnique: unique("induction_votes_user_candidate_uniq").on(table.userId, table.candidateId),

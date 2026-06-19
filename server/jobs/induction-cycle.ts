@@ -30,19 +30,21 @@ async function getActiveCandidateSnapshots(executor: any, weekCloseAt: Date): Pr
     .select({
       id: inductionCandidates.id,
       displayName: inductionCandidates.displayName,
-      seedVotes: inductionCandidates.seedVotes,
+      weightedScore: inductionCandidates.weightedScore,
     })
     .from(inductionCandidates)
     .where(eq(inductionCandidates.isActive, true))
-    .orderBy(desc(inductionCandidates.seedVotes));
+    .orderBy(desc(inductionCandidates.weightedScore));
 
   if (candidates.length === 0) return [];
 
+  // Roll back post-close votes by their captured curatorial weight so the
+  // recorded winner reflects the weighted standing at the moment of close.
   const candidateIds = candidates.map((candidate: { id: string }) => candidate.id);
   const postCloseRows = await executor
     .select({
       candidateId: inductionVotes.candidateId,
-      count: sql<number>`COUNT(*)::int`,
+      weight: sql<number>`COALESCE(SUM(${inductionVotes.weight}), 0)`,
     })
     .from(inductionVotes)
     .where(
@@ -53,15 +55,15 @@ async function getActiveCandidateSnapshots(executor: any, weekCloseAt: Date): Pr
     )
     .groupBy(inductionVotes.candidateId);
 
-  const postCloseVotesByCandidate = new Map<string, number>(
-    postCloseRows.map((row: { candidateId: string; count: number }) => [row.candidateId, Number(row.count || 0)]),
+  const postCloseWeightByCandidate = new Map<string, number>(
+    postCloseRows.map((row: { candidateId: string; weight: number }) => [row.candidateId, Number(row.weight || 0)]),
   );
 
-  return candidates.map((candidate: { id: string; displayName: string; seedVotes: number }) => ({
+  return candidates.map((candidate: { id: string; displayName: string; weightedScore: number }) => ({
     id: candidate.id,
     displayName: candidate.displayName,
-    seedVotes: Number(candidate.seedVotes || 0),
-    postCloseVotes: postCloseVotesByCandidate.get(candidate.id) ?? 0,
+    weightedScore: Number(candidate.weightedScore || 0),
+    postCloseWeight: postCloseWeightByCandidate.get(candidate.id) ?? 0,
   }));
 }
 
@@ -106,7 +108,8 @@ export async function runWeeklyInductionCycle(now: Date = new Date()): Promise<I
         status: "inducted",
         candidateId: winner.id,
         personId: approval.personId,
-        voteTotalAtClose: winner.voteTotalAtClose,
+        // Column is integer; weighted total can be fractional → round for the record.
+        voteTotalAtClose: Math.round(winner.voteTotalAtClose),
       });
 
       return {

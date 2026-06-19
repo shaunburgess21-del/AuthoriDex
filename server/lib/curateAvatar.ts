@@ -7,10 +7,12 @@ import { celebrityImages, trackedPeople, trendingPeople } from "@shared/schema";
  * `tracked_people.avatar` and `trending_people.avatar`. Also flips
  * `celebrity_images.is_primary` so it points at the current winner.
  *
- * The "winner" is the row in `celebrity_images` with the highest `votes_up`,
- * tie-broken by oldest `added_at`. This is the single source of truth used
- * across all surfaces of the app (leaderboard, sentiment polls, opinion polls,
- * predict cards, value cards, person detail).
+ * The "winner" is the row in `celebrity_images` with the highest
+ * `weighted_score` (curatorial-weighted, Phase 3), tie-broken by oldest
+ * `added_at`. The raw `votes_up` count remains the public display stat.
+ * This is the single source of truth used across all surfaces of the app
+ * (leaderboard, sentiment polls, opinion polls, predict cards, value
+ * cards, person detail).
  *
  * Safe to call repeatedly. Used by:
  *   - the curate-vote endpoint (after every vote)
@@ -23,14 +25,14 @@ export async function syncWinningAvatarForPerson(personId: string): Promise<void
     .select()
     .from(celebrityImages)
     .where(eq(celebrityImages.personId, personId))
-    .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
+    .orderBy(desc(celebrityImages.weightedScore), asc(celebrityImages.addedAt))
     .limit(1);
 
   if (topImage) {
     console.log(
       `[AvatarSync] Person ${personId}: winning image ${topImage.id} ` +
-      `(votesUp=${topImage.votesUp}, votesDown=${topImage.votesDown}, ` +
-      `url=${topImage.imageUrl.substring(0, 60)}...)`
+      `(weightedScore=${topImage.weightedScore}, votesUp=${topImage.votesUp}, ` +
+      `votesDown=${topImage.votesDown}, url=${topImage.imageUrl.substring(0, 60)}...)`
     );
     await db.update(celebrityImages).set({ isPrimary: false }).where(eq(celebrityImages.personId, personId));
     await db.update(celebrityImages).set({ isPrimary: true }).where(eq(celebrityImages.id, topImage.id));

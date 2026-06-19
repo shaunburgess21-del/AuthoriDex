@@ -11,11 +11,11 @@
  * Threshold tweaks land in this file ONLY — the streak overhaul moved
  * streak constants to shared/streak-config.ts for the same reason.
  *
- * NOTE: voteMultiplier values are persisted on the ranks table for
- * roadmap reasons but are NOT currently consumed by any vote handler.
- * The server-side getVoteMultiplier() helper is annotated @deprecated;
- * we keep the column populated so re-introducing weighted voting is a
- * one-call-site change rather than a migration.
+ * NOTE: curatorialWeight is the rank-based weight applied ONLY to
+ * platform-shaping votes (Induction Queue + Curate Profile Images).
+ * Real-world votes (sentiment, matchups, opinion polls, ratings,
+ * predictions) are deliberately one-vote-one-voice and never weighted.
+ * It replaced the old voteMultiplier column in the rank redesign.
  */
 
 export interface RankConfig {
@@ -24,7 +24,13 @@ export interface RankConfig {
   minXp: number;
   /** null = open-ended top tier. */
   maxXp: number | null;
-  voteMultiplier: number;
+  /**
+   * Curatorial vote weight applied to Induction Queue + Curate Profile
+   * Image votes only. Begins at Tier 3 (1.10x) and rises to 2.00x at
+   * Tier 8; Tiers 1-2 stay flat 1.0x. NOT applied to any real-world
+   * vote surface.
+   */
+  curatorialWeight: number;
   /**
    * Per-tier earn-rate multiplier applied to BOTH XP and credit awards
    * at the awardXp / adjustCredits chokepoints. Gentle curve
@@ -56,7 +62,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 1,
     minXp: 0,
     maxXp: 999,
-    voteMultiplier: 1.0,
+    curatorialWeight: 1.0,
     earnMultiplier: 1.0,
     color: "#6B7280",
     icon: "user",
@@ -68,7 +74,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 2,
     minXp: 1000,
     maxXp: 4999,
-    voteMultiplier: 1.0,
+    curatorialWeight: 1.0,
     earnMultiplier: 1.05,
     color: "#10B981",
     icon: "trending-up",
@@ -80,7 +86,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 3,
     minXp: 5000,
     maxXp: 14999,
-    voteMultiplier: 1.25,
+    curatorialWeight: 1.1,
     earnMultiplier: 1.1,
     color: "#3B82F6",
     icon: "eye",
@@ -92,7 +98,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 4,
     minXp: 15000,
     maxXp: 34999,
-    voteMultiplier: 1.5,
+    curatorialWeight: 1.2,
     earnMultiplier: 1.15,
     color: "#8B5CF6",
     icon: "bar-chart",
@@ -104,7 +110,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 5,
     minXp: 35000,
     maxXp: 74999,
-    voteMultiplier: 1.75,
+    curatorialWeight: 1.3,
     earnMultiplier: 1.2,
     color: "#F59E0B",
     icon: "award",
@@ -116,7 +122,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 6,
     minXp: 75000,
     maxXp: 149999,
-    voteMultiplier: 2.0,
+    curatorialWeight: 1.4,
     earnMultiplier: 1.3,
     color: "#EF4444",
     icon: "star",
@@ -128,7 +134,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 7,
     minXp: 150000,
     maxXp: 399999,
-    voteMultiplier: 2.5,
+    curatorialWeight: 1.6,
     earnMultiplier: 1.4,
     color: "#FFD700",
     icon: "crown",
@@ -140,7 +146,7 @@ export const RANKS: readonly RankConfig[] = [
     tier: 8,
     minXp: 400000,
     maxXp: null,
-    voteMultiplier: 3.0,
+    curatorialWeight: 2.0,
     earnMultiplier: 1.5,
     color: "#E5E4E2",
     icon: "sparkles",

@@ -3,11 +3,14 @@ import { getWeekContext } from "../native-markets/week-context";
 export interface InductionWinnerCandidate {
   id: string;
   displayName: string;
-  seedVotes: number;
-  postCloseVotes: number;
+  /** Curatorial-weighted accumulator (Phase 3). Replaces the raw seed-vote count for winner selection. */
+  weightedScore: number;
+  /** SUM of curatorial weights for votes cast AFTER the weekly close (rolled back so the winner reflects the standing at close). */
+  postCloseWeight: number;
 }
 
 export interface InductionWinnerSnapshot extends InductionWinnerCandidate {
+  /** Weighted vote total at the moment of close (never negative). */
   voteTotalAtClose: number;
 }
 
@@ -27,7 +30,7 @@ function firstName(value: string): string {
 }
 
 export function voteTotalAtClose(candidate: InductionWinnerCandidate): number {
-  return Math.max(0, Number(candidate.seedVotes || 0) - Number(candidate.postCloseVotes || 0));
+  return Math.max(0, Number(candidate.weightedScore || 0) - Number(candidate.postCloseWeight || 0));
 }
 
 export function selectInductionWinner(candidates: InductionWinnerCandidate[]): InductionWinnerSnapshot | null {

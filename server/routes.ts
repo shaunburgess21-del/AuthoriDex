@@ -3361,7 +3361,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select()
         .from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
-        .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt));
+        // Order by curatorial-weighted score so the winning image sorts
+        // first (matches syncWinningAvatarForPerson). Raw votesUp is still
+        // returned per row as the display count.
+        .orderBy(desc(celebrityImages.weightedScore), asc(celebrityImages.addedAt));
 
       const userId = req.userId || null;
       if (!userId || images.length === 0) {
@@ -3399,7 +3402,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select()
         .from(celebrityImages)
         .where(eq(celebrityImages.personId, id))
-        .orderBy(desc(celebrityImages.votesUp), asc(celebrityImages.addedAt))
+        // Winner = highest curatorial-weighted score (Phase 3), tie-broken
+        // by oldest added_at — consistent with syncWinningAvatarForPerson.
+        .orderBy(desc(celebrityImages.weightedScore), asc(celebrityImages.addedAt))
         .limit(1);
       
       if (primaryImage) {
@@ -3443,7 +3448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // voting for a different image of the same person is treated as a swap rather
       // than a brand-new vote. Join imageVotes -> celebrityImages to filter by personId.
       const [existing] = await db
-        .select({ id: imageVotes.id, imageId: imageVotes.imageId })
+        .select({ id: imageVotes.id, imageId: imageVotes.imageId, weight: imageVotes.weight })
         .from(imageVotes)
         .innerJoin(celebrityImages, eq(imageVotes.imageId, celebrityImages.id))
         .where(and(
@@ -3457,19 +3462,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "Already voted", alreadyVoted: true });
       }
 
+      // Curatorial vote weight (Phase 3): the caster's current rank
+      // weight. Recomputed on every cast so a rank change since the
+      // original vote is reflected on swap. Raw votesUp stays the public
+      // display count; weightedScore drives winner selection only.
+      const curatorialWeight = await gamificationService.getCuratorialWeight(userId);
+
       let xpResult: Awaited<ReturnType<typeof gamificationService.awardXp>> | undefined;
 
       if (action === 'swap') {
         const previousImageId = existing!.imageId;
+        const previousWeight = existing!.weight;
         await db.transaction(async (tx) => {
           await tx.update(imageVotes)
-            .set({ imageId, votedAt: new Date() })
+            .set({ imageId, weight: curatorialWeight, votedAt: new Date() })
             .where(eq(imageVotes.id, existing!.id));
           await tx.update(celebrityImages)
-            .set({ votesUp: sql`GREATEST(${celebrityImages.votesUp} - 1, 0)` })
+            .set({
+              votesUp: sql`GREATEST(${celebrityImages.votesUp} - 1, 0)`,
+              weightedScore: sql`GREATEST(${celebrityImages.weightedScore} - ${previousWeight}, 0)`,
+            })
             .where(eq(celebrityImages.id, previousImageId));
           await tx.update(celebrityImages)
-            .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+            .set({
+              votesUp: sql`${celebrityImages.votesUp} + 1`,
+              weightedScore: sql`${celebrityImages.weightedScore} + ${curatorialWeight}`,
+            })
             .where(eq(celebrityImages.id, imageId));
           await appendVoteAction(tx, {
             userId,
@@ -3485,9 +3503,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         await db.transaction(async (tx) => {
-          await tx.insert(imageVotes).values({ imageId, userId, direction: 'up' });
+          await tx.insert(imageVotes).values({ imageId, userId, direction: 'up', weight: curatorialWeight });
           await tx.update(celebrityImages)
-            .set({ votesUp: sql`${celebrityImages.votesUp} + 1` })
+            .set({
+              votesUp: sql`${celebrityImages.votesUp} + 1`,
+              weightedScore: sql`${celebrityImages.weightedScore} + ${curatorialWeight}`,
+            })
             .where(eq(celebrityImages.id, imageId));
           await tx.update(profiles)
             .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
@@ -20529,7 +20550,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         if (!Number.isInteger(tierNum) || tierNum < 1 || tierNum > 8) {
           return res.status(400).json({ error: "tier must be 1-8" });
         }
-        const { minXp, maxXp, voteMultiplier, description } = req.body ?? {};
+        const { minXp, maxXp, curatorialWeight, description } = req.body ?? {};
 
         const all = await db
           .select()
@@ -20582,13 +20603,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           minXp: nextMinXp,
           maxXp: nextMaxXp,
         };
-        if (typeof voteMultiplier === "number" && Number.isFinite(voteMultiplier)) {
-          if (voteMultiplier < 1 || voteMultiplier > 3) {
+        if (typeof curatorialWeight === "number" && Number.isFinite(curatorialWeight)) {
+          if (curatorialWeight < 1 || curatorialWeight > 3) {
             return res
               .status(400)
-              .json({ error: "voteMultiplier must be 1.0-3.0" });
+              .json({ error: "curatorialWeight must be 1.0-3.0" });
           }
-          updates.voteMultiplier = voteMultiplier;
+          updates.curatorialWeight = curatorialWeight;
         }
         if (typeof description === "string") {
           updates.description = description.slice(0, 200);
@@ -22489,10 +22510,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         return res.json({ success: true, alreadyVoted: true, budget: budgetSnapshot });
       }
 
+      // Curatorial vote weight (Phase 3): the caster's rank weight on
+      // platform-shaping votes. Anon voters and Tier 1-2 resolve to 1.0.
+      // Stored per-row so the post-close subtraction is exact; the raw
+      // seed_votes counter stays the public display number.
+      const curatorialWeight = req.userId
+        ? await gamificationService.getCuratorialWeight(req.userId)
+        : 1.0;
+
       await db.transaction(async (tx) => {
-        await tx.insert(inductionVotes).values({ candidateId: id, userId: writerId }).onConflictDoNothing();
+        await tx.insert(inductionVotes).values({ candidateId: id, userId: writerId, weight: curatorialWeight }).onConflictDoNothing();
         await tx.update(inductionCandidates)
-          .set({ seedVotes: sql`${inductionCandidates.seedVotes} + 1` })
+          .set({
+            seedVotes: sql`${inductionCandidates.seedVotes} + 1`,
+            weightedScore: sql`${inductionCandidates.weightedScore} + ${curatorialWeight}`,
+          })
           .where(eq(inductionCandidates.id, id));
         if (req.userId) {
           await tx.update(profiles)
@@ -22782,6 +22814,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
         seedVotes: sv,
+        // Mirror the seeded baseline into the weighted accumulator at
+        // weight 1.0 so admin-seeded candidates count in the weighted
+        // winner selection (Phase 3).
+        weightedScore: sv,
         inductionStatus: statusStr,
         isActive: activeFromStatus,
       };
@@ -22932,7 +22968,12 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
       if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
-      if (seedVotes !== undefined) updates.seedVotes = seedVotes;
+      if (seedVotes !== undefined) {
+        updates.seedVotes = seedVotes;
+        // Admin seed-vote edits set the crowd baseline; keep the weighted
+        // accumulator in lockstep (baseline votes are weight 1.0).
+        updates.weightedScore = seedVotes;
+      }
       applyInductionSocialFromBody(body, handleResult.values, updates);
       if (inductionStatus !== undefined) {
         const st = (typeof inductionStatus === "string" && inductionStatus.trim()) ? inductionStatus.trim() : "Queue";

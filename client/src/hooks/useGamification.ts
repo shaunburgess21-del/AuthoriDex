@@ -25,7 +25,7 @@ interface Rank {
   tier: number;
   minXp: number;
   maxXp: number | null;
-  voteMultiplier: number;
+  curatorialWeight: number;
   earnMultiplier: number;
   color: string;
   icon: string | null;

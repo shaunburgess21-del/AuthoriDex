@@ -109,6 +109,9 @@ async function main() {
               imageSlug,
               wikiSlug,
               seedVotes,
+              // Keep the weighted accumulator in lockstep with the seeded
+              // baseline (weight 1.0) so imports count in winner selection.
+              weightedScore: seedVotes,
               xHandle,
               inductionStatus,
               isActive,
@@ -122,6 +125,7 @@ async function main() {
             imageSlug,
             wikiSlug,
             seedVotes,
+            weightedScore: seedVotes,
             xHandle,
             inductionStatus,
             isActive,
