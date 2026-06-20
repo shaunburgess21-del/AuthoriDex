@@ -4,7 +4,6 @@ import type { InsightsTab } from "@shared/insights/filters";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
 import { OverviewTab } from "@/components/insights/OverviewTab";
 import { RankingsTab } from "@/components/insights/RankingsTab";
-import { DiscoverTab } from "@/components/insights/DiscoverTab";
 import { CrowdTab } from "@/components/insights/CrowdTab";
 import { VoteTab } from "@/components/insights/VoteTab";
 import { PredictTab } from "@/components/insights/PredictTab";
@@ -60,7 +59,6 @@ export default function InsightsPage() {
       <main className="container mx-auto px-4 max-w-7xl py-6 md:py-8">
         {tab === "today" && <OverviewTab />}
         {tab === "rankings" && <RankingsTab />}
-        {tab === "discover" && <DiscoverTab />}
         {tab === "vote" && <VoteTab />}
         {tab === "predict" && <PredictTab />}
         {tab === "crowd" && <CrowdTab />}

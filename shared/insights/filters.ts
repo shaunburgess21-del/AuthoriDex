@@ -179,6 +179,8 @@ export function canonicalCacheKey(prefix: string, filters: InsightsFilters): str
  *  - `markets`             → `predict`  (Markets moved into the in-Insights
  *                                        Predict tab in Phase 4; previously it
  *                                        redirected out to /predict)
+ *  - `discover`            → `today`    (tab hidden from UI; restore by
+ *                                        removing from this map + tab bar)
  */
 const LEGACY_INSIGHTS_TAB_URL: Record<string, InsightsTab> = {
   you: "today",
@@ -186,6 +188,7 @@ const LEGACY_INSIGHTS_TAB_URL: Record<string, InsightsTab> = {
   approval: "crowd",
   compare: "rankings",
   markets: "predict",
+  discover: "today",
 };
 
 /** Rewrites legacy `?tab=` values in the address bar to the current IA. */
@@ -196,22 +199,22 @@ export function canonicalizeInsightsTabUrl(): boolean {
   const raw = url.searchParams.get("tab");
   if (!raw) return false;
 
-  if ((INSIGHTS_TAB_VALUES as readonly string[]).includes(raw)) {
-    return false;
-  }
-
   const mapped = LEGACY_INSIGHTS_TAB_URL[raw];
-  if (mapped === undefined) {
-    url.searchParams.delete("tab");
+  if (mapped !== undefined) {
+    if (mapped === "today") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", mapped);
+    }
     window.history.replaceState({}, "", url.toString());
     return true;
   }
 
-  if (mapped === "today") {
-    url.searchParams.delete("tab");
-  } else {
-    url.searchParams.set("tab", mapped);
+  if ((INSIGHTS_TAB_VALUES as readonly string[]).includes(raw)) {
+    return false;
   }
+
+  url.searchParams.delete("tab");
   window.history.replaceState({}, "", url.toString());
   return true;
 }

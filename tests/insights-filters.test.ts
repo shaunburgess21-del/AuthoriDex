@@ -17,7 +17,6 @@ describe("parseTab", () => {
   it("resolves canonical tab ids", () => {
     assert.equal(parseTab("?tab=today"), "today");
     assert.equal(parseTab("?tab=rankings"), "rankings");
-    assert.equal(parseTab("?tab=discover"), "discover");
     assert.equal(parseTab("?tab=vote"), "vote");
     assert.equal(parseTab("?tab=predict"), "predict");
     assert.equal(parseTab("?tab=crowd"), "crowd");
@@ -31,6 +30,7 @@ describe("parseTab", () => {
     // Phase 4: `markets` used to redirect out to /predict; now it stays
     // inside Insights on the Predict tab.
     assert.equal(parseTab("?tab=markets"), "predict");
+    assert.equal(parseTab("?tab=discover"), "today");
   });
 
   it("lands on rankings when filter params are present", () => {
@@ -40,7 +40,7 @@ describe("parseTab", () => {
   });
 
   it("prefers explicit tab over filter-only routing", () => {
-    assert.equal(parseTab("?tab=discover&source=news_momentum"), "discover");
+    assert.equal(parseTab("?tab=rankings&source=news_momentum"), "rankings");
   });
 
   it("explicit today tab wins even with stale rankings filters present", () => {

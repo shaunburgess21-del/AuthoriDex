@@ -1,7 +1,6 @@
 import { useEffect, useRef, type ComponentType, type SVGProps } from "react";
 import {
   BarChart3,
-  Compass,
   LineChart as LineChartIcon,
   Sparkles,
   Users,
@@ -18,7 +17,6 @@ const INSIGHTS_TABS: Array<{
 }> = [
   { id: "today", label: "Today", icon: Sparkles },
   { id: "rankings", label: "Rankings", icon: BarChart3 },
-  { id: "discover", label: "Discover", icon: Compass },
   { id: "vote", label: "Vote", icon: VoteIcon },
   { id: "predict", label: "Predict", icon: LineChartIcon },
   { id: "crowd", label: "Crowd", icon: Users },
@@ -48,7 +46,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
     >
       <div className="container mx-auto px-3 sm:px-4 max-w-7xl py-2.5 md:py-3">
         {/*
-         * 6 tabs is too many for a single row at very narrow widths, so we
+         * 5 tabs is too many for a single row at very narrow widths, so we
          * collapse to icons-only with a horizontally scrollable, snap-aligned
          * row at < sm. Active tab still shows its label so the user always
          * sees where they are. Desktop keeps all labels visible.
