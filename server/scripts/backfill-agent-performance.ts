@@ -114,8 +114,8 @@ async function main() {
 
   const marketsWithoutWinner = markets.filter((m) => !winnerByMarket.has(m.id)).length;
   console.log(
-    `[backfill] Fetched ${winnerByMarket.size} winner entries + ${betRows.length} agent bets ` +
-      `(${marketsWithoutWinner} markets have no winner — voided/tie, skipped).`,
+    `[backfill] Fetched ${winnerByMarket.size} winner entries + ${betRows.length} agent buy-bets ` +
+      `(sells excluded; ${marketsWithoutWinner} markets have no winner — voided/tie, skipped).`,
   );
 
   const aggByKey = new Map<string, Agg>();
@@ -178,7 +178,7 @@ async function main() {
 
   const rows = Array.from(aggByKey.values());
   console.log(
-    `[backfill] Aggregated ${scannedBets} agent bets into ${rows.length} (agent x week) rows ` +
+    `[backfill] Aggregated ${scannedBets} scored buys into ${rows.length} (agent x week) rows ` +
       `across ${aggByKey.size} buckets. Skipped ${marketsWithoutWinner} markets without a winner entry.`,
   );
 

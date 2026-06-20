@@ -158,8 +158,9 @@ async function upsertAgentPerformance(
       agentId,
       periodStart,
       periodEnd,
-      // On insert, totalResolved = 1. totalEntered is incremented at bet placement;
-      // here we leave it at 1 as the baseline for the first resolved bet.
+      // This writer only fires at resolution, so each scored buy is both
+      // "entered" and "resolved" — keep the counters in lockstep (the backfill
+      // sets totalEntered = totalResolved too).
       totalEntered: 1,
       totalResolved: 1,
       correct: isCorrect ? 1 : 0,
@@ -170,7 +171,7 @@ async function upsertAgentPerformance(
     .onConflictDoUpdate({
       target: [agentPerformance.agentId, agentPerformance.periodStart, agentPerformance.periodEnd],
       set: {
-        // totalEntered is incremented at bet-placement; only totalResolved grows here
+        totalEntered: sql`${agentPerformance.totalEntered} + 1`,
         totalResolved: sql`${agentPerformance.totalResolved} + 1`,
         correct: sql`${agentPerformance.correct} + ${isCorrect ? 1 : 0}`,
         // The CASE result MUST be numeric: avg_brier_score / accuracy are numeric
