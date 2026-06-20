@@ -3050,25 +3050,37 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
 
     // Fetch primary images for all celebrities (from celebrity_images table)
     // Order by personId first, then by isPrimary (desc) and vote score (desc)
-    // This ensures when we iterate, we see the "best" image for each person first
-    const allImages = await db
-      .select()
-      .from(celebrityImages)
-      .orderBy(
-        celebrityImages.personId,
-        desc(celebrityImages.isPrimary), 
-        desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`)
-      );
-    
-    // Build a map of personId -> primary image URL (O(n) - one pass)
+    // This ensures when we iterate, we see the "best" image for each person first.
+    //
+    // Avatar lookup is cosmetic and NOT on the score path — trendingRows fall back
+    // to person.avatar when the map is empty. Isolate this step so a transient
+    // celebrity_images failure (e.g. a schema/connectivity blip during a migration)
+    // can only drop avatars for one tick instead of aborting the whole ingest run.
     const primaryImageMap = new Map<string, string>();
-    for (const img of allImages) {
-      // Only set if not already set (first image for each personId is the "best")
-      if (!primaryImageMap.has(img.personId)) {
-        primaryImageMap.set(img.personId, img.imageUrl);
+    try {
+      const allImages = await db
+        .select()
+        .from(celebrityImages)
+        .orderBy(
+          celebrityImages.personId,
+          desc(celebrityImages.isPrimary),
+          desc(sql`(${celebrityImages.votesUp} - ${celebrityImages.votesDown})`)
+        );
+
+      // Build a map of personId -> primary image URL (O(n) - one pass)
+      for (const img of allImages) {
+        // Only set if not already set (first image for each personId is the "best")
+        if (!primaryImageMap.has(img.personId)) {
+          primaryImageMap.set(img.personId, img.imageUrl);
+        }
       }
+      console.log(`[Ingest] Loaded ${primaryImageMap.size} primary avatar images from celebrity_images`);
+    } catch (err) {
+      // Non-fatal: keep going with whatever avatars are already on the person rows.
+      console.error(
+        `[Ingest] celebrity_images lookup failed; continuing without fresh avatars (falling back to person.avatar): ${err instanceof Error ? err.message : String(err)}`
+      );
     }
-    console.log(`[Ingest] Loaded ${primaryImageMap.size} primary avatar images from celebrity_images`);
 
     // ORDERING NOTE: snapshots are written BEFORE the trending_people update.
     // trend_snapshots is the canonical history; trending_people is a denormalized
