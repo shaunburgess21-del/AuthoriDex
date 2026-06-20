@@ -8,9 +8,10 @@
  * upserts absolute aggregates so the script is idempotent.
  *
  * Semantics mirror the live writer for homogeneity with future rows:
- *   - every agent bet row (buy AND sell) counts as one data point
+ *   - buys are scored; sells are excluded (position management, not a call)
  *   - correct = (bet.entry_id === winning entry id)
- *   - Brier = (confidence - outcome)^2, confidence defaults to 0.5 when null
+ *   - Brier = (predicted prob - outcome)^2, where predicted prob = the AMM
+ *     price_per_share (LMSR implied prob), falling back to confidence, then 0.5
  *   - category = the market's category
  *
  * Scope: native AMM markets only (updown / h2h / gainer). Jackpot is
@@ -22,7 +23,7 @@
  *   npx tsx --env-file=.env server/scripts/backfill-agent-performance.ts --apply
  */
 
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { db } from "../db";
 import {
   agentConfigs,
@@ -100,9 +101,16 @@ async function main() {
       entryId: marketBets.entryId,
       agentId: marketBets.agentId,
       confidence: marketBets.confidence,
+      pricePerShare: marketBets.pricePerShare,
     })
     .from(marketBets)
-    .where(and(inArray(marketBets.marketId, marketIds), isNotNull(marketBets.agentId)));
+    .where(
+      and(
+        inArray(marketBets.marketId, marketIds),
+        isNotNull(marketBets.agentId),
+        ne(marketBets.actionType, "sell"),
+      ),
+    );
 
   const marketsWithoutWinner = markets.filter((m) => !winnerByMarket.has(m.id)).length;
   console.log(
@@ -129,8 +137,15 @@ async function main() {
 
     const isCorrect = bet.entryId === winnerEntryId;
     const outcome = isCorrect ? 1 : 0;
-    const parsed = bet.confidence != null ? parseFloat(String(bet.confidence)) : 0.5;
-    const conf = Number.isFinite(parsed) ? parsed : 0.5;
+    // Predicted prob = AMM price_per_share (LMSR implied prob), falling back to
+    // confidence (legacy/parimutuel), then the 0.5 prior. Mirrors the live writer.
+    const rawProb =
+      bet.pricePerShare != null
+        ? parseFloat(String(bet.pricePerShare))
+        : bet.confidence != null
+          ? parseFloat(String(bet.confidence))
+          : 0.5;
+    const conf = Number.isFinite(rawProb) ? Math.min(1, Math.max(0, rawProb)) : 0.5;
     const brier = Math.pow(conf - outcome, 2);
 
     const key = `${bet.agentId}|${start.toISOString()}|${end.toISOString()}`;

@@ -5,7 +5,7 @@
 
 import { db } from "../db";
 import { marketBets, agentConfigs, agentPerformance, predictionMarkets } from "@shared/schema";
-import { eq, and, isNotNull, sql } from "drizzle-orm";
+import { eq, and, isNotNull, ne, sql } from "drizzle-orm";
 import { addMemory } from "./memoryManager";
 import { log } from "../log";
 
@@ -21,16 +21,26 @@ export async function scoreResolvedMarket(
 ): Promise<ScoreResolvedMarketResult> {
   const result: ScoreResolvedMarketResult = { total: 0, scored: 0, failed: 0 };
   try {
+    // Score buys (and any non-AMM rows) but exclude sells: a sell is position
+    // management, not a fresh directional prediction, so it shouldn't count
+    // toward Brier/accuracy. For AMM markets this leaves only buy rows.
     const agentBets = await db
       .select({
         betId: marketBets.id,
         entryId: marketBets.entryId,
         agentId: marketBets.agentId,
         confidence: marketBets.confidence,
+        pricePerShare: marketBets.pricePerShare,
         userId: marketBets.userId,
       })
       .from(marketBets)
-      .where(and(eq(marketBets.marketId, marketId), isNotNull(marketBets.agentId)));
+      .where(
+        and(
+          eq(marketBets.marketId, marketId),
+          isNotNull(marketBets.agentId),
+          ne(marketBets.actionType, "sell"),
+        ),
+      );
 
     result.total = agentBets.length;
     if (!agentBets.length) return result;
@@ -61,13 +71,22 @@ export async function scoreResolvedMarket(
       try {
         const isCorrect = bet.entryId === winnerEntryId;
         const outcome = isCorrect ? 1.0 : 0.0;
-        // Use != null so that a confidence of exactly 0 is not treated as missing
-        const parsedConf = bet.confidence != null ? parseFloat(String(bet.confidence)) : 0.5;
-        // Defensive: a non-finite confidence would yield a NaN Brier score,
-        // which numeric(6,4) rejects on insert. Fall back to the 0.5 prior.
-        const conf = Number.isFinite(parsedConf) ? parsedConf : 0.5;
+        // Predicted probability the entry wins. AMM trades store this as
+        // price_per_share (the LMSR implied probability at trade time);
+        // legacy/parimutuel rows use `confidence`. Fall back to the 0.5 prior
+        // only if neither is present. != null so an exact 0 isn't treated as
+        // missing.
+        const rawProb =
+          bet.pricePerShare != null
+            ? parseFloat(String(bet.pricePerShare))
+            : bet.confidence != null
+              ? parseFloat(String(bet.confidence))
+              : 0.5;
+        // Clamp to [0,1]; a non-finite value would yield a NaN Brier score,
+        // which numeric(6,4) rejects on insert.
+        const conf = Number.isFinite(rawProb) ? Math.min(1, Math.max(0, rawProb)) : 0.5;
 
-        // Brier score: (confidence - outcome)^2
+        // Brier score: (predicted probability - outcome)^2
         const brierScore = Math.pow(conf - outcome, 2);
 
         await upsertAgentPerformance(

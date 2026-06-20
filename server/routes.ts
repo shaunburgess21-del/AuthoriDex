@@ -24346,15 +24346,19 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       // ---- Brier + win rate per persona band, from market_bets only.
       //
-      // We read confidence + winner directly from the bet rows instead of
-      // `agent_performance` because the latter is bucketed per-week and
-      // doesn't support arbitrary windows. `confidence` is a numeric(4,3)
-      // text column in market_bets; we COALESCE to 0.5 to match the
-      // `scoreResolvedMarket` fallback so the Brier math agrees.
+      // We read the predicted probability + winner directly from the bet rows
+      // instead of `agent_performance` because the latter is bucketed per-week
+      // and doesn't support arbitrary windows.
       //
-      // The CASE on `winner_entry_id IS NULL` keeps void markets out of
-      // the won/lost denominator — a voided market is neither a win nor
-      // a loss; the bet is refunded and contributes 0 to Brier scoring.
+      // Predicted probability = price_per_share (the AMM/LMSR implied prob at
+      // trade time), falling back to `confidence` for legacy/parimutuel rows,
+      // then the 0.5 prior — matching `scoreResolvedMarket` so the Brier math
+      // agrees. (AMM bets never populate `confidence`, so reading it alone made
+      // every AMM Brier a degenerate 0.25.)
+      //
+      // Sells are excluded: a sell is position management, not a fresh
+      // directional call. The status IN ('won','lost') filter already keeps
+      // void markets out of the denominator (refunded, contribute nothing).
       const brierRows = (await db.execute(sql`
         SELECT
           COALESCE(ac.simulation_profile->>'personaBand', 'unknown') AS persona_band,
@@ -24364,15 +24368,16 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           AVG(
             CASE
               WHEN mb.status = 'won' THEN
-                POWER(COALESCE(mb.confidence::numeric, 0.5) - 1.0, 2)
+                POWER(COALESCE(mb.price_per_share::numeric, mb.confidence::numeric, 0.5) - 1.0, 2)
               WHEN mb.status = 'lost' THEN
-                POWER(COALESCE(mb.confidence::numeric, 0.5) - 0.0, 2)
+                POWER(COALESCE(mb.price_per_share::numeric, mb.confidence::numeric, 0.5) - 0.0, 2)
               ELSE NULL
             END
           ) AS avg_brier
         FROM agent_configs ac
         LEFT JOIN market_bets mb ON mb.agent_id = ac.id
           AND mb.status IN ('won','lost')
+          AND mb.action_type <> 'sell'
           AND mb.settled_at > ${cutoff}
         WHERE ac.is_active = true
           AND ac.simulation_profile->>'cohortId' = ${SIMULATION_V2_COHORT_ID}
