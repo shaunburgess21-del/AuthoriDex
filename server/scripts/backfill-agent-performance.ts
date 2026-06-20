@@ -78,73 +78,87 @@ async function main() {
 
   console.log(`[backfill] Found ${markets.length} resolved native AMM markets.`);
 
+  if (markets.length === 0) {
+    console.log("[backfill] Nothing to do.");
+    process.exit(0);
+  }
+
+  const marketIds = markets.map((m) => m.id);
+  const marketMeta = new Map(markets.map((m) => [m.id, m] as const));
+
+  // Batch-fetch in two queries (winners + agent bets) instead of ~2 queries
+  // per market, so this stays fast and observable even with 800+ markets.
+  const winnerRows = await db
+    .select({ marketId: marketEntries.marketId, id: marketEntries.id })
+    .from(marketEntries)
+    .where(and(inArray(marketEntries.marketId, marketIds), eq(marketEntries.resolutionStatus, "winner")));
+  const winnerByMarket = new Map(winnerRows.map((w) => [w.marketId, w.id] as const));
+
+  const betRows = await db
+    .select({
+      marketId: marketBets.marketId,
+      entryId: marketBets.entryId,
+      agentId: marketBets.agentId,
+      confidence: marketBets.confidence,
+    })
+    .from(marketBets)
+    .where(and(inArray(marketBets.marketId, marketIds), isNotNull(marketBets.agentId)));
+
+  const marketsWithoutWinner = markets.filter((m) => !winnerByMarket.has(m.id)).length;
+  console.log(
+    `[backfill] Fetched ${winnerByMarket.size} winner entries + ${betRows.length} agent bets ` +
+      `(${marketsWithoutWinner} markets have no winner — voided/tie, skipped).`,
+  );
+
   const aggByKey = new Map<string, Agg>();
   let scannedBets = 0;
-  let marketsWithoutWinner = 0;
 
-  for (const market of markets) {
-    const [winner] = await db
-      .select({ id: marketEntries.id })
-      .from(marketEntries)
-      .where(and(eq(marketEntries.marketId, market.id), eq(marketEntries.resolutionStatus, "winner")))
-      .limit(1);
-    if (!winner) {
-      // Voided / tie markets have no winner entry — nothing to score.
-      marketsWithoutWinner++;
-      continue;
-    }
+  for (const bet of betRows) {
+    if (!bet.agentId || !validAgentIds.has(bet.agentId)) continue;
+    const winnerEntryId = winnerByMarket.get(bet.marketId);
+    if (!winnerEntryId) continue; // voided / no-winner market — nothing to score
+    const meta = marketMeta.get(bet.marketId);
+    if (!meta?.resolvedAt) continue;
 
-    const bets = await db
-      .select({
-        entryId: marketBets.entryId,
-        agentId: marketBets.agentId,
-        confidence: marketBets.confidence,
-      })
-      .from(marketBets)
-      .where(and(eq(marketBets.marketId, market.id), isNotNull(marketBets.agentId)));
+    scannedBets++;
 
-    const refDate = new Date(market.resolvedAt as Date);
+    const refDate = new Date(meta.resolvedAt as Date);
     const start = getPeriodStart(refDate);
     const end = getPeriodEnd(refDate);
-    const category = market.category ?? "general";
+    const category = meta.category ?? "general";
 
-    for (const bet of bets) {
-      if (!bet.agentId || !validAgentIds.has(bet.agentId)) continue;
-      scannedBets++;
+    const isCorrect = bet.entryId === winnerEntryId;
+    const outcome = isCorrect ? 1 : 0;
+    const parsed = bet.confidence != null ? parseFloat(String(bet.confidence)) : 0.5;
+    const conf = Number.isFinite(parsed) ? parsed : 0.5;
+    const brier = Math.pow(conf - outcome, 2);
 
-      const isCorrect = bet.entryId === winner.id;
-      const outcome = isCorrect ? 1 : 0;
-      const parsed = bet.confidence != null ? parseFloat(String(bet.confidence)) : 0.5;
-      const conf = Number.isFinite(parsed) ? parsed : 0.5;
-      const brier = Math.pow(conf - outcome, 2);
-
-      const key = `${bet.agentId}|${start.toISOString()}|${end.toISOString()}`;
-      let agg = aggByKey.get(key);
-      if (!agg) {
-        agg = {
-          agentId: bet.agentId,
-          periodStart: start,
-          periodEnd: end,
-          total: 0,
-          correct: 0,
-          sumBrier: 0,
-          categories: new Map(),
-        };
-        aggByKey.set(key, agg);
-      }
-      agg.total++;
-      agg.correct += isCorrect ? 1 : 0;
-      agg.sumBrier += brier;
-
-      let cat = agg.categories.get(category);
-      if (!cat) {
-        cat = { correct: 0, total: 0, sumBrier: 0 };
-        agg.categories.set(category, cat);
-      }
-      cat.total++;
-      cat.correct += isCorrect ? 1 : 0;
-      cat.sumBrier += brier;
+    const key = `${bet.agentId}|${start.toISOString()}|${end.toISOString()}`;
+    let agg = aggByKey.get(key);
+    if (!agg) {
+      agg = {
+        agentId: bet.agentId,
+        periodStart: start,
+        periodEnd: end,
+        total: 0,
+        correct: 0,
+        sumBrier: 0,
+        categories: new Map(),
+      };
+      aggByKey.set(key, agg);
     }
+    agg.total++;
+    agg.correct += isCorrect ? 1 : 0;
+    agg.sumBrier += brier;
+
+    let cat = agg.categories.get(category);
+    if (!cat) {
+      cat = { correct: 0, total: 0, sumBrier: 0 };
+      agg.categories.set(category, cat);
+    }
+    cat.total++;
+    cat.correct += isCorrect ? 1 : 0;
+    cat.sumBrier += brier;
   }
 
   const rows = Array.from(aggByKey.values());
