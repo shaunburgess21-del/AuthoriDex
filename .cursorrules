@@ -119,7 +119,7 @@ Up/Down, H2H, Top Gainer, and World Markets use **AMM with LMSR** pricing. Weekl
 Native non-jackpot markets were migrated from parimutuel to AMM in a multi-phase rebuild (parimutuel resolver paths removed for new native markets; jackpot was always excluded).
 
 - **Engine dispatch:** `prediction_markets.engine` is `'amm'` (default) or `'parimutuel'` (jackpot + legacy rows). Bet/settlement routes branch on engine. Cutoff helper: `getMarketBettingCutoff()` in `server/native-markets/lifecycle.ts`.
-- **AMM state:** one `market_amm_state` row per AMM market (liquidity `b`, share quantities, house seed). Trades: `amm_buy` / `amm_sell` on `market_bets` + `credit_ledger`.
+- **AMM state:** one `market_amm_state` row per AMM market (liquidity `b`, share quantities, house seed). Trades write a `market_bets` row with `action_type` = `buy` / `sell` (`parimutuel` for jackpot) and a matching `credit_ledger` entry whose `txn_type` is `amm_buy` / `amm_sell`. (Note: `amm_buy`/`amm_sell` are ledger txn types, not `market_bets.action_type` values.)
 - **House singleton:** one `is_house` profile seeds AMM markets (`server/services/amm-house.ts`, fixed UUID in migrations).
 - **AMM cutoff:** trading closes at `endAt − pre_resolve_cooldown` (default **5 minutes**, admin-tunable via `amm_runtime_settings`). Jackpot uses a separate weekly cutoff (Friday 23:59 UTC).
 - **`buyCost` overflow guard:** `shared/lib/amm/lmsr.ts` switches formulas when `Δ/b` is large — preserve this.
