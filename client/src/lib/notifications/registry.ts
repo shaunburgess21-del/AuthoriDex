@@ -3,6 +3,7 @@ import {
   Award,
   Bell,
   Flame,
+  Heart,
   Megaphone,
   MessageSquare,
   RefreshCcw,
@@ -115,6 +116,13 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
   },
   comment_reply: {
     icon: MessageSquare,
+    accent: SOCIAL_ACCENT,
+    bgAccent: SOCIAL_BG,
+    category: "social",
+    priority: 0,
+  },
+  comment_like: {
+    icon: Heart,
     accent: SOCIAL_ACCENT,
     bgAccent: SOCIAL_BG,
     category: "social",

@@ -26,6 +26,7 @@ export type NotificationKind =
   | "favorite_hot_mover"
   | "favorite_new_market"
   | "comment_reply"
+  | "comment_like"
   | "comment_upvote_milestone"
   | "rank_up"
   | "streak_milestone"
@@ -58,6 +59,7 @@ const KIND_REGISTRY: Record<NotificationKind, KindMeta> = {
   favorite_hot_mover: { category: "favorites", priority: 0 },
   favorite_new_market: { category: "favorites", priority: 0 },
   comment_reply: { category: "social", priority: 0 },
+  comment_like: { category: "social", priority: 0 },
   comment_upvote_milestone: { category: "social", priority: 0 },
   rank_up: { category: "account", priority: 1 },
   streak_milestone: { category: "account", priority: 0 },

@@ -3809,6 +3809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           id: communityInsights.id,
           deletedAt: communityInsights.deletedAt,
           authorId: communityInsights.userId,
+          content: communityInsights.content,
         })
         .from(communityInsights)
         .where(eq(communityInsights.id, id))
@@ -3912,6 +3913,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
           } catch (e) { console.error("Author upvote XP award failed:", e); }
           await checkAndAwardUpvoteReceivedBadges(insight.authorId);
+
+          // Engagement fanout for insight likes. Counts are derived via
+          // COUNT (no denormalized counter), so we read the post-insert
+          // upvote total and treat (total - 1) as the previous value to
+          // detect threshold crossings [1, 5, 10, 25, 100]. The first
+          // like is an actor-attributed "X liked your post" hit; 5+ are
+          // milestones. All rows share one groupKey per insight so the
+          // bell collapses them. Self-likes are already excluded above.
+          try {
+            const [upvoteRow] = await db
+              .select({ count: sql<number>`CAST(COUNT(*) AS INTEGER)` })
+              .from(insightVotes)
+              .where(and(eq(insightVotes.insightId, id), eq(insightVotes.voteType, "up")));
+            const newUpvotes = upvoteRow?.count ?? 1;
+            const previousUpvotes = newUpvotes - 1;
+            const INSIGHT_UPVOTE_MILESTONES = [1, 5, 10, 25, 100] as const;
+            const crossed = INSIGHT_UPVOTE_MILESTONES.find(
+              (m) => previousUpvotes < m && newUpvotes >= m,
+            );
+            if (crossed) {
+              const baseHref = await resolveUnifiedCommentHref("community_insight", id);
+              const href = `${baseHref}#insight-${id}`;
+              const engagementGroupKey = `insight-engagement:${id}`;
+              const snippet = insight.content?.trim().slice(0, 140);
+              if (crossed === 1) {
+                const [voter] = await db
+                  .select(commentAuthorSelect)
+                  .from(profiles)
+                  .where(eq(profiles.id, userId))
+                  .limit(1);
+                const voterName = voter?.authorUsername ?? "Someone";
+                await createNotification({
+                  userId: insight.authorId,
+                  kind: "comment_like",
+                  actorUserId: userId,
+                  title: `${voterName} liked your post`,
+                  body: snippet || undefined,
+                  href,
+                  entityType: "community_insight",
+                  entityId: id,
+                  metadata: { upvotes: newUpvotes },
+                  groupKey: engagementGroupKey,
+                  idempotencyKey: `insight_like:${id}`,
+                });
+              } else {
+                await createNotification({
+                  userId: insight.authorId,
+                  kind: "comment_upvote_milestone",
+                  title: `Your post hit ${crossed} likes`,
+                  body: snippet || undefined,
+                  href,
+                  entityType: "community_insight",
+                  entityId: id,
+                  metadata: { milestone: crossed, upvotes: newUpvotes },
+                  groupKey: engagementGroupKey,
+                  idempotencyKey: `insight_upvote_milestone:${id}:${crossed}`,
+                });
+              }
+            }
+          } catch (err) {
+            console.error("[notifications] insight engagement fanout failed:", err);
+          }
         }
       }
 
@@ -5691,11 +5754,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 parentType: parentRow.parentType,
                 parentId: parentRow.parentId,
               },
+              // One groupKey per parent comment so a burst of replies to
+              // the same comment collapses into a single bell row.
+              groupKey: `comment-replies:${newComment.parentCommentId}`,
               idempotencyKey: `comment_reply:${newComment.id}`,
             });
           }
         } catch (err) {
           console.error("[notifications] comment_reply fanout failed:", err);
+        }
+      } else if (newComment.parentType === "community_insight") {
+        // Reply directly to a person-profile post (an "insight"). The
+        // post lives in community_insights, not the comments table, so
+        // the parentCommentId fanout above never fires for it — we look
+        // up the insight author explicitly here. Skips self-replies and
+        // deleted insights. Replies share one groupKey per insight so a
+        // burst collapses into a single bell row.
+        try {
+          const [insightRow] = await db
+            .select({
+              userId: communityInsights.userId,
+              personId: communityInsights.personId,
+              deletedAt: communityInsights.deletedAt,
+            })
+            .from(communityInsights)
+            .where(eq(communityInsights.id, newComment.parentId))
+            .limit(1);
+
+          if (insightRow && !insightRow.deletedAt && insightRow.userId !== userId) {
+            const replyAuthorName = profile?.authorUsername ?? "Someone";
+            const snippet = parsed.body.trim().slice(0, 140);
+            const href = insightRow.personId
+              ? `/person/${insightRow.personId}#insight-${newComment.parentId}`
+              : "/me";
+            await createNotification({
+              userId: insightRow.userId,
+              kind: "comment_reply",
+              actorUserId: userId,
+              title: `${replyAuthorName} replied to your post`,
+              body: snippet || undefined,
+              href,
+              entityType: "community_insight",
+              entityId: newComment.parentId,
+              metadata: {
+                parentType: "community_insight",
+                parentId: newComment.parentId,
+              },
+              groupKey: `insight-replies:${newComment.parentId}`,
+              idempotencyKey: `comment_reply:${newComment.id}`,
+            });
+          }
+        } catch (err) {
+          console.error("[notifications] insight reply fanout failed:", err);
         }
       }
 
@@ -5933,12 +6043,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // comment_upvote_milestone fanout. We deliberately do NOT ping per
-      // upvote — that's exactly the kind of engagement spam the plan is
-      // trying to avoid. Instead we ping when the comment's upvote
-      // counter crosses one of [5, 10, 25, 100]. Idempotency is keyed
-      // on (commentId, milestone) so re-running the vote handler can't
-      // double-fire. Skips self-upvotes and own-comment milestones.
+      // Engagement fanout. We deliberately do NOT ping per upvote —
+      // that's exactly the kind of engagement spam the plan is trying to
+      // avoid. Instead we ping when the comment's upvote counter crosses
+      // one of [1, 5, 10, 25, 100]: the first like is an actor-attributed
+      // "X liked your comment" social hit (kind `comment_like`), and 5+
+      // are "your comment hit N likes" milestones (kind
+      // `comment_upvote_milestone`). All rows for one comment share a
+      // single groupKey so the bell collapses them into one consolidated
+      // row. Idempotency keys are stable per (commentId, threshold) so
+      // re-running the handler can't double-fire. Skips self-upvotes.
       const newUpvotes = updated?.upvotes ?? comment.upvotes;
       if (
         comment.userId !== userId &&
@@ -5946,7 +6060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isNewVote &&
         newUpvotes > previousUpvotes
       ) {
-        const COMMENT_UPVOTE_MILESTONES = [5, 10, 25, 100] as const;
+        const COMMENT_UPVOTE_MILESTONES = [1, 5, 10, 25, 100] as const;
         const crossed = COMMENT_UPVOTE_MILESTONES.find(
           (m) => previousUpvotes < m && newUpvotes >= m,
         );
@@ -5957,20 +6071,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
               comment.parentId,
             );
             const snippet = comment.body.trim().slice(0, 140);
-            await createNotification({
-              userId: comment.userId,
-              kind: "comment_upvote_milestone",
-              title: `Your comment hit ${crossed} upvotes`,
-              body: snippet || undefined,
-              href: `${href}#comment-${comment.id}`,
-              entityType: "comment",
-              entityId: comment.id,
-              metadata: { milestone: crossed, upvotes: newUpvotes },
-              groupKey: `upvote-milestone:${comment.id}:${crossed}`,
-              idempotencyKey: `comment_upvote_milestone:${comment.id}:${crossed}`,
-            });
+            const engagementGroupKey = `comment-engagement:${comment.id}`;
+            if (crossed === 1) {
+              const [voter] = await db
+                .select(commentAuthorSelect)
+                .from(profiles)
+                .where(eq(profiles.id, userId))
+                .limit(1);
+              const voterName = voter?.authorUsername ?? "Someone";
+              await createNotification({
+                userId: comment.userId,
+                kind: "comment_like",
+                actorUserId: userId,
+                title: `${voterName} liked your comment`,
+                body: snippet || undefined,
+                href: `${href}#comment-${comment.id}`,
+                entityType: "comment",
+                entityId: comment.id,
+                metadata: { upvotes: newUpvotes },
+                groupKey: engagementGroupKey,
+                idempotencyKey: `comment_like:${comment.id}`,
+              });
+            } else {
+              await createNotification({
+                userId: comment.userId,
+                kind: "comment_upvote_milestone",
+                title: `Your comment hit ${crossed} likes`,
+                body: snippet || undefined,
+                href: `${href}#comment-${comment.id}`,
+                entityType: "comment",
+                entityId: comment.id,
+                metadata: { milestone: crossed, upvotes: newUpvotes },
+                groupKey: engagementGroupKey,
+                idempotencyKey: `comment_upvote_milestone:${comment.id}:${crossed}`,
+              });
+            }
           } catch (err) {
-            console.error("[notifications] comment_upvote_milestone fanout failed:", err);
+            console.error("[notifications] comment engagement fanout failed:", err);
           }
         }
       }

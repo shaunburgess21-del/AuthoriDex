@@ -17,6 +17,7 @@ export type NotificationKind =
   | "favorite_hot_mover"
   | "favorite_new_market"
   | "comment_reply"
+  | "comment_like"
   | "comment_upvote_milestone"
   | "rank_up"
   | "streak_milestone"

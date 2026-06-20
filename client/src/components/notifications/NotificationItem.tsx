@@ -34,6 +34,32 @@ function getNotificationDirection(
   return raw === "up" || raw === "down" ? raw : null;
 }
 
+/**
+ * For collapsed social groups (replies / likes on one comment or post),
+ * rewrite the head row's title into an aggregated form — "Shaun and 3
+ * others replied to your comment" — instead of showing a lone actor plus
+ * a "+N earlier" pill. Returns null for non-social kinds or uncollapsed
+ * rows so the caller falls back to the raw title + pill.
+ */
+function buildAggregatedSocialTitle(notification: NotificationRow): string | null {
+  const count = notification.collapsedCount ?? 0;
+  if (count <= 0) return null;
+  if (notification.kind !== "comment_reply" && notification.kind !== "comment_like") {
+    return null;
+  }
+  const target = notification.entityType === "community_insight" ? "your post" : "your comment";
+  const verb = notification.kind === "comment_like" ? "liked" : "replied to";
+  const suffix = ` ${verb} ${target}`;
+  const plural = count === 1 ? "other" : "others";
+  if (notification.title.endsWith(suffix)) {
+    const name = notification.title.slice(0, -suffix.length);
+    if (name) return `${name} and ${count} ${plural} ${verb} ${target}`;
+  }
+  // Title didn't match the expected shape (forward-compat copy change);
+  // fall back to an actor-less aggregate that still reads naturally.
+  return `${count + 1} people ${verb} ${target}`;
+}
+
 function resolveNotificationHref(notification: NotificationRow): string | null {
   if (!notification.href) return null;
   const marketType =
@@ -107,6 +133,8 @@ export function NotificationItem({
   const isInternalLink = !!resolvedHref && resolvedHref.startsWith("/");
   const isCollapsedHead =
     (notification.collapsedCount ?? 0) > 0 && !!notification.groupKey;
+  const aggregatedSocialTitle = buildAggregatedSocialTitle(notification);
+  const displayTitle = aggregatedSocialTitle ?? notification.title;
 
   const useSwipe = swipeEnabled && isMobile;
 
@@ -215,10 +243,10 @@ export function NotificationItem({
               isUnread ? "font-semibold" : "font-medium text-muted-foreground",
             )}
           >
-            {notification.title}
+            {displayTitle}
           </p>
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-            {(notification.collapsedCount ?? 0) > 0 && (
+            {(notification.collapsedCount ?? 0) > 0 && !aggregatedSocialTitle && (
               <span
                 className={cn(
                   "px-1.5 py-0.5 rounded-full text-[10px] font-medium",

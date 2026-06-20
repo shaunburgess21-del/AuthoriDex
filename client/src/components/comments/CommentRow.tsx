@@ -7,7 +7,16 @@ import { formatTimeAgo } from "@/lib/formatDate";
 import { getRankByName } from "@shared/rank-config";
 import type { CommentItem, VoteType } from "./types";
 
-const MAX_COMMENT_VISUAL_DEPTH = 5;
+/**
+ * Cap visual nesting at 3 levels. The data tree preserves full parentage
+ * (see buildThreadedComments), but indenting deeper than this marches
+ * replies off-screen on mobile, so depth > 3 renders at the same indent
+ * as depth 3 while the thread stays navigable via "View N more replies".
+ */
+const MAX_COMMENT_VISUAL_DEPTH = 3;
+
+/** Indent per nesting level (rem). Kept tight so depth-3 fits a 360px viewport. */
+const INDENT_REM_PER_LEVEL = 1.25;
 
 /**
  * The inline rank qualifier next to a comment author's name only shows
@@ -55,7 +64,7 @@ export function CommentRow({
     !isDeleted && !!comment.authorRank && authorTier >= RANK_QUALIFIER_MIN_TIER;
   const isNested = depth > 0;
   const visualDepth = Math.min(depth, MAX_COMMENT_VISUAL_DEPTH);
-  const indentRem = isNested ? visualDepth * 1.75 : 0;
+  const indentRem = isNested ? visualDepth * INDENT_REM_PER_LEVEL : 0;
 
   return (
     <div

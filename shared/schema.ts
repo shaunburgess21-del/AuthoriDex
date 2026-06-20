@@ -2202,7 +2202,8 @@ export const notifications = pgTable("notifications", {
   metadata: jsonb("metadata"),
   // 0 = silent (bell only), 1 = high (auto-toast in-session).
   priority: integer("priority").notNull().default(0),
-  // For batched kinds — e.g. "upvote-milestone:<commentId>:5".
+  // For batched kinds — e.g. "comment-engagement:<commentId>" so all
+  // likes/milestones on one comment collapse into a single bell row.
   groupKey: text("group_key"),
   // Critical for derivation jobs: re-running the job must not duplicate.
   idempotencyKey: text("idempotency_key").notNull(),
