@@ -3115,8 +3115,8 @@ export default function PredictPage() {
                 onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
                 data-testid="town-square-header"
               >
-                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-voxdex shrink-0">
-                  <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                  <Users className="h-4 w-4 text-slate-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
