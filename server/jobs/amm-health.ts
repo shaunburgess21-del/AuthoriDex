@@ -24,6 +24,9 @@
  *      decided buckets (warn >0.12, fail >0.20).
  *   9. Live convergence (advisory) — open markets: |fair − price| on
  *      decided weekly moves (warn only; never fails `ok`).
+ *  10. Agent performance writer freshness (advisory) — warn if native AMM
+ *      markets resolved in the last 7d but agent_performance got no writes
+ *      (i.e. scoreResolvedMarket is silently failing again).
  *
  * Failure semantics: any check returning status="fail" makes the overall
  * result `ok=false`. "warn" rows do NOT flip ok — operators should still
@@ -32,9 +35,10 @@
  * script wrapper / cron endpoint is responsible for surfacing them.
  */
 
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
+  agentPerformance,
   agentRuntimeState,
   ammHealthCheckRuns,
   predictionMarkets,
@@ -94,6 +98,7 @@ export async function runAmmHealthCheck(
   checks.push(await checkTieVoidRate(lookbackDays));
   checks.push(await checkMarketCalibration(lookbackDays));
   checks.push(await checkLiveConvergence());
+  checks.push(await checkAgentPerformanceFreshness());
 
   const passed = checks.filter((c) => c.status === "pass").length;
   const warned = checks.filter((c) => c.status === "warn").length;
@@ -342,6 +347,51 @@ async function checkStuckMarkets(): Promise<CheckResult> {
       title: m.title,
       endAt: m.endAt,
     })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Check 10: agent performance writer freshness (advisory)
+//
+// `scoreResolvedMarket` populates `agent_performance` on every native AMM
+// resolution. It silently produced zero rows for a long time (the failure was
+// swallowed). This catches a regression early: if native markets resolved in
+// the last 7d but nothing was written to agent_performance, the writer is
+// likely failing again. Advisory only (warn), since the telemetry is not on
+// any user-facing critical path.
+// ---------------------------------------------------------------------------
+async function checkAgentPerformanceFreshness(): Promise<CheckResult> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [resolved] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.status, "RESOLVED"),
+        eq(predictionMarkets.engine, "amm"),
+        inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer"]),
+        gte(predictionMarkets.resolvedAt, cutoff),
+      ),
+    );
+
+  const [perf] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(agentPerformance)
+    .where(gte(agentPerformance.updatedAt, cutoff));
+
+  const resolvedCount = Number(resolved?.n ?? 0);
+  const perfWrites = Number(perf?.n ?? 0);
+  const silent = resolvedCount > 0 && perfWrites === 0;
+
+  return {
+    name: "Agent performance writer freshness (last 7d)",
+    status: silent ? "warn" : "pass",
+    rowCount: perfWrites,
+    details: silent
+      ? `${resolvedCount} native AMM market(s) resolved in the last 7d but agent_performance has 0 rows ` +
+        `written — scoreResolvedMarket may be failing silently. Check logs for "[AgentPerformance] Failed to score".`
+      : `${perfWrites} agent_performance row(s) written in the last 7d across ${resolvedCount} resolved native market(s).`,
   };
 }
 
