@@ -1523,8 +1523,10 @@ export default function HowItWorksPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-voxdex shrink-0">
+              <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
             <div>
               <h1 className="font-semibold">How It Works</h1>
               <p className="text-xs text-muted-foreground">
