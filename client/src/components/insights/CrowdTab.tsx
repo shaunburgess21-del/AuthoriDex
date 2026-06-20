@@ -61,12 +61,12 @@ export function CrowdTab() {
       <div
         className="inline-flex rounded-lg border border-border/50 bg-muted/40 p-0.5 text-xs font-medium"
         role="tablist"
-        aria-label="Crowd subsection"
+        aria-label="Approval subsection"
       >
         {SUB_VALUES.map((value) => {
           const isActive = sub === value;
           const Icon = value === "web" ? Globe : Users;
-          const label = value === "web" ? "Web Sentiment" : "Approval";
+          const label = value === "web" ? "Web Sentiment" : "VoxDex Approval";
           return (
             <button
               key={value}

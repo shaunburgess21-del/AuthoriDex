@@ -19,7 +19,7 @@ const INSIGHTS_TABS: Array<{
   { id: "rankings", label: "Rankings", icon: BarChart3 },
   { id: "vote", label: "Vote", icon: VoteIcon },
   { id: "predict", label: "Predict", icon: LineChartIcon },
-  { id: "crowd", label: "Crowd", icon: Users },
+  { id: "crowd", label: "Approval", icon: Users },
 ];
 
 interface InsightsHeaderProps {
