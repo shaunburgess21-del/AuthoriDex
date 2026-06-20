@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
+import { Badge } from "@/components/ui/badge";
+import { PredictDetailSectionHeader } from "@/components/predict/PredictDetailSectionHeader";
 import { Activity } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { voxWord } from "@/lib/currency";
@@ -33,6 +35,8 @@ interface MarketActivityFeedProps {
   /** Trim to N rows (default 20). Server caps at 100. */
   limit?: number;
   className?: string;
+  /** Use predict-detail section header styling (matches Category Race page). */
+  detailHeader?: boolean;
 }
 
 /**
@@ -50,6 +54,7 @@ export function MarketActivityFeed({
   marketId,
   limit = 20,
   className,
+  detailHeader = false,
 }: MarketActivityFeedProps) {
   const [, setLocation] = useLocation();
 
@@ -71,14 +76,28 @@ export function MarketActivityFeed({
   const trades = data?.trades ?? [];
 
   return (
-    <Card className={`p-4 ${className ?? ""}`}>
-      <div className="flex items-center gap-2 mb-3">
-        <Activity className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-        <h3 className="text-sm font-semibold">Recent Trades</h3>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-auto">
-          Live
-        </span>
-      </div>
+    <Card className={`p-4 sm:p-5 ${className ?? ""}`}>
+      {detailHeader ? (
+        <PredictDetailSectionHeader
+          icon={Activity}
+          title="Recent Trades"
+          subtitle="Latest market activity from the crowd"
+          accent="predict"
+          trailing={
+            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 ml-auto">
+              Live
+            </Badge>
+          }
+        />
+      ) : (
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <h3 className="text-sm font-semibold">Recent Trades</h3>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-auto">
+            Live
+          </span>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">

@@ -36,6 +36,7 @@ import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
+import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
 import {
   ArrowLeft,
@@ -416,7 +417,7 @@ export default function OpinionPollDetailPage() {
         </div>
 
         <Card
-          className="p-5 sm:p-6 mb-6 border border-border/50 bg-card transition-all duration-200 hover:border-[#EFEFEF]/55 dark:hover:border-white/40"
+          className={voteDetailSectionCardClass("p-5 sm:p-6 mb-6")}
           data-testid="section-vote-module"
         >
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
@@ -557,7 +558,7 @@ export default function OpinionPollDetailPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <Card className="p-5 mb-6" data-testid="section-results">
+        <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results

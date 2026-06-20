@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
+import {
+  DEFAULT_HUB_ACTIVITY_FILTER,
+  type HubActivityFilter,
+  readHubActivityFilter,
+  writeHubActivityFilter,
+} from "@/lib/hub-activity-filter";
 import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
 import type { CardSectionHandle } from "@/components/CardSection";
 import { Button } from "@/components/ui/button";
@@ -1063,12 +1069,31 @@ export default function PredictPage() {
   const leaderboardCats = useLeaderboardCategories();
   const onboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
-  const [myPositionsFilter, setMyPositionsFilter] = useState<"all" | "show-mine" | "hide-mine">("all");
+  const [myPositionsFilter, setMyPositionsFilterState] = useState<HubActivityFilter>(() =>
+    readHubActivityFilter("predict", user?.id),
+  );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setMyPositionsFilterState(readHubActivityFilter("predict", user.id));
+  }, [user?.id]);
+
+  const setMyPositionsFilter = useCallback(
+    (value: HubActivityFilter | ((prev: HubActivityFilter) => HubActivityFilter)) => {
+      setMyPositionsFilterState((prev) => {
+        const next = typeof value === "function" ? value(prev) : value;
+        writeHubActivityFilter("predict", user?.id, next);
+        return next;
+      });
+    },
+    [user?.id],
+  );
+
   const cycleMyPositionsFilter = useCallback(() => {
     setMyPositionsFilter((prev) =>
       prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
     );
-  }, []);
+  }, [setMyPositionsFilter]);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
@@ -1549,9 +1574,9 @@ export default function PredictPage() {
   );
   useEffect(() => {
     if (activePredictions === 0 && myPositionsFilter === "show-mine") {
-      setMyPositionsFilter("all");
+      setMyPositionsFilter(DEFAULT_HUB_ACTIVITY_FILTER);
     }
-  }, [activePredictions, myPositionsFilter]);
+  }, [activePredictions, myPositionsFilter, setMyPositionsFilter]);
 
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
   const hydratedMarkets = useMemo((): PredictionMarket[] => {

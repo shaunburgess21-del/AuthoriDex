@@ -33,6 +33,8 @@ import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/l
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
+import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
+import { PredictDetailSectionHeader } from "@/components/predict/PredictDetailSectionHeader";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -45,6 +47,7 @@ import {
   Trophy,
   Clock,
   ChevronRight,
+  ChevronDown,
   Lock,
   BarChart3,
   Zap,
@@ -79,6 +82,7 @@ export default function CategoryRaceDetailPage() {
   const { openShareCard } = useShareCard();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [leaderboardExpanded, setLeaderboardExpanded] = useState(false);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   // Idempotency key per modal intent. See `useIdempotencyKey.ts`.
@@ -281,6 +285,17 @@ export default function CategoryRaceDetailPage() {
     const q = searchQuery.toLowerCase();
     return candidates.filter((c) => c.name.toLowerCase().includes(q));
   }, [candidates, searchQuery]);
+
+  const LEADERBOARD_PREVIEW = 8;
+  const displayedCandidates = useMemo(() => {
+    if (searchQuery || leaderboardExpanded) return filteredCandidates;
+    return filteredCandidates.slice(0, LEADERBOARD_PREVIEW);
+  }, [filteredCandidates, searchQuery, leaderboardExpanded]);
+
+  const showLeaderboardExpand =
+    !searchQuery && candidates.length > LEADERBOARD_PREVIEW && !leaderboardExpanded;
+
+  const raceLeader = candidates[0] ?? null;
 
   const maxGain = useMemo(
     () => Math.max(...candidates.map((c) => Math.abs(c.percentGain)), 1),
@@ -591,7 +606,7 @@ export default function CategoryRaceDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 pt-4 space-y-5 md:space-y-6 pb-28 md:pb-8">
         <MarketCycleStrip
           bettingCutoff={market?.bettingCutoff ?? null}
           resolveAt={market?.endAt ?? null}
@@ -599,33 +614,52 @@ export default function CategoryRaceDetailPage() {
           engine="amm"
         />
 
-        <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20">
+        {/* Hero — category context + current leader snapshot */}
+        <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20 shadow-none">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
-          <div className="relative p-4 md:p-5">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="relative p-4 sm:p-5">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <h1 className="text-lg sm:text-xl font-serif font-bold">Category Race</h1>
               <CategoryPill category={normalizeMarketCategory(market.category || "misc")} />
             </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Biggest weekly gain wins — pick who moves the most this week.
+            </p>
 
-            <div className="grid grid-cols-2 gap-3 text-center">
-              <div>
-                <p className="text-lg md:text-xl font-bold">{candidates.length}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Runners
+            {raceLeader && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/8 border border-amber-500/30 dark:border-amber-500/25 mb-4">
+                <div className="h-8 w-8 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
+                  <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <PersonAvatar
+                  name={raceLeader.name}
+                  avatar={raceLeader.avatar}
+                  className="h-11 w-11 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Current leader</p>
+                  <p className="text-sm font-semibold truncate">{raceLeader.name}</p>
+                </div>
+                <p className="text-base font-mono font-bold text-green-700 dark:text-green-500 shrink-0">
+                  {formatSignedPercent(raceLeader.percentGain)}
                 </p>
               </div>
-              <div>
-                <p className="text-lg md:text-xl font-bold">{totalParticipants}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Traders
-                </p>
+            )}
+
+            <div className="flex items-center justify-center gap-6">
+              <div className="text-center">
+                <p className="text-base font-bold tabular-nums">{candidates.length}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Runners</p>
+              </div>
+              <div className="h-8 w-px bg-border/50" />
+              <div className="text-center">
+                <p className="text-base font-bold tabular-nums">{totalParticipants}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Traders</p>
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Path-to-win callout — quantifies how far behind the leader
-            the user's pick is (in % gain points). Race resolves on the
-            biggest mover so this is the directly actionable number. */}
         {userPick && candidates.length > 0 && (
           <RaceWhatNeedsToHappen
             myPickName={userPick.name}
@@ -635,14 +669,168 @@ export default function CategoryRaceDetailPage() {
           />
         )}
 
-        {/* AMM Live Market — consolidated card.
-            Renders three layers in priority order:
-              1. Volume + Traders chips (parity with H2H / Up/Down)
-              2. Per-candidate position rows for candidates the user
-                 holds — net shares, avg, cost, conversational sell-now
-                 / if-wins copy, plus inline Add / Sell / Share buttons
-              3. Top-6 candidates by live LMSR price (existing market
-                 consensus surface) */}
+        {/* Race Leaderboard — primary resolution surface */}
+        <Card className={predictDetailSectionCardClass("overflow-hidden")} data-testid="section-race-leaderboard">
+          <div className="p-4 sm:p-5">
+            <PredictDetailSectionHeader
+              icon={BarChart3}
+              title="Race Leaderboard"
+              subtitle="Ranked by weekly % gain — biggest mover wins"
+              accent="predict"
+              trailing={
+                <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 ml-auto">
+                  {candidates.length} candidates
+                </Badge>
+              }
+              className="mb-4"
+            />
+
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={candidateSearchRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search ${categoryLabel} candidates...`}
+                className="pl-9"
+                data-testid="input-race-candidate-search"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              {displayedCandidates.map((candidate) => {
+                const globalIdx = candidates.indexOf(candidate);
+                const isLeader = globalIdx === 0;
+                const isUserPick = userPick?.entryId === candidate.entryId;
+                const canSelect = !isMarketClosed;
+                const marketPct =
+                  ammPriceMap && candidate.entryId
+                    ? Math.max(0, Math.min(100, Math.round(Number(ammPriceMap[candidate.entryId] ?? 0) * 100)))
+                    : null;
+
+                return (
+                  <ClosedMarketActionTrigger
+                    key={candidate.entryId || candidate.name}
+                    isClosed={isMarketClosed && canSelect}
+                    message={closedMarketMessage}
+                    side="top"
+                    align="center"
+                  >
+                    <div
+                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg transition-colors relative overflow-hidden ${
+                        canSelect ? "cursor-pointer" : ""
+                      } ${
+                        isLeader
+                          ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30"
+                          : isUserPick
+                          ? "border border-green-500/50 dark:border-green-500/40 bg-green-500/8 dark:bg-green-500/5"
+                          : canSelect
+                          ? "hover:bg-muted/50"
+                          : ""
+                      }`}
+                      onClick={() => canSelect && handleCandidateSelect(candidate)}
+                    >
+                      <div
+                        className="absolute inset-y-0 left-0 bg-green-500/8 transition-all"
+                        style={{
+                          width: `${Math.max((Math.abs(candidate.percentGain) / maxGain) * 100, 3)}%`,
+                        }}
+                      />
+
+                      <div className="relative flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
+                        {isLeader ? (
+                          <div className="h-7 w-7 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
+                            <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          </div>
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
+                            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">
+                              {globalIdx + 1}
+                            </span>
+                          </div>
+                        )}
+
+                        <PersonAvatar
+                          name={candidate.name}
+                          avatar={candidate.avatar}
+                          className={isLeader ? "h-14 w-14" : "h-10 w-10"}
+                        />
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-medium truncate">{candidate.name}</span>
+                            {isUserPick && (
+                              <Badge className="bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30 text-[9px] px-1.5 py-0">
+                                Your Pick
+                              </Badge>
+                            )}
+                            {marketPct != null && (
+                              <Badge variant="outline" className="text-[9px] text-muted-foreground border-border/40 px-1.5 py-0">
+                                Market · {marketPct}%
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {candidate.rank ? (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                #{candidate.rank} on board
+                              </span>
+                            ) : null}
+                            {candidate.rank ? (
+                              <span className="text-[10px] text-muted-foreground/40">&middot;</span>
+                            ) : null}
+                            <span
+                              className={`text-[10px] font-mono ${
+                                candidate.currentGain >= 0
+                                  ? "text-muted-foreground"
+                                  : "text-red-600/80 dark:text-red-400/80"
+                              }`}
+                            >
+                              {formatSignedPoints(candidate.currentGain)} pts added
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative text-right shrink-0">
+                        <p
+                          className={`text-base font-mono font-bold ${
+                            candidate.percentGain >= 0
+                              ? "text-green-700 dark:text-green-500"
+                              : "text-red-700 dark:text-red-500"
+                          }`}
+                        >
+                          {formatSignedPercent(candidate.percentGain)}
+                        </p>
+                      </div>
+                    </div>
+                  </ClosedMarketActionTrigger>
+                );
+              })}
+
+              {filteredCandidates.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  No candidates match &quot;{searchQuery}&quot;
+                </div>
+              )}
+
+              {showLeaderboardExpand && (
+                <Button
+                  variant="ghost"
+                  className="w-full mt-2 text-sm text-violet-600 dark:text-violet-400"
+                  onClick={() => setLeaderboardExpanded(true)}
+                  data-testid="button-show-all-candidates"
+                >
+                  Show all {candidates.length} candidates
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Live Market — trading panel (positions only; ranking lives in leaderboard) */}
         {ammPriceMap && candidates.length > 0 && (() => {
           const liveVolume = Number(
             ((market as any)?.ammState?.totalUserCreditsIn ?? (market as any)?.volume ?? 0),
@@ -652,45 +840,43 @@ export default function CategoryRaceDetailPage() {
             (p) => p.netShares > 1e-6,
           );
           return (
-            <Card className="border-emerald-500/30 dark:border-emerald-500/20">
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <h2 className="text-sm font-semibold flex items-center gap-1.5">
-                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    Live Market
-                  </h2>
-                  <div className="flex items-center gap-1.5">
-                    {liveVolumeLabel && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] tabular-nums text-muted-foreground border-border/50"
-                        data-testid="race-live-market-volume"
-                      >
-                        {liveVolumeLabel} vol
+            <Card className={predictDetailSectionCardClass()}>
+              <div className="p-4 sm:p-5">
+                <PredictDetailSectionHeader
+                  icon={Activity}
+                  title="Live Market"
+                  subtitle="Your open positions and live LMSR prices"
+                  accent="live"
+                  trailing={
+                    <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+                      {liveVolumeLabel && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] tabular-nums text-muted-foreground border-border/50"
+                          data-testid="race-live-market-volume"
+                        >
+                          {liveVolumeLabel} vol
+                        </Badge>
+                      )}
+                      {totalParticipants > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
+                        >
+                          <Users className="h-2.5 w-2.5" />
+                          {totalParticipants}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
+                        LIVE
                       </Badge>
-                    )}
-                    {totalParticipants > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
-                      >
-                        <Users className="h-2.5 w-2.5" />
-                        {totalParticipants}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
-                      LIVE
-                    </Badge>
-                  </div>
-                </div>
+                    </div>
+                  }
+                  className="mb-3"
+                />
 
-                {/* Per-candidate position rows. Race users can hold
-                    multiple candidates at once — we render one row per
-                    open position with conversational copy + per-row
-                    Sell button. The Add CTA below the list focuses the
-                    search input so they can back yet another. */}
-                {openPositions.length > 0 && (
-                  <div className="space-y-2 pb-3 mb-3 border-b border-border/40">
+                {openPositions.length > 0 ? (
+                  <div className="space-y-2">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Your positions
                     </p>
@@ -698,17 +884,10 @@ export default function CategoryRaceDetailPage() {
                       .slice()
                       .sort((a, b) => b.currentValue - a.currentValue)
                       .map((pos) => {
-                        const candidate = candidates.find(
-                          (c) => c.entryId === pos.entryId,
-                        );
+                        const candidate = candidates.find((c) => c.entryId === pos.entryId);
                         const candidateName = candidate?.name ?? pos.entryLabel;
                         const unrealisedPnl = pos.currentValue - pos.netCreditsIn;
                         const maxProfitIfWin = pos.netShares - pos.netCreditsIn;
-                        // Sub-cent clamp: render −Ꝟ0.00 as Ꝟ0.00 so
-                        // the user sees a clean break-even instead of a
-                        // misleading negative sign. `formatVoxDelta` does
-                        // the clamp; we still need the raw value here
-                        // for the colour-class branch.
                         const pnlIsZero = Math.abs(unrealisedPnl) < 0.005;
                         const pnlClass = pnlIsZero
                           ? "text-muted-foreground"
@@ -809,57 +988,21 @@ export default function CategoryRaceDetailPage() {
                       Live prices — these numbers shift as the market moves.
                     </p>
                   </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Pick a candidate from the leaderboard above to open a position.
+                  </p>
                 )}
-
-                {/* Top-6 candidates by live LMSR price — the "market
-                    consensus" surface that existed in this card before
-                    we added per-position rows. */}
-                <div className="space-y-1.5">
-                  {[...candidates]
-                    .filter(c => c.entryId)
-                    .map(c => ({
-                      ...c,
-                      livePrice: Number(ammPriceMap[c.entryId!] ?? 0),
-                    }))
-                    .sort((a, b) => b.livePrice - a.livePrice)
-                    .slice(0, 6)
-                    .map(c => {
-                      const pct = Math.max(0, Math.min(100, Math.round(c.livePrice * 100)));
-                      return (
-                        <div key={c.entryId} className="flex items-center gap-3 text-sm">
-                          <span className="w-[35%] sm:w-[30%] truncate font-medium">{c.name}</span>
-                          <div className="flex-1 h-5 rounded-md overflow-hidden border border-emerald-500/25 bg-slate-900/80">
-                            <div
-                              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-                              style={{ width: `${Math.max(pct, 1)}%` }}
-                            />
-                          </div>
-                          <span className="font-mono font-bold w-10 text-right tabular-nums">{pct}%</span>
-                          <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                            {formatVoxPrice(c.livePrice, 3)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-                <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                  Live LMSR pricing — each share pays Ꝟ1 if the candidate wins.
-                </p>
               </div>
             </Card>
           );
         })()}
 
-        {/* AMM Price History — week-long market consensus drift. We
-            only render the top 6 candidates BY CURRENT LMSR PRICE so
-            the chart matches the Live Market panel above it, rather
-            than mixing the leaderboard score ordering with the market
-            price ordering. */}
         {candidates.length > 0 && (() => {
           const palette = ["#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"];
           const series = [...candidates]
-            .filter(c => c.entryId)
-            .map(c => ({
+            .filter((c) => c.entryId)
+            .map((c) => ({
               entryId: c.entryId!,
               label: c.name,
               livePrice: Number(ammPriceMap?.[c.entryId!] ?? 0),
@@ -868,12 +1011,14 @@ export default function CategoryRaceDetailPage() {
             .slice(0, palette.length)
             .map((c, i) => ({ entryId: c.entryId, label: c.label, color: palette[i] }));
           return (
-            <Card className="border-border/50">
-              <div className="p-4">
-                <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Market Price This Week
-                </h2>
+            <Card className={predictDetailSectionCardClass()}>
+              <div className="p-4 sm:p-5">
+                <PredictDetailSectionHeader
+                  icon={Activity}
+                  title="Market Price This Week"
+                  subtitle="How crowd odds shifted over the past week"
+                  accent="live"
+                />
                 <AmmPriceHistoryChart
                   marketId={marketId}
                   series={series}
@@ -885,165 +1030,19 @@ export default function CategoryRaceDetailPage() {
           );
         })()}
 
-        {/* Live trade feed — sits right under the price chart so the
-            "who is moving the price" story is immediately readable. */}
-        <MarketActivityFeed marketId={marketId} />
-
-        {/* Race Leaderboard */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold flex items-center gap-1.5">
-              <BarChart3 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              Race Leaderboard
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {candidates.length} candidates
-            </span>
-          </div>
-
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              ref={candidateSearchRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${categoryLabel} candidates...`}
-              className="pl-9"
+        <Card className="border-border/50 shadow-none">
+          <div className="p-4 sm:p-5">
+            <PredictDetailSectionHeader
+              icon={Zap}
+              title="Race Insights"
+              subtitle="24h momentum vs weekly pace"
+              accent="insight"
             />
-          </div>
-
-          <div className="space-y-1.5">
-            {filteredCandidates.map((candidate, i) => {
-              const globalIdx = candidates.indexOf(candidate);
-              const isLeader = globalIdx === 0;
-              const isUserPick = userPick?.entryId === candidate.entryId;
-              // Race lets users back any candidate at any time (including
-              // re-staking on one they've already picked, which routes to
-              // a top-up). Selection only blocks once the market closes.
-              const canSelect = !isMarketClosed;
-
-              return (
-                <ClosedMarketActionTrigger
-                  key={candidate.entryId || candidate.name}
-                  isClosed={isMarketClosed && canSelect}
-                  message={closedMarketMessage}
-                  side="top"
-                  align="center"
-                >
-                  <div
-                    className={`flex items-center gap-3 p-3 rounded-lg transition-colors relative overflow-hidden ${
-                      canSelect ? "cursor-pointer" : ""
-                    } ${
-                      isLeader
-                        ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30"
-                        : isUserPick
-                        ? "border border-green-500/50 dark:border-green-500/40 bg-green-500/8 dark:bg-green-500/5"
-                        : canSelect
-                        ? "hover:bg-muted/50"
-                        : ""
-                    }`}
-                    onClick={() => canSelect && handleCandidateSelect(candidate)}
-                  >
-                  {/* Relative gain bar */}
-                  <div
-                    className="absolute inset-y-0 left-0 bg-green-500/8 transition-all"
-                    style={{
-                      width: `${Math.max(
-                        (Math.abs(candidate.percentGain) / maxGain) * 100,
-                        3
-                      )}%`,
-                    }}
-                  />
-
-                  <div className="relative flex items-center gap-3 flex-1 min-w-0">
-                    {/* Rank */}
-                    {isLeader ? (
-                      <div className="h-7 w-7 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
-                        <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                      </div>
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                        <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">
-                          {globalIdx + 1}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Avatar */}
-                    <PersonAvatar
-                      name={candidate.name}
-                      avatar={candidate.avatar}
-                      className="h-14 w-14"
-                    />
-
-                    {/* Name + meta */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium truncate">{candidate.name}</span>
-                        {isUserPick && (
-                          <Badge className="bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30 text-[9px] px-1.5 py-0">
-                            Your Pick
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {candidate.rank ? (
-                          <span className="text-[10px] text-muted-foreground font-mono">
-                            #{candidate.rank} on board
-                          </span>
-                        ) : null}
-                        <span className="text-[10px] text-muted-foreground/40">&middot;</span>
-                        <span
-                          className={`text-[10px] font-mono ${
-                            candidate.currentGain >= 0
-                              ? "text-muted-foreground"
-                              : "text-red-600/80 dark:text-red-400/80"
-                          }`}
-                        >
-                          {formatSignedPoints(candidate.currentGain)} pts added
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Gain % */}
-                  <div className="relative text-right shrink-0">
-                    <p
-                      className={`text-base font-mono font-bold ${
-                        candidate.percentGain >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"
-                      }`}
-                    >
-                      {formatSignedPercent(candidate.percentGain)}
-                    </p>
-                  </div>
-                  </div>
-                </ClosedMarketActionTrigger>
-              );
-            })}
-
-            {filteredCandidates.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No candidates match "{searchQuery}"
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Race Insights */}
-        <Card className="border-border/50">
-          <div className="p-4">
-            <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
-              <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              Race Insights
-            </h2>
-
-            {/* Momentum */}
             <div>
-              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">
+              <p className="text-[11px] sm:text-xs text-muted-foreground mb-3 font-medium uppercase tracking-wider">
                 Momentum (24h vs Weekly)
               </p>
-              <div className="space-y-1.5">
+              <div className="space-y-2.5">
                 {candidates
                   .filter((c) => c.change24h != null)
                   .slice(0, 5)
@@ -1052,12 +1051,12 @@ export default function CategoryRaceDetailPage() {
                     const isAccelerating =
                       c.percentGain > 0 && momentum24h > c.percentGain / 7;
                     return (
-                      <div key={c.entryId || c.name} className="flex items-center gap-2">
-                        <PersonAvatar name={c.name} avatar={c.avatar} className="h-6 w-6" />
-                        <span className="text-xs truncate flex-1">{c.name}</span>
+                      <div key={c.entryId || c.name} className="flex items-center gap-3">
+                        <PersonAvatar name={c.name} avatar={c.avatar} className="h-8 w-8" />
+                        <span className="text-sm font-medium truncate flex-1">{c.name}</span>
                         <Badge
                           variant="outline"
-                          className={`text-[9px] ${
+                          className={`text-[10px] sm:text-xs px-2 py-0.5 ${
                             isAccelerating
                               ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
                               : "text-orange-600 dark:text-orange-400 border-orange-500/40 dark:border-orange-500/30"
@@ -1065,7 +1064,7 @@ export default function CategoryRaceDetailPage() {
                         >
                           {isAccelerating ? "Accelerating" : "Steady"}
                         </Badge>
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-xs font-mono tabular-nums text-muted-foreground shrink-0">
                           {momentum24h >= 0 ? "+" : ""}
                           {momentum24h.toFixed(1)}% 24h
                         </span>
@@ -1073,7 +1072,7 @@ export default function CategoryRaceDetailPage() {
                     );
                   })}
                 {candidates.filter((c) => c.change24h != null).length === 0 && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Momentum data will appear as the week progresses.
                   </p>
                 )}
@@ -1082,7 +1081,13 @@ export default function CategoryRaceDetailPage() {
           </div>
         </Card>
 
-        {/* How This Resolves */}
+        <MarketActivityFeed
+          marketId={marketId}
+          limit={5}
+          detailHeader
+          className="border-border/50 shadow-none"
+        />
+
         <MarketResolutionInfo
           mode="race"
           bettingCutoff={serverCutoff}
@@ -1091,9 +1096,6 @@ export default function CategoryRaceDetailPage() {
           engine="amm"
         />
 
-        {/* Related markets — bottom-of-page so it's out of the way of
-            the betting flow. Reuses the cached `/api/native-markets/gainer`
-            list so this costs zero extra requests. */}
         <RelatedMarkets
           type="race"
           currentMarketId={marketId}

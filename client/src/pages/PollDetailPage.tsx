@@ -36,6 +36,7 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
+import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import {
   ArrowLeft,
@@ -391,7 +392,7 @@ export default function PollDetailPage() {
         )}
 
         {/* Vote Module */}
-        <Card className="p-5 mb-6" data-testid="section-vote-module">
+        <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-vote-module">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Cast Your Vote
@@ -512,7 +513,7 @@ export default function PollDetailPage() {
         </Card>
 
         {/* Results Bar */}
-        <Card className="p-5 mb-6" data-testid="section-results">
+        <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results

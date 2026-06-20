@@ -40,6 +40,7 @@ import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
+import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
@@ -1584,7 +1585,7 @@ export default function MarketDetailPage() {
             (p) => p.netShares > 1e-6,
           );
           return (
-            <Card className="p-4 mb-6 border-emerald-500/30 dark:border-emerald-500/20" data-testid="section-amm-live-market">
+            <Card className={predictDetailSectionCardClass("p-4 mb-6")} data-testid="section-amm-live-market">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <h2 className="text-sm font-semibold flex items-center gap-1.5">
                   <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -1785,7 +1786,7 @@ export default function MarketDetailPage() {
             .slice(0, palette.length)
             .map((e, i) => ({ entryId: e.id, label: e.label, color: palette[i] }));
           return (
-            <Card className="p-4 mb-6 border-border/50" data-testid="section-amm-price-history">
+            <Card className={predictDetailSectionCardClass("p-4 mb-6")} data-testid="section-amm-price-history">
               <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
                 <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 Market Price History

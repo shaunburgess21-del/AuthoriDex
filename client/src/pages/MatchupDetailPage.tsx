@@ -28,6 +28,7 @@ import {
 } from "@/lib/optimisticMatchupVote";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
+import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { matchupOgImagePath } from "@shared/matchup-og";
 import {
@@ -421,8 +422,11 @@ export default function MatchupDetailPage() {
         </div>
 
         {/* Cast Your Vote — full-bleed on mobile so option images use full width like list card */}
-        <div className="-mx-4 sm:mx-0">
-          <Card className="p-5 mb-6 border-0 shadow-none bg-transparent overflow-hidden" data-testid="section-vote-module">
+        <div
+          className={voteDetailSectionCardClass("-mx-4 sm:mx-0 mb-6 overflow-hidden")}
+          data-testid="section-vote-module"
+        >
+          <div className="p-5">
             <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
               <Swords className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
               Cast Your Vote
@@ -561,11 +565,11 @@ export default function MatchupDetailPage() {
               to cast your vote
             </p>
           )}
-          </Card>
+          </div>
         </div>
 
         {/* Results */}
-        <Card className="p-5 mb-6" data-testid="section-results">
+        <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results

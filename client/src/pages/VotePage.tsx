@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Children } from "react";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
+import {
+  DEFAULT_HUB_ACTIVITY_FILTER,
+  type HubActivityFilter,
+  readHubActivityFilter,
+  writeHubActivityFilter,
+} from "@/lib/hub-activity-filter";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1411,12 +1417,31 @@ export default function VotePage() {
   const [pollCustomDate, setPollCustomDate] = useState("");
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
-  const [myVotesFilter, setMyVotesFilter] = useState<"all" | "show-mine" | "hide-mine">("all");
+  const [myVotesFilter, setMyVotesFilterState] = useState<HubActivityFilter>(() =>
+    readHubActivityFilter("vote", user?.id),
+  );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setMyVotesFilterState(readHubActivityFilter("vote", user.id));
+  }, [user?.id]);
+
+  const setMyVotesFilter = useCallback(
+    (value: HubActivityFilter | ((prev: HubActivityFilter) => HubActivityFilter)) => {
+      setMyVotesFilterState((prev) => {
+        const next = typeof value === "function" ? value(prev) : value;
+        writeHubActivityFilter("vote", user?.id, next);
+        return next;
+      });
+    },
+    [user?.id],
+  );
+
   const cycleMyVotesFilter = useCallback(() => {
     setMyVotesFilter((prev) =>
       prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
     );
-  }, []);
+  }, [setMyVotesFilter]);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
   const [curateCategoryFilter, setCurateCategoryFilter] = useState<FilterCategory>("all");
@@ -1806,9 +1831,9 @@ export default function VotePage() {
 
   useEffect(() => {
     if (myVotesCount === 0 && myVotesFilter === "show-mine") {
-      setMyVotesFilter("all");
+      setMyVotesFilter(DEFAULT_HUB_ACTIVITY_FILTER);
     }
-  }, [myVotesCount, myVotesFilter]);
+  }, [myVotesCount, myVotesFilter, setMyVotesFilter]);
 
   const sentimentSlugList = useMemo(
     () => displayTopics.map((t: any) => t.slug).filter(Boolean) as string[],

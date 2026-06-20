@@ -32,6 +32,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
+import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -715,7 +716,7 @@ export default function UpDownDetailPage() {
           const hasAnyPosition = (upPos && upPos.netShares > 1e-6) || (downPos && downPos.netShares > 1e-6);
 
           return (
-            <Card className="border-emerald-500/30 dark:border-emerald-500/20">
+            <Card className={predictDetailSectionCardClass()}>
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold flex items-center gap-1.5">
@@ -882,7 +883,7 @@ export default function UpDownDetailPage() {
           const ammSnap = snapshotFromApi(hydrated.ammState);
           const livePrices = ammSnap ? pricesFor(ammSnap) : {};
           return (
-            <Card className="border-border/50">
+            <Card className={predictDetailSectionCardClass()}>
               <div className="p-4">
                 <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
                   <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />

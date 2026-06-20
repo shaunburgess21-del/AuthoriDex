@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { PredictDetailSectionHeader } from "./PredictDetailSectionHeader";
 import {
   Shield,
   TrendingUp,
@@ -118,17 +119,17 @@ export function MarketResolutionInfo({
       const b = person2Name || "Side B";
       return (
         <>
-          <Bullet icon={<TrendingUp className="h-3 w-3 text-blue-600 dark:text-blue-400" />}>
+          <Bullet icon={<TrendingUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}>
             <span>
               <span className="font-medium text-foreground">{a}</span> wins if their final Trend Score is higher
             </span>
           </Bullet>
-          <Bullet icon={<TrendingDown className="h-3 w-3 text-purple-600 dark:text-purple-400" />}>
+          <Bullet icon={<TrendingDown className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />}>
             <span>
               <span className="font-medium text-foreground">{b}</span> wins if their final Trend Score is higher
             </span>
           </Bullet>
-          <Bullet icon={<Swords className="h-3 w-3" />}>
+          <Bullet icon={<Swords className="h-3.5 w-3.5" />}>
             <span>Exact tie: {(tieRule === "refund" ? H2H_TIE_LABEL : tieLabel).toLowerCase()}</span>
           </Bullet>
         </>
@@ -138,13 +139,13 @@ export function MarketResolutionInfo({
       const cat = categoryLabel ? ` in ${categoryLabel}` : "";
       return (
         <>
-          <Bullet icon={<TrendingUp className="h-3 w-3 text-green-600 dark:text-green-500" />}>
+          <Bullet icon={<TrendingUp className="h-3.5 w-3.5 text-green-600 dark:text-green-500" />}>
             <span>
               Winner is whoever has the highest{" "}
               <span className="font-medium text-foreground">% gain</span> in their Trend Score by close{cat}.
             </span>
           </Bullet>
-          <Bullet icon={<Zap className="h-3 w-3 text-amber-600 dark:text-amber-500" />}>
+          <Bullet icon={<Zap className="h-3.5 w-3.5 text-amber-600 dark:text-amber-500" />}>
             <span>Biggest mover wins &mdash; not the highest ranked.</span>
           </Bullet>
         </>
@@ -154,11 +155,11 @@ export function MarketResolutionInfo({
       return (
         <>
           {resolutionCriteria ? (
-            <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
+            <Bullet icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
               <span>{resolutionCriteria}</span>
             </Bullet>
           ) : (
-            <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
+            <Bullet icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
               <span>Resolves Yes / No based on the market description.</span>
             </Bullet>
           )}
@@ -169,7 +170,7 @@ export function MarketResolutionInfo({
     const name = personName || "Subject";
     return (
       <>
-        <Bullet icon={<Database className="h-3 w-3" />}>
+        <Bullet icon={<Database className="h-3.5 w-3.5" />}>
           <span>
             Baseline Score:{" "}
             <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
@@ -178,19 +179,19 @@ export function MarketResolutionInfo({
             )}
           </span>
         </Bullet>
-        <Bullet icon={<TrendingUp className="h-3 w-3 text-green-500" />}>
+        <Bullet icon={<TrendingUp className="h-3.5 w-3.5 text-green-500" />}>
           <span>
             UP wins if {name} closes above{" "}
             <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
           </span>
         </Bullet>
-        <Bullet icon={<TrendingDown className="h-3 w-3 text-red-500" />}>
+        <Bullet icon={<TrendingDown className="h-3.5 w-3.5 text-red-500" />}>
           <span>
             DOWN wins if {name} closes below{" "}
             <span className="font-mono font-medium text-foreground">{formatScore(baselineScore)}</span>
           </span>
         </Bullet>
-        <Bullet icon={<RefreshCw className="h-3 w-3" />}>
+        <Bullet icon={<RefreshCw className="h-3.5 w-3.5" />}>
           <span>Exact tie: {tieLabel.toLowerCase()}</span>
         </Bullet>
       </>
@@ -256,26 +257,30 @@ export function MarketResolutionInfo({
   }
 
   return (
-    <Card className="p-3 bg-muted/30 border-border/40 space-y-2">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-        <Shield className="h-3.5 w-3.5 text-violet-500" />
-        How this resolves
-      </div>
-      <div className="text-[11px] text-muted-foreground space-y-1.5 leading-snug">
-        <Bullet icon={<Lock className="h-3 w-3 text-amber-500" />}>
-          <span>
-            {closeLabelVerb}: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
-          </span>
-        </Bullet>
-        <Bullet icon={<Trophy className="h-3 w-3 text-violet-500" />}>
-          <span>
-            Results: <span className="font-medium text-foreground">{resultsLabel}</span>
-          </span>
-        </Bullet>
-        {Bullets}
-        <Bullet icon={<CheckCircle className="h-3 w-3 text-violet-500" />}>
-          <span>{resolutionLabel}</span>
-        </Bullet>
+    <Card className="border-border/50 shadow-none">
+      <div className="p-4 sm:p-5">
+        <PredictDetailSectionHeader
+          icon={Shield}
+          title="How this resolves"
+          subtitle="Trading cutoff, results time, and winner rules"
+          accent="predict"
+        />
+        <div className="text-sm text-muted-foreground space-y-2.5 leading-relaxed">
+          <Bullet icon={<Lock className="h-3.5 w-3.5 text-amber-500" />}>
+            <span>
+              {closeLabelVerb}: <span className="font-medium text-foreground">{predictionsCloseLabel}</span>
+            </span>
+          </Bullet>
+          <Bullet icon={<Trophy className="h-3.5 w-3.5 text-violet-500" />}>
+            <span>
+              Results: <span className="font-medium text-foreground">{resultsLabel}</span>
+            </span>
+          </Bullet>
+          {Bullets}
+          <Bullet icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
+            <span>{resolutionLabel}</span>
+          </Bullet>
+        </div>
       </div>
     </Card>
   );
@@ -283,7 +288,7 @@ export function MarketResolutionInfo({
 
 function Bullet({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-1.5">
+    <div className="flex items-start gap-2.5">
       <span className="mt-0.5 shrink-0">{icon}</span>
       {children}
     </div>

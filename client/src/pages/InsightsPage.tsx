@@ -43,17 +43,6 @@ export default function InsightsPage() {
     <div className="min-h-screen pb-20 md:pb-0 bg-background overflow-x-clip">
       <SiteHeader active="insights" />
 
-      <div className="border-b border-border/40 bg-muted/20 min-h-16">
-        <div className="container mx-auto px-4 max-w-7xl py-3 md:py-4">
-          <h1 className="text-base md:text-lg font-semibold md:font-bold tracking-tight">
-            Insights
-          </h1>
-          <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
-            A closer look at what&apos;s moving across VoxDex.
-          </p>
-        </div>
-      </div>
-
       <InsightsHeader activeTab={tab} />
 
       <main className="container mx-auto px-4 max-w-7xl py-6 md:py-8">
