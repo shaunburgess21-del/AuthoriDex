@@ -64,6 +64,12 @@ export const CATEGORIES_LEADERBOARD = CANONICAL_CATEGORIES.filter(c => c.id !== 
 export const OPINION_POLL_MIN_OPTIONS = 3;
 export const OPINION_POLL_MAX_OPTIONS = 30;
 
+// ── Opinion Poll option suggestions (community-suggested options) ─────────────
+/** Max characters for a suggested option name. */
+export const OPINION_POLL_OPTION_SUGGESTION_MAX_LEN = 60;
+/** Max pending suggestions a single user may have on one poll at a time. */
+export const OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER = 3;
+
 /**
  * For filter bars that also need the "all"/"favorites"/"trending" UI-only entries.
  * Keep these SEPARATE from the content categories so they can't leak into submit payloads.

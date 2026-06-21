@@ -18,7 +18,7 @@ import {
 } from "./lib/inductionGalleryStorage";
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors } from "./lib/multerUploadErrors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -152,6 +152,8 @@ import {
   normalizeMarketCategory,
   OPINION_POLL_MIN_OPTIONS,
   OPINION_POLL_MAX_OPTIONS,
+  OPINION_POLL_OPTION_SUGGESTION_MAX_LEN,
+  OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER,
 } from "@shared/constants";
 import {
   shouldUseColdStart,
@@ -16718,6 +16720,207 @@ Target length: about 90-150 words.`;
   });
 
   // ===========================================
+  // OPINION POLL OPTION SUGGESTIONS (community)
+  // ===========================================
+
+  // Normalize a suggested/option name for duplicate comparison: trim, collapse
+  // internal whitespace, lowercase. Keeps display value intact (we only compare).
+  function normalizeOptionNameForCompare(name: string): string {
+    return name.trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  const suggestOptionBodySchema = z.object({
+    name: z.string().trim().min(1).max(OPINION_POLL_OPTION_SUGGESTION_MAX_LEN),
+  });
+
+  // GET pending option suggestions for a poll, with vote counts and (when
+  // authenticated) whether the caller has upvoted each one. Sorted by votes
+  // desc then newest. optionalAuth so anonymous users can view the list.
+  app.get("/api/opinion-polls/:slug/suggestions", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug } = req.params;
+      const userId = req.userId || null;
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const rows = await db
+        .select({
+          id: opinionPollOptionSuggestions.id,
+          name: opinionPollOptionSuggestions.name,
+          status: opinionPollOptionSuggestions.status,
+          createdAt: opinionPollOptionSuggestions.createdAt,
+          voteCount: count(opinionPollOptionSuggestionVotes.id),
+        })
+        .from(opinionPollOptionSuggestions)
+        .leftJoin(
+          opinionPollOptionSuggestionVotes,
+          eq(opinionPollOptionSuggestionVotes.suggestionId, opinionPollOptionSuggestions.id),
+        )
+        .where(and(
+          eq(opinionPollOptionSuggestions.pollId, poll.id),
+          eq(opinionPollOptionSuggestions.status, "pending"),
+        ))
+        .groupBy(opinionPollOptionSuggestions.id)
+        .orderBy(desc(count(opinionPollOptionSuggestionVotes.id)), desc(opinionPollOptionSuggestions.createdAt));
+
+      let votedIds = new Set<string>();
+      if (userId && rows.length > 0) {
+        const myVotes = await db
+          .select({ suggestionId: opinionPollOptionSuggestionVotes.suggestionId })
+          .from(opinionPollOptionSuggestionVotes)
+          .where(and(
+            eq(opinionPollOptionSuggestionVotes.pollId, poll.id),
+            eq(opinionPollOptionSuggestionVotes.userId, userId),
+          ));
+        votedIds = new Set(myVotes.map(v => v.suggestionId));
+      }
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        voteCount: Number(r.voteCount || 0),
+        userHasVoted: votedIds.has(r.id),
+        createdAt: r.createdAt,
+      })));
+    } catch (error: any) {
+      console.error("Error fetching opinion poll suggestions:", error.message);
+      res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
+  // Submit a new option suggestion (logged-in users only).
+  app.post("/api/opinion-polls/:slug/suggestions", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug } = req.params;
+      const userId = req.userId!;
+
+      const parsed = suggestOptionBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: `Option must be between 1 and ${OPINION_POLL_OPTION_SUGGESTION_MAX_LEN} characters` });
+      }
+      const name = parsed.data.name.trim();
+      const normalized = normalizeOptionNameForCompare(name);
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id, visibility: opinionPolls.visibility })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+
+      if (!poll || poll.visibility !== "live") {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      // Reject duplicates against existing live options.
+      const existingOptions = await db
+        .select({ name: opinionPollOptions.name })
+        .from(opinionPollOptions)
+        .where(eq(opinionPollOptions.pollId, poll.id));
+      if (existingOptions.some(o => normalizeOptionNameForCompare(o.name) === normalized)) {
+        return res.status(409).json({ error: "That option already exists on this poll." });
+      }
+
+      // Reject duplicates against pending suggestions (any user).
+      const pendingSuggestions = await db
+        .select({ name: opinionPollOptionSuggestions.name, suggestedBy: opinionPollOptionSuggestions.suggestedBy })
+        .from(opinionPollOptionSuggestions)
+        .where(and(
+          eq(opinionPollOptionSuggestions.pollId, poll.id),
+          eq(opinionPollOptionSuggestions.status, "pending"),
+        ));
+      if (pendingSuggestions.some(s => normalizeOptionNameForCompare(s.name) === normalized)) {
+        return res.status(409).json({ error: "That option has already been suggested." });
+      }
+
+      // Per-user pending cap.
+      const myPendingCount = pendingSuggestions.filter(s => s.suggestedBy === userId).length;
+      if (myPendingCount >= OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER) {
+        return res.status(429).json({
+          error: `You can have at most ${OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER} pending suggestions on a poll.`,
+        });
+      }
+
+      const [created] = await db
+        .insert(opinionPollOptionSuggestions)
+        .values({ pollId: poll.id, name, suggestedBy: userId, status: "pending" })
+        .returning();
+
+      res.json({ success: true, suggestion: { id: created.id, name: created.name, voteCount: 0, userHasVoted: false, createdAt: created.createdAt } });
+    } catch (error: any) {
+      console.error("Error creating opinion poll suggestion:", error.message);
+      res.status(500).json({ error: "Failed to submit suggestion" });
+    }
+  });
+
+  // Toggle the caller's upvote on a pending suggestion (logged-in users only).
+  app.post("/api/opinion-polls/:slug/suggestions/:suggestionId/vote", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const { slug, suggestionId } = req.params;
+      const userId = req.userId!;
+
+      const [poll] = await db
+        .select({ id: opinionPolls.id })
+        .from(opinionPolls)
+        .where(eq(opinionPolls.slug, slug))
+        .limit(1);
+      if (!poll) {
+        return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const [suggestion] = await db
+        .select({ id: opinionPollOptionSuggestions.id, status: opinionPollOptionSuggestions.status })
+        .from(opinionPollOptionSuggestions)
+        .where(and(
+          eq(opinionPollOptionSuggestions.id, suggestionId),
+          eq(opinionPollOptionSuggestions.pollId, poll.id),
+        ))
+        .limit(1);
+      if (!suggestion || suggestion.status !== "pending") {
+        return res.status(404).json({ error: "Suggestion not found" });
+      }
+
+      const [existing] = await db
+        .select({ id: opinionPollOptionSuggestionVotes.id })
+        .from(opinionPollOptionSuggestionVotes)
+        .where(and(
+          eq(opinionPollOptionSuggestionVotes.suggestionId, suggestionId),
+          eq(opinionPollOptionSuggestionVotes.userId, userId),
+        ))
+        .limit(1);
+
+      let userHasVoted: boolean;
+      if (existing) {
+        await db.delete(opinionPollOptionSuggestionVotes).where(eq(opinionPollOptionSuggestionVotes.id, existing.id));
+        userHasVoted = false;
+      } else {
+        await db
+          .insert(opinionPollOptionSuggestionVotes)
+          .values({ suggestionId, pollId: poll.id, userId })
+          .onConflictDoNothing();
+        userHasVoted = true;
+      }
+
+      const [{ cnt }] = await db
+        .select({ cnt: count() })
+        .from(opinionPollOptionSuggestionVotes)
+        .where(eq(opinionPollOptionSuggestionVotes.suggestionId, suggestionId));
+
+      res.json({ success: true, voteCount: Number(cnt || 0), userHasVoted });
+    } catch (error: any) {
+      console.error("Error voting on opinion poll suggestion:", error.message);
+      res.status(500).json({ error: "Failed to vote on suggestion" });
+    }
+  });
+
+  // ===========================================
   // ADMIN: OPINION POLLS CRUD
   // ===========================================
 
@@ -17026,6 +17229,193 @@ Target length: about 90-150 words.`;
     } catch (error: any) {
       console.error("[Opinion Polls] AI draft error:", error?.message || error);
       res.status(500).json({ error: "Failed to generate draft" });
+    }
+  });
+
+  // ===========================================
+  // ADMIN: OPINION POLL OPTION SUGGESTIONS
+  // ===========================================
+
+  // List option suggestions for review, with poll title, suggester, and vote
+  // count. Filterable by status and pollId. Sorted by votes desc (so the top
+  // community pick surfaces first), then newest.
+  app.get("/api/admin/opinion-poll-option-suggestions", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const statusFilter = typeof req.query.status === "string" ? req.query.status : "pending";
+      const pollIdFilter = typeof req.query.pollId === "string" && req.query.pollId ? req.query.pollId : null;
+
+      const conditions = [] as any[];
+      if (statusFilter && statusFilter !== "all") {
+        conditions.push(eq(opinionPollOptionSuggestions.status, statusFilter));
+      }
+      if (pollIdFilter) {
+        conditions.push(eq(opinionPollOptionSuggestions.pollId, pollIdFilter));
+      }
+
+      const rows = await db
+        .select({
+          id: opinionPollOptionSuggestions.id,
+          pollId: opinionPollOptionSuggestions.pollId,
+          name: opinionPollOptionSuggestions.name,
+          imageUrl: opinionPollOptionSuggestions.imageUrl,
+          personId: opinionPollOptionSuggestions.personId,
+          status: opinionPollOptionSuggestions.status,
+          suggestedBy: opinionPollOptionSuggestions.suggestedBy,
+          adminNotes: opinionPollOptionSuggestions.adminNotes,
+          approvedOptionId: opinionPollOptionSuggestions.approvedOptionId,
+          reviewedAt: opinionPollOptionSuggestions.reviewedAt,
+          createdAt: opinionPollOptionSuggestions.createdAt,
+          pollTitle: opinionPolls.title,
+          pollSlug: opinionPolls.slug,
+          suggesterUsername: profiles.username,
+          voteCount: count(opinionPollOptionSuggestionVotes.id),
+        })
+        .from(opinionPollOptionSuggestions)
+        .leftJoin(opinionPolls, eq(opinionPolls.id, opinionPollOptionSuggestions.pollId))
+        .leftJoin(profiles, eq(profiles.id, opinionPollOptionSuggestions.suggestedBy))
+        .leftJoin(
+          opinionPollOptionSuggestionVotes,
+          eq(opinionPollOptionSuggestionVotes.suggestionId, opinionPollOptionSuggestions.id),
+        )
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .groupBy(opinionPollOptionSuggestions.id, opinionPolls.title, opinionPolls.slug, profiles.username)
+        .orderBy(desc(count(opinionPollOptionSuggestionVotes.id)), desc(opinionPollOptionSuggestions.createdAt));
+
+      res.json(rows.map(r => ({ ...r, voteCount: Number(r.voteCount || 0) })));
+    } catch (error: any) {
+      console.error("Error fetching admin opinion poll suggestions:", error.message);
+      res.status(500).json({ error: "Failed to fetch suggestions" });
+    }
+  });
+
+  // Approve a suggestion -> append it as a real option on the poll. Idempotent:
+  // re-approving an already-approved suggestion is a no-op.
+  app.post("/api/admin/opinion-poll-option-suggestions/:id/approve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      const { name: nameOverride, imageUrl: imageUrlOverride, personId: personIdOverride } = req.body || {};
+
+      const [suggestion] = await db
+        .select()
+        .from(opinionPollOptionSuggestions)
+        .where(eq(opinionPollOptionSuggestions.id, id))
+        .limit(1);
+      if (!suggestion) {
+        return res.status(404).json({ error: "Suggestion not found" });
+      }
+      if (suggestion.status === "approved") {
+        return res.json({ success: true, optionId: suggestion.approvedOptionId, alreadyApproved: true });
+      }
+      if (suggestion.status === "rejected") {
+        return res.status(400).json({ error: "Suggestion was already rejected." });
+      }
+
+      const finalName = (typeof nameOverride === "string" && nameOverride.trim()) ? nameOverride.trim() : suggestion.name;
+      const finalImageUrl = typeof imageUrlOverride === "string" && imageUrlOverride.trim() ? imageUrlOverride.trim() : (suggestion.imageUrl || null);
+      const finalPersonId = typeof personIdOverride === "string" && personIdOverride.trim() ? personIdOverride.trim() : (suggestion.personId || null);
+
+      const existingOptions = await db
+        .select({ id: opinionPollOptions.id, name: opinionPollOptions.name, orderIndex: opinionPollOptions.orderIndex })
+        .from(opinionPollOptions)
+        .where(eq(opinionPollOptions.pollId, suggestion.pollId));
+
+      if (existingOptions.length >= OPINION_POLL_MAX_OPTIONS) {
+        return res.status(400).json({ error: `This poll already has the maximum of ${OPINION_POLL_MAX_OPTIONS} options.` });
+      }
+
+      const normalized = normalizeOptionNameForCompare(finalName);
+      if (existingOptions.some(o => normalizeOptionNameForCompare(o.name) === normalized)) {
+        return res.status(409).json({ error: "An option with this name already exists on the poll." });
+      }
+
+      const nextOrderIndex = existingOptions.reduce((max, o) => Math.max(max, o.orderIndex ?? 0), -1) + 1;
+
+      const [created] = await db
+        .insert(opinionPollOptions)
+        .values({
+          pollId: suggestion.pollId,
+          name: finalName,
+          imageUrl: finalImageUrl,
+          personId: finalPersonId,
+          orderIndex: nextOrderIndex,
+          seedCount: 0,
+        })
+        .returning();
+
+      await db
+        .update(opinionPollOptionSuggestions)
+        .set({
+          status: "approved",
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          approvedOptionId: created.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(opinionPollOptionSuggestions.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "approve_opinion_poll_option_suggestion",
+        targetTable: "opinion_poll_options",
+        targetId: created.id,
+        newData: { ...created },
+        metadata: { suggestionId: suggestion.id, pollId: suggestion.pollId },
+      });
+
+      res.json({ success: true, optionId: created.id });
+    } catch (error: any) {
+      console.error("Error approving opinion poll suggestion:", error.message);
+      res.status(500).json({ error: "Failed to approve suggestion" });
+    }
+  });
+
+  // Reject a suggestion.
+  app.post("/api/admin/opinion-poll-option-suggestions/:id/reject", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const adminId = req.userId!;
+      const adminNotes = typeof req.body?.adminNotes === "string" ? req.body.adminNotes.trim() || null : null;
+
+      const [suggestion] = await db
+        .select()
+        .from(opinionPollOptionSuggestions)
+        .where(eq(opinionPollOptionSuggestions.id, id))
+        .limit(1);
+      if (!suggestion) {
+        return res.status(404).json({ error: "Suggestion not found" });
+      }
+      if (suggestion.status === "approved") {
+        return res.status(400).json({ error: "Suggestion was already approved." });
+      }
+
+      await db
+        .update(opinionPollOptionSuggestions)
+        .set({
+          status: "rejected",
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          adminNotes,
+          updatedAt: new Date(),
+        })
+        .where(eq(opinionPollOptionSuggestions.id, id));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        adminEmail: null,
+        actionType: "reject_opinion_poll_option_suggestion",
+        targetTable: "opinion_poll_option_suggestions",
+        targetId: suggestion.id,
+        previousData: { status: suggestion.status },
+        newData: { status: "rejected", adminNotes },
+        metadata: { pollId: suggestion.pollId },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error rejecting opinion poll suggestion:", error.message);
+      res.status(500).json({ error: "Failed to reject suggestion" });
     }
   });
 

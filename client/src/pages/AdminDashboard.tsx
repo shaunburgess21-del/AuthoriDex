@@ -72,6 +72,7 @@ import {
 import { AdminUnderratedOverrated } from "@/components/admin/AdminUnderratedOverrated";
 import { AdminCurateProfile } from "@/components/admin/AdminCurateProfile";
 import { AdminInductionQueue } from "@/components/admin/AdminInductionQueue";
+import { AdminOptionSuggestionsSection } from "@/components/admin/AdminOptionSuggestionsSection";
 import { AdminSettlementCenter } from "@/components/admin/AdminSettlementCenter";
 import { AdminAmmSection } from "@/components/admin/AdminAmmSection";
 import { AdminUserCreditHistory } from "@/components/admin/AdminUserCreditHistory";
@@ -4935,6 +4936,9 @@ export default function AdminDashboard() {
                   <TabsTrigger value="opinion-polls" data-testid="tab-opinion-polls">
                     Opinion Polls {opinionPollsList ? <span className="ml-1 text-xs opacity-60">({opinionPollsList.length})</span> : null}
                   </TabsTrigger>
+                  <TabsTrigger value="option-suggestions" data-testid="tab-option-suggestions">
+                    Option Suggestions
+                  </TabsTrigger>
                   <TabsTrigger value="matchups" data-testid="tab-matchups">
                     Matchups {matchups ? <span className="ml-1 text-xs opacity-60">({matchups.length})</span> : null}
                   </TabsTrigger>
@@ -5578,6 +5582,10 @@ export default function AdminDashboard() {
                     )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="option-suggestions" className="mt-4">
+                <AdminOptionSuggestionsSection />
               </TabsContent>
 
               <TabsContent value="matchups" className="mt-4">

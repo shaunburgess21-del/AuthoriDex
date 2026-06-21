@@ -32,6 +32,7 @@ import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { OpinionPollOptionRow } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { SuggestOptionCard } from "@/components/opinion-polls/SuggestOptionCard";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -527,6 +528,13 @@ export default function OpinionPollDetailPage() {
             </div>
           )}
         </Card>
+
+        <SuggestOptionCard
+          slug={slug || ""}
+          pollTitle={poll.title}
+          isLoggedIn={!!user}
+          onRequireLogin={() => setLocation("/login")}
+        />
 
         <AlertDialog
           open={changeDialogOpen}
