@@ -73,6 +73,8 @@ import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
+import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { PersonNeighbourNav } from "@/components/PersonNeighbourNav";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { personOgImagePath } from "@shared/person-og";
@@ -132,6 +134,8 @@ interface FeaturedPoll {
   personAvatar?: string | null;
   imageUrl?: string | null;
   slug?: string | null;
+  userVote?: "support" | "neutral" | "oppose" | null;
+  commentCount?: number;
 }
 
 interface CelebrityImage {
@@ -167,6 +171,8 @@ interface TrendingPoll {
   neutralPercent: number;
   disapprovePercent: number;
   relatedPersonIds?: string[];
+  userVote?: "support" | "neutral" | "oppose" | null;
+  commentCount?: number;
 }
 
 interface OpinionPollOption {
@@ -382,17 +388,25 @@ function FeaturedPollCard({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  enableDiscussion = false,
 }: {
   poll: FeaturedPoll;
-  onVote: (choice: "support" | "neutral" | "oppose") => void;
+  onVote: (choice: "support" | "neutral" | "oppose") => void | Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  enableDiscussion?: boolean;
 }) {
-  const [voted, setVoted] = useState<"support" | "neutral" | "oppose" | null>(null);
+  const [voted, setVoted] = useState<"support" | "neutral" | "oppose" | null>(poll.userVote ?? null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+  const showDiscussion = enableDiscussion && !!poll.slug;
   const imgSources = [poll.personAvatar, poll.imageUrl].filter(Boolean) as string[];
   const [imgIdx, setImgIdx] = useState(0);
+
+  useEffect(() => {
+    setVoted(poll.userVote ?? null);
+  }, [poll.userVote]);
 
   useEffect(() => {
     setImgIdx(0);
@@ -408,10 +422,14 @@ function FeaturedPollCard({
     }
   };
 
-  const handleVote = (choice: "support" | "neutral" | "oppose") => {
-    if (!voted) {
-      setVoted(choice);
-      onVote(choice);
+  const handleVote = async (choice: "support" | "neutral" | "oppose") => {
+    if (voted) return;
+    const prev = voted;
+    setVoted(choice);
+    try {
+      await onVote(choice);
+    } catch {
+      setVoted(prev);
     }
   };
 
@@ -586,15 +604,23 @@ function FeaturedPollCard({
             </div>
 
             <div className="mt-2 flex items-center gap-2 pt-3 border-t border-white/10">
-              <div className="flex-1 min-w-0">
-                <button
-                  type="button"
-                  onClick={handleChangeVote}
-                  className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                  data-testid={`button-change-vote-${poll.id}`}
-                >
-                  Remove vote
-                </button>
+              <div className="flex-1 min-w-0 flex items-center">
+                {showDiscussion ? (
+                  <DiscussionButton
+                    count={poll.commentCount}
+                    onClick={() => setDiscussionOpen(true)}
+                    testId={`button-discussion-${poll.id}`}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleChangeVote}
+                    className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
+                    data-testid={`button-change-vote-${poll.id}`}
+                  >
+                    Remove vote
+                  </button>
+                )}
               </div>
               <div className="flex-1 min-w-0 text-center">
                 {pollDetailHref && (
@@ -640,6 +666,15 @@ function FeaturedPollCard({
           />
         </div>
       )}
+      {showDiscussion && poll.slug ? (
+        <CardCommentsFocusOverlay
+          open={discussionOpen}
+          onClose={() => setDiscussionOpen(false)}
+          entityType="poll"
+          slug={poll.slug}
+          contextTitle={poll.headline}
+        />
+      ) : null}
     </div>
   );
 }
@@ -653,15 +688,17 @@ function ViewAllPollsOverlay({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  enableDiscussion = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   polls: FeaturedPoll[];
-  onVote: (pollId: string, choice: "support" | "neutral" | "oppose") => void;
+  onVote: (pollId: string, choice: "support" | "neutral" | "oppose") => void | Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  enableDiscussion?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -724,6 +761,7 @@ function ViewAllPollsOverlay({
               onFilterCategory={onFilterCategory}
               categoryRaceMap={categoryRaceMap}
               leaderboardCategories={leaderboardCategories}
+              enableDiscussion={enableDiscussion}
             />
           ))}
         </div>
@@ -1077,6 +1115,66 @@ export default function PersonDetailPage() {
     matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
   };
 
+  const sentimentVoteMutation = useMutation({
+    mutationFn: async ({ slug, choice }: { slug: string; choice: string; topicId: string }) => {
+      const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      applyBudgetFromVoteResponse(queryClient, data);
+      queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+    },
+    onError: (error: any, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
+      if (isUnauthorizedApiError(error)) {
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+      } else if (isBudgetExhaustedVoteError(error)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "trending_poll",
+            targetId: variables.topicId,
+            cardRoute: window.location.pathname,
+            pendingVote: { choice: variables.choice },
+          },
+        });
+      } else {
+        const parsed = parseVoteError(error);
+        toast.error(parsed.retryAfter ? "Slow down" : "Error", { description: parsed.message || "Failed to submit vote" });
+      }
+    },
+  });
+
+  const handleSentimentVote = async (
+    topicId: string,
+    choice: "support" | "neutral" | "oppose",
+  ): Promise<void> => {
+    // Phase 4 — anon-budget gate, mirroring the Vote page's handleDiscourseVote.
+    const decision = checkVoteGate(budget, "trending_poll", topicId, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { choice },
+        },
+      });
+      throw new Error("Vote gate redirect");
+    }
+    const topic = trendingPolls.find((t) => t.id === topicId);
+    if (!topic?.slug) {
+      throw new Error("Topic not found");
+    }
+    await sentimentVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
+  };
+
   const { data: trendingPolls = [], isLoading: sentimentPollsLoading } = useQuery<TrendingPoll[]>({
     queryKey: ['/api/trending-polls'],
     staleTime: 60 * 1000,
@@ -1162,6 +1260,8 @@ export default function PersonDetailPage() {
       personAvatar: p.personAvatar,
       imageUrl: p.imageUrl,
       slug: p.slug,
+      userVote: p.userVote ?? null,
+      commentCount: p.commentCount ?? 0,
     }));
   }, [personTrendingPolls]);
 
@@ -1503,6 +1603,7 @@ export default function PersonDetailPage() {
                         onFilterCategory={handleSentimentCategoryFilter}
                         categoryRaceMap={categoryRaceMap}
                         leaderboardCategories={leaderboardCats}
+                        enableDiscussion
                       />
                     ))}
                   </CardSection>
@@ -1549,12 +1650,11 @@ export default function PersonDetailPage() {
                             const card = (
                               <FeaturedPollCard
                                 poll={poll}
-                                onVote={(choice) => {
-                                  toast("Vote Recorded", { description: `You voted "${choice}" on "${poll.headline}"` });
-                                }}
+                                onVote={(choice) => handleSentimentVote(poll.id, choice)}
                                 onFilterCategory={handleSentimentCategoryFilter}
                                 categoryRaceMap={categoryRaceMap}
                                 leaderboardCategories={leaderboardCats}
+                                enableDiscussion
                               />
                             );
                             return sg.item ? (
@@ -1574,12 +1674,11 @@ export default function PersonDetailPage() {
                       onClose={() => setShowAllPollsOverlay(false)}
                       title={`All Sentiment Polls about ${person.name}`}
                       polls={featuredPollsForPerson}
-                      onVote={(_pollId, _choice) => {
-                        toast("Vote Recorded", { description: "Your vote has been recorded." });
-                      }}
+                      onVote={(pollId, choice) => handleSentimentVote(pollId, choice)}
                       onFilterCategory={handleSentimentCategoryFilter}
                       categoryRaceMap={categoryRaceMap}
                       leaderboardCategories={leaderboardCats}
+                      enableDiscussion
                     />
                   </>
                 )}
@@ -1612,6 +1711,7 @@ export default function PersonDetailPage() {
                         onFilterCategory={handleSentimentCategoryFilter}
                         categoryRaceMap={categoryRaceMap}
                         leaderboardCategories={leaderboardCats}
+                        enableDiscussion
                       />
                     ))}
                   </CardSection>
