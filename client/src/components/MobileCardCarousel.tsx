@@ -18,6 +18,13 @@ import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/Windo
 
 export interface CardSectionHandle {
   slideToKey: (key: string) => boolean;
+  /**
+   * Advance the carousel as a voted card hides (Vote hub "Hidden" mode).
+   * Slides the next card in from the right to hint swipeability, then the
+   * parent removes the voted item; index is corrected so we land on the
+   * adjacent card rather than snapping back to slide 0.
+   */
+  playHideExit: (key: string) => void;
 }
 
 export function mobileSlideKey(item: ReactNode, index: number): string {
@@ -60,6 +67,10 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
     const swiperRef = useRef<SwiperType | null>(null);
     const pendingSlideKeyRef = useRef<string | null>(null);
     const userOrParentControlledRef = useRef(false);
+    // Set when a hide-exit advance is in flight so the length-change effect
+    // corrects the active index (instead of resetting to 0) once the voted
+    // slide is spliced out of `items`.
+    const pendingHideRef = useRef<{ idx: number; advanced: boolean } | null>(null);
 
     const modules = useMemo(() => (autoHeight ? [A11y] : [A11y, Virtual]), [autoHeight]);
 
@@ -105,8 +116,24 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
           }
           return true;
         },
+        playHideExit: (key: string) => {
+          const swiper = swiperRef.current;
+          if (!swiper || swiper.destroyed) return;
+          const idx = resolveKeyToIndex(key);
+          if (idx < 0) return;
+          // Keep the length-change effect from snapping back to slide 0.
+          userOrParentControlledRef.current = true;
+          const isActive = idx === swiper.activeIndex;
+          const hasNext = idx < items.length - 1;
+          const advanced = isActive && hasNext;
+          if (advanced) {
+            // Next card slides in from the right (also a swipe-affordance hint).
+            swiper.slideNext(300);
+          }
+          pendingHideRef.current = { idx, advanced };
+        },
       }),
-      [resolveKeyToIndex, slideToIndex],
+      [resolveKeyToIndex, slideToIndex, items.length],
     );
 
     useEffect(() => {
@@ -121,6 +148,20 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
     });
 
     useEffect(() => {
+      // A voted card was just spliced out (Hidden mode): correct the active
+      // index so we stay on the adjacent card rather than resetting to 0.
+      const pending = pendingHideRef.current;
+      if (pending) {
+        pendingHideRef.current = null;
+        const swiper = swiperRef.current;
+        // After slideNext we sit at idx+1; removing idx shifts us back by one.
+        // For the last card (no advance) drop to the new last slide.
+        const shift = pending.advanced || pending.idx <= activeIndex ? 1 : 0;
+        const target = Math.max(0, Math.min(activeIndex - shift, items.length - 1));
+        setActiveIndex(target);
+        if (swiper && !swiper.destroyed) swiper.slideTo(target, 0);
+        return;
+      }
       if (userOrParentControlledRef.current) return;
       setActiveIndex(0);
       swiperRef.current?.slideTo(0, 0);

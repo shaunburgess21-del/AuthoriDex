@@ -81,13 +81,14 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
 import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions, involvesAnyFavorite } from "@/lib/sectionCategoryFilters";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
-import { CardSection } from "@/components/CardSection";
+import { CardSection, type CardSectionHandle } from "@/components/CardSection";
+import { useHideExitQueue } from "@/hooks/useHideExitQueue";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -300,6 +301,58 @@ const isShapeVoxDexSection = (section: SectionToggle) =>
   section === "Underrated/Overrated" ||
   section === "Induction Queue" ||
   section === "Curate Profile";
+
+// Vote-hub "Hidden" mode card transition. A voted card dwells on its results,
+// then shrinks + drifts toward the top-left Hidden toggle while fading out;
+// the grid reflows the next card into the vacated slot.
+const HIDE_EXIT_REST = { opacity: 1, scale: 1, x: 0, y: 0 } as const;
+const HIDE_EXIT_FLY = { opacity: 0, scale: 0.12, x: -160, y: -200 } as const;
+const HIDE_EXIT_FLY_TRANSITION = { duration: 0.45, ease: "easeIn" } as const;
+const HIDE_EXIT_SETTLE_TRANSITION = { duration: 0.2, ease: "easeOut" } as const;
+const HIDE_EXIT_LAYOUT_TRANSITION = { duration: 0.3, ease: "easeOut" } as const;
+
+/**
+ * Card wrapper for the Vote-hub Hidden-mode transition. The outer layer owns
+ * the grid `layout` reflow (so neighbours slide into the vacated slot on
+ * desktop); the inner layer plays the shrink + drift-toward-the-toggle fly.
+ * On mobile the fly + layout are disabled — the carousel advance (slideNext)
+ * provides the exit motion instead.
+ */
+function HideExitCard({
+  isMobile,
+  exiting,
+  onClick,
+  onKeyDown,
+  children,
+}: {
+  isMobile: boolean;
+  exiting: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+  children: React.ReactNode;
+}) {
+  const flying = exiting && !isMobile;
+  return (
+    <motion.div
+      layout={isMobile ? false : "position"}
+      transition={HIDE_EXIT_LAYOUT_TRANSITION}
+      className="h-full"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+    >
+      <motion.div
+        className="h-full"
+        style={{ transformOrigin: "top left" }}
+        animate={flying ? HIDE_EXIT_FLY : HIDE_EXIT_REST}
+        transition={flying ? HIDE_EXIT_FLY_TRANSITION : HIDE_EXIT_SETTLE_TRANSITION}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+}
 
 const SECTION_RULES = {
   induction: {
@@ -1645,7 +1698,56 @@ export default function VotePage() {
   const matchupUserVotes = Object.fromEntries(
     Object.entries(matchupUserVotesMerged).filter(([_, v]) => v !== '__removed__')
   );
-  
+
+  // Hidden-mode card transition: defer removal of a just-voted card so it can
+  // dwell on its results then fly into the Hidden toggle. Mobile carousels are
+  // advanced imperatively via their section handle when a card starts exiting.
+  const sentimentSectionRef = useRef<CardSectionHandle | null>(null);
+  const matchupsSectionRef = useRef<CardSectionHandle | null>(null);
+  const opinionSectionRef = useRef<CardSectionHandle | null>(null);
+  const hideExit = useHideExitQueue({
+    onExiting: (key) => {
+      if (!isMobile) return;
+      const sep = key.indexOf(":");
+      if (sep < 0) return;
+      const section = key.slice(0, sep);
+      const id = key.slice(sep + 1);
+      const ref =
+        section === "sentiment"
+          ? sentimentSectionRef
+          : section === "matchups"
+            ? matchupsSectionRef
+            : section === "opinion"
+              ? opinionSectionRef
+              : null;
+      ref?.current?.playHideExit(id);
+    },
+  });
+  const {
+    beginExit: beginHideExit,
+    cancelExit: cancelHideExit,
+    isExiting: isHideExiting,
+    isRetained: isHideRetained,
+    isHidden: isHideHidden,
+    pulseTick: hidePulseTick,
+  } = hideExit;
+
+  // Pulse the Hidden toggle each time a card finishes flying into it, so the
+  // toggle visibly "receives" the voted card.
+  const hideTogglePulse = useAnimationControls();
+  useEffect(() => {
+    if (hidePulseTick === 0) return;
+    hideTogglePulse.start({
+      scale: [1, 1.14, 1],
+      boxShadow: [
+        "0 0 0 0 rgba(245, 158, 11, 0)",
+        "0 0 14px 2px rgba(245, 158, 11, 0.55)",
+        "0 0 0 0 rgba(245, 158, 11, 0)",
+      ],
+      transition: { duration: 0.45, ease: "easeOut" },
+    });
+  }, [hidePulseTick, hideTogglePulse]);
+
   const matchupVoteMutation = useMutation({
     mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b' | 'neutral'; previousVote?: string | null }) => {
       const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { option });
@@ -1665,9 +1767,12 @@ export default function VotePage() {
       toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted." });
     },
     onError: (error: any, variables) => {
+      // Roll back the optimistic vote and abort any pending hide animation so
+      // the card returns to the grid.
       if (variables.previousVote) {
         setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote! }));
       } else {
+        cancelHideExit(`matchups:${variables.matchupId}`);
         setLocalMatchupVotes((prev: Record<string, string>) => {
           const next = { ...prev };
           delete next[variables.matchupId];
@@ -1760,6 +1865,12 @@ export default function VotePage() {
       });
       return;
     }
+    // Begin the Hidden-mode dwell/fly now (the vote is optimistic, so the card
+    // would otherwise be filtered out instantly). Only newly-voted cards
+    // animate out — a re-votable card is always visible, never hidden.
+    if (myVotesFilter === "hide-mine" && !previousVote) {
+      beginHideExit(`matchups:${matchupId}`);
+    }
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
     matchupVoteMutation.mutate({ matchupId, option, previousVote });
   };
@@ -1799,14 +1910,21 @@ export default function VotePage() {
     return matchupVoted + sentimentVoted + opinionVoted;
   }, [filteredMatchups, filteredTopics, filteredOpinionPolls, matchupUserVotes]);
 
+  // In hide-mine mode a freshly-voted card is kept while it is dwelling/exiting
+  // (so it can show results and fly into the Hidden toggle), then dropped once
+  // its lifecycle completes (isHidden) — independent of refetch timing.
   const displayMatchups = useMemo(
     () =>
       myVotesFilter === "all"
         ? filteredMatchups
         : myVotesFilter === "show-mine"
           ? filteredMatchups.filter((m) => !!matchupUserVotes[m.id])
-          : filteredMatchups.filter((m) => !matchupUserVotes[m.id]),
-    [filteredMatchups, matchupUserVotes, myVotesFilter],
+          : filteredMatchups.filter((m) => {
+              const key = `matchups:${m.id}`;
+              if (isHideRetained(key)) return true;
+              return !matchupUserVotes[m.id] && !isHideHidden(key);
+            }),
+    [filteredMatchups, matchupUserVotes, myVotesFilter, isHideRetained, isHideHidden],
   );
 
   const displayTopics = useMemo(
@@ -1815,8 +1933,12 @@ export default function VotePage() {
         ? filteredTopics
         : myVotesFilter === "show-mine"
           ? filteredTopics.filter((t: any) => !!t.userVote)
-          : filteredTopics.filter((t: any) => !t.userVote),
-    [filteredTopics, myVotesFilter],
+          : filteredTopics.filter((t: any) => {
+              const key = `sentiment:${t.id}`;
+              if (isHideRetained(key)) return true;
+              return !t.userVote && !isHideHidden(key);
+            }),
+    [filteredTopics, myVotesFilter, isHideRetained, isHideHidden],
   );
 
   const displayOpinionPolls = useMemo(
@@ -1825,8 +1947,12 @@ export default function VotePage() {
         ? filteredOpinionPolls
         : myVotesFilter === "show-mine"
           ? filteredOpinionPolls.filter((p: any) => !!p.userVote)
-          : filteredOpinionPolls.filter((p: any) => !p.userVote),
-    [filteredOpinionPolls, myVotesFilter],
+          : filteredOpinionPolls.filter((p: any) => {
+              const key = `opinion:${p.id}`;
+              if (isHideRetained(key)) return true;
+              return !p.userVote && !isHideHidden(key);
+            }),
+    [filteredOpinionPolls, myVotesFilter, isHideRetained, isHideHidden],
   );
 
   useEffect(() => {
@@ -2512,7 +2638,34 @@ export default function VotePage() {
       throw new Error("Topic not found");
     }
     await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
+    if (myVotesFilter === "hide-mine") {
+      beginHideExit(`sentiment:${topicId}`);
+    }
   };
+
+  // Opinion-poll vote wrapper. The vote is applied optimistically, so the
+  // dwell/fly must begin up-front (otherwise the card is filtered out before
+  // it can animate). On error we abort the lifecycle so the card stays put;
+  // the error itself propagates to OpinionPollCard's own handlers.
+  const handleOpinionVote = useCallback(
+    async (slug: string, optionId: string) => {
+      let exitKey: string | null = null;
+      if (myVotesFilter === "hide-mine") {
+        const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
+        if (poll) {
+          exitKey = `opinion:${poll.id}`;
+          beginHideExit(exitKey);
+        }
+      }
+      try {
+        await voteOnOpinionPoll(slug, optionId);
+      } catch (err) {
+        if (exitKey) cancelHideExit(exitKey);
+        throw err;
+      }
+    },
+    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit],
+  );
 
   const openSuggestModal = (open: () => void) => {
     if (!user) {
@@ -2796,8 +2949,9 @@ export default function VotePage() {
             <div className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3">
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
-              <button
+              <motion.button
                 type="button"
+                animate={hideTogglePulse}
                 onClick={cycleMyVotesFilter}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                   myVotesFilter === "show-mine"
@@ -2814,7 +2968,7 @@ export default function VotePage() {
                   <Vote className="h-4 w-4 shrink-0" />
                 )}
                 {myVotesFilter === "hide-mine" ? `Hidden (${myVotesCount})` : `Votes (${myVotesCount})`}
-              </button>
+              </motion.button>
             )}
             {SECTION_TOGGLES.map((section) => (
               <button
@@ -2918,9 +3072,15 @@ export default function VotePage() {
           {pollsLoading ? (
             <CardGridSkeleton count={3} />
           ) : displayTopics.length > 0 ? (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
+            <CardSection ref={sentimentSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
               {displayTopics.map((topic) => (
-                <div key={topic.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }} className="h-full">
+                <HideExitCard
+                  key={topic.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`sentiment:${topic.id}`)}
+                  onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }}
+                >
                   <DiscourseCard
                     topic={topic}
                     onVote={(choice) => handleDiscourseVote(topic.id, choice)}
@@ -2931,7 +3091,7 @@ export default function VotePage() {
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
                     enableDiscussion
                   />
-                </div>
+                </HideExitCard>
               ))}
             </CardSection>
           ) : (
@@ -3028,9 +3188,15 @@ export default function VotePage() {
               ))}
             </div>
           ) : (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
+            <CardSection ref={matchupsSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
               {displayMatchups.map((matchup) => (
-                <div key={matchup.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }} className="h-full">
+                <HideExitCard
+                  key={matchup.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`matchups:${matchup.id}`)}
+                  onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }}
+                >
                   <VersusCard
                     matchup={matchup}
                     userVote={matchupUserVotes[matchup.id] || null}
@@ -3043,7 +3209,7 @@ export default function VotePage() {
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                     enableDiscussion
                   />
-                </div>
+                </HideExitCard>
               ))}
             </CardSection>
           )}
@@ -3138,12 +3304,18 @@ export default function VotePage() {
           {opinionPollsLoading ? (
             <CardGridSkeleton count={3} />
           ) : displayOpinionPolls.length > 0 ? (
-            <CardSection desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
+            <CardSection ref={opinionSectionRef} desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
               {displayOpinionPolls.map((poll: any) => (
-                <div key={poll.id} role="button" tabIndex={0} onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)} onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }} className="h-full">
+                <HideExitCard
+                  key={poll.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`opinion:${poll.id}`)}
+                  onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }}
+                >
                   <OpinionPollCard
                     poll={poll}
-                    onVote={voteOnOpinionPoll}
+                    onVote={handleOpinionVote}
                     onRemoveVote={removeOpinionPollVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -3152,7 +3324,7 @@ export default function VotePage() {
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
                     enableDiscussion
                   />
-                </div>
+                </HideExitCard>
               ))}
             </CardSection>
           ) : (

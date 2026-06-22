@@ -104,6 +104,16 @@ export function OpinionPollCard({
   const sortedOptions = [...options].sort(
     (a, b) => (b.votes ?? 0) - (a.votes ?? 0) || (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
   );
+  // After voting, pin the user's choice to the top so it stays visible in the
+  // card preview (and at the top of the drawer) even if it isn't a top scorer
+  // — important when the card is about to animate into the Hidden toggle.
+  if (voted) {
+    const selectedIdx = sortedOptions.findIndex((o) => o.id === voted);
+    if (selectedIdx > 0) {
+      const [selected] = sortedOptions.splice(selectedIdx, 1);
+      sortedOptions.unshift(selected);
+    }
+  }
   const displayOptions = voted ? sortedOptions : options;
   const visibleOptions = displayOptions.slice(0, OPINION_POLL_PREVIEW_COUNT);
   const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
@@ -137,6 +147,10 @@ export function OpinionPollCard({
       try {
         await onVote(poll.slug, optionId);
         setVoted(optionId);
+        // Close the "all options" drawer if the vote came from inside it, so
+        // the card surfaces its results (selected pinned to top) before it
+        // animates into the Hidden toggle.
+        setOptionsDrawerOpen(false);
       } catch (err) {
         if (isUnauthorizedApiError(err)) {
           toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));

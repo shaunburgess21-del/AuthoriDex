@@ -104,6 +104,8 @@ export const WorldMarketsCategoryStacks = forwardRef<
         slideCategoryToIndex(idx);
         return false;
       },
+      // World Markets stacks don't participate in Vote-hub Hidden mode.
+      playHideExit: () => {},
     }),
     [categoryFilters, resolveChipForMarketId, slideCategoryToIndex],
   );
