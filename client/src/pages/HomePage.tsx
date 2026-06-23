@@ -17,11 +17,10 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { MoverRowSubtext } from "@/components/MoverRowSubtext";
 import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
-import { TrendScoreInfoContent } from "@/components/TrendScoreInfo";
+import { TrendScoreLaunchpad } from "@/components/TrendScoreActionDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import {
   X,
@@ -61,29 +60,31 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 type HomeView = "leaderboard" | "predict" | "vote";
 const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
 
-// Clickable "Trend Score" column header. Carries the same explainer that
-// used to live behind the (i) next to the leaderboard title — moved here
-// because the tooltip is about Trend Score specifically, and the bordered
-// label doubles as the column header on every breakpoint.
-function TrendScoreHeaderLabel({ className }: { className?: string }) {
+// Clickable "Trend Score" column header. Doubles as the column header on every
+// breakpoint and, when tapped, opens the Trend Score launchpad — a menu of
+// onward actions plus an opt-in explainer (see TrendScoreLaunchpad). It sits in
+// prime thumb real estate, so it answers "now what?" rather than dead-ending in
+// an info panel.
+function TrendScoreHeaderLabel({
+  className,
+  onOpen,
+}: {
+  className?: string;
+  onOpen: () => void;
+}) {
   return (
-    <TouchTooltip
-      content={<TrendScoreInfoContent />}
-      side="bottom"
-      align="end"
-      contentClassName="max-w-[300px]"
-      showCloseButton
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "inline-flex h-9 items-center rounded-md border border-border px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground/80 cursor-pointer",
+        className,
+      )}
+      aria-label="Trend Score: actions and how it works"
+      data-testid="header-trend-score-info"
     >
-      <span
-        className={cn(
-          "inline-flex h-9 items-center rounded-md border border-border px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground/80 cursor-pointer",
-          className,
-        )}
-        data-testid="header-trend-score-info"
-      >
-        Trend Score
-      </span>
-    </TouchTooltip>
+      Trend Score
+    </button>
   );
 }
 
@@ -635,6 +636,7 @@ export default function HomePage() {
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);
+  const [trendScoreLaunchpadOpen, setTrendScoreLaunchpadOpen] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
@@ -1045,7 +1047,7 @@ export default function HomePage() {
                         </div>
                         {displayPeople.length > 0 && (
                           <div className="md:hidden shrink-0 min-w-[4.5rem] max-w-[6.5rem] flex justify-end">
-                            <TrendScoreHeaderLabel />
+                            <TrendScoreHeaderLabel onOpen={() => setTrendScoreLaunchpadOpen(true)} />
                           </div>
                         )}
                         {displayPeople.length > 0 && (
@@ -1054,7 +1056,7 @@ export default function HomePage() {
                             data-testid="leaderboard-column-header"
                           >
                             <div className="flex justify-end w-[120px] lg:w-[140px]">
-                              <TrendScoreHeaderLabel />
+                              <TrendScoreHeaderLabel onOpen={() => setTrendScoreLaunchpadOpen(true)} />
                             </div>
                             <div className="text-right w-[96px]">24h</div>
                             <div className="flex justify-end w-[88px]">
@@ -1222,6 +1224,12 @@ export default function HomePage() {
           <HomeApprovalInfoBody onNavigateLink={() => setVoteLeaderboardInfoOpen(false)} />
         </YourVoteInfoDialog>
       )}
+
+      <TrendScoreLaunchpad
+        open={trendScoreLaunchpadOpen}
+        onOpenChange={setTrendScoreLaunchpadOpen}
+        isMobile={isMobile}
+      />
 
       <VotingModal
         open={votingModalOpen}
