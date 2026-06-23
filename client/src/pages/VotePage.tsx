@@ -32,7 +32,6 @@ import {
   Vote,
   Users,
   User,
-  Clock,
   Sparkles,
   Camera,
   Crown,
@@ -128,23 +127,12 @@ import {
   SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
   SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
-import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
 import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
 import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
 import { ContenderSelector, type ContenderSelection } from "@/components/suggest/ContenderSelector";
-
-function formatInductionCountdown(deadline: Date): string {
-  const diffMs = Math.max(0, deadline.getTime() - Date.now());
-  const totalMinutes = Math.floor(diffMs / (60 * 1000));
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-
-  return `${days}d ${hours}h ${minutes}m`;
-}
 
 const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -484,15 +472,26 @@ function InductionCandidateCard({
       </div>
 
       <div className="flex flex-col items-center text-center mb-2 md:mb-4">
-        <div className="relative">
+        <Link
+          href={`/vote/induction#induction-card-${candidate.id}`}
+          className="relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+          aria-label={`View ${candidate.name} in the Induction Queue`}
+          data-testid={`link-induction-avatar-${candidate.id}`}
+        >
           <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
           {isVoted && (
             <div className={`absolute -top-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
               <Check className="h-3 w-3 text-white" />
             </div>
           )}
-        </div>
-        <h3 className="font-semibold text-[16px] leading-[1.4] mt-2 md:mt-3">{candidate.name}</h3>
+        </Link>
+        <Link
+          href={`/vote/induction#induction-card-${candidate.id}`}
+          className="mt-2 md:mt-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+          data-testid={`link-induction-name-${candidate.id}`}
+        >
+          <h3 className="font-semibold text-[16px] leading-[1.4]">{candidate.name}</h3>
+        </Link>
       </div>
       
       <div className="mt-auto mb-4">
@@ -1321,8 +1320,6 @@ export default function VotePage() {
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupCategory, setMatchupCategory] = useState("");
   const [isSuggestSubmitting, setIsSuggestSubmitting] = useState(false);
-  const [inductionCountdown, setInductionCountdown] = useState(() => formatInductionCountdown(getClientWeekDeadlines().sunday));
-
   const { data: userStats } = useUserStats(!!user);
   const xp = userStats?.xpPoints ?? 0;
   const rank = userStats?.rank?.name ?? "Citizen";
@@ -2505,16 +2502,6 @@ export default function VotePage() {
     if (valuePerceptionOverlayOpen) restoreOverlayScroll("value-perception", valuePerceptionScrollRef.current);
   }, [valuePerceptionOverlayOpen]);
 
-  useEffect(() => {
-    const updateInductionCountdown = () => {
-      setInductionCountdown(formatInductionCountdown(getClientWeekDeadlines().sunday));
-    };
-
-    updateInductionCountdown();
-    const interval = setInterval(updateInductionCountdown, 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Sync global category filter to all section filters
   useEffect(() => {
     setMatchupsCategoryFilter(globalCategoryFilter);
@@ -2908,7 +2895,7 @@ export default function VotePage() {
   };
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0">
+    <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <SiteHeader active="vote" logoVariant="vote" />
       <div 
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
@@ -3461,18 +3448,6 @@ export default function VotePage() {
                   <Maximize2 className="h-5 w-5" aria-hidden />
                 </button>
               </>
-            }
-            meta={
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-                  <Clock className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
-                  <span className="text-slate-300">Ends in: {inductionCountdown}</span>
-                </div>
-                <div className="rounded-full px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border bg-slate-800/50 border-slate-700/60">
-                  <Star className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                  <span className="text-slate-300">Top 1 will be inducted</span>
-                </div>
-              </div>
             }
           >
             <CategoryRowWithSearch

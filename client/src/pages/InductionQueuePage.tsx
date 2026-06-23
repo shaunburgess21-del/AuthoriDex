@@ -9,7 +9,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
-import { goBack } from "@/lib/goBack";
+import { writeVoteHubReturnState } from "@/lib/voteListNavigation";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -100,6 +100,11 @@ export default function InductionQueuePage() {
       return;
     }
     setSuggestOpen(true);
+  };
+
+  const handleBack = () => {
+    writeVoteHubReturnState({ activeSection: "All", anchorHashId: "vote-induction" });
+    setLocation("/vote");
   };
 
   const { data: inductionData, isLoading } = useQuery<InductionAPIResponse>({
@@ -197,6 +202,34 @@ export default function InductionQueuePage() {
     return [...inductionData.data].sort((a, b) => b.seedVotes - a.seedVotes);
   }, [inductionData]);
 
+  // Deep-link support: when arriving via /vote/induction#induction-card-<id>
+  // (e.g. tapping a candidate avatar/name on the Vote page), smooth-scroll to
+  // the card and briefly highlight it once the grid has rendered.
+  useEffect(() => {
+    if (isLoading || candidates.length === 0) return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#induction-card-")) return;
+    let resetTimeout: ReturnType<typeof setTimeout> | undefined;
+    const timeout = setTimeout(() => {
+      const el = document.getElementById(hash.slice(1));
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const overlay = el.querySelector<HTMLElement>("[data-hover-border]");
+      overlay?.classList.remove("opacity-0", "hidden");
+      overlay?.classList.add("opacity-100", "block");
+      el.classList.add("shadow-lg", "md:shadow-[0_8px_32px_rgba(239,239,239,0.1)]");
+      resetTimeout = setTimeout(() => {
+        overlay?.classList.add("opacity-0", "hidden");
+        overlay?.classList.remove("opacity-100", "block");
+        el.classList.remove("shadow-lg", "md:shadow-[0_8px_32px_rgba(239,239,239,0.1)]");
+      }, 2200);
+    }, 220);
+    return () => {
+      clearTimeout(timeout);
+      if (resetTimeout) clearTimeout(resetTimeout);
+    };
+  }, [isLoading, candidates.length]);
+
   const filteredCandidates = useMemo(() => {
     return candidates.filter((c) => {
       const matchesCat = categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
@@ -237,7 +270,7 @@ export default function InductionQueuePage() {
         <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
           <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/vote")} aria-label="Back to Vote">
+              <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Back to Vote">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <Link href="/">
@@ -272,7 +305,7 @@ export default function InductionQueuePage() {
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/vote")} aria-label="Back to Vote">
+            <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Back to Vote">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <Link href="/">
@@ -385,13 +418,16 @@ export default function InductionQueuePage() {
               return (
                 <motion.div
                   key={candidate.id}
+                  id={`induction-card-${candidate.id}`}
+                  className="group relative scroll-mt-24 rounded-xl transition-shadow"
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: idx * 0.02 }}
                 >
-                  <Card className={`relative overflow-hidden border-slate-700/40 bg-gradient-to-br ${getRankBg(globalRank)} from-slate-900/80 via-slate-800/80 to-slate-900/80 hover:border-slate-600/60 transition-all group`}>
+                  <div data-hover-border className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+                  <Card className={`relative overflow-hidden border-slate-700/40 bg-gradient-to-br ${getRankBg(globalRank)} from-slate-900/80 via-slate-800/80 to-slate-900/80 transition-all group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)]`}>
                     <AnimatePresence>
                       {showVoteAnim === candidate.id && (
                         <motion.div
