@@ -231,7 +231,7 @@ export function UnderratedOverratedCard({
           <div className="flex flex-1 items-start justify-center pt-2 pb-0 md:pt-1.5 md:pb-0">
             <Link
               href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
-              className="group inline-flex items-center gap-2 -translate-y-[5px] rounded-full border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-600 transition-all duration-200 hover:border-cyan-500/45 hover:bg-cyan-500/15 dark:border-cyan-400/25 dark:bg-cyan-400/10 dark:text-cyan-400 dark:hover:border-cyan-400/45 dark:hover:bg-cyan-400/15"
+              className="group inline-flex items-center gap-1.5 text-sm text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline"
               data-testid={`link-value-compare-${person.id}`}
               onClick={(e) => e.stopPropagation()}
             >
