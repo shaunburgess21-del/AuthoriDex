@@ -24,9 +24,10 @@ import {
   SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
 import { cn } from "@/lib/utils";
+import { FILTER_INACTIVE_PILL_VOTE } from "@/lib/filterControlStyles";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -36,12 +37,14 @@ import {
   Check,
   Users,
   BarChart3,
-  Trophy,
   Search,
   Info,
   TrendingUp,
-  Loader2,
+  UserPlus,
+  Plus,
 } from "lucide-react";
+import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
+import { InductionRaceChart } from "@/components/vote/InductionRaceChart";
 
 interface InductionCandidate {
   id: string;
@@ -88,7 +91,16 @@ export default function InductionQueuePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [showVoteAnim, setShowVoteAnim] = useState<string | null>(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const animRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openSuggest = () => {
+    if (!isLoggedIn) {
+      toast.error("Sign in required", { description: "Please sign in to suggest content." });
+      return;
+    }
+    setSuggestOpen(true);
+  };
 
   const { data: inductionData, isLoading } = useQuery<InductionAPIResponse>({
     queryKey: ["/api/vote/induction"],
@@ -198,6 +210,15 @@ export default function InductionQueuePage() {
     [candidates],
   );
 
+  // Race chart reflects the active category only (not the search box) so the
+  // visualisation stays stable while users search the grid below.
+  const raceCandidates = useMemo(() => {
+    if (categoryFilter === "all") return candidates;
+    return candidates.filter((c) => c.category?.toLowerCase() === categoryFilter.toLowerCase());
+  }, [candidates, categoryFilter]);
+
+  const activeCategoryLabel = FILTER_CATEGORIES.find((c) => c.value === categoryFilter)?.label ?? "All";
+
   const maxVotes = candidates.length > 0 ? candidates[0].seedVotes : 1;
   const totalVotes = candidates.reduce((sum, c) => sum + c.seedVotes, 0);
   const uniqueCategories = new Set(candidates.map((c) => c.category));
@@ -212,8 +233,35 @@ export default function InductionQueuePage() {
 
   if (isLoading && inductionData === undefined) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/vote")} aria-label="Back to Vote">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <Link href="/">
+                <VoxDexLogo size={24} />
+              </Link>
+            </div>
+            <HeaderUserActions />
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-4 py-6 md:py-10">
+          <Skeleton className="h-10 w-64 mb-8" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[68px]" />
+            ))}
+          </div>
+          <Skeleton className="h-9 w-full max-w-md mb-6" />
+          <Skeleton className="h-[280px] w-full rounded-xl mb-8" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-[280px] rounded-xl" />
+            ))}
+          </div>
+        </main>
       </div>
     );
   }
@@ -231,7 +279,18 @@ export default function InductionQueuePage() {
               <VoxDexLogo size={24} />
             </Link>
           </div>
-          <HeaderUserActions />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openSuggest}
+              className="hidden sm:flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
+              data-testid="button-suggest-induction-header"
+            >
+              <Plus className="h-4 w-4" />
+              Suggest
+            </button>
+            <HeaderUserActions />
+          </div>
         </div>
       </header>
 
@@ -288,10 +347,10 @@ export default function InductionQueuePage() {
               <button
                 key={cat.value}
                 onClick={() => setCategoryFilter(cat.value)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
                   categoryFilter === cat.value
-                    ? "bg-cyan-500/20 dark:bg-cyan-500/15 border-cyan-500/60 dark:border-cyan-500/50 text-cyan-600 dark:text-cyan-400"
-                    : "bg-muted/30 border-border text-muted-foreground hover:border-cyan-500/40 dark:border-cyan-500/30"
+                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+                    : FILTER_INACTIVE_PILL_VOTE
                 }`}
               >
                 {cat.label}
@@ -308,6 +367,11 @@ export default function InductionQueuePage() {
               className="pl-9"
             />
           </div>
+        </div>
+
+        {/* Induction race — glowing bar chart of the front-runners */}
+        <div className="mb-8">
+          <InductionRaceChart candidates={raceCandidates} categoryLabel={activeCategoryLabel} />
         </div>
 
         {/* Main grid */}
@@ -425,12 +489,53 @@ export default function InductionQueuePage() {
               );
             })}
           </AnimatePresence>
+
+          {/* Suggest Someone — dedicated CTA card, always the final cell */}
+          <motion.div
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <button
+              type="button"
+              onClick={openSuggest}
+              data-testid="card-suggest-induction"
+              className="pulse-card-cyan group relative flex h-full min-h-[260px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-cyan-500/40 dark:border-cyan-500/30 p-5 text-center transition-colors hover:border-cyan-500/70 dark:hover:border-cyan-500/50"
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 transition-transform group-hover:scale-105">
+                <UserPlus className="h-7 w-7 text-cyan-600 dark:text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-base leading-tight">Suggest Someone</h3>
+                <p className="mt-1 text-xs text-muted-foreground max-w-[14rem]">
+                  Who are we missing? Nominate a new candidate for the Induction Queue.
+                </p>
+              </div>
+              <span className="mt-1 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 transition-colors group-hover:bg-cyan-500/25 dark:group-hover:bg-cyan-500/20">
+                <Plus className="h-4 w-4" />
+                Suggest a Candidate
+              </span>
+            </button>
+          </motion.div>
         </div>
 
         {filteredCandidates.length === 0 && !isLoading && (
           <div className="text-center py-16 text-muted-foreground">
             <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
             <p className="text-sm">No candidates match your filters.</p>
+            {(categoryFilter !== "all" || searchQuery) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryFilter("all");
+                  setSearchQuery("");
+                }}
+                className="mt-4 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
+                data-testid="button-clear-filters"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         )}
 
@@ -501,40 +606,13 @@ export default function InductionQueuePage() {
           </Card>
         </div>
 
-        {/* Top 3 Podium (desktop only) */}
-        {candidates.length >= 3 && (
-          <Card className="hidden md:block p-6 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60 mb-10">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-6 justify-center">
-              <Trophy className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              Current Leaders
-            </h3>
-            <div className="flex items-end justify-center gap-6">
-              {/* 2nd place */}
-              <div className="flex flex-col items-center">
-                <PersonAvatar name={candidates[1].displayName} avatar={candidates[1].avatar} imageSlug={candidates[1].imageSlug} imageContext="induction" className="h-20 w-20 mb-2 ring-2 ring-slate-400/30" />
-                <p className="font-medium text-sm mb-1">{candidates[1].displayName}</p>
-                <Badge variant="outline" className="text-xs border-slate-500/50 dark:border-slate-400/40 text-slate-500 dark:text-slate-300">#2 · {candidates[1].seedVotes.toLocaleString("en-US")}</Badge>
-                <div className="mt-2 w-20 h-16 rounded-t-lg bg-slate-400/10 border border-b-0 border-slate-400/20" />
-              </div>
-              {/* 1st place */}
-              <div className="flex flex-col items-center">
-                <Crown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mb-1" />
-                <PersonAvatar name={candidates[0].displayName} avatar={candidates[0].avatar} imageSlug={candidates[0].imageSlug} imageContext="induction" className="h-24 w-24 mb-2 ring-2 ring-yellow-500/40" />
-                <p className="font-semibold text-base mb-1">{candidates[0].displayName}</p>
-                <Badge variant="outline" className="text-xs border-yellow-500/50 dark:border-yellow-500/40 text-yellow-500 dark:text-yellow-300">#1 · {candidates[0].seedVotes.toLocaleString("en-US")}</Badge>
-                <div className="mt-2 w-24 h-24 rounded-t-lg bg-yellow-500/15 dark:bg-yellow-500/10 border border-b-0 border-yellow-500/30 dark:border-yellow-500/20" />
-              </div>
-              {/* 3rd place */}
-              <div className="flex flex-col items-center">
-                <PersonAvatar name={candidates[2].displayName} avatar={candidates[2].avatar} imageSlug={candidates[2].imageSlug} imageContext="induction" className="h-18 w-18 mb-2 ring-2 ring-orange-500/30" />
-                <p className="font-medium text-sm mb-1">{candidates[2].displayName}</p>
-                <Badge variant="outline" className="text-xs border-orange-500/50 dark:border-orange-500/40 text-orange-500 dark:text-orange-300">#3 · {candidates[2].seedVotes.toLocaleString("en-US")}</Badge>
-                <div className="mt-2 w-18 h-12 rounded-t-lg bg-orange-500/15 dark:bg-orange-500/10 border border-b-0 border-orange-500/30 dark:border-orange-500/20" />
-              </div>
-            </div>
-          </Card>
-        )}
       </main>
+
+      <SuggestCandidateModal
+        open={suggestOpen}
+        onOpenChange={setSuggestOpen}
+        onSubmitted={() => queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] })}
+      />
     </div>
   );
 }

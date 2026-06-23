@@ -130,6 +130,7 @@ import {
 } from "@/lib/sentimentPollVoteDisplay";
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
+import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
 import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
@@ -1315,10 +1316,6 @@ export default function VotePage() {
   const [curateCelebrity, setCurateCelebrity] = useState("");
   const [curateImageFile, setCurateImageFile] = useState<File | null>(null);
   const [curateImageSource, setCurateImageSource] = useState("");
-  const [suggestName, setSuggestName] = useState("");
-  const [suggestCategory, setSuggestCategory] = useState("");
-  const [suggestReason, setSuggestReason] = useState("");
-  const [suggestUrl, setSuggestUrl] = useState("");
   const [matchupHeadline, setMatchupHeadline] = useState("");
   const [matchupContenderA, setMatchupContenderA] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
@@ -2789,35 +2786,6 @@ export default function VotePage() {
     }
   };
 
-  const handleInductionSuggestSubmit = async () => {
-    setIsSuggestSubmitting(true);
-    try {
-      const suggestRes = await apiRequest("POST", "/api/suggestions", {
-        type: "induction",
-        payload: {
-          displayName: suggestName,
-          socialUrl: suggestUrl,
-          category: suggestCategory || undefined,
-          reason: suggestReason || undefined,
-        },
-      });
-      const suggestData = await suggestRes.json();
-      if (suggestData?.xp?.xpAwarded) {
-        triggerXpBurst(suggestData.xp.xpAwarded, undefined, suggestData.xp.reason);
-      }
-      setSuggestName("");
-      setSuggestUrl("");
-      setSuggestCategory("");
-      setSuggestReason("");
-      setInductionSuggestOpen(false);
-      toast("Candidate suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
-    } catch (err: any) {
-      toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
-    } finally {
-      setIsSuggestSubmitting(false);
-    }
-  };
-
   const handleCurateSuggestSubmit = async () => {
     if (!curateImageFile) return;
     setIsSuggestSubmitting(true);
@@ -3873,75 +3841,7 @@ export default function VotePage() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
-      <Drawer.Root open={inductionSuggestOpen} onOpenChange={setInductionSuggestOpen}>
-        <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
-              <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-                  Suggest a Candidate
-                </Drawer.Title>
-                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
-                  Who are we missing? Suggest someone NEW to be added to VoxDex.
-                </Drawer.Description>
-              </div>
-              <button type="button" onClick={() => setInductionSuggestOpen(false)} className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors" aria-label="Close">
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">Candidate Name *</label>
-                <Input
-                  value={suggestName}
-                  onChange={(e) => setSuggestName(e.target.value)}
-                  placeholder="Enter the person's name"
-                  data-testid="input-induction-name"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">Social/Profile URL *</label>
-                <Input
-                  value={suggestUrl}
-                  onChange={(e) => setSuggestUrl(e.target.value)}
-                  placeholder="https://twitter.com/... or https://instagram.com/..."
-                  data-testid="input-induction-url"
-                  className={suggestUrl && !suggestUrl.startsWith('http') ? 'border-red-500' : ''}
-                />
-                {suggestUrl && !suggestUrl.startsWith('http') ? (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">Please enter a valid URL starting with http:// or https://</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
-                )}
-              </div>
-              <SuggestCategorySelect value={suggestCategory} onChange={setSuggestCategory} categories={CATEGORIES_LEADERBOARD} label="Category (optional)" data-testid="select-induction-category" />
-              <div>
-                <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
-                <Input
-                  value={suggestReason}
-                  onChange={(e) => setSuggestReason(e.target.value)}
-                  placeholder="Brief reason..."
-                  data-testid="input-induction-reason"
-                />
-              </div>
-            </div>
-            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setInductionSuggestOpen(false)} data-testid="button-cancel-induction">Cancel</Button>
-              <Button
-                onClick={handleInductionSuggestSubmit}
-                disabled={isSuggestSubmitting || !suggestName || !suggestUrl || !suggestUrl.startsWith('http')}
-                className="bg-cyan-500 text-white"
-                data-testid="button-submit-induction"
-              >
-                {isSuggestSubmitting ? "Submitting…" : "Submit Suggestion"}
-              </Button>
-            </div>
-          </Drawer.Content>
-        </Drawer.Portal>
-      </Drawer.Root>
+      <SuggestCandidateModal open={inductionSuggestOpen} onOpenChange={setInductionSuggestOpen} />
       {/* Curate Profile Suggest Drawer */}
       <Drawer.Root open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
         <Drawer.Portal>
