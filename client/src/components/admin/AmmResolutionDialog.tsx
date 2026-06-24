@@ -8,7 +8,7 @@
  * original — engine-aware URL switching for parimutuel vs AMM, and
  * a payout-preview side-panel for parimutuel markets.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +30,8 @@ import {
   Coins,
   CheckCircle,
   XCircle,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
@@ -46,6 +48,20 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   return fetch(url, { ...options, headers: { ...headers, ...options.headers }, credentials: "include" });
 }
 
+/** AI resolution-scout assessment, persisted in market metadata while the
+ *  market was OPEN. Surfaced here so the operator sees the AI's last read
+ *  when settling. Advisory only — the human always confirms. */
+export interface ScoutAssessmentView {
+  leaning?: string;
+  proposedWinnerEntryId?: string | null;
+  confidence?: number;
+  stage?: "watch" | "likely" | "near_certain" | "met" | string;
+  recommendedAction?: "none" | "watch" | "resolve_soon" | "resolve_now" | string;
+  whatChanged?: string;
+  sources?: string[];
+  assessedAt?: string;
+}
+
 export interface ResolvableMarket {
   id: string;
   title: string;
@@ -55,6 +71,8 @@ export interface ResolvableMarket {
   pool?: number;
   uniqueBettors?: number;
   entries: Array<{ id: string; label: string; marketId?: string }>;
+  /** Optional AI scout assessment from when the market was open. */
+  scoutAssessment?: ScoutAssessmentView | null;
 }
 
 interface ResolutionPreview {
@@ -91,6 +109,98 @@ function MarketTypeBadge({ type }: { type: string }) {
   );
 }
 
+const SCOUT_ACTION_LABEL: Record<string, string> = {
+  resolve_now: "Resolve now",
+  resolve_soon: "Resolve soon",
+  watch: "Watch",
+  none: "No action",
+};
+
+const SCOUT_STAGE_LABEL: Record<string, string> = {
+  met: "Condition met",
+  near_certain: "Near-certain",
+  likely: "Likely",
+  watch: "Watch",
+};
+
+function ScoutPanel({ scout }: { scout: ScoutAssessmentView }) {
+  const conf =
+    typeof scout.confidence === "number"
+      ? `${Math.round(scout.confidence * 100)}%`
+      : null;
+  const actionLabel = scout.recommendedAction
+    ? SCOUT_ACTION_LABEL[scout.recommendedAction] ?? scout.recommendedAction
+    : null;
+  const stageLabel = scout.stage
+    ? SCOUT_STAGE_LABEL[scout.stage] ?? scout.stage
+    : null;
+  const urgent =
+    scout.recommendedAction === "resolve_now" || scout.stage === "met";
+  const assessedAt = scout.assessedAt
+    ? new Date(scout.assessedAt).toLocaleString()
+    : null;
+
+  return (
+    <div
+      className={`rounded-md border p-3 space-y-2 ${
+        urgent
+          ? "border-amber-500/40 bg-amber-500/10"
+          : "border-sky-500/30 bg-sky-500/10"
+      }`}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+        <span className="text-sm font-medium">AI Scout assessment</span>
+        {actionLabel && (
+          <Badge
+            variant="outline"
+            className={`text-xs border-0 ${
+              urgent
+                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                : "bg-sky-500/15 text-sky-700 dark:text-sky-300"
+            }`}
+          >
+            {actionLabel}
+          </Badge>
+        )}
+      </div>
+
+      <div className="text-sm">
+        <span className="text-muted-foreground">Suggests: </span>
+        <span className="font-medium">{scout.leaning || "Unclear"}</span>
+        {conf ? <span className="text-muted-foreground"> · {conf} confidence</span> : null}
+        {stageLabel ? <span className="text-muted-foreground"> · {stageLabel}</span> : null}
+      </div>
+
+      {scout.whatChanged ? (
+        <p className="text-sm text-muted-foreground">{scout.whatChanged}</p>
+      ) : null}
+
+      {Array.isArray(scout.sources) && scout.sources.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          {scout.sources.slice(0, 4).map((src, i) => (
+            <a
+              key={`${src}-${i}`}
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1 break-all"
+            >
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              {src}
+            </a>
+          ))}
+        </div>
+      ) : null}
+
+      <p className="text-[11px] text-muted-foreground">
+        Advisory only — verify against the sources before resolving.
+        {assessedAt ? ` Assessed ${assessedAt}.` : ""}
+      </p>
+    </div>
+  );
+}
+
 export function AmmResolutionDialog({
   market,
   open,
@@ -115,6 +225,22 @@ export function AmmResolutionDialog({
   const [voidReason, setVoidReason] = useState("");
 
   const isAmm = market.engine === "amm";
+
+  const scout = market.scoutAssessment ?? null;
+  const scoutProposedEntry =
+    scout?.proposedWinnerEntryId &&
+    market.entries.some((e) => e.id === scout.proposedWinnerEntryId)
+      ? scout.proposedWinnerEntryId
+      : null;
+
+  // Pre-select the scout's proposed winner when the dialog opens, so a
+  // confident assessment becomes a one-click confirm. The operator can
+  // still change the selection before resolving.
+  useEffect(() => {
+    if (open && scoutProposedEntry) {
+      setSelectedEntry(scoutProposedEntry);
+    }
+  }, [open, scoutProposedEntry]);
 
   // Parimutuel preview is the only path that needs a server-rendered
   // payout breakdown; AMM payouts are always 1 credit per winning
@@ -236,6 +362,8 @@ export function AmmResolutionDialog({
             </div>
           )}
 
+          {scout && !showVoid && <ScoutPanel scout={scout} />}
+
           {!showVoid && isAmm ? (
             <div className="space-y-3">
               <p className="text-sm font-medium">Select winning outcome:</p>
@@ -253,6 +381,14 @@ export function AmmResolutionDialog({
                         {isSelected && <div className="h-2 w-2 rounded-full bg-primary" />}
                       </div>
                       <span className="font-medium">{entry.label}</span>
+                      {scoutProposedEntry === entry.id && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-0 bg-sky-500/15 text-sky-700 dark:text-sky-300 gap-1"
+                        >
+                          <Sparkles className="h-3 w-3" /> AI pick
+                        </Badge>
+                      )}
                     </CardContent>
                   </Card>
                 );

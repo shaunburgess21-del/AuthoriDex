@@ -300,6 +300,8 @@ function CreateMarketModal({
   const [sourceUrl, setSourceUrl] = useState("");
   const [resolveMethod, setResolveMethod] = useState("admin_manual");
   const [resolutionCriteria, setResolutionCriteria] = useState<string[]>([""]);
+  const [scoutWatch, setScoutWatch] = useState("");
+  const [isSuggestingWatch, setIsSuggestingWatch] = useState(false);
   const [underlying, setUnderlying] = useState("");
   const [metric, setMetric] = useState("");
   const [strike, setStrike] = useState("");
@@ -343,6 +345,38 @@ function CreateMarketModal({
       setIsGeneratingSummary(false);
     }
   };
+  const handleSuggestWatch = async () => {
+    if (!title.trim()) {
+      toast.error("Add a title first", { description: "The AI needs the market title to suggest what to watch." });
+      return;
+    }
+    setIsSuggestingWatch(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/world-markets/suggest-watch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          category,
+          teaser,
+          outcomes: entries.map((e) => e.label).filter(Boolean),
+          resolutionCriteria: resolutionCriteria.filter((c) => c.trim()),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to suggest watch criteria" }));
+        throw new Error(err.error || "Failed to suggest watch criteria");
+      }
+      const data = await res.json();
+      setScoutWatch(data.scoutWatch);
+      toast("Watch criteria drafted", { description: "Review and edit before saving." });
+    } catch (err: any) {
+      toast.error("Suggestion failed", { description: err.message });
+    } finally {
+      setIsSuggestingWatch(false);
+    }
+  };
+
   const [isGeneratingTeaser, setIsGeneratingTeaser] = useState(false);
   const handleGenerateTeaser = async () => {
     if (!editMarket?.id) return;
@@ -408,6 +442,9 @@ function CreateMarketModal({
       setSourceUrl(editMarket.sourceUrl || "");
       setResolveMethod(editMarket.resolveMethod || "admin_manual");
       setResolutionCriteria(editMarket.resolutionCriteria?.length ? editMarket.resolutionCriteria : [""]);
+      setScoutWatch(
+        typeof editMarket.metadata?.scoutWatch === "string" ? editMarket.metadata.scoutWatch : "",
+      );
       setUnderlying(editMarket.underlying || "");
       setMetric(editMarket.metric || "");
       setStrike(editMarket.strike ? String(editMarket.strike) : "");
@@ -460,6 +497,9 @@ function CreateMarketModal({
             if (data?.relatedPeople?.length) {
               setRelatedPeople(data.relatedPeople);
             }
+            if (typeof data?.metadata?.scoutWatch === "string") {
+              setScoutWatch(data.metadata.scoutWatch);
+            }
           })
           .catch(() => {});
       } else if (editMarket.entries?.length) {
@@ -484,6 +524,7 @@ function CreateMarketModal({
       setSourceUrl("");
       setResolveMethod("admin_manual");
       setResolutionCriteria([""]);
+      setScoutWatch("");
       setUnderlying("");
       setMetric("");
       setStrike("");
@@ -625,6 +666,7 @@ function CreateMarketModal({
       sourceUrl: sourceUrl || null,
       resolveMethod,
       resolutionCriteria: resolutionCriteria.filter(c => c.trim()),
+      scoutWatch: scoutWatch.trim() || null,
       underlying: openMarketType === "updown" ? underlying : undefined,
       metric: openMarketType === "updown" ? metric : undefined,
       strike: openMarketType === "updown" ? strike : undefined,
@@ -967,6 +1009,37 @@ function CreateMarketModal({
               <Plus className="h-3 w-3 mr-1" />
               Add Criterion
             </Button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>AI Scout — Watch Criteria</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSuggestWatch}
+                disabled={isSuggestingWatch}
+                className="gap-1"
+                data-testid="button-suggest-watch"
+              >
+                {isSuggestingWatch ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Suggesting...</>
+                ) : (
+                  <><Sparkles className="h-3 w-3" /> Suggest with AI</>
+                )}
+              </Button>
+            </div>
+            <Textarea
+              value={scoutWatch}
+              onChange={(e) => setScoutWatch(e.target.value)}
+              placeholder="Leading indicators the daily AI scout should watch for, e.g. Portugal squad announcement; Ronaldo named in starting XI; official withdrawal."
+              rows={3}
+              data-testid="input-scout-watch"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional. Guides the once-daily resolution scout on what real-world signals would move this market toward resolution. Leave blank to let the scout infer from the title and criteria.
+            </p>
           </div>
 
           {openMarketType === "updown" && (

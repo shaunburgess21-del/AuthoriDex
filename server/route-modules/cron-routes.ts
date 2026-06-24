@@ -507,6 +507,63 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // World Market ops digest + AI resolution scout. Mirrors the in-process
+  // scheduler in server/index.ts so external cron / SERVERLESS_MODE
+  // deployments still get the daily digest. Advisory-locked, so it's safe to
+  // call concurrently with the in-process scheduler. Read-only on market
+  // state. Recommended Railway schedule: daily ~08:00 UTC.
+  app.post("/api/cron/market-ops-digest", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runMarketOpsDigest } = await import("../jobs/market-ops-digest");
+      const result = await runMarketOpsDigest();
+      res.json({
+        success: true,
+        message: "World Market ops digest completed",
+        ...result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Market ops digest error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Standalone AI resolution scout. Writes scout assessments to market
+  // metadata and returns actionable findings WITHOUT sending the digest
+  // email — useful for manual testing / inspection. The daily digest runs
+  // the scout inline, so this endpoint is not needed for normal operation.
+  app.post("/api/cron/resolution-scout", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runResolutionScout } = await import("../jobs/resolution-scout");
+      const result = await runResolutionScout();
+      res.json({
+        success: true,
+        message: result.enabled
+          ? "Resolution scout completed"
+          : "Resolution scout disabled (RESOLUTION_SCOUT_LLM_ENABLED is off)",
+        ...result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Resolution scout error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.get("/api/cron/health", verifyCronSecret, async (_req, res) => {
     // Include upstream provider state so external monitors can alert on Serper
     // auth/quota/rate-limit outages instead of silently degrading product features.

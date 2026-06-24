@@ -13,6 +13,7 @@ import { runDataIngestion, hydrateTrendingPeopleFromSnapshots } from "./jobs/ing
 import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } from "./jobs/live-tick";
 import { startNotificationsDerivationScheduler } from "./jobs/notifications-derivation";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
+import { runMarketOpsDigest } from "./jobs/market-ops-digest";
 import { startAmmPriceSamplerScheduler } from "./jobs/amm-price-sampler";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
@@ -835,6 +836,13 @@ async function startServer() {
     } else {
       log("[InsightsCacheRefresh] Skipped - serverless mode. Use POST /api/cron/refresh-insights-cache.");
     }
+
+    // World Market ops digest + AI resolution scout (daily 08:00 UTC).
+    if (!SERVERLESS_MODE) {
+      startScheduler("MarketOpsDigest", startMarketOpsDigestScheduler);
+    } else {
+      log("[MarketOpsDigest] Skipped - serverless mode. Use POST /api/cron/market-ops-digest.");
+    }
   });
 }
 
@@ -1186,6 +1194,39 @@ function startInsightsCacheRefreshScheduler() {
     void runScheduledInsightsCacheRefresh();
     setInterval(() => void runScheduledInsightsCacheRefresh(), INSIGHTS_CACHE_REFRESH_INTERVAL_MS);
   }, 90 * 1000);
+}
+
+// ─── World Market ops digest scheduler ───────────────────────────────────────
+// Once daily at 08:00 UTC (10:00 in the founders' UTC+2 timezone). Composes
+// the World Market resolution reminders (closing soon / needs resolution /
+// stuck) AND runs the AI resolution scout inline, then emails the ops
+// recipients (OPS_ALERT_EMAILS). Read-only; never mutates market state.
+const MARKET_OPS_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MARKET_OPS_DIGEST_UTC_HOUR = 8;
+
+async function runScheduledMarketOpsDigest(): Promise<void> {
+  try {
+    const result = await runMarketOpsDigest();
+    log(
+      `[MarketOpsDigest] OK — needsResolution=${result.needsResolution} stuck=${result.stuck} ` +
+        `closingSoon=${result.closingSoon} scoutFindings=${result.scoutFindings} ` +
+        `delivered=${result.alert.delivered} failed=${result.alert.failed}`,
+    );
+  } catch (err: any) {
+    log(`[MarketOpsDigest] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startMarketOpsDigestScheduler() {
+  if (SERVERLESS_MODE) return;
+  const initialDelay = msUntilNextUtcHour(MARKET_OPS_DIGEST_UTC_HOUR);
+  log(
+    `[MarketOpsDigest] Starting (daily ~${MARKET_OPS_DIGEST_UTC_HOUR}:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`,
+  );
+  setTimeout(() => {
+    void runScheduledMarketOpsDigest();
+    setInterval(() => void runScheduledMarketOpsDigest(), MARKET_OPS_DIGEST_INTERVAL_MS);
+  }, initialDelay);
 }
 
 startServer().catch((error) => {

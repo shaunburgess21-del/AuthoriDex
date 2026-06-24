@@ -1066,6 +1066,22 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
               updatedAt: new Date(),
             }).where(eq(predictionMarkets.id, market.id));
             pending++;
+            // Instant ops ping: this market just entered the manual-resolution
+            // queue. Fire-and-forget + idempotent (email_send_log keyed per
+            // market), so it can never block or break the resolver loop.
+            void (async () => {
+              try {
+                const { sendMarketNeedsResolutionAlert } = await import("./market-ops-digest");
+                await sendMarketNeedsResolutionAlert({
+                  id: market.id,
+                  title: market.title,
+                  slug: market.slug,
+                  endAt: market.endAt,
+                });
+              } catch (alertErr: any) {
+                log(`[MarketResolver] needs-resolution alert failed for ${market.id}: ${alertErr?.message ?? alertErr}`);
+              }
+            })();
             break;
           case "jackpot":
             outcome = await resolveJackpot(market);

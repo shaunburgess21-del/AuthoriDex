@@ -17879,8 +17879,15 @@ Target length: about 90-150 words.`;
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
         underlying, metric, strike, unit,
         entries: entryList, personId, isLive, visibility, inactiveMessage,
-        relatedPersonIds,
+        relatedPersonIds, scoutWatch,
       } = req.body;
+
+      // Watch criteria for the AI resolution scout (leading indicators to
+      // monitor). Stored in metadata so no schema migration is needed.
+      const scoutWatchValue =
+        typeof scoutWatch === "string" && scoutWatch.trim()
+          ? scoutWatch.trim()
+          : null;
 
       if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
         return res.status(400).json({ error: "openMarketType must be binary, multi, or updown" });
@@ -17960,6 +17967,7 @@ Target length: about 90-150 words.`;
             visibility: ["draft", "live", "inactive", "archived"].includes(visibility) ? visibility : "live",
             inactiveMessage: inactiveMessage || null,
             cmsDisplayOrder: nextCmsOrder,
+            metadata: scoutWatchValue ? { scoutWatch: scoutWatchValue } : null,
           })
           .returning();
 
@@ -18045,7 +18053,7 @@ Target length: about 90-150 words.`;
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         underlying, metric, strike, unit,
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
-        relatedPersonIds,
+        relatedPersonIds, scoutWatch,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -18078,6 +18086,19 @@ Target length: about 90-150 words.`;
         updates.isLive = visibility === "live" || visibility === "inactive";
       }
       if (inactiveMessage !== undefined) updates.inactiveMessage = inactiveMessage || null;
+
+      // Merge scout watch criteria into metadata via a JSONB merge so we
+      // never clobber the cached worldAssessment / scoutAssessment the agents
+      // and scout write concurrently (read-modify-write would race them).
+      if (scoutWatch !== undefined) {
+        const trimmed =
+          typeof scoutWatch === "string" && scoutWatch.trim()
+            ? scoutWatch.trim()
+            : null;
+        updates.metadata = trimmed
+          ? sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify({ scoutWatch: trimmed })}::jsonb`
+          : sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) - 'scoutWatch'`;
+      }
 
       const [updated] = await db
         .update(predictionMarkets)
@@ -18826,6 +18847,73 @@ Target length: about 90-150 words.`;
     } catch (error) {
       console.error("[Open Markets] Admin detail error:", error);
       res.status(500).json({ error: "Failed to fetch market" });
+    }
+  });
+
+  // AI-suggest "watch criteria" for the resolution scout. Stateless (works
+  // from the create form before a market exists): pass title/category/teaser/
+  // outcomes/resolutionCriteria and get back a concise list of the leading
+  // indicators the scout should monitor. The admin reviews/edits before save.
+  app.post("/api/admin/world-markets/suggest-watch", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { title, category, teaser, outcomes, resolutionCriteria } = req.body || {};
+      if (!title || typeof title !== "string") {
+        return res.status(400).json({ error: "title is required" });
+      }
+
+      const outcomesStr = Array.isArray(outcomes)
+        ? outcomes.filter((o: unknown) => typeof o === "string" && o.trim()).join(", ")
+        : "";
+      const criteriaStr = Array.isArray(resolutionCriteria)
+        ? resolutionCriteria.filter((c: unknown) => typeof c === "string" && c.trim()).join("; ")
+        : typeof resolutionCriteria === "string"
+          ? resolutionCriteria
+          : "";
+
+      const systemPrompt = `You help operators of a prediction-market platform monitor real-world events. For a given market, list the concrete LEADING INDICATORS an automated scout should watch for to know the market is moving toward resolution — the specific, verifiable developments that would make the outcome certain, near-certain, or materially more likely.
+
+Rules:
+- Output 2-4 short indicators, separated by semicolons, plain text only.
+- Be specific and verifiable (e.g. "Portugal squad announcement for the 2026 World Cup", "Ronaldo named in the starting XI for a match", "official resignation or removal from office", "exchange price crosses the threshold").
+- Cover both the YES-trigger and the NO-trigger when relevant.
+- No preamble, no markdown, no numbering — just the semicolon-separated indicators.`;
+
+      const userPrompt = `Market: "${title}"
+Category: ${category || "General"}
+${teaser ? `Teaser: "${teaser}"` : ""}
+Outcomes: ${outcomesStr || "Not specified"}
+Resolution criteria: ${criteriaStr || "Not specified"}
+
+List the leading indicators to watch for.`;
+
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+      });
+
+      const response = await openai.responses.create({
+        model: getAiModel("aiDrafts"),
+        tools: [{ type: "web_search" as any }],
+        instructions: systemPrompt,
+        input: userPrompt,
+        max_output_tokens: 300,
+      } as any);
+
+      const raw = ((response as any).output_text
+        || ((response as any).output || [])
+             .filter((item: any) => item.type === "message")
+             .flatMap((item: any) => item.content || [])
+             .filter((part: any) => part.type === "output_text" || part.type === "text")
+             .map((part: any) => part.text)
+             .join(" ")
+        || "").trim();
+
+      const scoutWatch = stripCitations(raw).trim();
+      if (!scoutWatch) return res.status(500).json({ error: "AI returned an empty suggestion" });
+
+      res.json({ scoutWatch });
+    } catch (error: any) {
+      console.error("[World Markets] Watch-criteria suggestion error:", error?.message || error);
+      res.status(500).json({ error: "Failed to suggest watch criteria" });
     }
   });
 

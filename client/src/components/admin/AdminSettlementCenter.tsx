@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { formatTimeAgo } from "@/lib/formatDate";
-import { AmmResolutionDialog } from "./AmmResolutionDialog";
+import { AmmResolutionDialog, type ScoutAssessmentView } from "./AmmResolutionDialog";
 import { CURRENCY } from "@/lib/currency";
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -53,6 +53,8 @@ interface PendingMarket {
   pendingReason?: string;
   warnings: string[];
   entries: Array<{ id: string; label: string; marketId: string }>;
+  /** Flexible market metadata; may carry the AI scout's last assessment. */
+  metadata?: { scoutAssessment?: ScoutAssessmentView | null } | null;
 }
 
 interface ResolvedMarket {
@@ -445,7 +447,7 @@ export function AdminSettlementCenter() {
 
       {resolveMarket && (
         <AmmResolutionDialog
-          market={resolveMarket}
+          market={{ ...resolveMarket, scoutAssessment: resolveMarket.metadata?.scoutAssessment ?? null }}
           open={!!resolveMarket}
           onOpenChange={open => { if (!open) setResolveMarket(null); }}
         />
