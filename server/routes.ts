@@ -25552,7 +25552,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         typeof req.body?.winnerEntryId === "string" && req.body.winnerEntryId.length > 0
           ? String(req.body.winnerEntryId)
           : null;
-      const voidMarket = req.body?.void === true;
+      // Accept both `void` and `voidMarket` body keys. The shared
+      // <AmmResolutionDialog> sends `voidMarket: true`; earlier callers /
+      // smoke tests use `void: true`. Honour either to avoid a silent
+      // 400 on the void path.
+      const voidMarket = req.body?.void === true || req.body?.voidMarket === true;
 
       if (!voidMarket && !winnerEntryId) {
         return res.status(400).json({

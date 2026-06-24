@@ -281,7 +281,9 @@ export function AmmResolutionDialog({
       const res = await fetchWithAuth(url, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        const msg = err.error || "Failed to settle";
+        // Prefer the human-readable `message` (e.g. the self-resolution
+        // guard) over the machine `error` code so toasts read cleanly.
+        const msg = err.message || err.error || "Failed to settle";
         const isAlreadySettled = /already (resolved|settled)/i.test(msg) || /not.*OPEN|not.*CLOSED_PENDING/i.test(msg);
         if (isAlreadySettled) {
           return { alreadySettled: true, message: msg };
@@ -316,7 +318,10 @@ export function AmmResolutionDialog({
           ? { notes: voidReason }
           : { voidReason };
       const res = await fetchWithAuth(url, { method: "POST", body: JSON.stringify(body) });
-      if (!res.ok) throw new Error("Failed to void");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to void" }));
+        throw new Error(err.message || err.error || "Failed to void");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -324,7 +329,7 @@ export function AmmResolutionDialog({
       invalidateAfter();
       onOpenChange(false);
     },
-    onError: () => toast.error("Void Failed", { description: "Could not void market" }),
+    onError: (err: Error) => toast.error("Void Failed", { description: err.message }),
   });
 
   const selectedPreview = preview?.entries.find((e) => e.entryId === selectedEntry);

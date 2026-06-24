@@ -90,6 +90,8 @@ export interface AdminUsersListResponse {
 export interface PredictionMarket {
   id: string;
   marketType: string;
+  /** Settlement engine. Community + native non-jackpot markets are 'amm'. */
+  engine?: "parimutuel" | "amm" | string | null;
   openMarketType: string | null;
   status: string;
   title: string;

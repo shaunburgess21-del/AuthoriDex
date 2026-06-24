@@ -142,7 +142,7 @@ import {
 } from "@/pages/admin/adminTypes";
 import { fetchWithAuth, getAuthHeaders } from "@/pages/admin/adminAuth";
 import { CopyDebugSummaryButton } from "@/pages/admin/CopyDebugSummaryButton";
-import { SettleMarketModal } from "@/pages/admin/SettleMarketModal";
+import { AmmResolutionDialog } from "@/components/admin/AmmResolutionDialog";
 
 // Human-readable labels for the source keys written by the ingest job
 // (see server/jobs/ingest.ts). Keep in sync if a new source is added —
@@ -1223,7 +1223,9 @@ function CreateMarketModal({
   );
 }
 
-// NOTE: SettleMarketModal is now imported from "@/pages/admin/SettleMarketModal".
+// NOTE: World-market settlement now uses the shared <AmmResolutionDialog>
+// (client/src/components/admin/AmmResolutionDialog.tsx), the same dialog the
+// Settlement Center uses — AMM-aware payouts plus the AI scout panel.
 // CreateMarketModal (immediately above) is still defined inline because it
 // has deep ties to the admin component's toast/query state; extracting it is
 // scheduled for a follow-up refactor.
@@ -1803,7 +1805,7 @@ export default function AdminDashboard() {
   });
 
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
-  const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[] }>({
+  const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[]; totalParticipants?: number }>({
     queryKey: ["/api/open-markets", settleMarket?.slug],
     queryFn: async () => {
       if (!settleMarket?.slug) return { entries: [] };
@@ -1860,28 +1862,9 @@ export default function AdminDashboard() {
     },
   });
 
-  const settleMarketMutation = useMutation({
-    mutationFn: async ({ id, winnerEntryId, resolutionNotes }: { id: string; winnerEntryId: string; resolutionNotes?: string }) => {
-      const res = await fetchWithAuth(`/api/admin/open-markets/${id}/settle`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ winnerEntryId, resolutionNotes }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to settle market");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-      setSettleMarketId(null);
-      toast("Market Settled", { description: "Market has been resolved." });
-    },
-    onError: (err: Error) => {
-      toast.error("Error", { description: err.message });
-    },
-  });
+  // Settlement now runs through the shared <AmmResolutionDialog>, which owns
+  // its own resolve/void mutations (engine-aware URLs, AMM payout preview,
+  // AI scout panel). The legacy bespoke settleMarketMutation was removed.
 
   const voidMarketMutation = useMutation({
     mutationFn: async ({ id, voidReason }: { id: string; voidReason: string }) => {
@@ -10212,18 +10195,28 @@ export default function AdminDashboard() {
         })() : undefined}
       />
 
-      <SettleMarketModal
-        market={settleMarket || null}
-        entries={settleMarketDetail?.entries || []}
-        open={!!settleMarketId}
-        onClose={() => setSettleMarketId(null)}
-        onSettle={(winnerEntryId, notes) => {
-          if (settleMarketId) {
-            settleMarketMutation.mutate({ id: settleMarketId, winnerEntryId, resolutionNotes: notes || undefined });
-          }
-        }}
-        isPending={settleMarketMutation.isPending}
-      />
+      {settleMarket && (
+        <AmmResolutionDialog
+          market={{
+            id: settleMarket.id,
+            title: settleMarket.title,
+            marketType: settleMarket.marketType,
+            // Community markets are always AMM; default defensively in case
+            // the list row predates the engine column.
+            engine: settleMarket.engine ?? "amm",
+            uniqueBettors: settleMarketDetail?.totalParticipants,
+            entries: (settleMarketDetail?.entries ?? []).map((e) => ({
+              id: e.id,
+              label: e.label,
+              marketId: settleMarket.id,
+            })),
+            scoutAssessment: settleMarket.metadata?.scoutAssessment ?? null,
+          }}
+          open={!!settleMarketId}
+          onOpenChange={(isOpen) => { if (!isOpen) setSettleMarketId(null); }}
+          invalidateOnSettle={[["/api/admin/markets"]]}
+        />
+      )}
 
       <Dialog open={!!voidMarketId} onOpenChange={(isOpen) => !isOpen && setVoidMarketId(null)}>
         <DialogContent className="max-w-md">
