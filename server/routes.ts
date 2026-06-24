@@ -149,7 +149,9 @@ import {
   GAINER_MIN_ELIGIBLE,
   canonicalizePersonCategory,
   getMarketCategoryLabel,
+  matchesCategoryFilter,
   normalizeMarketCategory,
+  sanitizeSecondaryCategories,
   OPINION_POLL_MIN_OPTIONS,
   OPINION_POLL_MAX_OPTIONS,
   OPINION_POLL_OPTION_SUGGESTION_MAX_LEN,
@@ -308,6 +310,21 @@ function storedMatchesCanonicalCategory(
     return true;
   }
   return normalizeMarketCategory(trimmedStored) === canonicalId;
+}
+
+/** Returns the set of allowed category ids (normalized) from the live `content_categories`
+ * registry, falling back to the canonical set when the registry is empty/unavailable.
+ * Used to validate admin-supplied secondary categories. */
+async function getAllowedCategoryIds(): Promise<Set<string>> {
+  try {
+    const rows = await db.select({ id: contentCategories.id }).from(contentCategories);
+    const ids = rows.length > 0
+      ? rows.map((r) => r.id)
+      : (CANONICAL_MARKET_CATEGORIES as readonly string[]);
+    return new Set(ids.map((id) => normalizeMarketCategory(id)));
+  } catch {
+    return new Set((CANONICAL_MARKET_CATEGORIES as readonly string[]).map((id) => normalizeMarketCategory(id)));
+  }
 }
 
 type CategoryUsageBreakdown = {
@@ -4761,6 +4778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tp.name,
           tp.avatar,
           tp.category,
+          tp.secondary_categories,
           tp.bio
         FROM trend_snapshots ts
         JOIN tracked_people tp ON tp.id = ts.person_id
@@ -4778,6 +4796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         avatar: row.avatar,
         bio: row.bio,
         category: row.category,
+        secondaryCategories: row.secondary_categories ?? [],
         rank: idx + 1,
         trendScore: row.trend_score,
         fameIndex: row.fame_index,
@@ -4827,6 +4846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tp.name,
           tp.avatar,
           tp.category,
+          tp.secondary_categories,
           tp.bio
         FROM trend_snapshots ts
         JOIN tracked_people tp ON tp.id = ts.person_id AND tp.status = 'main_leaderboard'
@@ -4853,7 +4873,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else {
           const categoryCanonical = normalizeMarketCategory(category);
-          filtered = filtered.filter((r: any) => normalizeMarketCategory(r.category) === categoryCanonical);
+          filtered = filtered.filter((r: any) =>
+            matchesCategoryFilter(r.category, r.secondary_categories, categoryCanonical),
+          );
         }
       }
       if (search && search.trim()) {
@@ -4873,6 +4895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: row.name,
         avatar: row.avatar,
         category: row.category,
+        secondaryCategories: row.secondary_categories || [],
         rank: offset + idx + 1,
         trendScore: row.trend_score,
         fameIndex: row.fame_index,
@@ -4922,13 +4945,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/leaderboard/categories", async (_req, res) => {
     try {
       const rows = await db
-        .selectDistinct({ category: trendingPeople.category })
-        .from(trendingPeople)
-        .where(isNotNull(trendingPeople.category));
+        .select({
+          category: trendingPeople.category,
+          secondaryCategories: trendingPeople.secondaryCategories,
+        })
+        .from(trendingPeople);
       const normalized = Array.from(
         new Set(
           rows
-            .map((r) => normalizeMarketCategory(r.category))
+            .flatMap((r) => [r.category, ...(r.secondaryCategories || [])])
+            .filter((c): c is string => Boolean(c))
+            .map((c) => normalizeMarketCategory(c))
             .filter(Boolean),
         ),
       );
@@ -4984,22 +5011,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else {
           const canonicalCategory = normalizeMarketCategory(category);
-          const categoryRows = await db
-            .select({ id: trendingPeople.id, category: trendingPeople.category })
-            .from(trendingPeople)
-            .where(isNotNull(trendingPeople.category));
-          const matchingIds = categoryRows
-            .filter((row) => normalizeMarketCategory(row.category) === canonicalCategory)
-            .map((row) => row.id);
+          // "all"/"trending" are UI-only filters, not real categories. Skip the
+          // category restriction entirely so matchesCategoryFilter's "trending"
+          // passthrough can't silently match every row.
+          if (canonicalCategory !== "all" && canonicalCategory !== "trending") {
+            const categoryRows = await db
+              .select({
+                id: trendingPeople.id,
+                category: trendingPeople.category,
+                secondaryCategories: trendingPeople.secondaryCategories,
+              })
+              .from(trendingPeople);
+            const matchingIds = categoryRows
+              .filter((row) =>
+                matchesCategoryFilter(row.category, row.secondaryCategories, canonicalCategory),
+              )
+              .map((row) => row.id);
 
-          if (matchingIds.length === 0) {
-            const noRowsCondition = sql`1 = 0`;
-            conditions.push(noRowsCondition);
-            nonSearchConditions.push(noRowsCondition);
-          } else {
-            const categoryCondition = inArray(trendingPeople.id, matchingIds);
-            conditions.push(categoryCondition);
-            nonSearchConditions.push(categoryCondition);
+            if (matchingIds.length === 0) {
+              const noRowsCondition = sql`1 = 0`;
+              conditions.push(noRowsCondition);
+              nonSearchConditions.push(noRowsCondition);
+            } else {
+              const categoryCondition = inArray(trendingPeople.id, matchingIds);
+              conditions.push(categoryCondition);
+              nonSearchConditions.push(categoryCondition);
+            }
           }
         }
       }
@@ -5037,6 +5074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: trendingPeople.name,
           avatar: trendingPeople.avatar,
           category: trendingPeople.category,
+          secondaryCategories: trendingPeople.secondaryCategories,
           rank: trendingPeople.rank,
           trendScore: trendingPeople.trendScore,
           fameIndex: trendingPeople.fameIndex,
@@ -6219,6 +6257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               change24h: null,
               change7d: null,
               category: person.category,
+              secondaryCategories: (person as any).secondaryCategories ?? [],
               profileViews10m: null,
             }, { forceRefresh: true });
 
@@ -6304,9 +6343,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(matchups)
         .orderBy(...orderTerms, asc(matchups.displayOrder));
       
-      // Filter by category if provided
-      if (category && category !== 'All') {
-        matchupList = matchupList.filter(f => f.category === category);
+      // Filter by category if provided (matches primary OR secondary categories)
+      if (category && typeof category === "string" && category !== 'All') {
+        const canonicalCategory = normalizeMarketCategory(category);
+        matchupList = matchupList.filter(f =>
+          matchesCategoryFilter(f.category, f.secondaryCategories, canonicalCategory),
+        );
       }
       
       // Public API: Only show live and inactive matchups (not draft/hidden/archived)
@@ -12818,7 +12860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/celebrities/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { name, category, status, wikiSlug, avatar, searchQueryOverride, googleTrendsTopicId } = req.body;
+      const { name, category, status, wikiSlug, avatar, searchQueryOverride, googleTrendsTopicId, secondaryCategories } = req.body;
       const adminId = req.userId!;
 
       const [existing] = await db.select().from(trackedPeople).where(eq(trackedPeople.id, id));
@@ -12840,10 +12882,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (searchQueryOverride !== undefined) updates.searchQueryOverride = searchQueryOverride || null;
       if (googleTrendsTopicId !== undefined) updates.googleTrendsTopicId = googleTrendsTopicId || null;
 
+      let cleanSecondary: string[] | undefined;
+      if (secondaryCategories !== undefined) {
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        cleanSecondary = sanitizeSecondaryCategories(
+          secondaryCategories,
+          category !== undefined ? category : existing.category,
+          allowedCategoryIds,
+        );
+        updates.secondaryCategories = cleanSecondary;
+      }
+
       const trendingUpdates: Record<string, unknown> = {};
       if (name !== undefined) trendingUpdates.name = name;
       if (category !== undefined) trendingUpdates.category = canonicalizePersonCategory(category)!;
       if (avatar !== undefined) trendingUpdates.avatar = avatar;
+      if (cleanSecondary !== undefined) trendingUpdates.secondaryCategories = cleanSecondary;
 
       await db.transaction(async (tx) => {
         await tx.update(trackedPeople).set(updates).where(eq(trackedPeople.id, id));
@@ -14122,7 +14176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add new celebrity
   app.post("/api/admin/celebrities", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { name, category, status, wikiSlug, avatar, searchQueryOverride } = req.body;
+      const { name, category, status, wikiSlug, avatar, searchQueryOverride, secondaryCategories } = req.body;
       const adminId = req.userId!;
 
       if (!name) {
@@ -14134,9 +14188,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid handle(s)", fieldErrors: handleResult.errors });
       }
 
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+
       const [created] = await db.insert(trackedPeople).values({
         name,
         category: canonicalizePersonCategory(category || "Other")!,
+        secondaryCategories: cleanSecondary,
         status: status || 'main_leaderboard',
         imageSlug: generateImageSlug(name),
         wikiSlug: wikiSlug || null,
@@ -14944,12 +15002,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
         return res.status(400).json({ error: "Title and both options are required" });
       }
+
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category || 'General', allowedCategoryIds);
       
       // Get next display order
       const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(matchups);
@@ -14959,6 +15020,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [created] = await db.insert(matchups).values({
         title,
         category: category || 'General',
+        secondaryCategories: cleanSecondary,
         optionAText,
         optionAImage: optionAImage || null,
         optionBText,
@@ -15014,7 +15076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -15025,6 +15087,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates: any = {};
       if (title !== undefined) updates.title = title;
       if (category !== undefined) updates.category = category;
+      if (secondaryCategories !== undefined) {
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        updates.secondaryCategories = sanitizeSecondaryCategories(
+          secondaryCategories,
+          category !== undefined ? category : existing.category,
+          allowedCategoryIds,
+        );
+      }
       if (optionAText !== undefined) updates.optionAText = optionAText;
       if (optionAImage !== undefined) updates.optionAImage = optionAImage;
       if (optionBText !== undefined) updates.optionBText = optionBText;
@@ -15267,6 +15337,7 @@ Target length: about 90-150 words.`;
           subjectText: trendingPolls.subjectText,
           description: trendingPolls.description,
           category: trendingPolls.category,
+          secondaryCategories: trendingPolls.secondaryCategories,
           personId: trendingPolls.personId,
           imageUrl: trendingPolls.imageUrl,
           slug: trendingPolls.slug,
@@ -15320,6 +15391,7 @@ Target length: about 90-150 words.`;
           subjectText: p.subjectText,
           description: p.description,
           category: p.category,
+          secondaryCategories: p.secondaryCategories || [],
           personId: p.personId,
           personName: p.personName || null,
           personAvatar: p.personAvatar || null,
@@ -15599,12 +15671,15 @@ Target length: about 90-150 words.`;
 
   app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds, secondaryCategories } = req.body;
       const adminId = req.userId!;
 
       if (!headline || !subjectText || !category) {
         return res.status(400).json({ error: "Headline, subject text, and category are required" });
       }
+
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
 
       const effectiveVisibility = visibility || status || "draft";
       const effectiveStatus = (effectiveVisibility === "inactive") ? "draft" : effectiveVisibility;
@@ -15613,6 +15688,7 @@ Target length: about 90-150 words.`;
       const [created] = await db.insert(trendingPolls).values({
         status: effectiveStatus,
         category,
+        secondaryCategories: cleanSecondary,
         headline,
         subjectText,
         personId: personId || null,
@@ -15665,7 +15741,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds, secondaryCategories } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) {
@@ -15675,6 +15751,14 @@ Target length: about 90-150 words.`;
         updates.status = status;
       }
       if (category !== undefined) updates.category = category;
+      if (secondaryCategories !== undefined) {
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        updates.secondaryCategories = sanitizeSecondaryCategories(
+          secondaryCategories,
+          category !== undefined ? category : existing.category,
+          allowedCategoryIds,
+        );
+      }
       if (headline !== undefined) updates.headline = headline;
       if (subjectText !== undefined) updates.subjectText = subjectText;
       if (personId !== undefined) updates.personId = personId || null;
@@ -16962,7 +17046,7 @@ Target length: about 90-150 words.`;
 
   app.post("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds, secondaryCategories } = req.body;
       const adminId = req.userId!;
 
       if (!title || !slug || !category) {
@@ -16973,12 +17057,16 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: `Between ${OPINION_POLL_MIN_OPTIONS} and ${OPINION_POLL_MAX_OPTIONS} options are required` });
       }
 
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+
       const [maxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(opinionPolls);
       const nextDisplayOrder = (maxOrd?.max || 0) + 1;
       const [created] = await db.insert(opinionPolls).values({
         title,
         slug,
         category,
+        secondaryCategories: cleanSecondary,
         description: description || null,
         summary: summary || null,
         imageUrl: imageUrl || null,
@@ -17030,7 +17118,7 @@ Target length: about 90-150 words.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, displayOrder, options, relatedPersonIds } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, displayOrder, options, relatedPersonIds, secondaryCategories } = req.body;
 
       const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
       if (!existing) {
@@ -17041,6 +17129,14 @@ Target length: about 90-150 words.`;
       if (title !== undefined) updates.title = title;
       if (slug !== undefined) updates.slug = slug;
       if (category !== undefined) updates.category = category;
+      if (secondaryCategories !== undefined) {
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        updates.secondaryCategories = sanitizeSecondaryCategories(
+          secondaryCategories,
+          category !== undefined ? category : existing.category,
+          allowedCategoryIds,
+        );
+      }
       if (description !== undefined) updates.description = description || null;
       if (summary !== undefined) updates.summary = summary || null;
       if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
@@ -17539,7 +17635,16 @@ Target length: about 90-150 words.`;
       ];
 
       if (category && typeof category === "string") {
-        conditions.push(eq(predictionMarkets.category, category));
+        // Match primary category OR any secondary category (array overlap).
+        // Normalize so a kebab filter id matches both the canonical primary and
+        // the sanitized (kebab) secondary ids regardless of stored casing.
+        const canonicalCategory = normalizeMarketCategory(category);
+        conditions.push(
+          or(
+            eq(predictionMarkets.category, canonicalCategory),
+            sql`${predictionMarkets.secondaryCategories} && ARRAY[${canonicalCategory}]::text[]`,
+          )!,
+        );
       }
 
       if (featured === "true") {
@@ -17879,8 +17984,11 @@ Target length: about 90-150 words.`;
         closeAt, resolutionCriteria, resolutionSources, resolveMethod, rules,
         underlying, metric, strike, unit,
         entries: entryList, personId, isLive, visibility, inactiveMessage,
-        relatedPersonIds, scoutWatch,
+        relatedPersonIds, scoutWatch, secondaryCategories,
       } = req.body;
+
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
 
       // Watch criteria for the AI resolution scout (leading indicators to
       // monitor). Stored in metadata so no schema migration is needed.
@@ -17944,6 +18052,7 @@ Target length: about 90-150 words.`;
             summary: summary || null,
             description: description || null,
             category: category || null,
+            secondaryCategories: cleanSecondary,
             tags: tags || null,
             coverImageUrl: coverImageUrl || null,
             sourceUrl: sourceUrl || null,
@@ -18053,7 +18162,7 @@ Target length: about 90-150 words.`;
         resolutionCriteria, resolutionSources, resolveMethod, rules,
         underlying, metric, strike, unit,
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
-        relatedPersonIds, scoutWatch,
+        relatedPersonIds, scoutWatch, secondaryCategories,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -18062,6 +18171,14 @@ Target length: about 90-150 words.`;
       if (summary !== undefined) updates.summary = summary;
       if (description !== undefined) updates.description = description;
       if (category !== undefined) updates.category = category;
+      if (secondaryCategories !== undefined) {
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        updates.secondaryCategories = sanitizeSecondaryCategories(
+          secondaryCategories,
+          category !== undefined ? category : existing.category,
+          allowedCategoryIds,
+        );
+      }
       if (tags !== undefined) updates.tags = tags;
       if (coverImageUrl !== undefined) updates.coverImageUrl = coverImageUrl;
       if (sourceUrl !== undefined) updates.sourceUrl = sourceUrl;
@@ -20179,7 +20296,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.post("/api/admin/native-markets/h2h", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { personAId, personBId, category, visibility = "live", featured = false } = req.body;
+      const { personAId, personBId, category, visibility = "live", featured = false, secondaryCategories } = req.body;
 
       if (!personAId || !personBId) {
         return res.status(400).json({ error: "Both person A and person B are required" });
@@ -20194,6 +20311,24 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!personA || !personB) {
         return res.status(404).json({ error: "One or both celebrities not found" });
       }
+
+      // Normalize to a canonical kebab id (mirrors the weekly H2H generator),
+      // so manually created battles filter the same way as auto-generated ones.
+      const h2hPrimaryCategory = normalizeMarketCategory(category || personA.category);
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      // Inherit both fighters' primary + secondary categories so the battle
+      // surfaces under each side's filters (sanitize drops the primary + dupes).
+      const h2hSecondary = sanitizeSecondaryCategories(
+        [
+          ...(Array.isArray(secondaryCategories) ? secondaryCategories : []),
+          personA.category,
+          personB.category,
+          ...(personA.secondaryCategories || []),
+          ...(personB.secondaryCategories || []),
+        ],
+        h2hPrimaryCategory,
+        allowedCategoryIds,
+      );
 
       const now = new Date();
       const dayOfWeek = now.getUTCDay();
@@ -20234,7 +20369,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         engine: "amm" as const,
         title,
         slug: slugVal,
-        category: category || personA.category?.toLowerCase() || "misc",
+        category: h2hPrimaryCategory,
+        secondaryCategories: h2hSecondary,
         visibility,
         featured,
         status: "OPEN" as const,
@@ -20369,6 +20505,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (persons.length !== personIds.length) {
         return res.status(400).json({ error: "Some person IDs not found" });
       }
+
       const orderedPersonIds = personIds as string[];
       const personOrder = new Map<string, number>(orderedPersonIds.map((personId: string, index: number) => [personId, index]));
       persons.sort((a, b) => (personOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (personOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
@@ -20413,6 +20550,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           title,
           slug,
           category: normalizedCategory,
+          // Category Race stays primary-only (single-category field).
           visibility,
           featured,
           status: "OPEN",
@@ -23483,8 +23621,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.post("/api/admin/induction", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const body = req.body as Record<string, unknown>;
-      const { displayName, category, imageSlug, wikiSlug, seedVotes, inductionStatus, searchQueryOverride } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, inductionStatus, searchQueryOverride, secondaryCategories } = req.body;
       if (!displayName || !category) return res.status(400).json({ error: "displayName and category are required" });
+
+      const allowedCategoryIds = await getAllowedCategoryIds();
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
 
       const handleResult = normaliseSocialHandles(body);
       if (Object.keys(handleResult.errors).length > 0) {
@@ -23506,6 +23647,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const insertRow: Record<string, unknown> = {
         displayName,
         category: canonicalizePersonCategory(category)!,
+        secondaryCategories: cleanSecondary,
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
         seedVotes: sv,
@@ -23651,7 +23793,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const body = req.body as Record<string, unknown>;
       const { id } = req.params;
-      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive, inductionStatus, searchQueryOverride } = req.body;
+      const { displayName, category, imageSlug, wikiSlug, seedVotes, isActive, inductionStatus, searchQueryOverride, secondaryCategories } = req.body;
 
       const handleResult = normaliseSocialHandles(body);
       if (Object.keys(handleResult.errors).length > 0) {
@@ -23661,6 +23803,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const updates: any = {};
       if (displayName !== undefined) updates.displayName = displayName;
       if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
+      if (secondaryCategories !== undefined) {
+        let primaryForSanitize = category;
+        if (primaryForSanitize === undefined) {
+          const [existingCand] = await db.select({ category: inductionCandidates.category }).from(inductionCandidates).where(eq(inductionCandidates.id, id));
+          primaryForSanitize = existingCand?.category;
+        }
+        const allowedCategoryIds = await getAllowedCategoryIds();
+        updates.secondaryCategories = sanitizeSecondaryCategories(secondaryCategories, primaryForSanitize, allowedCategoryIds);
+      }
       if (imageSlug !== undefined) updates.imageSlug = imageSlug;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (seedVotes !== undefined) {

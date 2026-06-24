@@ -7,6 +7,7 @@ import {
 } from "@/components/shared/RelatedItemsCarousel";
 import { coalesceHttpImage } from "@/lib/displayImageUrl";
 import { useSupabaseUrl } from "@/lib/imageResolver";
+import { normalizeMarketCategory } from "@shared/constants";
 import {
   getTopOpinionOptionThumbs,
   hasMultipleOptionImages,
@@ -76,6 +77,7 @@ function normalizeMatchup(m: any, cardWidthClass: string): RelatedCarouselItem |
       },
     ],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     voteCount: typeof m.totalVotes === "number" ? m.totalVotes : null,
     typePill: TYPE_PILL.matchup,
     cardWidthClass,
@@ -117,6 +119,7 @@ function normalizeSentiment(
       },
     ],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     voteCount: typeof m.totalVotes === "number" ? m.totalVotes : null,
     typePill: TYPE_PILL.sentiment,
     cardWidthClass,
@@ -163,6 +166,7 @@ function normalizeOpinion(m: any, cardWidthClass: string): RelatedCarouselItem |
     thumbVariant,
     thumbParticipants,
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     voteCount: typeof m.totalVotes === "number" ? m.totalVotes : null,
     typePill: TYPE_PILL.opinion,
     cardWidthClass,
@@ -216,11 +220,15 @@ export function RelatedVoteItems({
       .map((m) => normalize(type, m, supabaseUrl))
       .filter((item): item is RelatedCarouselItem => item !== null);
 
+    const isSameCategory = (m: RelatedCarouselItem) =>
+      (!!m.category && m.category === category) ||
+      (Array.isArray(m.secondaryCategories) &&
+        m.secondaryCategories.some((s) => normalizeMarketCategory(s) === normalizeMarketCategory(category)));
     const sameCategory = category
-      ? normalized.filter((m) => m.category && m.category === category)
+      ? normalized.filter(isSameCategory)
       : [];
     const otherCategory = category
-      ? normalized.filter((m) => !m.category || m.category !== category)
+      ? normalized.filter((m) => !isSameCategory(m))
       : normalized;
 
     const byVotes = (a: RelatedCarouselItem, b: RelatedCarouselItem) =>

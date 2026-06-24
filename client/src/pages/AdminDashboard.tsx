@@ -116,6 +116,7 @@ import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
 import { formatDate } from "@/lib/formatDate";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { AdminCategoryMultiSelect } from "@/components/admin/AdminCategoryMultiSelect";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
@@ -294,6 +295,7 @@ function CreateMarketModal({
   const [teaser, setTeaser] = useState("");
   const [summary, setSummary] = useState("");
   const [category, setCategory] = useState("misc");
+  const [secondaryCategories, setSecondaryCategories] = useState<string[]>([]);
   const [endAt, setEndAt] = useState("");
   const [closeAt, setCloseAt] = useState("");
   const [featured, setFeatured] = useState(false);
@@ -436,6 +438,7 @@ function CreateMarketModal({
       setTeaser(editMarket.teaser || "");
       setSummary(editMarket.summary || "");
       setCategory(normalizeMarketCategory(editMarket.category) || "misc");
+      setSecondaryCategories((editMarket.secondaryCategories as string[] | null) ?? []);
       setEndAt(dateToLocal(editMarket.endAt));
       setCloseAt(dateToLocal(editMarket.closeAt));
       setFeatured(editMarket.featured || false);
@@ -518,6 +521,7 @@ function CreateMarketModal({
       setTeaser("");
       setSummary("");
       setCategory("misc");
+      setSecondaryCategories([]);
       setEndAt("");
       setCloseAt("");
       setFeatured(false);
@@ -660,6 +664,7 @@ function CreateMarketModal({
       teaser: teaser || null,
       summary: summary || null,
       category,
+      secondaryCategories,
       endAt: localDatetimeToIso(endAt),
       closeAt: closeAt ? localDatetimeToIso(closeAt) : undefined,
       featured,
@@ -830,6 +835,14 @@ function CreateMarketModal({
               </div>
             </div>
           </div>
+
+          <AdminCategoryMultiSelect
+            options={categoryOptions}
+            value={secondaryCategories}
+            onChange={setSecondaryCategories}
+            primaryValue={category}
+            testId="market-secondary-categories"
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -1352,6 +1365,7 @@ export default function AdminDashboard() {
   const [matchupForm, setMatchupForm] = useState({
     title: "",
     category: "tech",
+    secondaryCategories: [] as string[],
     optionAText: "",
     optionBText: "",
     optionAImage: "",
@@ -1380,6 +1394,7 @@ export default function AdminDashboard() {
   const [pollForm, setPollForm] = useState({
     status: "draft" as "draft" | "live" | "archived",
     category: "tech",
+    secondaryCategories: [] as string[],
     headline: "",
     subjectText: "",
     personId: "",
@@ -1445,6 +1460,7 @@ export default function AdminDashboard() {
   const [h2hPersonAId, setH2hPersonAId] = useState("");
   const [h2hPersonBId, setH2hPersonBId] = useState("");
   const [h2hCategory, setH2hCategory] = useState("misc");
+  const [h2hSecondaryCategories, setH2hSecondaryCategories] = useState<string[]>([]);
   const [gainerCategory, setGainerCategory] = useState<string>("tech");
   const [gainerPersonIds, setGainerPersonIds] = useState<string[]>([]);
   const [gainerPersonSearch, setGainerPersonSearch] = useState("");
@@ -1457,6 +1473,7 @@ export default function AdminDashboard() {
     title: "",
     slug: "",
     category: "tech",
+    secondaryCategories: [] as string[],
     description: "",
     summary: "",
     imageUrl: "",
@@ -2337,7 +2354,7 @@ export default function AdminDashboard() {
       toast("Matchup Created", { description: "New matchup added successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2359,7 +2376,7 @@ export default function AdminDashboard() {
       toast("Matchup Updated", { description: "Matchup updated successfully" });
       setShowMatchupModal(false);
       setEditingMatchup(null);
-      setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+      setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
@@ -2476,6 +2493,7 @@ export default function AdminDashboard() {
       setH2hModalOpen(false);
       setH2hPersonAId(""); setH2hPersonBId("");
       setH2hPersonASearch(""); setH2hPersonBSearch("");
+      setH2hSecondaryCategories([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
     },
     onError: (err: any) => toast.error("Error", { description: err.message }),
@@ -3087,6 +3105,7 @@ export default function AdminDashboard() {
     setCelebrityForm({
       name: celebrity.name,
       category: celebrity.category,
+      secondaryCategories: ((celebrity as any).secondaryCategories as string[] | null) ?? [],
       status: isInductionShadow ? "induction" : (celebrity.status || "main_leaderboard"),
       wikiSlug: celebrity.wikiSlug || matchedCandidate?.wikiSlug || "",
       xHandle: celebrity.xHandle || matchedCandidate?.xHandle || "",
@@ -3125,6 +3144,7 @@ export default function AdminDashboard() {
     setMatchupForm({
       title: matchup.title,
       category: normalizeMarketCategory(matchup.category),
+      secondaryCategories: ((matchup as any).secondaryCategories as string[] | null) ?? [],
       optionAText: matchup.optionAText,
       optionBText: matchup.optionBText,
       optionAImage: matchup.optionAImage || "",
@@ -3184,6 +3204,7 @@ export default function AdminDashboard() {
     setPollForm({
       status: "draft",
       category: "tech",
+      secondaryCategories: [],
       headline: "",
       subjectText: "",
       personId: "",
@@ -3240,6 +3261,7 @@ export default function AdminDashboard() {
     setPollForm({
       status: poll.status as "draft" | "live" | "archived",
       category: normalizeMarketCategory(poll.category),
+      secondaryCategories: ((poll as any).secondaryCategories as string[] | null) ?? [],
       headline: poll.headline,
       subjectText: poll.subjectText,
       personId: poll.personId || "",
@@ -3368,6 +3390,7 @@ export default function AdminDashboard() {
       title: "",
       slug: "",
       category: "tech",
+      secondaryCategories: [],
       description: "",
       summary: "",
       imageUrl: "",
@@ -3394,6 +3417,7 @@ export default function AdminDashboard() {
       title: poll.title || "",
       slug: poll.slug || "",
       category: normalizeMarketCategory(poll.category || "tech"),
+      secondaryCategories: (poll.secondaryCategories as string[] | null) ?? [],
       description: poll.description || "",
       summary: poll.summary || "",
       imageUrl: poll.imageUrl || "",
@@ -4666,7 +4690,7 @@ export default function AdminDashboard() {
                       <CardTitle>Head-to-Head Battles</CardTitle>
                       <CardDescription>Curated matchups between two celebrities</CardDescription>
                     </div>
-                    <Button onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hPersonASearch(""); setH2hPersonBSearch(""); setH2hCategory("misc"); setH2hModalOpen(true); }} size="sm" data-testid="button-create-h2h">
+                    <Button onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hPersonASearch(""); setH2hPersonBSearch(""); setH2hCategory("misc"); setH2hSecondaryCategories([]); setH2hModalOpen(true); }} size="sm" data-testid="button-create-h2h">
                       <Plus className="h-4 w-4 mr-1" />New Battle
                     </Button>
                   </CardHeader>
@@ -4718,7 +4742,7 @@ export default function AdminDashboard() {
                         <div className="text-center py-8 text-muted-foreground">
                           <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
                           <p>No Head-to-Head battles yet</p>
-                          <Button className="mt-4" onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hModalOpen(true); }} data-testid="button-create-first-h2h">
+                          <Button className="mt-4" onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hCategory("misc"); setH2hSecondaryCategories([]); setH2hModalOpen(true); }} data-testid="button-create-first-h2h">
                             <Plus className="h-4 w-4 mr-2" />Create First Battle
                           </Button>
                         </div>
@@ -4805,7 +4829,7 @@ export default function AdminDashboard() {
             </Tabs>
 
             {/* H2H Create Modal */}
-            <Dialog open={h2hModalOpen} onOpenChange={setH2hModalOpen}>
+            <Dialog open={h2hModalOpen} onOpenChange={(open) => { if (!open) setH2hSecondaryCategories([]); setH2hModalOpen(open); }}>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Create Head-to-Head Battle</DialogTitle>
@@ -4857,10 +4881,18 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <AdminCategoryMultiSelect
+                    options={adminCategorySelectOptions}
+                    value={h2hSecondaryCategories}
+                    onChange={setH2hSecondaryCategories}
+                    primaryValue={h2hCategory}
+                    helperText="Extra filters this battle appears under (in addition to the players' own secondary categories). Optional."
+                    testId="h2h-secondary-categories"
+                  />
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setH2hModalOpen(false)} data-testid="button-cancel-h2h">Cancel</Button>
-                  <Button onClick={() => createH2hMutation.mutate({ personAId: h2hPersonAId, personBId: h2hPersonBId, category: h2hCategory })} disabled={!h2hPersonAId || !h2hPersonBId || createH2hMutation.isPending} data-testid="button-submit-h2h">
+                  <Button variant="outline" onClick={() => { setH2hSecondaryCategories([]); setH2hModalOpen(false); }} data-testid="button-cancel-h2h">Cancel</Button>
+                  <Button onClick={() => createH2hMutation.mutate({ personAId: h2hPersonAId, personBId: h2hPersonBId, category: h2hCategory, secondaryCategories: h2hSecondaryCategories })} disabled={!h2hPersonAId || !h2hPersonBId || createH2hMutation.isPending} data-testid="button-submit-h2h">
                     {createH2hMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
                     Create Battle
                   </Button>
@@ -5655,7 +5687,7 @@ export default function AdminDashboard() {
                       size="sm"
                       onClick={() => {
                         setEditingMatchup(null);
-                        setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                        setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                         setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                         setShowMatchupModal(true);
                       }}
@@ -5897,7 +5929,7 @@ export default function AdminDashboard() {
                             className="mt-4" 
                             onClick={() => {
                               setEditingMatchup(null);
-                              setMatchupForm({ title: "", category: "tech", optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
+                              setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
                               setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
                               setShowMatchupModal(true);
                             }}
@@ -8557,6 +8589,15 @@ export default function AdminDashboard() {
               </Select>
             </div>
             <div className="space-y-2">
+              <AdminCategoryMultiSelect
+                options={adminCategorySelectOptions}
+                value={celebrityForm.secondaryCategories}
+                onChange={(next) => setCelebrityForm({ ...celebrityForm, secondaryCategories: next })}
+                primaryValue={celebrityForm.category}
+                testId="celebrity-secondary-categories"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="celeb-status">Status</Label>
               <Select 
                 value={celebrityForm.status} 
@@ -9252,6 +9293,14 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            <AdminCategoryMultiSelect
+              options={adminCategorySelectOptions}
+              value={matchupForm.secondaryCategories}
+              onChange={(next) => setMatchupForm({ ...matchupForm, secondaryCategories: next })}
+              primaryValue={matchupForm.category}
+              testId="matchup-secondary-categories"
+            />
+
             <Label className="text-sm font-medium">Option A</Label>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 relative">
@@ -9593,6 +9642,15 @@ export default function AdminDashboard() {
               </div>
             </div>
             <div className="space-y-2 min-w-0">
+              <AdminCategoryMultiSelect
+                options={adminCategorySelectOptions}
+                value={opinionPollForm.secondaryCategories}
+                onChange={(next) => setOpinionPollForm(prev => ({ ...prev, secondaryCategories: next }))}
+                primaryValue={opinionPollForm.category}
+                testId="opinion-poll-secondary-categories"
+              />
+            </div>
+            <div className="space-y-2 min-w-0">
               <Label>Title</Label>
               <Input
                 value={opinionPollForm.title}
@@ -9892,6 +9950,15 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <AdminCategoryMultiSelect
+                options={adminCategorySelectOptions}
+                value={pollForm.secondaryCategories}
+                onChange={(next) => setPollForm({ ...pollForm, secondaryCategories: next })}
+                primaryValue={pollForm.category}
+                testId="poll-secondary-categories"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="poll-headline">Headline</Label>

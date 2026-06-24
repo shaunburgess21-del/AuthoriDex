@@ -7,6 +7,9 @@ export type SectionCategoryOption = {
 
 type BuildOptions = {
   categories: Array<string | null | undefined>;
+  /** Additional (secondary) category ids to surface as pills even when no
+   * item lists them as its primary category. Flattened across items. */
+  secondaryCategories?: Array<string | null | undefined>;
   includeAll?: boolean;
   includeFavorites?: boolean;
   includeTrending?: boolean;
@@ -22,6 +25,7 @@ const PINNED_LABELS: Record<string, string> = {
 
 export function buildSectionCategoryOptions({
   categories,
+  secondaryCategories,
   includeAll = true,
   includeFavorites = false,
   includeTrending = true,
@@ -30,11 +34,14 @@ export function buildSectionCategoryOptions({
 }: BuildOptions): SectionCategoryOption[] {
   const ids = new Set<string>();
 
-  for (const raw of categories) {
+  const addId = (raw: string | null | undefined) => {
     const normalized = normalizeMarketCategory(raw);
-    if (!normalized || normalized === "all" || normalized === "favorites" || normalized === "trending") continue;
+    if (!normalized || normalized === "all" || normalized === "favorites" || normalized === "trending") return;
     ids.add(normalized);
-  }
+  };
+
+  for (const raw of categories) addId(raw);
+  for (const raw of secondaryCategories ?? []) addId(raw);
 
   const dynamic = Array.from(ids)
     .sort((a, b) => getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)))

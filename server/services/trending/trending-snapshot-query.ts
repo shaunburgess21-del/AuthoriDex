@@ -1,4 +1,5 @@
 import type { TrendingPerson } from "@shared/schema";
+import { matchesCategoryFilter, normalizeMarketCategory } from "@shared/constants";
 import type { BaselineDiagnostics } from "../../utils/baseline";
 
 export type EnrichedTrendingPerson = TrendingPerson & {
@@ -43,7 +44,14 @@ export function filterAndSortTrendingPeople(
   }
 
   if (category && typeof category === "string") {
-    result = result.filter((p) => p.category === category);
+    const canonicalCategory = normalizeMarketCategory(category);
+    // "all"/"trending" are UI-only filters, not real categories — leave the
+    // list unfiltered rather than relying on matchesCategoryFilter passthrough.
+    if (canonicalCategory !== "all" && canonicalCategory !== "trending") {
+      result = result.filter((p) =>
+        matchesCategoryFilter(p.category, p.secondaryCategories, canonicalCategory),
+      );
+    }
   }
 
   if (sort === "rank") {

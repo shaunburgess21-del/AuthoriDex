@@ -223,6 +223,61 @@ export const MARKET_CATEGORY_OPTIONS = CANONICAL_CATEGORIES.map((c) => ({
   label: c.label,
 }));
 
+/**
+ * True if `filter` matches the item's primary OR any of its secondary categories.
+ *
+ * Both sides are run through normalizeMarketCategory so it works regardless of
+ * whether values are stored as Title Case labels (people) or kebab ids
+ * (polls/markets). The UI-only "all"/"trending"/"favorites" filters are handled
+ * by callers (favorites needs person ids), so this returns true for "all"/"trending"
+ * and otherwise compares against the normalized category set.
+ */
+export function matchesCategoryFilter(
+  primary: string | null | undefined,
+  secondary: readonly string[] | null | undefined,
+  filter: string,
+): boolean {
+  if (filter === "all" || filter === "trending") return true;
+  if (normalizeMarketCategory(primary) === filter) return true;
+  if (!secondary || secondary.length === 0) return false;
+  return secondary.some((s) => normalizeMarketCategory(s) === filter);
+}
+
+/**
+ * Normalizes a list of incoming secondary category values to canonical kebab ids,
+ * keeping only ids present in `allowedIds` (the registry), dropping the primary
+ * category, and de-duplicating. Returns a clean array safe to persist.
+ *
+ * `allowedIds` defaults to the canonical set; callers with the live
+ * `content_categories` registry should pass those ids so admin-added categories
+ * are accepted.
+ */
+export function sanitizeSecondaryCategories(
+  input: unknown,
+  primary: string | null | undefined,
+  allowedIds?: Iterable<string>,
+): string[] {
+  if (!Array.isArray(input)) return [];
+  const allowed = new Set<string>(
+    [...(allowedIds ?? CANONICAL_MARKET_CATEGORIES)].map((id) =>
+      normalizeMarketCategory(id),
+    ),
+  );
+  const primaryId = primary ? normalizeMarketCategory(primary) : null;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    const id = normalizeMarketCategory(raw);
+    if (!id || id === primaryId) continue;
+    if (!allowed.has(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 /** Category Race (gainer) field size — fixed at market creation each Monday. */
 export const GAINER_FIELD_SIZE = 5;
 /** Minimum eligible people (movement history + opening baseline) before a category races. */

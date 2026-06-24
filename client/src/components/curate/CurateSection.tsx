@@ -12,7 +12,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
-import { normalizeMarketCategory, type FilterCategory } from "@shared/constants";
+import { matchesCategoryFilter, type FilterCategory } from "@shared/constants";
 import { useFavorites } from "@/hooks/useFavorites";
 
 interface TrendingPerson {
@@ -79,7 +79,7 @@ export function CurateSection({
       );
     }
     return allCelebrities.filter(
-      person => normalizeMarketCategory(person.category) === categoryFilter && matchesSearch(person)
+      person => matchesCategoryFilter(person.category, (person as any).secondaryCategories, categoryFilter) && matchesSearch(person)
     );
   }, [allCelebrities, categoryFilter, searchQuery, favoriteIds]);
 

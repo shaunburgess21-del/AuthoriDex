@@ -158,6 +158,7 @@ export interface Celebrity {
   id: string;
   name: string;
   category: string;
+  secondaryCategories?: string[] | null;
   status: string;
   avatar: string | null;
   imageSlug?: string | null;
@@ -175,6 +176,7 @@ export interface Celebrity {
 export const EMPTY_CELEBRITY_FORM = {
   name: "",
   category: "Tech",
+  secondaryCategories: [] as string[],
   status: "main_leaderboard",
   wikiSlug: "",
   xHandle: "",

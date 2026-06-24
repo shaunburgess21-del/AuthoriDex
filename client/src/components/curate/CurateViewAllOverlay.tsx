@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
-import { normalizeMarketCategory } from "@shared/constants";
+import { matchesCategoryFilter } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFavorites } from "@/hooks/useFavorites";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { motion, AnimatePresence } from "framer-motion";
@@ -167,6 +168,7 @@ export function CurateViewAllOverlay({
   leaderboardCategories,
 }: CurateViewAllOverlayProps) {
   const { user } = useAuth();
+  const { favoriteIds } = useFavorites();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>("all");
@@ -185,16 +187,22 @@ export function CurateViewAllOverlay({
   }, [celebritiesResponse]);
 
   const filteredCelebrities = useMemo(() => {
-    return celebrities.filter(person => {
-      const matchesCategory =
-        categoryFilter === "all" ||
-        categoryFilter === "trending" ||
-        normalizeMarketCategory(person.category) === categoryFilter;
-      const matchesSearch = !searchQuery || 
-        person.name?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
+    const matchesSearch = (person: TrendingPerson) =>
+      !searchQuery || person.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    // "favorites" is a UI-only filter that matchesCategoryFilter can't satisfy
+    // (it isn't a real category) — gate on the user's favorite ids instead.
+    if (categoryFilter === "favorites") {
+      return celebrities.filter((person) => favoriteIds.has(person.id) && matchesSearch(person));
+    }
+    return celebrities.filter((person) => {
+      const matchesCategory = matchesCategoryFilter(
+        person.category,
+        (person as any).secondaryCategories,
+        categoryFilter,
+      );
+      return matchesCategory && matchesSearch(person);
     }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
-  }, [celebrities, categoryFilter, searchQuery]);
+  }, [celebrities, categoryFilter, searchQuery, favoriteIds]);
 
   return (
     <motion.div

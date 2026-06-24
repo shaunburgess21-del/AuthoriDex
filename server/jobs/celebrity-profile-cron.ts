@@ -32,6 +32,7 @@ export function toTrendingPerson(person: TrackedPerson): TrendingPerson {
     change24h: null,
     change7d: null,
     category: person.category,
+    secondaryCategories: person.secondaryCategories ?? [],
     profileViews10m: null,
   };
 }

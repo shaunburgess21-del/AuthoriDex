@@ -77,6 +77,7 @@ export async function approveInductionCandidate(
         id: personId,
         name: displayName,
         category: canonicalizePersonCategory(candidate.category)!,
+        secondaryCategories: candidate.secondaryCategories ?? [],
         rank: 0,
         trendScore: 0,
         fameIndex: 0,
@@ -91,6 +92,7 @@ export async function approveInductionCandidate(
       .values({
         name: displayName,
         category: canonicalizePersonCategory(candidate.category)!,
+        secondaryCategories: candidate.secondaryCategories ?? [],
         imageSlug: candidate.imageSlug,
         wikiSlug: candidate.wikiSlug,
         xHandle: candidate.xHandle,
@@ -112,6 +114,7 @@ export async function approveInductionCandidate(
         id: personId,
         name: displayName,
         category: canonicalizePersonCategory(candidate.category)!,
+        secondaryCategories: candidate.secondaryCategories ?? [],
         rank: 0,
         trendScore: 0,
         fameIndex: 0,

@@ -397,6 +397,7 @@ export async function aggregateCelebrityData(): Promise<TrendingPerson[]> {
       change24h: change24h !== null ? Math.round(change24h * 10) / 10 : null,
       change7d: change7d !== null ? Math.round(change7d * 10) / 10 : null,
       category: celeb.category,
+      secondaryCategories: (dbPerson as any).secondaryCategories ?? [],
       profileViews10m: null,
     });
   }

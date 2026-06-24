@@ -49,6 +49,9 @@ export const trackedPeople = pgTable("tracked_people", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   category: text("category").notNull(),
+  // Optional additional categories (canonical kebab ids) used for filtering only.
+  // The primary `category` is the one displayed on cards/pills.
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   displayOrder: integer("display_order").notNull().default(0),
   avatar: text("avatar"),
   imageSlug: text("image_slug"),
@@ -166,6 +169,8 @@ export const trendingPeople = pgTable("trending_people", {
   change24h: real("change_24h"),
   change7d: real("change_7d"),
   category: text("category"),
+  // Mirror of tracked_people.secondary_categories for leaderboard filtering.
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   profileViews10m: integer("profile_views_10m").default(0), // view counter reset each tick
 }, (table) => ({
   rankIdx: index("trending_people_rank_idx").on(table.rank),
@@ -499,6 +504,7 @@ export const inductionCandidates = pgTable("induction_candidates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   displayName: text("display_name").notNull(),
   category: text("category").notNull(),
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   imageSlug: text("image_slug"),
   // Raw, unweighted vote count — the public "X votes" display stat.
   seedVotes: integer("seed_votes").notNull().default(0),
@@ -631,6 +637,7 @@ export const inductionCycleResults = pgTable("induction_cycle_results", {
 export const matchups = pgTable("face_offs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   category: text("category").notNull(),
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   title: text("title").notNull(),
   optionAText: text("option_a_text").notNull(),
   optionAImage: text("option_a_image"),
@@ -692,6 +699,7 @@ export const trendingPolls = pgTable("trending_polls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   status: contentStatusEnum("status").notNull().default("draft"),
   category: text("category").notNull(),
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   headline: text("headline").notNull(),
   subjectText: text("subject_text").notNull(),
   personId: varchar("person_id").references(() => trackedPeople.id),
@@ -1342,6 +1350,7 @@ export const predictionMarkets = pgTable("prediction_markets", {
   teaser: text("teaser"), // Short tagline for card display
   description: text("description"), // Longer rich description for detail page
   category: text("category"), // 'politics', 'tech', 'entertainment', 'sports', 'business', 'creator', 'misc'
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`), // Additional categories (canonical ids) for filtering only
   tags: text("tags").array(), // Freeform tags for filtering
   coverImageUrl: text("cover_image_url"),
   sourceUrl: text("source_url"), // Link to source article/event
@@ -1844,6 +1853,7 @@ export const opinionPolls = pgTable("opinion_polls", {
   title: text("title").notNull(),
   slug: text("slug").notNull(),
   category: text("category").notNull(),
+  secondaryCategories: text("secondary_categories").array().notNull().default(sql`'{}'`),
   description: text("description"),
   summary: text("summary"),
   imageUrl: text("image_url"),

@@ -66,6 +66,7 @@ export async function syncInductionCandidateToShadowTrackedPerson(
     .values({
       name,
       category: canonicalizePersonCategory(candidate.category || "Other")!,
+      secondaryCategories: candidate.secondaryCategories ?? [],
       status: "induction",
       imageSlug,
       wikiSlug: candidate.wikiSlug,

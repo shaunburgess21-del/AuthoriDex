@@ -119,7 +119,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
-import { getMarketCategoryLabel, normalizeMarketCategory, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, matchesCategoryFilter, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import {
   communityChipForMarket,
@@ -1605,6 +1605,10 @@ export default function PredictPage() {
           endTime: "",
           upPoolPercent: upPercent || 50,
           category: normalizeMarketCategory(m.category || person.category || "misc") as CategoryFilter,
+          secondaryCategories: [
+            ...(Array.isArray(m.secondaryCategories) ? m.secondaryCategories : []),
+            ...(Array.isArray(person.secondaryCategories) ? person.secondaryCategories : []),
+          ],
           upEntryId: upEntry?.id,
           downEntryId: downEntry?.id,
           cadence: m.cadence || "weekly",
@@ -1648,6 +1652,11 @@ export default function PredictPage() {
           person1Id: e1.personId || "",
           person2Id: e2.personId || "",
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
+          secondaryCategories: [
+            ...(Array.isArray(m.secondaryCategories) ? m.secondaryCategories : []),
+            ...(Array.isArray(p1.secondaryCategories) ? p1.secondaryCategories : []),
+            ...(Array.isArray(p2.secondaryCategories) ? p2.secondaryCategories : []),
+          ],
           endTime: "",
           endAt: m.endAt || null,
           startAt: m.startAt || null,
@@ -1705,6 +1714,12 @@ export default function PredictPage() {
         return {
           id: m.id,
           category: normalizeMarketCategory(m.category || "misc") as CategoryFilter,
+          secondaryCategories: [
+            ...(Array.isArray(m.secondaryCategories) ? m.secondaryCategories : []),
+            ...entries.flatMap((e: any) =>
+              Array.isArray(e.person?.secondaryCategories) ? e.person.secondaryCategories : [],
+            ),
+          ],
           leaders: allCandidates.slice(0, 3),
           allCandidates,
           endTime: "",
@@ -2598,11 +2613,16 @@ export default function PredictPage() {
   };
 
   // Section-specific filtering logic
-  const matchesCategory = (cat: CategoryFilter, marketCategory: string, personId?: string) => {
+  const matchesCategory = (
+    cat: CategoryFilter,
+    marketCategory: string,
+    personId?: string,
+    secondaryCategories?: string[] | null,
+  ) => {
     if (cat === "all") return true;
     if (cat === "trending") return true;
     if (cat === "favorites") return !!personId && favoriteIds.has(personId);
-    return normalizeMarketCategory(marketCategory) === cat;
+    return matchesCategoryFilter(marketCategory, secondaryCategories, cat);
   };
 
   const passesMyPositionsFilter = (marketId: string) =>
@@ -2644,7 +2664,7 @@ export default function PredictPage() {
       hydratedMarkets
         .filter(
           (m) =>
-            matchesCategory(updownCategory, m.category, m.personId) &&
+            matchesCategory(updownCategory, m.category, m.personId, (m as any).secondaryCategories) &&
             (!updownSearch ||
               m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
             passesMyPositionsFilter(m.id),
@@ -2680,7 +2700,7 @@ export default function PredictPage() {
               (h2hCategory === "favorites"
                 ? favoriteIds.has(m.person1Id || "") ||
                   favoriteIds.has(m.person2Id || "")
-                : matchesCategory(h2hCategory, m.category))) &&
+                : matchesCategory(h2hCategory, m.category, undefined, (m as any).secondaryCategories))) &&
             (!h2hSearch ||
               m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
               m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
@@ -2712,7 +2732,7 @@ export default function PredictPage() {
               gainerCategory === "trending" ||
               (gainerCategory === "favorites"
                 ? m.leaders.some((l) => l.personId && favoriteIds.has(l.personId))
-                : matchesCategory(gainerCategory, m.category))) &&
+                : matchesCategory(gainerCategory, m.category, undefined, (m as any).secondaryCategories))) &&
             (!gainerSearch ||
               getMarketCategoryLabel(m.category)
                 .toLowerCase()
@@ -2750,7 +2770,7 @@ export default function PredictPage() {
       (gainersOverlayCategoryFilter === "all" || gainersOverlayCategoryFilter === "trending" ||
        (gainersOverlayCategoryFilter === "favorites"
          ? m.leaders.some(l => l.personId && favoriteIds.has(l.personId))
-         : matchesCategory(gainersOverlayCategoryFilter, m.category))) &&
+         : matchesCategory(gainersOverlayCategoryFilter, m.category, undefined, (m as any).secondaryCategories))) &&
       (!gainersOverlaySearchQuery || getMarketCategoryLabel(m.category).toLowerCase().includes(gainersOverlaySearchQuery.toLowerCase()) ||
        (m.allCandidates || m.leaders).some(l => l.name.toLowerCase().includes(gainersOverlaySearchQuery.toLowerCase())))
     )
@@ -2812,6 +2832,7 @@ export default function PredictPage() {
     () =>
       buildSectionCategoryOptions({
         categories: hydratedMarkets.map((m) => m.category),
+        secondaryCategories: hydratedMarkets.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: updownCategory,
@@ -2823,6 +2844,7 @@ export default function PredictPage() {
     () =>
       buildSectionCategoryOptions({
         categories: hydratedH2H.map((m) => m.category),
+        secondaryCategories: hydratedH2H.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: h2hCategory,
@@ -2834,6 +2856,7 @@ export default function PredictPage() {
     () =>
       buildSectionCategoryOptions({
         categories: hydratedGainers.map((m) => m.category),
+        secondaryCategories: hydratedGainers.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: gainerCategory,
@@ -2845,6 +2868,7 @@ export default function PredictPage() {
     () =>
       buildSectionCategoryOptions({
         categories: openMarkets.map((m: any) => m.category),
+        secondaryCategories: openMarkets.flatMap((m: any) => m.secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: communityCategory,
@@ -2910,6 +2934,7 @@ export default function PredictPage() {
         id: String(m.id),
         slug: m.slug || String(m.id),
         category: m.category || "misc",
+        secondaryCategories: m.secondaryCategories,
         title: m.title || "",
       })),
     [getCommunityMarketsForCategory],
@@ -2980,6 +3005,7 @@ export default function PredictPage() {
         id: String(m.id),
         slug: String(m.id),
         category: m.category || "misc",
+        secondaryCategories: m.secondaryCategories,
         title: m.personName || "",
         personId: m.personId,
         personName: m.personName,
@@ -3875,7 +3901,7 @@ export default function PredictPage() {
       >
         {hydratedMarkets
           .filter(m => 
-            matchesCategory(weeklyOverlayCategoryFilter, m.category, m.personId) &&
+            matchesCategory(weeklyOverlayCategoryFilter, m.category, m.personId, (m as any).secondaryCategories) &&
             (!weeklyOverlaySearchQuery || m.personName.toLowerCase().includes(weeklyOverlaySearchQuery.toLowerCase()))
           )
           .sort((a, b) => weeklyOverlayCategoryFilter === "trending"
@@ -3914,7 +3940,7 @@ export default function PredictPage() {
             (h2hOverlayCategoryFilter === "all" || h2hOverlayCategoryFilter === "trending" ||
               (h2hOverlayCategoryFilter === "favorites"
                 ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || ""))
-                : normalizeMarketCategory(m.category) === h2hOverlayCategoryFilter)) &&
+                : matchesCategoryFilter(m.category, (m as any).secondaryCategories, h2hOverlayCategoryFilter))) &&
             (!h2hOverlaySearchQuery || m.title.toLowerCase().includes(h2hOverlaySearchQuery.toLowerCase()))
           )
           .sort((a, b) => h2hOverlayCategoryFilter === "trending"
@@ -3997,7 +4023,7 @@ export default function PredictPage() {
             (communityOverlayCategoryFilter === "all" || communityOverlayCategoryFilter === "trending" ||
               (communityOverlayCategoryFilter === "favorites"
                 ? !!m.personId && favoriteIds.has(m.personId)
-                : normalizeMarketCategory(m.category) === communityOverlayCategoryFilter)) &&
+                : matchesCategoryFilter(m.category, m.secondaryCategories, communityOverlayCategoryFilter))) &&
             (!communityOverlaySearchQuery || m.title?.toLowerCase().includes(communityOverlaySearchQuery.toLowerCase()))
           )
           .sort((a: any, b: any) => communityOverlayCategoryFilter === "trending"
