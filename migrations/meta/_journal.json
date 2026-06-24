@@ -582,6 +582,13 @@
       "when": 1781539200000,
       "tag": "0082_opinion_poll_option_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1782300000000,
+      "tag": "0083_secondary_categories_and_insight_votes_unique",
+      "breakpoints": true
     }
   ]
 }

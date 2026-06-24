@@ -35,6 +35,13 @@ export function buildTrackedPersonBackfillFromCandidate(
     updates.category = canonicalizePersonCategory(candidate.category)!;
   }
 
+  // Backfill secondary categories (filtering-only metadata, canonical kebab
+  // ids) from the candidate when the tracked row has none set yet.
+  const candidateSecondary = candidate.secondaryCategories ?? [];
+  if ((tp.secondaryCategories ?? []).length === 0 && candidateSecondary.length > 0) {
+    updates.secondaryCategories = candidateSecondary;
+  }
+
   if (isEmptyish(tp.wikiSlug) && !isEmptyish(candidate.wikiSlug)) {
     updates.wikiSlug = candidate.wikiSlug;
   }

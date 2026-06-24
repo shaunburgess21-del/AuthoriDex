@@ -81,7 +81,7 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
-import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, matchesCategoryFilter, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions, involvesAnyFavorite } from "@/lib/sectionCategoryFilters";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
@@ -1566,7 +1566,7 @@ export default function VotePage() {
       inductionCategoryFilter === "all" ||
       inductionCategoryFilter === "trending" ||
       (inductionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
-      normalizeMarketCategory(c.category) === inductionCategoryFilter;
+      matchesCategoryFilter(c.category, (c as any).secondaryCategories, inductionCategoryFilter);
     const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => b.votes - a.votes);
@@ -1594,7 +1594,7 @@ export default function VotePage() {
       topicsCategoryFilter === "trending" ||
       (topicsCategoryFilter === "favorites" &&
         involvesAnyFavorite(favoriteIds, [t.personId, ...(t.relatedPersonIds || [])])) ||
-      normalizeMarketCategory(t.category) === topicsCategoryFilter;
+      matchesCategoryFilter(t.category, t.secondaryCategories, topicsCategoryFilter);
     const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -1609,7 +1609,7 @@ export default function VotePage() {
           ...(p.options || []).map((o: any) => o.personId),
           ...(p.relatedPersonIds || []),
         ])) ||
-      normalizeMarketCategory(p.category) === opinionPollsCategoryFilter;
+      matchesCategoryFilter(p.category, p.secondaryCategories, opinionPollsCategoryFilter);
     const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
                          (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -1665,7 +1665,7 @@ export default function VotePage() {
       valuePerceptionCategoryFilter === "all" ||
       valuePerceptionCategoryFilter === "trending" ||
       (valuePerceptionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
-      normalizeMarketCategory(c.category) === valuePerceptionCategoryFilter;
+      matchesCategoryFilter(c.category, (c as any).secondaryCategories, valuePerceptionCategoryFilter);
     const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => {
@@ -1890,7 +1890,7 @@ export default function VotePage() {
           f.personBId,
           ...(f.relatedPersonIds || []),
         ])) ||
-      normalizeMarketCategory(f.category) === matchupsCategoryFilter;
+      matchesCategoryFilter(f.category, (f as any).secondaryCategories, matchupsCategoryFilter);
     const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionBText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase());
@@ -2038,6 +2038,7 @@ export default function VotePage() {
         id: m.id,
         slug: m.slug || m.id,
         category: m.category,
+        secondaryCategories: (m as any).secondaryCategories,
         title: m.title,
       })),
     [matchupSnapSource],
@@ -2063,6 +2064,7 @@ export default function VotePage() {
         id: t.id,
         slug: t.slug || t.id,
         category: t.category || "misc",
+        secondaryCategories: t.secondaryCategories,
         title: t.headline || t.title || "",
       })),
     [sentimentSnapSource],
@@ -2088,6 +2090,7 @@ export default function VotePage() {
         id: p.id,
         slug: p.slug || p.id,
         category: p.category || "misc",
+        secondaryCategories: p.secondaryCategories,
         title: p.title || "",
       })),
     [opinionSnapSource],
@@ -2109,6 +2112,7 @@ export default function VotePage() {
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
+        secondaryCategories: person.secondaryCategories,
         title: person.name || "",
         personId: person.id,
         personName: person.name,
@@ -2130,6 +2134,7 @@ export default function VotePage() {
         id: c.id,
         slug: c.id,
         category: c.category || "misc",
+        secondaryCategories: c.secondaryCategories,
         title: c.name || "",
       })),
     [inductionSnapSource],
@@ -2153,7 +2158,7 @@ export default function VotePage() {
         curateCategoryFilter === "all" ||
         curateCategoryFilter === "trending" ||
         (curateCategoryFilter === "favorites" && favoriteIds.has(p.id)) ||
-        normalizeMarketCategory(p.category) === curateCategoryFilter;
+        matchesCategoryFilter(p.category, p.secondaryCategories, curateCategoryFilter);
       const matchesSearch = !search || p.name.toLowerCase().includes(search);
       return matchesCategory && matchesSearch;
     });
@@ -2163,6 +2168,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: dbPolls.map((t: any) => t.category),
+        secondaryCategories: dbPolls.flatMap((t: any) => t.secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: topicsCategoryFilter,
@@ -2174,6 +2180,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: matchups.filter((m) => m.isActive).map((m) => m.category),
+        secondaryCategories: matchups.filter((m) => m.isActive).flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: matchupsCategoryFilter,
@@ -2185,6 +2192,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: opinionPolls.map((p: any) => p.category),
+        secondaryCategories: opinionPolls.flatMap((p: any) => p.secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: opinionPollsCategoryFilter,
@@ -2196,6 +2204,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: valueCelebrities.map((c) => c.category),
+        secondaryCategories: valueCelebrities.flatMap((c) => (c as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: valuePerceptionCategoryFilter,
@@ -2207,6 +2216,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: enrichedCandidates.map((c) => c.category),
+        secondaryCategories: enrichedCandidates.flatMap((c) => (c as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: inductionCategoryFilter,
@@ -2218,6 +2228,7 @@ export default function VotePage() {
     () =>
       buildSectionCategoryOptions({
         categories: curateTrendingCelebrities.map((p: any) => p.category),
+        secondaryCategories: curateTrendingCelebrities.flatMap((p: any) => p.secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: curateCategoryFilter,
@@ -2262,6 +2273,7 @@ export default function VotePage() {
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
+        secondaryCategories: person.secondaryCategories,
         title: person.name || "",
         personId: person.id,
         personName: person.name,

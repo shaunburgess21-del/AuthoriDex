@@ -28,6 +28,44 @@ const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
 const MARKET_GENERATOR_MAX_RETRIES = 4;
 
 /**
+ * Derive a market's secondary categories from a person's secondary categories.
+ * Person secondaries are already stored as sanitized canonical ids, so we just
+ * normalize, drop the market's primary category, and de-duplicate.
+ */
+function deriveMarketSecondaryCategories(
+  personSecondary: readonly string[] | null | undefined,
+  primaryCanonical: string,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of personSecondary || []) {
+    const id = normalizeMarketCategory(raw);
+    if (!id || id === primaryCanonical || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Union of multiple people's secondary categories (plus optional extra ids),
+ * normalized, with the market's primary category removed and de-duplicated. */
+function unionPersonSecondaryCategories(
+  values: readonly (string | null | undefined)[],
+  primaryCanonical: string,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    if (!raw) continue;
+    const id = normalizeMarketCategory(raw);
+    if (!id || id === primaryCanonical || id === "trending" || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/**
  * Parimutuel sunset (Phase 1.5): every non-jackpot weekly market is
  * created as AMM. The previous `AMM_NATIVE_FLIP_ENABLED` and
  * `AMM_GAINER_FLIP_ENABLED` env-var rollback handles were deleted
@@ -120,6 +158,7 @@ type AnchoredPoolRow = {
   id: string;
   name: string;
   category: string | null;
+  secondaryCategories: string[];
   avatar: string | null;
   fameIndex: number;
 };
@@ -130,6 +169,7 @@ async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
       id: trackedPeople.id,
       name: trackedPeople.name,
       category: trackedPeople.category,
+      secondaryCategories: trackedPeople.secondaryCategories,
       avatar: trackedPeople.avatar,
       fameIndex: trendingPeople.fameIndex,
     })
@@ -140,7 +180,7 @@ async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
     .limit(ANCHORED_POOL_LIMIT);
 
   if (rows.length > 0) {
-    return rows.map((r) => ({ ...r, fameIndex: r.fameIndex ?? 0 }));
+    return rows.map((r) => ({ ...r, secondaryCategories: r.secondaryCategories ?? [], fameIndex: r.fameIndex ?? 0 }));
   }
 
   log(`[MarketGenerator:Anchored] No trackedPeople matched, falling back to trendingPeople top ${ANCHORED_POOL_LIMIT}`);
@@ -149,6 +189,7 @@ async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
       id: trendingPeople.id,
       name: trendingPeople.name,
       category: trendingPeople.category,
+      secondaryCategories: trendingPeople.secondaryCategories,
       avatar: trendingPeople.avatar,
       fameIndex: trendingPeople.fameIndex,
     })
@@ -156,7 +197,7 @@ async function loadAnchoredPoolFromDb(): Promise<AnchoredPoolRow[]> {
     .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id)
     .limit(ANCHORED_POOL_LIMIT);
 
-  return trending.map((r) => ({ ...r, fameIndex: r.fameIndex ?? 0 }));
+  return trending.map((r) => ({ ...r, secondaryCategories: r.secondaryCategories ?? [], fameIndex: r.fameIndex ?? 0 }));
 }
 
 type AnchoredPoolContext = {
@@ -295,12 +336,14 @@ export async function generateWeeklyUpDown(): Promise<number> {
     const baseSlug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
     const openScore = openingScoreMap.get(person.id);
 
+    const updownPrimary = normalizeMarketCategory(person.category);
     const baseValues = {
       marketType: "updown" as const,
       engine,
       title: `${person.name}: Up or Down?`,
       personId: person.id,
-      category: normalizeMarketCategory(person.category),
+      category: updownPrimary,
+      secondaryCategories: deriveMarketSecondaryCategories(person.secondaryCategories, updownPrimary),
       visibility: "live" as const,
       status: "OPEN" as const,
       startAt: monday,
@@ -429,6 +472,13 @@ export async function ensureUpDownMarketForInductee(person: {
   const openingScoreMap = await loadOpeningScoreMap([person.id], db, { asOf: monday });
   const openScore = openingScoreMap.get(person.id);
 
+  const [personRow] = await db
+    .select({ secondaryCategories: trackedPeople.secondaryCategories })
+    .from(trackedPeople)
+    .where(eq(trackedPeople.id, person.id))
+    .limit(1);
+  const inducteePrimary = normalizeMarketCategory(person.category);
+
   const engine = nativeEngineFor("updown");
   const baseSlug = `updown-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-week-${weekNumber}`;
   const baseValues = {
@@ -436,7 +486,8 @@ export async function ensureUpDownMarketForInductee(person: {
     engine,
     title: `${person.name}: Up or Down?`,
     personId: person.id,
-    category: normalizeMarketCategory(person.category),
+    category: inducteePrimary,
+    secondaryCategories: deriveMarketSecondaryCategories(personRow?.secondaryCategories, inducteePrimary),
     visibility: "live" as const,
     status: "OPEN" as const,
     startAt: monday,
@@ -614,6 +665,7 @@ export async function generateWeeklyJackpot(): Promise<number> {
       slug,
       personId: person.id,
       category: normalizeMarketCategory(person.category),
+      secondaryCategories: deriveMarketSecondaryCategories(person.secondaryCategories, normalizeMarketCategory(person.category)),
       visibility: "live" as const,
       status: "OPEN" as const,
       startAt: monday,
@@ -643,6 +695,7 @@ type H2HCandidate = {
   id: string;
   name: string;
   category: string | null;
+  secondaryCategories: string[];
   fameIndex: number | null;
 };
 
@@ -818,7 +871,7 @@ export async function generateWeeklyH2H(): Promise<number> {
   // it, two people with identical fame would swap positions across runs and
   // produce non-deterministic pairings. Rare in practice but free to fix.
   const allPeopleRaw = await db
-    .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, fameIndex: trendingPeople.fameIndex })
+    .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, secondaryCategories: trendingPeople.secondaryCategories, fameIndex: trendingPeople.fameIndex })
     .from(trendingPeople)
     .orderBy(desc(trendingPeople.fameIndex), trendingPeople.id);
 
@@ -873,6 +926,13 @@ export async function generateWeeklyH2H(): Promise<number> {
       const catA = normalizeMarketCategory(personA.category);
       const catB = normalizeMarketCategory(personB.category);
       const h2hCategory = catA === catB ? catA : "trending";
+      // Inherit both fighters' categories (primary + secondary) so the battle
+      // surfaces under each side's filters. When the pair spans two categories
+      // (h2hCategory='trending'), both primaries are kept as secondaries.
+      const h2hSecondary = unionPersonSecondaryCategories(
+        [catA, catB, ...(personA.secondaryCategories || []), ...(personB.secondaryCategories || [])],
+        h2hCategory,
+      );
 
       let slug = baseSlug;
       while (existingSlugs.has(slug)) slug = `${baseSlug}-${randomUUID().slice(0, 6)}`;
@@ -883,6 +943,7 @@ export async function generateWeeklyH2H(): Promise<number> {
         title: `${personA.name} vs ${personB.name}`,
         slug,
         category: h2hCategory,
+        secondaryCategories: h2hSecondary,
         visibility: "live",
         status: "OPEN",
         startAt: monday,
@@ -946,13 +1007,14 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
   if (people.length === 0) {
     log(`[MarketGenerator:Gainer] No trackedPeople found, falling back to trendingPeople`);
     const trending = await db
-      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, avatar: trendingPeople.avatar })
+      .select({ id: trendingPeople.id, name: trendingPeople.name, category: trendingPeople.category, secondaryCategories: trendingPeople.secondaryCategories, avatar: trendingPeople.avatar })
       .from(trendingPeople)
       .orderBy(desc(trendingPeople.fameIndex))
       .limit(100);
     people = trending.map(t => ({
       ...t,
       category: t.category || "misc",
+      secondaryCategories: t.secondaryCategories || [],
       displayOrder: 0,
       imageSlug: null as string | null,
       bio: null as string | null,
@@ -1114,6 +1176,8 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
             title,
             slug: finalSlug,
             category: cat,
+            // Category Race is defined by a single category; it stays
+            // primary-only (no secondary inheritance from the field).
             visibility: "live",
             status: "OPEN",
             startAt: monday,

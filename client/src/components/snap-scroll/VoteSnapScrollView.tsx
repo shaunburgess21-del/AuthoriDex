@@ -26,6 +26,9 @@ export interface SnapItem {
   id: string;
   slug: string;
   category: string;
+  /** Optional additional categories (any format) used so the item also appears
+   * under those category tabs. Normalized internally. */
+  secondaryCategories?: string[] | null;
   title: string;
   personId?: string;
   personName?: string;
@@ -264,6 +267,9 @@ export function VoteSnapScrollView({
       items.map((item) => ({
         ...item,
         category: normalizeMarketCategory(item.category),
+        secondaryCategories: Array.isArray(item.secondaryCategories)
+          ? item.secondaryCategories.map((s) => normalizeMarketCategory(s))
+          : [],
       })),
     [items],
   );
@@ -271,7 +277,10 @@ export function VoteSnapScrollView({
   // ── Categories ────────────────────────────────────────────────────────
   const categories = useMemo(() => {
     const cats = new Set<string>();
-    normalizedItems.forEach((item) => cats.add(item.category));
+    normalizedItems.forEach((item) => {
+      cats.add(item.category);
+      item.secondaryCategories.forEach((s) => cats.add(s));
+    });
     const sorted = Array.from(cats).sort((a, b) =>
       getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)),
     );
@@ -316,7 +325,12 @@ export function VoteSnapScrollView({
     map.set("All", normalizedItems);
     for (const cat of categories) {
       if (cat === "All") continue;
-      map.set(cat, normalizedItems.filter((i) => i.category === cat));
+      map.set(
+        cat,
+        normalizedItems.filter(
+          (i) => i.category === cat || i.secondaryCategories.includes(cat),
+        ),
+      );
     }
     return map;
   }, [normalizedItems, categories]);

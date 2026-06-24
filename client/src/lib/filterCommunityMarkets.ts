@@ -1,4 +1,4 @@
-import { normalizeMarketCategory } from "@shared/constants";
+import { matchesCategoryFilter, normalizeMarketCategory } from "@shared/constants";
 
 export type CommunityCategoryFilter = string;
 
@@ -39,7 +39,7 @@ export function filterCommunityMarkets(
         category === "trending" ||
         (category === "favorites"
           ? !!m.personId && favoriteIds.has(m.personId)
-          : normalizeMarketCategory(m.category) === category);
+          : matchesCategoryFilter(m.category, m.secondaryCategories, category));
 
       const searchMatch =
         !searchLower || m.title?.toLowerCase().includes(searchLower);

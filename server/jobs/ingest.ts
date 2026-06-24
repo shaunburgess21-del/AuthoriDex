@@ -3172,6 +3172,17 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       }
       const upsertedIds = trendingRows.map((r) => r.id);
 
+      // Mirror secondary categories (filter-only metadata) from tracked_people
+      // so newly-created leaderboard rows pick up admin-assigned secondary
+      // categories. This is a plain metadata copy and does not touch scoring.
+      await tx.execute(sql`
+        UPDATE trending_people tp
+        SET secondary_categories = src.secondary_categories
+        FROM tracked_people src
+        WHERE src.id = tp.id
+          AND tp.secondary_categories IS DISTINCT FROM src.secondary_categories
+      `);
+
       if (upsertedIds.length > 0) {
         const staleCountResult = await tx.execute(
           sql`SELECT COUNT(*) as count FROM trending_people WHERE id NOT IN (${sql.join(upsertedIds.map(id => sql`${id}`), sql`, `)})`
@@ -3661,6 +3672,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
         tp.name,
         tp.avatar,
         tp.category,
+        tp.secondary_categories,
         tp.bio
       FROM trend_snapshots ts
       JOIN tracked_people tp ON tp.id = ts.person_id AND tp.status = 'main_leaderboard'
@@ -3689,6 +3701,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
           change24h: null,
           change7d: null,
           category: canonicalizePersonCategory(row.category) ?? row.category,
+          secondaryCategories: row.secondary_categories ?? [],
         }).onConflictDoUpdate({
           target: trendingPeople.id,
           set: {
@@ -3699,6 +3712,7 @@ export async function hydrateTrendingPeopleFromSnapshots(): Promise<boolean> {
             trendScore: row.trend_score,
             fameIndex: row.fame_index,
             category: canonicalizePersonCategory(row.category) ?? row.category,
+            secondaryCategories: row.secondary_categories ?? [],
           },
         });
       }

@@ -7,6 +7,7 @@ import {
 } from "@/components/shared/RelatedItemsCarousel";
 import { getTopRaceEntries } from "@/lib/nativeRaceLeaders";
 import { buildH2hSplitBar, buildUpDownSplitBar } from "@/lib/nativeMarketCarouselPercents";
+import { normalizeMarketCategory } from "@shared/constants";
 
 /**
  * Detail-page "more like this" carousel.
@@ -73,6 +74,7 @@ function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
       },
     ],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.updown,
@@ -95,6 +97,7 @@ function normalizeH2h(m: any, cardWidthClass: string): RelatedCarouselItem {
     thumbVariant: "split",
     thumbParticipants: [p1, p2],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.h2h,
@@ -120,6 +123,7 @@ function normalizeRace(m: any, cardWidthClass: string): RelatedCarouselItem {
         ? topEntries
         : [{ name: categoryLabel, avatar: null }],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
     creditPool: typeof m.totalPool === "number" ? m.totalPool : null,
     typePill: TYPE_PILL.race,
@@ -146,6 +150,7 @@ function normalizeCommunity(m: any, cardWidthClass: string): RelatedCarouselItem
       },
     ],
     category: m.category ?? null,
+    secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.closeAt ?? m.endAt ?? null,
     creditPool: null,
     typePill: TYPE_PILL.community,
@@ -188,11 +193,15 @@ export function RelatedMarkets({
     const others = list.filter((m: any) => m && m.id && m.id !== currentMarketId);
     const normalized = others.map((m) => normalize(type, m));
 
+    const isSameCategory = (m: RelatedCarouselItem) =>
+      (!!m.category && m.category === category) ||
+      (Array.isArray(m.secondaryCategories) &&
+        m.secondaryCategories.some((s) => normalizeMarketCategory(s) === normalizeMarketCategory(category)));
     const sameCategory = category
-      ? normalized.filter((m) => m.category && m.category === category)
+      ? normalized.filter(isSameCategory)
       : [];
     const otherCategory = category
-      ? normalized.filter((m) => !m.category || m.category !== category)
+      ? normalized.filter((m) => !isSameCategory(m))
       : normalized;
 
     const byEndSoonest = (a: RelatedCarouselItem, b: RelatedCarouselItem) => {

@@ -20,6 +20,7 @@ export type RelatedCarouselItem = {
   typePill: string;
   cardWidthClass: string;
   category?: string | null;
+  secondaryCategories?: string[] | null;
   endAt?: string | null;
   voteCount?: number | null;
   creditPool?: number | null;

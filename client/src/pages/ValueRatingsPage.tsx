@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import {
   BASE_CATEGORY_FILTER_OPTIONS,
+  getMarketCategoryLabel,
+  matchesCategoryFilter,
   normalizeMarketCategory,
   type FilterCategory,
 } from "@shared/constants";
@@ -31,6 +33,7 @@ interface ValuePerson {
   name: string;
   avatar: string | null;
   category: string | null;
+  secondaryCategories?: string[] | null;
   rank: number;
   trendScore: number;
   fameIndex: number | null;
@@ -230,7 +233,7 @@ export default function ValueRatingsPage() {
     if (categoryFilter === "favorites") {
       list = list.filter((p) => favoriteIds.has(p.id));
     } else if (categoryFilter !== "all" && categoryFilter !== "trending") {
-      list = list.filter((p) => normalizeMarketCategory(p.category) === categoryFilter);
+      list = list.filter((p) => matchesCategoryFilter(p.category, (p as any).secondaryCategories, categoryFilter));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -239,6 +242,26 @@ export default function ValueRatingsPage() {
     list = [...list].sort((a, b) => ((b[sortField] ?? -999) as number) - ((a[sortField] ?? -999) as number));
     return list;
   }, [allPeople, categoryFilter, searchQuery, sortField, favoriteIds]);
+
+  // Start from the canonical chip set, then append any category that only shows
+  // up as a primary/secondary on the data (e.g. admin-added registry ids) so
+  // secondary-only categories get a chip too. Filtering already honors them.
+  const categoryFilterOptions = useMemo(() => {
+    const base = BASE_CATEGORY_FILTER_OPTIONS;
+    const known = new Set(base.map((o) => o.id as string));
+    const extras: { id: FilterCategory; label: string }[] = [];
+    for (const person of allPeople) {
+      const ids = [person.category, ...((person.secondaryCategories as string[] | undefined) ?? [])];
+      for (const raw of ids) {
+        if (!raw) continue;
+        const id = normalizeMarketCategory(raw);
+        if (id === "all" || id === "trending" || known.has(id)) continue;
+        known.add(id);
+        extras.push({ id: id as FilterCategory, label: getMarketCategoryLabel(id) });
+      }
+    }
+    return extras.length > 0 ? [...base, ...extras] : base;
+  }, [allPeople]);
 
   const spotlightMostUnderrated = useMemo(() => [...allPeople].sort((a, b) => (b.underratedPct ?? 0) - (a.underratedPct ?? 0))[0] ?? null, [allPeople]);
   const spotlightMostOverrated = useMemo(() => [...allPeople].sort((a, b) => (b.overratedPct ?? 0) - (a.overratedPct ?? 0))[0] ?? null, [allPeople]);
@@ -287,7 +310,7 @@ export default function ValueRatingsPage() {
 
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
           <div ref={filterScrollRef} onWheel={handleFilterScroll} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:flex-1 sm:min-w-0">
-            {BASE_CATEGORY_FILTER_OPTIONS.map(({ id, label }) => {
+            {categoryFilterOptions.map(({ id, label }) => {
               const isFavorites = id === "favorites";
               const Icon = VOTE_CATEGORY_ICONS[id];
               const isActive = categoryFilter === id;
