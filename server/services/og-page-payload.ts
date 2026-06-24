@@ -47,7 +47,7 @@ export const SITE_URL =
   process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://voxdex.com";
 export const SITE_NAME = "VoxDex";
 export const DEFAULT_DESCRIPTION =
-  "The voice of the people, indexed. Vote, predict, and track the people and topics shaping global conversation.";
+  "VoxDex turns the voice of the people into a living, real-time index. Vote, predict, and weigh in on the figures and topics shaping global conversation. — make your voice heard, one vote at a time.";
 
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
@@ -609,7 +609,7 @@ export async function resolveNativePredictOg(
 export async function resolveSiteOg(canonicalUrl = SITE_URL): Promise<OgPreviewResult> {
   return withPreviewMeta(
     {
-      title: `${SITE_NAME} — Vox Populi`,
+      title: `${SITE_NAME} | Vox Populi - Indexed`,
       description: DEFAULT_DESCRIPTION,
       canonicalUrl,
       imageUrl: defaultImageUrl(),

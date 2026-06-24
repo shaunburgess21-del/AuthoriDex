@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import {
   X,
   RefreshCw,
@@ -608,6 +609,12 @@ interface TrendingResponse {
 type SortDirection = "desc" | "asc";
 
 export default function HomePage() {
+  useDocumentMeta({
+    title: "VoxDex | Vox Populi - Indexed",
+    description:
+      "VoxDex turns the voice of the people into a living, real-time index. Vote, predict, and weigh in on the figures and topics shaping global conversation. — make your voice heard, one vote at a time.",
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [category, setCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);

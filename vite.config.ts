@@ -16,7 +16,7 @@ export default defineConfig({
         "fonts/vox-mark.woff2",
       ],
       manifest: {
-        name: "VoxDex - Vox Populi",
+        name: "VoxDex | Vox Populi - Indexed",
         short_name: "VoxDex",
         description:
           "Track how famous people are trending. Vote, predict, and earn XP.",
