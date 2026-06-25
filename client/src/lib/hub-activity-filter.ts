@@ -46,3 +46,16 @@ export function writeHubActivityFilter(
     /* Preference persistence is optional in private browsing. */
   }
 }
+
+/** Direct search should surface matches even when hide-mine is active. */
+export function searchBypassesActivityFilter(search: string): boolean {
+  return search.trim().length > 0;
+}
+
+export function passesSectionActivityFilter(
+  marketId: string,
+  search: string,
+  passesMyPositions: (marketId: string) => boolean,
+): boolean {
+  return searchBypassesActivityFilter(search) || passesMyPositions(marketId);
+}

@@ -3,6 +3,7 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import {
   DEFAULT_HUB_ACTIVITY_FILTER,
   type HubActivityFilter,
+  passesSectionActivityFilter,
   readHubActivityFilter,
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
@@ -124,7 +125,6 @@ import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import {
   communityChipForMarket,
   filterCommunityMarkets,
-  openMarketPool,
 } from "@/lib/filterCommunityMarkets";
 import { SuggestCategorySelect, SuggestDurationPicker, OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
@@ -151,6 +151,13 @@ import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed 
 
 type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
 type PredictOverlayKey = "weekly" | "h2h" | "gainers" | "community";
+
+/** When the user is searching, show every match — not just the preview grid cap. */
+function sectionDesktopLimit(search: string): number {
+  return search.trim().length > 0 ? Number.POSITIVE_INFINITY : 9;
+}
+
+const OPEN_MARKETS_PREDICT_LIMIT = 500;
 
 const PREDICT_ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
@@ -1318,7 +1325,11 @@ export default function PredictPage() {
   );
   
   const { data: openMarketsData, isLoading: isLoadingOpenMarkets, error: openMarketsError, refetch: refetchOpenMarkets } = useQuery<any[]>({
-    queryKey: ['/api/open-markets'],
+    queryKey: ["/api/open-markets", "predict-page"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/open-markets?limit=${OPEN_MARKETS_PREDICT_LIMIT}`);
+      return res.json();
+    },
   });
   const openMarkets = useMemo(() => openMarketsData || [], [openMarketsData]);
 
@@ -1855,9 +1866,36 @@ export default function PredictPage() {
   }, [categoryFilter]);
 
   const openPredictOverlay = useCallback((category: PredictOverlayKey) => {
+    switch (category) {
+      case "weekly":
+        setWeeklyOverlaySearchQuery(updownSearch);
+        setWeeklyOverlayCategoryFilter(updownCategory);
+        break;
+      case "h2h":
+        setH2hOverlaySearchQuery(h2hSearch);
+        setH2hOverlayCategoryFilter(h2hCategory);
+        break;
+      case "gainers":
+        setGainersOverlaySearchQuery(gainerSearch);
+        setGainersOverlayCategoryFilter(gainerCategory);
+        break;
+      case "community":
+        setCommunityOverlaySearchQuery(communitySearch);
+        setCommunityOverlayCategoryFilter(communityCategory);
+        break;
+    }
     window.history.pushState({ overlay: category }, "");
     setViewAllCategory(category);
-  }, []);
+  }, [
+    updownSearch,
+    updownCategory,
+    h2hSearch,
+    h2hCategory,
+    gainerSearch,
+    gainerCategory,
+    communitySearch,
+    communityCategory,
+  ]);
 
   const closePredictOverlay = useCallback(() => {
     ["community", "weekly", "h2h", "gainers"].forEach(clearOverlayScroll);
@@ -2629,6 +2667,9 @@ export default function PredictPage() {
     (myPositionsFilter === "show-mine" && userBetsByMarket.has(String(marketId))) ||
     (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(String(marketId)));
 
+  const passesPredictSectionFilter = (marketId: string, search: string) =>
+    passesSectionActivityFilter(marketId, search, passesMyPositionsFilter);
+
   // Trending sort: most bet-on first, then fall back to the subject's popularity
   // (fame / trend score). Without the fallback, early-week cards with 0 bets all
   // tie and the Trending tab becomes a no-op.
@@ -2666,7 +2707,7 @@ export default function PredictPage() {
             matchesCategory(updownCategory, m.category, m.personId, (m as any).secondaryCategories) &&
             (!updownSearch ||
               m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
-            passesMyPositionsFilter(m.id),
+            passesPredictSectionFilter(m.id, updownSearch),
         )
         .sort((a, b) =>
           updownCategory === "trending"
@@ -2704,7 +2745,7 @@ export default function PredictPage() {
               m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
               m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
               m.person2.name.toLowerCase().includes(h2hSearch.toLowerCase())) &&
-            passesMyPositionsFilter(m.id),
+            passesPredictSectionFilter(m.id, h2hSearch),
         )
         .sort((a, b) =>
           h2hCategory === "trending"
@@ -2739,7 +2780,7 @@ export default function PredictPage() {
               (m.allCandidates || m.leaders).some((l) =>
                 l.name.toLowerCase().includes(gainerSearch.toLowerCase()),
               )) &&
-            passesMyPositionsFilter(m.id),
+            passesPredictSectionFilter(m.id, gainerSearch),
         )
         .sort((a, b) =>
           gainerCategory === "trending"
@@ -2783,6 +2824,11 @@ export default function PredictPage() {
       : hasLiveGainers
         ? "No gainers match your filters"
         : "No Category Races are available right now";
+
+  const communityEmptyMessage =
+    communitySearch.trim().length > 0 || communityCategory !== "all"
+      ? "No markets match your filters"
+      : "No markets available yet";
 
   const filteredCommunity = useMemo(
     () =>
@@ -2915,6 +2961,26 @@ export default function PredictPage() {
     }
   }, [communityOverlayCategoryFilter, communityCategoryFilters]);
 
+  const filteredOverlayCommunity = useMemo(
+    () =>
+      filterCommunityMarkets(
+        openMarkets,
+        communityOverlayCategoryFilter,
+        communityOverlaySearchQuery,
+        favoriteIds,
+        passesMyPositionsFilter,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      openMarkets,
+      communityOverlayCategoryFilter,
+      communityOverlaySearchQuery,
+      favoriteIds,
+      myPositionsFilter,
+      userBetsByMarket,
+    ],
+  );
+
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
   const showNativePredictScope =
     selectedType === "all" ||
@@ -2992,7 +3058,7 @@ export default function PredictPage() {
         (m) =>
           (!updownSearch ||
             m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
-          passesMyPositionsFilter(m.id),
+          passesPredictSectionFilter(m.id, updownSearch),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- passesMyPositionsFilter closes over myPositionsFilter/userBetsByMarket which are listed
     [hydratedMarkets, updownSearch, myPositionsFilter, userBetsByMarket],
@@ -3453,7 +3519,7 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection ref={updownSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
+              <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
                 {filteredUpDown.map((market) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
                     <WeeklyUpDownCard 
@@ -3555,7 +3621,7 @@ export default function PredictPage() {
             ) : h2hLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
-              <CardSection ref={h2hSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
@@ -3679,7 +3745,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection ref={gainerSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" autoHeight>
+              <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" autoHeight>
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id}
@@ -3837,7 +3903,7 @@ export default function PredictPage() {
                 ) : (
                   <CardSection
                     ref={communitySectionRef}
-                    desktopLimit={9}
+                    desktopLimit={sectionDesktopLimit(communitySearch)}
                     gap="gap-4"
                     testIdPrefix="section-community"
                     dotActiveColor="bg-violet-500"
@@ -3847,7 +3913,24 @@ export default function PredictPage() {
                 )
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  No markets available yet
+                  {communitySearch.trim().length > 0 || communityCategory !== "all" ? (
+                    <div className="space-y-3">
+                      <p>{communityEmptyMessage}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setCommunityCategory("all");
+                          setCommunitySearch("");
+                        }}
+                        data-testid="button-reset-community-filters"
+                      >
+                        Reset filters
+                      </Button>
+                    </div>
+                  ) : (
+                    <p>{communityEmptyMessage}</p>
+                  )}
                 </div>
               )}
               <div className="hidden md:block text-center mt-6">
@@ -3939,7 +4022,10 @@ export default function PredictPage() {
               (h2hOverlayCategoryFilter === "favorites"
                 ? (favoriteIds.has(m.person1Id || "") || favoriteIds.has(m.person2Id || ""))
                 : matchesCategoryFilter(m.category, (m as any).secondaryCategories, h2hOverlayCategoryFilter))) &&
-            (!h2hOverlaySearchQuery || m.title.toLowerCase().includes(h2hOverlaySearchQuery.toLowerCase()))
+            (!h2hOverlaySearchQuery ||
+              m.title.toLowerCase().includes(h2hOverlaySearchQuery.toLowerCase()) ||
+              m.person1.name.toLowerCase().includes(h2hOverlaySearchQuery.toLowerCase()) ||
+              m.person2.name.toLowerCase().includes(h2hOverlaySearchQuery.toLowerCase()))
           )
           .sort((a, b) => h2hOverlayCategoryFilter === "trending"
             ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
@@ -4016,26 +4102,11 @@ export default function PredictPage() {
         onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
         categories={communityCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
       >
-        {openMarkets
-          .filter((m: any) => 
-            (communityOverlayCategoryFilter === "all" || communityOverlayCategoryFilter === "trending" ||
-              (communityOverlayCategoryFilter === "favorites"
-                ? !!m.personId && favoriteIds.has(m.personId)
-                : matchesCategoryFilter(m.category, m.secondaryCategories, communityOverlayCategoryFilter))) &&
-            (!communityOverlaySearchQuery || m.title?.toLowerCase().includes(communityOverlaySearchQuery.toLowerCase()))
-          )
-          .sort((a: any, b: any) => communityOverlayCategoryFilter === "trending"
-            ? trendingCompare(
-                Number(a.activeParticipantCount ?? 0),
-                Number(b.activeParticipantCount ?? 0),
-                openMarketPool(a),
-                openMarketPool(b),
-              )
-            : 0)
-          .map((market: any) => (
-            <OpenMarketCard 
-              key={market.id} 
-              market={market} 
+        {filteredOverlayCommunity.length > 0 ? (
+          filteredOverlayCommunity.map((market: any) => (
+            <OpenMarketCard
+              key={market.id}
+              market={market}
               onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
               onPickEntry={handleCommunityPickEntry}
               isMarketClosed={market.status !== 'OPEN'}
@@ -4046,7 +4117,15 @@ export default function PredictPage() {
               leaderboardCategories={leaderboardCats}
               unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
             />
-          ))}
+          ))
+        ) : (
+          <div className="col-span-full text-center py-8 text-muted-foreground">
+            {communityOverlaySearchQuery.trim().length > 0 ||
+            communityOverlayCategoryFilter !== "all"
+              ? "No markets match your filters"
+              : "No markets available yet"}
+          </div>
+        )}
       </FullScreenOverlay>
       <StakeModal
         open={stakeModalOpen}

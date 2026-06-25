@@ -1,3 +1,4 @@
+import { searchBypassesActivityFilter } from "@/lib/hub-activity-filter";
 import { matchesCategoryFilter, normalizeMarketCategory } from "@shared/constants";
 
 export type CommunityCategoryFilter = string;
@@ -23,6 +24,22 @@ export function communityTrendingCompare(
   return bPool - aPool;
 }
 
+export function openMarketMatchesSearch(m: any, searchLower: string): boolean {
+  if (!searchLower) return true;
+
+  const haystacks: Array<string | null | undefined> = [
+    m.title,
+    m.summary,
+    m.teaser,
+    m.linkedPersonName,
+    ...(m.entries ?? []).map((entry: { label?: string | null }) => entry.label),
+  ];
+
+  return haystacks.some(
+    (text) => typeof text === "string" && text.toLowerCase().includes(searchLower),
+  );
+}
+
 export function filterCommunityMarkets(
   markets: any[],
   category: CommunityCategoryFilter,
@@ -41,10 +58,11 @@ export function filterCommunityMarkets(
           ? !!m.personId && favoriteIds.has(m.personId)
           : matchesCategoryFilter(m.category, m.secondaryCategories, category));
 
-      const searchMatch =
-        !searchLower || m.title?.toLowerCase().includes(searchLower);
+      const searchMatch = openMarketMatchesSearch(m, searchLower);
+      const positionsMatch =
+        searchBypassesActivityFilter(search) || passesMyPositions(m.id);
 
-      return categoryMatch && searchMatch && passesMyPositions(m.id);
+      return categoryMatch && searchMatch && positionsMatch;
     })
     .sort((a: any, b: any) =>
       category === "trending"
