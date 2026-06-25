@@ -6,10 +6,11 @@ interface SearchBarProps {
   onSearch?: (query: string) => void;
   placeholder?: string;
   debounceMs?: number;
+  initialValue?: string;
 }
 
-export function SearchBar({ onSearch, placeholder = "Search people...", debounceMs = 300 }: SearchBarProps) {
-  const [query, setQuery] = useState("");
+export function SearchBar({ onSearch, placeholder = "Search people...", debounceMs = 300, initialValue = "" }: SearchBarProps) {
+  const [query, setQuery] = useState(initialValue);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSearchRef = useRef(onSearch);
 

@@ -23,9 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { shareHomeLeaderboardView } from "@/lib/home-leaderboard-share";
 import {
   X,
   RefreshCw,
+  Share2,
   TrendingUp,
   TrendingDown,
   Activity,
@@ -615,7 +617,10 @@ export default function HomePage() {
       "VoxDex turns the voice of the people into a living, real-time index. Vote, predict, and weigh in on the figures and topics shaping global conversation. — make your voice heard, one vote at a time.",
   });
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("search") ?? "";
+  });
   const [category, setCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get("category");
@@ -639,7 +644,10 @@ export default function HomePage() {
   }, []);
   const [activeView, setActiveView] = useState<HomeView>("leaderboard");
   const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("sortDir") === "asc" ? "asc" : "desc";
+  });
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);
@@ -1009,8 +1017,8 @@ export default function HomePage() {
                     aria-hidden
                   />
                   <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 bg-card/95 pb-4 pt-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                        <div className="flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
                           </div>
@@ -1029,6 +1037,35 @@ export default function HomePage() {
                             </span>
                           </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 shrink-0"
+                          data-testid="button-home-leaderboard-share"
+                          onClick={async () => {
+                            try {
+                              const result = await shareHomeLeaderboardView({
+                                category,
+                                searchQuery,
+                                sortDirection,
+                                categoryLabel:
+                                  category !== "all" ? activeCategoryLabel : undefined,
+                              });
+                              toast(result === "shared" ? "Shared" : "Link copied", {
+                                description:
+                                  result === "copied"
+                                    ? "Leaderboard link copied to clipboard."
+                                    : undefined,
+                              });
+                            } catch {
+                              /* user cancelled */
+                            }
+                          }}
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">Share</span>
+                        </Button>
                       </div>
                     </CardHeader>
                 </div>
@@ -1050,6 +1087,7 @@ export default function HomePage() {
                           <SearchBar 
                             onSearch={setSearchQuery} 
                             placeholder="Search..."
+                            initialValue={searchQuery}
                           />
                         </div>
                         {displayPeople.length > 0 && (
