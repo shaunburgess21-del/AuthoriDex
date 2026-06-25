@@ -14,6 +14,11 @@
  *     this is a no-op that returns empty findings.
  *   - Budget rail: a per-run cap derived from RESOLUTION_SCOUT_DAILY_BUDGET_USD
  *     / RESOLUTION_SCOUT_PER_CALL_ESTIMATE_USD bounds worst-case spend.
+ *   - Hybrid prioritisation: when there are more open markets than the budget
+ *     allows, markets are ranked (1) closing-soon, (2) news-spiking (linked to
+ *     a heated main-leaderboard person — free shock-event signal from the
+ *     ingest job, no extra API spend), then (3) round-robin by least-recently
+ *     scanned, so no market is ever permanently starved.
  *   - Change detection: each market stores a `signature` (stage|action|winner);
  *     a finding is "changed" when the new signature differs from the stored
  *     one, so the digest can lead with what's new instead of repeating the
@@ -23,14 +28,20 @@
  */
 
 import OpenAI from "openai";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
-import { marketEntries, predictionMarkets } from "@shared/schema";
+import { marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
 import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
+import { getTrendContextBatch } from "../services/trend-context";
 
 const RESOLUTION_SCOUT_LOCK_KEY = 5_211;
+
+/** Markets resolving within this window are always top priority to scan. */
+const CLOSING_SOON_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+/** Only main-leaderboard people get fresh daily trend data (news/wiki). */
+const MAIN_LEADERBOARD_STATUS = "main_leaderboard";
 
 // ---- Config ---------------------------------------------------------------
 
@@ -123,6 +134,8 @@ interface ScoutMarket {
   endAt: Date;
   resolutionCriteria: string[] | null;
   metadata: unknown;
+  /** Linked celebrity (for the news-spike priority lane). */
+  personId: string | null;
 }
 
 interface ScoutEntry {
@@ -178,6 +191,18 @@ function previousWhatChanged(metadata: unknown): string | null {
     | Partial<ScoutAssessment>
     | undefined;
   return prev && typeof prev.whatChanged === "string" ? prev.whatChanged : null;
+}
+
+/** Epoch-ms of the market's last scout assessment (0 if never scanned). Drives
+ *  the round-robin lane so the least-recently-scanned markets rotate in. */
+function readLastAssessedAtMs(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object") return 0;
+  const prev = (metadata as Record<string, unknown>).scoutAssessment as
+    | Partial<ScoutAssessment>
+    | undefined;
+  if (!prev || typeof prev.assessedAt !== "string") return 0;
+  const ms = Date.parse(prev.assessedAt);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 function extractOutputText(response: any): string | null {
@@ -447,6 +472,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
       endAt: predictionMarkets.endAt,
       resolutionCriteria: predictionMarkets.resolutionCriteria,
       metadata: predictionMarkets.metadata,
+      personId: predictionMarkets.personId,
     })
     .from(predictionMarkets)
     .where(
@@ -464,7 +490,84 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
 
   const callBudget = maxCallsPerRun();
 
-  for (const market of markets) {
+  // --- Prioritise which markets get an LLM call this run --------------------
+  // When open markets exceed the budget rail, rank them so the calls land where
+  // they matter most:
+  //   1. Closing soon — resolving within the next week, soonest first. Most
+  //      time-sensitive, so always covered.
+  //   2. News spike  — linked to a MAIN-LEADERBOARD person who is currently
+  //      "heated" (news + wiki both surging). Shock-event safety net (CEO
+  //      fired, athlete injured) for far-future markets, using the per-person
+  //      signal the ingest job already computes — no extra API spend. Only
+  //      main-leaderboard people are tracked daily, so induction-queue links
+  //      correctly fall through to round-robin.
+  //   3. Round-robin — everything else, least-recently-scanned first, so no
+  //      market is ever permanently starved.
+  const now = Date.now();
+
+  const linkedPersonIds = Array.from(
+    new Set(
+      markets.map((m) => m.personId).filter((id): id is string => !!id),
+    ),
+  );
+
+  // Restrict the news signal to main-leaderboard people (the only ones with
+  // fresh daily data) and flag those currently spiking. Best-effort: a failure
+  // here just means we fall back to deadline + round-robin ordering.
+  const heatedPersonIds = new Set<string>();
+  if (linkedPersonIds.length > 0) {
+    try {
+      const leaderboardRows = await db
+        .select({ id: trackedPeople.id })
+        .from(trackedPeople)
+        .where(
+          and(
+            inArray(trackedPeople.id, linkedPersonIds),
+            eq(trackedPeople.status, MAIN_LEADERBOARD_STATUS),
+          ),
+        );
+      const leaderboardIds = leaderboardRows.map((r) => r.id);
+      if (leaderboardIds.length > 0) {
+        const ctx = await getTrendContextBatch(leaderboardIds);
+        for (const [pid, c] of ctx) {
+          if (c.isHeated) heatedPersonIds.add(pid);
+        }
+      }
+    } catch (err) {
+      log(
+        `[ResolutionScout] News-signal lookup failed (continuing with deadline + round-robin): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  const ranked = markets
+    .map((market) => {
+      const endAtMs = new Date(market.endAt).getTime();
+      return {
+        market,
+        endAtMs,
+        closingSoon: endAtMs - now <= CLOSING_SOON_HORIZON_MS,
+        newsSpike: !!market.personId && heatedPersonIds.has(market.personId),
+        lastScannedMs: readLastAssessedAtMs(market.metadata),
+      };
+    })
+    .sort((a, b) => {
+      // 1. Closing-soon bucket first, soonest deadline leading.
+      if (a.closingSoon !== b.closingSoon) return a.closingSoon ? -1 : 1;
+      if (a.closingSoon && b.closingSoon) return a.endAtMs - b.endAtMs;
+      // 2. News-spiking linked markets next.
+      if (a.newsSpike !== b.newsSpike) return a.newsSpike ? -1 : 1;
+      // 3. Round-robin: least-recently-scanned first (never-scanned = 0 leads).
+      if (a.lastScannedMs !== b.lastScannedMs) return a.lastScannedMs - b.lastScannedMs;
+      // 4. Tiebreak: soonest deadline.
+      return a.endAtMs - b.endAtMs;
+    });
+
+  let closingSoonScanned = 0;
+  let newsSpikeScanned = 0;
+
+  for (const cand of ranked) {
+    const { market } = cand;
     result.scanned += 1;
     if (result.llmCalls >= callBudget) {
       result.budgetBlocked += 1;
@@ -484,6 +587,9 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     if (entries.length === 0) continue;
 
     result.llmCalls += 1;
+    if (cand.closingSoon) closingSoonScanned += 1;
+    if (cand.newsSpike) newsSpikeScanned += 1;
+
     const assessment = await assessMarket(market, entries);
     if (!assessment) {
       result.errors += 1;
@@ -518,6 +624,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
 
   log(
     `[ResolutionScout] scanned=${result.scanned} llmCalls=${result.llmCalls} ` +
+      `(closingSoon=${closingSoonScanned} newsSpike=${newsSpikeScanned}) ` +
       `budgetBlocked=${result.budgetBlocked} errors=${result.errors} ` +
       `actionable=${result.findings.length}`,
   );
