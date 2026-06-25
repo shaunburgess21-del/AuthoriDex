@@ -257,7 +257,6 @@ interface RecentPredictionActivity {
   username: string | null;
   displayName: string;
   avatarUrl: string | null;
-  isAgent: boolean;
   isPublic: boolean;
   rationale: string | null;
 }
@@ -3249,7 +3248,6 @@ export default function PredictPage() {
                                 <UserSocialAvatar
                                   displayName={item.displayName}
                                   avatarUrl={item.avatarUrl}
-                                  isAgent={item.isAgent}
                                   className="h-9 w-9 shrink-0"
                                   onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
                                 />
@@ -3292,7 +3290,7 @@ export default function PredictPage() {
                                   {isAmmSell && proceeds != null
                                     ? `${voxWord(proceeds)} in`
                                     : voxWord(item.stakeAmount)}
-                                  {!item.isAgent && item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
+                                  {item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                                 </p>
                                 {item.rationale && (
                                   <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">

@@ -34,6 +34,11 @@ import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./ac
 import { getMarketBettingCutoff, getAmmTradingClosedMessage } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
 import { executeBuy, executeSell, type TradeError } from "../services/amm-trades";
+import { fireAmmPlacementHooks } from "../services/amm-bet-hooks";
+import { upsertEngagement } from "../lib/engagementWriter";
+import { gamificationService } from "../services/gamification";
+import { checkAndAwardPredictionBadges } from "../services/badges";
+import { maybeFireReferralCredit } from "../services/credits-earn";
 import { syncProfilePredictionStats } from "../services/profile-prediction-stats";
 import { sizeAmmBudget } from "./sizing";
 import { type AmmStateSnapshot } from "@shared/lib/amm/positions";
@@ -345,7 +350,7 @@ async function executeAmmBuy(
   },
   decision: PredictionDecision,
   agent: typeof agentConfigs.$inferSelect,
-  market: { id: string; title: string | null; marketType: string | null },
+  market: { id: string; title: string | null; marketType: string | null; category: string | null },
   entry: typeof marketEntries.$inferSelect,
 ): Promise<void> {
   if (decision.direction === "no") {
@@ -444,12 +449,21 @@ async function executeAmmBuy(
     return;
   }
 
-  // `executeBuy` now bumps `profiles.totalPredictions` itself inside the
-  // trade transaction (see server/services/amm-trades.ts), so the agent
-  // worker no longer needs a follow-up UPDATE. Centralising the counter
-  // there keeps it in lock-step with `market_bets` for both human and
-  // agent callers and removes the double-counting risk that existed
-  // briefly during the parimutuel sunset.
+  try {
+    await fireAmmPlacementHooks({
+      userId: agent.userId,
+      marketId: action.marketId,
+      betId: result.betId,
+      stakeAmount: result.chargeCredits,
+      categoryId: market.category ?? null,
+    });
+  } catch (hookErr) {
+    log(
+      `[ActionWorker] AMM placement hooks failed for action=${action.id}: ${
+        hookErr instanceof Error ? hookErr.message : hookErr
+      }`,
+    );
+  }
 
   await markExecuted(action.id);
 
@@ -667,6 +681,7 @@ async function executeJackpotAction(
         visibility: predictionMarkets.visibility,
         endAt: predictionMarkets.endAt,
         marketType: predictionMarkets.marketType,
+        category: predictionMarkets.category,
       })
       .from(predictionMarkets)
       .where(
@@ -770,7 +785,7 @@ async function executeJackpotAction(
     }
 
     // Place jackpot bet via DB transaction (mirrors user-facing jackpot endpoint)
-    await db.transaction(async (tx) => {
+    const jackpotBetId = await db.transaction(async (tx) => {
       const [updatedProfile] = await tx
         .update(profiles)
         .set({
@@ -817,7 +832,7 @@ async function executeJackpotAction(
           confidence: decision.confidence?.toFixed(2) ?? null,
           betMetadata: { predictedScore, actionId: action.id },
         })
-        .returning();
+        .returning({ id: marketBets.id });
 
       await tx.insert(creditLedger).values({
         userId: agent.userId,
@@ -840,7 +855,32 @@ async function executeJackpotAction(
         .update(marketEntries)
         .set({ totalStake: sql`${marketEntries.totalStake} + ${JACKPOT_TICKET_COST}` })
         .where(eq(marketEntries.id, action.entryId));
+
+      return insertedBet.id;
     });
+
+    try {
+      await upsertEngagement({
+        userId: agent.userId,
+        categoryId: market.category ?? null,
+        stakeCredits: JACKPOT_TICKET_COST,
+        source: "jackpot-bet",
+      });
+      await gamificationService.awardXp(
+        agent.userId,
+        "place_prediction",
+        `prediction_${action.marketId}_${jackpotBetId}_${agent.userId}`,
+        { marketId: action.marketId, stakeAmount: JACKPOT_TICKET_COST },
+      );
+      await maybeFireReferralCredit(agent.userId);
+      await checkAndAwardPredictionBadges(agent.userId);
+    } catch (hookErr) {
+      log(
+        `[ActionWorker] Jackpot placement hooks failed for action=${action.id}: ${
+          hookErr instanceof Error ? hookErr.message : hookErr
+        }`,
+      );
+    }
 
     await markExecuted(action.id);
     void syncProfilePredictionStats(agent.userId);

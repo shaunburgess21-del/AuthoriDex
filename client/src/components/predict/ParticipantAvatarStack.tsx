@@ -5,7 +5,6 @@ export interface ParticipantPreview {
   username: string | null;
   displayName: string;
   avatarUrl: string | null;
-  isAgent: boolean;
 }
 
 export function ParticipantAvatarStack({

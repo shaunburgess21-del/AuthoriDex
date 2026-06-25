@@ -17,6 +17,7 @@ import {
   type SimulationPersonaBand,
   isV2SimulationProfile,
 } from "./simulationProfile";
+import { assignAgentDemographics } from "./agentDemographics";
 
 type AgentSeed = {
   username: string;
@@ -496,6 +497,14 @@ export async function seedAgents(): Promise<{
       }
 
       try {
+        const createdAt = pastDate(seed.daysAgo);
+        const demographics = assignAgentDemographics({
+          username: seed.username,
+          bio: seed.bio,
+          specialties: seed.specialties,
+          createdAt,
+        });
+
         await db.transaction(async (tx) => {
           await tx.insert(profiles).values({
             id: userId,
@@ -509,7 +518,8 @@ export async function seedAgents(): Promise<{
             isAgent: true,
             predictCredits: seed.predictCredits,
             lastActiveAt: pastDate(Math.max(1, Math.round(seed.daysAgo / 3))),
-            createdAt: pastDate(seed.daysAgo),
+            createdAt,
+            ...demographics,
           });
 
           await tx.insert(agentConfigs).values({

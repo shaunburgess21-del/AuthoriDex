@@ -5370,7 +5370,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           positionsPublic: profiles.positionsPublic,
           rank: profiles.rank,
           createdAt: profiles.createdAt,
-          isAgent: profiles.isAgent,
           currentStreak: profiles.currentStreak,
           lastActiveAt: profiles.lastActiveAt,
         })
@@ -5445,7 +5444,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             displayName: shouldRevealIdentity ? (profile?.username || 'Anonymous') : 'Private Predictor',
             avatarUrl: shouldRevealIdentity ? (profile?.avatarUrl || null) : null,
             isPublic,
-            isAgent: profile?.isAgent ?? false,
             userRank: profile?.rank || 'Citizen',
             currentStreak: profile?.currentStreak || 0,
             lastActiveAt: profile?.lastActiveAt || null,
@@ -8098,57 +8096,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const baseProfile = profile[0];
-      let agentProfile: {
-        archetype: string;
-        bio: string | null;
-        specialties: string[];
-        displayName: string;
-        totalEntered?: number;
-        accuracy?: number | null;
-      } | null = null;
-
-      if (baseProfile.isAgent) {
-        const { agentConfigs, agentPerformance } = await import("@shared/schema");
-        const { isV2SimulationProfile } = await import("./agents/simulationProfile");
-
-        const [agentConfig] = await db
-          .select({
-            id: agentConfigs.id,
-            displayName: agentConfigs.displayName,
-            bio: agentConfigs.bio,
-            archetype: agentConfigs.archetype,
-            specialties: agentConfigs.specialties,
-            simulationProfile: agentConfigs.simulationProfile,
-          })
-          .from(agentConfigs)
-          .where(eq(agentConfigs.userId, baseProfile.id))
-          .limit(1);
-
-        // V2 (simulation) agents must look like normal users on the public
-        // profile. We deliberately do not surface internal labels (archetype,
-        // bio, specialties) for them. Legacy agents keep their old payload
-        // so admin/QA tools still work during the transition.
-        if (agentConfig && !isV2SimulationProfile(agentConfig.simulationProfile)) {
-          const [latestPerformance] = await db
-            .select({
-              totalEntered: agentPerformance.totalEntered,
-              accuracy: agentPerformance.accuracy,
-            })
-            .from(agentPerformance)
-            .where(eq(agentPerformance.agentId, agentConfig.id))
-            .orderBy(desc(agentPerformance.periodEnd))
-            .limit(1);
-
-          agentProfile = {
-            displayName: agentConfig.displayName,
-            bio: agentConfig.bio ?? null,
-            archetype: agentConfig.archetype,
-            specialties: agentConfig.specialties ?? [],
-            totalEntered: latestPerformance?.totalEntered ?? 0,
-            accuracy: latestPerformance?.accuracy ? Number(latestPerformance.accuracy) : null,
-          };
-        }
-      }
       
       // If profile is private, return limited info
       if (!baseProfile.isPublic) {
@@ -8157,10 +8104,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: baseProfile.username,
           avatarUrl: baseProfile.avatarUrl,
           rank: baseProfile.rank,
-          isAgent: baseProfile.isAgent,
           isPublic: false,
           positionsPublic: baseProfile.positionsPublic ?? true,
-          agentProfile,
           message: "This profile is private"
         });
       }
@@ -8305,11 +8250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalVotes: visibleTotalVotes,
         totalPredictions: visibleTotalPredictions,
         winRate: baseProfile.winRate,
-        isAgent: baseProfile.isAgent,
         isPublic: true,
         positionsPublic: baseProfile.positionsPublic ?? true,
         createdAt: baseProfile.createdAt,
-        agentProfile,
         profitLoss,
         // Surface the split so the client can render "Realised X +
         // unrealised Y" tooltips without recomputing from raw bets.
@@ -10451,7 +10394,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userId: profiles.id,
           username: profiles.username,
           avatarUrl: profiles.avatarUrl,
-          isAgent: profiles.isAgent,
           isProfilePublic: profiles.isPublic,
           positionsPublic: profiles.positionsPublic,
         })
@@ -10484,7 +10426,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           displayName: reveal ? r.username ?? "Anonymous" : "Private Predictor",
           username: reveal ? r.username : null,
           avatarUrl: reveal ? r.avatarUrl : null,
-          isAgent: r.isAgent,
         };
       });
 

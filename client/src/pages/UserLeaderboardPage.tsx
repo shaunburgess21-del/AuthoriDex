@@ -48,7 +48,6 @@ interface LeaderboardUser {
   displayName: string;
   avatarUrl: string | null;
   isPublic: boolean;
-  isAgent?: boolean;
   userRank: string;
   currentStreak?: number;
   lastActiveAt?: string | null;

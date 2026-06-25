@@ -142,7 +142,6 @@ export async function loadRecentPredictionActivity(limit: number): Promise<unkno
           username: reveal ? profile?.username || null : null,
           displayName: reveal ? profile?.username || "Anonymous" : "Private Predictor",
           avatarUrl: reveal ? profile?.avatarUrl || null : null,
-          isAgent: profile?.isAgent ?? false,
           isPublic: reveal,
           rationale: reveal ? rationale || null : null,
         };

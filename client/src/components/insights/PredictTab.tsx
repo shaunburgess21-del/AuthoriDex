@@ -67,7 +67,6 @@ interface RecentBet {
   marketType: string;
   displayName: string;
   avatarUrl: string | null;
-  isAgent: boolean;
 }
 
 interface LeaderboardUser {

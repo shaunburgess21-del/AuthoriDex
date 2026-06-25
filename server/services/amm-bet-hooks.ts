@@ -25,10 +25,9 @@
  * Contract:
  *   * Each hook is wrapped in its own try/catch so one failure can't
  *     mask another. None are awaited inside the trade transaction.
- *   * Designed to be called from HTTP route handlers only — the agent
- *     worker calls `executeBuy` directly and intentionally skips these
- *     hooks (agents don't progress badges, earn XP, or trigger
- *     engagement signals on their bets).
+ *   * Human HTTP routes call this after `executeBuy`. Agent workers
+ *     call it after successful AMM buys too so badges/XP/credits stay
+ *     in parity with real users.
  *   * Returns the XP result so the route can echo it back to the
  *     client, matching the jackpot bet response shape.
  *   * Resolves successfully even when every hook fails. The one path

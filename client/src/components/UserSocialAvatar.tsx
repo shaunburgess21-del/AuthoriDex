@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 interface UserSocialAvatarProps {
   displayName: string;
   avatarUrl?: string | null;
-  isAgent?: boolean;
   className?: string;
   onClick?: () => void;
 }
@@ -18,7 +17,6 @@ interface UserSocialAvatarProps {
 export function UserSocialAvatar({
   displayName,
   avatarUrl,
-  isAgent: _isAgent = false,
   className,
   onClick,
 }: UserSocialAvatarProps) {

@@ -10,7 +10,6 @@ export interface MarketEngagementPreview {
       username: string | null;
       displayName: string;
       avatarUrl: string | null;
-      isAgent: boolean;
     }>
   >;
   activeParticipantCountByMarket: Map<string, number>;
@@ -21,7 +20,6 @@ export interface MarketEngagementPreview {
       authorUsername: string | null;
       authorDisplayName: string;
       authorAvatarUrl: string | null;
-      isAgent: boolean;
     }
   >;
 }
@@ -77,7 +75,6 @@ export async function getMarketEngagementPreview(
             id: profiles.id,
             username: profiles.username,
             avatarUrl: profiles.avatarUrl,
-            isAgent: profiles.isAgent,
           })
           .from(profiles)
           .where(
@@ -102,7 +99,6 @@ export async function getMarketEngagementPreview(
     const displayName = profile?.username || "Anonymous";
     const username = profile?.username || null;
     const avatarUrl = profile?.avatarUrl || null;
-    const isAgent = profile?.isAgent ?? false;
 
     const counted = countedParticipants.get(bet.marketId) || new Set<string>();
     counted.add(bet.userId);
@@ -121,7 +117,6 @@ export async function getMarketEngagementPreview(
           username,
           displayName,
           avatarUrl,
-          isAgent,
         });
         recentParticipantsByMarket.set(bet.marketId, participants);
       }
@@ -134,13 +129,12 @@ export async function getMarketEngagementPreview(
         ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
         : "";
 
-    if (isAgent && rationaleText && !latestRationaleByMarket.has(bet.marketId)) {
+    if (rationaleText && !latestRationaleByMarket.has(bet.marketId)) {
       latestRationaleByMarket.set(bet.marketId, {
         text: rationaleText,
         authorUsername: username,
         authorDisplayName: displayName,
         authorAvatarUrl: avatarUrl,
-        isAgent,
       });
     }
   }

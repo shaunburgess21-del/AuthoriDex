@@ -23,6 +23,8 @@ import {
 import { eq, and, sql, gte, count, desc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { gamificationService } from "../services/gamification";
+import { awardVoteCredits, maybeFireReferralCredit } from "../services/credits-earn";
+import { checkAndAwardVoteBadges } from "../services/badges";
 import { getSimulationProfile, type AgentSimulationProfile } from "./simulationProfile";
 import { recomputeCelebrityMetrics } from "../services/celebrity-metrics-recompute";
 import { isAgentsPaused } from "./runtime-state";
@@ -41,6 +43,29 @@ type VoteType =
 // 20–30 ratings per week across the whole agent cohort so we add some life
 // without shifting leaderboard averages.
 const APPROVAL_RATING_TRIGGER_CHANCE = 0.2;
+
+async function fireAgentVoteRewards(
+  userId: string,
+  voteType: string,
+  entityId: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await awardVoteCredits(userId, voteType, entityId, metadata);
+  } catch (e) {
+    log(`[VoteWorker] vote credits failed for ${userId}: ${e}`);
+  }
+  try {
+    await checkAndAwardVoteBadges(userId);
+  } catch (e) {
+    log(`[VoteWorker] vote badges failed for ${userId}: ${e}`);
+  }
+  try {
+    await maybeFireReferralCredit(userId);
+  } catch (e) {
+    log(`[VoteWorker] referral credit failed for ${userId}: ${e}`);
+  }
+}
 
 // Cap candidate celebrities so the rating sweep stays bounded if the
 // catalogue ever grows past a few hundred. With the current ~159 curated
@@ -498,7 +523,7 @@ export async function castMatchupVoteForUser(
     const crowd = await getMatchupCrowdSplit(matchup.id);
     const choice = decideMatchup({ contrarianism, specialties }, matchup, crowd);
 
-    return await db.transaction(async (tx) => {
+    const inserted = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(votes)
         .values({
@@ -528,6 +553,10 @@ export async function castMatchupVoteForUser(
       }
       return true;
     });
+    if (!inserted) return false;
+
+    await fireAgentVoteRewards(userId, "matchup", matchup.id, { votedOption: choice });
+    return true;
   } catch (err) {
     log(`[VoteWorker:inline] castMatchupVoteForUser failed (user=${userId}, matchup=${matchupId}): ${err}`);
     return false;
@@ -557,7 +586,7 @@ export async function castSentimentPollVoteForUser(
     const crowd = await getPollCrowdSplit(poll.id);
     const choice = decideSentimentPoll({ contrarianism }, poll, crowd);
 
-    return await db.transaction(async (tx) => {
+    const inserted = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(trendingPollVotes)
         .values({ pollId: poll.id, userId, choice })
@@ -580,6 +609,10 @@ export async function castSentimentPollVoteForUser(
       }
       return true;
     });
+    if (!inserted) return false;
+
+    await fireAgentVoteRewards(userId, "trending_poll", String(poll.id), { choice });
+    return true;
   } catch (err) {
     log(`[VoteWorker:inline] castSentimentPollVoteForUser failed (user=${userId}, poll=${pollId}): ${err}`);
     return false;
@@ -605,7 +638,7 @@ export async function castOpinionPollVoteForUser(
 
     const choice = decideOpinionPoll({ contrarianism }, options);
 
-    return await db.transaction(async (tx) => {
+    const inserted = await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(opinionPollVotes)
         .values({ pollId, optionId: choice.id, userId })
@@ -628,6 +661,12 @@ export async function castOpinionPollVoteForUser(
       }
       return true;
     });
+    if (!inserted) return false;
+
+    await fireAgentVoteRewards(userId, "opinion_poll", String(pollId), {
+      optionId: choice.id,
+    });
+    return true;
   } catch (err) {
     log(`[VoteWorker:inline] castOpinionPollVoteForUser failed (user=${userId}, poll=${pollId}): ${err}`);
     return false;
@@ -743,6 +782,10 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
             log(`[VoteWorker] XP award failed for ${agent.displayName}: ${e}`);
           }
 
+          await fireAgentVoteRewards(agent.userId, "matchup", matchup.id, {
+            votedOption: choice,
+          });
+
           const choiceLabel = choice === "option_a" ? matchup.optionAText : matchup.optionBText;
           results.push({
             agentName: agent.displayName,
@@ -789,6 +832,10 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
             log(`[VoteWorker] XP award failed for ${agent.displayName}: ${e}`);
           }
 
+          await fireAgentVoteRewards(agent.userId, "trending_poll", String(poll.id), {
+            choice,
+          });
+
           results.push({
             agentName: agent.displayName,
             voteType: "sentiment_poll",
@@ -832,6 +879,10 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
           } catch (e) {
             log(`[VoteWorker] XP award failed for ${agent.displayName}: ${e}`);
           }
+
+          await fireAgentVoteRewards(agent.userId, "opinion_poll", String(poll.id), {
+            optionId: choice.id,
+          });
 
           results.push({
             agentName: agent.displayName,
@@ -882,6 +933,13 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
           } catch (e) {
             log(`[VoteWorker] XP award failed for ${agent.displayName}: ${e}`);
           }
+
+          await fireAgentVoteRewards(
+            agent.userId,
+            "sentiment",
+            `${person.id}_${today}`,
+            { personId: person.id, voteType: choice },
+          );
 
           results.push({
             agentName: agent.displayName,

@@ -22,7 +22,6 @@ interface MarketTrade {
   displayName: string;
   username: string | null;
   avatarUrl: string | null;
-  isAgent: boolean;
 }
 
 interface RecentTradesResponse {
@@ -147,7 +146,6 @@ export function MarketActivityFeed({
                 <UserSocialAvatar
                   displayName={t.displayName}
                   avatarUrl={t.avatarUrl}
-                  isAgent={t.isAgent}
                   className="h-8 w-8 shrink-0"
                   onClick={
                     clickable

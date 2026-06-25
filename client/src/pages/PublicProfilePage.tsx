@@ -59,7 +59,6 @@ interface PublicProfile {
   totalVotes?: number;
   totalPredictions?: number;
   winRate?: number;
-  isAgent?: boolean;
   isPublic: boolean;
   /** Sprint 1 phase 15.C — when false, the public bets `active` tab and the
    * AMM open positions list are hidden. Settled history stays visible. */
@@ -74,14 +73,6 @@ interface PublicProfile {
   biggestWin?: number;
   openPositionsValue?: number;
   openPositionsCount?: number;
-  agentProfile?: {
-    displayName: string;
-    bio?: string | null;
-    archetype: string;
-    specialties: string[];
-    totalEntered?: number;
-    accuracy?: number | null;
-  } | null;
   // Demographic surface — each field is gated server-side by the
   // matching per-field visibility toggle on the profile.
   bio?: string | null;
@@ -1518,11 +1509,12 @@ export default function PublicProfilePage() {
   const memberSince = profile.createdAt
     ? new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long" })
     : "Unknown";
-  const accuracyPct = profile.agentProfile?.accuracy != null
-    ? Math.round(profile.agentProfile.accuracy * 100)
-    : null;
+  const accuracyPct =
+    profile.winRate != null && profile.winRate > 0
+      ? Math.round(profile.winRate)
+      : null;
   const pnl = profile.profitLoss ?? 0;
-  const predictions = profile.agentProfile?.totalEntered || profile.totalPredictions || 0;
+  const predictions = profile.totalPredictions ?? 0;
   const positionsPublic = profile.positionsPublic ?? true;
 
   return (

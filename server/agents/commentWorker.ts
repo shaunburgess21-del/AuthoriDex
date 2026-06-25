@@ -20,6 +20,8 @@ import {
 } from "@shared/schema";
 import { db } from "../db";
 import { log } from "../log";
+import { gamificationService } from "../services/gamification";
+import { awardCommentCredits, maybeFireReferralCredit } from "../services/credits-earn";
 import {
   getSimulationProfile,
   isV2SimulationProfile,
@@ -684,19 +686,45 @@ export async function runCommentSweep(): Promise<{
     }
 
     try {
-      await db.transaction(async (tx) => {
-        await tx.insert(unifiedComments).values({
-          parentType: parent.parentType,
-          parentId: parent.parentId,
-          parentCommentId: replyTarget?.commentId ?? null,
-          userId: agent.userId,
-          body,
-        });
+      const trimmedContent = body.trim();
+      const shouldAwardXp =
+        String(parent.parentType) === "community_insight" && trimmedContent.length >= 20;
+
+      const newCommentId = await db.transaction(async (tx) => {
+        const [newComment] = await tx
+          .insert(unifiedComments)
+          .values({
+            parentType: parent.parentType,
+            parentId: parent.parentId,
+            parentCommentId: replyTarget?.commentId ?? null,
+            userId: agent.userId,
+            body,
+          })
+          .returning({ id: unifiedComments.id });
         await tx
           .update(profiles)
           .set({ lastActiveAt: new Date() })
           .where(eq(profiles.id, agent.userId));
+        return newComment.id;
       });
+
+      if (shouldAwardXp) {
+        try {
+          await gamificationService.awardXp(
+            agent.userId,
+            "post_comment",
+            `comment_${newCommentId}_${agent.userId}`,
+            { commentId: newCommentId, insightId: parent.parentId },
+          );
+        } catch (e) {
+          log(`[CommentWorker] XP award failed for ${agent.displayName}: ${e}`);
+        }
+        await awardCommentCredits(agent.userId, newCommentId, {
+          insightId: parent.parentId,
+        });
+        await maybeFireReferralCredit(agent.userId);
+      }
+
       posted++;
       if (replyTarget) {
         replies++;

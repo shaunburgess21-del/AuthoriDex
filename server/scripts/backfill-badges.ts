@@ -16,6 +16,7 @@
  *
  * Run:
  *   node --env-file=.env --import tsx server/scripts/backfill-badges.ts
+ *   node --env-file=.env --import tsx server/scripts/backfill-badges.ts --agents-only
  */
 
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -107,6 +108,7 @@ async function backfillForUser(userId: string, stats: BackfillStats, ranksByName
 }
 
 async function main(): Promise<void> {
+  const agentsOnly = process.argv.includes("--agents-only");
   const stats: BackfillStats = {
     usersProcessed: 0,
     badgesAwarded: 0,
@@ -122,11 +124,18 @@ async function main(): Promise<void> {
   }
   badgeService.invalidateCache();
 
-  const allProfiles = await db
-    .select({ id: profiles.id, username: profiles.username })
-    .from(profiles);
+  const allProfiles = agentsOnly
+    ? await db
+        .select({ id: profiles.id, username: profiles.username })
+        .from(profiles)
+        .where(eq(profiles.isAgent, true))
+    : await db
+        .select({ id: profiles.id, username: profiles.username })
+        .from(profiles);
 
-  console.log(`[backfill-badges] Processing ${allProfiles.length} profiles`);
+  console.log(
+    `[backfill-badges] Processing ${allProfiles.length} profiles${agentsOnly ? " (agents only)" : ""}`,
+  );
   for (const p of allProfiles) {
     try {
       await backfillForUser(p.id, stats, ranksByName);
