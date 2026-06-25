@@ -305,7 +305,18 @@ export async function resolveAmmMarket(
   // returns the typed error union for the caller.
   if ("error" in txResult) return txResult;
   if (!txResult.idempotentSkip) {
-    await emitResolutionSideEffects(txResult);
+    // Fire-and-forget. The settlement transaction (payouts, ledger,
+    // market status) is already committed above, so the result we return
+    // is final and complete. The fanout below — per-bettor notifications,
+    // win XP, badge checks, agent scoring, AI summary — is eventually
+    // consistent and can take many seconds on markets with lots of
+    // bettors. Awaiting it here held the admin "Resolve" HTTP response
+    // (and each auto-resolver tick) open for the full fanout, which made
+    // the dialog button spin on "Resolving..." long after the market was
+    // settled. `emitResolutionSideEffects` wraps its whole body in a
+    // try/catch that logs and swallows, so it never rejects — `void` is
+    // safe and cannot produce an unhandled rejection.
+    void emitResolutionSideEffects(txResult);
   }
   return txResult;
 }
