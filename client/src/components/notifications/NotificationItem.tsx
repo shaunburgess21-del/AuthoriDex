@@ -88,13 +88,11 @@ interface NotificationItemProps {
  * relative timestamp on the right, unread indicator on the left.
  *
  * Click-through: marks read AND navigates if the row carries an href.
- * Dismiss: tucked into a hover-revealed corner button so it doesn't
- * compete visually with the row content. On touch devices the button
- * is always visible (no hover) — we keep it always rendered and rely
- * on opacity to gate hover-only display via Tailwind.
+ * Dismiss (desktop): shares a fixed meta slot with the timestamp — hover or
+ * focus crossfades timestamp out and reveals the dismiss button in place.
  *
  * Mobile (`swipeEnabled`): swipe right = toggle read/unread, swipe left = delete
- * (directions respect Settings → invert swipe actions).
+ * (directions respect Settings → invert swipe actions). No dismiss button.
  */
 export function NotificationItem({
   notification,
@@ -264,9 +262,43 @@ export function NotificationItem({
                 +{notification.collapsedCount} earlier
               </span>
             )}
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-              {formatTimeAgo(notification.createdAt)}
-            </span>
+            <div className="relative h-5 min-w-[2.75rem] shrink-0">
+              <span
+                className={cn(
+                  "absolute inset-0 flex items-center justify-end",
+                  "text-[10px] text-muted-foreground whitespace-nowrap",
+                  "transition-opacity",
+                  !useSwipe &&
+                    "[@media(hover:hover)]:group-hover:opacity-0 group-focus-within:opacity-0",
+                )}
+              >
+                {formatTimeAgo(notification.createdAt)}
+              </span>
+              {!useSwipe && (
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  aria-label={
+                    isCollapsedHead
+                      ? `Dismiss this group of ${(notification.collapsedCount ?? 0) + 1} notifications`
+                      : "Dismiss notification"
+                  }
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-end",
+                    "h-5 w-5 ml-auto rounded-full",
+                    "text-muted-foreground hover:text-foreground hover:bg-muted/80",
+                    "transition-opacity",
+                    "[@media(hover:hover)]:opacity-0",
+                    "[@media(hover:hover)]:group-hover:opacity-100",
+                    "group-focus-within:opacity-100",
+                    "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
+                  data-testid={`notification-dismiss-${notification.id}`}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         {notification.body && (
@@ -275,29 +307,6 @@ export function NotificationItem({
           </p>
         )}
       </div>
-
-      <button
-        type="button"
-        onClick={handleDismiss}
-        aria-label={
-          isCollapsedHead
-            ? `Dismiss this group of ${(notification.collapsedCount ?? 0) + 1} notifications`
-            : "Dismiss notification"
-        }
-        className={cn(
-          "absolute top-2 right-2 h-6 w-6 rounded-full",
-          "flex items-center justify-center",
-          "text-muted-foreground hover:text-foreground hover:bg-muted/80",
-          "opacity-60",
-          "[@media(hover:hover)]:opacity-0",
-          "group-hover:opacity-100 group-focus-within:opacity-100",
-          "transition-opacity",
-          "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        )}
-        data-testid={`notification-dismiss-${notification.id}`}
-      >
-        <X className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
     </div>
   );
 
