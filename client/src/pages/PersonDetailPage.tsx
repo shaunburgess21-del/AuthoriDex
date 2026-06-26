@@ -17,6 +17,7 @@ import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { CardSection } from "@/components/CardSection";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { UnderratedOverratedCard, type ValueVotePerson } from "@/components/UnderratedOverratedCard";
 import { CurateProfileCard, type CuratePerson } from "@/components/curate";
@@ -29,7 +30,6 @@ import {
   Trophy,
   Camera,
   Check,
-  X,
   Search,
   ThumbsUp,
   ThumbsDown,
@@ -646,26 +646,13 @@ function FeaturedPollCard({
           </div>
         )}
       </Card>
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedImage(null)}
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedImage}
-            alt={poll.personName || poll.headline}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage ?? ""}
+        alt={poll.personName || poll.headline}
+        onClose={() => setExpandedImage(null)}
+        zIndexClass="z-50"
+      />
       {showDiscussion && poll.slug ? (
         <CardCommentsFocusOverlay
           open={discussionOpen}
@@ -1828,27 +1815,13 @@ export default function PersonDetailPage() {
         </div>
         </div>
 
-      {expandedProfileImage && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedProfileImage(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedProfileImage(null)}
-            aria-label="Close"
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedProfileImage}
-            alt={person.name}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedProfileImage}
+        src={expandedProfileImage ?? ""}
+        alt={person.name}
+        onClose={() => setExpandedProfileImage(null)}
+        zIndexClass="z-[60]"
+      />
     </div>
   );
 }

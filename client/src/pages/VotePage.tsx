@@ -26,6 +26,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useUserStats } from "@/hooks/useGamification";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { 
   Plus, 
@@ -1091,25 +1092,12 @@ function DiscourseCard({
         </>
       )}
     </Card>
-    {expandedImage && (
-      <div
-        className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-        onClick={() => setExpandedImage(null)}
-      >
-        <button
-          className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-          onClick={() => setExpandedImage(null)}
-        >
-          <X className="h-6 w-6 text-white" />
-        </button>
-        <img
-          src={expandedImage}
-          alt={topic.personName || topic.headline}
-          className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-    )}
+    <ImageLightbox
+      open={!!expandedImage}
+      src={expandedImage ?? ""}
+      alt={topic.personName || topic.headline}
+      onClose={() => setExpandedImage(null)}
+    />
     {showDiscussion && topic.slug ? (
       <CardCommentsFocusOverlay
         open={discussionOpen}

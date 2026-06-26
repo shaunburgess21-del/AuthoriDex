@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -53,7 +54,6 @@ import {
   MessageSquare,
   ArrowUpDown,
   Copy,
-  X,
 } from "lucide-react";
 
 interface PollData {
@@ -639,25 +639,13 @@ export default function PollDetailPage() {
       </div>
       </SwipeNavigator>
 
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
-        >
-          <button
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedImage(null)}
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedImage}
-            alt={poll.headline}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage ?? ""}
+        alt={poll.headline}
+        onClose={() => setExpandedImage(null)}
+        zIndexClass="z-50"
+      />
     </div>
   );
 }

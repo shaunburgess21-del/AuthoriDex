@@ -24,6 +24,7 @@ import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView"
 import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { ImageLightbox } from "@/components/ImageLightbox";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -450,34 +451,12 @@ export function OpinionPollCard({
         </AlertDialogContent>
       </AlertDialog>
 
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4"
-          data-interactive="true"
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpandedImage(null);
-          }}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpandedImage(null);
-            }}
-            aria-label="Close"
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedImage.url}
-            alt={expandedImage.alt}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage?.url ?? ""}
+        alt={expandedImage?.alt ?? ""}
+        onClose={() => setExpandedImage(null)}
+      />
 
       <Drawer.Root
         open={optionsDrawerOpen}

@@ -38,6 +38,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
 import {
   ArrowLeft,
@@ -49,7 +50,6 @@ import {
   Share2,
   BarChart3,
   Info,
-  X,
   ListChecks,
 } from "lucide-react";
 
@@ -682,26 +682,13 @@ export default function OpinionPollDetailPage() {
       </div>
       </SwipeNavigator>
 
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedImage(null)}
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedImage.url}
-            alt={expandedImage.alt}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage?.url ?? ""}
+        alt={expandedImage?.alt ?? ""}
+        onClose={() => setExpandedImage(null)}
+        zIndexClass="z-50"
+      />
     </div>
   );
 }

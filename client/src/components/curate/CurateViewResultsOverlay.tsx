@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { normalizeMarketCategory } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
-import { motion, AnimatePresence } from "framer-motion";
+import { ImageLightbox } from "@/components/ImageLightbox";
+import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -87,7 +88,8 @@ export function CurateViewResultsOverlay({
   leaderboardCategories,
 }: CurateViewResultsOverlayProps) {
   const [expandedImage, setExpandedImage] = useState<CelebrityImage | null>(null);
-  const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);  const [, setLocation] = useLocation();
+  const [pendingVoteImageId, setPendingVoteImageId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
   const imageQueryKey = useMemo(() => ['/api/people', person.id, 'images'] as const, [person.id]);
 
   const { data: images = [], isLoading } = useQuery<CelebrityImage[]>({
@@ -305,39 +307,18 @@ export function CurateViewResultsOverlay({
         </div>
       </motion.div>
 
-      <AnimatePresence>
-        {expandedImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setExpandedImage(null)}
-            data-testid="image-lightbox"
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-4 right-4 text-white hover:bg-white/10"
-              onClick={() => setExpandedImage(null)}
-              aria-label="Close lightbox"
-              data-testid="button-close-lightbox"
-            >
-              <X className="h-6 w-6" />
-            </Button>
-            
-            <motion.img 
-              src={expandedImage.imageUrl} 
-              alt={`${person.name} expanded`}
-              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            />
-            
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-lg px-4 py-2">
-              <span className="text-white font-medium">{expandedImage.votesUp.toLocaleString('en-US')} votes</span>
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage?.imageUrl ?? ""}
+        alt={expandedImage ? `${person.name} expanded` : ""}
+        onClose={() => setExpandedImage(null)}
+        zIndexClass="z-[60]"
+        testId="image-lightbox"
+        closeButtonTestId="button-close-lightbox"
+        footer={
+          expandedImage ? (
+            <div className="flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-lg px-4 py-2">
+              <span className="text-white font-medium">{expandedImage.votesUp.toLocaleString("en-US")} votes</span>
               <Button
                 size="sm"
                 variant="outline"
@@ -357,9 +338,9 @@ export function CurateViewResultsOverlay({
                     : "Vote for this look"}
               </Button>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ) : undefined
+        }
+      />
     </>
   );
 }

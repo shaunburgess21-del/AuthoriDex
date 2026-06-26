@@ -41,6 +41,7 @@ import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
 import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
@@ -63,7 +64,6 @@ import {
   Info,
   Gavel,
   Share2,
-  X,
   MessageSquare,
   ChevronRight,
   Activity,
@@ -2281,26 +2281,13 @@ export default function MarketDetailPage() {
         </>
       )}
 
-      {expandedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setExpandedImage(null)}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-            onClick={() => setExpandedImage(null)}
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
-          <img
-            src={expandedImage}
-            alt={market.title}
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!expandedImage}
+        src={expandedImage ?? ""}
+        alt={market.title}
+        onClose={() => setExpandedImage(null)}
+        zIndexClass="z-50"
+      />
 
       {/* Sprint 5 / Phase 4.1+4.2: StakeModal for community AMM
           markets. The buy flow is opened from per-entry buttons

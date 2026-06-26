@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import { toast } from "sonner";
 import {
   Search, Image, ArrowUpDown, X, Plus, Trash2, Loader2, ThumbsUp, Crown, Edit, ZoomIn,
@@ -526,36 +527,16 @@ export function AdminCurateProfile() {
         </div>
       )}
 
-      {lightboxImage && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
-          onClick={() => setLightboxImage(null)}
-          data-testid="curate-image-lightbox"
-          role="presentation"
-        >
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon"
-            className="absolute top-4 right-4 z-10 rounded-full shadow-md"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxImage(null);
-            }}
-            aria-label="Close preview"
-            data-testid="button-close-curate-lightbox"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-          <img
-            src={lightboxImage.imageUrl}
-            alt={editingCard ? `${editingCard.name} — full size` : "Full size preview"}
-            className="max-h-[90vh] max-w-[95vw] object-contain select-none"
-            onClick={(e) => e.stopPropagation()}
-            draggable={false}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        open={!!lightboxImage}
+        src={lightboxImage?.imageUrl ?? ""}
+        alt={editingCard ? `${editingCard.name} — full size` : "Full size preview"}
+        onClose={() => setLightboxImage(null)}
+        zIndexClass="z-[60]"
+        imageClassName="max-h-[90vh] max-w-[95vw]"
+        testId="curate-image-lightbox"
+        closeButtonTestId="button-close-curate-lightbox"
+      />
     </>
   );
 }
