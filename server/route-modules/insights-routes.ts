@@ -210,9 +210,12 @@ export function registerInsightsRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/insights/markets/demographics", async (_req, res) => {
+  app.get("/api/insights/markets/demographics", async (req, res) => {
     try {
-      const data = await loadPredictorDemographics();
+      const rawWindow = typeof req.query.window === "string" ? req.query.window : "all";
+      const window =
+        rawWindow === "7d" || rawWindow === "30d" ? rawWindow : ("all" as const);
+      const data = await loadPredictorDemographics(window);
       res.json({ data });
     } catch (error) {
       console.error("[insights] markets demographics", error);

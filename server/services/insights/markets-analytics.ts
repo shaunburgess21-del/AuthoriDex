@@ -576,8 +576,19 @@ function mapDemographicRows(
   });
 }
 
-export async function loadPredictorDemographics(): Promise<PredictorDemographics> {
-  return withDiscoverCache("markets:demographics", async () => {
+export type DemographicsWindow = "all" | "30d" | "7d";
+
+function demographicsCreatedAtFilter(window: DemographicsWindow) {
+  if (window === "7d") return sql`AND mb.created_at >= NOW() - INTERVAL '7 days'`;
+  if (window === "30d") return sql`AND mb.created_at >= NOW() - INTERVAL '30 days'`;
+  return sql``;
+}
+
+export async function loadPredictorDemographics(
+  window: DemographicsWindow = "all",
+): Promise<PredictorDemographics> {
+  const timeFilter = demographicsCreatedAtFilter(window);
+  return withDiscoverCache(`markets:demographics:${window}`, async () => {
     const [countryResult, genderResult, totalsResult] = await Promise.all([
       db.execute(sql`
         SELECT
@@ -589,6 +600,7 @@ export async function loadPredictorDemographics(): Promise<PredictorDemographics
         INNER JOIN profiles p ON p.id = mb.user_id
         WHERE p.country_of_residence IS NOT NULL
           AND p.country_of_residence != ''
+          ${timeFilter}
         GROUP BY p.country_of_residence
         ORDER BY bets DESC
       `),
@@ -602,6 +614,7 @@ export async function loadPredictorDemographics(): Promise<PredictorDemographics
         INNER JOIN profiles p ON p.id = mb.user_id
         WHERE p.gender IS NOT NULL
           AND p.gender != ''
+          ${timeFilter}
         GROUP BY p.gender
         ORDER BY bets DESC
       `),
@@ -615,8 +628,11 @@ export async function loadPredictorDemographics(): Promise<PredictorDemographics
           COALESCE(SUM(mb.stake_amount), 0)::int AS total_staked
         FROM market_bets mb
         INNER JOIN profiles p ON p.id = mb.user_id
-        WHERE (p.country_of_residence IS NOT NULL AND p.country_of_residence != '')
-           OR (p.gender IS NOT NULL AND p.gender != '')
+        WHERE (
+            (p.country_of_residence IS NOT NULL AND p.country_of_residence != '')
+            OR (p.gender IS NOT NULL AND p.gender != '')
+          )
+          ${timeFilter}
       `),
     ]);
 
