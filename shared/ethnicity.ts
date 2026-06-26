@@ -6,10 +6,10 @@
  */
 
 export const ETHNICITY_OPTIONS = [
-  { value: "african_black", label: "African / Black" },
+  { value: "african_black", label: "African" },
   { value: "asian", label: "Asian" },
   { value: "white", label: "White" },
-  { value: "coloured", label: "Coloured" },
+  { value: "coloured", label: "Mixed Race" },
   { value: "indian", label: "Indian" },
   { value: "middle_eastern", label: "Middle Eastern" },
   { value: "hispanic", label: "Hispanic" },

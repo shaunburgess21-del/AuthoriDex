@@ -23,6 +23,7 @@ import {
   Vote,
   TrendingUp,
   ChevronRight,
+  ChevronDown,
   Camera,
   Sparkles,
   Upload,
@@ -49,6 +50,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Popover,
@@ -85,9 +93,24 @@ import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { cn } from "@/lib/utils";
 import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import { ETHNICITY_OPTIONS } from "@shared/ethnicity";
+import { resolveCountryCode } from "@shared/countries";
+import { YearWheel, buildDateOfBirth } from "@/pages/auth/onboarding/YearStep";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 const BIO_MAX = 280;
+
+function parseBirthYear(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth || !/^\d{4}-/.test(dateOfBirth)) return null;
+  const y = Number(dateOfBirth.slice(0, 4));
+  return Number.isNaN(y) ? null : y;
+}
+
+/** Matches YearStep default when no birth year is saved. */
+const BIRTH_YEAR_DEFAULT = 1990;
+
+function countryForApi(raw: string): string | null {
+  return resolveCountryCode(raw.trim() || null);
+}
 
 const OCCUPATION_OPTIONS = [
   "Entertainment",
@@ -288,16 +311,14 @@ function SettingsTabsBar({
 }
 
 /**
- * Tab 1: Profile — avatar + username + bio + read-only email.
- * Mirrors the original Profile Information card; the bio textarea
- * is the only new control here. Same Save button drives every
- * field at once so we never end up with a half-saved state.
+ * Tab 1: Profile — avatar + username + read-only email.
+ * Same Save button drives every field at once so we never end up
+ * with a half-saved state.
  */
 function ProfileTab() {
   const { user, profile, profileLoading, refreshProfile } = useAuth();
   const [username, setUsername] = useState(profile?.username || "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || "");
-  const [bio, setBio] = useState(profile?.bio ?? "");
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -308,11 +329,10 @@ function ProfileTab() {
     if (!profile || hasLocalChanges) return;
     setUsername(profile.username || "");
     setAvatarUrl(profile.avatarUrl || "");
-    setBio(profile.bio ?? "");
   }, [profile, hasLocalChanges]);
 
   const mutation = useMutation({
-    mutationFn: async (data: { username?: string; bio?: string | null }) => {
+    mutationFn: async (data: { username?: string }) => {
       const res = await apiRequest("PATCH", "/api/profile/me", data);
       return res.json();
     },
@@ -331,17 +351,12 @@ function ProfileTab() {
   const normalize = (v: string | null | undefined) => (v ?? "").trim();
   const usernameInvalid =
     normalize(username).length > 0 && !USERNAME_PATTERN.test(normalize(username));
-  const bioOver = bio.length > BIO_MAX;
   const isDirty = profile
-    ? normalize(username) !== normalize(profile.username) ||
-      normalize(bio) !== normalize(profile.bio)
+    ? normalize(username) !== normalize(profile.username)
     : false;
 
   const onSave = () => {
-    mutation.mutate({
-      username,
-      bio: normalize(bio).length > 0 ? bio : null,
-    });
+    mutation.mutate({ username });
   };
 
   const onSaveAvatar = async (seed: string) => {
@@ -493,34 +508,6 @@ function ProfileTab() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="bio">Bio</Label>
-          <Textarea
-            id="bio"
-            value={bio}
-            onChange={(e) => {
-              setHasLocalChanges(true);
-              setBio(e.target.value);
-            }}
-            placeholder="Tell people a little about yourself…"
-            rows={3}
-            data-testid="input-bio"
-          />
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              Shown on your public profile.
-            </span>
-            <span
-              className={cn(
-                "tabular-nums",
-                bioOver ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
-              {bio.length} / {BIO_MAX}
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-2">
           <Label>Email</Label>
           <Input value={user?.email ?? ""} disabled />
           <p className="text-xs text-muted-foreground">
@@ -534,7 +521,6 @@ function ProfileTab() {
             disabled={
               !isDirty ||
               usernameInvalid ||
-              bioOver ||
               mutation.isPending ||
               profileLoading ||
               !profile
@@ -788,7 +774,12 @@ function AboutMeTab() {
   const { profile, refreshProfile } = useAuth();
 
   const [bio, setBio] = useState(profile?.bio ?? "");
-  const [dateOfBirth, setDateOfBirth] = useState(profile?.dateOfBirth ?? "");
+  const [birthYear, setBirthYear] = useState<number | null>(
+    () => parseBirthYear(profile?.dateOfBirth),
+  );
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const [pendingYear, setPendingYear] = useState<number | null>(null);
+  const [yearSaving, setYearSaving] = useState(false);
   const [gender, setGender] = useState(profile?.gender ?? "");
   const [countryOfOrigin, setCountryOfOrigin] = useState(
     profile?.countryOfOrigin ?? "",
@@ -827,7 +818,7 @@ function AboutMeTab() {
   useEffect(() => {
     if (!profile || dirty) return;
     setBio(profile.bio ?? "");
-    setDateOfBirth(profile.dateOfBirth ?? "");
+    setBirthYear(parseBirthYear(profile.dateOfBirth));
     setGender(profile.gender ?? "");
     setCountryOfOrigin(profile.countryOfOrigin ?? "");
     setCountryOfResidence(profile.countryOfResidence ?? "");
@@ -853,20 +844,21 @@ function AboutMeTab() {
       setDirty(false);
       toast("Saved", { description: "Your About Me details were updated." });
     },
-    onError: () => {
-      toast.error("Update failed", {
-        description: "There was an error saving your changes.",
-      });
+    onError: (err) => {
+      const parsed = parseApiError(err, "Failed to save About Me details");
+      toast.error("Update failed", { description: parsed.description });
     },
   });
 
   const onSave = () => {
     mutation.mutate({
       bio: bio.trim() || null,
-      dateOfBirth: dateOfBirth || null,
+      ...(birthYear !== null
+        ? { dateOfBirth: buildDateOfBirth(birthYear) }
+        : {}),
       gender: gender || null,
-      countryOfOrigin: countryOfOrigin.trim() || null,
-      countryOfResidence: countryOfResidence.trim() || null,
+      countryOfOrigin: countryForApi(countryOfOrigin),
+      countryOfResidence: countryForApi(countryOfResidence),
       ethnicity: ethnicity.trim() || null,
       socialXHandle: socialXHandle.trim() || null,
       socialInstagramHandle: socialInstagramHandle.trim() || null,
@@ -881,6 +873,30 @@ function AboutMeTab() {
   };
 
   const markDirty = () => setDirty(true);
+
+  const openYearPicker = () => {
+    setPendingYear(birthYear ?? BIRTH_YEAR_DEFAULT);
+    setYearPickerOpen(true);
+  };
+
+  const saveYearPicker = async () => {
+    if (pendingYear === null || yearSaving) return;
+    setYearSaving(true);
+    try {
+      await apiRequest("PATCH", "/api/profile/me", {
+        dateOfBirth: buildDateOfBirth(pendingYear),
+      });
+      await refreshProfile();
+      setBirthYear(pendingYear);
+      setYearPickerOpen(false);
+      toast("Saved", { description: "Your birth year was updated." });
+    } catch (err) {
+      const parsed = parseApiError(err, "Failed to update birth year");
+      toast.error("Couldn't save", { description: parsed.description });
+    } finally {
+      setYearSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -914,20 +930,26 @@ function AboutMeTab() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="dob">Date of birth</Label>
-            <Input
-              id="dob"
-              type="date"
-              value={dateOfBirth ?? ""}
-              onChange={(e) => {
-                markDirty();
-                setDateOfBirth(e.target.value);
-              }}
-              data-testid="input-dob"
-            />
+          <div className="space-y-2" data-testid="input-dob">
+            <Label htmlFor="birth-year-display">Year you were born</Label>
+            <button
+              type="button"
+              id="birth-year-display"
+              onClick={openYearPicker}
+              data-testid="button-change-birth-year"
+              className={cn(
+                "flex h-9 w-full items-center justify-between rounded-md border border-input",
+                "bg-background px-3 py-2 text-sm ring-offset-background",
+                "hover:bg-accent/50 transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                birthYear === null && "text-muted-foreground",
+              )}
+            >
+              <span>{birthYear !== null ? String(birthYear) : "Not set"}</span>
+              <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+            </button>
             <p className="text-xs text-muted-foreground">
-              We display age, never the raw date.
+              Your birth year stays private unless you enable it below.
             </p>
           </div>
 
@@ -1066,8 +1088,8 @@ function AboutMeTab() {
         </p>
 
         <PrivacyRow
-          label="Show date of birth (age only) on my public profile"
-          helper="We only ever display your age, never the raw date."
+          label="Show age on my public profile"
+          helper="We only ever display your age, never your birth year."
           checked={dobPublic}
           onChange={(v) => {
             markDirty();
@@ -1140,6 +1162,42 @@ function AboutMeTab() {
           <span className="text-xs text-muted-foreground">Unsaved changes</span>
         )}
       </div>
+
+      <Dialog
+        open={yearPickerOpen}
+        onOpenChange={(open) => !yearSaving && setYearPickerOpen(open)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Year you were born</DialogTitle>
+          </DialogHeader>
+          {yearPickerOpen && pendingYear !== null && (
+            <YearWheel
+              key={pendingYear}
+              initialDateOfBirth={buildDateOfBirth(pendingYear)}
+              onChange={setPendingYear}
+            />
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={yearSaving}
+              onClick={() => setYearPickerOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={yearSaving || pendingYear === null}
+              onClick={() => void saveYearPicker()}
+            >
+              {yearSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1904,8 +1962,8 @@ function PrivacyTab() {
           </div>
 
           <PrivacyRow
-            label="Show date of birth (age only)"
-            helper="We only ever display your age, never the raw date."
+            label="Show age on my public profile"
+            helper="We only ever display your age, never your birth year."
             checked={dobPublic}
             onChange={(v) => {
               setDirty(true);
