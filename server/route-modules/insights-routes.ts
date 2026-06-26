@@ -23,7 +23,7 @@ import { loadVolatility } from "../services/insights/volatility";
 import { loadStreaks } from "../services/insights/streaks";
 import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
-import { loadMarketsAnalytics } from "../services/insights/markets-analytics";
+import { loadMarketsAnalytics, loadBiggestMovers, loadPredictorDemographics } from "../services/insights/markets-analytics";
 import {
   loadCrowdWebSentimentPage,
   WEB_SENTIMENT_DEFAULT_PAGE_SIZE,
@@ -196,6 +196,27 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] markets analytics", error);
       res.status(500).json({ error: "Failed to load markets analytics" });
+    }
+  });
+
+  app.get("/api/insights/markets/movers", async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit ?? "6"), 10) || 6, 12);
+      const data = await loadBiggestMovers(limit);
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] markets movers", error);
+      res.status(500).json({ error: "Failed to load market movers" });
+    }
+  });
+
+  app.get("/api/insights/markets/demographics", async (_req, res) => {
+    try {
+      const data = await loadPredictorDemographics();
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] markets demographics", error);
+      res.status(500).json({ error: "Failed to load predictor demographics" });
     }
   });
 

@@ -1,11 +1,15 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ThumbParticipant } from "@/components/predict/MarketThumbCollage";
 import {
   RelatedItemsCarousel,
   type RelatedCarouselItem,
 } from "@/components/shared/RelatedItemsCarousel";
-import { getTopRaceEntries } from "@/lib/nativeRaceLeaders";
+import {
+  marketThumbFromCommunity,
+  marketThumbFromGainer,
+  marketThumbFromH2h,
+  marketThumbFromUpdown,
+} from "@/lib/marketThumbParticipants";
 import { buildH2hSplitBar, buildUpDownSplitBar } from "@/lib/nativeMarketCarouselPercents";
 import { normalizeMarketCategory } from "@shared/constants";
 
@@ -51,28 +55,16 @@ const CARD_WIDTH: Record<RelatedMarketsType, string> = {
   community: "w-[19rem] max-w-[82vw]",
 };
 
-function h2hEntryParticipant(entry: any): ThumbParticipant {
-  const person = entry?.person;
-  return {
-    name: person?.name ?? entry?.label ?? "?",
-    avatar: person?.avatar?.trim() ? person.avatar : null,
-  };
-}
-
 function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
   const personName: string = m.person?.name ?? m.personName ?? "Unknown";
+  const thumb = marketThumbFromUpdown(m);
   return {
     id: m.id,
     href: `/predict/updown/${m.id}`,
     title: personName,
     subtitle: null,
-    thumbVariant: "single",
-    thumbParticipants: [
-      {
-        name: personName,
-        avatar: m.person?.avatar?.trim() ? m.person.avatar : null,
-      },
-    ],
+    thumbVariant: thumb.variant,
+    thumbParticipants: thumb.participants,
     category: m.category ?? null,
     secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
@@ -86,16 +78,16 @@ function normalizeUpdown(m: any, cardWidthClass: string): RelatedCarouselItem {
 }
 
 function normalizeH2h(m: any, cardWidthClass: string): RelatedCarouselItem {
-  const entries = m.entries || [];
-  const p1 = h2hEntryParticipant(entries[0]);
-  const p2 = h2hEntryParticipant(entries[1]);
+  const thumb = marketThumbFromH2h(m);
+  const p1 = thumb.participants[0] ?? { name: "?", avatar: null };
+  const p2 = thumb.participants[1] ?? { name: "?", avatar: null };
   return {
     id: m.id,
     href: `/predict/h2h/${m.id}`,
     title: m.title || `${p1.name} vs ${p2.name}`,
     subtitle: null,
-    thumbVariant: "split",
-    thumbParticipants: [p1, p2],
+    thumbVariant: thumb.variant,
+    thumbParticipants: thumb.participants,
     category: m.category ?? null,
     secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
@@ -110,18 +102,15 @@ function normalizeH2h(m: any, cardWidthClass: string): RelatedCarouselItem {
 
 function normalizeRace(m: any, cardWidthClass: string): RelatedCarouselItem {
   const categoryLabel: string = m.categoryLabel ?? m.category ?? "Race";
-  const topEntries = getTopRaceEntries(m.entries, m.metadata, 4);
-  const leaderName = topEntries[0]?.name;
+  const thumb = marketThumbFromGainer(m);
+  const leaderName = thumb.participants[0]?.name;
   return {
     id: m.id,
     href: `/predict/race/${m.id}`,
     title: m.title || `Category Race: ${categoryLabel}`,
     subtitle: leaderName ? `Leading: ${leaderName}` : "Pick a candidate",
-    thumbVariant: topEntries.length > 1 ? "grid" : "single",
-    thumbParticipants:
-      topEntries.length > 0
-        ? topEntries
-        : [{ name: categoryLabel, avatar: null }],
+    thumbVariant: thumb.variant,
+    thumbParticipants: thumb.participants,
     category: m.category ?? null,
     secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.endAt ?? null,
@@ -136,19 +125,14 @@ function normalizeRace(m: any, cardWidthClass: string): RelatedCarouselItem {
 
 function normalizeCommunity(m: any, cardWidthClass: string): RelatedCarouselItem {
   const title: string = m.title ?? "Untitled market";
-  const avatar = m.coverImageUrl ?? m.linkedPersonAvatar ?? null;
+  const thumb = marketThumbFromCommunity(m);
   return {
     id: m.id,
     href: `/markets/${m.slug ?? m.id}`,
     title,
     subtitle: m.teaser ?? m.summary ?? null,
-    thumbVariant: "single",
-    thumbParticipants: [
-      {
-        name: title,
-        avatar: avatar?.trim() ? avatar : null,
-      },
-    ],
+    thumbVariant: thumb.variant,
+    thumbParticipants: thumb.participants,
     category: m.category ?? null,
     secondaryCategories: Array.isArray(m.secondaryCategories) ? m.secondaryCategories : null,
     endAt: m.closeAt ?? m.endAt ?? null,

@@ -243,3 +243,32 @@ export interface InsightsMarketsAnalytics {
   contested: ContestedMarketsBlock;
   openInterest: OpenInterestBlock;
 }
+
+export interface MarketMover {
+  marketId: string;
+  slug: string;
+  title: string;
+  marketType: string;
+  entryLabel: string;
+  pctNow: number;
+  pctPrev: number;
+  deltaPts: number;
+  direction: "up" | "down";
+}
+
+export interface PredictorDemographicRow {
+  key: string;
+  label: string;
+  predictors: number;
+  bets: number;
+  totalStaked: number;
+}
+
+export interface PredictorDemographics {
+  predictorCount: number;
+  countryCount: number;
+  totalBets: number;
+  totalStaked: number;
+  byCountry: PredictorDemographicRow[];
+  byGender: PredictorDemographicRow[];
+}

@@ -7,8 +7,12 @@ import type {
   ContestedMarket,
   InsightsMarketsAnalytics,
   MarketsCalibrationBucket,
+  MarketMover,
   OpenInterestRow,
+  PredictorDemographics,
+  PredictorDemographicRow,
 } from "@shared/insights/types";
+import { getCountryName } from "@shared/countries";
 import { withDiscoverCache } from "./discover-cache";
 
 function normalizeMarketTypeLabel(marketType: string): string {
@@ -258,7 +262,9 @@ async function loadContestedByEngine(
           ORDER BY aps.recorded_at DESC
           LIMIT 1
         ) lp
-        WHERE pm.status = 'OPEN' AND pm.engine = 'amm'
+        WHERE pm.status = 'OPEN'
+          AND pm.engine = 'amm'
+          AND pm.visibility IN ('live', 'inactive')
       ),
       scores AS (
         SELECT market_id, MIN(ABS(price - 0.5)) AS contested_score
@@ -287,13 +293,23 @@ async function loadContestedByEngine(
           (me.total_stake::numeric + COALESCE(me.no_stake::numeric, 0)) AS stake
         FROM market_entries me
         INNER JOIN prediction_markets pm ON pm.id = me.market_id
-        WHERE pm.status = 'OPEN' AND pm.engine = 'parimutuel'
+        WHERE pm.status = 'OPEN'
+          AND pm.engine = 'parimutuel'
+          AND pm.visibility IN ('live', 'inactive')
+          AND pm.market_type != 'jackpot'
       ),
-      totals AS (
-        SELECT market_id, SUM(stake) AS total_stake
+      entry_counts AS (
+        SELECT market_id, COUNT(*)::int AS entry_count
         FROM stakes
         GROUP BY market_id
-        HAVING SUM(stake) > 0
+        HAVING COUNT(*) >= 2
+      ),
+      totals AS (
+        SELECT s.market_id, SUM(s.stake) AS total_stake
+        FROM stakes s
+        INNER JOIN entry_counts ec ON ec.market_id = s.market_id
+        GROUP BY s.market_id
+        HAVING SUM(s.stake) > 0
       ),
       shares AS (
         SELECT s.market_id, s.stake / t.total_stake AS share
@@ -335,11 +351,8 @@ async function loadContestedByEngine(
 }
 
 async function loadContestedMarkets(limit = 8): Promise<InsightsMarketsAnalytics["contested"]> {
-  const [amm, parimutuel] = await Promise.all([
-    loadContestedByEngine("amm", limit),
-    loadContestedByEngine("parimutuel", limit),
-  ]);
-  return { amm, parimutuel };
+  const amm = await loadContestedByEngine("amm", limit);
+  return { amm, parimutuel: [] };
 }
 
 async function loadOpenInterest(): Promise<InsightsMarketsAnalytics["openInterest"]> {
@@ -431,5 +444,200 @@ export async function loadMarketsAnalytics(): Promise<InsightsMarketsAnalytics> 
       loadOpenInterest(),
     ]);
     return { calibration, contested, openInterest };
+  });
+}
+
+function mapRows(result: unknown): Record<string, unknown>[] {
+  return (
+    (Array.isArray(result)
+      ? result
+      : (result as { rows: Record<string, unknown>[] }).rows) ?? []
+  );
+}
+
+const GENDER_LABELS: Record<string, string> = {
+  male: "Male",
+  female: "Female",
+  prefer_not_to_say: "Prefer not to say",
+};
+
+export async function loadBiggestMovers(limit = 6): Promise<MarketMover[]> {
+  return withDiscoverCache(`markets:movers:${limit}`, async () => {
+    const result = await db.execute(sql`
+      WITH open_markets AS (
+        SELECT pm.id, pm.slug, pm.title, pm.market_type
+        FROM prediction_markets pm
+        WHERE pm.status = 'OPEN'
+          AND pm.engine = 'amm'
+          AND pm.visibility IN ('live', 'inactive')
+      ),
+      price_points AS (
+        SELECT
+          om.id AS market_id,
+          om.slug,
+          om.title,
+          om.market_type,
+          me.label,
+          latest.price::float AS price_now,
+          prev.price::float AS price_prev
+        FROM open_markets om
+        JOIN market_entries me ON me.market_id = om.id
+        CROSS JOIN LATERAL (
+          SELECT aps.price
+          FROM amm_price_snapshots aps
+          WHERE aps.market_id = om.id AND aps.entry_id = me.id
+          ORDER BY aps.recorded_at DESC
+          LIMIT 1
+        ) latest
+        LEFT JOIN LATERAL (
+          SELECT aps.price
+          FROM amm_price_snapshots aps
+          WHERE aps.market_id = om.id
+            AND aps.entry_id = me.id
+            AND aps.recorded_at <= NOW() - INTERVAL '24 hours'
+          ORDER BY aps.recorded_at DESC
+          LIMIT 1
+        ) prev ON true
+      ),
+      deltas AS (
+        SELECT
+          market_id,
+          slug,
+          title,
+          market_type,
+          label AS entry_label,
+          price_now,
+          COALESCE(price_prev, price_now) AS price_prev,
+          ABS(price_now - COALESCE(price_prev, price_now)) AS abs_delta,
+          (price_now - COALESCE(price_prev, price_now)) AS delta
+        FROM price_points
+        WHERE price_now IS NOT NULL
+      ),
+      per_market AS (
+        SELECT DISTINCT ON (market_id)
+          market_id,
+          slug,
+          title,
+          market_type,
+          entry_label,
+          price_now,
+          price_prev,
+          delta,
+          abs_delta
+        FROM deltas
+        ORDER BY market_id, abs_delta DESC
+      )
+      SELECT
+        market_id,
+        slug,
+        title,
+        market_type,
+        entry_label,
+        ROUND(price_now * 100)::int AS pct_now,
+        ROUND(price_prev * 100)::int AS pct_prev,
+        ROUND(delta * 100)::int AS delta_pts
+      FROM per_market
+      WHERE abs_delta > 0
+      ORDER BY abs_delta DESC
+      LIMIT ${limit}
+    `);
+
+    return mapRows(result).map((row) => {
+      const deltaPts = Number(row.delta_pts ?? 0);
+      return {
+        marketId: String(row.market_id),
+        slug: String(row.slug ?? ""),
+        title: String(row.title ?? ""),
+        marketType: String(row.market_type ?? ""),
+        entryLabel: String(row.entry_label ?? "Outcome"),
+        pctNow: Number(row.pct_now ?? 0),
+        pctPrev: Number(row.pct_prev ?? 0),
+        deltaPts,
+        direction: deltaPts >= 0 ? ("up" as const) : ("down" as const),
+      };
+    });
+  });
+}
+
+function mapDemographicRows(
+  rows: Record<string, unknown>[],
+  keyField: string,
+  labelForKey: (key: string) => string,
+): PredictorDemographicRow[] {
+  return rows.map((row) => {
+    const key = String(row[keyField] ?? "unknown");
+    return {
+      key,
+      label: labelForKey(key),
+      predictors: Number(row.predictors ?? 0),
+      bets: Number(row.bets ?? 0),
+      totalStaked: Number(row.total_staked ?? 0),
+    };
+  });
+}
+
+export async function loadPredictorDemographics(): Promise<PredictorDemographics> {
+  return withDiscoverCache("markets:demographics", async () => {
+    const [countryResult, genderResult, totalsResult] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          p.country_of_residence AS country_code,
+          COUNT(DISTINCT p.id)::int AS predictors,
+          COUNT(mb.id)::int AS bets,
+          COALESCE(SUM(mb.stake_amount), 0)::int AS total_staked
+        FROM market_bets mb
+        INNER JOIN profiles p ON p.id = mb.user_id
+        WHERE p.country_of_residence IS NOT NULL
+          AND p.country_of_residence != ''
+        GROUP BY p.country_of_residence
+        ORDER BY bets DESC
+      `),
+      db.execute(sql`
+        SELECT
+          p.gender AS gender_key,
+          COUNT(DISTINCT p.id)::int AS predictors,
+          COUNT(mb.id)::int AS bets,
+          COALESCE(SUM(mb.stake_amount), 0)::int AS total_staked
+        FROM market_bets mb
+        INNER JOIN profiles p ON p.id = mb.user_id
+        WHERE p.gender IS NOT NULL
+          AND p.gender != ''
+        GROUP BY p.gender
+        ORDER BY bets DESC
+      `),
+      db.execute(sql`
+        SELECT
+          COUNT(DISTINCT p.id)::int AS predictor_count,
+          COUNT(DISTINCT p.country_of_residence) FILTER (
+            WHERE p.country_of_residence IS NOT NULL AND p.country_of_residence != ''
+          )::int AS country_count,
+          COUNT(mb.id)::int AS total_bets,
+          COALESCE(SUM(mb.stake_amount), 0)::int AS total_staked
+        FROM market_bets mb
+        INNER JOIN profiles p ON p.id = mb.user_id
+        WHERE (p.country_of_residence IS NOT NULL AND p.country_of_residence != '')
+           OR (p.gender IS NOT NULL AND p.gender != '')
+      `),
+    ]);
+
+    const countryRows = mapRows(countryResult);
+    const genderRows = mapRows(genderResult);
+    const totalsRow = mapRows(totalsResult)[0] ?? {};
+
+    const byCountry = mapDemographicRows(countryRows, "country_code", (key) =>
+      getCountryName(key) ?? key,
+    );
+    const byGender = mapDemographicRows(genderRows, "gender_key", (key) =>
+      GENDER_LABELS[key] ?? key,
+    );
+
+    return {
+      predictorCount: Number(totalsRow.predictor_count ?? 0),
+      countryCount: Number(totalsRow.country_count ?? 0),
+      totalBets: Number(totalsRow.total_bets ?? 0),
+      totalStaked: Number(totalsRow.total_staked ?? 0),
+      byCountry,
+      byGender,
+    };
   });
 }

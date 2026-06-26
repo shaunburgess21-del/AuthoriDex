@@ -3000,6 +3000,13 @@ export default function AdminDashboard() {
     return list;
   }, [markets, rwMarketSearch, rwVisFilter, rwCatFilter, rwStatusFilter, rwTypeFilter, rwSortBy]);
 
+  const rwMarketStatusSummary = useMemo(() => {
+    const open = rwMarkets.filter((m) => m.status === "OPEN").length;
+    const resolved = rwMarkets.filter((m) => m.status === "RESOLVED").length;
+    const other = rwMarkets.length - open - resolved;
+    return { open, resolved, other };
+  }, [rwMarkets]);
+
   const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
     if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
     if (nativeSearchQuery && !m.title?.toLowerCase().includes(nativeSearchQuery.toLowerCase())) return false;
@@ -4270,23 +4277,23 @@ export default function AdminDashboard() {
                         data-testid="input-rw-market-search"
                       />
                       <Select value={rwVisFilter} onValueChange={setRwVisFilter}>
-                        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Visibility" /></SelectTrigger>
+                        <SelectTrigger className="w-[150px]"><SelectValue placeholder="Visibility" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">All Visibility</SelectItem>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="live">Live</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                          <SelectItem value="archived">Archived</SelectItem>
+                          <SelectItem value="all">All visibility</SelectItem>
+                          <SelectItem value="draft">Visibility: Draft</SelectItem>
+                          <SelectItem value="live">Visibility: Published</SelectItem>
+                          <SelectItem value="inactive">Visibility: Inactive</SelectItem>
+                          <SelectItem value="archived">Visibility: Archived</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select value={rwStatusFilter} onValueChange={setRwStatusFilter}>
-                        <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                        <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="OPEN">Open</SelectItem>
-                          <SelectItem value="CLOSED_PENDING">Pending</SelectItem>
-                          <SelectItem value="RESOLVED">Resolved</SelectItem>
-                          <SelectItem value="VOID">Void</SelectItem>
+                          <SelectItem value="all">All status</SelectItem>
+                          <SelectItem value="OPEN">Status: Open</SelectItem>
+                          <SelectItem value="CLOSED_PENDING">Status: Pending</SelectItem>
+                          <SelectItem value="RESOLVED">Status: Resolved</SelectItem>
+                          <SelectItem value="VOID">Status: Void</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select value={rwCatFilter} onValueChange={setRwCatFilter}>
@@ -4317,7 +4324,21 @@ export default function AdminDashboard() {
                           <SelectItem value="created">Newest first</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span className="text-xs text-muted-foreground ml-auto">{rwMarkets.length} shown</span>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {rwMarkets.length} shown
+                        {rwMarkets.length > 0 && (
+                          <>
+                            {" "}
+                            · {rwMarketStatusSummary.open} open
+                            {rwMarketStatusSummary.resolved > 0
+                              ? `, ${rwMarketStatusSummary.resolved} resolved`
+                              : ""}
+                            {rwMarketStatusSummary.other > 0
+                              ? `, ${rwMarketStatusSummary.other} other`
+                              : ""}
+                          </>
+                        )}
+                      </span>
                     </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8">
