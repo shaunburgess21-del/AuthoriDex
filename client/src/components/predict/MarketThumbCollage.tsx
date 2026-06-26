@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 import { handleImageError } from "@/lib/imageResolver";
 import { coalesceHttpImage } from "@/lib/displayImageUrl";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,10 @@ function ThumbCell({
   const fallbackDistinct =
     fallback && fallback !== primary ? fallback : null;
   const [showInitials, setShowInitials] = useState(!primary && !fallbackDistinct);
+
+  useEffect(() => {
+    setShowInitials(!primary && !fallbackDistinct);
+  }, [primary, fallbackDistinct]);
 
   if (showInitials) {
     return (

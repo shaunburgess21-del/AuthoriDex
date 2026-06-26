@@ -87,8 +87,39 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 function marketTypeLabel(marketType: string): string {
-  if (marketType === "gainer") return "Race";
-  return marketType.charAt(0).toUpperCase() + marketType.slice(1);
+  const key = marketType === "gainer" ? "race" : marketType.toLowerCase();
+  const labels: Record<string, string> = {
+    updown: "Up/Down",
+    h2h: "Head-to-Head",
+    race: "Category Races",
+    gainer: "Category Races",
+    jackpot: "Weekly Jackpot",
+    community: "World Markets",
+  };
+  return labels[key] ?? (marketType.charAt(0).toUpperCase() + marketType.slice(1));
+}
+
+function MarketThumbSlot({
+  marketType,
+  market,
+}: {
+  marketType: string;
+  market: Record<string, unknown>;
+}) {
+  const thumb = marketThumbFromMarket(marketType, market);
+  return (
+    <div className="shrink-0">
+      <MarketThumbCollage
+        variant={thumb.variant}
+        participants={thumb.participants}
+        size="sm"
+        className={cn(
+          thumb.variant === "split" && "w-14",
+          thumb.variant === "grid" && "w-10",
+        )}
+      />
+    </div>
+  );
 }
 
 function nativeMarketHref(m: { id: string; slug?: string; marketType: string }): string {
@@ -119,39 +150,6 @@ function formatClosingLabel(target: string | null | undefined): string | null {
   if (hours < 24) return `${hours}h`;
   const days = Math.round(hours / 24);
   return `${days}d`;
-}
-
-function MarketThumbSlot({
-  marketType,
-  market,
-  hot,
-}: {
-  marketType: string;
-  market: Record<string, unknown>;
-  hot?: boolean;
-}) {
-  const thumb = marketThumbFromMarket(marketType, market);
-  return (
-    <div className="relative shrink-0">
-      <MarketThumbCollage
-        variant={thumb.variant}
-        participants={thumb.participants}
-        size="sm"
-        className={cn(
-          thumb.variant === "split" && "w-14",
-          thumb.variant === "grid" && "w-10",
-        )}
-      />
-      {hot ? (
-        <span
-          className="pointer-events-none absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 shadow-sm"
-          aria-hidden
-        >
-          <Flame className="h-2.5 w-2.5 text-white" />
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 function HottestMarketsTile() {
@@ -215,7 +213,7 @@ function HottestMarketsTile() {
             }
             className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
           >
-            <MarketThumbSlot marketType={m.marketType} market={m.market} hot />
+            <MarketThumbSlot marketType={m.marketType} market={m.market} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium truncate">{m.title}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
@@ -328,7 +326,13 @@ function ClosingSoonTile() {
   );
 }
 
-function ContestedRow({ market }: { market: ContestedMarket }) {
+function ContestedRow({
+  market,
+  thumbMarket,
+}: {
+  market: ContestedMarket;
+  thumbMarket?: Record<string, unknown>;
+}) {
   const href =
     market.marketType === "community"
       ? `/markets/${market.slug}`
@@ -352,7 +356,7 @@ function ContestedRow({ market }: { market: ContestedMarket }) {
     <li>
       <Link
         href={href}
-        className="block p-3 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
+        className="flex items-start gap-3 p-3 rounded-lg border border-border/40 bg-background/50 hover:bg-muted/40 transition-colors"
         onClick={() =>
           logInsightsEvent("predict", "contested_click", {
             marketId: market.marketId,
@@ -360,20 +364,29 @@ function ContestedRow({ market }: { market: ContestedMarket }) {
           })
         }
       >
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium line-clamp-2 flex-1">{market.title}</p>
-          <Badge variant="outline" className="text-[10px] shrink-0 uppercase">
-            {marketTypeLabel(market.marketType)}
-          </Badge>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-1">
-          {pctFromEven}% from an even split
-        </p>
-        {market.topPair.length > 0 && (
-          <p className="text-xs text-muted-foreground mt-2">
-            {market.topPair.map((p) => `${p.label} ${p.pct}%`).join(" · ")}
+        <MarketThumbSlot
+          marketType={market.marketType}
+          market={
+            thumbMarket ??
+            ({ title: market.title, marketType: market.marketType } as Record<string, unknown>)
+          }
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm font-medium line-clamp-2 flex-1">{market.title}</p>
+            <Badge variant="outline" className="text-[10px] shrink-0 uppercase">
+              {marketTypeLabel(market.marketType)}
+            </Badge>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {pctFromEven}% from an even split
           </p>
-        )}
+          {market.topPair.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {market.topPair.map((p) => `${p.label} ${p.pct}%`).join(" · ")}
+            </p>
+          )}
+        </div>
       </Link>
     </li>
   );
@@ -383,8 +396,9 @@ function ContestedTile() {
   const { data, isLoading } = useInsightsQuery<InsightsMarketsAnalytics>(
     "/api/insights/markets/analytics",
   );
+  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50, "closing");
 
-  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (isLoading || listsLoading) return <Skeleton className="h-40 w-full" />;
   const contested = data?.contested;
 
   // Card covers native + community AMM markets only (no jackpots / parimutuel).
@@ -397,7 +411,11 @@ function ContestedTile() {
   return (
     <ul className="grid gap-2 sm:grid-cols-2">
       {combined.slice(0, 6).map((m) => (
-        <ContestedRow key={m.marketId} market={m} />
+        <ContestedRow
+          key={m.marketId}
+          market={m}
+          thumbMarket={marketById.get(m.marketId) as Record<string, unknown> | undefined}
+        />
       ))}
     </ul>
   );
@@ -427,7 +445,7 @@ function OpenInterestTile() {
         {rows.map((r) => (
           <li key={r.key}>
             <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:items-center text-xs mb-1">
-              <span className="font-medium">{r.label}</span>
+              <span className="font-medium">{marketTypeLabel(r.key)}</span>
               <span className="text-muted-foreground tabular-nums shrink-0">
                 {formatVoxCompact(r.total) ?? formatVox(0)} · {r.marketCount}{" "}
                 {r.marketCount === 1 ? "market" : "markets"}
@@ -619,9 +637,9 @@ function moverHref(m: MarketMover): string {
 
 function MoversTile() {
   const moversQ = useInsightsQuery<MarketMover[]>("/api/insights/markets/movers");
-  const { marketById } = useInsightsMarketLists(12, "hottest");
+  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(12, "hottest");
 
-  if (moversQ.isLoading) return <Skeleton className="h-40 w-full" />;
+  if (moversQ.isLoading || listsLoading) return <Skeleton className="h-40 w-full" />;
   const movers = moversQ.data ?? [];
   if (movers.length === 0) {
     return <InsightsEmptyState message="No significant price moves in the last 24 hours." />;
@@ -681,6 +699,7 @@ function MoversTile() {
 }
 
 type DemographicMetric = "predictors" | "bets" | "volume";
+type DemographicWindow = "all" | "30d" | "7d";
 
 const DEMOGRAPHIC_GENDER_COLORS: Record<string, string> = {
   male: "#3B82F6",
@@ -688,10 +707,53 @@ const DEMOGRAPHIC_GENDER_COLORS: Record<string, string> = {
   prefer_not_to_say: "#94A3B8",
 };
 
-function DemographicsTile() {
-  const { data, isLoading } = useInsightsQuery<PredictorDemographics>(
-    "/api/insights/markets/demographics",
+function DemographicsWindowToggle({
+  value,
+  onChange,
+}: {
+  value: DemographicWindow;
+  onChange: (next: DemographicWindow) => void;
+}) {
+  return (
+    <div
+      className="inline-flex shrink-0 rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
+      role="group"
+      aria-label="Demographics time window"
+    >
+      {(
+        [
+          ["all", "All time"],
+          ["30d", "30d"],
+          ["7d", "7d"],
+        ] as const
+      ).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => onChange(key)}
+          className={cn(
+            "rounded-md px-2.5 py-1.5 transition-colors sm:px-3",
+            value === key
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
+}
+
+function DemographicsTile({ timeWindow }: { timeWindow: DemographicWindow }) {
+  const path =
+    timeWindow === "all"
+      ? "/api/insights/markets/demographics"
+      : `/api/insights/markets/demographics?window=${timeWindow}`;
+  const { data, isLoading } = useInsightsQuery<PredictorDemographics>(path, {
+    queryKey: [path],
+  });
   const [metric, setMetric] = useState<DemographicMetric>("predictors");
 
   if (isLoading) return <Skeleton className="h-56 w-full" />;
@@ -843,6 +905,25 @@ function DemographicsTile() {
   );
 }
 
+function DemographicsSection() {
+  const [timeWindow, setTimeWindow] = useState<DemographicWindow>("all");
+
+  return (
+    <InsightsSection
+      tab="predict"
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          <Users className="h-4 w-4 text-violet-500" /> Predictor demographics
+        </span>
+      }
+      description="Where our predictors are from and how activity breaks down."
+      action={<DemographicsWindowToggle value={timeWindow} onChange={setTimeWindow} />}
+    >
+      <DemographicsTile timeWindow={timeWindow} />
+    </InsightsSection>
+  );
+}
+
 export function PredictTab() {
   return (
     <div className="space-y-6 md:space-y-8">
@@ -866,7 +947,7 @@ export function PredictTab() {
               <TrendingUp className="h-4 w-4 text-green-500" /> Biggest movers
             </span>
           }
-          description="Largest AMM price swings in the last 24 hours."
+          description="Largest price swings in the last 24 hours."
         >
           <MoversTile />
         </InsightsSection>
@@ -923,17 +1004,7 @@ export function PredictTab() {
         </InsightsSection>
       </div>
 
-      <InsightsSection
-        tab="predict"
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-violet-500" /> Predictor demographics
-          </span>
-        }
-        description="Where our predictors are from and how activity breaks down."
-      >
-        <DemographicsTile />
-      </InsightsSection>
+      <DemographicsSection />
 
       <InsightsSection
         tab="predict"
