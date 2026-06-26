@@ -31,7 +31,7 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 ## Critical Rules — Read Before Every Change
 
 ### Never Do This
-- NEVER push directly to `main` branch without asking first
+- NEVER push directly to `main` branch unless user has asked for this
 - NEVER modify `server/db.ts` without understanding Drizzle + Supabase pooler setup
 - NEVER expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend
 - NEVER modify the score engine (`server/scoring/`, `server/jobs/ingest.ts` score path) without being explicitly asked
