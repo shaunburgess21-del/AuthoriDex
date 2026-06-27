@@ -122,6 +122,7 @@ type ContestedRow = {
   market_type: string;
   engine: string;
   contested_score: number;
+  cover_image_url: string | null;
 };
 
 /** Drizzle `sql` templates expand JS arrays as $1,$2,... — invalid for `ANY`. */
@@ -144,6 +145,7 @@ function mapContestedRows(result: unknown): ContestedRow[] {
     market_type: String(row.market_type),
     engine: String(row.engine),
     contested_score: Number(row.contested_score),
+    cover_image_url: row.cover_image_url ? String(row.cover_image_url) : null,
   }));
 }
 
@@ -277,6 +279,7 @@ async function loadContestedByEngine(
         pm.title,
         pm.market_type,
         pm.engine,
+        pm.cover_image_url,
         s.contested_score::float AS contested_score
       FROM scores s
       INNER JOIN prediction_markets pm ON pm.id = s.market_id
@@ -327,6 +330,7 @@ async function loadContestedByEngine(
         pm.title,
         pm.market_type,
         pm.engine,
+        pm.cover_image_url,
         s.contested_score
       FROM scores s
       INNER JOIN prediction_markets pm ON pm.id = s.market_id
@@ -347,6 +351,7 @@ async function loadContestedByEngine(
     engine: r.engine as "amm" | "parimutuel",
     score: Number(r.contested_score),
     topPair: pairs.get(r.market_id) ?? [],
+    coverImageUrl: r.cover_image_url,
   }));
 }
 

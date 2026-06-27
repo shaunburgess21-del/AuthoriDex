@@ -64,9 +64,11 @@ export function useInsightsMarketLists(
   const openQ = useQuery({
     queryKey: ["/api/open-markets", `insights-${openQuerySuffix}`, openLimit],
     queryFn: () =>
-      fetchJson<{ data?: InsightsOpenMarket[]; markets?: InsightsOpenMarket[] }>(
-        `/api/open-markets?limit=${openLimit}`,
-      ).then((j) => j.data ?? j.markets ?? []),
+      fetchJson<
+        InsightsOpenMarket[] | { data?: InsightsOpenMarket[]; markets?: InsightsOpenMarket[] }
+      >(`/api/open-markets?limit=${openLimit}`).then((j) =>
+        Array.isArray(j) ? j : (j.data ?? j.markets ?? []),
+      ),
     staleTime: 60_000,
   });
 

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   AlarmClock,
+  ArrowUpDown,
   Flame,
   Globe2,
   LineChart as LineChartIcon,
@@ -40,15 +41,12 @@ import type {
 /**
  * V1 Predict tab — market analytics + activity tiles.
  *
- * Tiles:
- *  - Hottest markets by volume (native + community, with avatar collages)
- *  - Biggest movers (24h AMM price swings)
- *  - Closing soon (native + community, cutoff within ~48h)
- *  - Most contested markets (AMM + parimutuel, closest to even split)
- *  - Open interest by type
- *  - Top predictors this week
- *  - Predictor demographics (country + gender)
- *  - Live bet feed
+ * Layout:
+ *  - Hottest + Closing soon (2-col)
+ *  - Most contested (full)
+ *  - Open interest + Top predictors (2-col)
+ *  - Predictor demographics (full)
+ *  - Biggest movers + Live bet feed (2-col)
  */
 
 interface OpenMarket extends InsightsOpenMarket {}
@@ -368,7 +366,11 @@ function ContestedRow({
           marketType={market.marketType}
           market={
             thumbMarket ??
-            ({ title: market.title, marketType: market.marketType } as Record<string, unknown>)
+            ({
+              title: market.title,
+              marketType: market.marketType,
+              ...(market.coverImageUrl ? { coverImageUrl: market.coverImageUrl } : {}),
+            } as Record<string, unknown>)
           }
         />
         <div className="min-w-0 flex-1">
@@ -637,7 +639,7 @@ function moverHref(m: MarketMover): string {
 
 function MoversTile() {
   const moversQ = useInsightsQuery<MarketMover[]>("/api/insights/markets/movers");
-  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(12, "hottest");
+  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50, "hottest");
 
   if (moversQ.isLoading || listsLoading) return <Skeleton className="h-40 w-full" />;
   const movers = moversQ.data ?? [];
@@ -688,7 +690,7 @@ function MoversTile() {
                   <TrendingDown className="h-3.5 w-3.5" />
                 )}
                 {up ? "+" : ""}
-                {m.deltaPts}
+                {m.deltaPts} pts
               </span>
             </Link>
           </li>
@@ -927,7 +929,7 @@ function DemographicsSection() {
 export function PredictTab() {
   return (
     <div className="space-y-6 md:space-y-8">
-      <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6">
         <InsightsSection
           tab="predict"
           title={
@@ -942,19 +944,6 @@ export function PredictTab() {
 
         <InsightsSection
           tab="predict"
-          title={
-            <span className="inline-flex items-center gap-1.5">
-              <TrendingUp className="h-4 w-4 text-green-500" /> Biggest movers
-            </span>
-          }
-          description="Largest price swings in the last 24 hours."
-        >
-          <MoversTile />
-        </InsightsSection>
-
-        <InsightsSection
-          tab="predict"
-          className="lg:col-span-2 xl:col-span-1"
           title={
             <span className="inline-flex items-center gap-1.5">
               <AlarmClock className="h-4 w-4 text-amber-500" /> Closing soon
@@ -973,7 +962,7 @@ export function PredictTab() {
             <Zap className="h-4 w-4 text-blue-500" /> Most contested markets
           </span>
         }
-        description="Native and community markets closest to an even split."
+        description="Markets closest to an even split."
       >
         <ContestedTile />
       </InsightsSection>
@@ -1006,13 +995,27 @@ export function PredictTab() {
 
       <DemographicsSection />
 
-      <InsightsSection
-        tab="predict"
-        title="Live bet feed"
-        description="Latest activity across all prediction markets."
-      >
-        <LiveBetFeedTile />
-      </InsightsSection>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <InsightsSection
+          tab="predict"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              <ArrowUpDown className="h-4 w-4 text-blue-500" /> Biggest movers
+            </span>
+          }
+          description="Markets where prices moved the most in the last 24 hours as bettors changed their conviction."
+        >
+          <MoversTile />
+        </InsightsSection>
+
+        <InsightsSection
+          tab="predict"
+          title="Live bet feed"
+          description="Latest activity across all prediction markets."
+        >
+          <LiveBetFeedTile />
+        </InsightsSection>
+      </div>
     </div>
   );
 }

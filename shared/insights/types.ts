@@ -220,6 +220,8 @@ export interface ContestedMarket {
   engine: "amm" | "parimutuel";
   score: number;
   topPair: ContestedMarketPair[];
+  /** World Markets cover art — avoids relying on volume-ranked open-markets list. */
+  coverImageUrl?: string | null;
 }
 
 export interface ContestedMarketsBlock {
