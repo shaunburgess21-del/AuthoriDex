@@ -762,7 +762,7 @@ function SentimentPulseTile() {
           <div className="flex items-start gap-3 rounded-lg border border-border/40 bg-background/50 p-3 transition-colors hover:bg-muted/40">
             <PersonAvatar
               name={p.personName ?? p.headline}
-              avatar={p.personAvatar}
+              avatar={p.personAvatar ?? p.imageUrl}
               size="sm"
               className="shrink-0"
             />

@@ -328,6 +328,8 @@ export interface InsightsTrendingPollRow {
   disapprovePercent: number;
   personName: string | null;
   personAvatar: string | null;
+  /** Poll topic image when no linked person (same field as main Vote page). */
+  imageUrl?: string | null;
 }
 
 export interface InsightsApprovalPersonRow {
