@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Children } from "react";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import {
   DEFAULT_HUB_ACTIVITY_FILTER,
   type HubActivityFilter,
@@ -737,7 +738,7 @@ function CurateProfileCard({
                 data-testid={`button-photo-a-${poll.id}`}
               >
                 <img 
-                  src={imageA.imageUrl} 
+                  src={getDisplayImageUrl(imageA.imageUrl, { width: 600 })} 
                   alt={`${poll.personName} Look A`}
                   loading="lazy"
                   decoding="async"
@@ -778,7 +779,7 @@ function CurateProfileCard({
                 data-testid={`button-photo-b-${poll.id}`}
               >
                 <img 
-                  src={imageB.imageUrl} 
+                  src={getDisplayImageUrl(imageB.imageUrl, { width: 600 })} 
                   alt={`${poll.personName} Look B`}
                   loading="lazy"
                   decoding="async"

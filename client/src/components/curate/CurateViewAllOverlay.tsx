@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { matchesCategoryFilter } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -134,7 +135,7 @@ function CelebCard({
                 className="relative aspect-square rounded-md overflow-hidden bg-slate-800"
               >
                 <img 
-                  src={img.imageUrl} 
+                  src={getDisplayImageUrl(img.imageUrl, { width: 400 })} 
                   alt={`${person.name} photo ${idx + 1}`}
                   className="w-full h-full object-cover"
                 />

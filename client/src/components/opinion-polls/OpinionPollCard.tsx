@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext, type KeyboardEvent, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Users, ListChecks, MessageSquare, X } from "lucide-react";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Drawer } from "vaul";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -303,7 +304,7 @@ export function OpinionPollCard({
                 }}
                 className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <img src={poll.imageUrl} alt={poll.title} className="w-full h-full object-cover" />
+                <img src={getDisplayImageUrl(poll.imageUrl!, { width: 200 })} alt={poll.title} className="w-full h-full object-cover" />
               </div>
             ) : (
               <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -274,7 +275,7 @@ export function CurateProfileCard({
                 {selectedImage ? (
                   <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-600/60 bg-slate-900/80 shadow-lg">
                     <img
-                      src={selectedImage.imageUrl}
+                      src={getDisplayImageUrl(selectedImage.imageUrl, { width: 500 })}
                       alt={`${person.name} selected photo`}
                       className="w-full h-full object-cover"
                     />
@@ -357,7 +358,7 @@ export function CurateProfileCard({
                       data-testid={`button-curate-photo-${image.id}`}
                     >
                       <img 
-                        src={image.imageUrl} 
+                        src={getDisplayImageUrl(image.imageUrl, { width: 400 })} 
                         alt={`${person.name} photo`}
                         className="w-full h-full object-cover"
                       />

@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 
 export type OpinionPollOptionRowOption = {
   id: string;
@@ -44,7 +45,7 @@ export function OpinionPollOptionRow({
       onClick={() => onExpandImage(option.imageUrl!, option.name)}
       className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
     >
-      <img src={option.imageUrl} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+      <img src={getDisplayImageUrl(option.imageUrl!, { width: 200 })} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
     </button>
   ) : (
     <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">

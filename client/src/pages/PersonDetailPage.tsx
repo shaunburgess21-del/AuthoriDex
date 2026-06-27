@@ -1,5 +1,6 @@
 import { Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { handleImageError } from "@/lib/imageResolver";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -292,7 +293,7 @@ function CurateProfileCardProfile({
             {imageA ? (
               <>
                 <img 
-                  src={imageA.imageUrl} 
+                  src={getDisplayImageUrl(imageA.imageUrl, { width: 600 })} 
                   alt={`${poll.personName} Look A`}
                   className="w-full h-full object-cover"
                 />
@@ -342,7 +343,7 @@ function CurateProfileCardProfile({
             {imageB ? (
               <>
                 <img 
-                  src={imageB.imageUrl} 
+                  src={getDisplayImageUrl(imageB.imageUrl, { width: 600 })} 
                   alt={`${poll.personName} Look B`}
                   className="w-full h-full object-cover"
                 />

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { normalizeMarketCategory } from "@shared/constants";
@@ -245,7 +246,7 @@ export function CurateViewResultsOverlay({
                       data-testid={`button-expand-image-${image.id}`}
                     >
                       <img 
-                        src={image.imageUrl} 
+                        src={getDisplayImageUrl(image.imageUrl, { width: 200 })} 
                         alt={`${person.name} photo ${idx + 1}`}
                         className="w-full h-full object-cover"
                       />
