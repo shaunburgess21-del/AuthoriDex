@@ -22,7 +22,7 @@ import { DoughnutChart } from "@/components/charts/DoughnutChart";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import { useInsightsQuery } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
-import { formatVox, formatVoxCompact } from "@/lib/currency";
+import { formatVox, formatVoxCompact, formatVoxPrice } from "@/lib/currency";
 import { marketThumbFromMarket } from "@/lib/marketThumbParticipants";
 import {
   useInsightsMarketLists,
@@ -111,6 +111,22 @@ function contestedGapLabel(marketType: string, gapPts: number): string {
     default:
       return `${n} between top two`;
   }
+}
+
+/** Share-price line for biggest movers — matches predict-page Ꝟ/share quotes. */
+function moverSharePriceLine(m: MarketMover): string {
+  const prev = formatVoxPrice(m.pctPrev / 100, 2);
+  const now = formatVoxPrice(m.pctNow / 100, 2);
+  return `${m.entryLabel}: was ${prev}/share now ${now}/share`;
+}
+
+/** Relative % change from the 24h-ago share price (same basis as per-share quotes). */
+function formatMoverPctChange(pctPrev: number, pctNow: number): string {
+  if (pctPrev <= 0) {
+    return pctNow > 0 ? `+${pctNow}%` : "0%";
+  }
+  const rel = Math.round(((pctNow - pctPrev) / pctPrev) * 100);
+  return rel >= 0 ? `+${rel}%` : `${rel}%`;
 }
 
 function MarketThumbSlot({
@@ -683,7 +699,7 @@ function MoversTile() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{m.title}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                  {m.entryLabel}: {m.pctPrev}% → {m.pctNow}%
+                  {moverSharePriceLine(m)}
                 </p>
               </div>
               <span
@@ -699,8 +715,7 @@ function MoversTile() {
                 ) : (
                   <TrendingDown className="h-3.5 w-3.5" />
                 )}
-                {up ? "+" : ""}
-                {m.deltaPts} pts
+                {formatMoverPctChange(m.pctPrev, m.pctNow)}
               </span>
             </Link>
           </li>
