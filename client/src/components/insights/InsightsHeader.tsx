@@ -46,10 +46,8 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
     >
       <div className="container mx-auto px-3 sm:px-4 max-w-7xl py-2.5 md:py-3">
         {/*
-         * 5 tabs is too many for a single row at very narrow widths, so we
-         * collapse to icons-only with a horizontally scrollable, snap-aligned
-         * row at < sm. Active tab still shows its label so the user always
-         * sees where they are. Desktop keeps all labels visible.
+         * Five tabs scroll horizontally on narrow screens (icon + label on
+         * every tab), matching the How It Works knowledge tab bar.
          */}
         <div
           className="mx-auto max-w-3xl"
@@ -68,17 +66,14 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                   onClick={() => writeInsightsQuery({ tab: tab.id, clearFilters: true })}
                   className={cn(
                     "relative flex items-center justify-center gap-1.5",
-                    "whitespace-nowrap px-2.5 sm:px-4 py-[10px] sm:py-[11px]",
-                    "rounded-md text-[12px] sm:text-[14px] font-medium transition-all snap-start",
-                    // Mobile: equal-width icon-only tabs (label shows when active).
-                    // Desktop: each tab grows to fill the bar and shows its label.
+                    "whitespace-nowrap px-2.5 sm:px-4 py-[11px]",
+                    "rounded-md text-[13px] sm:text-[14px] font-medium transition-all snap-start",
                     "flex-1 min-w-fit",
                     isActive
                       ? "bg-background shadow-sm text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                   data-testid={`insights-tab-${tab.id}`}
-                  aria-label={tab.label}
                   aria-pressed={isActive}
                 >
                   {isActive && (
@@ -91,9 +86,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                     className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] shrink-0"
                     style={isActive ? { color: accent } : undefined}
                   />
-                  <span className={cn(isActive ? "inline" : "hidden sm:inline")}>
-                    {tab.label}
-                  </span>
+                  {tab.label}
                 </button>
               );
             })}
