@@ -24,6 +24,7 @@ import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
+import { sortOpinionPollOptionsForCard } from "@/lib/opinionPollOptions";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { ImageLightbox } from "@/components/ImageLightbox";
 
@@ -103,20 +104,7 @@ export function OpinionPollCard({
   // Once the user has voted, sort options by leader -> trailing so positions
   // update dynamically as votes come in. Pre-vote we keep the authored
   // orderIndex so we don't telegraph popular picks before voting.
-  const sortedOptions = [...options].sort(
-    (a, b) => (b.votes ?? 0) - (a.votes ?? 0) || (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
-  );
-  // After voting, pin the user's choice to the top so it stays visible in the
-  // card preview (and at the top of the drawer) even if it isn't a top scorer
-  // — important when the card is about to animate into the Hidden toggle.
-  if (voted) {
-    const selectedIdx = sortedOptions.findIndex((o) => o.id === voted);
-    if (selectedIdx > 0) {
-      const [selected] = sortedOptions.splice(selectedIdx, 1);
-      sortedOptions.unshift(selected);
-    }
-  }
-  const displayOptions = voted ? sortedOptions : options;
+  const displayOptions = sortOpinionPollOptionsForCard(options, voted);
   const visibleOptions = displayOptions.slice(0, OPINION_POLL_PREVIEW_COUNT);
   const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
   const categoryKey = poll.category ?? "";

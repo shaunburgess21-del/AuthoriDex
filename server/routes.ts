@@ -15322,8 +15322,33 @@ Target length: about 90-150 words.`;
         }
       }
 
+      const realCountsByPoll = new Map<string, { support: number; neutral: number; oppose: number }>();
+      if (pollIds.length > 0) {
+        const realVoteRows = await db
+          .select({
+            pollId: trendingPollVotes.pollId,
+            choice: trendingPollVotes.choice,
+            cnt: count(),
+          })
+          .from(trendingPollVotes)
+          .where(inArray(trendingPollVotes.pollId, pollIds))
+          .groupBy(trendingPollVotes.pollId, trendingPollVotes.choice);
+
+        for (const row of realVoteRows) {
+          const bucket = realCountsByPoll.get(row.pollId) ?? { support: 0, neutral: 0, oppose: 0 };
+          if (row.choice === "support" || row.choice === "neutral" || row.choice === "oppose") {
+            bucket[row.choice] = Number(row.cnt);
+          }
+          realCountsByPoll.set(row.pollId, bucket);
+        }
+      }
+
       const result = polls.map(p => {
-        const total = (p.seedSupportCount || 0) + (p.seedNeutralCount || 0) + (p.seedOpposeCount || 0);
+        const real = realCountsByPoll.get(p.id) ?? { support: 0, neutral: 0, oppose: 0 };
+        const supportCount = (p.seedSupportCount || 0) + real.support;
+        const neutralCount = (p.seedNeutralCount || 0) + real.neutral;
+        const opposeCount = (p.seedOpposeCount || 0) + real.oppose;
+        const total = supportCount + neutralCount + opposeCount;
         const effectiveSlug = p.slug || slugifyHeadline(p.headline);
         const imageUrl = resolveSentimentPollImageUrl(p.imageUrl, effectiveSlug);
         return {
@@ -15339,9 +15364,9 @@ Target length: about 90-150 words.`;
           imageUrl,
           slug: p.slug || null,
           totalVotes: total,
-          approvePercent: total > 0 ? Math.round(((p.seedSupportCount || 0) / total) * 100) : 0,
-          neutralPercent: total > 0 ? Math.round(((p.seedNeutralCount || 0) / total) * 100) : 0,
-          disapprovePercent: total > 0 ? Math.round(((p.seedOpposeCount || 0) / total) * 100) : 0,
+          approvePercent: total > 0 ? Math.round((supportCount / total) * 100) : 0,
+          neutralPercent: total > 0 ? Math.round((neutralCount / total) * 100) : 0,
+          disapprovePercent: total > 0 ? Math.round((opposeCount / total) * 100) : 0,
           status: p.status,
           relatedPersonIds: (relatedMap[p.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[p.id] || [],

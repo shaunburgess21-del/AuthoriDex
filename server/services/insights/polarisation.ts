@@ -127,6 +127,21 @@ async function enrichPollItems(items: PolarisationItem[]): Promise<void> {
       item.runnerUpPct = Math.round(meta.runnerUpPct ?? 0);
     }
   }
+
+  const countResult = await db.execute(sql`
+    SELECT poll_id, COUNT(*)::int AS option_count
+    FROM opinion_poll_options
+    WHERE poll_id IN (${sql.join(pollIds.map((id) => sql`${id}`), sql`, `)})
+    GROUP BY poll_id
+  `);
+  const countById = new Map(
+    extract(countResult).map((row) => [String(row.poll_id), Number(row.option_count ?? 0)]),
+  );
+  for (const item of items) {
+    if (item.kind !== "opinion_poll") continue;
+    const count = countById.get(item.id);
+    if (count != null) item.optionCount = count;
+  }
 }
 
 async function enrichFaceOffItems(items: PolarisationItem[]): Promise<void> {

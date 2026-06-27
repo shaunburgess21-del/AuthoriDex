@@ -38,6 +38,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
+import { sortOpinionPollOptionsByVotes } from "@/lib/opinionPollOptions";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -312,6 +313,7 @@ export default function OpinionPollDetailPage() {
 
   const hasVoted = !!poll.userVote;
   const options = poll.options || [];
+  const voteSortedOptions = sortOpinionPollOptionsByVotes(options);
   const votedOption = options.find((o: any) => o.id === poll.userVote);
 
   return (
@@ -472,10 +474,10 @@ export default function OpinionPollDetailPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2.5">
-              {options.map((option: any, idx: number) => {
+              {voteSortedOptions.map((option: any, idx: number) => {
                 const isSelected = poll.userVote === option.id;
                 const percent = option.percent || 0;
-                const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
+                const maxPercent = Math.max(...voteSortedOptions.map((o: any) => o.percent || 0), 0);
                 const isLeading = percent === maxPercent && percent > 0;
                 return (
                   <OpinionPollOptionRow
@@ -577,11 +579,9 @@ export default function OpinionPollDetailPage() {
           </h2>
 
           <div className="flex flex-col gap-3">
-            {[...options]
-              .sort((a: any, b: any) => (b.percent || 0) - (a.percent || 0))
-              .map((option: any) => {
+            {voteSortedOptions.map((option: any) => {
                 const percent = option.percent || 0;
-                const maxPercent = Math.max(...options.map((o: any) => o.percent || 0), 0);
+                const maxPercent = Math.max(...voteSortedOptions.map((o: any) => o.percent || 0), 0);
                 const isLeading = percent === maxPercent && percent > 0;
                 const isUserVote = poll.userVote === option.id;
                 return (

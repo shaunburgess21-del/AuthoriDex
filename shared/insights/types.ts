@@ -294,6 +294,7 @@ export interface PolarisationItem {
   leaderLabel?: string | null;
   leaderPct?: number | null;
   leaderImageUrl?: string | null;
+  optionCount?: number | null;
   participants?: PolarisationParticipant[];
   optionAPct?: number | null;
   optionBPct?: number | null;

@@ -77,15 +77,9 @@ function VoteRowThumb({
   return <PersonAvatar name={name} avatar={src} size="sm" className="shrink-0" />;
 }
 
-function PollLeadBar({ pct }: { pct: number }) {
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
-      <div
-        className="h-full bg-gradient-to-r from-cyan-600/80 to-cyan-400/60 transition-all"
-        style={{ width: `${Math.max(pct, 2)}%` }}
-      />
-    </div>
-  );
+function formatOptionCount(optionCount?: number | null): string | null {
+  if (optionCount == null || optionCount <= 0) return null;
+  return `${optionCount} ${optionCount === 1 ? "option" : "options"}`;
 }
 
 function MatchupSplitBar({
@@ -154,39 +148,6 @@ function matchupPcts(item: {
   };
 }
 
-function knifeEdgeMeta(item: PolarisationItem): {
-  leaderName: string;
-  margin: number;
-  isTie: boolean;
-  tieCount: number;
-  neutralVotes: number;
-} | null {
-  const aVotes = item.optionAVotes;
-  const bVotes = item.optionBVotes;
-  const participants = item.participants;
-  if (aVotes == null || bVotes == null || !participants || participants.length < 2) {
-    return null;
-  }
-  const neutralVotes = item.neutralVotes ?? 0;
-  if (aVotes === bVotes) {
-    return {
-      leaderName: participants[0].name,
-      margin: 0,
-      isTie: true,
-      tieCount: aVotes,
-      neutralVotes,
-    };
-  }
-  const aWins = aVotes > bVotes;
-  return {
-    leaderName: aWins ? participants[0].name : participants[1].name,
-    margin: Math.abs(aVotes - bVotes),
-    isTie: false,
-    tieCount: 0,
-    neutralVotes,
-  };
-}
-
 function MatchupInsightRow({
   title,
   slug,
@@ -198,7 +159,6 @@ function MatchupInsightRow({
   optionAVotes,
   optionBVotes,
   neutralVotes,
-  edgeMeta,
   onClick,
 }: {
   title: string;
@@ -211,7 +171,6 @@ function MatchupInsightRow({
   optionAVotes?: number;
   optionBVotes?: number;
   neutralVotes?: number;
-  edgeMeta?: ReturnType<typeof knifeEdgeMeta>;
   onClick?: () => void;
 }) {
   const href = slug ? `/vote/matchups/${slug}` : null;
@@ -232,17 +191,7 @@ function MatchupInsightRow({
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-medium leading-snug line-clamp-2">{title}</p>
           <span className="shrink-0 text-[10px] font-mono tabular-nums text-muted-foreground">
-            {edgeMeta ? (
-              edgeMeta.isTie ? (
-                <span className="text-cyan-600 dark:text-cyan-400">Even</span>
-              ) : (
-                <span className="text-cyan-600 dark:text-cyan-400">
-                  {edgeMeta.leaderName} +{edgeMeta.margin}
-                </span>
-              )
-            ) : (
-              formatVotes(totalVotes)
-            )}
+            {formatVotes(totalVotes)}
           </span>
         </div>
         <div className="mt-2">
@@ -256,31 +205,6 @@ function MatchupInsightRow({
           {pcts.a}% · {pcts.b}%
           {pcts.n > 0 ? ` · ${pcts.n}% neutral` : ""}
         </p>
-        {edgeMeta ? (
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {edgeMeta.isTie ? (
-              <>
-                Tied: {edgeMeta.tieCount.toLocaleString()}–{edgeMeta.tieCount.toLocaleString()}
-                {edgeMeta.neutralVotes > 0
-                  ? ` · +${edgeMeta.neutralVotes.toLocaleString()} neutral`
-                  : null}
-              </>
-            ) : (
-              <>
-                {edgeMeta.leaderName} leads by {edgeMeta.margin.toLocaleString()}{" "}
-                {edgeMeta.margin === 1 ? "vote" : "votes"}
-                {edgeMeta.neutralVotes > 0
-                  ? ` · +${edgeMeta.neutralVotes.toLocaleString()} neutral`
-                  : null}
-              </>
-            )}
-          </p>
-        ) : null}
-        {edgeMeta ? (
-          <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
-            {formatVotes(totalVotes)}
-          </p>
-        ) : null}
       </div>
     </div>
   );
@@ -303,8 +227,6 @@ function OpinionPollInsightRow({
   leaderPct,
   runnerUpLabel,
   runnerUpPct,
-  variant,
-  leadBarPct,
   onClick,
 }: {
   title: string;
@@ -316,12 +238,10 @@ function OpinionPollInsightRow({
   leaderPct?: number | null;
   runnerUpLabel?: string | null;
   runnerUpPct?: number | null;
-  variant: "landslide" | "most-voted";
-  leadBarPct?: number;
   onClick?: () => void;
 }) {
   const href = slug ? `/vote/opinion-polls/${slug}` : null;
-  const isLandslide = variant === "landslide";
+  const optionMeta = formatOptionCount(optionCount);
 
   const body = (
     <div className="flex items-start gap-3 rounded-lg border border-border/40 bg-background/50 p-3 transition-colors hover:bg-muted/40">
@@ -329,28 +249,11 @@ function OpinionPollInsightRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-medium leading-snug line-clamp-2">{title}</p>
-          <span className="max-w-[42%] shrink-0 text-right text-[10px] leading-snug">
-            {isLandslide && leaderLabel && leaderPct != null ? (
-              <>
-                <span className="block text-muted-foreground">Top pick</span>
-                <span className="font-semibold text-cyan-600 dark:text-cyan-400">
-                  <span className="line-clamp-2">{leaderLabel}</span>{" "}
-                  <span className="tabular-nums">{leaderPct}%</span>
-                </span>
-              </>
-            ) : (
-              <span className="font-mono tabular-nums text-muted-foreground">
-                {formatVotes(totalVotes)}
-              </span>
-            )}
+          <span className="shrink-0 text-[10px] font-mono tabular-nums text-muted-foreground">
+            {formatVotes(totalVotes)}
           </span>
         </div>
-        {isLandslide && leadBarPct != null ? (
-          <div className="mt-2">
-            <PollLeadBar pct={leadBarPct} />
-          </div>
-        ) : null}
-        {!isLandslide && leaderLabel && leaderPct != null ? (
+        {leaderLabel && leaderPct != null ? (
           <p className="mt-1.5 text-[11px] text-muted-foreground">
             Top pick:{" "}
             <span className="font-semibold text-cyan-600 dark:text-cyan-400">
@@ -364,18 +267,12 @@ function OpinionPollInsightRow({
             2nd:{" "}
             <span className="font-medium text-foreground">{runnerUpLabel}</span>
             {runnerUpPct != null ? (
-              <span className="tabular-nums"> ({runnerUpPct}%)</span>
+              <span className="tabular-nums"> {runnerUpPct}%</span>
             ) : null}
           </p>
         ) : null}
-        {isLandslide ? (
-          <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
-            {formatVotes(totalVotes)}
-          </p>
-        ) : optionCount != null ? (
-          <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
-            {optionCount} {optionCount === 1 ? "option" : "options"}
-          </p>
+        {optionMeta ? (
+          <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">{optionMeta}</p>
         ) : null}
       </div>
     </div>
@@ -416,7 +313,6 @@ function PolarisationTile({ variant }: { variant: "knife-edge" | "landslide" }) 
     <ul className="space-y-2">
       {list.slice(0, 5).map((item) => {
         const isKnifeEdge = variant === "knife-edge";
-        const edge = isKnifeEdge ? knifeEdgeMeta(item) : null;
         const pcts = isKnifeEdge ? matchupPcts(item) : null;
 
         return (
@@ -433,7 +329,6 @@ function PolarisationTile({ variant }: { variant: "knife-edge" | "landslide" }) 
                 optionAVotes={item.optionAVotes ?? undefined}
                 optionBVotes={item.optionBVotes ?? undefined}
                 neutralVotes={item.neutralVotes ?? undefined}
-                edgeMeta={edge}
                 onClick={() =>
                   logInsightsEvent("vote", "polarisation_row_click", {
                     variant,
@@ -448,12 +343,11 @@ function PolarisationTile({ variant }: { variant: "knife-edge" | "landslide" }) 
                 slug={item.slug}
                 thumb={item.leaderImageUrl ?? item.imageUrl}
                 totalVotes={item.totalVotes}
+                optionCount={item.optionCount ?? undefined}
                 leaderLabel={item.leaderLabel}
                 leaderPct={item.leaderPct}
                 runnerUpLabel={item.runnerUpLabel}
                 runnerUpPct={item.runnerUpPct}
-                variant="landslide"
-                leadBarPct={item.maxPct}
                 onClick={() =>
                   logInsightsEvent("vote", "polarisation_row_click", {
                     variant,
@@ -493,7 +387,6 @@ function MostVotedPollsTile() {
             leaderPct={poll.leaderPct}
             runnerUpLabel={poll.runnerUpLabel}
             runnerUpPct={poll.runnerUpPct}
-            variant="most-voted"
             onClick={() =>
               logInsightsEvent("vote", "most_voted_poll_click", { pollId: poll.id })
             }
@@ -716,7 +609,7 @@ function ApprovalExtremesTile({ direction }: { direction: "asc" | "desc" }) {
 
 function SentimentLegend() {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
       <span className="inline-flex items-center gap-1">
         <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden />
         Approve
@@ -737,12 +630,87 @@ function sentimentCloseness(p: InsightsTrendingPollRow): number {
   return Math.abs(p.approvePercent - p.disapprovePercent);
 }
 
-function SentimentPulseTile() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["/api/trending-polls", "controversy"],
+function sentimentDominance(p: InsightsTrendingPollRow): number {
+  return Math.max(p.approvePercent, p.neutralPercent, p.disapprovePercent);
+}
+
+function useSentimentPollRows() {
+  return useQuery({
+    queryKey: ["/api/trending-polls", "insights-vote"],
     queryFn: () => fetchJson<InsightsTrendingPollRow[]>("/api/trending-polls"),
     staleTime: 90_000,
   });
+}
+
+/** Vertical list — reads well in half-width desktop columns and on mobile. */
+const SENTIMENT_TILE_LIST_CLASS = "space-y-2";
+
+function SentimentSplitBar({ poll }: { poll: InsightsTrendingPollRow }) {
+  return (
+    <div className="mt-2 flex items-center gap-1.5 sm:gap-2 text-[10px] tabular-nums min-w-0">
+      <span className="shrink-0 font-semibold text-green-600 dark:text-green-400 w-[26px] text-right">
+        {poll.approvePercent}%
+      </span>
+      <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
+        <div
+          className="h-full bg-green-500/70"
+          style={{ width: `${poll.approvePercent}%` }}
+        />
+        <div
+          className="h-full bg-slate-400/40"
+          style={{ width: `${poll.neutralPercent}%` }}
+        />
+        <div
+          className="h-full bg-red-500/70"
+          style={{ width: `${poll.disapprovePercent}%` }}
+        />
+      </div>
+      <span className="shrink-0 font-semibold text-red-500 w-[26px]">
+        {poll.disapprovePercent}%
+      </span>
+    </div>
+  );
+}
+
+function SentimentSplitRow({
+  poll,
+  onClick,
+}: {
+  poll: InsightsTrendingPollRow;
+  onClick?: () => void;
+}) {
+  const href = poll.slug ? `/polls/${poll.slug}` : null;
+
+  const body = (
+    <div className="flex items-start gap-3 rounded-lg border border-border/40 bg-background/50 p-3 transition-colors hover:bg-muted/40">
+      <PersonAvatar
+        name={poll.personName ?? poll.headline}
+        avatar={poll.personAvatar ?? poll.imageUrl}
+        size="sm"
+        className="shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium leading-snug line-clamp-2">{poll.headline}</p>
+          <span className="shrink-0 text-[10px] font-mono tabular-nums text-muted-foreground">
+            {formatVotes(poll.totalVotes)}
+          </span>
+        </div>
+        <SentimentSplitBar poll={poll} />
+      </div>
+    </div>
+  );
+
+  if (!href) return body;
+  return (
+    <Link href={href} onClick={onClick}>
+      {body}
+    </Link>
+  );
+}
+
+function SentimentPulseTile() {
+  const { data, isLoading } = useSentimentPollRows();
 
   const rows = (data ?? [])
     .filter((p) => p.totalVotes >= 5)
@@ -755,62 +723,44 @@ function SentimentPulseTile() {
   }
 
   return (
-    <ul className="space-y-2 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 lg:grid-cols-3">
-      {rows.map((p) => {
-        const href = p.slug ? `/polls/${p.slug}` : null;
-        const body = (
-          <div className="flex items-start gap-3 rounded-lg border border-border/40 bg-background/50 p-3 transition-colors hover:bg-muted/40">
-            <PersonAvatar
-              name={p.personName ?? p.headline}
-              avatar={p.personAvatar ?? p.imageUrl}
-              size="sm"
-              className="shrink-0"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-snug line-clamp-2">{p.headline}</p>
-              <div className="mt-2 flex items-center gap-2 text-[10px] tabular-nums">
-                <span className="font-semibold text-green-600 dark:text-green-400">
-                  {p.approvePercent}%
-                </span>
-                <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-muted/60">
-                  <div
-                    className="h-full bg-green-500/70"
-                    style={{ width: `${p.approvePercent}%` }}
-                  />
-                  <div
-                    className="h-full bg-slate-400/40"
-                    style={{ width: `${p.neutralPercent}%` }}
-                  />
-                  <div
-                    className="h-full bg-red-500/70"
-                    style={{ width: `${p.disapprovePercent}%` }}
-                  />
-                </div>
-                <span className="font-semibold text-red-500">{p.disapprovePercent}%</span>
-              </div>
-              <p className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">
-                {formatVotes(p.totalVotes)}
-              </p>
-            </div>
-          </div>
-        );
-        return (
-          <li key={p.id}>
-            {href ? (
-              <Link
-                href={href}
-                onClick={() =>
-                  logInsightsEvent("vote", "sentiment_row_click", { pollId: p.id })
-                }
-              >
-                {body}
-              </Link>
-            ) : (
-              body
-            )}
-          </li>
-        );
-      })}
+    <ul className={SENTIMENT_TILE_LIST_CLASS}>
+      {rows.map((p) => (
+        <li key={p.id}>
+          <SentimentSplitRow
+            poll={p}
+            onClick={() => logInsightsEvent("vote", "sentiment_row_click", { pollId: p.id })}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SentimentLandslideTile() {
+  const { data, isLoading } = useSentimentPollRows();
+
+  const rows = (data ?? [])
+    .filter((p) => p.totalVotes >= 5)
+    .sort((a, b) => sentimentDominance(b) - sentimentDominance(a))
+    .slice(0, 5);
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (rows.length === 0) {
+    return <InsightsEmptyState message="No landslide sentiment topics yet." />;
+  }
+
+  return (
+    <ul className={SENTIMENT_TILE_LIST_CLASS}>
+      {rows.map((p) => (
+        <li key={p.id}>
+          <SentimentSplitRow
+            poll={p}
+            onClick={() =>
+              logInsightsEvent("vote", "sentiment_landslide_row_click", { pollId: p.id })
+            }
+          />
+        </li>
+      ))}
     </ul>
   );
 }
@@ -868,18 +818,33 @@ export function VoteTab() {
         </InsightsSection>
       </div>
 
-      <InsightsSection
-        tab="vote"
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <Scale className="h-4 w-4 text-amber-500" /> Closest sentiment splits
-          </span>
-        }
-        description="Sentiment polls with the closest approve-vs-oppose split."
-        action={<SentimentLegend />}
-      >
-        <SentimentPulseTile />
-      </InsightsSection>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <InsightsSection
+          tab="vote"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              <Scale className="h-4 w-4 text-amber-500" /> Closest sentiment splits
+            </span>
+          }
+          description="Sentiment polls with the closest approve-vs-oppose split."
+          action={<SentimentLegend />}
+        >
+          <SentimentPulseTile />
+        </InsightsSection>
+
+        <InsightsSection
+          tab="vote"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              <BarChart3 className="h-4 w-4 text-amber-500" /> Landslide sentiment polls
+            </span>
+          }
+          description="Sentiment polls where one stance is pulling clearly ahead."
+          action={<SentimentLegend />}
+        >
+          <SentimentLandslideTile />
+        </InsightsSection>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <InsightsSection
