@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2, MessagesSquare } from "lucide-react";
@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { useScrollHideOffset } from "@/hooks/useScrollHideOffset";
 import { cn } from "@/lib/utils";
 import { VoiceCard } from "@/components/voices/VoiceCard";
 import { VoicesFilterBar } from "@/components/voices/VoicesFilterBar";
@@ -36,6 +37,10 @@ export default function VoicesPage() {
   const [mode, setMode] = useState<VoicesFeedMode>("for-you");
   const [filters, setFilters] = useState<VoicesFilters>(EMPTY_VOICES_FILTERS);
   const [selected, setSelected] = useState<VoicesFeedItem | null>(null);
+
+  // Scroll-linked hide/reveal of the filter sub-header (tracks scroll 1:1).
+  const headerRef = useRef<HTMLDivElement>(null);
+  const headerOffset = useScrollHideOffset(headerRef);
 
   const isAuthenticated = isLoggedIn || !!user;
 
@@ -155,7 +160,11 @@ export default function VoicesPage() {
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <SiteHeader active="voices" />
 
-      <div className="sticky top-16 z-40 border-b bg-background/80 backdrop-blur-xl">
+      <div
+        ref={headerRef}
+        className="sticky top-16 z-40 border-b bg-background/80 backdrop-blur-xl will-change-transform transition-transform duration-100 ease-out"
+        style={{ transform: `translateY(-${headerOffset}px)` }}
+      >
         <div className="container mx-auto max-w-2xl space-y-3 px-4 py-3">
           <div className="flex items-center gap-1">
             {MODES.map((m) => (

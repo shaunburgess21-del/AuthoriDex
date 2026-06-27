@@ -85,6 +85,7 @@ export function VoicesFilterBar({ filters, onChange }: VoicesFilterBarProps) {
         <PersonSearchPopover
           excludeIds={filters.personIds}
           onSelect={addPerson}
+          closeOnSelect
           trigger={
             <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 font-normal">
               <Plus className="h-3.5 w-3.5" />

@@ -72,7 +72,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
         value={body}
         onChange={setBody}
         onSubmit={() => mutation.mutate()}
-        placeholder={attachPerson ? `Share a take on ${attachPerson.name}…` : "Share a take with the Town Square…"}
+        placeholder={attachPerson ? `Share a take on ${attachPerson.name}…` : "Share your voice"}
         isPending={mutation.isPending}
         authorAvatarUrl={profile?.avatarUrl ?? null}
         authorDisplayName={profile?.username || user?.email || ""}
