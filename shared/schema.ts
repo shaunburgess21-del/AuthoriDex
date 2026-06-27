@@ -16,6 +16,11 @@ export const commentParentTypeEnum = pgEnum("comment_parent_type", [
   "trending_poll",
   "opinion_poll",
   "open_market",
+  // Standalone "Voices" timeline posts that are not attached to any card or
+  // profile. They share the unified comments table via a sentinel parent id
+  // (see VOICES_TIMELINE_ID in shared/constants.ts) so they reuse comment
+  // votes, reports, replies, and notifications.
+  "voices_post",
 ]);
 export const commentVoteTypeEnum = pgEnum("comment_vote_type", ["up", "down"]);
 

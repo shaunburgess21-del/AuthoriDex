@@ -6,7 +6,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { cn } from "@/lib/utils";
 
-type ActiveNav = "home" | "vote" | "predict" | "insights";
+type ActiveNav = "home" | "vote" | "predict" | "voices" | "insights";
 type LogoVariant = "default" | "vote" | "predict";
 
 interface SiteHeaderProps {
@@ -37,6 +37,7 @@ const ACTIVE_CLASS: Record<ActiveNav, string> = {
   home: "text-blue-700 dark:text-blue-400",
   vote: "text-cyan-700 dark:text-cyan-400",
   predict: "text-violet-700 dark:text-violet-500",
+  voices: "text-amber-600 dark:text-amber-400",
   insights: "text-blue-600 dark:text-blue-400",
 };
 
@@ -44,6 +45,7 @@ const NAV_ITEMS: Array<{ key: ActiveNav; label: string; href: string; testId: st
   { key: "home", label: "Home", href: "/", testId: "nav-home-desktop" },
   { key: "vote", label: "Vote", href: "/vote", testId: "nav-vote-desktop" },
   { key: "predict", label: "Predict", href: "/predict", testId: "nav-predict-desktop" },
+  { key: "voices", label: "Voices", href: "/voices", testId: "nav-voices-desktop" },
   { key: "insights", label: "Insights", href: "/insights", testId: "nav-insights-desktop" },
 ];
 

@@ -9,3 +9,4 @@ export { registerAdminBrandingRoutes } from "./admin-branding-routes";
 export { registerShareRoutes } from "./share-routes";
 export { registerBadgesRoutes } from "./badges-routes";
 export { registerInsightsRoutes } from "./insights-routes";
+export { registerVoicesRoutes } from "./voices-routes";

@@ -156,6 +156,7 @@ import {
   OPINION_POLL_MAX_OPTIONS,
   OPINION_POLL_OPTION_SUGGESTION_MAX_LEN,
   OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER,
+  VOICES_TIMELINE_ID,
 } from "@shared/constants";
 import {
   shouldUseColdStart,
@@ -182,7 +183,7 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -235,7 +236,7 @@ function formatCommentAuthor(author: CommentAuthorJoin) {
   };
 }
 
-const COMMENT_PARENT_TYPES = ["community_insight", "matchup", "trending_poll", "opinion_poll", "open_market"] as const;
+const COMMENT_PARENT_TYPES = ["community_insight", "matchup", "trending_poll", "opinion_poll", "open_market", "voices_post"] as const;
 type CommentParentType = typeof COMMENT_PARENT_TYPES[number];
 
 const commentParentTypeSchema = z.enum(COMMENT_PARENT_TYPES);
@@ -403,6 +404,12 @@ async function resolveUnifiedCommentParent(input: {
   const parentId = input.parentId?.trim();
   const parentSlug = input.parentSlug?.trim();
 
+  if (input.parentType === "voices_post") {
+    // Standalone Voices timeline posts all hang off a single sentinel parent.
+    // Replies validate against this same id via parentCommentId downstream.
+    return VOICES_TIMELINE_ID;
+  }
+
   if (input.parentType === "community_insight") {
     if (!parentId) return null;
     const [insight] = await db
@@ -475,6 +482,12 @@ async function resolveUnifiedCommentParent(input: {
  */
 async function resolveUnifiedCommentHref(parentType: CommentParentType, parentId: string): Promise<string> {
   try {
+    if (parentType === "voices_post") {
+      // Standalone timeline posts live on the Voices page. parentId here is the
+      // shared sentinel (VOICES_TIMELINE_ID), so we can only land on the page;
+      // the appended `#comment-<id>` hash lets the page locate the thread.
+      return "/voices";
+    }
     if (parentType === "community_insight") {
       // Insights live on the person detail page; we need the personId.
       const [row] = await db
@@ -1377,6 +1390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerShareRoutes(app);
   registerBadgesRoutes(app);
   registerInsightsRoutes(app);
+  registerVoicesRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);

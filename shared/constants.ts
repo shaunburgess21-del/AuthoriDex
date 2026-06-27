@@ -11,6 +11,38 @@ export function getMarketTypeLabel(marketType: string): string {
 }
 
 /**
+ * Sentinel `parent_id` used for standalone "Voices" timeline posts in the
+ * unified `comments` table (`parent_type = 'voices_post'`). Standalone posts
+ * have no real parent entity, so they all hang off this single virtual parent.
+ * Replies attach via `parent_comment_id` as usual.
+ */
+export const VOICES_TIMELINE_ID = "global";
+
+/**
+ * Voices feed "surfaces" — the user-facing filter buckets that map onto the
+ * underlying comment parent types. `timeline` = standalone voices posts.
+ */
+export const VOICES_SURFACES = [
+  "matchup",
+  "sentiment_poll",
+  "opinion_poll",
+  "world_market",
+  "profile",
+  "timeline",
+] as const;
+
+export type VoicesSurface = (typeof VOICES_SURFACES)[number];
+
+export const VOICES_SURFACE_LABELS: Record<VoicesSurface, string> = {
+  matchup: "Matchups",
+  sentiment_poll: "Sentiment Polls",
+  opinion_poll: "Opinion Polls",
+  world_market: "World Markets",
+  profile: "Profiles",
+  timeline: "Timeline",
+};
+
+/**
  * CANONICAL_CATEGORIES — default seed set and normalization baseline (not the full admin registry).
  *
  * The **authoritative** list of category ids an operator can add/remove lives in Postgres

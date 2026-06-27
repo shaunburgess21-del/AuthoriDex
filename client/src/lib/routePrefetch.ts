@@ -10,6 +10,7 @@ const loaders: Record<string, () => Promise<unknown>> = {
   "/": () => import("@/pages/HomePage"),
   "/vote": () => import("@/pages/VotePage"),
   "/predict": () => import("@/pages/PredictPage"),
+  "/voices": () => import("@/pages/VoicesPage"),
   "/insights": () => import("@/pages/InsightsPage"),
 };
 

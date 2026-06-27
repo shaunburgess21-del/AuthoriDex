@@ -26,6 +26,13 @@ export interface CommentComposerProps {
   onCancelReply: () => void;
   supportsFullscreen?: boolean;
   parentExpanded?: boolean;
+  /**
+   * Whether expanding into manual mode should scroll the composer into view.
+   * Defaults to true (correct for card comment boxes pinned to the bottom of
+   * detail pages). Set false when the composer sits at the top of a page under
+   * a sticky header (e.g. Voices), where the scroll would hide it behind it.
+   */
+  scrollIntoViewOnExpand?: boolean;
   variant?: "card" | "inline";
   /** Hard character cap; mirrors the server limit. */
   maxLength?: number;
@@ -52,6 +59,7 @@ export function CommentComposer({
   onCancelReply,
   supportsFullscreen = true,
   parentExpanded = false,
+  scrollIntoViewOnExpand = true,
   variant = "card",
   maxLength = DEFAULT_COMMENT_MAX_LENGTH,
   testIds,
@@ -129,7 +137,7 @@ export function CommentComposer({
     setComposerMode((mode) => {
       if (mode !== "auto") return "auto";
       const nextMode = parentExpanded ? "fullscreen" : "manual";
-      if (nextMode === "manual") {
+      if (nextMode === "manual" && scrollIntoViewOnExpand) {
         requestAnimationFrame(() => {
           composerContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
           window.setTimeout(() => {
@@ -139,7 +147,7 @@ export function CommentComposer({
       }
       return nextMode;
     });
-  }, [parentExpanded, supportsFullscreen]);
+  }, [parentExpanded, supportsFullscreen, scrollIntoViewOnExpand]);
 
   // Cancel = abandon draft. Clears value, dismisses any reply intent, exits
   // fullscreen if active, blurs the focused textarea. Buttons fade out via

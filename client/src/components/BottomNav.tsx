@@ -1,4 +1,4 @@
-import { Home, TrendingUp, Vote, LineChart } from "lucide-react";
+import { Home, TrendingUp, Vote, LineChart, MessagesSquare } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { prefetchRoute } from "@/lib/routePrefetch";
@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { path: "/", label: "Home", icon: Home },
   { path: "/vote", label: "Vote", icon: Vote },
   { path: "/predict", label: "Predict", icon: TrendingUp },
+  { path: "/voices", label: "Voices", icon: MessagesSquare },
   { path: "/insights", label: "Insights", icon: LineChart },
 ];
 
@@ -68,7 +69,7 @@ export function BottomNav() {
               onPointerEnter={() => prefetchRoute(item.path)}
               onTouchStart={() => prefetchRoute(item.path)}
               onFocus={() => prefetchRoute(item.path)}
-              className={`flex flex-col items-center justify-center gap-1 px-4 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+              className={`flex flex-1 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isActive 
                   ? "text-primary" 
                   : "text-muted-foreground hover:text-foreground"
