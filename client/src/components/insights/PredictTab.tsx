@@ -97,6 +97,22 @@ function marketTypeLabel(marketType: string): string {
   return labels[key] ?? (marketType.charAt(0).toUpperCase() + marketType.slice(1));
 }
 
+/** Gap subtext for contested rows — wording matches how each market type frames its outcomes. */
+function contestedGapLabel(marketType: string, gapPts: number): string {
+  const n = gapPts === 1 ? "1 pt gap" : `${gapPts} pt gap`;
+  switch (marketType) {
+    case "updown":
+      return `${n} between Up and Down`;
+    case "h2h":
+      return `${n} between opponents`;
+    case "gainer":
+    case "community":
+      return `${n} between leaders`;
+    default:
+      return `${n} between top two`;
+  }
+}
+
 function MarketThumbSlot({
   marketType,
   market,
@@ -344,8 +360,7 @@ function ContestedRow({
 
   // score = price gap between the top two outcomes (0–1); smaller = more contested.
   const gapPts = Math.round(market.score * 100);
-  const gapLabel =
-    gapPts === 1 ? "1 pt gap between leaders" : `${gapPts} pt gap between leaders`;
+  const gapLabel = contestedGapLabel(market.marketType, gapPts);
 
   return (
     <li>
