@@ -90,7 +90,16 @@ export function AdminCategoryMultiSelect({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[260px] p-0" align="start">
-          <div className="max-h-64 overflow-y-auto p-1">
+          <div
+            className="max-h-64 overflow-y-auto p-1"
+            onWheel={(e) => {
+              // The popover is portaled outside the create modal's Dialog, so
+              // react-remove-scroll's background lock swallows wheel events.
+              // Scroll the list manually to restore mouse-wheel scrolling.
+              e.currentTarget.scrollTop += e.deltaY;
+              e.stopPropagation();
+            }}
+          >
             {selectableOptions.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted-foreground">
                 No categories available.
