@@ -26,7 +26,7 @@ export function resolvePersonAvatarUrl(
   return candidates[0] ?? null;
 }
 
-/** Ordered URLs to try when fetching hero photo (stored avatar, then 1–4.webp, legacy png). */
+/** Ordered URLs to try when fetching hero photo (stored avatar, then 1–4.webp). */
 export function resolvePersonAvatarCandidates(
   storedAvatar: string | null | undefined,
   imageSlug: string | null | undefined,
@@ -47,10 +47,6 @@ export function resolvePersonAvatarCandidates(
   if (imageSlug) {
     for (let i = 1; i <= 4; i++) {
       push(personConventionImageUrl(imageSlug, i));
-    }
-    const base = supabasePublicBase();
-    if (base) {
-      push(`${base}/celebrity_images/${encodeURIComponent(imageSlug)}/1.png`);
     }
   }
 

@@ -31,14 +31,12 @@ export function getImageCandidates(
     }
     candidates.push(`${base}/${LEADERS_BUCKET}/${seg}/1.webp`);
     candidates.push(`${base}/${LEADERS_BUCKET}/${seg}/2.webp`);
-    candidates.push(`${base}/celebrity_images/${seg}/1.png`);
   } else {
     // tile and expanded: same bucket and path
     candidates.push(`${base}/${CELEBRITY_BUCKET}/${seg}/${index}.webp`);
     if (index > 1) {
       candidates.push(`${base}/${CELEBRITY_BUCKET}/${seg}/1.webp`);
     }
-    candidates.push(`${base}/celebrity_images/${seg}/1.png`);
   }
 
   return candidates;

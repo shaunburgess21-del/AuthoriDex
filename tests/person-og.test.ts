@@ -69,10 +69,9 @@ test("resolvePersonAvatarCandidates tries 1-4.webp for slug", () => {
   process.env.SUPABASE_URL = "https://example.supabase.co";
   const urls = resolvePersonAvatarCandidates(null, "elon-musk");
   process.env.SUPABASE_URL = prev;
-  assert.equal(urls.length, 5);
+  assert.equal(urls.length, 4);
   assert.match(urls[0]!, /\/elon-musk\/1\.webp$/);
   assert.match(urls[3]!, /\/elon-musk\/4\.webp$/);
-  assert.match(urls[4]!, /\/celebrity_images\/elon-musk\/1\.png$/);
 });
 
 test("personOgUsesSiteDefaultFallback is false", () => {
