@@ -14,6 +14,7 @@ import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   KNOWLEDGE_TABS,
+  KNOWLEDGE_NAV_TAB_ORDER,
   XP_ACTIONS,
   RANKS,
   VOTE_SURFACES,
@@ -37,6 +38,7 @@ import {
 } from "@shared/profile-theme-config";
 import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
+import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 
 /**
  * Tier at which a member's rank qualifier starts appearing inline on their
@@ -417,6 +419,7 @@ function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
       <div
         className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide md:grid md:grid-cols-4 md:gap-3 md:overflow-visible"
         data-testid="rank-ladder-strip"
+        data-no-tab-swipe
       >
         {RANKS.map((rank) => {
           const isCurrent = currentTier === rank.tier;
@@ -1508,6 +1511,23 @@ export default function HowItWorksPage() {
 
   const ActiveSection = SECTION_BY_TAB[activeTab];
 
+  const tabIndex = useMemo(() => {
+    const idx = KNOWLEDGE_NAV_TAB_ORDER.indexOf(activeTab);
+    return idx >= 0 ? idx : 0;
+  }, [activeTab]);
+
+  const onSwipeLeft = useCallback(() => {
+    if (tabIndex < KNOWLEDGE_NAV_TAB_ORDER.length - 1) {
+      selectTab(KNOWLEDGE_NAV_TAB_ORDER[tabIndex + 1]!);
+    }
+  }, [selectTab, tabIndex]);
+
+  const onSwipeRight = useCallback(() => {
+    if (tabIndex > 0) {
+      selectTab(KNOWLEDGE_NAV_TAB_ORDER[tabIndex - 1]!);
+    }
+  }, [selectTab, tabIndex]);
+
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
@@ -1550,31 +1570,40 @@ export default function HowItWorksPage() {
         </div>
       </div>
 
-      <div className="container mx-auto max-w-3xl space-y-6 px-2 py-6 sm:px-4">
-        <Card className="flex items-start gap-3 p-4">
-          <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-          <p className="text-sm text-muted-foreground">
-            This page is the canonical reference for how VoxDex rewards
-            participation. Pick a tab above to dig into XP, Ranks, Vox,
-            Badges, Voting, or Predictions. Numbers shown here mirror the
-            server-side configuration.
+      <SwipeNavigator
+        onSwipeLeft={onSwipeLeft}
+        onSwipeRight={onSwipeRight}
+        disableLeft={tabIndex >= KNOWLEDGE_NAV_TAB_ORDER.length - 1}
+        disableRight={tabIndex <= 0}
+        ignoreSelector="[data-no-tab-swipe]"
+        commitOffsetPx={96}
+      >
+        <div className="container mx-auto max-w-3xl space-y-6 px-2 py-6 sm:px-4">
+          <Card className="flex items-start gap-3 p-4">
+            <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <p className="text-sm text-muted-foreground">
+              This page is the canonical reference for how VoxDex rewards
+              participation. Pick a tab above to dig into XP, Ranks, Vox,
+              Badges, Voting, or Predictions. Numbers shown here mirror the
+              server-side configuration.
+            </p>
+          </Card>
+
+          <ProgressHeader />
+
+          <ActiveSection onJumpToTab={selectTab} />
+
+          <Separator />
+
+          <p className="text-center text-xs text-muted-foreground">
+            Want to suggest a tweak to how rewards work?{" "}
+            <a className="underline" href="/contact">
+              Drop us a note
+            </a>
+            .
           </p>
-        </Card>
-
-        <ProgressHeader />
-
-        <ActiveSection onJumpToTab={selectTab} />
-
-        <Separator />
-
-        <p className="text-center text-xs text-muted-foreground">
-          Want to suggest a tweak to how rewards work?{" "}
-          <a className="underline" href="/contact">
-            Drop us a note
-          </a>
-          .
-        </p>
-      </div>
+        </div>
+      </SwipeNavigator>
     </div>
   );
 }

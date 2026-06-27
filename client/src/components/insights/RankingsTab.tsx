@@ -408,6 +408,7 @@ export function RankingsTab() {
         className="sticky z-30 -mx-1 bg-background/90 px-1 py-2 backdrop-blur-md"
         style={{ top: pillStickyTop }}
         data-testid="rankings-source-pills"
+        data-no-tab-swipe
       >
         <ScrollMaskedChipRow>
           {PILL_SOURCES.map((pill) => (

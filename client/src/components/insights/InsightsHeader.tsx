@@ -22,6 +22,9 @@ const INSIGHTS_TABS: Array<{
   { id: "crowd", label: "Approval", icon: Users },
 ];
 
+/** Tab order for the Insights bar and mobile swipe navigation. */
+export const INSIGHTS_NAV_TAB_ORDER: InsightsTab[] = INSIGHTS_TABS.map((t) => t.id);
+
 interface InsightsHeaderProps {
   activeTab: InsightsTab;
 }

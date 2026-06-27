@@ -50,6 +50,9 @@ export const KNOWLEDGE_TABS: KnowledgeTab[] = [
   { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },
 ];
 
+/** Tab order for the How It Works bar and mobile swipe navigation. */
+export const KNOWLEDGE_NAV_TAB_ORDER: KnowledgeTabId[] = KNOWLEDGE_TABS.map((t) => t.id);
+
 /**
  * Maps each knowledge tab to the matching `.pulse-card-*` glow skin defined in
  * client/src/index.css (the same premium glow used on the Insights page). Five

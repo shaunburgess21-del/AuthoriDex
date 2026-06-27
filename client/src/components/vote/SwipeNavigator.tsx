@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, type PanInfo } from "framer-motion";
 
 interface SwipeNavigatorProps {
@@ -10,6 +10,10 @@ interface SwipeNavigatorProps {
   disableRight?: boolean;
   /** If true, swipe-left is a no-op (rubber-band rebound only). */
   disableLeft?: boolean;
+  /** Ignore drags that start inside this selector (e.g. horizontal chip rows). */
+  ignoreSelector?: string;
+  /** Horizontal drag distance (px) required to commit navigation. */
+  commitOffsetPx?: number;
   children: ReactNode;
   className?: string;
 }
@@ -47,10 +51,13 @@ export function SwipeNavigator({
   onSwipeLeft,
   disableRight = false,
   disableLeft = false,
+  ignoreSelector,
+  commitOffsetPx = COMMIT_OFFSET_PX,
   children,
   className,
 }: SwipeNavigatorProps) {
   const [isTouch, setIsTouch] = useState(false);
+  const ignoredGestureRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -72,12 +79,26 @@ export function SwipeNavigator({
     return <div className={className}>{children}</div>;
   }
 
+  const handleDragStart = (event: MouseEvent | TouchEvent | PointerEvent) => {
+    ignoredGestureRef.current = false;
+    if (!ignoreSelector) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest(ignoreSelector)) {
+      ignoredGestureRef.current = true;
+    }
+  };
+
   const handleDragEnd = (_event: unknown, info: PanInfo) => {
+    if (ignoredGestureRef.current) {
+      ignoredGestureRef.current = false;
+      return;
+    }
+
     const { offset, velocity } = info;
     const absX = Math.abs(offset.x);
     const absVx = Math.abs(velocity.x);
 
-    if (absX < COMMIT_OFFSET_PX && absVx < COMMIT_VELOCITY_PX_PER_S) return;
+    if (absX < commitOffsetPx && absVx < COMMIT_VELOCITY_PX_PER_S) return;
 
     if (offset.x > 0) {
       if (!disableRight) onSwipeRight();
@@ -93,6 +114,7 @@ export function SwipeNavigator({
       dragSnapToOrigin
       dragElastic={0.15}
       dragMomentum={false}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       className={className}
       style={{ touchAction: "pan-y" }}
