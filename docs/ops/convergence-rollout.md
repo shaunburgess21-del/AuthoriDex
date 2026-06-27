@@ -79,7 +79,41 @@ Reduces hourly fame flicker in `NEWS_AGGREGATION_MODE=union` when Serper dominat
 
 **Do not change** `LOCKIN_SIGMA_1D`, fame EMA, or agent lock-in flags when enabling smoothing.
 
+## Decisive latch revert + mid-week convergence (Jun 2026)
+
+Fixes sticky ~99% up/down prices after a mid-week spike fully reverts (e.g. Curry +28% → +0.3%). All behavior is **env-flag gated** (default OFF). Ship shadow-first; enable live flags at a **Sunday resolve → Monday open** boundary.
+
+### Phase 1 — Revert-aware latch
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| 1 | `LATCH_REVERT_SHADOW=true` | Logs `[LatchRevert][shadow] market=… pct=… wouldDisarm=…` on latched markets; no bet changes |
+| 2 | `LATCH_REVERT_ENABLED=true` | When `|pctChangeVsOpen| < DECISIVE_REVERT_PCT` (default 0.05), latched markets re-arm contrarianism / weighted-random even if `weeklyOpen.decisiveLatched` stays true in metadata |
+
+Optional tuning: `DECISIVE_REVERT_PCT` (must stay &lt; `DECISIVE_WEEKLY_MOVE_PCT` 0.10), `LATCH_TRAILING_SAMPLE_COUNT` (default 3 hourly fame samples for latch trigger — ignores single-hour score glitches).
+
+### Phase 2 — Mid-week convergence (requires arb cohort)
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| 1 | `MIDWEEK_CONVERGENCE_SHADOW=true` | Logs `[MidweekConvergence][shadow] market=… gap=… wouldSchedule=…` for markets outside the final-6h window |
+| 2 | `MIDWEEK_CONVERGENCE_ENABLED=true` | Arb cohort buys underpriced favored side when `|fair − price| ≥ ARB_MIDWEEK_MIN_EDGE_PP` (default 0.12); max `ARB_CONVERGENCE_MARKETS_PER_SWEEP` per sweep; one mid-week action per market per UTC day |
+
+Requires `ARB_COHORT_ENABLED=true` (same as near-close convergence). Reverted flat markets (|pct| &lt; 0.10) are handled by Phase 1, not mid-week arb.
+
+Optional tuning: `ARB_MIDWEEK_MIN_EDGE_PP` (default `0.12`).
+
 ### Validation
+
+1. Shadow logs — Curry/Messi-type markets should show `wouldDisarm=true` when `|pct| &lt; 0.05`.
+2. `npm run amm:convergence` — mispriced count should drop after `MIDWEEK_CONVERGENCE_ENABLED` on genuinely decisive moves.
+3. Post-enable (next Sunday): latched markets that reverted should sit near lock-in fair, not ~99%.
+
+### Rollback
+
+Flip `LATCH_REVERT_ENABLED` / `MIDWEEK_CONVERGENCE_ENABLED` off; next agent sweep picks up. Positions settle normally.
+
+### Validation (union news smoothing)
 
 ```bash
 npx tsx server/diagnostics/audit-news-smoothing.ts 3a5bbf27-b9c2-4315-a4dc-7944d9878d0d

@@ -42,6 +42,7 @@ export function computeArbPrediction(
   signals: TrendSignals,
   hoursRemaining: number,
   currentPrices: Record<string, number>,
+  options?: { minEdgePp?: number },
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"],
@@ -73,7 +74,8 @@ export function computeArbPrediction(
   }
 
   const cur = currentPrices[chosen.id] ?? 0.5;
-  if (fairSide - cur < ARB_MIN_EDGE_PP) {
+  const minEdgePp = options?.minEdgePp ?? ARB_MIN_EDGE_PP;
+  if (fairSide - cur < minEdgePp) {
     return abstain("low_edge");
   }
 

@@ -231,6 +231,46 @@ export const CONVICTION_SCORE_THRESHOLD_PCT = 0.05;
 // Phase 3 (May 2026): loosened after Phase 1 news smoothing verified — do not
 // lower further while trend-score sawtooth remains elevated.
 export const DECISIVE_WEEKLY_MOVE_PCT = 0.10;
+/** Re-arm decisive latch when |pctChangeVsOpen| falls back below this (hysteresis). */
+export const DECISIVE_REVERT_PCT = (() => {
+  const raw = Number(process.env.DECISIVE_REVERT_PCT);
+  return Number.isFinite(raw) && raw > 0 && raw < DECISIVE_WEEKLY_MOVE_PCT ? raw : 0.05;
+})();
+/** Log latch-revert disarm candidates without changing bets. */
+export const LATCH_REVERT_SHADOW = envFlag(process.env.LATCH_REVERT_SHADOW);
+/** Treat latched markets as non-decisive when score reverts near flat. */
+export const LATCH_REVERT_ENABLED = envFlag(process.env.LATCH_REVERT_ENABLED);
+/** Hourly fame samples when deciding whether to set weeklyOpen.decisiveLatched. */
+export const LATCH_TRAILING_SAMPLE_COUNT = (() => {
+  const raw = Number(process.env.LATCH_TRAILING_SAMPLE_COUNT);
+  return Number.isInteger(raw) && raw >= 2 ? raw : 3;
+})();
+/** Log mid-week convergence candidates without scheduling bets. */
+export const MIDWEEK_CONVERGENCE_SHADOW = envFlag(process.env.MIDWEEK_CONVERGENCE_SHADOW);
+/** Arb cohort nudges mispriced up/down markets before the final-6h window. */
+export const MIDWEEK_CONVERGENCE_ENABLED = envFlag(process.env.MIDWEEK_CONVERGENCE_ENABLED);
+/** Higher edge bar than ARB_MIN_EDGE_PP to avoid mid-week thrash. */
+export const ARB_MIDWEEK_MIN_EDGE_PP = (() => {
+  const raw = Number(process.env.ARB_MIDWEEK_MIN_EDGE_PP);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.12;
+})();
+
+export function isLatchRevertShadow(): boolean {
+  return envFlag(process.env.LATCH_REVERT_SHADOW);
+}
+
+export function isLatchRevertEnabled(): boolean {
+  return envFlag(process.env.LATCH_REVERT_ENABLED);
+}
+
+export function isMidweekConvergenceShadow(): boolean {
+  return envFlag(process.env.MIDWEEK_CONVERGENCE_SHADOW);
+}
+
+export function isMidweekConvergenceEnabled(): boolean {
+  return envFlag(process.env.MIDWEEK_CONVERGENCE_ENABLED);
+}
+
 export const REPREDICT_PCT_THRESHOLD = 0.06;
 export const REPREDICT_MAX_PER_MARKET = 2;
 export const CONVICTION_SCORE_AGREE_FLIP = 0.12;

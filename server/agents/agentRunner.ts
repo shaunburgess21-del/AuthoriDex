@@ -80,6 +80,11 @@ import {
   MISPRICED_SCORE_PCT,
   MISPRICED_UP_PRICE_HIGH,
   MISPRICED_UP_PRICE_LOW,
+  LATCH_TRAILING_SAMPLE_COUNT,
+  isLatchRevertShadow,
+  ARB_MIDWEEK_MIN_EDGE_PP,
+  isMidweekConvergenceShadow,
+  isMidweekConvergenceEnabled,
   AGENT_STAKE_OVERRIDES,
   WORLD_REEVAL_INTERVAL_DAYS,
   WORLD_CONVICTION_INTERVAL_DAYS,
@@ -90,6 +95,8 @@ import {
   MIN_NET_SHARES_FOR_SELL_EVAL,
   SELL_DEFAULT_CONVICTION,
   WORLD_MARKETS_LLM_ENABLED,
+  POSITIVE_HINTS,
+  NEGATIVE_HINTS,
 } from "./constants";
 import { filterRankableMarketsForRanker } from "./sharpRanker-input";
 import { isAgentsPaused } from "./runtime-state";
@@ -99,38 +106,17 @@ import {
   fairGainerByEntryId,
   favoredH2HFromFairMap,
   hoursUntilEnd,
+  computeLockInFairUp,
+  fairForEntry,
 } from "./lockInFair";
+import {
+  readWeeklyOpen,
+  resolveDecisiveLatched,
+  shouldLatchFromTrailingMedian,
+  wouldDisarmLatch,
+} from "./weeklyOpenLatch";
 
 const AGENT_RUNNER_LOCK_KEY = 5_201;
-
-type WeeklyOpenMetadata = {
-  decisiveLatched?: boolean;
-  peakAbsPctChangeVsOpen?: number;
-};
-
-function readWeeklyOpen(meta: Record<string, unknown> | null | undefined): WeeklyOpenMetadata {
-  const weeklyOpen = meta?.weeklyOpen;
-  if (!weeklyOpen || typeof weeklyOpen !== "object") return {};
-  return weeklyOpen as WeeklyOpenMetadata;
-}
-
-function resolveDecisiveLatched(
-  meta: Record<string, unknown> | null | undefined,
-  pctChangeVsOpen: number | undefined,
-): boolean {
-  const weekly = readWeeklyOpen(meta);
-  if (weekly.decisiveLatched === true) return true;
-  const peak = weekly.peakAbsPctChangeVsOpen ?? 0;
-  if (peak >= DECISIVE_WEEKLY_MOVE_PCT) return true;
-  if (
-    pctChangeVsOpen != null &&
-    Number.isFinite(pctChangeVsOpen) &&
-    Math.abs(pctChangeVsOpen) >= DECISIVE_WEEKLY_MOVE_PCT
-  ) {
-    return true;
-  }
-  return false;
-}
 
 function openingScoreFromMeta(
   meta: Record<string, unknown> | null | undefined,
@@ -1114,6 +1100,12 @@ async function runAgentBatchOnce(): Promise<{
     );
     convergenceScheduled += await runConvergenceSweepH2H(agents, markets, now);
     convergenceScheduled += await runConvergenceSweepGainer(agents, markets, now);
+    convergenceScheduled += await runMidweekConvergenceSweep(
+      agents,
+      markets,
+      now,
+      updownSweepCtx,
+    );
   } catch (convSweepErr) {
     log(
       `[AgentRunner] Convergence sweep error: ${convSweepErr instanceof Error ? convSweepErr.message : convSweepErr}`,
@@ -1347,6 +1339,107 @@ async function pickMispricedUpdownMarketIds(
   return scored.slice(0, limit).map((s) => s.id);
 }
 
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+async function fetchTrailingFameSamplesByPerson(
+  personIds: string[],
+  sampleCount: number,
+): Promise<Map<string, number[]>> {
+  const result = new Map<string, number[]>();
+  if (!personIds.length || sampleCount <= 0) return result;
+
+  const rows = (await db.execute(sql`
+    SELECT person_id, fame_index
+    FROM (
+      SELECT
+        person_id,
+        fame_index,
+        ROW_NUMBER() OVER (PARTITION BY person_id ORDER BY timestamp DESC) AS rn
+      FROM trend_snapshots
+      WHERE person_id IN (${sql.join(personIds.map((id) => sql`${id}`), sql`, `)})
+    ) ranked
+    WHERE rn <= ${sampleCount}
+    ORDER BY person_id, rn
+  `)).rows as Array<{ person_id: string; fame_index: number }>;
+
+  for (const row of rows) {
+    const fame = Number(row.fame_index);
+    if (!Number.isFinite(fame)) continue;
+    const list = result.get(row.person_id) ?? [];
+    list.push(fame);
+    result.set(row.person_id, list);
+  }
+  return result;
+}
+
+async function pickMidweekConvergenceMarketIds(
+  candidates: UpdownMarketRow[],
+  limit: number,
+  ctx: UpdownSweepContext,
+  now: Date,
+  minEdgePp: number,
+): Promise<string[]> {
+  const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+  const outsideNearClose = candidates.filter((m) => {
+    if (!m.endAt) return false;
+    const cutoff = getMarketBettingCutoff(m.endAt, "amm", m.marketType ?? undefined);
+    return now.getTime() < cutoff.getTime() - bufferMs;
+  });
+  if (!outsideNearClose.length || limit <= 0) return [];
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, outsideNearClose.map((m) => m.id)));
+
+  const scored: { id: string; gap: number }[] = [];
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    const marketCtx = ctx.marketContext.get(row.marketId);
+    if (!marketCtx) continue;
+
+    const market = outsideNearClose.find((m) => m.id === row.marketId);
+    if (!market?.endAt) continue;
+
+    const pct = marketCtx.pctChangeVsOpen;
+    const hoursRemaining = Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000);
+    const fairUp = computeLockInFairUp(pct, hoursRemaining);
+    if (fairUp == null) continue;
+
+    const snap: AmmStateSnapshot = {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    };
+    const prices = ammCurrentPrices(snap);
+
+    const upFair =
+      fairForEntry(fairUp, "Up", POSITIVE_HINTS, NEGATIVE_HINTS) ?? 0.5;
+    const downFair =
+      fairForEntry(fairUp, "Down", POSITIVE_HINTS, NEGATIVE_HINTS) ?? 0.5;
+    const upPrice = prices[marketCtx.upEntryId] ?? 0.5;
+    const downPrice = prices[marketCtx.downEntryId] ?? 0.5;
+
+    const upGap = upFair - upPrice;
+    const downGap = downFair - downPrice;
+    const gap = Math.max(upGap, downGap);
+    if (gap >= minEdgePp) {
+      scored.push({ id: row.marketId, gap });
+    }
+  }
+
+  scored.sort((a, b) => b.gap - a.gap);
+  return scored.slice(0, limit).map((s) => s.id);
+}
+
 async function touchWeeklyOpenMetadataLatch(
   allMarkets: UpdownMarketRow[],
   preBuiltCtx?: UpdownSweepContext["marketContext"],
@@ -1357,23 +1450,44 @@ async function touchWeeklyOpenMetadataLatch(
   const ctx = preBuiltCtx ?? (await buildUpdownMarketContext(ammUpdown));
   const now = new Date();
 
-  // Batch the per-market UPDATE writes. Each row needs its own metadata
-  // payload (peak + decisive flag merged into existing meta), so we
-  // can't do a single UPDATE — but we can fire them in parallel so the
-  // sweep doesn't stall on serial round-trips.
+  if (isLatchRevertShadow()) {
+    for (const market of ammUpdown) {
+      const meta = (market.metadata ?? {}) as Record<string, unknown>;
+      const weekly = readWeeklyOpen(meta);
+      if (!weekly.decisiveLatched) continue;
+      const pct = ctx.get(market.id)?.pctChangeVsOpen;
+      log(
+        `[LatchRevert][shadow] market=${market.id.slice(0, 8)} pct=${pct != null ? pct.toFixed(3) : "n/a"} wouldDisarm=${wouldDisarmLatch(meta, pct)}`,
+      );
+    }
+  }
+
+  const personIds = [
+    ...new Set(
+      ammUpdown.map((m) => m.personId).filter((id): id is string => id != null),
+    ),
+  ];
+  const trailingSamples = await fetchTrailingFameSamplesByPerson(
+    personIds,
+    LATCH_TRAILING_SAMPLE_COUNT,
+  );
+
   const updates: Promise<unknown>[] = [];
   for (const market of ammUpdown) {
-    const pct = ctx.get(market.id)?.pctChangeVsOpen;
-    if (pct == null || Math.abs(pct) < DECISIVE_WEEKLY_MOVE_PCT) continue;
+    if (!market.personId) continue;
+    const openingScore = openingScoreFromMeta(
+      market.metadata as Record<string, unknown> | null,
+    );
+    if (openingScore == null) continue;
 
+    const samples = trailingSamples.get(market.personId) ?? [];
+    const { latch, medianPct } = shouldLatchFromTrailingMedian(samples, openingScore);
+    if (!latch || medianPct == null) continue;
+
+    const pct = medianPct;
     const meta = (market.metadata ?? {}) as Record<string, unknown>;
     const weekly = readWeeklyOpen(meta);
-    const nextPeak = Math.max(
-      weekly.peakAbsPctChangeVsOpen ?? 0,
-      Math.abs(pct),
-    );
-    // Idempotency: skip the write if nothing actually changed. Most
-    // markets that latched yesterday will trip this guard today.
+    const nextPeak = Math.max(weekly.peakAbsPctChangeVsOpen ?? 0, Math.abs(pct));
     if (weekly.decisiveLatched === true && nextPeak === weekly.peakAbsPctChangeVsOpen) {
       continue;
     }
@@ -2005,6 +2119,195 @@ async function runConvergenceSweep(
 
   if (scheduled > 0) {
     log(`[AgentRunner] Convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
+}
+
+/**
+ * Mid-week convergence — arb cohort nudges genuinely decisive up/down markets
+ * toward lock-in fair before the final-6h near-close window. Higher edge bar
+ * than the near-close sweep to limit thrash.
+ */
+async function runMidweekConvergenceSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+  ctx: UpdownSweepContext,
+): Promise<number> {
+  const shadow = isMidweekConvergenceShadow();
+  const enabled = isMidweekConvergenceEnabled();
+  if (!shadow && !enabled) return 0;
+  if (!ARB_COHORT_ENABLED) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const ammUpdown = filterAmmPerPersonUpdown(allMarkets);
+  if (!ammUpdown.length) return 0;
+
+  const targetIds = new Set(
+    await pickMidweekConvergenceMarketIds(
+      ammUpdown,
+      ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+      ctx,
+      now,
+      ARB_MIDWEEK_MIN_EDGE_PP,
+    ),
+  );
+  if (!targetIds.size) return 0;
+
+  const dayStart = startOfUtcDay(now);
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, Array.from(targetIds)));
+
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entriesByMarket = new Map<string, { id: string; label: string | null }[]>();
+  const entryRows = await db
+    .select({ marketId: marketEntries.marketId, id: marketEntries.id, label: marketEntries.label })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, Array.from(targetIds)));
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const market of ammUpdown) {
+    if (!targetIds.has(market.id)) continue;
+    const mctx = ctx.marketContext.get(market.id);
+    if (!mctx) continue;
+
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length !== 2) continue;
+
+    let signals = market.personId ? ctx.signalsByPerson.get(market.personId) : undefined;
+    if (!signals && market.personId) {
+      const meta = market.metadata as Record<string, unknown> | null;
+      const openingScore = openingScoreFromMeta(meta);
+      if (openingScore == null) continue;
+      signals = await getTrendSignals(market.personId, { openingScore });
+      ctx.signalsByPerson.set(market.personId, signals);
+    }
+    if (!signals) continue;
+
+    const hoursRemaining =
+      market.endAt != null
+        ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+        : 0;
+
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+    const prices = ammCurrentPrices(snap);
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const marketData: MarketWithEntries = {
+      id: market.id,
+      marketType: "updown",
+      status: "OPEN",
+      title: market.title ?? "",
+      category: null,
+      personId: market.personId,
+      endAt: market.endAt ?? null,
+      createdAt: market.createdAt ?? null,
+      entries: entries.map((e) => ({
+        id: e.id,
+        label: e.label ?? "",
+        totalStake: 0,
+        noStake: 0,
+        personId: market.personId,
+      })),
+    };
+
+    const decision = computeArbPrediction(marketData, signals, hoursRemaining, prices, {
+      minEdgePp: ARB_MIDWEEK_MIN_EDGE_PP,
+    });
+
+    const fairUp = computeLockInFairUp(signals.pctChangeVsOpen ?? null, hoursRemaining);
+    const upFair = fairUp != null ? fairForEntry(fairUp, "Up", POSITIVE_HINTS, NEGATIVE_HINTS) : null;
+    const upPrice = prices[mctx.upEntryId] ?? 0.5;
+    const gap = upFair != null ? Math.abs(upFair - upPrice) : 0;
+
+    if (shadow) {
+      log(
+        `[MidweekConvergence][shadow] market=${market.id.slice(0, 8)} gap=${gap.toFixed(3)} ` +
+          `wouldSchedule=${!decision.abstain && decision.entryId != null}`,
+      );
+    }
+
+    if (!enabled) continue;
+    if (decision.abstain || !decision.entryId) continue;
+
+    const [recentMidweek] = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.decisionPayload}->>'midweekConvergenceSweep' = 'true'`,
+          gte(scheduledAgentActions.createdAt, dayStart),
+        ),
+      )
+      .limit(1);
+    if (recentMidweek) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, midweekConvergenceSweep: true },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] Midweek convergence ${agent.displayName} → ${market.title?.slice(0, 28)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] Midweek convergence sweep scheduled ${scheduled} actions`);
   }
   return scheduled;
 }
