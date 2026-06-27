@@ -99,6 +99,10 @@ export async function loadDivergence(
         return overrated >= 40 && change7d < -2;
       case "consensus":
         return approvalPct >= 60 && fairly >= 40;
+      case "underrated":
+        return underrated >= 20;
+      case "overrated":
+        return overrated >= 20;
       case "press_loved_crowd_cool":
       case "crowd_loved_press_critical": {
         if (row.web_sentiment_method !== WEB_SENTIMENT_METHOD) return false;
@@ -131,7 +135,15 @@ export async function loadDivergence(
         );
         return gapB - gapA;
       })
-      : filtered;
+      : type === "underrated"
+        ? [...filtered].sort(
+            (a, b) => Number(b.underrated_pct ?? 0) - Number(a.underrated_pct ?? 0),
+          )
+        : type === "overrated"
+          ? [...filtered].sort(
+              (a, b) => Number(b.overrated_pct ?? 0) - Number(a.overrated_pct ?? 0),
+            )
+          : filtered;
 
   const rows: InsightsDiscoverRow[] = sorted.slice(0, limit).map((row) => {
     const change7d = Number(row.change_7d ?? 0);
@@ -153,6 +165,12 @@ export async function loadDivergence(
         break;
       case "consensus":
         highlight = `High approval with fair-rating consensus`;
+        break;
+      case "underrated":
+        highlight = `${Number(row.underrated_pct ?? 0).toFixed(0)}% of voters say underrated`;
+        break;
+      case "overrated":
+        highlight = `${Number(row.overrated_pct ?? 0).toFixed(0)}% of voters say overrated`;
         break;
       case "press_loved_crowd_cool":
       case "crowd_loved_press_critical":

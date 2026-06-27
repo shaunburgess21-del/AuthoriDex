@@ -24,6 +24,7 @@ import { loadStreaks } from "../services/insights/streaks";
 import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
 import { loadMarketsAnalytics, loadBiggestMovers, loadPredictorDemographics } from "../services/insights/markets-analytics";
+import { loadTopVoted } from "../services/insights/vote-analytics";
 import {
   loadCrowdWebSentimentPage,
   WEB_SENTIMENT_DEFAULT_PAGE_SIZE,
@@ -42,6 +43,8 @@ const divergenceTypes = [
   "consensus",
   "press_loved_crowd_cool",
   "crowd_loved_press_critical",
+  "underrated",
+  "overrated",
 ] as const;
 
 const insightsEventLimiter = rateLimit({
@@ -220,6 +223,16 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] markets demographics", error);
       res.status(500).json({ error: "Failed to load predictor demographics" });
+    }
+  });
+
+  app.get("/api/insights/vote/top", async (_req, res) => {
+    try {
+      const data = await loadTopVoted();
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] vote top", error);
+      res.status(500).json({ error: "Failed to load top voted" });
     }
   });
 

@@ -145,7 +145,9 @@ export type InsightsDivergenceType =
   | "overrated_cooling"
   | "consensus"
   | "press_loved_crowd_cool"
-  | "crowd_loved_press_critical";
+  | "crowd_loved_press_critical"
+  | "underrated"
+  | "overrated";
 
 export interface InsightsDiscoverRow {
   id: string;
@@ -271,4 +273,101 @@ export interface PredictorDemographics {
   totalStaked: number;
   byCountry: PredictorDemographicRow[];
   byGender: PredictorDemographicRow[];
+}
+
+/** Thumbnail participant for vote insights tiles (polls, matchups). */
+export interface PolarisationParticipant {
+  name: string;
+  avatar: string | null;
+}
+
+export interface PolarisationItem {
+  id: string;
+  slug: string | null;
+  title: string;
+  kind: "opinion_poll" | "face_off";
+  maxPct: number;
+  spreadStddev: number | null;
+  totalVotes: number;
+  label: string;
+  imageUrl?: string | null;
+  leaderLabel?: string | null;
+  leaderPct?: number | null;
+  leaderImageUrl?: string | null;
+  participants?: PolarisationParticipant[];
+  optionAPct?: number | null;
+  optionBPct?: number | null;
+  optionAVotes?: number | null;
+  optionBVotes?: number | null;
+  neutralVotes?: number | null;
+  neutralPct?: number | null;
+  runnerUpLabel?: string | null;
+  runnerUpPct?: number | null;
+}
+
+export interface PolarisationKindLists {
+  lopsided: PolarisationItem[];
+  evenlySplit: PolarisationItem[];
+}
+
+export interface PolarisationResponse {
+  lopsided: PolarisationItem[];
+  evenlySplit: PolarisationItem[];
+  polls: PolarisationKindLists;
+  faceOffs: PolarisationKindLists;
+}
+
+export interface InsightsTrendingPollRow {
+  id: string;
+  headline: string;
+  slug: string | null;
+  category: string | null;
+  totalVotes: number;
+  approvePercent: number;
+  neutralPercent: number;
+  disapprovePercent: number;
+  personName: string | null;
+  personAvatar: string | null;
+}
+
+export interface InsightsApprovalPersonRow {
+  id: string;
+  name: string;
+  avatar: string | null;
+  category: string | null;
+  approvalAvgRating: number;
+  approvalVotesCount: number;
+}
+
+export interface TopVotePoll {
+  id: string;
+  slug: string | null;
+  title: string;
+  totalVotes: number;
+  optionCount: number;
+  imageUrl: string | null;
+  leaderLabel: string | null;
+  leaderPct: number | null;
+  leaderImageUrl: string | null;
+  runnerUpLabel?: string | null;
+  runnerUpPct?: number | null;
+}
+
+export interface TopVoteMatchup {
+  id: string;
+  slug: string | null;
+  title: string;
+  totalVotes: number;
+  optionAPct: number;
+  optionBPct: number;
+  neutralPct?: number;
+  optionAVotes?: number;
+  optionBVotes?: number;
+  neutralVotes?: number;
+  participants: PolarisationParticipant[];
+}
+
+export interface TopVotedResponse {
+  polls: TopVotePoll[];
+  matchups: TopVoteMatchup[];
 }

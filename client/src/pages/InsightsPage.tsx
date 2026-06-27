@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { canonicalizeInsightsTabUrl, parseTab } from "@shared/insights/filters";
 import type { InsightsTab } from "@shared/insights/filters";
 import { InsightsHeader } from "@/components/insights/InsightsHeader";
@@ -15,8 +15,14 @@ function readTabFromLocation(): InsightsTab {
   return parseTab(window.location.search);
 }
 
+function insightsScrollKey(tab: InsightsTab): string {
+  return `voxdex:insights:scroll:${tab}`;
+}
+
 export default function InsightsPage() {
   const [tab, setTab] = useState<InsightsTab>(() => readTabFromLocation());
+  const prevTabRef = useRef<InsightsTab | null>(null);
+  const isFirstMountRef = useRef(true);
 
   useEffect(() => {
     const syncFromUrl = () => setTab(readTabFromLocation());
@@ -33,10 +39,41 @@ export default function InsightsPage() {
   }, []);
 
   useEffect(() => {
+    const saveScroll = () => {
+      sessionStorage.setItem(insightsScrollKey(tab), String(Math.round(window.scrollY)));
+    };
+    window.addEventListener("scroll", saveScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", saveScroll);
+      saveScroll();
+    };
+  }, [tab]);
+
+  useEffect(() => {
     logInsightsEvent("insights", "tab_view", { tab });
-    // Land at the top when switching tabs (e.g. Attention mix → Rankings),
-    // otherwise the new tab inherits the previous tab's scroll position.
-    window.scrollTo({ top: 0, behavior: "auto" });
+
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      const saved = sessionStorage.getItem(insightsScrollKey(tab));
+      const y = saved ? parseInt(saved, 10) : 0;
+      if (!Number.isNaN(y) && y > 0) {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: y, behavior: "auto" });
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: y, behavior: "auto" });
+          });
+        });
+      } else {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+      prevTabRef.current = tab;
+      return;
+    }
+
+    if (prevTabRef.current !== null && prevTabRef.current !== tab) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+    prevTabRef.current = tab;
   }, [tab]);
 
   return (

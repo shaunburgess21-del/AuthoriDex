@@ -17,6 +17,8 @@ export type MarketThumbCollageProps = {
   participants: ThumbParticipant[];
   /** `lg` for related-market cards; `sm` keeps the original compact footprint. */
   size?: MarketThumbCollageSize;
+  /** Vote matchups use amber on the right; predict markets use purple. */
+  splitAccent?: "predict" | "vote";
   className?: string;
 };
 
@@ -105,6 +107,7 @@ export function MarketThumbCollage({
   variant,
   participants,
   size = "sm",
+  splitAccent = "predict",
   className,
 }: MarketThumbCollageProps) {
   const dim = DIMENSIONS[size];
@@ -127,6 +130,8 @@ export function MarketThumbCollage({
   if (variant === "split") {
     const left = participants[0] ?? { name: "?", avatar: null };
     const right = participants[1] ?? { name: "?", avatar: null };
+    const rightBg =
+      splitAccent === "vote" ? "bg-amber-600/20" : "bg-purple-600/20";
     return (
       <div
         className={cn(
@@ -145,7 +150,7 @@ export function MarketThumbCollage({
               initialClassName={dim.initial}
             />
           </div>
-          <div className="relative h-full w-1/2 overflow-hidden bg-purple-600/20">
+          <div className={cn("relative h-full w-1/2 overflow-hidden", rightBg)}>
             <ThumbCell
               name={right.name}
               avatar={right.avatar}
