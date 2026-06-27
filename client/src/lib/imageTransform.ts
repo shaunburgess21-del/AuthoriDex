@@ -19,7 +19,11 @@ const PUBLIC_MARKER = "/storage/v1/object/public/";
 const RENDER_MARKER = "/storage/v1/render/image/public/";
 
 export interface ImageTransformOptions {
-  /** Target render width in CSS pixels (Supabase scales height to keep aspect). */
+  /**
+   * Target render size in CSS pixels. Sent as a square WxW bounding box with
+   * resize=contain so Supabase downscales while preserving the source aspect
+   * ratio (width-only would otherwise keep the original height and zoom/crop).
+   */
   width?: number;
   /** WebP quality 20-100 (Supabase default 80). */
   quality?: number;
@@ -39,7 +43,15 @@ export function getDisplayImageUrl(
 
   const renderUrl = url.replace(PUBLIC_MARKER, RENDER_MARKER);
   const params = new URLSearchParams();
-  if (opts?.width) params.set("width", String(Math.round(opts.width)));
+  if (opts?.width) {
+    const w = Math.round(opts.width);
+    params.set("width", String(w));
+    // Supabase render keeps the ORIGINAL height when only width is sent, which
+    // distorts/zooms the image once object-cover frames it. A square bounding box
+    // + contain downscales with the true aspect ratio preserved (no crop, no pad).
+    params.set("height", String(w));
+    params.set("resize", "contain");
+  }
   params.set("quality", String(opts?.quality ?? 75));
   return `${renderUrl}?${params.toString()}`;
 }
