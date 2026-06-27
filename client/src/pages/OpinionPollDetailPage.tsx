@@ -40,6 +40,7 @@ import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import {
   ArrowLeft,
   Clock,
@@ -100,7 +101,10 @@ export default function OpinionPollDetailPage() {
 
   const conventionPollImageUrl = useMemo(() => {
     if (!supabaseUrl?.trim() || !slug.trim()) return null;
-    return `${supabaseUrl.trim()}/storage/v1/object/public/opinion-polls/${slug}/1.webp`;
+    return getDisplayImageUrl(
+      `${supabaseUrl.trim()}/storage/v1/object/public/opinion-polls/${slug}/1.webp`,
+      { width: 700 },
+    );
   }, [supabaseUrl, slug]);
 
   const { data: poll, isLoading } = useQuery<any>({

@@ -7,6 +7,7 @@ import {
 } from "@/components/shared/RelatedItemsCarousel";
 import { coalesceHttpImage } from "@/lib/displayImageUrl";
 import { useSupabaseUrl } from "@/lib/imageResolver";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { normalizeMarketCategory } from "@shared/constants";
 import {
   getTopOpinionOptionThumbs,
@@ -89,7 +90,10 @@ function sentimentPollConventionUrl(
   supabaseUrl: string | null,
 ): string | null {
   if (!supabaseUrl?.trim() || !slug.trim()) return null;
-  return `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
+  return getDisplayImageUrl(
+    `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`,
+    { width: 700 },
+  );
 }
 
 function normalizeSentiment(

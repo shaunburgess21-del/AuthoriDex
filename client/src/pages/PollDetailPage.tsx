@@ -39,6 +39,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl } from "@/lib/imageResolver";
+import { getDisplayImageUrl } from "@/lib/imageTransform";
 import {
   ArrowLeft,
   Clock,
@@ -115,7 +116,10 @@ export default function PollDetailPage() {
 
   const conventionImageUrl = useMemo(() => {
     if (!supabaseUrl?.trim() || !slug.trim()) return null;
-    return `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`;
+    return getDisplayImageUrl(
+      `${supabaseUrl.trim()}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`,
+      { width: 700 },
+    );
   }, [supabaseUrl, slug]);
 
   const { data: poll, isLoading: pollLoading, error: pollError } = useQuery<PollData>({
