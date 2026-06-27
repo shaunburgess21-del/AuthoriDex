@@ -218,6 +218,7 @@ export interface ContestedMarket {
   title: string;
   marketType: string;
   engine: "amm" | "parimutuel";
+  /** Price gap between the top two outcomes (0–1); smaller = more contested. */
   score: number;
   topPair: ContestedMarketPair[];
   /** World Markets cover art — avoids relying on volume-ranked open-markets list. */

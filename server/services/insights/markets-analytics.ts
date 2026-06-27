@@ -176,7 +176,7 @@ async function loadTopPairsForMarkets(
           price,
           ROW_NUMBER() OVER (
             PARTITION BY market_id
-            ORDER BY ABS(price - 0.5) ASC
+            ORDER BY price DESC
           ) AS rn
         FROM latest
       )
@@ -268,10 +268,21 @@ async function loadContestedByEngine(
           AND pm.engine = 'amm'
           AND pm.visibility IN ('live', 'inactive')
       ),
-      scores AS (
-        SELECT market_id, MIN(ABS(price - 0.5)) AS contested_score
+      ranked AS (
+        SELECT market_id, price,
+          ROW_NUMBER() OVER (PARTITION BY market_id ORDER BY price DESC) AS rn
         FROM latest
+      ),
+      scores AS (
+        SELECT
+          market_id,
+          (
+            MAX(price) FILTER (WHERE rn = 1) - MAX(price) FILTER (WHERE rn = 2)
+          )::float AS contested_score
+        FROM ranked
+        WHERE rn <= 2
         GROUP BY market_id
+        HAVING COUNT(*) >= 2
       )
       SELECT
         pm.id AS market_id,
@@ -280,9 +291,10 @@ async function loadContestedByEngine(
         pm.market_type,
         pm.engine,
         pm.cover_image_url,
-        s.contested_score::float AS contested_score
+        s.contested_score
       FROM scores s
       INNER JOIN prediction_markets pm ON pm.id = s.market_id
+      WHERE s.contested_score IS NOT NULL
       ORDER BY s.contested_score ASC
       LIMIT ${limit}
     `);
@@ -315,14 +327,23 @@ async function loadContestedByEngine(
         HAVING SUM(s.stake) > 0
       ),
       shares AS (
-        SELECT s.market_id, s.stake / t.total_stake AS share
+        SELECT
+          s.market_id,
+          s.stake / t.total_stake AS share,
+          ROW_NUMBER() OVER (PARTITION BY s.market_id ORDER BY s.stake DESC) AS rn
         FROM stakes s
         INNER JOIN totals t ON t.market_id = s.market_id
       ),
       scores AS (
-        SELECT market_id, (MAX(share) - MIN(share))::float AS contested_score
+        SELECT
+          market_id,
+          (
+            MAX(share) FILTER (WHERE rn = 1) - MAX(share) FILTER (WHERE rn = 2)
+          )::float AS contested_score
         FROM shares
+        WHERE rn <= 2
         GROUP BY market_id
+        HAVING COUNT(*) >= 2
       )
       SELECT
         pm.id AS market_id,
@@ -334,6 +355,7 @@ async function loadContestedByEngine(
         s.contested_score
       FROM scores s
       INNER JOIN prediction_markets pm ON pm.id = s.market_id
+      WHERE s.contested_score IS NOT NULL
       ORDER BY s.contested_score ASC
       LIMIT ${limit}
     `);

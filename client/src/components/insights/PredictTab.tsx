@@ -342,13 +342,10 @@ function ContestedRow({
             ? `/predict/race/${market.marketId}`
             : `/markets/${market.slug}`;
 
-  // Unified "distance from an even split" so AMM and parimutuel markets read
-  // on one scale (0% = perfectly even, higher = more lopsided). The engine is
-  // never surfaced — users see the market-type badge instead.
-  const pctFromEven =
-    market.engine === "amm"
-      ? Math.round(market.score * 200)
-      : Math.round(market.score * 100);
+  // score = price gap between the top two outcomes (0–1); smaller = more contested.
+  const gapPts = Math.round(market.score * 100);
+  const gapLabel =
+    gapPts === 1 ? "1 pt gap between leaders" : `${gapPts} pt gap between leaders`;
 
   return (
     <li>
@@ -380,9 +377,7 @@ function ContestedRow({
               {marketTypeLabel(market.marketType)}
             </Badge>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            {pctFromEven}% from an even split
-          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">{gapLabel}</p>
           {market.topPair.length > 0 && (
             <p className="text-xs text-muted-foreground mt-2">
               {market.topPair.map((p) => `${p.label} ${p.pct}%`).join(" · ")}
@@ -962,7 +957,7 @@ export function PredictTab() {
             <Zap className="h-4 w-4 text-blue-500" /> Most contested markets
           </span>
         }
-        description="Markets closest to an even split."
+        description="Where the top two favorites are closest together."
       >
         <ContestedTile />
       </InsightsSection>
