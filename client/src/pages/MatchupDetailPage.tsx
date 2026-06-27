@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { handleImageError } from "@/lib/imageResolver";
+import { CardImage } from "@/components/ui/card-image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -452,10 +453,11 @@ export default function MatchupDetailPage() {
               <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
-                    <img
+                    <CardImage
                       src={matchup.optionAImage}
                       alt={matchup.optionAText}
-                      className="w-full h-full object-cover"
+                      priority
+                      width={700}
                       onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                     />
                   </div>
@@ -518,10 +520,11 @@ export default function MatchupDetailPage() {
               <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
-                    <img
+                    <CardImage
                       src={matchup.optionBImage}
                       alt={matchup.optionBText}
-                      className="w-full h-full object-cover"
+                      priority
+                      width={700}
                       onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                     />
                   </div>

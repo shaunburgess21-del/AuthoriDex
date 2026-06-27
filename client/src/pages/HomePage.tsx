@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
+import { useDeferredReady } from "@/hooks/useDeferredReady";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { shareHomeLeaderboardView } from "@/lib/home-leaderboard-share";
 import {
@@ -774,18 +775,26 @@ export default function HomePage() {
     }
   }, [activeView]);
 
+  // Defer secondary (below-the-fold "Pulse"/freshness) queries until the
+  // browser is idle so the primary leaderboard fetch + first paint aren't
+  // competing with a burst of parallel requests on slow connections.
+  const deferredReady = useDeferredReady();
+
   const { data: topGainers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/gainers'],
+    enabled: deferredReady,
     refetchInterval: 5 * 60 * 1000,
   });
 
   const { data: topDroppers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/droppers'],
+    enabled: deferredReady,
     refetchInterval: 5 * 60 * 1000,
   });
 
   const { data: dailyMovers = [] } = useQuery<TrendingPerson[]>({
     queryKey: ['/api/trending/movers/daily'],
+    enabled: deferredReady,
     refetchInterval: 5 * 60 * 1000,
   });
 
@@ -805,6 +814,7 @@ export default function HomePage() {
     fullRefreshAtFormatted: string | null;
   }>({
     queryKey: ['/api/system/freshness'],
+    enabled: deferredReady,
     refetchInterval: 90 * 1000,
   });
 

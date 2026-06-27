@@ -93,6 +93,26 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
       swiperRef.current?.slideTo(idx, 0);
     }, []);
 
+    // Warm the images of every currently-rendered (virtual) slide so the
+    // adjacent cards' images are fetched while the user looks at the active
+    // card — kills the "black box until I swipe there" delay on slow links.
+    // Virtual only mounts a small window, so this never floods the network.
+    const warmRenderedSlideImages = useCallback(
+      (s: SwiperType | null | undefined) => {
+        if (!s || s.destroyed) return;
+        requestAnimationFrame(() => {
+          if (!s || s.destroyed) return;
+          for (const slide of s.slides) {
+            slide.querySelectorAll("img").forEach((node) => {
+              const img = node as HTMLImageElement;
+              if (img.loading !== "eager") img.loading = "eager";
+            });
+          }
+        });
+      },
+      [],
+    );
+
     const resolveKeyToIndex = useCallback(
       (key: string): number => {
         for (let i = 0; i < items.length; i++) {
@@ -186,16 +206,20 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
           speed={300}
           cssMode={false}
           autoHeight={autoHeight}
-          virtual={autoHeight ? undefined : true}
+          virtual={
+            autoHeight ? undefined : { addSlidesBefore: 1, addSlidesAfter: 2 }
+          }
           pagination={false}
           onSwiper={(s) => {
             swiperRef.current = s;
             if (autoHeight) refreshAutoHeight();
+            warmRenderedSlideImages(s);
           }}
           onSlideChange={(s) => {
             setActiveIndex(s.activeIndex);
             userOrParentControlledRef.current = true;
             if (autoHeight) safeUpdateAutoHeight(s);
+            warmRenderedSlideImages(s);
             (document.activeElement as HTMLElement | undefined)?.blur?.();
           }}
           a11y={{

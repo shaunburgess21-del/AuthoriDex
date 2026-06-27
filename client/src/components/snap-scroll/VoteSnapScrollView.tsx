@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode, type UIEvent } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
@@ -698,6 +698,45 @@ export function VoteSnapScrollView({
   const commentEntityType = SECTION_COMMENT_TYPE[sectionType] ?? "matchup";
   const hasComments = commentMode !== "none";
 
+  // ── Image warming (preload upcoming cards) ────────────────────────────
+  // The active column keeps all cards in the DOM but their images are lazy,
+  // so a fast scroll lands on a card whose image hasn't started loading
+  // (the "black box"). Warm images within ~2 screens of the scroll position
+  // by flipping them to eager — windowed so we never fetch the whole column.
+  const warmImagesInColumn = useCallback((el: HTMLElement) => {
+    const h = el.clientHeight;
+    const cr = el.getBoundingClientRect();
+    el.querySelectorAll("img").forEach((node) => {
+      const img = node as HTMLImageElement;
+      if (img.loading === "eager") return;
+      const r = img.getBoundingClientRect();
+      const top = r.top - cr.top;
+      if (top < h * 2 && r.bottom - cr.top > -h) {
+        img.loading = "eager";
+      }
+    });
+  }, []);
+
+  const warmRafRef = useRef<number | null>(null);
+  const handleColumnScroll = useCallback(
+    (e: UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      if (warmRafRef.current != null) return;
+      warmRafRef.current = requestAnimationFrame(() => {
+        warmRafRef.current = null;
+        warmImagesInColumn(el);
+      });
+    },
+    [warmImagesInColumn],
+  );
+
+  useEffect(
+    () => () => {
+      if (warmRafRef.current != null) cancelAnimationFrame(warmRafRef.current);
+    },
+    [],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <AnimatePresence>
@@ -762,8 +801,11 @@ export function VoteSnapScrollView({
                                 (img as HTMLImageElement).loading = "lazy";
                               });
                               restoreScrollPosition(cat, el);
+                            } else if (el && isCurrent) {
+                              requestAnimationFrame(() => warmImagesInColumn(el));
                             }
                           }}
+                          onScroll={isCurrent ? handleColumnScroll : undefined}
                           className="h-full overflow-y-auto snap-y snap-mandatory"
                           style={{ scrollSnapType: "y mandatory" }}
                         >

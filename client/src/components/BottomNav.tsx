@@ -1,6 +1,7 @@
 import { Home, TrendingUp, Vote, LineChart } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
+import { prefetchRoute } from "@/lib/routePrefetch";
 
 interface NavItem {
   path: string;
@@ -64,6 +65,9 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               aria-current={isActive ? "page" : undefined}
+              onPointerEnter={() => prefetchRoute(item.path)}
+              onTouchStart={() => prefetchRoute(item.path)}
+              onFocus={() => prefetchRoute(item.path)}
               className={`flex flex-col items-center justify-center gap-1 px-4 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isActive 
                   ? "text-primary" 

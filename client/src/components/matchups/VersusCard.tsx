@@ -4,6 +4,7 @@ import { Users, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { CardImage } from "@/components/ui/card-image";
 import { handleImageError } from "@/lib/imageResolver";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useMatchupHelpDismissed } from "@/hooks/useMatchupHelpDismissed";
@@ -51,6 +52,7 @@ export function VersusCard({
   onNavigateToDetail,
   onBrowseFullScreen,
   enableDiscussion = false,
+  priority = false,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -62,6 +64,8 @@ export function VersusCard({
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
   enableDiscussion?: boolean;
+  /** Eagerly load this card's images (active/first visible card). */
+  priority?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -143,12 +147,11 @@ export function VersusCard({
               <div className="relative" style={{ minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
-                    <img
+                    <CardImage
                       src={matchup.optionAImage}
                       alt={matchup.optionAText}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover"
+                      priority={priority}
+                      width={400}
                       onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
                     />
                   </div>
@@ -204,12 +207,11 @@ export function VersusCard({
               <div className="relative" style={{ minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
-                    <img
+                    <CardImage
                       src={matchup.optionBImage}
                       alt={matchup.optionBText}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover"
+                      priority={priority}
+                      width={400}
                       onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
                     />
                   </div>
