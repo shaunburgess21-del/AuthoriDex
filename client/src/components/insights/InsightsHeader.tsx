@@ -44,15 +44,12 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
       className="sticky top-16 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md"
       data-testid="insights-tab-bar"
     >
-      <div className="container mx-auto px-3 sm:px-4 max-w-7xl py-2.5 md:py-3">
+      <div className="container mx-auto px-2 sm:px-4 max-w-7xl py-2.5 md:py-3">
         {/*
          * Five tabs scroll horizontally on narrow screens (icon + label on
          * every tab), matching the How It Works knowledge tab bar.
          */}
-        <div
-          className="mx-auto max-w-3xl"
-          data-testid="insights-segmented-tabs"
-        >
+        <div data-testid="insights-segmented-tabs">
           <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
             {INSIGHTS_TABS.map((tab) => {
               const isActive = activeTab === tab.id;

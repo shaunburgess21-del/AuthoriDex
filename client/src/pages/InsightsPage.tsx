@@ -82,7 +82,7 @@ export default function InsightsPage() {
 
       <InsightsHeader activeTab={tab} />
 
-      <main className="container mx-auto px-4 max-w-7xl py-6 md:py-8">
+      <main className="container mx-auto px-2 sm:px-4 max-w-7xl py-6 md:py-8">
         {tab === "today" && <OverviewTab />}
         {tab === "rankings" && <RankingsTab />}
         {tab === "vote" && <VoteTab />}

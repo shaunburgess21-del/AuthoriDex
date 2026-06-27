@@ -64,7 +64,7 @@ export function InsightsSection({
         className,
       )}
     >
-      <div className="px-4 pt-4 pb-2 border-b border-border/30 bg-card/60">
+      <div className="px-3 sm:px-4 pt-4 pb-2 border-b border-border/30 bg-card/60">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
@@ -75,7 +75,7 @@ export function InsightsSection({
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-3 sm:p-4">{children}</div>
     </section>
   );
 }
