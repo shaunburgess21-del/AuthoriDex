@@ -51,7 +51,7 @@ export function useInsightsRankings(filters: InsightsFilters) {
 
 export function useInsightsOverview() {
   return useQuery({
-    queryKey: ["/api/insights/overview"],
+    queryKey: ["/api/insights/overview", "v2"],
     queryFn: () => fetchInsightsJson<InsightsOverviewResponse>("/api/insights/overview"),
     staleTime: 90_000,
     /** Keep last overview visible while refetching so tab switches feel instant. */

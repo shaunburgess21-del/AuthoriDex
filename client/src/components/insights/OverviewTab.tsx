@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowRight,
@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Vote,
   LineChart as LineChartIcon,
+  LayoutGrid,
 } from "lucide-react";
 import { useInsightsOverview } from "@/lib/insights-hooks";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -40,6 +41,10 @@ import {
   INSIGHTS_DRIVER_LEGEND,
 } from "@shared/insights/constants";
 import { cn } from "@/lib/utils";
+
+const TopCategoryMixTile = lazy(() =>
+  import("./TopCategoryMixTile").then((m) => ({ default: m.TopCategoryMixTile })),
+);
 
 /** Strip combining diacritical marks so "Mbappé" matches a stored "Mbappe". */
 function stripDiacritics(value: string): string {
@@ -494,7 +499,7 @@ export function OverviewTab() {
     return <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>;
   }
 
-  const { story, movers, boardLeader, favouritesSignals } = data;
+  const { story, movers, boardLeader, favouritesSignals, categoryMix } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
   // Mover line: live 24h climber. Board line: live rank #1.
@@ -677,6 +682,20 @@ export function OverviewTab() {
         </p>
       </InsightsSection>
       )}
+
+      <InsightsSection
+        tab="today"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <LayoutGrid className="h-4 w-4 text-orange-500" /> Top 50 category mix
+          </span>
+        }
+        description="Which categories are dominating the upper ranks of the leaderboard right now."
+      >
+        <Suspense fallback={<Skeleton className="h-56 w-full rounded-lg" />}>
+          <TopCategoryMixTile mix={categoryMix} />
+        </Suspense>
+      </InsightsSection>
 
       <PersonInsightModal person={selectedMover} onClose={() => setSelectedMover(null)} />
     </div>

@@ -1,6 +1,10 @@
-import type { InsightsOverviewResponse, InsightsMoverItem } from "@shared/insights/types";
+import type {
+  InsightsOverviewResponse,
+  InsightsMoverItem,
+} from "@shared/insights/types";
 import type { TrendingPerson } from "@shared/schema";
 import { QUADRANT_MIN_VOTES } from "@shared/insights/constants";
+import { buildCategoryMix } from "@shared/insights/category-mix";
 import { db } from "../../db";
 import {
   celebrityMetrics,
@@ -258,6 +262,7 @@ async function loadInsightsOverviewInner(
   const boardLeaderPerson = [...peopleList].sort(
     (a, b) => (a.rank ?? 999) - (b.rank ?? 999),
   )[0];
+  const categoryMix = buildCategoryMix(peopleList);
 
   return {
     quadrantPoints,
@@ -269,6 +274,7 @@ async function loadInsightsOverviewInner(
       minVotes: QUADRANT_MIN_VOTES,
     },
     driverMix,
+    categoryMix,
     movers: {
       "24h": movers24h,
       "7d": movers7d,
@@ -284,7 +290,12 @@ async function loadInsightsOverviewInner(
 export async function loadInsightsOverview(
   userId?: string | null,
 ): Promise<InsightsOverviewResponse> {
-  return withDiscoverCache(`overview:${userId ?? "anon"}`, () =>
+  // v2: includes categoryMix — bump key so pre-feature cached payloads are not served.
+  const data = await withDiscoverCache(`overview:v2:${userId ?? "anon"}`, () =>
     loadInsightsOverviewInner(userId),
   );
+  if (data.categoryMix) return data;
+
+  const peopleList = await getCachedTrendingPeople();
+  return { ...data, categoryMix: buildCategoryMix(peopleList) };
 }

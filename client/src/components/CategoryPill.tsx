@@ -91,6 +91,32 @@ const DEFAULT_CATEGORY_STYLE = {
   text: 'text-[#94A3B8]',
 };
 
+const CATEGORY_HEX: Record<CanonicalMarketCategory, string> = {
+  tech: "#1E90FF",
+  music: "#EC4899",
+  politics: "#94A3B8",
+  business: "#38BDF8",
+  sports: "#FB923C",
+  "film-tv": "#A855F7",
+  gaming: "#7C3AED",
+  creator: "#FACC15",
+  comedy: "#F97316",
+  "food-drink": "#D97706",
+  lifestyle: "#DB2777",
+  misc: "#94A3B8",
+};
+
+const EXTRA_CATEGORY_HEX: Record<string, string> = {
+  media: "#10B981",
+  streaming: "#4ADE80",
+};
+
+const DYNAMIC_CATEGORY_HEX = [
+  "#22D3EE", "#14B8A6", "#10B981", "#84CC16", "#EAB308", "#F59E0B",
+  "#FB7185", "#F43F5E", "#E879F9", "#C084FC", "#A78BFA", "#818CF8",
+  "#38BDF8", "#2DD4BF", "#4ADE80", "#FBBF24",
+] as const;
+
 // Named overrides for non-canonical categories that should have stable, explicit colors.
 const EXTRA_CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   media: {
@@ -138,6 +164,21 @@ export function getCategoryStyle(category: string, canonicalIdOverride?: string)
 
 export function getCategoryTextColor(category: string, canonicalIdOverride?: string) {
   return getCategoryStyle(category, canonicalIdOverride).text;
+}
+
+/** Hex color for charts and other non-Tailwind consumers. */
+export function getCategoryHexColor(category: string, canonicalIdOverride?: string): string {
+  const normalized = (canonicalIdOverride && canonicalIdOverride.trim())
+    ? canonicalIdOverride.trim()
+    : normalizeMarketCategory(category);
+  if (normalized in CATEGORY_HEX) {
+    return CATEGORY_HEX[normalized as CanonicalMarketCategory];
+  }
+  if (normalized in EXTRA_CATEGORY_HEX) {
+    return EXTRA_CATEGORY_HEX[normalized]!;
+  }
+  if (!normalized || normalized === "misc") return CATEGORY_HEX.misc;
+  return DYNAMIC_CATEGORY_HEX[hashString(normalized) % DYNAMIC_CATEGORY_HEX.length]!;
 }
 
 const SIZE_CLASSES = {

@@ -70,6 +70,19 @@ export interface InsightsDriverMixSegment {
   sampleIds: string[];
 }
 
+export interface InsightsCategoryMixSegment {
+  /** Normalized category id (e.g. `sports`). */
+  category: string;
+  label: string;
+  count: number;
+  pct: number;
+}
+
+export interface InsightsCategoryMix {
+  topN: number;
+  segments: InsightsCategoryMixSegment[];
+}
+
 export interface InsightsMoverItem {
   id: string;
   name: string;
@@ -129,6 +142,8 @@ export interface InsightsOverviewResponse {
     topN: number;
     segments: InsightsDriverMixSegment[];
   };
+  /** Share of each category among the top-N leaderboard by Trend Score. */
+  categoryMix?: InsightsCategoryMix;
   movers: Record<
     InsightsWindow,
     { climbers: InsightsMoverItem[]; droppers: InsightsMoverItem[] }
