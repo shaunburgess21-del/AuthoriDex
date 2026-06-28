@@ -46,6 +46,14 @@ interface Props {
   reShowAfterDays?: number;
   /** When true, never auto-show the bottom toast (e.g. signed-in users). Drawer still opens via ref / footer. */
   disableAutoToast?: boolean;
+  /**
+   * When true, the first-visit flow opens the drawer directly instead of
+   * surfacing the bottom toast. Used on pages where the steps ARE the point
+   * of visiting (e.g. How It Works) so users see the guide immediately.
+   * Honours the same `shouldShowToast` gate (localStorage + 21-day re-show),
+   * so it only auto-opens once per re-show window.
+   */
+  autoOpenOnFirstVisit?: boolean;
 }
 
 function shouldShowToast(storageKey: string, reShowAfterDays: number): boolean {
@@ -156,6 +164,7 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
       delayMs = 2000,
       reShowAfterDays = RE_SHOW_DAYS,
       disableAutoToast = false,
+      autoOpenOnFirstVisit = false,
     },
     ref,
   ) {
@@ -174,11 +183,22 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
     }));
 
     useEffect(() => {
-      if (disableAutoToast) return;
       if (!shouldShowToast(storageKey, reShowAfterDays)) return;
+      if (autoOpenOnFirstVisit) {
+        // The guide itself is the destination — open it directly and mark
+        // seen so it doesn't auto-open again until the re-show window lapses.
+        const timer = setTimeout(() => {
+          setStep(0);
+          setDirection(1);
+          setDrawerOpen(true);
+          markSeen(storageKey);
+        }, delayMs);
+        return () => clearTimeout(timer);
+      }
+      if (disableAutoToast) return;
       const timer = setTimeout(() => setShowToast(true), delayMs);
       return () => clearTimeout(timer);
-    }, [storageKey, delayMs, reShowAfterDays, disableAutoToast]);
+    }, [storageKey, delayMs, reShowAfterDays, disableAutoToast, autoOpenOnFirstVisit]);
 
     const dismiss = useCallback(() => {
       setShowToast(false);

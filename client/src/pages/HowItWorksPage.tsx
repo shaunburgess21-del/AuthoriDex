@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ArrowLeft, BookOpen, ChevronRight, Flame, Info, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Flame, HelpCircle, Info, Sparkles } from "lucide-react";
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -20,6 +20,7 @@ import {
   VOTE_SURFACES,
   PREDICT_SURFACES,
   glowClassFor,
+  getRankConfig,
   type KnowledgeTab,
   type KnowledgeTabId,
   type XpActionRow,
@@ -39,6 +40,8 @@ import {
 import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
+import { HowItWorksWelcomeModal } from "@/components/HowItWorksWelcomeModal";
+import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
 /**
  * Tier at which a member's rank qualifier starts appearing inline on their
@@ -390,6 +393,35 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
 }
 
 /**
+ * Rounded-square icon chip for a rank — the rank's own Lucide glyph tinted in
+ * its tier colour. Replaces the old flat numbered circle; the tier number now
+ * lives in the tile label as "Tier N". Two sizes: the compact ladder strip
+ * (sm) and the larger Ranks-tab detail cards (lg).
+ */
+function RankIconChip({
+  rank,
+  size = "sm",
+}: {
+  rank: (typeof RANKS)[number];
+  size?: "sm" | "lg";
+}) {
+  const Icon = getRankConfig(rank.name).icon;
+  const box = size === "lg" ? "h-11 w-11 rounded-xl" : "h-9 w-9 rounded-lg";
+  const glyph = size === "lg" ? "h-5 w-5" : "h-4 w-4";
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center justify-center", box)}
+      style={{
+        background: `linear-gradient(135deg, ${rank.color}33 0%, ${rank.color}1a 100%)`,
+        border: `1px solid ${rank.color}59`,
+      }}
+    >
+      <Icon className={glyph} style={{ color: rank.color }} strokeWidth={2} />
+    </span>
+  );
+}
+
+/**
  * Compact horizontal rank ladder — eight tiered chips on a scrollable
  * strip, anchored above the "How XP is awarded" prose. Highlights the
  * authenticated user's current tier so the section reads as "here's
@@ -427,25 +459,28 @@ function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
             <div
               key={rank.tier}
               data-testid={`rank-ladder-tier-${rank.tier}`}
-              className={`shrink-0 md:shrink min-w-[110px] md:min-w-0 rounded-lg border px-2 py-2 md:px-3 md:py-2.5 transition-colors ${
+              className={cn(
+                "shrink-0 md:shrink min-w-[110px] md:min-w-0 rounded-lg px-2.5 py-2.5 md:px-3 md:py-3 transition-colors",
                 isCurrent
-                  ? "border-amber-500/60 bg-amber-500/10 shadow-[0_0_0_2px_rgba(245,158,11,0.2)]"
-                  : "border-border/60 bg-muted/30"
-              }`}
+                  ? "rank-glow"
+                  : "border border-border/60 bg-muted/30",
+              )}
+              style={
+                isCurrent
+                  ? ({ "--rank-color": rank.color } as CSSProperties)
+                  : undefined
+              }
             >
-              <div className="flex items-center gap-2 md:flex-col md:items-center md:gap-1.5 md:text-center">
-                <span
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                  style={{ backgroundColor: rank.color }}
-                >
-                  {rank.tier}
-                </span>
+              <div className="flex items-center gap-2.5 md:flex-col md:items-center md:gap-2 md:text-center">
+                <RankIconChip rank={rank} />
                 <div className="min-w-0 leading-tight md:w-full">
-                  <p className="truncate md:whitespace-normal md:line-clamp-2 md:text-balance text-[12px] font-semibold">
+                  <p className="truncate md:whitespace-normal md:line-clamp-2 md:text-balance text-[13px] font-bold">
                     {rank.name}
                   </p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    {rank.minXp.toLocaleString()} XP
+                  <p className="text-[10px] text-muted-foreground">
+                    <span className="uppercase tracking-wide">Tier {rank.tier}</span>
+                    <span className="mx-1 opacity-50">·</span>
+                    <span className="font-mono">{rank.minXp.toLocaleString()} XP</span>
                   </p>
                 </div>
               </div>
@@ -542,6 +577,9 @@ function rankStatusSummary(tier: number): string {
 
 function RanksSection() {
   const accent = accentFor("ranks");
+  const { isLoggedIn } = useAuth();
+  const { data: stats } = useUserStats(isLoggedIn);
+  const currentTier = stats?.rank?.tier ?? null;
   return (
     <section className="space-y-6">
       <SectionHeading
@@ -578,18 +616,27 @@ function RanksSection() {
       </Card>
 
       <div className="grid gap-3 md:grid-cols-2">
-        {RANKS.map((rank) => (
-          <Card key={rank.tier} className="space-y-3 p-4">
+        {RANKS.map((rank) => {
+          const isCurrent = currentTier === rank.tier;
+          return (
+          <Card
+            key={rank.tier}
+            data-testid={`rank-card-tier-${rank.tier}`}
+            className={cn("space-y-3 p-4", isCurrent && "rank-glow")}
+            style={
+              isCurrent
+                ? ({
+                    "--rank-color": rank.color,
+                    borderColor: `${rank.color}66`,
+                  } as CSSProperties)
+                : undefined
+            }
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ backgroundColor: rank.color }}
-                >
-                  {rank.tier}
-                </span>
+                <RankIconChip rank={rank} size="lg" />
                 <div>
-                  <div className="font-semibold">{rank.name}</div>
+                  <div className="text-base font-bold">{rank.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {rank.minXp.toLocaleString()} –{" "}
                     {rank.maxXp === null
@@ -637,7 +684,8 @@ function RanksSection() {
               </div>
             </div>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
     </section>
@@ -1413,6 +1461,7 @@ function ProgressHeader() {
   if (!isLoggedIn || !rank) return null;
 
   const xp = stats?.xpPoints ?? 0;
+  const rankConfig = RANKS.find((r) => r.tier === rank.tier) ?? null;
   const nextRank = RANKS.find((r) => r.tier === rank.tier + 1) ?? null;
   const toNext = nextRank ? Math.max(0, nextRank.minXp - xp) : 0;
   const pct = nextRank
@@ -1429,12 +1478,16 @@ function ProgressHeader() {
     <Card className="space-y-3 p-4" data-testid="how-it-works-progress">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: rank.color }}
-          >
-            {rank.tier}
-          </span>
+          {rankConfig ? (
+            <RankIconChip rank={rankConfig} size="lg" />
+          ) : (
+            <span
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+              style={{ backgroundColor: rank.color }}
+            >
+              {rank.tier}
+            </span>
+          )}
           <div className="leading-tight">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
               Your rank
@@ -1474,6 +1527,7 @@ function ProgressHeader() {
 export default function HowItWorksPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
+  const welcomeModalRef = useRef<OnboardingDrawerHandle>(null);
 
   const [activeTab, setActiveTab] = useState<KnowledgeTabId>(() => {
     if (typeof window === "undefined") return "xp";
@@ -1579,31 +1633,34 @@ export default function HowItWorksPage() {
         commitOffsetPx={96}
       >
         <div className="container mx-auto max-w-3xl space-y-6 px-2 py-6 sm:px-4">
-          <Card className="flex items-start gap-3 p-4">
-            <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-            <p className="text-sm text-muted-foreground">
-              This page is the canonical reference for how VoxDex rewards
-              participation. Pick a tab above to dig into XP, Ranks, Vox,
-              Badges, Voting, or Predictions. Numbers shown here mirror the
-              server-side configuration.
-            </p>
-          </Card>
-
           <ProgressHeader />
 
           <ActiveSection onJumpToTab={selectTab} />
 
           <Separator />
 
-          <p className="text-center text-xs text-muted-foreground">
-            Want to suggest a tweak to how rewards work?{" "}
-            <a className="underline" href="/contact">
-              Drop us a note
-            </a>
-            .
-          </p>
+          <div className="space-y-3 text-center">
+            <button
+              type="button"
+              onClick={() => welcomeModalRef.current?.open()}
+              className="text-sm text-muted-foreground transition-colors hover:text-primary"
+              data-testid="button-replay-how-it-works"
+            >
+              <HelpCircle className="mr-1 inline h-4 w-4 align-text-bottom" />
+              How this page works
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Want to suggest a tweak to how rewards work?{" "}
+              <a className="underline" href="/contact">
+                Drop us a note
+              </a>
+              .
+            </p>
+          </div>
         </div>
       </SwipeNavigator>
+
+      <HowItWorksWelcomeModal ref={welcomeModalRef} />
     </div>
   );
 }

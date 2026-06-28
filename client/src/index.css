@@ -634,6 +634,46 @@
     transform: none;
   }
 
+  /* ===== RANK GLOW (per-rank colour) =====
+     Same top-lip + ambient-glow language as .pulse-card-*, but driven by a
+     single --rank-color custom property so one class skins every tier
+     (the active rank tile on /how-it-works picks up its own colour). */
+  .rank-glow {
+    position: relative;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--rank-color) 38%, transparent);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--rank-color) 10%, transparent) 0%, transparent 45%),
+      linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
+    box-shadow:
+      0 4px 20px -4px color-mix(in srgb, var(--rank-color) 22%, transparent),
+      0 0 40px -10px color-mix(in srgb, var(--rank-color) 14%, transparent);
+  }
+  .rank-glow::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 10;
+    background: linear-gradient(90deg, transparent 0%, var(--rank-color) 50%, transparent 100%);
+  }
+  .rank-glow::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(ellipse at top, color-mix(in srgb, var(--rank-color) 18%, transparent) 0%, transparent 60%);
+  }
+  .rank-glow > * {
+    position: relative;
+    z-index: 2;
+  }
+
   /* ===== NEUTRAL WHITE (Daily Movers) ===== */
   .pulse-card-blue {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%),
