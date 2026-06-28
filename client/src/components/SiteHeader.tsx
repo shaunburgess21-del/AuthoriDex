@@ -38,7 +38,7 @@ const ACTIVE_CLASS: Record<ActiveNav, string> = {
   vote: "text-cyan-700 dark:text-cyan-400",
   predict: "text-violet-700 dark:text-violet-500",
   voices: "text-amber-600 dark:text-amber-400",
-  insights: "text-[#F3F4F6] dark:text-[#F3F4F6]",
+  insights: "text-blue-600 dark:text-blue-400",
 };
 
 const NAV_ITEMS: Array<{ key: ActiveNav; label: string; href: string; testId: string }> = [

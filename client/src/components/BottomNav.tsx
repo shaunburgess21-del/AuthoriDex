@@ -15,7 +15,7 @@ const navItems: NavItem[] = [
   { path: "/vote", label: "Vote", icon: Vote, activeClass: "text-cyan-400" },
   { path: "/predict", label: "Predict", icon: TrendingUp, activeClass: "text-violet-500" },
   { path: "/voices", label: "Voices", icon: MessagesSquare, activeClass: "text-amber-400" },
-  { path: "/insights", label: "Insights", icon: LineChart, activeClass: "text-[#F3F4F6]" },
+  { path: "/insights", label: "Insights", icon: LineChart, activeClass: "text-blue-400" },
 ];
 
 export function BottomNav() {
