@@ -16,10 +16,13 @@ VoxDex uses environment variables for all secrets and configuration. These must 
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ Yes | PostgreSQL connection string (Supabase session pooler, port 5432) |
+| `DATABASE_URL` | ✅ Yes | PostgreSQL connection string (Supabase transaction pooler, port 6543) |
 
-**Important:** Use the **Session Pooler** URL from Supabase, not the direct connection.
-Format: `postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase.com:5432/postgres`
+**Important:** Use the **Transaction pooler** URL from Supabase (port **6543**), not session mode (5432) or the direct connection. Session mode pins one backend connection per client and exhausts the pool under parallel schedulers + API traffic (`EMAXCONNSESSION` / `pool_size: 15` errors). Transaction mode multiplexes many app clients onto fewer backends.
+
+Format: `postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase.com:6543/postgres`
+
+Optional: `DB_POOL_MAX` (default **25** in code) — max connections in the Node `pg` pool. Override per environment if needed.
 
 ---
 
@@ -103,7 +106,7 @@ Before deploying, confirm these variables exist in all three environments:
 Copy this and fill in your values:
 
 ```
-DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-1-eu-north-1.pooler.supabase.com:6543/postgres
 SUPABASE_URL=https://[ref].supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -117,7 +120,7 @@ DISABLE_SCHEDULERS=true
 
 | Key | Location |
 |---|---|
-| `DATABASE_URL` | Supabase → Settings → Database → Session Pooler |
+| `DATABASE_URL` | Supabase → Settings → Database → Connection pooling → **Transaction** mode (port 6543) |
 | `SUPABASE_URL` | Supabase → Settings → API → Project URL |
 | `SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role |

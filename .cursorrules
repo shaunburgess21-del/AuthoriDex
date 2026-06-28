@@ -57,7 +57,7 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 
 ## Database Rules
 - Use Drizzle ORM for all DB queries — no raw SQL unless absolutely necessary
-- The `DATABASE_URL` uses Supabase Session Pooler (port 5432)
+- The `DATABASE_URL` uses Supabase **transaction** pooler (port **6543**), not session mode (5432) — session mode exhausts the pool under parallel schedulers + API traffic
 - Never use the direct connection string in production
 - All schema changes go through `drizzle-kit push` — never manual SQL
 - You have access to Supabase via MCP Plugin. Use it when reviewing code where necessary
