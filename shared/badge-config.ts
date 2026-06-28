@@ -496,7 +496,7 @@ export const BADGES: BadgeConfig[] = [
     name: "Community Member",
     description: "Add your age, gender, and country of residence",
     category: BADGE_CATEGORIES.PROFILE,
-    rarity: BADGE_RARITIES.RARE,
+    rarity: BADGE_RARITIES.COMMON,
     icon: "globe-2",
     criteriaJson: {
       type: "profile_fields",

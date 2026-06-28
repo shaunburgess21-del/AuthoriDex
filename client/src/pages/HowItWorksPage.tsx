@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useSearch } from "wouter";
-import { ArrowLeft, BookOpen, ChevronRight, Flame, HelpCircle, Info, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  BadgeCheck,
+  BookOpen,
+  Check,
+  ChevronRight,
+  Coins,
+  Flame,
+  Gauge,
+  Gift,
+  HelpCircle,
+  Info,
+  Scale,
+  Send,
+  ShoppingCart,
+  Sparkles,
+  Trophy,
+  type LucideIcon,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type { BadgeCardData } from "@/components/BadgeCard";
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -122,6 +143,77 @@ function accentFor(id: KnowledgeTabId): string {
 }
 
 /**
+ * Shared knowledge-base table cell classes. Header cells are vertically
+ * centered with the same row height as body cells (matches the XP-tab
+ * polish) so every table on the page reads consistently.
+ */
+const KB_TH = "py-3.5 align-middle font-medium leading-normal";
+const KB_TD = "px-3 py-3.5 align-middle";
+
+/** Neutral slate accent for XP-tab concept tiles — the XP chrome is
+ * white/neutral, so a fixed slate reads in both light and dark themes. */
+const XP_TILE_ACCENT = "#64748B";
+
+/**
+ * Elegant, scannable concept tile — an icon chip, a short bold label, and a
+ * one-line description. Replaces dense bullet lists in the "general info"
+ * containers so they're easy to grasp at a glance.
+ */
+function ConceptTile({
+  icon: Icon,
+  label,
+  accent,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  accent: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+      <span
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+        style={{
+          background: `linear-gradient(135deg, ${accent}33 0%, ${accent}1a 100%)`,
+          border: `1px solid ${accent}59`,
+        }}
+      >
+        <Icon className="h-4 w-4" style={{ color: accent }} strokeWidth={2} />
+      </span>
+      <div className="min-w-0 space-y-0.5 leading-snug">
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="text-xs text-muted-foreground">{children}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Consistent informational callout used across the Vote / Predict toggles.
+ * A clean tinted left accent border (no floating icon) keeps the emphasis
+ * subtle and consistent with the page's glow language.
+ */
+function InfoCallout({
+  accent,
+  children,
+}: {
+  accent?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      className={cn("border-l-2 p-4", !accent && "border-l-border")}
+      style={accent ? { borderLeftColor: accent } : undefined}
+    >
+      <div className="min-w-0 space-y-1 text-sm text-muted-foreground">
+        {children}
+      </div>
+    </Card>
+  );
+}
+
+/**
  * Glowing hero container that opens each tab. Carries the per-tab pulse-card
  * glow (color keyed to the active tab, mirroring the Insights page) and
  * optionally wraps lead content like the stat-pill row. Uses pulse-card-flush
@@ -215,36 +307,89 @@ function formatCap(cap: number | null): string {
   return cap === null ? "No cap" : `${cap} / day`;
 }
 
-function XpActionTable({ rows }: { rows: XpActionRow[] }) {
+function XpActionLabel({
+  actionKey,
+  displayName,
+}: {
+  actionKey: string;
+  displayName: string;
+}) {
+  if (actionKey === "market_suggestion_approved") {
+    return (
+      <>
+        Market Suggestion
+        <br />
+        Approved
+      </>
+    );
+  }
+  return displayName;
+}
+
+function XpActionTable({
+  rows,
+  glowClass,
+  xpValueClass,
+}: {
+  rows: XpActionRow[];
+  glowClass?: string;
+  xpValueClass?: string;
+}) {
   return (
-    <div className="overflow-hidden rounded-xl border">
-      <table className="w-full text-sm">
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl",
+        glowClass ? cn(glowClass, "pulse-card-flush") : "border",
+      )}
+    >
+      <table className="w-full table-fixed text-sm">
         <thead>
-          <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <th className="px-3 py-2 font-medium">Action</th>
-            <th className="px-3 py-2 font-medium text-right">XP</th>
-            <th className="px-3 py-2 font-medium text-right">Daily Cap</th>
-            <th className="hidden px-3 py-2 font-medium md:table-cell">Notes</th>
+          <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+            <th className={cn("font-medium", XP_TABLE_HEADER_CELL, XP_TABLE_ACTION_PAD, XP_TABLE_COL.action)}>
+              Action
+            </th>
+            <th className={cn("px-3 font-medium text-right", XP_TABLE_HEADER_CELL, XP_TABLE_COL.xp)}>
+              XP
+            </th>
+            <th
+              className={cn(
+                "px-3 font-medium text-right",
+                XP_TABLE_HEADER_CELL,
+                XP_TABLE_COL.dailyCap,
+              )}
+            >
+              Daily Cap
+            </th>
+            <th className={cn("px-3 font-medium", XP_TABLE_HEADER_CELL, XP_TABLE_COL.notes)}>
+              Notes
+            </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr
               key={row.actionKey}
-              className="border-t border-border/60 align-top"
+              className="border-t border-border/60 align-middle"
             >
-              <td className="px-3 py-2">
-                <div className="font-medium">{row.displayName}</div>
+              <td className={cn("py-3.5", XP_TABLE_ACTION_PAD, XP_TABLE_COL.action)}>
+                <div className="font-medium leading-snug">
+                  <XpActionLabel actionKey={row.actionKey} displayName={row.displayName} />
+                </div>
               </td>
-              <td className="px-3 py-2 text-right">
-                <span className="font-mono font-semibold text-slate-700 dark:text-white">
+              <td className={cn("px-3 py-3.5 text-right", XP_TABLE_COL.xp)}>
+                <span
+                  className={cn(
+                    "font-mono font-semibold",
+                    xpValueClass ?? "text-slate-700 dark:text-white",
+                  )}
+                >
                   {row.xpValue > 0 ? `+${row.xpValue}` : row.xpValue}
                 </span>
               </td>
-              <td className="px-3 py-2 text-right text-muted-foreground">
+              <td className={cn("px-3 py-3.5 text-right text-muted-foreground", XP_TABLE_COL.dailyCap)}>
                 {formatCap(row.dailyCap)}
               </td>
-              <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
+              <td className={cn("px-3 py-3.5 text-muted-foreground", XP_TABLE_COL.notes)}>
                 {row.description}
               </td>
             </tr>
@@ -269,6 +414,47 @@ const USER_FACING_XP_CATEGORIES: XpActionRow["category"][] = [
   "Prediction",
   "Streak",
 ];
+
+/**
+ * Per-category glow skin for the XP action tables — each section borrows
+ * its surface's theme colour (the same `.pulse-card-*` skins used by the
+ * section heroes). `pulse-card-blue` is the neutral/white skin, so Streak
+ * uses `pulse-card-voxdex` for the standard VoxDex blue.
+ */
+const XP_CATEGORY_GLOW: Record<XpActionRow["category"], string> = {
+  Voting: "pulse-card-cyan",
+  Content: "pulse-card-amber",
+  Engagement: "pulse-card-amber",
+  Prediction: "pulse-card-purple",
+  Streak: "pulse-card-voxdex",
+  Special: "",
+};
+
+/** Per-category tint for XP column values — matches each container's theme. */
+const XP_CATEGORY_XP_COLOR: Record<XpActionRow["category"], string> = {
+  Voting: "text-cyan-600 dark:text-cyan-400",
+  Content: "text-amber-600 dark:text-amber-400",
+  Engagement: "text-amber-600 dark:text-amber-400",
+  Prediction: "text-violet-600 dark:text-violet-400",
+  Streak: "text-blue-600 dark:text-blue-400",
+  Special: "text-slate-700 dark:text-white",
+};
+
+/**
+ * Shared column widths — applied to every XpActionTable th/td so all five
+ * category tables line up vertically on the page. Rem-based (not %) so the
+ * Action column hugs the longest label without a dead gap before XP.
+ */
+const XP_TABLE_COL = {
+  action: "w-[11rem] sm:w-[12rem] md:w-[12.5rem] whitespace-nowrap",
+  xp: "w-[3rem] sm:w-[3.25rem] md:w-[3.5rem] whitespace-nowrap",
+  dailyCap: "w-[4.5rem] sm:w-[5rem] md:w-[5.5rem] whitespace-nowrap",
+  notes: "hidden md:table-cell",
+} as const;
+
+const XP_TABLE_ACTION_PAD = "pl-5 pr-3";
+
+const XP_TABLE_HEADER_CELL = "py-3.5 align-middle leading-normal";
 
 interface XpSectionProps {
   onJumpToTab?: (tab: KnowledgeTabId) => void;
@@ -342,26 +528,31 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
 
       <RankLadderStrip onJumpToRanks={() => onJumpToTab?.("ranks")} />
 
-      <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("xp"), "pulse-card-flush")}>
-        <h3 className="font-semibold">How XP is awarded</h3>
-        <p className="text-sm text-muted-foreground">
-          Every action you take on VoxDex that contributes to the community
-          earns you XP. Votes, predictions, comments, streaks — it all counts.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Each action can only award XP once per event — you'll never get
-          double credit for the same thing, even if something goes wrong on
-          our end.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Most actions have a daily limit to keep things fair. Hitting a limit
-          just means you stop earning XP for that action today — everything
-          else still counts, and limits reset at midnight UTC.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          When you earn enough XP to cross a rank threshold, your rank updates
-          automatically and you'll get a notification.
-        </p>
+      <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", glowClassFor("xp"), "pulse-card-flush")}>
+        <div className="space-y-1">
+          <h3 className="font-semibold">How XP is awarded</h3>
+          <p className="text-sm text-muted-foreground">
+            Earn XP for everything you do on VoxDex — it adds up and lifts your
+            rank.
+          </p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <ConceptTile icon={Sparkles} label="Everything counts" accent={XP_TILE_ACCENT}>
+            Votes, predictions, comments, and streaks all earn XP.
+          </ConceptTile>
+          <ConceptTile icon={Check} label="Once per event" accent={XP_TILE_ACCENT}>
+            Each action awards XP once — no double credit, even if something
+            errors on our end.
+          </ConceptTile>
+          <ConceptTile icon={Gauge} label="Daily limits" accent={XP_TILE_ACCENT}>
+            Most actions cap per day to keep it fair. Hit a cap and other
+            actions still count; resets midnight UTC.
+          </ConceptTile>
+          <ConceptTile icon={Trophy} label="Automatic rank-ups" accent={XP_TILE_ACCENT}>
+            Cross a rank threshold and your rank updates automatically —
+            you&apos;ll get a notification.
+          </ConceptTile>
+        </div>
       </Card>
 
       {grouped.map(({ category, rows }) => (
@@ -375,7 +566,11 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             {category}
           </h3>
-          <XpActionTable rows={rows} />
+          <XpActionTable
+            rows={rows}
+            glowClass={XP_CATEGORY_GLOW[category]}
+            xpValueClass={XP_CATEGORY_XP_COLOR[category]}
+          />
           {category === "Streak" && <StreakExplainer />}
         </div>
       ))}
@@ -508,9 +703,9 @@ function RankLadderStrip({ onJumpToRanks }: { onJumpToRanks: () => void }) {
  */
 function StreakExplainer() {
   return (
-    <Card className="space-y-4 p-4 border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
+    <Card className={cn("space-y-4 p-4 shadow-none", "pulse-card-voxdex", "pulse-card-flush")}>
       <div className="flex items-start gap-3">
-        <Flame className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+        <Flame className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
         <div className="space-y-1">
           <h4 className="font-semibold text-base">How streaks work</h4>
           <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-5">
@@ -528,7 +723,7 @@ function StreakExplainer() {
 
       <div className="border-t border-border/60 pt-4">
         <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="h-4 w-4 text-amber-500" />
+          <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <h4 className="font-semibold text-base">Milestone rewards</h4>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -539,7 +734,7 @@ function StreakExplainer() {
               data-testid={`streak-milestone-${day}`}
             >
               <span className="text-sm font-medium">Day {day}</span>
-              <span className="font-mono text-sm font-semibold text-amber-600 dark:text-amber-400">
+              <span className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
                 +{STREAK_MILESTONE_XP[day]} XP
               </span>
             </div>
@@ -588,31 +783,28 @@ function RanksSection() {
         subtitle="Everyone can do everything. Rank amplifies it."
       />
 
-      <Card className="space-y-2 p-4">
-        <h3 className="font-semibold">How rank actually works</h3>
-        <p className="text-sm text-muted-foreground">
-          Every feature — voting, predicting, commenting, posting insights,
-          curating images, nominating inductions — is open to everyone from
-          day one. Climbing the ladder doesn&apos;t unlock buttons; it{" "}
-          <strong className="text-foreground">amplifies</strong> what you
-          already do:
-        </p>
-        <ul className="space-y-1 text-sm text-muted-foreground">
-          <li>
-            <strong className="text-foreground">Earn rate</strong> — a per-tier
-            multiplier on the XP and Vox you earn from engagement.
-          </li>
-          <li>
-            <strong className="text-foreground">Curatorial influence</strong> —
-            how much your Induction and Curate votes count toward picking
-            winners (everyone&apos;s vote still shows as one vote).
-          </li>
-          <li>
-            <strong className="text-foreground">Status</strong> — visible
-            markers: a rank qualifier on your comments, then a custom profile
-            banner, then a profile accent theme at the very top.
-          </li>
-        </ul>
+      <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", "pulse-card-voxdex", "pulse-card-flush")}>
+        <div className="space-y-1">
+          <h3 className="font-semibold">How rank actually works</h3>
+          <p className="text-sm text-muted-foreground">
+            Everything&apos;s unlocked from day one — rank just{" "}
+            <strong className="text-foreground">amplifies</strong> what you
+            already do.
+          </p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <ConceptTile icon={Gauge} label="Earn rate" accent={accent}>
+            A per-tier multiplier on the XP and Vox you earn from engagement.
+          </ConceptTile>
+          <ConceptTile icon={Scale} label="Curatorial influence" accent={accent}>
+            How much your Induction and Curate votes count toward winners —
+            everyone&apos;s vote still shows as one.
+          </ConceptTile>
+          <ConceptTile icon={BadgeCheck} label="Status" accent={accent}>
+            Visible markers: a rank qualifier, then a custom banner, then a
+            profile accent theme.
+          </ConceptTile>
+        </div>
       </Card>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -636,7 +828,21 @@ function RanksSection() {
               <div className="flex items-center gap-3">
                 <RankIconChip rank={rank} size="lg" />
                 <div>
-                  <div className="text-base font-bold">{rank.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold">{rank.name}</span>
+                    {isCurrent && (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        style={{
+                          backgroundColor: `${rank.color}1f`,
+                          color: rank.color,
+                          border: `1px solid ${rank.color}59`,
+                        }}
+                      >
+                        Your rank
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {rank.minXp.toLocaleString()} –{" "}
                     {rank.maxXp === null
@@ -649,7 +855,7 @@ function RanksSection() {
               <Badge
                 variant="outline"
                 className="text-[10px]"
-                style={{ borderColor: `${accent}66`, color: accent }}
+                style={{ borderColor: `${rank.color}66`, color: rank.color }}
               >
                 Tier {rank.tier}
               </Badge>
@@ -712,58 +918,69 @@ function CreditsSection() {
         </div>
       </SectionHeading>
 
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Why virtual currency?</h3>
-        <p className="text-sm text-muted-foreground">
-          Vox is play-money — it has no cash value and can&apos;t be redeemed or
-          withdrawn. We use a virtual currency so anyone, anywhere can predict
-          without putting real money at risk, and so the platform stays purely
-          entertainment.
+      <InfoCallout accent={accent}>
+        <p>
+          <strong className="text-foreground">Why virtual currency?</strong>{" "}
+          Vox has no cash value and can&apos;t be redeemed or withdrawn. A
+          virtual currency means anyone, anywhere can predict without putting
+          real money at risk — the platform stays purely entertainment.
         </p>
-      </Card>
+      </InfoCallout>
 
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Where Vox comes from</h3>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>
-            <strong className="text-foreground">Signup grant.</strong> Every
-            new account starts with{" "}
-            {formatVox(SIGNUP_CREDIT_GRANT)} so you can place predictions
-            immediately.
-          </li>
-          <li>
-            <strong className="text-foreground">Prediction payouts.</strong>{" "}
-            Winning predictions return Vox to your balance when the market
-            settles, plus your share of the pool.
-          </li>
-          <li>
-            <strong className="text-foreground">Engagement earn loop.</strong>{" "}
-            Cast votes, post insights, comment, and hit streak milestones to
-            earn small top-ups (see the table below).
-          </li>
-          <li>
-            <strong className="text-foreground">Approved suggestions.</strong>{" "}
-            Suggest a candidate or a market — if it goes live, you earn a
-            larger one-off bounty.
-          </li>
-          <li>
-            <strong className="text-foreground">Purchase.</strong> Buy more
-            from the{" "}
-            <a className="underline" href="/pricing">
-              pricing page
-            </a>{" "}
-            (this is our phase-1 revenue model).
-          </li>
-        </ul>
-      </Card>
-
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Where Vox goes</h3>
-        <p className="text-sm text-muted-foreground">
-          Every prediction deducts Vox from your balance the moment you
-          place it. Your stake size is your call — if you win, Vox returns
-          to your balance plus your share of the pool.
-        </p>
+      <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", glowClassFor("credits"), "pulse-card-flush")}>
+        <div className="space-y-1">
+          <h3 className="font-semibold">How Vox flows</h3>
+          <p className="text-sm text-muted-foreground">
+            Four ways Vox comes in, one way it goes out.
+          </p>
+        </div>
+        <div>
+          <p
+            className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: accent }}
+          >
+            Coming in
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <ConceptTile icon={Gift} label="Signup grant" accent={accent}>
+              Every new account starts with {formatVox(SIGNUP_CREDIT_GRANT)} so
+              you can predict immediately.
+            </ConceptTile>
+            <ConceptTile icon={Trophy} label="Prediction payouts" accent={accent}>
+              Winning predictions return Vox plus your share of the pool when
+              the market settles.
+            </ConceptTile>
+            <ConceptTile icon={Sparkles} label="Engagement earn loop" accent={accent}>
+              Vote, post insights, comment, and hit streak milestones for small
+              top-ups (see below).
+            </ConceptTile>
+            <ConceptTile icon={BadgeCheck} label="Approved suggestions" accent={accent}>
+              Suggest a candidate or market — if it goes live, you earn a larger
+              one-off bounty.
+            </ConceptTile>
+          </div>
+        </div>
+        <div>
+          <p
+            className="mb-2 text-[11px] font-semibold uppercase tracking-wider"
+            style={{ color: accent }}
+          >
+            Going out
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <ConceptTile icon={ShoppingCart} label="Staking on predictions" accent={accent}>
+              Every prediction deducts Vox the moment you place it — your stake
+              size is your call.
+            </ConceptTile>
+            <ConceptTile icon={Coins} label="Top up anytime" accent={accent}>
+              Need more? Buy Vox from the{" "}
+              <a className="underline" href="/pricing">
+                pricing page
+              </a>{" "}
+              (our phase-1 revenue model).
+            </ConceptTile>
+          </div>
+        </div>
       </Card>
 
       <CreditEarnTable accent={accent} />
@@ -802,64 +1019,72 @@ function CreditEarnTable({ accent }: { accent: string }) {
   })();
 
   return (
-    <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("credits"), "pulse-card-flush")}>
-      <h3 className="font-semibold">Earn Vox by participating</h3>
-      <p className="text-sm text-muted-foreground">
-        Engagement actions earn small daily-capped top-ups. Approved
-        suggestions and streak milestones pay out larger one-offs. Values
-        below are live — admins can tune them at any time.
-      </p>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h3 className="font-semibold">Earn Vox by participating</h3>
+        <p className="text-sm text-muted-foreground">
+          Engagement actions earn small daily-capped top-ups. Approved
+          suggestions and streak milestones pay out larger one-offs. Values
+          below are live — admins can tune them at any time.
+        </p>
+      </div>
 
       {grouped.map(([category, actions]) => (
-        <div key={category} className="space-y-2">
-          <p
-            className="text-[11px] font-semibold uppercase tracking-wider"
-            style={{ color: accent }}
-          >
-            {CREDIT_CATEGORY_LABELS[category]}
-          </p>
-          <div
-            className="overflow-hidden rounded-lg border"
-            style={{ borderColor: `${accent}40` }}
-          >
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2 font-medium">Action</th>
-                  <th className="px-3 py-2 font-medium text-right">Vox</th>
-                  <th className="px-3 py-2 font-medium text-right">Daily cap</th>
-                  <th className="hidden px-3 py-2 font-medium md:table-cell">
-                    Notes
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {actions.map((action) => (
-                  <tr
-                    key={action.key}
-                    className="border-t border-border/60 align-top"
-                    data-testid={`credit-earn-row-${action.key}`}
-                  >
-                    <td className="px-3 py-2 font-medium">{action.label}</td>
-                    <td className="px-3 py-2 text-right">
-                      <span
-                        className="font-mono text-xs font-semibold"
-                        style={{ color: accent }}
-                      >
-                        +{action.proposedCredits}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs text-muted-foreground">
-                      {action.dailyCap === null ? "No cap" : `${action.dailyCap}/day`}
-                    </td>
-                    <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
-                      {action.notes ?? ""}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div
+          key={category}
+          className={cn(
+            "overflow-hidden rounded-xl",
+            glowClassFor("credits"),
+            "pulse-card-flush",
+          )}
+        >
+          <div className="px-4 pt-3 pb-1">
+            <p
+              className="text-[11px] font-semibold uppercase tracking-wider"
+              style={{ color: accent }}
+            >
+              {CREDIT_CATEGORY_LABELS[category]}
+            </p>
           </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+                <th className={cn("pl-5 pr-3", KB_TH)}>Action</th>
+                <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>Vox</th>
+                <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>
+                  Daily cap
+                </th>
+                <th className={cn("px-3 hidden md:table-cell", KB_TH)}>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {actions.map((action) => (
+                <tr
+                  key={action.key}
+                  className="border-t border-border/60 align-middle"
+                  data-testid={`credit-earn-row-${action.key}`}
+                >
+                  <td className={cn("pl-5 pr-3 py-3.5 align-middle font-medium")}>
+                    {action.label}
+                  </td>
+                  <td className={cn("text-right", KB_TD)}>
+                    <span
+                      className="font-mono text-xs font-semibold"
+                      style={{ color: accent }}
+                    >
+                      +{action.proposedCredits}
+                    </span>
+                  </td>
+                  <td className={cn("text-right text-xs text-muted-foreground", KB_TD)}>
+                    {action.dailyCap === null ? "No cap" : `${action.dailyCap}/day`}
+                  </td>
+                  <td className={cn("hidden text-muted-foreground md:table-cell", KB_TD)}>
+                    {action.notes ?? ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ))}
 
@@ -889,14 +1114,36 @@ function CreditEarnTable({ accent }: { accent: string }) {
           </p>
         );
       })()}
-    </Card>
+    </div>
   );
 }
 
 type RarityFilter = "ALL" | "COMMON" | "RARE" | "EPIC" | "LEGENDARY";
 
 function BadgesSection() {
+  const { isLoggedIn } = useAuth();
   const [rarityFilter, setRarityFilter] = useState<RarityFilter>("ALL");
+  const [earnedOnly, setEarnedOnly] = useState(false);
+
+  // Earned state powers the personalised glow + "Earned" chip. Same
+  // endpoint the /me/badges trophy cabinet uses, so earned status stays
+  // in lockstep. Logged-out visitors just see the full catalogue.
+  const { data: earnedData } = useQuery<BadgeCardData[]>({
+    queryKey: ["/api/me/badges"],
+    enabled: isLoggedIn,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/me/badges");
+      return res.json();
+    },
+  });
+
+  const earnedMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const b of earnedData ?? []) {
+      if (b.earned) map.set(b.key, b.earnedAt);
+    }
+    return map;
+  }, [earnedData]);
 
   const visibleBadges = useMemo(
     () =>
@@ -906,12 +1153,19 @@ function BadgesSection() {
     [],
   );
 
+  const earnedCount = useMemo(
+    () => visibleBadges.filter((b) => earnedMap.has(b.key)).length,
+    [visibleBadges, earnedMap],
+  );
+
   const filtered = useMemo(
     () =>
-      rarityFilter === "ALL"
-        ? visibleBadges
-        : visibleBadges.filter((b) => b.rarity === rarityFilter),
-    [visibleBadges, rarityFilter],
+      visibleBadges.filter((b) => {
+        if (rarityFilter !== "ALL" && b.rarity !== rarityFilter) return false;
+        if (earnedOnly && !earnedMap.has(b.key)) return false;
+        return true;
+      }),
+    [visibleBadges, rarityFilter, earnedOnly, earnedMap],
   );
 
   const grouped = useMemo(() => {
@@ -954,6 +1208,14 @@ function BadgesSection() {
         subtitle="A collectible record of what you've done — earned automatically as you vote, predict, comment, and engage. Distinct from your rank, which tracks overall standing."
       />
 
+      {isLoggedIn && (
+        <p className="text-sm text-muted-foreground -mt-3" data-testid="badges-earned-summary">
+          You&apos;ve earned{" "}
+          <span className="font-semibold text-foreground">{earnedCount}</span> of{" "}
+          {visibleBadges.length} badges.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Badge
           variant="outline"
@@ -985,6 +1247,19 @@ function BadgesSection() {
             </Badge>
           );
         })}
+        {isLoggedIn && (
+          <Badge
+            variant="outline"
+            onClick={() => setEarnedOnly((v) => !v)}
+            className={cn(
+              "cursor-pointer text-[11px] border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
+              earnedOnly && "ring-2 ring-emerald-500",
+            )}
+            data-testid="badges-filter-earned"
+          >
+            <Check className="mr-1 h-3 w-3" /> Earned ({earnedCount})
+          </Badge>
+        )}
       </div>
 
       {grouped.map(({ category, rows }) => (
@@ -993,32 +1268,60 @@ function BadgesSection() {
             {BADGE_CATEGORY_LABELS[category]}
           </h3>
           <div className="grid gap-2 md:grid-cols-2">
-            {rows.map((row) => (
-              <Card key={row.key} className="space-y-1.5 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">{row.name}</div>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] shrink-0"
-                    style={{
-                      borderColor: `${rarityAccent[row.rarity]}66`,
-                      color: rarityAccent[row.rarity],
-                    }}
-                  >
-                    {rarityLabel[row.rarity]}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {row.description}
-                </p>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                  {BADGE_CATEGORY_LABELS[category]}
-                </p>
-              </Card>
-            ))}
+            {rows.map((row) => {
+              const isEarned = earnedMap.has(row.key);
+              return (
+                <Card
+                  key={row.key}
+                  className={cn("space-y-1.5 p-3", isEarned && "earned-glow")}
+                  style={
+                    isEarned
+                      ? ({ "--glow-color": rarityAccent[row.rarity] } as CSSProperties)
+                      : undefined
+                  }
+                  data-testid={`badge-card-${row.key}`}
+                  data-earned={isEarned ? "true" : "false"}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium">{row.name}</div>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] shrink-0"
+                      style={{
+                        borderColor: `${rarityAccent[row.rarity]}66`,
+                        color: rarityAccent[row.rarity],
+                      }}
+                    >
+                      {rarityLabel[row.rarity]}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {row.description}
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                      {BADGE_CATEGORY_LABELS[category]}
+                    </p>
+                    {isEarned && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+                        <Check className="h-3 w-3" /> Earned
+                      </span>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
       ))}
+
+      {filtered.length === 0 && (
+        <Card className="p-6 text-center text-sm text-muted-foreground">
+          {earnedOnly
+            ? "No badges earned in this filter yet — keep participating to unlock them."
+            : "No badges match this filter."}
+        </Card>
+      )}
     </section>
   );
 }
@@ -1084,12 +1387,12 @@ function VoteSection({
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Surface</th>
-                <th className="px-3 py-2 font-medium">Where</th>
-                <th className="px-3 py-2 font-medium text-right">XP</th>
-                <th className="px-3 py-2 font-medium text-right">Cap</th>
-                <th className="px-3 py-2 font-medium text-right">Vox</th>
+              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+                <th className={cn("pl-5 pr-3", KB_TH)}>Surface</th>
+                <th className={cn("px-3", KB_TH)}>Where</th>
+                <th className={cn("px-3 text-right", KB_TH)}>XP</th>
+                <th className={cn("px-3 text-right", KB_TH)}>Cap</th>
+                <th className={cn("px-3 text-right", KB_TH)}>Vox</th>
               </tr>
             </thead>
             <tbody>
@@ -1098,10 +1401,12 @@ function VoteSection({
                   (action) => action.actionKey === row.xpActionKey,
                 );
                 return (
-                  <tr key={row.surface} className="border-t border-border/60 align-top">
-                    <td className="px-3 py-2 font-medium">{row.surface}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.where}</td>
-                    <td className="px-3 py-2 text-right">
+                  <tr key={row.surface} className="border-t border-border/60 align-middle">
+                    <td className={cn("pl-5 pr-3 py-3.5 align-middle font-medium")}>
+                      {row.surface}
+                    </td>
+                    <td className={cn("text-muted-foreground", KB_TD)}>{row.where}</td>
+                    <td className={cn("text-right", KB_TD)}>
                       <span
                         className="font-mono font-semibold"
                         style={{ color: accent }}
@@ -1109,10 +1414,10 @@ function VoteSection({
                         +{xp?.xpValue ?? 0}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">
+                    <td className={cn("text-right text-muted-foreground", KB_TD)}>
                       {formatCap(xp?.dailyCap ?? null)}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className={cn("text-right", KB_TD)}>
                       <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
                         +{CURRENCY.symbol}{voteCreditAction?.proposedCredits ?? 2}
                       </span>
@@ -1129,47 +1434,34 @@ function VoteSection({
         </p>
       </Card>
 
-      <Card className="flex items-start gap-3 p-4">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          Induction and Image Curation votes require{" "}
-          <button
-            type="button"
-            onClick={() => onJumpToTab("ranks")}
-            className="underline-offset-2 hover:underline text-foreground/80"
-          >
-            Aspirant rank
-          </button>{" "}
-          (Tier 2 — 1,000 XP) or above. Reach Aspirant to unlock these surfaces.
-        </p>
-      </Card>
-
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">Suggesting new vote content</h3>
-        <p className="text-sm text-muted-foreground">
-          Submit matchups, sentiment polls, opinion polls, induction
-          candidates, or profile images for admin review. You earn{" "}
-          <span className="font-mono" style={{ color: accent }}>
-            +{submitSuggestionXp?.xpValue ?? 5} XP
-          </span>{" "}
-          for the submission (capped at {submitSuggestionXp?.dailyCap ?? 3} /
-          day) and a{" "}
-          <span className="font-mono" style={{ color: accent }}>
-            +{suggestionApprovedXp?.xpValue ?? 50} XP
-          </span>{" "}
-          bonus when it&apos;s approved and goes live.
-        </p>
+      <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", glowClassFor("vote"), "pulse-card-flush")}>
+        <div className="space-y-1">
+          <h3 className="font-semibold">Suggesting new vote content</h3>
+          <p className="text-sm text-muted-foreground">
+            Submit matchups, polls, induction candidates, or profile images for
+            review.
+          </p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          <ConceptTile icon={Send} label="You submit" accent={accent}>
+            +{submitSuggestionXp?.xpValue ?? 5} XP per submission (capped{" "}
+            {submitSuggestionXp?.dailyCap ?? 3}/day).
+          </ConceptTile>
+          <ConceptTile icon={BadgeCheck} label="It gets approved" accent={accent}>
+            +{suggestionApprovedXp?.xpValue ?? 50} XP bonus when it goes live.
+          </ConceptTile>
+          <ConceptTile icon={Coins} label="Vox bonus" accent={accent}>
+            Approved suggestions also earn +{CURRENCY.symbol}
+            {suggestionApprovedCredits?.proposedCredits ?? 50}, no daily cap.
+          </ConceptTile>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Approval-gating protects against suggestion spam — only quality
-          submissions earn the bonus. Approved vote suggestions also earn{" "}
-          <span className="font-mono text-violet-500 dark:text-violet-300">
-            +{CURRENCY.symbol}{suggestionApprovedCredits?.proposedCredits ?? 50}
-          </span>{" "}
-          with no daily cap.
+          Approval-gating protects against spam — only quality submissions earn
+          the bonus.
         </p>
       </Card>
 
-      <Card className="space-y-2 p-4">
+      <Card className={cn("space-y-2 p-4 shadow-none", glowClassFor("vote"), "pulse-card-flush")}>
         <h3 className="font-semibold">Voting Badges</h3>
         <p className="text-sm text-muted-foreground">
           Cast votes to unlock 10 voting badges — from First Vote to Legend
@@ -1254,41 +1546,35 @@ function PredictSection({
         for earn rates, signup grants, and purchase options.
       </p>
 
-      <Card className="space-y-3 p-4">
-        <h3 className="font-semibold">How prediction markets work</h3>
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>
-            Most markets are <strong className="text-foreground">live-price markets</strong>: you buy
-            shares of an outcome at the current price, and each winning share
-            pays{" "}
-            <strong className="text-foreground">Ꝟ1</strong> when the market
-            settles. Prices reflect the crowd's view of the odds — a Ꝟ0.30
-            share implies a ~30% chance.
-          </li>
-          <li>
-            <strong className="text-foreground">Cheaper shares pay bigger multiples</strong>{" "}
-            if your side wins. A contrarian pick at Ꝟ0.20 pays 5× per share;
-            the heavy favourite at Ꝟ0.80 pays only 1.25×. Sell anytime
-            before close to lock in profits or cut losses.
-          </li>
-          <li>
-            The <strong className="text-foreground">Weekly Jackpot</strong> is
-            the exception — it's a single shared pool that goes to whoever
-            guesses the closing Trend Score closest at Sunday close.
-          </li>
-          <li>
-            Your stake is debited from your Vox balance the moment you place
-            the prediction.
-          </li>
-          <li>
-            When the market resolves, the resolver settles winning positions —
-            payout returns Vox to your balance and awards{" "}
+      <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>
+        <div className="space-y-1">
+          <h3 className="font-semibold">How prediction markets work</h3>
+          <p className="text-sm text-muted-foreground">
+            Buy shares of an outcome at the current price — the crowd&apos;s
+            odds. Get it right and each share pays out.
+          </p>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <ConceptTile icon={Gauge} label="Live-price shares" accent={accent}>
+            Each winning share pays Ꝟ1 at settlement. Price = implied odds — a
+            Ꝟ0.30 share means a ~30% chance.
+          </ConceptTile>
+          <ConceptTile icon={Trophy} label="Cheaper pays bigger" accent={accent}>
+            A contrarian pick at Ꝟ0.20 pays 5×; the Ꝟ0.80 favourite pays 1.25×.
+            Sell anytime before close.
+          </ConceptTile>
+          <ConceptTile icon={Sparkles} label="Weekly Jackpot" accent={accent}>
+            The exception — one shared pool for whoever guesses the closing
+            Trend Score closest at Sunday close.
+          </ConceptTile>
+          <ConceptTile icon={Coins} label="Stake & settle" accent={accent}>
+            Your stake is debited when you place it. Wins return Vox plus{" "}
             <span className="font-mono" style={{ color: accent }}>
               +{predictionWinXp?.xpValue ?? 100} XP
-            </span>{" "}
-            for the win.
-          </li>
-        </ul>
+            </span>
+            .
+          </ConceptTile>
+        </div>
       </Card>
 
       <Card className={cn("space-y-3 p-4 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>
@@ -1296,12 +1582,12 @@ function PredictSection({
         <div className="overflow-hidden rounded-lg border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Surface</th>
-                <th className="px-3 py-2 font-medium">Where</th>
-                <th className="px-3 py-2 font-medium text-right">XP</th>
-                <th className="px-3 py-2 font-medium text-right">Cap</th>
-                <th className="px-3 py-2 font-medium text-right">Vox</th>
+              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+                <th className={cn("pl-5 pr-3", KB_TH)}>Surface</th>
+                <th className={cn("px-3", KB_TH)}>Where</th>
+                <th className={cn("px-3 text-right", KB_TH)}>XP</th>
+                <th className={cn("px-3 text-right", KB_TH)}>Cap</th>
+                <th className={cn("px-3 text-right", KB_TH)}>Vox</th>
               </tr>
             </thead>
             <tbody>
@@ -1310,8 +1596,8 @@ function PredictSection({
                   (action) => action.actionKey === row.xpActionKey,
                 );
                 return (
-                  <tr key={row.surface} className="border-t border-border/60 align-top">
-                    <td className="px-3 py-2">
+                  <tr key={row.surface} className="border-t border-border/60 align-middle">
+                    <td className={cn("pl-5 pr-3 py-3.5 align-middle")}>
                       <div className="font-medium">{row.surface}</div>
                       {row.notes && (
                         <div className="text-xs text-muted-foreground">
@@ -1319,8 +1605,8 @@ function PredictSection({
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.where}</td>
-                    <td className="px-3 py-2 text-right">
+                    <td className={cn("text-muted-foreground", KB_TD)}>{row.where}</td>
+                    <td className={cn("text-right", KB_TD)}>
                       <span
                         className="font-mono font-semibold"
                         style={{ color: accent }}
@@ -1328,10 +1614,10 @@ function PredictSection({
                         +{xp?.xpValue ?? 0}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">
+                    <td className={cn("text-right text-muted-foreground", KB_TD)}>
                       {formatCap(xp?.dailyCap ?? null)}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className={cn("text-right", KB_TD)}>
                       {creditCellFor(row.xpActionKey)}
                     </td>
                   </tr>
@@ -1342,9 +1628,8 @@ function PredictSection({
         </div>
       </Card>
 
-      <Card className="flex items-start gap-3 p-4">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
+      <InfoCallout accent={accent}>
+        <p>
           When your suggested world market is approved and published,
           you&apos;ll earn{" "}
           <span className="font-mono" style={{ color: accent }}>
@@ -1357,35 +1642,30 @@ function PredictSection({
           when your market goes live. World markets carry the most editorial
           weight on VoxDex — only the best suggestions make it through.
         </p>
-      </Card>
+      </InfoCallout>
 
-      <Card className="flex items-start gap-3 p-4">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">
-              Advanced prediction markets unlock at{" "}
-              <button
-                type="button"
-                onClick={() => onJumpToTab("ranks")}
-                className="underline-offset-2 hover:underline text-foreground/80"
-              >
-                Analyst rank
-              </button>{" "}
-              (Tier 4 — 15,000 XP). Higher-stakes markets are reserved for
-              credentialed predictors.
-            </p>
-          </div>
-          <Badge
-            variant="outline"
-            className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-300"
+      <InfoCallout accent={accent}>
+        <p>
+          Advanced prediction markets unlock at{" "}
+          <button
+            type="button"
+            onClick={() => onJumpToTab("ranks")}
+            className="underline-offset-2 hover:underline text-foreground/80"
           >
-            Coming soon
-          </Badge>
-        </div>
-      </Card>
+            Analyst rank
+          </button>{" "}
+          (Tier 4 — 15,000 XP). Higher-stakes markets are reserved for
+          credentialed predictors.
+        </p>
+        <Badge
+          variant="outline"
+          className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-300"
+        >
+          Coming soon
+        </Badge>
+      </InfoCallout>
 
-      <Card className="space-y-2 p-4">
+      <Card className={cn("space-y-2 p-4 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>
         <h3 className="font-semibold">Prediction Badges</h3>
         <p className="text-sm text-muted-foreground">
           Win predictions to unlock 7 prediction badges — from First Win to
