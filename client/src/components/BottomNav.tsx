@@ -7,14 +7,15 @@ interface NavItem {
   path: string;
   label: string;
   icon: typeof Home;
+  activeClass: string;
 }
 
 const navItems: NavItem[] = [
-  { path: "/", label: "Home", icon: Home },
-  { path: "/vote", label: "Vote", icon: Vote },
-  { path: "/predict", label: "Predict", icon: TrendingUp },
-  { path: "/voices", label: "Voices", icon: MessagesSquare },
-  { path: "/insights", label: "Insights", icon: LineChart },
+  { path: "/", label: "Home", icon: Home, activeClass: "text-blue-400" },
+  { path: "/vote", label: "Vote", icon: Vote, activeClass: "text-cyan-400" },
+  { path: "/predict", label: "Predict", icon: TrendingUp, activeClass: "text-violet-500" },
+  { path: "/voices", label: "Voices", icon: MessagesSquare, activeClass: "text-amber-400" },
+  { path: "/insights", label: "Insights", icon: LineChart, activeClass: "text-[#F3F4F6]" },
 ];
 
 export function BottomNav() {
@@ -71,13 +72,13 @@ export function BottomNav() {
               onFocus={() => prefetchRoute(item.path)}
               className={`flex flex-1 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isActive 
-                  ? "text-primary" 
+                  ? item.activeClass 
                   : "text-muted-foreground hover:text-foreground"
               }`}
               data-testid={`nav-${item.label.toLowerCase()}`}
             >
-              <item.icon className={`h-5 w-5 ${isActive ? "text-primary" : ""}`} />
-              <span className={`text-xs font-medium ${isActive ? "text-primary" : ""}`}>
+              <item.icon className={`h-5 w-5 ${isActive ? item.activeClass : ""}`} />
+              <span className={`text-xs font-medium ${isActive ? item.activeClass : ""}`}>
                 {item.label}
               </span>
             </Link>
