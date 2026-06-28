@@ -101,7 +101,7 @@ export interface InsightsStoryPayload {
   /** Multi-paragraph editorial; preferred over `body` when present. */
   paragraphs?: string[];
   /** Names to linkify in the briefing copy. */
-  people?: Array<{ id: string; name: string }>;
+  people?: Array<{ id: string; name: string; avatar?: string | null }>;
   generatedAt: string;
   refreshesAt: string;
   mode: "deterministic" | "ai";

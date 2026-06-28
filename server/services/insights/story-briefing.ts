@@ -14,6 +14,7 @@ export interface BriefingPersonInput {
   rank: number;
   change24h: number;
   category: string;
+  avatar?: string | null;
   whyTrending?: string;
   topHeadline?: string;
 }
@@ -21,7 +22,7 @@ export interface BriefingPersonInput {
 export interface BriefingInputs {
   anchors: BriefingPersonInput[];
   movers: BriefingPersonInput[];
-  people: Array<{ id: string; name: string }>;
+  people: Array<{ id: string; name: string; avatar?: string | null }>;
 }
 
 /**
