@@ -11,6 +11,8 @@ import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 import { CREDIT_ACTIONS, SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { voxWord } from "@/lib/currency";
+import { cn } from "@/lib/utils";
+import { glowClassFor } from "@/lib/gamification-content";
 
 // Derive the referral copy numbers from credit-config so the marketing
 // blurb in the card and the actual Vox awarded by the backend stay
@@ -25,6 +27,11 @@ const REFERRAL_REWARD =
   CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
     ?.proposedCredits ?? 0;
 const REFERRED_USER_TOTAL = SIGNUP_CREDIT_GRANT + REFERRAL_SIGNUP_BONUS;
+
+const REFER_CARD_CLASS = cn(
+  "p-6 shadow-none pulse-card-flush",
+  glowClassFor("xp"),
+);
 
 interface ReferralStats {
   referralCode: string | null;
@@ -93,7 +100,7 @@ export function ReferAFriendCard() {
 
   if (isLoading) {
     return (
-      <Card className="p-6 space-y-3" data-testid="refer-a-friend-loading">
+      <Card className={cn(REFER_CARD_CLASS, "space-y-3")} data-testid="refer-a-friend-loading">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-4 w-2/3" />
@@ -107,7 +114,7 @@ export function ReferAFriendCard() {
   if (isError || !data?.referralCode) {
     return (
       <Card
-        className="p-6 space-y-3"
+        className={cn(REFER_CARD_CLASS, "space-y-3")}
         data-testid="refer-a-friend-generating"
       >
         <div className="flex items-center gap-2">
@@ -158,10 +165,10 @@ export function ReferAFriendCard() {
   };
 
   return (
-    <Card className="p-6 space-y-4 border-violet-500/30 bg-gradient-to-br from-violet-500/5 to-transparent">
+    <Card className={cn(REFER_CARD_CLASS, "space-y-4")}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <Users className="h-4 w-4 text-slate-700 dark:text-white" />
           <h3 className="font-semibold">Refer a Friend</h3>
         </div>
         <Badge variant="outline" className="text-xs">
