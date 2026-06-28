@@ -8,7 +8,10 @@ import {
 import { opinionPollOgDescription } from "../server/services/opinion-poll-og-meta";
 import {
   resolveOpinionPollImageUrl,
+  resolveOpinionOptionImageUrl,
   opinionPollConventionImageUrl,
+  slugifyOptionName,
+  preferredOptionSlug,
 } from "../server/services/opinion-poll-images";
 import {
   buildOpinionPollOverlaySvg,
@@ -62,6 +65,34 @@ test("opinionPollConventionImageUrl shape", () => {
   const url = opinionPollConventionImageUrl("best-pizza");
   process.env.SUPABASE_URL = prev;
   assert.match(url!, /\/opinion-polls\/best-pizza\/1\.webp$/);
+});
+
+test("slugifyOptionName collapses slashes and spaces to a single dash", () => {
+  assert.equal(slugifyOptionName("Freelance / gig only"), "freelance-gig-only");
+  assert.equal(slugifyOptionName("Co-working space / nomad"), "co-working-space-nomad");
+});
+
+test("preferredOptionSlug uses short label for X (Twitter)", () => {
+  assert.equal(preferredOptionSlug("X (Twitter)"), "x");
+  assert.equal(preferredOptionSlug("US Dollar (USD)"), "us-dollar-usd");
+});
+
+test("preferredOptionSlug hyphenates compound storage tokens", () => {
+  assert.equal(preferredOptionSlug("The Starfish"), "the-star-fish");
+});
+
+test("resolveOpinionOptionImageUrl keeps stored URL when filename matches slugified option", () => {
+  const prev = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  const stored =
+    "https://example.supabase.co/storage/v1/object/public/opinion-polls/preferred-work-setup-in-2026/freelance-gig-only.webp";
+  const url = resolveOpinionOptionImageUrl(
+    stored,
+    "preferred-work-setup-in-2026",
+    "Freelance / gig only",
+  );
+  process.env.SUPABASE_URL = prev;
+  assert.equal(url, stored);
 });
 
 const BASE_CTX = {

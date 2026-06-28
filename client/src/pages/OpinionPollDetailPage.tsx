@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,8 +40,9 @@ import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { sortOpinionPollOptionsByVotes } from "@/lib/opinionPollOptions";
 import { ImageLightbox } from "@/components/ImageLightbox";
-import { useSupabaseUrl, handleImageError } from "@/lib/imageResolver";
+import { useSupabaseUrl } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
+import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
 import {
   ArrowLeft,
   Clock,
@@ -96,17 +97,8 @@ export default function OpinionPollDetailPage() {
   }, [hasVoteListContext, goBackToVoteHub, setLocation]);
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
-  const [imgIdx, setImgIdx] = useState(0);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const supabaseUrl = useSupabaseUrl();
-
-  const conventionPollImageUrl = useMemo(() => {
-    if (!supabaseUrl?.trim() || !slug.trim()) return null;
-    return getDisplayImageUrl(
-      `${supabaseUrl.trim()}/storage/v1/object/public/opinion-polls/${slug}/1.webp`,
-      { width: 700 },
-    );
-  }, [supabaseUrl, slug]);
 
   const { data: poll, isLoading } = useQuery<any>({
     queryKey: ["/api/opinion-polls", slug],
@@ -123,30 +115,11 @@ export default function OpinionPollDetailPage() {
     enabled: !!slug,
   });
 
-  const firstOptionImageUrl = useMemo(() => {
-    const opts = poll?.options;
-    if (!Array.isArray(opts)) return null;
-    for (const o of opts) {
-      const url = o?.imageUrl?.trim();
-      if (url && /^https?:\/\//i.test(url)) return url;
-    }
-    return null;
-  }, [poll?.options]);
-
-  const imgSources = useMemo(() => {
-    if (!poll) return [] as string[];
-    return [poll.imageUrl, firstOptionImageUrl, conventionPollImageUrl].filter(Boolean) as string[];
-  }, [poll, firstOptionImageUrl, conventionPollImageUrl]);
-
-  useEffect(() => {
-    setImgIdx(0);
-  }, [slug, poll?.id, poll?.imageUrl, firstOptionImageUrl, conventionPollImageUrl]);
-
-  const currentImgSrc = imgSources[imgIdx] ?? null;
-
-  const handleHeaderImgError = useCallback(() => {
-    setImgIdx((prev) => (prev + 1 < imgSources.length ? prev + 1 : imgSources.length));
-  }, [imgSources.length]);
+  const { currentSrc: currentImgSrc, onImageError: handleHeaderImgError } = useOpinionPollHeaderImage(
+    poll,
+    slug,
+    supabaseUrl,
+  );
 
   const budget = useAnonBudget();
 

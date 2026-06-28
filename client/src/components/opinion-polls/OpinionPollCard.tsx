@@ -27,6 +27,8 @@ import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { sortOpinionPollOptionsForCard } from "@/lib/opinionPollOptions";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { ImageLightbox } from "@/components/ImageLightbox";
+import { useSupabaseUrl } from "@/lib/imageResolver";
+import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -100,6 +102,12 @@ export function OpinionPollCard({
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
+  const supabaseUrl = useSupabaseUrl();
+  const { currentSrc: headerImageSrc, onImageError: onHeaderImageError } = useOpinionPollHeaderImage(
+    poll,
+    poll.slug,
+    supabaseUrl,
+  );
   const options = poll.options || [];
   // Once the user has voted, sort options by leader -> trailing so positions
   // update dynamically as votes come in. Pre-vote we keep the authored
@@ -274,25 +282,30 @@ export function OpinionPollCard({
           onTitleNavigate={onNavigateToDetail}
           linkTestId={`link-opinion-detail-${poll.id}`}
           avatar={
-            poll.imageUrl ? (
+            headerImageSrc ? (
               <div
                 role="button"
                 tabIndex={0}
                 aria-label="View larger image"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
+                  setExpandedImage({ url: headerImageSrc, alt: poll.title });
                 }}
                 onKeyDown={(e: KeyboardEvent) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     e.stopPropagation();
-                    setExpandedImage({ url: poll.imageUrl!, alt: poll.title });
+                    setExpandedImage({ url: headerImageSrc, alt: poll.title });
                   }
                 }}
                 className="h-16 w-16 rounded-md overflow-hidden shrink-0 bg-muted dark:bg-slate-800 cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <img src={getDisplayImageUrl(poll.imageUrl!, { width: 200 })} alt={poll.title} className="w-full h-full object-cover" />
+                <img
+                  src={getDisplayImageUrl(headerImageSrc, { width: 200 })}
+                  alt={poll.title}
+                  className="w-full h-full object-cover"
+                  onError={onHeaderImageError}
+                />
               </div>
             ) : (
               <div className="h-16 w-16 rounded-md bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center shrink-0">

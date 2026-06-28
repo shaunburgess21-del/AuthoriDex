@@ -16228,7 +16228,34 @@ Target length: about 90-150 words.`;
     : null;
 
   function slugifyOptionName(name: string): string {
-    return name.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[''`]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  function preferredOptionSlug(name: string): string {
+    const full = slugifyOptionName(name);
+    const parenIdx = name.indexOf("(");
+    if (parenIdx > 0) {
+      const before = slugifyOptionName(name.slice(0, parenIdx));
+      if (before && before.length <= 2 && full.startsWith(`${before}-`)) {
+        return applyCompoundSlugFixes(before);
+      }
+    }
+    return applyCompoundSlugFixes(full);
+  }
+
+  function applyCompoundSlugFixes(slug: string): string {
+    let result = slug;
+    for (const [pattern, replacement] of [
+      [/starfish/g, "star-fish"] as const,
+    ]) {
+      result = result.replace(pattern, replacement);
+    }
+    return result;
   }
 
   function opinionPollImageUrl(pollSlug: string | null | undefined): string | null {
@@ -16238,7 +16265,7 @@ Target length: about 90-150 words.`;
 
   function opinionOptionImageUrl(pollSlug: string | null | undefined, optionName: string): string | null {
     if (!OPINION_POLL_BUCKET_BASE || !pollSlug) return null;
-    return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/${slugifyOptionName(optionName)}.webp`;
+    return `${OPINION_POLL_BUCKET_BASE}/${pollSlug}/${preferredOptionSlug(optionName)}.webp`;
   }
 
   function isOpinionPollConventionImageUrl(url: string | null): boolean {
@@ -16275,7 +16302,7 @@ Target length: about 90-150 words.`;
     if (stored.includes('/opinion-polls/')) {
       try {
         const path = new URL(stored).pathname;
-        const optionSlug = slugifyOptionName(optionName);
+        const optionSlug = preferredOptionSlug(optionName);
         if (!path.includes(`/opinion-polls/${pollSlug}/`)) return derived;
         if (stored.endsWith('/1.webp')) return derived;
         if (!path.endsWith(`/${optionSlug}.webp`)) return derived;
