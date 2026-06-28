@@ -76,6 +76,7 @@ async function enrichPersonForBriefing(
     rank: person.rank ?? 999,
     change24h: person.change24h ?? 0,
     category,
+    avatar: person.avatar ?? null,
     whyTrending,
     topHeadline,
   };
@@ -129,15 +130,32 @@ export async function buildBriefingInputs(
     anchors.push(enriched);
   }
 
-  const peopleLinks: Array<{ id: string; name: string }> = [];
+  const peopleLinks: Array<{ id: string; name: string; avatar?: string | null }> = [];
   const seenPeople = new Set<string>();
   for (const pick of [...anchors, ...movers]) {
     if (seenPeople.has(pick.id)) continue;
     seenPeople.add(pick.id);
-    peopleLinks.push({ id: pick.id, name: pick.name });
+    peopleLinks.push({ id: pick.id, name: pick.name, avatar: pick.avatar ?? null });
   }
 
   return { anchors, movers, people: peopleLinks };
+}
+
+async function enrichStoryPeopleAvatars(story: InsightsStoryPayload): Promise<InsightsStoryPayload> {
+  if (!story.people?.length || story.people.every((p) => p.avatar != null)) {
+    return story;
+  }
+
+  const peopleList = await getCachedTrendingPeople();
+  const avatarById = new Map(peopleList.map((p) => [p.id, p.avatar ?? null]));
+
+  return {
+    ...story,
+    people: story.people.map((p) => ({
+      ...p,
+      avatar: p.avatar ?? avatarById.get(p.id) ?? null,
+    })),
+  };
 }
 
 export async function buildDeterministicStory(
@@ -162,13 +180,13 @@ export async function getInsightsStory(): Promise<InsightsStoryPayload> {
   if (isInsightsAiStoryEnabled()) {
     const aiCached = await getInsightsCache<InsightsStoryPayload>(STORY_AI_KEY);
     if (aiCached?.mode === "ai") {
-      return aiCached;
+      return enrichStoryPeopleAvatars(aiCached);
     }
     // Never call OpenAI on overview requests — cron is the only writer for AI.
   }
 
   const detCached = await getInsightsCache<InsightsStoryPayload>(STORY_DETERMINISTIC_KEY);
-  if (detCached) return detCached;
+  if (detCached) return enrichStoryPeopleAvatars(detCached);
 
   // Request path: no prefetch — never block a user's overview on OpenAI.
   // Cron warms the cache (and may prefetch cold movers) via runInsightsStoryCronRefresh.
@@ -179,5 +197,5 @@ export async function getInsightsStory(): Promise<InsightsStoryPayload> {
     story,
     INSIGHTS_STORY_TTL_MS,
   );
-  return story;
+  return enrichStoryPeopleAvatars(story);
 }

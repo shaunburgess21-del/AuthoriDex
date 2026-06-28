@@ -16,6 +16,7 @@ import {
   type Suggestion,
 } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { applyInductionMatchupSideLinksFromDb } from "./matchup-person-link";
 
 // ---------------------------------------------------------------------------
 // Canonical content-type labels written to suggestions.approved_as_type.
@@ -408,6 +409,14 @@ export async function dispatchApproval(
   switch (suggestion.type) {
     case "matchup": {
       const p = translateMatchupPayload(userPayload, adminOverrides);
+      const linkedSides = await applyInductionMatchupSideLinksFromDb({
+        optionAText: p.optionAText,
+        optionBText: p.optionBText,
+        personAId: p.personAId,
+        personBId: p.personBId,
+        optionAImage: p.optionAImage,
+        optionBImage: p.optionBImage,
+      });
 
       const [maxOrder] = await db
         .select({ max: sql<number>`COALESCE(MAX(display_order), 0)` })
@@ -421,10 +430,10 @@ export async function dispatchApproval(
           category: p.category,
           optionAText: p.optionAText,
           optionBText: p.optionBText,
-          optionAImage: p.optionAImage,
-          optionBImage: p.optionBImage,
-          personAId: p.personAId,
-          personBId: p.personBId,
+          optionAImage: linkedSides.optionAImage,
+          optionBImage: linkedSides.optionBImage,
+          personAId: linkedSides.personAId,
+          personBId: linkedSides.personBId,
           promptText: p.promptText,
           description: p.description,
           slug: p.slug,

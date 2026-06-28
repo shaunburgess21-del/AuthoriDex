@@ -51,6 +51,16 @@ function stripDiacritics(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function findLeadPerson<T extends { name: string }>(paragraph: string, people: T[]): T | null {
+  const norm = stripDiacritics(paragraph).toLowerCase();
+  let best: { idx: number; person: T } | null = null;
+  for (const p of people) {
+    const idx = norm.indexOf(stripDiacritics(p.name).toLowerCase());
+    if (idx !== -1 && (best === null || idx < best.idx)) best = { idx, person: p };
+  }
+  return best?.person ?? null;
+}
+
 function buildNormalized(text: string): { normalized: string; map: number[] } {
   let normalized = "";
   const map: number[] = [];
@@ -139,18 +149,28 @@ function BriefingBody({
 }: {
   paragraphs?: string[];
   body: string;
-  people?: Array<{ id: string; name: string }>;
+  people?: Array<{ id: string; name: string; avatar?: string | null }>;
 }) {
   const blocks = paragraphs?.length ? paragraphs : [body];
   const linkPeople = people ?? [];
 
   return (
-    <div className="mt-3 space-y-3">
-      {blocks.map((paragraph, i) => (
-        <p key={i} className="text-sm text-muted-foreground leading-relaxed">
-          {linkifyBriefingText(paragraph, linkPeople)}
-        </p>
-      ))}
+    <div className="mt-3 space-y-4">
+      {blocks.map((paragraph, i) => {
+        const lead = paragraphs?.length ? findLeadPerson(paragraph, linkPeople) : null;
+        return (
+          <div key={i} className="flex items-center gap-3">
+            {lead ? (
+              <Link href={`/person/${lead.id}`} aria-label={lead.name} className="shrink-0 self-center">
+                <PersonAvatar name={lead.name} avatar={lead.avatar} size="md" />
+              </Link>
+            ) : null}
+            <p className="min-w-0 flex-1 text-sm text-muted-foreground leading-relaxed">
+              {linkifyBriefingText(paragraph, linkPeople)}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }

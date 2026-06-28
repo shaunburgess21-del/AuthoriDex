@@ -9327,7 +9327,7 @@ export default function AdminDashboard() {
               <div className="space-y-2 relative">
                 <Label className="text-xs text-muted-foreground">Linked Celebrity (optional)</Label>
                 {matchupForm.personAId ? (
-                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30 border-green-500/40">
                     <span className="text-sm flex-1 truncate">{matchupForm.optionAText}</span>
                     <Button
                       type="button"
@@ -9383,7 +9383,7 @@ export default function AdminDashboard() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {matchupForm.personAId ? `ID: ${matchupForm.personAId.slice(0, 8)}...` : "Search and select a celebrity"}
+                  {matchupForm.personAId ? `ID: ${matchupForm.personAId.slice(0, 8)}...` : "Not linked — search and select a celebrity"}
                 </p>
               </div>
               <div className="space-y-2">
@@ -9404,7 +9404,7 @@ export default function AdminDashboard() {
               <div className="space-y-2 relative">
                 <Label className="text-xs text-muted-foreground">Linked Celebrity (optional)</Label>
                 {matchupForm.personBId ? (
-                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
+                  <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30 border-green-500/40">
                     <span className="text-sm flex-1 truncate">{matchupForm.optionBText}</span>
                     <Button
                       type="button"
@@ -9460,7 +9460,7 @@ export default function AdminDashboard() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {matchupForm.personBId ? `ID: ${matchupForm.personBId.slice(0, 8)}...` : "Search and select a celebrity"}
+                  {matchupForm.personBId ? `ID: ${matchupForm.personBId.slice(0, 8)}...` : "Not linked — search and select a celebrity"}
                 </p>
               </div>
               <div className="space-y-2">

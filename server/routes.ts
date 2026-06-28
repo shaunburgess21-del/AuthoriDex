@@ -31,6 +31,7 @@ import multer from "multer";
 import path from "path";
 import { gamificationService } from "./services/gamification";
 import { resolveMatchupOptionDisplay } from "./services/matchup-option-images";
+import { applyInductionMatchupSideLinksFromDb } from "./services/matchup-person-link";
 import {
   awardVoteCredits,
   awardCommentCredits,
@@ -15001,21 +15002,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nextOrder = (maxOrder?.max || 0) + 1;
       
       const effectiveVisibility = visibility || 'live';
+      const linkedSides = await applyInductionMatchupSideLinksFromDb({
+        optionAText,
+        optionBText,
+        personAId: personAId || null,
+        personBId: personBId || null,
+        optionAImage: optionAImage || null,
+        optionBImage: optionBImage || null,
+      });
       const [created] = await db.insert(matchups).values({
         title,
         category: category || 'General',
         secondaryCategories: cleanSecondary,
         optionAText,
-        optionAImage: optionAImage || null,
+        optionAImage: linkedSides.optionAImage,
         optionBText,
-        optionBImage: optionBImage || null,
+        optionBImage: linkedSides.optionBImage,
         isActive: effectiveVisibility === 'live',
         displayOrder: nextOrder,
         visibility: effectiveVisibility,
         featured: featured || false,
         slug: slug || null,
-        personAId: personAId || null,
-        personBId: personBId || null,
+        personAId: linkedSides.personAId,
+        personBId: linkedSides.personBId,
         promptText: promptText || null,
         description: description || null,
         seedVotesA: parseInt(seedVotesA) || 0,
@@ -15094,6 +15103,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (description !== undefined) updates.description = description || null;
       if (seedVotesA !== undefined) updates.seedVotesA = parseInt(seedVotesA) || 0;
       if (seedVotesB !== undefined) updates.seedVotesB = parseInt(seedVotesB) || 0;
+
+      const linkedSides = await applyInductionMatchupSideLinksFromDb({
+        optionAText: updates.optionAText ?? existing.optionAText,
+        optionBText: updates.optionBText ?? existing.optionBText,
+        personAId:
+          personAId !== undefined ? (personAId || null) : existing.personAId,
+        personBId:
+          personBId !== undefined ? (personBId || null) : existing.personBId,
+        optionAImage:
+          optionAImage !== undefined ? (optionAImage || null) : existing.optionAImage,
+        optionBImage:
+          optionBImage !== undefined ? (optionBImage || null) : existing.optionBImage,
+      });
+      updates.personAId = linkedSides.personAId;
+      updates.personBId = linkedSides.personBId;
+      updates.optionAImage = linkedSides.optionAImage;
+      updates.optionBImage = linkedSides.optionBImage;
       
       await db.update(matchups).set(updates).where(eq(matchups.id, id));
 
