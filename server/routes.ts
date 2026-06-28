@@ -7205,81 +7205,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         referredBy,
       };
       
-      // Phase 4 — discard anonymous voting trail at signup (D8). The
-      // fdx_sid cookie identifies any anonymous votes this user cast
-      // pre-signup. Wipe them transactionally with the profile insert
-      // so the new user starts fresh — no anon-prefixed rows surviving
-      // in any of the 6 vote tables that Stage 4 wires. The fdx_sid
-      // cookie is also cleared on the response (below) so future writes
-      // don't carry the stale identity.
+      // Phase 4 (revised) — migrate the anonymous voting trail into the
+      // new account at signup. The fdx_sid cookie identifies any votes
+      // this user cast pre-signup; rather than discarding them (the
+      // original D8 wipe behaviour), we re-point every anon-prefixed row
+      // to the real userId so the user keeps the votes they already made
+      // before creating their account. This is done transactionally with
+      // the profile insert. The anon budget counter is dropped and the
+      // fdx_sid cookie is cleared on the response (below) so future
+      // writes carry the authenticated identity and the user gets a
+      // clean slate if they later sign out.
+      //
+      // Celebrity metrics need no recompute here: the vote rows survive
+      // (only their userId changes), so the aggregate counts behind
+      // celebrity_metrics are unchanged by the migration.
       const fdxSidForCleanup = readFdxSid(req);
       const anonWriterId = fdxSidForCleanup ? `anon_${fdxSidForCleanup}` : "";
 
-      // Capture celebrity IDs touched by this anon identity BEFORE the
-      // delete tx, so we can recompute their cached metrics afterwards.
-      // Without this, celebrity_metrics keeps the contributions from the
-      // about-to-be-wiped anon votes until the next vote on each celeb
-      // (recomputeCelebrityMetrics only runs on vote-write, not delete).
-      const affectedCelebs = new Set<string>();
-      if (fdxSidForCleanup) {
-        try {
-          const userVotePeople = await db
-            .select({ id: userVotes.personId })
-            .from(userVotes)
-            .where(eq(userVotes.userId, anonWriterId));
-          const valueVotePeople = await db
-            .select({ id: celebrityValueVotes.celebrityId })
-            .from(celebrityValueVotes)
-            .where(eq(celebrityValueVotes.userId, anonWriterId));
-          userVotePeople.forEach((r) => affectedCelebs.add(r.id));
-          valueVotePeople.forEach((r) => affectedCelebs.add(r.id));
-        } catch (e) {
-          console.warn("[profile-sync] anon-cleanup affected-celeb lookup failed:", e);
-          captureBackgroundError(e, {
-            surface: "profile-sync.affected-celebs-lookup",
-            userId,
-          });
-        }
-      }
+      let migratedVoteCount = 0;
 
       await db.transaction(async (tx) => {
         await tx.insert(profiles).values(newProfile);
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
         if (fdxSidForCleanup) {
-          await tx.delete(votes).where(eq(votes.userId, anonWriterId));
-          await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, anonWriterId));
-          await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, anonWriterId));
-          await tx.delete(inductionVotes).where(eq(inductionVotes.userId, anonWriterId));
-          await tx.delete(userVotes).where(eq(userVotes.userId, anonWriterId));
-          await tx.delete(celebrityValueVotes).where(eq(celebrityValueVotes.userId, anonWriterId));
+          // Re-assign each of the 6 vote tables from the anon identity to
+          // the new account. A freshly created profile owns no votes yet,
+          // so the per-table unique constraints (userId, target) cannot
+          // collide. As a defensive guard we first clear any rows already
+          // owned by the real userId — a no-op for new accounts — so the
+          // UPDATE can never violate a unique constraint even if this path
+          // is ever reached for a non-empty account.
+          await tx.delete(votes).where(eq(votes.userId, userId));
+          const migratedMatchupVotes = await tx
+            .update(votes)
+            .set({ userId })
+            .where(eq(votes.userId, anonWriterId))
+            .returning({ id: votes.id });
+
+          await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, userId));
+          const migratedTrendingVotes = await tx
+            .update(trendingPollVotes)
+            .set({ userId })
+            .where(eq(trendingPollVotes.userId, anonWriterId))
+            .returning({ id: trendingPollVotes.id });
+
+          await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, userId));
+          const migratedOpinionVotes = await tx
+            .update(opinionPollVotes)
+            .set({ userId })
+            .where(eq(opinionPollVotes.userId, anonWriterId))
+            .returning({ id: opinionPollVotes.id });
+
+          await tx.delete(inductionVotes).where(eq(inductionVotes.userId, userId));
+          const migratedInductionVotes = await tx
+            .update(inductionVotes)
+            .set({ userId })
+            .where(eq(inductionVotes.userId, anonWriterId))
+            .returning({ id: inductionVotes.id });
+
+          await tx.delete(userVotes).where(eq(userVotes.userId, userId));
+          const migratedApprovalVotes = await tx
+            .update(userVotes)
+            .set({ userId })
+            .where(eq(userVotes.userId, anonWriterId))
+            .returning({ id: userVotes.id });
+
+          await tx.delete(celebrityValueVotes).where(eq(celebrityValueVotes.userId, userId));
+          const migratedValueVotes = await tx
+            .update(celebrityValueVotes)
+            .set({ userId })
+            .where(eq(celebrityValueVotes.userId, anonWriterId))
+            .returning({ id: celebrityValueVotes.id });
+
+          // Anon budget counter is keyed on fdx_sid and is meaningless
+          // once the user is authenticated — drop it.
           await tx.delete(anonVoteBudget).where(eq(anonVoteBudget.fdxSid, fdxSidForCleanup));
+
+          migratedVoteCount =
+            migratedMatchupVotes.length +
+            migratedTrendingVotes.length +
+            migratedOpinionVotes.length +
+            migratedInductionVotes.length +
+            migratedApprovalVotes.length +
+            migratedValueVotes.length;
+
+          // Reflect the carried-over activity on the brand-new profile
+          // (inserted above with totalVotes: 0) so the user's stats
+          // include the votes they made before signing up.
+          if (migratedVoteCount > 0) {
+            await tx
+              .update(profiles)
+              .set({ totalVotes: migratedVoteCount })
+              .where(eq(profiles.id, userId));
+          }
         }
       });
-
-      // Post-tx: refresh cached celebrity_metrics for every celeb whose
-      // anon contributions were just wiped. Best-effort — failures are
-      // logged but never break signup (the tx has already committed and
-      // the user must be considered signed up at this point).
-      for (const celebId of affectedCelebs) {
-        try {
-          await recomputeCelebrityMetrics(celebId);
-        } catch (e) {
-          console.warn(
-            `[profile-sync] post-cleanup recompute failed celebId=${celebId}:`,
-            e,
-          );
-          captureBackgroundError(e, {
-            surface: "profile-sync.recompute-after-anon-cleanup",
-            celebId,
-            userId,
-          });
-        }
-      }
 
       // Phase 4 — clear fdx_sid cookie post-signup. The user is now
       // authenticated, so fdx_sid serves no purpose for their writes;
       // clearing it ensures a clean slate if they later sign out (no
-      // accidental re-attachment to the now-deleted anon trail).
+      // accidental re-attachment to the now-migrated anon trail).
       // Flags must match the original res.cookie(...) call in
       // server/lib/anonIdentity.ts so the browser actually clears.
       if (fdxSidForCleanup) {
