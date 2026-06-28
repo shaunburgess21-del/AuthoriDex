@@ -5,7 +5,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { CardImage } from "@/components/ui/card-image";
-import { handleImageError } from "@/lib/imageResolver";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useMatchupHelpDismissed } from "@/hooks/useMatchupHelpDismissed";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
@@ -152,7 +151,7 @@ export function VersusCard({
                       alt={matchup.optionAText}
                       priority={priority}
                       width={400}
-                      onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
+                      fallbackSrc={matchup.optionAFallbackImage}
                     />
                   </div>
                 ) : (
@@ -212,7 +211,7 @@ export function VersusCard({
                       alt={matchup.optionBText}
                       priority={priority}
                       width={400}
-                      onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
+                      fallbackSrc={matchup.optionBFallbackImage}
                     />
                   </div>
                 ) : (

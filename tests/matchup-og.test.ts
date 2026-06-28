@@ -57,14 +57,33 @@ test("resolveMatchupOptionDisplay: DB URL wins over bucket convention", () => {
     "Lionel Messi",
     {},
     {},
+    "football-goat",
   );
   assert.equal(display.resolved, dbUrl);
 });
 
-test("matchupBucketUrl builds public Supabase path shape", () => {
+test("matchupBucketUrl builds public Supabase path shape using slug folder", () => {
   const prev = process.env.SUPABASE_URL;
   process.env.SUPABASE_URL = "https://example.supabase.co";
   const url = matchupBucketUrl(
+    "football-goat",
+    "Cristiano Ronaldo",
+    "Lionel Messi",
+    "Cristiano Ronaldo",
+  );
+  process.env.SUPABASE_URL = prev;
+  assert.ok(url);
+  assert.match(
+    url!,
+    /\/storage\/v1\/object\/public\/matchups\/football-goat\/cristiano-ronaldo\.webp$/,
+  );
+});
+
+test("matchupBucketUrl falls back to option-derived folder when slug missing", () => {
+  const prev = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  const url = matchupBucketUrl(
+    null,
     "Cristiano Ronaldo",
     "Lionel Messi",
     "Cristiano Ronaldo",

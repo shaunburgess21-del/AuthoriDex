@@ -6445,6 +6445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           matchup.optionBText,
           avatarById,
           avatarByName,
+          matchup.slug,
         );
         const optB = resolveMatchupOptionDisplay(
           matchup.optionBImage,
@@ -6454,6 +6455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           matchup.optionBText,
           avatarById,
           avatarByName,
+          matchup.slug,
         );
         const optionAImageResolved = optA.resolved;
         const optionBImageResolved = optB.resolved;
@@ -6539,6 +6541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matchup.optionBText,
         avatarById,
         avatarByName,
+        matchup.slug,
       );
       const optB = resolveMatchupOptionDisplay(
         matchup.optionBImage,
@@ -6548,6 +6551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         matchup.optionBText,
         avatarById,
         avatarByName,
+        matchup.slug,
       );
       const optionAImageResolved = optA.resolved;
       const optionBImageResolved = optB.resolved;

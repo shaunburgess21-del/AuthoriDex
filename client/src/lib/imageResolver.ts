@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type SyntheticEvent } from "react";
+import { useState, useCallback, useEffect, useMemo, type SyntheticEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 const CELEBRITY_BUCKET = "celebrity-large";
@@ -75,17 +75,74 @@ export function useResolvedImage(
   return { src, onError };
 }
 
-const IMG_EXTENSIONS = ['.webp', '.jpeg', '.jpg', '.png'];
+export const IMG_EXTENSIONS = [".webp", ".jpeg", ".jpg", ".png"] as const;
 
-function stripExtension(url: string): string | null {
-  const ext = IMG_EXTENSIONS.find(e => url.toLowerCase().endsWith(e));
-  return ext ? url.slice(0, -ext.length) : null;
+/** Strip known image extension from URL path (ignores query string). */
+export function stripImageExtension(url: string): string | null {
+  const path = url.split("?")[0].toLowerCase();
+  const ext = IMG_EXTENSIONS.find((e) => path.endsWith(e));
+  if (!ext) return null;
+  return url.slice(0, url.length - (path.length - path.lastIndexOf(ext)));
+}
+
+/** Ordered candidates: alternate extensions for `primary`, then optional `fallback`. */
+export function buildImageLoadCandidates(
+  primary: string,
+  fallback?: string | null,
+): string[] {
+  const base = stripImageExtension(primary);
+  const extensionVariants = base
+    ? IMG_EXTENSIONS.map((ext) => base + ext)
+    : [primary];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const url of [...extensionVariants, ...(fallback ? [fallback] : [])]) {
+    if (!seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  }
+  return out;
+}
+
+/**
+ * React-safe image fallback for matchup cards. Cycles extensions then optional
+ * fallback URL without imperative DOM mutation (survives parent re-renders).
+ */
+export function useMatchupImageCandidates(
+  primary: string | null | undefined,
+  fallback?: string | null,
+): { src: string | null; onError: () => void; exhausted: boolean } {
+  const candidates = useMemo(() => {
+    if (!primary) return fallback ? [fallback] : [];
+    return buildImageLoadCandidates(primary, fallback);
+  }, [primary, fallback]);
+
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [primary, fallback]);
+
+  const onError = useCallback(() => {
+    setIndex((prev) => prev + 1);
+  }, []);
+
+  return {
+    src: index < candidates.length ? candidates[index] : null,
+    onError,
+    exhausted: candidates.length > 0 && index >= candidates.length,
+  };
 }
 
 /**
  * Generic onError handler for matchup / bucket-derived images.
  * Tries alternate extensions (.webp -> .jpeg -> .jpg -> .png),
  * then a fallback URL (e.g. celebrity avatar), then hides the element.
+ *
+ * Prefer `useMatchupImageCandidates` inside React components — imperative
+ * `img.src` changes are reset when React re-renders controlled `src` props.
  */
 export function handleImageError(
   e: SyntheticEvent<HTMLImageElement>,
@@ -94,21 +151,26 @@ export function handleImageError(
   const img = e.currentTarget;
   const src = img.src;
 
-  const base = stripExtension(src);
+  const base = stripImageExtension(src);
   if (base) {
-    const currentExt = IMG_EXTENSIONS.find(ext => src.toLowerCase().endsWith(ext))!;
-    const nextIdx = IMG_EXTENSIONS.indexOf(currentExt) + 1;
-    if (nextIdx < IMG_EXTENSIONS.length) {
-      img.src = base + IMG_EXTENSIONS[nextIdx];
-      return;
+    const path = src.split("?")[0].toLowerCase();
+    const currentExt = IMG_EXTENSIONS.find((ext) => path.endsWith(ext));
+    if (currentExt) {
+      const nextIdx = IMG_EXTENSIONS.indexOf(currentExt) + 1;
+      if (nextIdx < IMG_EXTENSIONS.length) {
+        img.removeAttribute("srcset");
+        img.src = base + IMG_EXTENSIONS[nextIdx];
+        return;
+      }
     }
   }
 
   if (fallbackUrl && !img.dataset.triedFallback) {
-    img.dataset.triedFallback = 'true';
+    img.dataset.triedFallback = "true";
+    img.removeAttribute("srcset");
     img.src = fallbackUrl;
     return;
   }
 
-  img.style.display = 'none';
+  img.style.display = "none";
 }

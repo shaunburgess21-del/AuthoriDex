@@ -104,12 +104,10 @@ async function main() {
     console.log(`        B "${nameB}" (${fileB}.*) → ${bFile}`);
 
     if (!DRY_RUN) {
-      const updateData: any = {};
-      if (urlA) updateData.optionAImage = urlA;
-      if (urlB) updateData.optionBImage = urlB;
-      if (Object.keys(updateData).length > 0) {
-        await db.update(matchups).set(updateData).where(eq(matchups.id, m.id));
-      }
+      const updateData: { optionAImage?: string | null; optionBImage?: string | null } = {};
+      updateData.optionAImage = urlA;
+      updateData.optionBImage = urlB;
+      await db.update(matchups).set(updateData).where(eq(matchups.id, m.id));
     }
 
     updated++;

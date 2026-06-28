@@ -56,6 +56,7 @@ export async function loadMatchupOgContext(
     matchup.optionBText,
     avatarById,
     avatarByName,
+    matchup.slug,
   );
   const optB = resolveMatchupOptionDisplay(
     matchup.optionBImage,
@@ -65,6 +66,7 @@ export async function loadMatchupOgContext(
     matchup.optionBText,
     avatarById,
     avatarByName,
+    matchup.slug,
   );
 
   return {

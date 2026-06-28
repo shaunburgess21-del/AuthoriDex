@@ -25,14 +25,22 @@ export function slugifyMatchupName(s: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/**
+ * Convention-based public bucket URL for a matchup option image.
+ * Prefer the row `slug` when set — storage folders follow slug, not always
+ * `{optionA}-vs-{optionB}` (e.g. `rap-legends` vs `drake-vs-kendrick-lamar`).
+ */
 export function matchupBucketUrl(
+  slug: string | null | undefined,
   optionAText: string,
   optionBText: string,
   optionText: string,
 ): string | null {
   const base = matchupBucketBase();
   if (!base) return null;
-  const folder = `${slugifyMatchupName(optionAText)}-vs-${slugifyMatchupName(optionBText)}`;
+  const folder =
+    slug?.trim() ||
+    `${slugifyMatchupName(optionAText)}-vs-${slugifyMatchupName(optionBText)}`;
   return `${base}/${folder}/${slugifyMatchupName(optionText)}.webp`;
 }
 
@@ -41,7 +49,7 @@ export type MatchupOptionDisplay = {
   fallback: string | null;
 };
 
-/** Primary image: explicit DB URL > linked celebrity avatar > convention bucket URL. */
+/** Primary image: explicit DB URL > linked celebrity avatar > name avatar > bucket URL. */
 export function resolveMatchupOptionDisplay(
   dbUrl: string | null,
   personId: string | null,
@@ -50,14 +58,15 @@ export function resolveMatchupOptionDisplay(
   optionBText: string,
   avatarById: Record<string, string | null>,
   avatarByName: Record<string, string | null>,
+  slug?: string | null,
 ): MatchupOptionDisplay {
-  const bucket = matchupBucketUrl(optionAText, optionBText, optionLabelText);
+  const bucket = matchupBucketUrl(slug, optionAText, optionBText, optionLabelText);
   const linkedAvatar = personId ? (avatarById[personId] ?? null) : null;
   const nameAvatar = avatarByName[optionLabelText.toLowerCase()] ?? null;
 
-  const resolved = dbUrl || linkedAvatar || bucket || null;
+  const resolved = dbUrl || linkedAvatar || nameAvatar || bucket || null;
 
-  for (const cand of [linkedAvatar, nameAvatar, bucket]) {
+  for (const cand of [linkedAvatar, nameAvatar, bucket, dbUrl]) {
     if (cand && cand !== resolved) {
       return { resolved, fallback: cand };
     }

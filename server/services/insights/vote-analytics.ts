@@ -212,6 +212,7 @@ async function loadTopMatchups(limit: number): Promise<TopVoteMatchup[]> {
       optionBText,
       avatarById,
       avatarByName,
+      row.slug != null ? String(row.slug) : null,
     );
     const optB = resolveMatchupOptionDisplay(
       row.option_b_image != null ? String(row.option_b_image) : null,
@@ -221,6 +222,7 @@ async function loadTopMatchups(limit: number): Promise<TopVoteMatchup[]> {
       optionBText,
       avatarById,
       avatarByName,
+      row.slug != null ? String(row.slug) : null,
     );
 
     return {

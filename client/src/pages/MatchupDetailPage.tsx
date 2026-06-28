@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from "react";
-import { handleImageError } from "@/lib/imageResolver";
 import { CardImage } from "@/components/ui/card-image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
@@ -458,7 +457,7 @@ export default function MatchupDetailPage() {
                       alt={matchup.optionAText}
                       priority
                       width={700}
-                      onError={(e) => handleImageError(e, matchup.optionAFallbackImage)}
+                      fallbackSrc={matchup.optionAFallbackImage}
                     />
                   </div>
                 ) : (
@@ -525,7 +524,7 @@ export default function MatchupDetailPage() {
                       alt={matchup.optionBText}
                       priority
                       width={700}
-                      onError={(e) => handleImageError(e, matchup.optionBFallbackImage)}
+                      fallbackSrc={matchup.optionBFallbackImage}
                     />
                   </div>
                 ) : (
