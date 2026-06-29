@@ -7332,7 +7332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
 
-      // Referral signup bonus — +2,000 credits stacked on top of the
+      // Referral signup bonus — +5,000 credits stacked on top of the
       // standard signup grant for users who arrived via a ?ref= link.
       // The idempotency key (referral_bonus_${newUserId}) ensures a
       // re-sync of an already-signed-up user can't double-pay even

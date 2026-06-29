@@ -187,7 +187,7 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
   {
     key: "referral_completed",
     label: "Successful referral",
-    proposedCredits: 500,
+    proposedCredits: 5000,
     dailyCap: null,
     category: "SOCIAL",
     notes: "Awarded to referrer when referred user completes their first meaningful action",
@@ -197,7 +197,7 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
   {
     key: "referral_signup_bonus",
     label: "Referral signup bonus",
-    proposedCredits: 2000,
+    proposedCredits: 5000,
     dailyCap: null,
     category: "SOCIAL",
     notes: "Bonus credits for new user who signed up via a referral link — stacks on top of standard signup grant",

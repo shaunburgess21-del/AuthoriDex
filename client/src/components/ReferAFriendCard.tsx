@@ -1,18 +1,15 @@
-import { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Copy, Check, Share2, Users, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { apiRequest } from "@/lib/queryClient";
-import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 import { CREDIT_ACTIONS, SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
 import { voxWord } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { glowClassFor } from "@/lib/gamification-content";
+import { useReferralLink } from "@/hooks/useReferralLink";
 
 // Derive the referral copy numbers from credit-config so the marketing
 // blurb in the card and the actual Vox awarded by the backend stay
@@ -33,16 +30,11 @@ const REFER_CARD_CLASS = cn(
   glowClassFor("xp"),
 );
 
-interface ReferralStats {
-  referralCode: string | null;
-  successfulReferrals: number;
-  pendingReferrals: number;
-}
-
 /**
  * "Refer a Friend" card mounted on /me. Shows the user's referral
- * link, a copy + share affordance, and counters fed by
- * GET /api/me/referral-stats.
+ * link, a copy + share affordance, and counters. The link/share/copy
+ * logic + stats query live in the shared `useReferralLink` hook so this
+ * card, the ReferralPromptModal, and the out-of-Vox banners never drift.
  *
  * Failure modes — the card stays mounted in all of them so the user
  * never sees it disappear mid-page:
@@ -51,33 +43,25 @@ interface ReferralStats {
  *   - error               → "Generating your referral link..." with a
  *                           single auto-retry after 2s, then a manual
  *                           Retry button
- *   - data.referralCode null (server failed to mint on demand) →
- *                           same generating state, with retry. We
- *                           refetch instead of hiding because the
- *                           backfill / on-demand mint should resolve
- *                           it within one extra round-trip.
+ *   - referralCode null (server failed to mint on demand) →
+ *                           same generating state, with retry.
  *   - happy path          → full card with link, copy, share, counters
  */
 export function ReferAFriendCard() {
-  const { isLoggedIn, user } = useAuth();
-  const queryClient = useQueryClient();
-  const [copied, setCopied] = useState(false);
+  const { isLoggedIn } = useAuth();
+  const {
+    stats,
+    referralUrl,
+    hasCode,
+    isLoading,
+    isError,
+    isFetching,
+    copied,
+    copy,
+    share,
+    refetch,
+  } = useReferralLink();
   const [autoRetryDone, setAutoRetryDone] = useState(false);
-
-  const { data, isLoading, isError, refetch, isFetching } =
-    useQuery<ReferralStats>({
-      queryKey: ["/api/me/referral-stats"],
-      queryFn: async () => {
-        const res = await apiRequest("GET", "/api/me/referral-stats");
-        return res.json();
-      },
-      enabled: isLoggedIn,
-      staleTime: 60 * 1000,
-      // Don't let React Query give up silently — if it fails once,
-      // we want a stable error state we can render rather than a
-      // disappearing card.
-      retry: 1,
-    });
 
   // Single auto-retry 2s after a missing-code or error response.
   // Most often this is a fresh post-overhaul login that triggered
@@ -86,15 +70,15 @@ export function ReferAFriendCard() {
   useEffect(() => {
     if (autoRetryDone) return;
     if (isLoading || isFetching) return;
-    const needsRetry = isError || (data && !data.referralCode);
+    const needsRetry = isError || !hasCode;
     if (!needsRetry) return;
 
     const t = setTimeout(() => {
       setAutoRetryDone(true);
-      queryClient.invalidateQueries({ queryKey: ["/api/me/referral-stats"] });
+      refetch();
     }, 2000);
     return () => clearTimeout(t);
-  }, [autoRetryDone, isLoading, isFetching, isError, data, queryClient]);
+  }, [autoRetryDone, isLoading, isFetching, isError, hasCode, refetch]);
 
   if (!isLoggedIn) return null;
 
@@ -111,7 +95,7 @@ export function ReferAFriendCard() {
   // Error / missing-code path. We keep the card mounted with a
   // friendly message so the /me layout doesn't reflow when the
   // referral system has a transient hiccup.
-  if (isError || !data?.referralCode) {
+  if (isError || !hasCode || !referralUrl) {
     return (
       <Card
         className={cn(REFER_CARD_CLASS, "space-y-3")}
@@ -131,7 +115,7 @@ export function ReferAFriendCard() {
           size="sm"
           onClick={() => {
             setAutoRetryDone(false);
-            void refetch();
+            refetch();
           }}
           disabled={isFetching}
           data-testid="button-retry-referral"
@@ -142,28 +126,6 @@ export function ReferAFriendCard() {
     );
   }
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const referralUrl = `${origin}?ref=${data.referralCode}`;
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(referralUrl);
-      setCopied(true);
-      toast.success("Referral link copied!");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Couldn't copy link");
-    }
-  };
-
-  const handleShare = () => {
-    void sharePage("Join me on VoxDex", {
-      sharerUserId: user?.id,
-      surface: "referral",
-      url: referralUrl,
-    });
-  };
-
   return (
     <Card className={cn(REFER_CARD_CLASS, "space-y-4")}>
       <div className="flex items-center justify-between">
@@ -172,8 +134,8 @@ export function ReferAFriendCard() {
           <h3 className="font-semibold">Refer a Friend</h3>
         </div>
         <Badge variant="outline" className="text-xs">
-          {data.successfulReferrals} successful
-          {data.pendingReferrals > 0 ? ` · ${data.pendingReferrals} pending` : ""}
+          {stats?.successfulReferrals ?? 0} successful
+          {(stats?.pendingReferrals ?? 0) > 0 ? ` · ${stats?.pendingReferrals} pending` : ""}
         </Badge>
       </div>
 
@@ -191,7 +153,7 @@ export function ReferAFriendCard() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={handleCopy}
+          onClick={() => void copy()}
           aria-label="Copy referral link"
           data-testid="button-copy-referral"
         >
@@ -206,7 +168,7 @@ export function ReferAFriendCard() {
       <Button
         variant="outline"
         className="w-full gap-2"
-        onClick={handleShare}
+        onClick={share}
         data-testid="button-share-referral"
       >
         <Share2 className="h-4 w-4" />

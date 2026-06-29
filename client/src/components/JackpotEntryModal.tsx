@@ -9,16 +9,24 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabase } from "@/lib/supabase";
-import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Wallet } from "lucide-react";
+import { Crown, Check, X, Loader2, Lock, TicketCheck, HelpCircle, Gift, ArrowRight } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { ChevronDown } from "lucide-react";
 import type { TrendingPerson } from "@shared/schema";
-import { formatVox } from "@/lib/currency";
+import { formatVox, voxWord } from "@/lib/currency";
+import { CREDIT_ACTIONS } from "@shared/credit-config";
+
+// Referral reward derives from credit-config so the out-of-Vox nudge
+// tracks the real award amount (same pattern as ReferAFriendCard).
+const REFERRAL_REWARD =
+  CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+    ?.proposedCredits ?? 0;
 
 interface JackpotEntry {
   betId: string;
@@ -56,6 +64,7 @@ export function JackpotEntryModal({
 }: JackpotEntryModalProps) {
   const { session, loading, refreshProfile, isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
+  const { open: openReferralModal } = useReferralModal();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const [scoreInput, setScoreInput] = useState("");
@@ -475,28 +484,47 @@ export function JackpotEntryModal({
               </div>
             </div>
 
-            {/* Mirror StakeModal: only nudge to /pricing once the user is
-                authenticated. Logged-out viewers shouldn't see a "Buy
-                Vox" affordance — they need the Sign In path first,
-                and /checkout is a no-op for them anyway. */}
+            {/* Mirror StakeModal's out-of-Vox treatment: Phase 1 has no Vox
+                sales, so we turn the shortfall into an earn moment —
+                refer-and-earn (both sides get Vox) plus a link to the full
+                earn guide. Only shown once authenticated; logged-out
+                viewers need the Sign In path first. */}
             {isLoggedIn && userCredits < JACKPOT_TICKET_COST && (
-              <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
-                <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-                <p className="text-xs text-muted-foreground flex-1">
-                  Need at least {formatVox(JACKPOT_TICKET_COST)} to enter.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15"
-                  onClick={() => {
-                    handleClose();
-                    setLocation("/pricing");
-                  }}
-                  data-testid="button-buy-credits-jackpot"
-                >
-                  Buy Vox
-                </Button>
+              <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 space-y-2.5">
+                <div className="flex items-start gap-3">
+                  <Gift className="h-4 w-4 mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
+                  <p className="text-xs text-muted-foreground flex-1">
+                    Need {formatVox(JACKPOT_TICKET_COST)} to enter. Invite a
+                    friend — you both get {voxWord(REFERRAL_REWARD)}.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                    onClick={() => {
+                      handleClose();
+                      openReferralModal("out_of_vox");
+                    }}
+                    data-testid="button-refer-earn-jackpot"
+                  >
+                    <Gift className="h-3.5 w-3.5" />
+                    Refer &amp; earn
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      handleClose();
+                      setLocation("/how-it-works?tab=credits");
+                    }}
+                    data-testid="button-earn-more-vox-jackpot"
+                  >
+                    How to earn more
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             )}
 

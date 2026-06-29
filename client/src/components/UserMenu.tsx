@@ -38,9 +38,18 @@ import {
   Flame,
   BookOpen,
   LineChart,
+  Gift,
 } from "lucide-react";
-import { CURRENCY } from "@/lib/currency";
+import { CURRENCY, voxWord } from "@/lib/currency";
+import { CREDIT_ACTIONS } from "@shared/credit-config";
+import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
+
+// Referral reward derives from credit-config so the menu label tracks the
+// real award amount (same pattern as ReferAFriendCard / the modal).
+const REFERRAL_REWARD =
+  CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+    ?.proposedCredits ?? 0;
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -126,9 +135,16 @@ function UserMenuContent({
   onSignOut,
   onClose,
 }: UserMenuContentProps) {
+  const { open: openReferralModal } = useReferralModal();
+
   const handleNavClick = (path: string) => {
     onNavigate(path);
     onClose?.();
+  };
+
+  const handleReferClick = () => {
+    onClose?.();
+    openReferralModal("menu");
   };
 
   if (!isLoggedIn) {
@@ -385,6 +401,20 @@ function UserMenuContent({
         >
           <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <span className="flex-1 text-sm">How It Works</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        {/* Always-available referral entry — Phase 1 leads with earning
+            (refer-and-earn pays both sides) rather than buying, so this
+            sits right above Buy Vox in the same accented treatment. */}
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={handleReferClick}
+          data-testid="link-refer-earn"
+        >
+          <Gift className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+          <span className="flex-1 text-sm font-medium text-violet-700 dark:text-violet-300">
+            Refer &amp; earn {voxWord(REFERRAL_REWARD)}
+          </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         {/* Visually accented (violet matches the Vox pill above) so the

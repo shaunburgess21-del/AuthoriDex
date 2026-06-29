@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, Wallet, Loader2, ChevronDown } from "lucide-react";
+import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, Gift, Loader2, ChevronDown, ArrowRight } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
+import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { navigateToLogin } from "@/lib/authReturn";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
@@ -25,6 +26,13 @@ import {
   snapshotFromApi,
 } from "@/lib/ammClient";
 import { CURRENCY, formatVox, formatVoxPrice, voxWord } from "@/lib/currency";
+import { CREDIT_ACTIONS } from "@shared/credit-config";
+
+// Referral reward derives from credit-config so the out-of-Vox nudge
+// tracks the real award amount (same pattern as ReferAFriendCard).
+const REFERRAL_REWARD =
+  CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+    ?.proposedCredits ?? 0;
 
 /**
  * AMM mission copy — all non-jackpot StakeModal flows are LMSR now.
@@ -213,6 +221,7 @@ export function StakeModal({
   });
   const { isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
+  const { open: openReferralModal } = useReferralModal();
   const [confidence, setConfidence] = useState(0);
   const [thesis, setThesis] = useState("");
   const [showThesisSection, setShowThesisSection] = useState(false);
@@ -1243,32 +1252,50 @@ export function StakeModal({
             )}
           </div>
 
-          {/* Highest-converting placement for the Buy Vox CTA — the
-              user has explicit intent to predict and just discovered
-              they can't afford the entry. Two trigger conditions cover
-              both "below minimum stake" (idle state) and "tried to
-              over-stake" (active typing). Logged-out users see the
-              Sign In button instead, so this only matters once auth'd. */}
+          {/* Highest-intent earn moment — the user wants to predict and
+              just discovered they can't afford the entry. Phase 1 has no
+              Vox sales, so instead of a Buy CTA we lead with refer-and-earn
+              (both sides get Vox) plus a link to the full earn guide. Two
+              trigger conditions cover both "below minimum stake" (idle) and
+              "tried to over-stake" (typing). Logged-out users see the Sign
+              In button instead, so this only matters once auth'd. */}
           {isLoggedIn && (walletBalance < MIN_STAKE || balanceAfter < 0) && (
-            <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 flex items-center gap-3">
-              <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-              <p className="text-xs text-muted-foreground flex-1">
-                {walletBalance < MIN_STAKE
-                  ? "You need Vox to predict."
-                  : "Not enough Vox for that stake."}
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-violet-500/50 text-violet-700 dark:text-violet-300 hover:bg-violet-500/15"
-                onClick={() => {
-                  onClose();
-                  setLocation("/pricing");
-                }}
-                data-testid="button-buy-credits-stake"
-              >
-                Buy Vox
-              </Button>
+            <div className="rounded-lg border border-violet-500/40 bg-violet-500/10 dark:border-violet-500/30 dark:bg-violet-500/8 p-3 space-y-2.5">
+              <div className="flex items-start gap-3">
+                <Gift className="h-4 w-4 mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
+                <p className="text-xs text-muted-foreground flex-1">
+                  {walletBalance < MIN_STAKE
+                    ? `Out of Vox? Invite a friend — you both get ${voxWord(REFERRAL_REWARD)}.`
+                    : `Not enough Vox for that stake. Invite a friend — you both get ${voxWord(REFERRAL_REWARD)}.`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 gap-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  onClick={() => {
+                    onClose();
+                    openReferralModal("out_of_vox");
+                  }}
+                  data-testid="button-refer-earn-stake"
+                >
+                  <Gift className="h-3.5 w-3.5" />
+                  Refer &amp; earn
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    onClose();
+                    setLocation("/how-it-works?tab=credits");
+                  }}
+                  data-testid="button-earn-more-vox-stake"
+                >
+                  How to earn more
+                  <ArrowRight className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           )}
         </div>

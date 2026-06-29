@@ -15,6 +15,8 @@ import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { ShareCardProvider } from "@/contexts/ShareCardContext";
+import { ReferralModalProvider } from "@/components/referral/ReferralModalProvider";
+import { ReferralPromptGate } from "@/components/referral/ReferralPromptGate";
 import { RankUpModalHost } from "@/components/RankUpModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
@@ -420,40 +422,46 @@ function App() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <TooltipProvider>
-              <ScrollToTop />
-              {/* duration: Sonner default 4000ms felt too brief on slow reads;
-                  5000ms was comfortable but a touch long — 4000ms matches the
-                  library default while staying readable. closeButton + swipe
-                  (see swipeDirections) let users dismiss early on desktop/touch. */}
-              <ThemedToaster />
-              <PWAUpdatePrompt />
-              <NewUserGate />
-              <InterestsGate />
-              <NotificationsRealtimeWatcher />
-              <RankUpModalHost />
-              <AnalyticsWatcher />
-              <ShareAttributionWatcher />
-              <XpBurstProvider>
-                {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
-                <XpCelebrationWatcher />
-                {/* ShareCard modal is mounted once at app root so every
-                    surface (post-trade toast, open positions, settled
-                    wins, leaderboard) opens the same instance via
-                    `useShareCard()`. */}
-                <ShareCardProvider>
-                  <SiteBanner />
-                  <div
-                    className="min-h-0"
-                    style={{ paddingTop: "var(--site-banner-height, 0px)" }}
-                  >
-                    <ErrorBoundary>
-                      <Router />
-                    </ErrorBoundary>
-                  </div>
-                </ShareCardProvider>
-              </XpBurstProvider>
-              <Footer />
-              <BottomNav />
+              {/* ReferralModalProvider owns a single referral modal so the
+                  engagement gate, out-of-Vox prediction banners, and user
+                  menu all open the same instance via `useReferralModal()`. */}
+              <ReferralModalProvider>
+                <ScrollToTop />
+                {/* duration: Sonner default 4000ms felt too brief on slow reads;
+                    5000ms was comfortable but a touch long — 4000ms matches the
+                    library default while staying readable. closeButton + swipe
+                    (see swipeDirections) let users dismiss early on desktop/touch. */}
+                <ThemedToaster />
+                <PWAUpdatePrompt />
+                <NewUserGate />
+                <InterestsGate />
+                <ReferralPromptGate />
+                <NotificationsRealtimeWatcher />
+                <RankUpModalHost />
+                <AnalyticsWatcher />
+                <ShareAttributionWatcher />
+                <XpBurstProvider>
+                  {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
+                  <XpCelebrationWatcher />
+                  {/* ShareCard modal is mounted once at app root so every
+                      surface (post-trade toast, open positions, settled
+                      wins, leaderboard) opens the same instance via
+                      `useShareCard()`. */}
+                  <ShareCardProvider>
+                    <SiteBanner />
+                    <div
+                      className="min-h-0"
+                      style={{ paddingTop: "var(--site-banner-height, 0px)" }}
+                    >
+                      <ErrorBoundary>
+                        <Router />
+                      </ErrorBoundary>
+                    </div>
+                  </ShareCardProvider>
+                </XpBurstProvider>
+                <Footer />
+                <BottomNav />
+              </ReferralModalProvider>
             </TooltipProvider>
           </AuthProvider>
         </QueryClientProvider>
