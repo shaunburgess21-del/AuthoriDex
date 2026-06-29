@@ -89,6 +89,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Feed queries whose ordering is personalised server-side (interest /
+ * behavioural blend). On a hard refresh these mount and fetch before the
+ * Supabase session is restored (the client is created via an async
+ * /api/config/supabase round-trip), so the first fetch can land without an
+ * Authorization header and receive the anonymous cold-start order. That
+ * result is then cached (staleTime) and never refetched, so a logged-in
+ * user is stuck with the anonymous order. Invalidating these the moment a
+ * session is available forces a refetch with the auth header.
+ */
+const PERSONALISED_FEED_QUERY_KEYS = [
+  ["/api/matchups"],
+  ["/api/trending-polls"],
+  ["/api/opinion-polls"],
+  ["/api/open-markets"],
+] as const;
+
+function invalidatePersonalisedFeeds() {
+  for (const queryKey of PERSONALISED_FEED_QUERY_KEYS) {
+    queryClient.invalidateQueries({ queryKey: [...queryKey] });
+  }
+}
+
 function clearLocalVoteCache() {
   try {
     const keysToRemove: string[] = [];
@@ -223,6 +246,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (currentSession?.access_token) {
             await fetchProfile(currentSession.access_token);
+            // Session was restored after a refresh; any feed query that
+            // already fetched anonymously (before the session resolved)
+            // must refetch with the auth header to get personalised order.
+            invalidatePersonalisedFeeds();
           }
         }
 
@@ -243,12 +270,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (newUserId && newUserId !== prevUserId) {
                 queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
                 queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+                // Personalised feeds must re-rank for the newly signed-in user.
+                invalidatePersonalisedFeeds();
               }
               await syncProfile(newSession.access_token);
             } else if (!newSession) {
               clearLocalVoteCache();
               queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
               queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
+              // Drop personalised order back to anonymous on sign-out.
+              invalidatePersonalisedFeeds();
               setProfile(null);
               setProfileJustCreated(null);
             }

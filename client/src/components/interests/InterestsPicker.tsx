@@ -266,48 +266,21 @@ function PickerBody({
         </div>
       ) : null}
 
-      {mode === "settings" ? (
-        // Settings keeps the dense pill row so it nests cleanly alongside
-        // the demographic + privacy sections on /me/settings. The icon
-        // grid would crowd the page.
-        <div
-          role="group"
-          aria-label="Category interests"
-          className="flex flex-wrap gap-2"
-          data-testid="interests-pill-grid"
-        >
-          {interestCategories.map((cat) => {
-            const isSelected = selected.has(cat.id);
-            const style = getCategoryStyle(cat.id);
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => toggle(cat.id)}
-                aria-pressed={isSelected}
-                data-testid={`interest-pill-${cat.id}`}
-                className={cn(
-                  "inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-150 active:scale-95",
-                  isSelected
-                    ? `${style.bg} ${style.border} ${style.text}`
-                    : "border-border bg-transparent text-muted-foreground hover:border-foreground/40 hover:text-foreground",
-                )}
-              >
-                {cat.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
+      {
         // Reddit-style icon grid. Each tile always shows its category
         // colour so palettes that read "muted" (politics, misc) don't
         // disappear in the unselected state. Selection bumps opacity
         // to 100 and adds a check pip — a clear, palette-independent
-        // signal.
+        // signal. Settings reuses the same tiles, widening to more
+        // columns on large screens since the settings card has more
+        // horizontal room than the onboarding drawer/dialog/step shell.
         <div
           role="group"
           aria-label="Category interests"
-          className="grid grid-cols-3 gap-3 sm:grid-cols-4"
+          className={cn(
+            "grid grid-cols-3 gap-3 sm:grid-cols-4",
+            mode === "settings" && "lg:grid-cols-6",
+          )}
           data-testid="interests-pill-grid"
         >
           {interestCategories.map((cat) => {
@@ -365,7 +338,7 @@ function PickerBody({
             );
           })}
         </div>
-      )}
+      }
 
       <Button
         onClick={handleSave}
