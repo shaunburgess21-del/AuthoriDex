@@ -165,6 +165,7 @@ import {
   orderFeaturedRecencyForUser,
   orderSeedVotesForUser,
   orderFeaturedCategoryForUser,
+  isColdStartUser,
 } from "./lib/coldStartOrder";
 import { upsertEngagement } from "./lib/engagementWriter";
 import { captureBackgroundError } from "./sentry";
@@ -6349,6 +6350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         req,
         matchups.createdAt,
         matchups.category,
+        matchups.displayOrder,
       );
 
       let matchupList = await db
@@ -15338,6 +15340,7 @@ Target length: about 90-150 words.`;
         req as AuthRequest,
         trendingPolls.createdAt,
         trendingPolls.category,
+        trendingPolls.displayOrder,
       );
 
       const polls = await db
@@ -16462,6 +16465,7 @@ Target length: about 90-150 words.`;
         req as AuthRequest,
         opinionPolls.createdAt,
         opinionPolls.category,
+        opinionPolls.displayOrder,
       );
 
       const polls = await db
@@ -17718,6 +17722,7 @@ Target length: about 90-150 words.`;
         predictionMarkets.featured,
         predictionMarkets.createdAt,
         predictionMarkets.category,
+        predictionMarkets.cmsDisplayOrder,
       );
 
       const markets = await db
@@ -17835,10 +17840,15 @@ Target length: about 90-150 words.`;
       // Sort AMM markets to the top by volume desc, parimutuel markets
       // sink. Stable __idx tiebreaker preserves the original
       // featured/recency/category ordering inside each volume bucket.
-      result.sort((a, b) => {
-        if (b.volume !== a.volume) return b.volume - a.volume;
-        return a.__idx - b.__idx;
-      });
+      // Skipped for cold-start users (anonymous / no interests) so the
+      // admin-curated cms_display_order from the SQL query is preserved.
+      const coldStart = await isColdStartUser(req);
+      if (!coldStart) {
+        result.sort((a, b) => {
+          if (b.volume !== a.volume) return b.volume - a.volume;
+          return a.__idx - b.__idx;
+        });
+      }
 
       res.json(result.map(({ __idx, ...rest }) => rest));
     } catch (error: any) {

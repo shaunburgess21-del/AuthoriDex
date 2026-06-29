@@ -34,7 +34,7 @@
 //     cold-start politics rule for that specific user).
 
 import type { AnyColumn, SQL } from "drizzle-orm";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
 import type { AuthRequest } from "../auth-middleware";
@@ -204,6 +204,19 @@ export function personalisedInterestBucket(
   return sql`CASE WHEN ${inArray(sql`LOWER(${categoryCol})`, lcInterests)} THEN 0 ELSE 1 END`;
 }
 
+/**
+ * Whether this request should use the cold-start ordering (no blend
+ * signal: anonymous, or signed-in with no stated interests and no
+ * meaningful behavioural engagement). Mirrors the branch inside the
+ * orderer wrappers so routes can gate post-query JS re-sorts (e.g. the
+ * World Markets volume sort) and keep the admin-curated order intact for
+ * cold-start users. Reuses the per-request memoised blend state.
+ */
+export async function isColdStartUser(req: AuthRequest): Promise<boolean> {
+  const state = await resolveBlendState(req);
+  return !hasBlendSignal(state);
+}
+
 // ── Higher-level "build the right ORDER BY for this user" wrappers ──
 //
 // These return an array of ORDER BY terms ready to splat into Drizzle's
@@ -237,10 +250,22 @@ export async function orderRecencyForUser(
   req: AuthRequest,
   createdAtCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
+  displayOrderCol?: AnyColumn | SQL,
 ): Promise<SQL[]> {
   const state = await resolveBlendState(req);
   if (hasBlendSignal(state)) {
     return [blendedRecencyOrder(createdAtCol, categoryCol, state)];
+  }
+  // Cold-start: admin-curated manual order wins. Cards with an explicit
+  // display_order (> 0) lead in that exact order; un-placed cards fall
+  // below, politics-soft-deprioritised then newest-first.
+  if (displayOrderCol) {
+    return [
+      sql`CASE WHEN COALESCE(${displayOrderCol}, 0) > 0 THEN 0 ELSE 1 END`,
+      asc(displayOrderCol),
+      coldStartCategoryRank(categoryCol),
+      desc(createdAtCol),
+    ];
   }
   // Cold-start: politics-soft-deprioritised, then recency.
   return [coldStartCategoryRank(categoryCol), desc(createdAtCol)];
@@ -255,6 +280,7 @@ export async function orderFeaturedRecencyForUser(
   featuredCol: AnyColumn | SQL,
   createdAtCol: AnyColumn | SQL,
   categoryCol: AnyColumn | SQL,
+  displayOrderCol?: AnyColumn | SQL,
 ): Promise<SQL[]> {
   const state = await resolveBlendState(req);
   if (hasBlendSignal(state)) {
@@ -265,6 +291,18 @@ export async function orderFeaturedRecencyForUser(
     return [
       desc(featuredCol),
       blendedRecencyOrder(createdAtCol, categoryCol, state),
+    ];
+  }
+  // Cold-start: admin-curated manual order wins. Markets with an explicit
+  // cms_display_order (> 0) lead in that exact order; un-placed markets
+  // fall below by featured, politics-soft-deprioritised, then newest-first.
+  if (displayOrderCol) {
+    return [
+      sql`CASE WHEN COALESCE(${displayOrderCol}, 0) > 0 THEN 0 ELSE 1 END`,
+      asc(displayOrderCol),
+      desc(featuredCol),
+      coldStartCategoryRank(categoryCol),
+      desc(createdAtCol),
     ];
   }
   return [
