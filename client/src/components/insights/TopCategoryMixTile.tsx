@@ -6,6 +6,7 @@ import { getCategoryHexColor, CategoryPill } from "@/components/CategoryPill";
 import type { InsightsCategoryMix } from "@shared/insights/types";
 import { buildCategoryMix } from "@shared/insights/category-mix";
 import { getAuthHeaders } from "@/lib/queryClient";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InsightsEmptyState } from "./insights-ui";
 
@@ -29,6 +30,7 @@ function hasCategoryMixData(mix?: InsightsCategoryMix | null): mix is InsightsCa
 }
 
 export function TopCategoryMixTile({ mix }: TopCategoryMixTileProps) {
+  const categoryRegistry = useCategoryRegistry();
   const needsFallback = !hasCategoryMixData(mix);
   const { data: fallbackMix, isLoading, isError } = useQuery({
     queryKey: ["/api/leaderboard", "category-mix-top50"],
@@ -43,13 +45,16 @@ export function TopCategoryMixTile({ mix }: TopCategoryMixTileProps) {
 
   const doughnutSegments: DoughnutSegment[] = useMemo(
     () =>
-      segments.map((row) => ({
-        id: row.category,
-        label: row.label,
-        value: row.count,
-        color: getCategoryHexColor(row.category),
-      })),
-    [segments],
+      segments.map((row) => {
+        const colorKey = categoryRegistry.resolveCanonicalId(row.category);
+        return {
+          id: row.category,
+          label: row.label,
+          value: row.count,
+          color: getCategoryHexColor(row.category, colorKey),
+        };
+      }),
+    [segments, categoryRegistry],
   );
 
   const maxCount = useMemo(
@@ -83,7 +88,12 @@ export function TopCategoryMixTile({ mix }: TopCategoryMixTileProps) {
         {leader ? (
           <span className="inline-flex flex-wrap items-center gap-1.5">
             Leading:
-            <CategoryPill category={leader.category} size="sm" />
+            <CategoryPill
+              category={leader.category}
+              canonicalIdOverride={categoryRegistry.resolveCanonicalId(leader.category)}
+              displayLabel={categoryRegistry.getDisplayLabel(leader.category)}
+              size="sm"
+            />
             <span className="font-semibold text-foreground tabular-nums">
               {leader.count} ({leader.pct}%)
             </span>
@@ -113,7 +123,8 @@ export function TopCategoryMixTile({ mix }: TopCategoryMixTileProps) {
           <ul className="space-y-2.5">
             {segments.map((row) => {
               const barPct = Math.round((row.count / maxCount) * 100);
-              const color = getCategoryHexColor(row.category);
+              const colorKey = categoryRegistry.resolveCanonicalId(row.category);
+              const color = getCategoryHexColor(row.category, colorKey);
               return (
                 <li key={row.category}>
                   <div className="flex items-center justify-between gap-2 text-xs mb-1">

@@ -1,4 +1,4 @@
-import { getMarketCategoryLabel, normalizeMarketCategory, type CanonicalMarketCategory } from "@shared/constants";
+import { getMarketCategoryLabel, resolveCategoryColorKey, type CanonicalMarketCategory } from "@shared/constants";
 
 const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: string; text: string }> = {
   tech: {
@@ -150,6 +150,7 @@ const CATEGORY_HEX: Record<CanonicalMarketCategory, string> = {
 
 const EXTRA_CATEGORY_HEX: Record<string, string> = {
   media: "#10B981",
+  "media-and-podcast": "#10B981",
   streaming: "#4ADE80",
 };
 
@@ -162,6 +163,11 @@ const DYNAMIC_CATEGORY_HEX = [
 // Named overrides for non-canonical categories that should have stable, explicit colors.
 const EXTRA_CATEGORY_STYLES: Record<string, { bg: string; border: string; text: string }> = {
   media: {
+    bg: "bg-[#10B981]/10",
+    border: "border-[#10B981]/40",
+    text: "text-[#10B981]",
+  },
+  "media-and-podcast": {
     bg: "bg-[#10B981]/10",
     border: "border-[#10B981]/40",
     text: "text-[#10B981]",
@@ -191,17 +197,15 @@ function hashString(input: string): number {
  * canonical and extra style maps, and fall back to the dynamic hash palette.
  */
 export function getCategoryStyle(category: string, canonicalIdOverride?: string) {
-  const normalized = (canonicalIdOverride && canonicalIdOverride.trim())
-    ? canonicalIdOverride.trim()
-    : normalizeMarketCategory(category);
-  if (normalized in CATEGORY_STYLES) {
-    return CATEGORY_STYLES[normalized as CanonicalMarketCategory];
+  const colorKey = resolveCategoryColorKey(category, canonicalIdOverride);
+  if (colorKey in CATEGORY_STYLES) {
+    return CATEGORY_STYLES[colorKey as CanonicalMarketCategory];
   }
-  if (normalized in EXTRA_CATEGORY_STYLES) {
-    return EXTRA_CATEGORY_STYLES[normalized];
+  if (colorKey in EXTRA_CATEGORY_STYLES) {
+    return EXTRA_CATEGORY_STYLES[colorKey];
   }
-  if (!normalized || normalized === "misc") return DEFAULT_CATEGORY_STYLE;
-  return DYNAMIC_CATEGORY_STYLES[hashString(normalized) % DYNAMIC_CATEGORY_STYLES.length];
+  if (!colorKey || colorKey === "misc") return DEFAULT_CATEGORY_STYLE;
+  return DYNAMIC_CATEGORY_STYLES[hashString(colorKey) % DYNAMIC_CATEGORY_STYLES.length];
 }
 
 export function getCategoryTextColor(category: string, canonicalIdOverride?: string) {
@@ -210,17 +214,15 @@ export function getCategoryTextColor(category: string, canonicalIdOverride?: str
 
 /** Hex color for charts and other non-Tailwind consumers. */
 export function getCategoryHexColor(category: string, canonicalIdOverride?: string): string {
-  const normalized = (canonicalIdOverride && canonicalIdOverride.trim())
-    ? canonicalIdOverride.trim()
-    : normalizeMarketCategory(category);
-  if (normalized in CATEGORY_HEX) {
-    return CATEGORY_HEX[normalized as CanonicalMarketCategory];
+  const colorKey = resolveCategoryColorKey(category, canonicalIdOverride);
+  if (colorKey in CATEGORY_HEX) {
+    return CATEGORY_HEX[colorKey as CanonicalMarketCategory];
   }
-  if (normalized in EXTRA_CATEGORY_HEX) {
-    return EXTRA_CATEGORY_HEX[normalized]!;
+  if (colorKey in EXTRA_CATEGORY_HEX) {
+    return EXTRA_CATEGORY_HEX[colorKey]!;
   }
-  if (!normalized || normalized === "misc") return CATEGORY_HEX.misc;
-  return DYNAMIC_CATEGORY_HEX[hashString(normalized) % DYNAMIC_CATEGORY_HEX.length]!;
+  if (!colorKey || colorKey === "misc") return CATEGORY_HEX.misc;
+  return DYNAMIC_CATEGORY_HEX[hashString(colorKey) % DYNAMIC_CATEGORY_HEX.length]!;
 }
 
 const SIZE_CLASSES = {
@@ -231,6 +233,10 @@ const SIZE_CLASSES = {
 
 interface CategoryPillProps {
   category: string;
+  /** Registry-resolved canonical id for colour (e.g. `media` for `media-and-podcast`). */
+  canonicalIdOverride?: string;
+  /** Override display label (e.g. from category registry). */
+  displayLabel?: string;
   /** Compact pill for dense layouts (e.g. rankings). */
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
@@ -239,11 +245,13 @@ interface CategoryPillProps {
 
 export function CategoryPill({
   category,
+  canonicalIdOverride,
+  displayLabel,
   size = "default",
   className = "",
   "data-testid": testId,
 }: CategoryPillProps) {
-  const style = getCategoryStyle(category);
+  const style = getCategoryStyle(category, canonicalIdOverride);
   const sizeClass = SIZE_CLASSES[size];
 
   return (
@@ -251,7 +259,7 @@ export function CategoryPill({
       className={`inline-flex items-center rounded-full border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
-      {getMarketCategoryLabel(category)}
+      {displayLabel ?? getMarketCategoryLabel(category)}
     </span>
   );
 }

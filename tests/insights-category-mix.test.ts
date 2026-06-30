@@ -28,4 +28,17 @@ describe("buildCategoryMix", () => {
     assert.equal(mix.topN, 0);
     assert.deepEqual(mix.segments, []);
   });
+
+  it("merges media-and-podcast into the media bucket", () => {
+    const mix = buildCategoryMix([
+      { rank: 1, category: "Media & Podcast" },
+      { rank: 2, category: "media" },
+      { rank: 3, category: "Sports" },
+    ]);
+
+    assert.equal(mix.topN, 3);
+    assert.equal(mix.segments.length, 2);
+    assert.equal(mix.segments.find((s) => s.category === "media")?.count, 2);
+    assert.equal(mix.segments.find((s) => s.category === "media")?.label, "Media & Podcast");
+  });
 });

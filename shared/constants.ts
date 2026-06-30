@@ -235,6 +235,33 @@ const PERSON_CATEGORY_LEGACY_LABELS: Record<string, string> = {
   "media-and-podcast": "Media & Podcast",
 };
 
+/**
+ * Normalised slugs that should share one bucket for counts, filters, and colours
+ * (e.g. registry id `media` with label `Media & Podcast` → slug `media-and-podcast`).
+ */
+export const CATEGORY_BUCKET_ALIASES: Record<string, string> = {
+  "media-and-podcast": "media",
+};
+
+/** Canonical bucket id for aggregating counts (top-50 mix, filters, etc.). */
+export function getCategoryBucketId(category: string | null | undefined): string {
+  const normalized = normalizeMarketCategory(category);
+  return CATEGORY_BUCKET_ALIASES[normalized] ?? normalized;
+}
+
+/**
+ * Key used to look up category colours. Prefer an explicit registry/canonical id;
+ * otherwise map known legacy slugs (e.g. `media-and-podcast` → `media`).
+ */
+export function resolveCategoryColorKey(
+  category: string | null | undefined,
+  canonicalIdOverride?: string,
+): string {
+  if (canonicalIdOverride?.trim()) return canonicalIdOverride.trim();
+  const normalized = normalizeMarketCategory(category ?? "");
+  return CATEGORY_BUCKET_ALIASES[normalized] ?? normalized;
+}
+
 function normalizeCategoryLookupKey(category: string) {
   return category
     .trim()

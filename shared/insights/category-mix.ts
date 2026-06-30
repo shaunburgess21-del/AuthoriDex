@@ -1,4 +1,4 @@
-import { getMarketCategoryLabel, normalizeMarketCategory } from "../constants";
+import { getMarketCategoryLabel, getCategoryBucketId } from "../constants";
 import type { InsightsCategoryMix } from "./types";
 
 export const CATEGORY_MIX_TOP_N = 50;
@@ -13,11 +13,12 @@ export function buildCategoryMix(
 
   const counts = new Map<string, { category: string; label: string; count: number }>();
   for (const person of top) {
-    const category = normalizeMarketCategory(person.category);
+    const bucket = getCategoryBucketId(person.category);
     const label = getMarketCategoryLabel(person.category);
-    const current = counts.get(category) ?? { category, label, count: 0 };
+    const current = counts.get(bucket) ?? { category: bucket, label, count: 0 };
     current.count += 1;
-    counts.set(category, current);
+    if (label.length > current.label.length) current.label = label;
+    counts.set(bucket, current);
   }
 
   const sampleSize = top.length;
