@@ -11,6 +11,7 @@
  *   - server/jobs/market-ops-digest.ts  (daily World Market reminders)
  *   - server/jobs/market-resolver.ts    (instant "needs resolution" ping)
  *   - server/jobs/resolution-scout.ts   (AI early-resolution proposals)
+ *   - server/services/ingest-provider-alert-runner.ts (news API outage alerts)
  *
  * Recipients come from OPS_ALERT_EMAILS (comma-separated). If unset, the
  * dispatcher logs a warning and no-ops — alerts must never throw into the

@@ -138,6 +138,55 @@ export function formatIngestAlertLogLine(alert: ProviderCoverageAlert): string {
   );
 }
 
+/** Operator checklist shown in the ops email for each provider. */
+export const INGEST_PROVIDER_CHECK_HINTS: Record<IngestAlertProvider, string> = {
+  currents:
+    "Check Currents Builder billing, daily quota (2,500/day), and API keys at currentsapi.services.",
+  serper: "Check Serper account credits/billing and that SERPER_API_KEY is valid in Railway.",
+  mediastack: "Check Mediastack monthly call limit and MEDIASTACK_API_KEY in Railway.",
+  gdelt:
+    "GDELT is a free cascade fallback — sustained zero coverage may indicate network or parsing issues.",
+};
+
+export interface IngestProviderOpsAlertPayload {
+  kind: "ingest_provider_outage";
+  provider: IngestAlertProvider;
+  title: string;
+  summary: string;
+  coveragePct: number;
+  peopleWithArticles: number;
+  peopleWithData: number;
+  lastHealthyRunAt: string | null;
+  checkHint: string;
+  idempotencyKeyBase: string;
+}
+
+/** Build the ops-email payload for a fired coverage alert (pure; no send). */
+export function buildIngestProviderOpsAlertPayload(
+  alert: ProviderCoverageAlert,
+  now: Date = new Date(),
+): IngestProviderOpsAlertPayload {
+  const coveragePct = Math.round(alert.coverageRatio * 100);
+  const label = alert.provider.charAt(0).toUpperCase() + alert.provider.slice(1);
+  const utcDay = now.toISOString().slice(0, 10);
+
+  return {
+    kind: "ingest_provider_outage",
+    provider: alert.provider,
+    title: `News provider outage: ${label}`,
+    summary:
+      `${label} article coverage collapsed to ${coveragePct}% ` +
+      `(${alert.peopleWithArticles}/${alert.peopleWithData} people with news). ` +
+      `Trend scores and prediction markets may be distorted until this is fixed.`,
+    coveragePct,
+    peopleWithArticles: alert.peopleWithArticles,
+    peopleWithData: alert.peopleWithData,
+    lastHealthyRunAt: alert.lastHealthyRunAt,
+    checkHint: INGEST_PROVIDER_CHECK_HINTS[alert.provider],
+    idempotencyKeyBase: `ingest_provider_outage:${alert.provider}:${utcDay}`,
+  };
+}
+
 /** Reset in-process de-dup state (for tests). */
 export function resetIngestAlertDedupState(): void {
   outageAlerted.clear();

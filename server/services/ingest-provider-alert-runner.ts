@@ -3,6 +3,11 @@ import { ingestionRuns } from "@shared/schema";
 import { db } from "../db";
 import { captureBackgroundMessage } from "../sentry";
 import {
+  adminDashboardUrl,
+  sendOpsAlert,
+} from "./ops-alerts";
+import {
+  buildIngestProviderOpsAlertPayload,
   buildProviderHistoryFromRuns,
   evaluateProviderCoverageFromRunHistory,
   extractProviderCoverageFromHealthSummary,
@@ -62,6 +67,53 @@ export async function checkAndEmitProviderCoverageAlerts(
         peopleWithData: alert.peopleWithData,
         lastHealthyRunAt: alert.lastHealthyRunAt,
       },
+    });
+
+    const payload = buildIngestProviderOpsAlertPayload(alert);
+    void sendOpsAlert({
+      kind: payload.kind,
+      severity: "critical",
+      title: payload.title,
+      summary: payload.summary,
+      sections: [
+        {
+          heading: "What we detected",
+          emoji: "⚠️",
+          items: [
+            {
+              text: `Coverage: ${payload.coveragePct}% of roster`,
+              detail: `${payload.peopleWithArticles}/${payload.peopleWithData} people returned articles`,
+            },
+            {
+              text: "Trigger",
+              detail:
+                "Below 25% for 3 consecutive hourly ingests after being healthy in the prior 24h",
+            },
+            {
+              text: `Last healthy ingest: ${payload.lastHealthyRunAt ?? "unknown"}`,
+              detail: "UTC",
+            },
+          ],
+        },
+        {
+          heading: "Suggested checks",
+          emoji: "🔧",
+          items: [
+            { text: payload.checkHint },
+            {
+              text: "Review Railway ingest logs for THROTTLED / FAILED source status or frozen rate-limit snapshots.",
+            },
+          ],
+        },
+      ],
+      ctaUrl: adminDashboardUrl(),
+      ctaLabel: "Open admin dashboard",
+      idempotencyKeyBase: payload.idempotencyKeyBase,
+    }).catch((err) => {
+      console.error(
+        `[IngestAlert] Ops email failed for ${alert.provider}:`,
+        err instanceof Error ? err.message : String(err),
+      );
     });
   }
 }

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   COVERAGE_HEALTHY_THRESHOLD,
   COVERAGE_LOW_THRESHOLD,
+  buildIngestProviderOpsAlertPayload,
   evaluateProviderCoverageFromRunHistory,
   extractProviderCoverageFromHealthSummary,
   formatIngestAlertLogLine,
@@ -147,4 +148,26 @@ test("de-dup clears when coverage recovers to healthy threshold", () => {
 test("threshold constants match plan", () => {
   assert.equal(COVERAGE_LOW_THRESHOLD, 0.25);
   assert.equal(COVERAGE_HEALTHY_THRESHOLD, 0.5);
+});
+
+test("buildIngestProviderOpsAlertPayload shapes ops email fields", () => {
+  resetIngestAlertDedupState();
+  const serperAlert = evaluateProviderCoverageFromRunHistory(
+    "serper",
+    [
+      { startedAt: new Date("2026-06-30T09:00:00Z"), coverageRatio: 0.05 },
+      { startedAt: new Date("2026-06-30T08:00:00Z"), coverageRatio: 0.06 },
+      { startedAt: new Date("2026-06-30T07:00:00Z"), coverageRatio: 0.08 },
+      { startedAt: new Date("2026-06-30T06:00:00Z"), coverageRatio: 0.72 },
+    ],
+    { provider: "serper", peopleWithArticles: 8, peopleWithData: 161, coverageRatio: 8 / 161 },
+  );
+  assert.ok(serperAlert);
+  const payload = buildIngestProviderOpsAlertPayload(serperAlert!, new Date("2026-06-30T10:00:00Z"));
+  assert.equal(payload.kind, "ingest_provider_outage");
+  assert.equal(payload.provider, "serper");
+  assert.match(payload.title, /Serper/);
+  assert.match(payload.summary, /8\/161/);
+  assert.equal(payload.idempotencyKeyBase, "ingest_provider_outage:serper:2026-06-30");
+  assert.match(payload.checkHint, /Serper/i);
 });
