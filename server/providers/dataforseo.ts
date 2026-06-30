@@ -45,6 +45,8 @@ export {
   parseSearchVolumeResponse,
   computeMoMDeltaPct,
   buildSearchVolumeHistory,
+  formatSearchVolumeMoMPeriodLabel,
+  formatSearchVolumeMonthShort,
   type SearchVolumeDatum,
   type SearchVolumeHistoryPoint,
 } from "./search-volume-window";

@@ -108,6 +108,45 @@ export function buildSearchVolumeHistory(
  * into tiers, so real moves tend to be chunky (~±20%) — callers should apply a
  * dead zone before display.
  */
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** "2026-05" → "May" for compact MoM subtitles. */
+export function formatSearchVolumeMonthShort(ym: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!match) return ym;
+  const month = Number(match[2]);
+  if (!Number.isFinite(month) || month < 1 || month > 12) return ym;
+  return MONTH_SHORT[month - 1];
+}
+
+/**
+ * Human label for the two months used in MoM, e.g. "May vs Apr".
+ * Uses the latest two points in an ascending history series.
+ */
+export function formatSearchVolumeMoMPeriodLabel(
+  history: SearchVolumeHistoryPoint[] | null | undefined,
+): string | null {
+  if (!Array.isArray(history) || history.length < 2) return null;
+  const sorted = [...history]
+    .filter((p) => p != null && typeof p.ym === "string" && p.ym.length >= 7)
+    .sort((a, b) => b.ym.localeCompare(a.ym));
+  if (sorted.length < 2) return null;
+  return `${formatSearchVolumeMonthShort(sorted[0].ym)} vs ${formatSearchVolumeMonthShort(sorted[1].ym)}`;
+}
+
 export function computeMoMDeltaPct(
   monthlySearches: Array<{ year?: number; month?: number; search_volume?: number | null }> | null | undefined,
 ): number {

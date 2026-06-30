@@ -18,6 +18,10 @@ import {
   ratioFromDiagnostics,
   sortValueForSource,
 } from "./signal-utils";
+import {
+  formatSearchVolumeMoMPeriodLabel,
+  type SearchVolumeHistoryPoint,
+} from "../../providers/search-volume-window";
 
 type MetricDeltaKind = "change24h" | "change7d" | "mom";
 
@@ -41,6 +45,38 @@ function metricDeltaFor(
     return { value: person.change7d ?? null, kind: "change7d" };
   }
   return { value: person.change24h ?? null, kind: "change24h" };
+}
+
+function deriveSearchVolumeMoMPeriod(
+  snapshots: Map<string, { diagnostics?: unknown }>,
+): string | null {
+  let bestHistory: SearchVolumeHistoryPoint[] | null = null;
+  let bestLatestYm = "";
+
+  for (const snap of snapshots.values()) {
+    const raw = (snap.diagnostics as Record<string, any> | null)?.raw as
+      | Record<string, unknown>
+      | undefined;
+    const hist = raw?.googleSearchVolumeMonthly;
+    if (!Array.isArray(hist) || hist.length < 2) continue;
+
+    const usable = hist.filter(
+      (p): p is SearchVolumeHistoryPoint =>
+        p != null &&
+        typeof p.ym === "string" &&
+        typeof p.v === "number" &&
+        Number.isFinite(p.v),
+    );
+    if (usable.length < 2) continue;
+
+    const latestYm = [...usable].sort((a, b) => b.ym.localeCompare(a.ym))[0].ym;
+    if (!bestHistory || latestYm.localeCompare(bestLatestYm) > 0) {
+      bestHistory = usable;
+      bestLatestYm = latestYm;
+    }
+  }
+
+  return formatSearchVolumeMoMPeriodLabel(bestHistory);
 }
 
 function rankingsCacheKey(filters: InsightsFilters, userId?: string | null): string {
@@ -206,10 +242,14 @@ async function loadInsightsRankingsInner(
       ? latestTs.toISOString()
       : null;
 
+  const searchVolumeMoMPeriod =
+    filters.source === "search_volume" ? deriveSearchVolumeMoMPeriod(snapshots) : null;
+
   return {
     rows: pageRows,
     total,
     asOf,
     source: filters.source,
+    searchVolumeMoMPeriod,
   };
 }

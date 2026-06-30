@@ -9,6 +9,8 @@ import {
   parseSearchVolumeResponse,
   computeMoMDeltaPct,
   buildSearchVolumeHistory,
+  formatSearchVolumeMoMPeriodLabel,
+  formatSearchVolumeMonthShort,
   shouldFetchSearchVolume,
   SEARCH_VOLUME_FETCH_INTERVAL_MS,
 } from "../server/providers/search-volume-window";
@@ -247,6 +249,29 @@ test("parseSearchVolumeResponse: tolerant of malformed payloads", () => {
   assert.equal(parseSearchVolumeResponse({}, k2p).size, 0);
   assert.equal(parseSearchVolumeResponse({ tasks: [{}] }, k2p).size, 0);
   assert.equal(parseSearchVolumeResponse({ tasks: [{ result: null }] }, k2p).size, 0);
+});
+
+// ── formatSearchVolumeMoMPeriodLabel ─────────────────────────────────────────
+
+test("formatSearchVolumeMonthShort: formats YYYY-MM", () => {
+  assert.equal(formatSearchVolumeMonthShort("2026-05"), "May");
+  assert.equal(formatSearchVolumeMonthShort("2026-04"), "Apr");
+});
+
+test("formatSearchVolumeMoMPeriodLabel: latest two months in descending order", () => {
+  assert.equal(
+    formatSearchVolumeMoMPeriodLabel([
+      { ym: "2026-03", v: 100 },
+      { ym: "2026-05", v: 90 },
+      { ym: "2026-04", v: 95 },
+    ]),
+    "May vs Apr",
+  );
+});
+
+test("formatSearchVolumeMoMPeriodLabel: insufficient history -> null", () => {
+  assert.equal(formatSearchVolumeMoMPeriodLabel(null), null);
+  assert.equal(formatSearchVolumeMoMPeriodLabel([{ ym: "2026-05", v: 1 }]), null);
 });
 
 // ── shouldFetchSearchVolume ─────────────────────────────────────────────────

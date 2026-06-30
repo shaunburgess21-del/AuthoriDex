@@ -153,12 +153,14 @@ function RankingsMobileMetricColumn({
   hasSecondaryCol,
   isMovers,
   isSearch,
+  searchVolumeMoMPeriod,
   renderPrimary,
 }: {
   row: InsightsRankingRow;
   hasSecondaryCol: boolean;
   isMovers: boolean;
   isSearch: boolean;
+  searchVolumeMoMPeriod?: string | null;
   renderPrimary: (row: InsightsRankingRow) => ReactNode;
 }) {
   const mobileSecondaryLabel = isMovers ? "Score" : isSearch ? "MoM" : "";
@@ -176,6 +178,11 @@ function RankingsMobileMetricColumn({
           ) : (
             <DeltaCell value={row.metricDelta} className="text-[10px]" />
           )}
+        </p>
+      )}
+      {isSearch && searchVolumeMoMPeriod && (
+        <p className="mt-0.5 truncate text-[9px] leading-tight text-muted-foreground/65">
+          {searchVolumeMoMPeriod}
         </p>
       )}
     </div>
@@ -260,6 +267,7 @@ export function RankingsTab() {
     [data],
   );
   const total = data?.pages[0]?.total ?? 0;
+  const searchVolumeMoMPeriod = data?.pages[0]?.searchVolumeMoMPeriod ?? null;
 
   const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver<HTMLDivElement>({
     enabled: hasNextPage && !isFetchingNextPage,
@@ -468,8 +476,10 @@ export function RankingsTab() {
                   </div>
                   {filters.source === "search_volume" && (
                     <p className="text-[11px] text-muted-foreground/70 mt-1.5 leading-relaxed">
-                      Google search interest is reported monthly — the change shown is
-                      month-over-month.
+                      Google search interest is reported monthly
+                      {searchVolumeMoMPeriod
+                        ? ` — change shown is ${searchVolumeMoMPeriod}.`
+                        : " — the change shown is month-over-month."}
                     </p>
                   )}
                 </div>
@@ -510,7 +520,14 @@ export function RankingsTab() {
               <div className="flex shrink-0 items-center gap-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 <span className="text-right">{primaryColLabel}</span>
                 {hasSecondaryCol && (
-                  <span className="hidden md:block w-24 text-right">{secondaryColLabel}</span>
+                  <span className="hidden md:block w-24 text-right leading-tight">
+                    <span className="block">{secondaryColLabel}</span>
+                    {isSearch && searchVolumeMoMPeriod && (
+                      <span className="mt-0.5 block text-[10px] font-normal normal-case tracking-normal text-muted-foreground/65">
+                        {searchVolumeMoMPeriod}
+                      </span>
+                    )}
+                  </span>
                 )}
               </div>
             </div>
@@ -584,6 +601,7 @@ export function RankingsTab() {
                     hasSecondaryCol={hasSecondaryCol}
                     isMovers={isMovers}
                     isSearch={isSearch}
+                    searchVolumeMoMPeriod={searchVolumeMoMPeriod}
                     renderPrimary={renderPrimary}
                   />
                 </Link>

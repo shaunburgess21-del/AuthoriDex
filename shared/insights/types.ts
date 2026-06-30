@@ -50,6 +50,8 @@ export interface InsightsRankingsResponse {
   total: number;
   asOf: string | null;
   source: InsightsSource;
+  /** e.g. "May vs Apr" — months compared for search-volume MoM (search tab only). */
+  searchVolumeMoMPeriod?: string | null;
 }
 
 export interface InsightsQuadrantPoint {
