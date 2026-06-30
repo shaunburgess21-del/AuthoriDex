@@ -5,7 +5,6 @@ import {
   AlarmClock,
   ArrowUpDown,
   Flame,
-  Globe2,
   LineChart as LineChartIcon,
   TrendingDown,
   TrendingUp,
@@ -18,8 +17,12 @@ import { Badge } from "@/components/ui/badge";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { MarketThumbCollage } from "@/components/predict/MarketThumbCollage";
-import { DoughnutChart } from "@/components/charts/DoughnutChart";
-import { CountryFlag } from "@/components/ui/CountryFlag";
+import {
+  DemographicsTile,
+  DemographicsWindowToggle,
+  type DemographicChartData,
+  type DemographicWindow,
+} from "./DemographicsTile";
 import { useInsightsQuery } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { formatVox, formatVoxCompact, formatVoxPrice } from "@/lib/currency";
@@ -30,7 +33,6 @@ import {
   type InsightsOpenMarket,
 } from "@/lib/useInsightsMarketLists";
 import { cn } from "@/lib/utils";
-import { getCountryName } from "@shared/countries";
 import type {
   ContestedMarket,
   InsightsMarketsAnalytics,
@@ -725,210 +727,71 @@ function MoversTile() {
   );
 }
 
-type DemographicMetric = "predictors" | "bets" | "volume";
-type DemographicWindow = "all" | "30d" | "7d";
-
-const DEMOGRAPHIC_GENDER_COLORS: Record<string, string> = {
-  male: "#3B82F6",
-  female: "#A78BFA",
-  prefer_not_to_say: "#94A3B8",
-};
-
-function DemographicsWindowToggle({
-  value,
-  onChange,
-}: {
-  value: DemographicWindow;
-  onChange: (next: DemographicWindow) => void;
-}) {
-  return (
-    <div
-      className="inline-flex shrink-0 rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
-      role="group"
-      aria-label="Demographics time window"
-    >
-      {(
-        [
-          ["all", "All time"],
-          ["30d", "30d"],
-          ["7d", "7d"],
-        ] as const
-      ).map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={value === key}
-          onClick={() => onChange(key)}
-          className={cn(
-            "rounded-md px-2.5 py-1.5 transition-colors sm:px-3",
-            value === key
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+function mapPredictorDemographics(raw: unknown): DemographicChartData {
+  const data = raw as PredictorDemographics;
+  const mapRow = (row: PredictorDemographics["byCountry"][number]) => ({
+    key: row.key,
+    label: row.label,
+    primary: row.predictors,
+    secondary: row.bets,
+    tertiary: row.totalStaked,
+  });
+  return {
+    participantCount: data.predictorCount,
+    countryCount: data.countryCount,
+    totalPrimary: data.predictorCount,
+    totalSecondary: data.totalBets,
+    totalTertiary: data.totalStaked,
+    byCountry: data.byCountry.map(mapRow),
+    byGender: data.byGender.map(mapRow),
+  };
 }
 
-function DemographicsTile({ timeWindow }: { timeWindow: DemographicWindow }) {
-  const path =
+function PredictorDemographicsTile({ timeWindow }: { timeWindow: DemographicWindow }) {
+  const apiPath =
     timeWindow === "all"
       ? "/api/insights/markets/demographics"
       : `/api/insights/markets/demographics?window=${timeWindow}`;
-  const { data, isLoading } = useInsightsQuery<PredictorDemographics>(path, {
-    queryKey: [path],
-  });
-  const [metric, setMetric] = useState<DemographicMetric>("predictors");
-
-  if (isLoading) return <Skeleton className="h-56 w-full" />;
-  if (!data || data.predictorCount === 0) {
-    return <InsightsEmptyState message="No predictor demographics yet." />;
-  }
-
-  const metricValue = (row: { predictors: number; bets: number; totalStaked: number }) => {
-    if (metric === "bets") return row.bets;
-    if (metric === "volume") return row.totalStaked;
-    return row.predictors;
-  };
-
-  const formatMetric = (value: number) => {
-    if (metric === "volume") return formatVoxCompact(value) ?? formatVox(value);
-    return value.toLocaleString();
-  };
-
-  const genderSegments = data.byGender.map((row) => ({
-    id: row.key,
-    label: row.label,
-    value: metricValue(row),
-    color: DEMOGRAPHIC_GENDER_COLORS[row.key],
-  }));
-
-  const centerTitle =
-    metric === "volume"
-      ? formatVoxCompact(data.totalStaked) ?? formatVox(data.totalStaked)
-      : metric === "bets"
-        ? data.totalBets.toLocaleString()
-        : data.predictorCount.toLocaleString();
-  const centerSubtitle =
-    metric === "volume" ? "wagered" : metric === "bets" ? "predictions" : "predictors";
-
-  const topCountries = data.byCountry.slice(0, 8);
-  const maxCountryMetric = Math.max(...topCountries.map((r) => metricValue(r)), 1);
-
-  const topGender = data.byGender[0];
-  const topCountry = data.byCountry[0];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <DemographicsTile
+      apiPath={apiPath}
+      emptyMessage="No predictor demographics yet."
+      metrics={[
+        { key: "primary", label: "Predictors", centerSubtitle: "predictors" },
+        { key: "secondary", label: "Predictions", centerSubtitle: "predictions" },
+        { key: "tertiary", label: "Volume", centerSubtitle: "wagered" },
+      ]}
+      formatMetricValue={(value, metric) => {
+        if (metric === "tertiary") return formatVoxCompact(value) ?? formatVox(value);
+        return value.toLocaleString();
+      }}
+      renderSummaryStats={(chart) => (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>
             <span className="font-semibold text-foreground tabular-nums">
-              {data.predictorCount.toLocaleString()}
+              {chart.totalPrimary.toLocaleString()}
             </span>{" "}
             predictors
           </span>
           <span>
             <span className="font-semibold text-foreground tabular-nums">
-              {data.countryCount}
+              {chart.countryCount}
             </span>{" "}
             countries
           </span>
           <span>
             <span className="font-semibold text-foreground tabular-nums">
-              {formatVoxCompact(data.totalStaked) ?? formatVox(data.totalStaked)}
+              {formatVoxCompact(chart.totalTertiary) ?? formatVox(chart.totalTertiary)}
             </span>{" "}
             wagered
           </span>
         </div>
-        <div
-          className="inline-flex w-full sm:w-auto shrink-0 rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[11px] font-medium"
-          role="group"
-          aria-label="Demographics metric"
-        >
-          {(
-            [
-              ["predictors", "Predictors"],
-              ["bets", "Predictions"],
-              ["volume", "Volume"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={metric === key}
-              onClick={() => setMetric(key)}
-              className={cn(
-                "rounded-md px-3 py-1.5 transition-colors",
-                metric === key
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-3">Gender split</p>
-          <DoughnutChart
-            data={genderSegments}
-            centerTitle={centerTitle}
-            centerSubtitle={centerSubtitle}
-            height={200}
-            innerRadiusRatio={0.62}
-          />
-          {topGender ? (
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Largest group: {topGender.label} ({formatMetric(metricValue(topGender))})
-            </p>
-          ) : null}
-        </div>
-
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-3">Top countries</p>
-          <ul className="space-y-2.5">
-            {topCountries.map((row) => {
-              const value = metricValue(row);
-              const pct = Math.round((value / maxCountryMetric) * 100);
-              const countryName = row.label || getCountryName(row.key) || row.key;
-              return (
-                <li key={row.key}>
-                  <div className="flex items-center justify-between gap-2 text-xs mb-1">
-                    <span className="inline-flex items-center gap-2 min-w-0">
-                      <CountryFlag code={row.key} title={countryName} />
-                      <span className="font-medium truncate">{countryName}</span>
-                    </span>
-                    <span className="text-muted-foreground tabular-nums shrink-0">
-                      {formatMetric(value)}
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-violet-500/80 to-violet-300/60"
-                      style={{ width: `${Math.max(4, pct)}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          {topCountry ? (
-            <p className="mt-2 text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
-              <Globe2 className="h-3.5 w-3.5" />
-              Most active: {getCountryName(topCountry.key) ?? topCountry.key} (
-              {formatMetric(metricValue(topCountry))})
-            </p>
-          ) : null}
-        </div>
-      </div>
-    </div>
+      )}
+      barGradientClass="from-violet-500/80 to-violet-300/60"
+      isEmpty={(data) => data.participantCount === 0}
+      mapData={mapPredictorDemographics}
+    />
   );
 }
 
@@ -946,7 +809,7 @@ function DemographicsSection() {
       description="Where our predictors are from and how activity breaks down."
       action={<DemographicsWindowToggle value={timeWindow} onChange={setTimeWindow} />}
     >
-      <DemographicsTile timeWindow={timeWindow} />
+      <PredictorDemographicsTile timeWindow={timeWindow} />
     </InsightsSection>
   );
 }

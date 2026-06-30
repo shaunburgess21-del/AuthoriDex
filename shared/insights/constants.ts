@@ -56,3 +56,13 @@ export const INSIGHTS_DIVERGENCE_LABELS: Record<string, string> = {
   overrated_cooling: "Overrated & Cooling",
   consensus: "Consensus Sweet Spot",
 };
+
+/** Human labels for vote_actions.vote_type in Insights vote demographics. */
+export const VOTE_SURFACE_LABELS: Record<string, string> = {
+  face_off: "Matchups",
+  opinion_poll: "Opinion polls",
+  trending_poll: "Sentiment polls",
+  overall_rating: "Approval ratings",
+  value_vote: "Value votes",
+  sentiment: "Daily sentiment",
+};

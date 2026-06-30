@@ -65,7 +65,7 @@ export function InsightsSection({
       )}
     >
       <div className="px-3 sm:px-4 pt-4 pb-2 border-b border-border/30 bg-card/60">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
             {description && (

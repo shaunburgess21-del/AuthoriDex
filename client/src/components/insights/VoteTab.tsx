@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   BarChart3,
+  LayoutGrid,
   Scale,
   Swords,
   Star,
@@ -11,9 +12,17 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { useState } from "react";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
+import {
+  DemographicsTile,
+  DemographicsWindowToggle,
+  type DemographicChartData,
+  type DemographicMetricKey,
+  type DemographicWindow,
+} from "./DemographicsTile";
 import { MarketThumbCollage } from "@/components/predict/MarketThumbCollage";
 import { useInsightsQuery } from "@/lib/insights-hooks";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
@@ -27,6 +36,7 @@ import type {
   PolarisationResponse,
   TopVoteMatchup,
   TopVotedResponse,
+  VoterDemographics,
 } from "@shared/insights/types";
 import { cn } from "@/lib/utils";
 
@@ -765,6 +775,246 @@ function SentimentLandslideTile() {
   );
 }
 
+const SURFACE_MIN_VOTES = 10;
+
+type SurfaceMetric = "voters" | "votes";
+
+function mapVoterDemographics(raw: unknown): DemographicChartData {
+  const data = raw as VoterDemographics;
+  const mapRow = (row: VoterDemographics["byCountry"][number]) => ({
+    key: row.key,
+    label: row.label,
+    primary: row.voters,
+    secondary: row.votes,
+    tertiary: row.avgVotes,
+  });
+  const avgVotesTotal =
+    data.voterCount > 0
+      ? Math.round((data.totalVotes / data.voterCount) * 10) / 10
+      : 0;
+  return {
+    participantCount: data.voterCount,
+    countryCount: data.countryCount,
+    totalPrimary: data.voterCount,
+    totalSecondary: data.totalVotes,
+    totalTertiary: avgVotesTotal,
+    byCountry: data.byCountry.map(mapRow),
+    byGender: data.byGender.map(mapRow),
+  };
+}
+
+function voterDemographicsPath(timeWindow: DemographicWindow): string {
+  return timeWindow === "all"
+    ? "/api/insights/vote/demographics"
+    : `/api/insights/vote/demographics?window=${timeWindow}`;
+}
+
+function VoterDemographicsTile({
+  timeWindow,
+  data,
+  isLoading,
+}: {
+  timeWindow: DemographicWindow;
+  data?: VoterDemographics;
+  isLoading?: boolean;
+}) {
+  const apiPath = voterDemographicsPath(timeWindow);
+
+  return (
+    <DemographicsTile
+      apiPath={apiPath}
+      managedExternally
+      externalData={data}
+      externalLoading={isLoading}
+      emptyMessage="No voter demographics yet."
+      noBreakdownMessage="Voters haven't shared gender or country profile details yet."
+      metrics={[
+        { key: "primary", label: "Voters", centerSubtitle: "voters" },
+        { key: "secondary", label: "Votes", centerSubtitle: "votes" },
+        { key: "tertiary", label: "Avg votes", centerSubtitle: "avg / voter" },
+      ]}
+      formatMetricValue={(value, metric: DemographicMetricKey) => {
+        if (metric === "tertiary") {
+          return value % 1 === 0 ? value.toLocaleString() : value.toFixed(1);
+        }
+        return value.toLocaleString();
+      }}
+      renderSummaryStats={(chart) => (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground tabular-nums">
+              {chart.totalPrimary.toLocaleString()}
+            </span>{" "}
+            voters
+          </span>
+          <span>
+            <span className="font-semibold text-foreground tabular-nums">
+              {chart.countryCount}
+            </span>{" "}
+            countries
+          </span>
+          <span>
+            <span className="font-semibold text-foreground tabular-nums">
+              {chart.totalSecondary.toLocaleString()}
+            </span>{" "}
+            votes cast
+          </span>
+        </div>
+      )}
+      barGradientClass="from-cyan-500/80 to-cyan-300/60"
+      isEmpty={(chart) => chart.participantCount === 0}
+      mapData={mapVoterDemographics}
+    />
+  );
+}
+
+function VoteSurfaceSection({
+  data,
+  isLoading,
+}: {
+  data?: VoterDemographics;
+  isLoading?: boolean;
+}) {
+  const [metric, setMetric] = useState<SurfaceMetric>("votes");
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (!data || data.totalVotes < SURFACE_MIN_VOTES) {
+    return (
+      <InsightsEmptyState message="Not enough vote activity to show surface breakdown yet." />
+    );
+  }
+
+  const surfaces = [...data.bySurface].sort((a, b) =>
+    metric === "votes" ? b.votes - a.votes : b.voters - a.voters,
+  );
+  if (surfaces.length === 0) {
+    return <InsightsEmptyState message="Not enough vote activity to show surface breakdown yet." />;
+  }
+
+  const metricValue = (row: (typeof surfaces)[number]) =>
+    metric === "votes" ? row.votes : row.voters;
+  const platformTotal = metric === "votes" ? data.totalVotes : data.voterCount;
+  const maxMetric = Math.max(...surfaces.map(metricValue), 1);
+  const topSurface = surfaces[0];
+  const topShare =
+    platformTotal > 0 && topSurface
+      ? Math.round((metricValue(topSurface) / platformTotal) * 100)
+      : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <div
+          className="inline-flex w-full sm:w-auto shrink-0 rounded-lg border border-border/50 bg-muted/40 p-0.5 text-[10px] font-medium sm:text-[11px]"
+          role="group"
+          aria-label="Vote surface metric"
+        >
+          {(
+            [
+              ["voters", "Voters"],
+              ["votes", "Votes"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={metric === key}
+              onClick={() => setMetric(key)}
+              className={cn(
+                "flex-1 sm:flex-none rounded-md px-2 py-1.5 transition-colors sm:px-3",
+                metric === key
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ul className="space-y-2.5">
+        {surfaces.map((row) => {
+          const value = metricValue(row);
+          const barPct = Math.round((value / maxMetric) * 100);
+          const sharePct =
+            platformTotal > 0 ? Math.round((value / platformTotal) * 100) : 0;
+          return (
+            <li key={row.key}>
+              <div className="flex items-center justify-between gap-2 text-xs mb-1">
+                <span className="font-medium truncate min-w-0">{row.label}</span>
+                <span className="text-muted-foreground tabular-nums shrink-0 whitespace-nowrap">
+                  {value.toLocaleString()}
+                  <span className="text-muted-foreground/70 ml-1">({sharePct}%)</span>
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500/80 to-cyan-300/60"
+                  style={{ width: `${Math.max(4, barPct)}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {topSurface ? (
+        <p className="text-[11px] text-muted-foreground">
+          Most popular surface: {topSurface.label} ({topShare}% of{" "}
+          {metric === "votes" ? "votes" : "voters"})
+          {metric === "voters" ? (
+            <span className="text-muted-foreground/70"> — voters may appear on multiple surfaces</span>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function VoteAnalyticsSections() {
+  const [timeWindow, setTimeWindow] = useState<DemographicWindow>("all");
+  const apiPath = voterDemographicsPath(timeWindow);
+  const { data, isLoading } = useInsightsQuery<VoterDemographics>(apiPath, {
+    queryKey: [apiPath],
+  });
+
+  return (
+    <>
+      <InsightsSection
+        tab="vote"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <LayoutGrid className="h-4 w-4 text-cyan-500" /> Where people vote
+          </span>
+        }
+        description="How activity splits across vote surfaces."
+        action={
+          <DemographicsWindowToggle value={timeWindow} onChange={setTimeWindow} />
+        }
+      >
+        <VoteSurfaceSection data={data} isLoading={isLoading} />
+      </InsightsSection>
+
+      <InsightsSection
+        tab="vote"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Users className="h-4 w-4 text-cyan-500" /> Voter demographics
+          </span>
+        }
+        description="Where our voters are from and how vote activity breaks down."
+      >
+        <VoterDemographicsTile
+          timeWindow={timeWindow}
+          data={data}
+          isLoading={isLoading}
+        />
+      </InsightsSection>
+    </>
+  );
+}
+
 export function VoteTab() {
   return (
     <div className="space-y-6 md:space-y-8">
@@ -895,6 +1145,8 @@ export function VoteTab() {
           <ValueVoteTile divergenceType="overrated" />
         </InsightsSection>
       </div>
+
+      <VoteAnalyticsSections />
     </div>
   );
 }

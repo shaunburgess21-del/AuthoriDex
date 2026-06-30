@@ -25,6 +25,7 @@ import { loadMostDiscussed } from "../services/insights/most-discussed";
 import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
 import { loadMarketsAnalytics, loadBiggestMovers, loadPredictorDemographics } from "../services/insights/markets-analytics";
 import { loadTopVoted } from "../services/insights/vote-analytics";
+import { loadVoterDemographics } from "../services/insights/vote-demographics";
 import {
   loadCrowdWebSentimentPage,
   WEB_SENTIMENT_DEFAULT_PAGE_SIZE,
@@ -233,6 +234,19 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] vote top", error);
       res.status(500).json({ error: "Failed to load top voted" });
+    }
+  });
+
+  app.get("/api/insights/vote/demographics", async (req, res) => {
+    try {
+      const rawWindow = typeof req.query.window === "string" ? req.query.window : "all";
+      const window =
+        rawWindow === "7d" || rawWindow === "30d" ? rawWindow : ("all" as const);
+      const data = await loadVoterDemographics(window);
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] vote demographics", error);
+      res.status(500).json({ error: "Failed to load voter demographics" });
     }
   });
 

@@ -293,6 +293,30 @@ export interface PredictorDemographics {
   byGender: PredictorDemographicRow[];
 }
 
+export interface VoterDemographicRow {
+  key: string;
+  label: string;
+  voters: number;
+  votes: number;
+  avgVotes: number;
+}
+
+export interface VoteSurfaceRow {
+  key: string;
+  label: string;
+  voters: number;
+  votes: number;
+}
+
+export interface VoterDemographics {
+  voterCount: number;
+  countryCount: number;
+  totalVotes: number;
+  byCountry: VoterDemographicRow[];
+  byGender: VoterDemographicRow[];
+  bySurface: VoteSurfaceRow[];
+}
+
 /** Thumbnail participant for vote insights tiles (polls, matchups). */
 export interface PolarisationParticipant {
   name: string;
