@@ -155,17 +155,22 @@ function BriefingBody({
   const linkPeople = people ?? [];
 
   return (
-    <div className="mt-3 space-y-4">
+    <div className="mt-3 space-y-3 md:space-y-4">
       {blocks.map((paragraph, i) => {
         const lead = paragraphs?.length ? findLeadPerson(paragraph, linkPeople) : null;
         return (
-          <div key={i} className="flex items-center gap-3">
+          <div key={i} className="flex items-start gap-2.5 md:items-center md:gap-3">
             {lead ? (
-              <Link href={`/person/${lead.id}`} aria-label={lead.name} className="shrink-0 self-center">
-                <PersonAvatar name={lead.name} avatar={lead.avatar} size="md" />
+              <Link href={`/person/${lead.id}`} aria-label={lead.name} className="shrink-0 md:self-center">
+                <PersonAvatar
+                  name={lead.name}
+                  avatar={lead.avatar}
+                  size="md"
+                  className="h-10 w-10 md:h-12 md:w-12"
+                />
               </Link>
             ) : null}
-            <p className="min-w-0 flex-1 text-sm text-muted-foreground leading-relaxed">
+            <p className="min-w-0 flex-1 text-sm text-muted-foreground leading-relaxed line-clamp-3 md:line-clamp-none">
               {linkifyBriefingText(paragraph, linkPeople)}
             </p>
           </div>
