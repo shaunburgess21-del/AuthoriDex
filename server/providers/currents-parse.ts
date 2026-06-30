@@ -31,10 +31,37 @@ export function parseRateLimitHeaders(headers: Headers): CurrentsRateLimitSnapsh
   };
 }
 
+/**
+ * True when the daily quota window has rolled over since this snapshot was
+ * captured, meaning the stored `remaining` is stale. Prefer the provider's
+ * `resetTime`; fall back to a UTC-day change on `capturedAt`. Without this the
+ * hard stop deadlocks: once `remaining` hits the floor it blocks the very call
+ * that would refresh the snapshot, so it never sees the daily reset.
+ */
+export function hasRateLimitWindowReset(
+  snapshot: CurrentsRateLimitSnapshot,
+  now: Date = new Date(),
+): boolean {
+  if (snapshot.resetTime) {
+    const reset = Date.parse(snapshot.resetTime);
+    if (Number.isFinite(reset) && now.getTime() >= reset) return true;
+  }
+  const captured = Date.parse(snapshot.capturedAt);
+  if (Number.isFinite(captured)) {
+    const capturedDay = new Date(captured).toISOString().slice(0, 10);
+    const nowDay = now.toISOString().slice(0, 10);
+    if (nowDay > capturedDay) return true;
+  }
+  return false;
+}
+
 export function shouldHardStopFromRateLimit(
   snapshot: CurrentsRateLimitSnapshot | null,
+  now: Date = new Date(),
 ): boolean {
   if (!snapshot) return false;
+  // A rolled-over window means the cap reset — let one probe refresh the snapshot.
+  if (hasRateLimitWindowReset(snapshot, now)) return false;
   const floor = Math.max(1, Math.floor(snapshot.limit * BUDGET_HARD_STOP_REMAINING_PCT));
   return snapshot.remaining <= floor;
 }
