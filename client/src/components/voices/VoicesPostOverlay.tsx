@@ -96,6 +96,8 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       onPostSuccess: () => {
         toast("Reply posted");
         queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
       },
       onDeleteSuccess: () => {
         setDrawerComment(null);
@@ -133,6 +135,8 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       setRootDeleteOpen(false);
       toast("Post deleted");
       queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
     },
   });
 

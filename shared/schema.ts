@@ -359,6 +359,8 @@ export const comments = pgTable("comments", {
 }, (table) => ({
   parentIdx: index("comments_parent_idx").on(table.parentType, table.parentId),
   parentCommentIdx: index("comments_parent_comment_idx").on(table.parentCommentId),
+  // Author timeline lookups (e.g. /me/comments history, profile comment count).
+  userCreatedIdx: index("comments_user_created_idx").on(table.userId, table.createdAt),
 }));
 
 export const insertCommentSchema = createInsertSchema(comments).omit({

@@ -596,6 +596,13 @@
       "when": 1782950400000,
       "tag": "0084_add_new_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1782950500000,
+      "tag": "0085_comments_user_created_idx",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SiteHeader } from "@/components/SiteHeader";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award } from "lucide-react";
+import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award, MessageSquare } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -42,7 +42,7 @@ export default function MePage() {
     <div className="min-h-screen pb-20 md:pb-0">
       <SiteHeader />
 
-      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-3xl">
         <h1 className="text-3xl font-serif font-bold mb-6" data-testid="text-me-title">
           My Account
         </h1>
@@ -95,7 +95,7 @@ export default function MePage() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6 text-center">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6 text-center">
                 <button
                   type="button"
                   className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -147,6 +147,18 @@ export default function MePage() {
                   </div>
                   <p className="text-xs text-muted-foreground">Streak</p>
                 </button>
+                <button
+                  type="button"
+                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  onClick={() => setLocation("/me/comments")}
+                  data-testid="link-me-comments-stat"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{profile?.totalComments || 0}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Comments</p>
+                </button>
               </div>
               
               <ProfileCompletionCard />
@@ -183,6 +195,15 @@ export default function MePage() {
                 >
                   <TrendingUp className="h-4 w-4" />
                   My Predictions
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-3"
+                  onClick={() => setLocation("/me/comments")}
+                  data-testid="button-my-comments"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  My Comments
                 </Button>
                 <Button
                   variant="outline"

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CommentActionDrawer } from "./CommentActionDrawer";
 import { CommentSortHeader } from "./CommentSortHeader";
 import { CommentList } from "./CommentList";
@@ -113,12 +113,17 @@ function createCardCommentsAdapter(args: {
       toast("Comment Posted");
       const item = data as CommentItem | undefined;
       if (item?.id) onPosted?.(item);
+      // Keep the author's /me Comments tile + history in sync.
+      void queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
     },
     onReportSuccess: () => {
       onModalClose();
     },
     onDeleteSuccess: () => {
       onModalClose();
+      void queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
     },
     supportsReplies: true,
     invalidateOnMutate: entityType === "opinion-poll" ? [[base, slug]] : undefined,

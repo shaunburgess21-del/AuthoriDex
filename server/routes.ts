@@ -185,7 +185,7 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1393,6 +1393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerBadgesRoutes(app);
   registerInsightsRoutes(app);
   registerVoicesRoutes(app);
+  registerMeCommentsRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);
@@ -7381,9 +7382,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (profile.length === 0) {
         return res.status(404).json({ error: "Profile not found. Please sync your profile first." });
       }
-      
+
+      // Live count of the user's authored discussion messages (top-level posts
+      // and replies), excluding soft-deleted rows — mirrors the entity-level
+      // commentCount logic and powers the /me Comments tile + history page.
+      const [commentCountRow] = await db
+        .select({ value: count() })
+        .from(unifiedComments)
+        .where(and(eq(unifiedComments.userId, userId), isNull(unifiedComments.deletedAt)));
+
       const { isAgent, ...publicProfile } = profile[0];
-      res.json(stripRecoveryEmailVerificationFields(publicProfile));
+      res.json({
+        ...stripRecoveryEmailVerificationFields(publicProfile),
+        totalComments: commentCountRow?.value ?? 0,
+      });
     } catch (error: any) {
       console.error("Error fetching profile:", error.message);
       res.status(500).json({ error: "Failed to fetch profile" });

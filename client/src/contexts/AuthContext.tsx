@@ -22,6 +22,8 @@ export interface UserProfile {
   totalVotes: number;
   totalPredictions: number;
   winRate: number;
+  /** Live count of authored comments + replies (excludes soft-deleted). Set by /api/profile/me. */
+  totalComments?: number;
   /** AMM open-position visibility (Sprint 1 phase 15.C). Defaults to true. */
   positionsPublic?: boolean;
   // About Me — see migration 0060_badge_system.sql + 0061_profile_extended.sql.

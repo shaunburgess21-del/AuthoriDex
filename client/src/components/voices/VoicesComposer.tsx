@@ -42,6 +42,8 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
       setBody("");
       setAttachPerson(null);
       queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
       onPosted?.(data.item ?? null);
     },
     onError: () => {
