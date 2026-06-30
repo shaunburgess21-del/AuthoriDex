@@ -272,6 +272,9 @@ export default function SettingsPage() {
   );
 }
 
+/** Single blue accent for the active settings tab underline + icon. */
+const SETTINGS_TAB_ACCENT = "#3B82F6";
+
 function SettingsTabsBar({
   tabs,
   activeTab,
@@ -282,30 +285,41 @@ function SettingsTabsBar({
   onTabChange: (id: SettingsTabId) => void;
 }) {
   return (
-    <div className="-mx-2 sm:mx-0 overflow-x-auto sm:overflow-visible no-scrollbar">
-      <div className="inline-flex sm:flex w-max sm:w-full items-center gap-1 sm:gap-2 px-2 sm:px-0">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const active = t.id === activeTab;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onTabChange(t.id)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors whitespace-nowrap",
-                active
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-white/10 text-muted-foreground hover:bg-muted/40",
-              )}
-              data-testid={`settings-tab-${t.id}`}
-            >
-              <Icon className="h-4 w-4" />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
+      {tabs.map((t) => {
+        const Icon = t.icon;
+        const active = t.id === activeTab;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onTabChange(t.id)}
+            className={cn(
+              "relative flex items-center justify-center gap-1.5",
+              "whitespace-nowrap px-2.5 sm:px-4 py-[11px]",
+              "rounded-md text-[13px] sm:text-[14px] font-medium transition-all snap-start",
+              "flex-1 min-w-fit",
+              active
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            data-testid={`settings-tab-${t.id}`}
+            aria-pressed={active}
+          >
+            {active && (
+              <span
+                className="absolute bottom-0 left-1 right-1 h-[2px] rounded-full"
+                style={{ backgroundColor: SETTINGS_TAB_ACCENT }}
+              />
+            )}
+            <Icon
+              className="h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] shrink-0"
+              style={active ? { color: SETTINGS_TAB_ACCENT } : undefined}
+            />
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
