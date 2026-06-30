@@ -1,7 +1,8 @@
 /**
  * CurrentsAPI (currentsapi.services) news provider for union-mode ingest.
  *
- * One /v1/search call per person per refresh cycle (24h window, page_size=100).
+ * One /v1/search call per person per refresh cycle (24h window, page_size=50 —
+ * the API's hard cap; values >50 return HTTP 400 "Max page_size...").
  * Flat full-roster cadence — no rank priority. Budget: ~161 × 12 cycles/day ≈
  * 1,932 calls on Builder's 2,500/day limit.
  */
@@ -34,6 +35,10 @@ const CURRENTS_API_BASE = "https://api.currentsapi.services";
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 const REQUEST_TIMEOUT_MS = 20000;
+
+// Currents /v1/search caps page_size at 50. Larger values are rejected with
+// HTTP 400 ("Max page_size ..."), which previously failed the entire batch.
+const CURRENTS_PAGE_SIZE = 50;
 
 const LAST_FETCH_KEY = "system:currents:last_fetch_at";
 const RATE_LIMIT_KEY = "system:currents:rate_limit";
@@ -214,7 +219,7 @@ async function fetchCurrentsSearchRaw(
     keywords,
     language: "en",
     start_date: startDate24hIso(),
-    page_size: "100",
+    page_size: String(CURRENTS_PAGE_SIZE),
   });
   const url = `${CURRENTS_API_BASE}/v1/search?${params.toString()}`;
 
