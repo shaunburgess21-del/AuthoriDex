@@ -1645,21 +1645,7 @@ export default function AdminDashboard() {
   });
 
   const celebrityCategoryOptions = useMemo(() => {
-    const fallback = [
-      "Tech",
-      "Music",
-      "Sports",
-      "Politics",
-      "Business",
-      "Film & TV",
-      "Gaming",
-      "Science",
-      "Creator",
-      "Comedy",
-      "Food & Drink",
-      "Lifestyle",
-      "Misc",
-    ];
+    const fallback = MARKET_CATEGORY_OPTIONS.map((c) => c.label);
     const set = new Set<string>(fallback);
     (adminCategoryRows || []).forEach((row) => {
       if (row?.label?.trim()) set.add(row.label.trim());

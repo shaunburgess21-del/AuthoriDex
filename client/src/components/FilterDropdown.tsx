@@ -9,23 +9,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArrowDown, ArrowUp, SlidersHorizontal } from "lucide-react";
+import { CATEGORY_FILTER_SELECT_OPTIONS } from "@shared/constants";
 
-const DEFAULT_CATEGORIES = [
-  { value: "all", label: "All Categories" },
-  { value: "favorites", label: "Favorites" },
-  { value: "trending", label: "Trending" },
-  { value: "Tech", label: "Tech" },
-  { value: "Business", label: "Business" },
-  { value: "Politics", label: "Politics" },
-  { value: "Music", label: "Music" },
-  { value: "Sports", label: "Sports" },
-  { value: "Film & TV", label: "Film & TV" },
-  { value: "Gaming", label: "Gaming" },
-  { value: "Creator", label: "Creator" },
-  { value: "Comedy", label: "Comedy" },
-  { value: "Food & Drink", label: "Food & Drink" },
-  { value: "Lifestyle", label: "Lifestyle" },
-];
+const DEFAULT_CATEGORIES = CATEGORY_FILTER_SELECT_OPTIONS;
 
 export type SortDirection = "desc" | "asc";
 

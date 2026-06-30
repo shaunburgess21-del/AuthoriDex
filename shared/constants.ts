@@ -81,6 +81,13 @@ export const CANONICAL_CATEGORIES = [
   { id: "comedy",     label: "Comedy" },
   { id: "food-drink", label: "Food & Drink" },
   { id: "lifestyle",  label: "Lifestyle" },
+  { id: "crypto",     label: "Crypto" },
+  { id: "ai",         label: "AI" },
+  { id: "fashion",    label: "Fashion" },
+  { id: "beauty",     label: "Beauty" },
+  { id: "health",     label: "Health" },
+  { id: "travel",     label: "Travel" },
+  { id: "dating",     label: "Dating" },
   { id: "misc",       label: "Misc" },
 ] as const;
 
@@ -129,6 +136,14 @@ export type FilterCategory = (typeof CATEGORIES_WITH_FILTERS)[number]["id"];
 export const BASE_CATEGORY_FILTER_OPTIONS: { id: FilterCategory; label: string }[] =
   CATEGORIES_WITH_FILTERS.map(c => ({ id: c.id as FilterCategory, label: c.label }));
 
+/**
+ * `{ value, label }` shape (value = canonical id, incl. all/favorites/trending)
+ * for filter dropdowns/overlays. Single source for fallback option lists so new
+ * categories propagate without editing each consumer.
+ */
+export const CATEGORY_FILTER_SELECT_OPTIONS: { value: FilterCategory; label: string }[] =
+  BASE_CATEGORY_FILTER_OPTIONS.map(({ id, label }) => ({ value: id, label }));
+
 /** Both lists are now identical — misc is always in the canonical set. */
 export const CATEGORY_FILTER_OPTIONS_WITH_CUSTOM = BASE_CATEGORY_FILTER_OPTIONS;
 
@@ -172,6 +187,13 @@ export const MARKET_CATEGORY_LABELS: Record<CanonicalMarketCategory, string> = {
   comedy: "Comedy",
   "food-drink": "Food & Drink",
   lifestyle: "Lifestyle",
+  crypto: "Crypto",
+  ai: "AI",
+  fashion: "Fashion",
+  beauty: "Beauty",
+  health: "Health",
+  travel: "Travel",
+  dating: "Dating",
   misc: "Misc",
 };
 
@@ -181,6 +203,7 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
   business: "business",
   music: "music",
   sports: "sports",
+  sport: "sports",
   "film tv": "film-tv",
   "film & tv": "film-tv",
   acting: "film-tv",
@@ -190,8 +213,19 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
   "food drink": "food-drink",
   "food & drink": "food-drink",
   lifestyle: "lifestyle",
+  crypto: "crypto",
+  cryptocurrency: "crypto",
+  ai: "ai",
+  "artificial intelligence": "ai",
+  fashion: "fashion",
+  beauty: "beauty",
+  health: "health",
+  travel: "travel",
+  dating: "dating",
   misc: "misc",
   other: "misc",
+  custom: "misc",
+  "custom topic": "misc",
 };
 
 /** Display labels for legacy person categories not in the canonical 12. */

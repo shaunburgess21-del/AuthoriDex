@@ -8,14 +8,14 @@ import { PredictCard } from "@/components/predict/PredictCard";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } from "@shared/constants";
 import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { cn } from "@/lib/utils";
 import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
 
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
+type CategoryFilter = FilterCategory;
 
 export type GainerCandidate = {
   name: string;

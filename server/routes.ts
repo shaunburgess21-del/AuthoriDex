@@ -16042,23 +16042,13 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "csvContent (string) is required" });
       }
 
-      const VALID_CATS = new Set(["Tech", "Politics", "Business", "Music", "Sports", "Film & TV", "Gaming", "Creator", "misc", "Food & Drink", "Lifestyle"]);
-      const CAT_MAP: Record<string, string> = {
-        "custom topic": "misc", "custom": "misc", "misc": "misc",
-        "tech": "Tech", "politics": "Politics", "business": "Business",
-        "music": "Music", "sports": "Sports",
-        "acting": "Film & TV", "film-tv": "Film & TV", "film & tv": "Film & TV",
-        "gaming": "Gaming",
-        "creator": "Creator",
-        "food-drink": "Food & Drink", "food & drink": "Food & Drink",
-        "lifestyle": "Lifestyle",
-      };
-
+      // Resolve raw CSV category to its canonical Title Case label (or null if
+      // unrecognized), derived from the single source of truth in shared/constants.
       const normalizeCat = (raw: string): string | null => {
-        const lower = raw.trim().toLowerCase();
-        if (CAT_MAP[lower]) return CAT_MAP[lower];
-        const cap = raw.trim().charAt(0).toUpperCase() + raw.trim().slice(1).toLowerCase();
-        return VALID_CATS.has(cap) ? cap : (VALID_CATS.has(raw.trim()) ? raw.trim() : null);
+        const id = normalizeMarketCategory(raw);
+        return (CANONICAL_MARKET_CATEGORIES as readonly string[]).includes(id)
+          ? getMarketCategoryLabel(id)
+          : null;
       };
 
       const parseCSVContent = (content: string): string[][] => {
@@ -18737,7 +18727,10 @@ Target length: about 90-150 words.`;
       }
 
       const VALID_TYPES = ["binary", "multi", "updown"];
-      const VALID_CATEGORIES = ["politics", "tech", "music", "sports", "business", "creator", "Film & TV", "gaming", "misc", "Food & Drink", "Lifestyle"];
+      // Single source: allowed category ids from the live content_categories
+      // registry (falls back to the canonical set). Auto-includes admin-added
+      // categories so the importer never drifts from the registry.
+      const allowedCategoryIds = await getAllowedCategoryIds();
       const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
       const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople);
@@ -18818,7 +18811,7 @@ Target length: about 90-150 words.`;
           else if (endDate <= new Date()) { msgs.push({ severity: "error", field: "resolutionDate", message: "Resolution date is in the past" }); hasError = true; }
         }
 
-        if (category && !VALID_CATEGORIES.includes(category)) {
+        if (category && !allowedCategoryIds.has(normalizeMarketCategory(category))) {
           msgs.push({ severity: "warning", field: "category", message: `Category "${category}" not in standard list; will be used as-is` });
         }
 

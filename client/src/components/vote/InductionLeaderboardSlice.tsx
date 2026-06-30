@@ -24,7 +24,7 @@ export interface InductionCandidate {
   initials: string;
   imageSlug?: string | null;
   avatar?: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle" | "Comedy";
+  category: string;
   votes: number;
 }
 

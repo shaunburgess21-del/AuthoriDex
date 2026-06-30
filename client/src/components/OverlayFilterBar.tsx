@@ -3,38 +3,8 @@ import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_PILL_VOTE, FILTER_ROW_SEA
 import { cn } from "@/lib/utils";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
-import { Search, Star, Flame, LayoutGrid, Cpu, Landmark, Briefcase, Trophy, Music2, Gamepad2, Video, UtensilsCrossed, Heart, Sparkles } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-const DEFAULT_ICONS: Record<string, LucideIcon> = {
-  all: LayoutGrid,
-  All: LayoutGrid,
-  favorites: Star,
-  Favorites: Star,
-  trending: Flame,
-  Trending: Flame,
-  tech: Cpu,
-  Tech: Cpu,
-  politics: Landmark,
-  Politics: Landmark,
-  business: Briefcase,
-  Business: Briefcase,
-  music: Music2,
-  Music: Music2,
-  sports: Trophy,
-  Sports: Trophy,
-  "film-tv": LayoutGrid,
-  "Film & TV": LayoutGrid,
-  gaming: Gamepad2,
-  Gaming: Gamepad2,
-  creator: Video,
-  Creator: Video,
-  "food-drink": UtensilsCrossed,
-  "Food & Drink": UtensilsCrossed,
-  lifestyle: Heart,
-  Lifestyle: Heart,
-  misc: Sparkles,
-};
+import { Search } from "lucide-react";
+import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 
 interface OverlayFilterBarProps {
   value: string;
@@ -97,7 +67,7 @@ export function OverlayFilterBar({
         <ScrollMaskedChipRow className="flex-1 min-w-0">
           {categories.map((cat) => {
             const isFavorites = cat.value.toLowerCase() === "favorites";
-            const IconComponent = DEFAULT_ICONS[cat.value] || DEFAULT_ICONS[cat.value.toLowerCase()] || LayoutGrid;
+            const IconComponent = getFilterCategoryIcon(cat.value);
             const isActive = value.toLowerCase() === cat.value.toLowerCase();
 
             return (

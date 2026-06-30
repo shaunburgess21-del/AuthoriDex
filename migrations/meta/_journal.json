@@ -589,6 +589,13 @@
       "when": 1782300000000,
       "tag": "0083_secondary_categories_and_insight_votes_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1782950400000,
+      "tag": "0084_add_new_categories",
+      "breakpoints": true
     }
   ]
 }

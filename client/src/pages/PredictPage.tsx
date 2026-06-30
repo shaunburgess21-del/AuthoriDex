@@ -108,6 +108,7 @@ import {
   Maximize2,
   type LucideIcon
 } from "lucide-react";
+import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -126,7 +127,20 @@ import {
   communityChipForMarket,
   filterCommunityMarkets,
 } from "@/lib/filterCommunityMarkets";
-import { SuggestCategorySelect, SuggestDurationPicker, OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest";
+import {
+  SuggestCategorySelect,
+  SuggestDurationPicker,
+  OpinionOptionRow,
+  type OpinionOptionInput,
+  SUGGEST_DRAWER_OVERLAY,
+  SUGGEST_DRAWER_CONTENT,
+  SUGGEST_DRAWER_HANDLE,
+  SUGGEST_DRAWER_HEADER,
+  SUGGEST_DRAWER_BODY,
+  SUGGEST_DRAWER_FOOTER,
+  SUGGEST_DRAWER_TITLE,
+  SUGGEST_DRAWER_DESCRIPTION,
+} from "@/components/suggest";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -362,7 +376,7 @@ function SectionFilterBar({
         variant="predict"
       >
         {filters.map((cat) => {
-          const IconComponent = CATEGORY_ICONS[cat.id] || LayoutGrid;
+          const IconComponent = getFilterCategoryIcon(cat.id);
           return (
             <button
               key={cat.id}
@@ -391,23 +405,6 @@ function SectionFilterBar({
   );
 }
 
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  all: LayoutGrid,
-  favorites: Star,
-  trending: Flame,
-  tech: Cpu,
-  politics: Landmark,
-  business: Briefcase,
-  sports: Trophy,
-  music: Music2,
-  "film-tv": Clapperboard,
-  gaming: Gamepad2,
-  creator: Video,
-  "food-drink": UtensilsCrossed,
-  comedy: Laugh,
-  lifestyle: Heart,
-  misc: Sparkles,
-};
 
 
 
@@ -838,16 +835,16 @@ function CreatePredictionModal({
   return (
     <Drawer.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-          <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-          <div className="flex items-center justify-between px-4 pb-2">
+        <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+        <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <div className={SUGGEST_DRAWER_HANDLE} />
+          <div className={SUGGEST_DRAWER_HEADER}>
             <div>
-              <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                 <Plus className="h-5 w-5 text-violet-700 dark:text-violet-500" />
                 Suggest a Market
               </Drawer.Title>
-              <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+              <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                 Suggest a prediction market for the community. Your submission will be reviewed by an admin before going live.
               </Drawer.Description>
             </div>
@@ -856,7 +853,7 @@ function CreatePredictionModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+          <div className={SUGGEST_DRAWER_BODY}>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-sm font-medium">Title *</label>
@@ -872,26 +869,25 @@ function CreatePredictionModal({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">Type *</label>
-                <Select value={marketType} onValueChange={(v) => handleTypeChange(v as MarketTypeOption)}>
-                  <SelectTrigger data-testid="select-prediction-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="binary">Yes/No</SelectItem>
-                    <SelectItem value="multi">Multiple Choice</SelectItem>
-                    <SelectItem value="updown">Above/Below</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <SuggestCategorySelect
-                value={category}
-                onChange={setCategory}
-                data-testid="select-prediction-category"
-              />
+            <div>
+              <label className="text-sm font-medium mb-1 block">Type *</label>
+              <Select value={marketType} onValueChange={(v) => handleTypeChange(v as MarketTypeOption)}>
+                <SelectTrigger data-testid="select-prediction-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="binary">Yes/No</SelectItem>
+                  <SelectItem value="multi">Multiple Choice</SelectItem>
+                  <SelectItem value="updown">Above/Below</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            <SuggestCategorySelect
+              value={category}
+              onChange={setCategory}
+              data-testid="select-prediction-category"
+            />
 
             {marketType === "binary" && (
               <div>
@@ -1042,7 +1038,7 @@ function CreatePredictionModal({
             </div>
           </div>
 
-          <div className="border-t border-border/40 px-4 py-3 flex gap-2">
+          <div className={SUGGEST_DRAWER_FOOTER}>
             <Button variant="outline" onClick={handleClose} className="flex-1" data-testid="button-cancel-prediction">
               Cancel
             </Button>

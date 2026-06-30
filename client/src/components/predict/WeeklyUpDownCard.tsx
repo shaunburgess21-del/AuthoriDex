@@ -13,8 +13,9 @@ import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { formatVoxCompact } from "@/lib/currency";
+import type { FilterCategory } from "@shared/constants";
 
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
+type CategoryFilter = FilterCategory;
 
 export interface PredictionMarket {
   id: string;

@@ -56,6 +56,41 @@ const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: str
     border: 'border-[#DB2777]/40',
     text: 'text-[#DB2777]',
   },
+  crypto: {
+    bg: 'bg-[#F59E0B]/10',
+    border: 'border-[#F59E0B]/40',
+    text: 'text-[#F59E0B]',
+  },
+  ai: {
+    bg: 'bg-[#6366F1]/10',
+    border: 'border-[#6366F1]/40',
+    text: 'text-[#6366F1]',
+  },
+  fashion: {
+    bg: 'bg-[#D946EF]/10',
+    border: 'border-[#D946EF]/40',
+    text: 'text-[#D946EF]',
+  },
+  beauty: {
+    bg: 'bg-[#FB7185]/10',
+    border: 'border-[#FB7185]/40',
+    text: 'text-[#FB7185]',
+  },
+  health: {
+    bg: 'bg-[#22C55E]/10',
+    border: 'border-[#22C55E]/40',
+    text: 'text-[#22C55E]',
+  },
+  travel: {
+    bg: 'bg-[#06B6D4]/10',
+    border: 'border-[#06B6D4]/40',
+    text: 'text-[#06B6D4]',
+  },
+  dating: {
+    bg: 'bg-[#EF4444]/10',
+    border: 'border-[#EF4444]/40',
+    text: 'text-[#EF4444]',
+  },
   misc: {
     bg: 'bg-[#94A3B8]/10',
     border: 'border-[#94A3B8]/40',
@@ -103,6 +138,13 @@ const CATEGORY_HEX: Record<CanonicalMarketCategory, string> = {
   comedy: "#F97316",
   "food-drink": "#D97706",
   lifestyle: "#DB2777",
+  crypto: "#F59E0B",
+  ai: "#6366F1",
+  fashion: "#D946EF",
+  beauty: "#FB7185",
+  health: "#22C55E",
+  travel: "#06B6D4",
+  dating: "#EF4444",
   misc: "#94A3B8",
 };
 

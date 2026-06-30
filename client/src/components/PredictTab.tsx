@@ -57,7 +57,7 @@ import {
   Check,
 } from "lucide-react";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
-import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
+import { normalizeMarketCategory, getMarketCategoryLabel, type FilterCategory } from "@shared/constants";
 
 interface PredictTabProps {
   personId: string;
@@ -94,7 +94,7 @@ function predictSectionGridClass(n: number): { container: string; item: string }
   return { container: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4", item: "" };
 }
 
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
+type CategoryFilter = FilterCategory;
 
 function GainerCandidatesDialog({
   market,

@@ -7,6 +7,16 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
+import {
+  SUGGEST_DRAWER_OVERLAY,
+  SUGGEST_DRAWER_CONTENT,
+  SUGGEST_DRAWER_HANDLE,
+  SUGGEST_DRAWER_HEADER,
+  SUGGEST_DRAWER_BODY,
+  SUGGEST_DRAWER_FOOTER,
+  SUGGEST_DRAWER_TITLE,
+  SUGGEST_DRAWER_DESCRIPTION,
+} from "@/components/suggest/drawerStyles";
 import { CATEGORIES_LEADERBOARD } from "@shared/constants";
 
 interface SuggestCandidateModalProps {
@@ -62,16 +72,16 @@ export function SuggestCandidateModal({ open, onOpenChange, onSubmitted }: Sugge
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-          <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-          <div className="flex items-center justify-between px-4 pb-2">
+        <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+        <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <div className={SUGGEST_DRAWER_HANDLE} />
+          <div className={SUGGEST_DRAWER_HEADER}>
             <div>
-              <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                 <UserPlus className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                 Suggest a Candidate
               </Drawer.Title>
-              <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+              <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                 Who are we missing? Suggest someone NEW to be added to VoxDex.
               </Drawer.Description>
             </div>
@@ -79,7 +89,7 @@ export function SuggestCandidateModal({ open, onOpenChange, onSubmitted }: Sugge
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+          <div className={SUGGEST_DRAWER_BODY}>
             <div>
               <label className="text-sm font-medium mb-1 block">Candidate Name *</label>
               <Input
@@ -115,7 +125,7 @@ export function SuggestCandidateModal({ open, onOpenChange, onSubmitted }: Sugge
               />
             </div>
           </div>
-          <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+          <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
             <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-induction">Cancel</Button>
             <Button
               onClick={handleSubmit}

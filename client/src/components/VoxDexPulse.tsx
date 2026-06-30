@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { getMarketCategoryLabel, CANONICAL_CATEGORIES } from "@shared/constants";
+import { getCategoryHexColor } from "@/components/CategoryPill";
 
 // --------------- Types ---------------
 
@@ -69,16 +70,7 @@ const TIME_RANGES: { key: TimeRange; days: number }[] = [
   { key: "30D", days: 30 },
 ];
 
-const CATEGORIES = [
-  "All", "Tech", "Business", "Politics", "Sports",
-  "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle",
-] as const;
-
-const CATEGORY_HEX: Record<string, string> = {
-  tech: "#1E90FF", music: "#EC4899", politics: "#94A3B8", business: "#B8860B",
-  sports: "#FB923C", "film-tv": "#A855F7", gaming: "#7C3AED", creator: "#FACC15",
-  "food-drink": "#D97706", lifestyle: "#DB2777", misc: "#94A3B8",
-};
+const CATEGORIES: string[] = ["All", ...CANONICAL_CATEGORIES.map((c) => c.label)];
 
 const APPROVAL_COLORS = ["#FF0000", "#FF6D00", "#FFC400", "#76FF03", "#00C853"];
 
@@ -92,7 +84,7 @@ const MAX_FRAMES = 100;
 // --------------- Helpers ---------------
 
 function getCategoryHex(category: string): string {
-  return CATEGORY_HEX[normalizeMarketCategory(category)] ?? "#94A3B8";
+  return getCategoryHexColor(category);
 }
 
 function formatScore(value: number): string {

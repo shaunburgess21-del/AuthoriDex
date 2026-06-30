@@ -69,6 +69,7 @@ import {
   Maximize2,
   type LucideIcon
 } from "lucide-react";
+import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -130,6 +131,16 @@ import {
   SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
 import { SuggestCategorySelect } from "@/components/suggest/SuggestCategorySelect";
+import {
+  SUGGEST_DRAWER_OVERLAY,
+  SUGGEST_DRAWER_CONTENT,
+  SUGGEST_DRAWER_HANDLE,
+  SUGGEST_DRAWER_HEADER,
+  SUGGEST_DRAWER_BODY,
+  SUGGEST_DRAWER_FOOTER,
+  SUGGEST_DRAWER_TITLE,
+  SUGGEST_DRAWER_DESCRIPTION,
+} from "@/components/suggest/drawerStyles";
 import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
 import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
@@ -166,7 +177,7 @@ interface InductionCandidate {
   initials: string;
   imageSlug: string | null;
   avatar: string | null;
-  category: "Tech" | "Music" | "Creator" | "Sports" | "Business" | "Politics" | "Film & TV" | "Gaming" | "Food & Drink" | "Lifestyle" | "Comedy";
+  category: string;
   votes: number;
 }
 
@@ -1192,23 +1203,6 @@ function CarouselSection({
 }
 
 
-const VOTE_CATEGORY_ICONS: Record<string, LucideIcon> = {
-  all: LayoutGrid,
-  favorites: Star,
-  trending: Flame,
-  tech: Cpu,
-  politics: Landmark,
-  business: Briefcase,
-  music: Music2,
-  sports: Trophy,
-  "film-tv": Clapperboard,
-  gaming: Gamepad2,
-  creator: Video,
-  comedy: Laugh,
-  "food-drink": UtensilsCrossed,
-  lifestyle: Heart,
-  misc: Sparkles,
-};
 
 function FilterChip({ 
   category, 
@@ -1228,7 +1222,7 @@ function FilterChip({
   isCustomTopic?: boolean;
 }) {
   const isFavorites = category === "favorites";
-  const IconComponent = VOTE_CATEGORY_ICONS[category] || LayoutGrid;
+  const IconComponent = getFilterCategoryIcon(category);
 
   const handleClick = () => {
     if (isFavorites && !user) {
@@ -3608,16 +3602,16 @@ export default function VotePage() {
       </div>
       <Drawer.Root open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
+          <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+            <div className={SUGGEST_DRAWER_HANDLE} />
+            <div className={SUGGEST_DRAWER_HEADER}>
               <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                   <MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   Suggest a Poll
                 </Drawer.Title>
-                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                   Suggest a topic for the community to vote on.
                 </Drawer.Description>
               </div>
@@ -3625,7 +3619,7 @@ export default function VotePage() {
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+            <div className={SUGGEST_DRAWER_BODY}>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium">Headline *</label>
@@ -3731,7 +3725,7 @@ export default function VotePage() {
                 <p className="text-xs text-muted-foreground mt-1">{pollDescription.length}/140</p>
               </div>
             </div>
-            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+            <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
               <Button variant="outline" onClick={() => setStartPollModalOpen(false)} data-testid="button-cancel-poll">Cancel</Button>
               <Button
                 onClick={handlePollSubmit}
@@ -3747,16 +3741,16 @@ export default function VotePage() {
       </Drawer.Root>
       <Drawer.Root open={matchupSuggestOpen} onOpenChange={setMatchupSuggestOpen}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
+          <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+            <div className={SUGGEST_DRAWER_HANDLE} />
+            <div className={SUGGEST_DRAWER_HEADER}>
               <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                   <Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   Suggest a Matchup
                 </Drawer.Title>
-                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                   Create an A vs B matchup for the community to vote on.
                 </Drawer.Description>
               </div>
@@ -3764,7 +3758,7 @@ export default function VotePage() {
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+            <div className={SUGGEST_DRAWER_BODY}>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium">Headline *</label>
@@ -3795,7 +3789,7 @@ export default function VotePage() {
               />
               <SuggestCategorySelect value={matchupCategory} onChange={setMatchupCategory} data-testid="select-matchup-category" />
             </div>
-            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+            <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
               <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
               <Button
                 onClick={handleMatchupSuggestSubmit}
@@ -3821,16 +3815,16 @@ export default function VotePage() {
       {/* Curate Profile Suggest Drawer */}
       <Drawer.Root open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
+          <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+            <div className={SUGGEST_DRAWER_HANDLE} />
+            <div className={SUGGEST_DRAWER_HEADER}>
               <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                   <Upload className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   Suggest a Profile Image
                 </Drawer.Title>
-                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                   Upload a high-quality photo for a celebrity's profile.
                 </Drawer.Description>
               </div>
@@ -3838,7 +3832,7 @@ export default function VotePage() {
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+            <div className={SUGGEST_DRAWER_BODY}>
               <div>
                 <label className="text-sm font-medium mb-1 block">Who is this for? *</label>
                 <HybridSubjectCombobox
@@ -3889,7 +3883,7 @@ export default function VotePage() {
                 <p className="text-xs text-muted-foreground mt-1">Help us give proper attribution</p>
               </div>
             </div>
-            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+            <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
               <Button 
                 variant="outline" 
                 onClick={() => {
@@ -3917,16 +3911,16 @@ export default function VotePage() {
       {/* Suggest Opinion Poll Drawer */}
       <Drawer.Root open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
         <Drawer.Portal>
-          <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]">
-            <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
+          <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+            <div className={SUGGEST_DRAWER_HANDLE} />
+            <div className={SUGGEST_DRAWER_HEADER}>
               <div>
-                <Drawer.Title className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Drawer.Title className={SUGGEST_DRAWER_TITLE}>
                   <ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   Suggest an Opinion Poll
                 </Drawer.Title>
-                <Drawer.Description className="text-xs text-muted-foreground mt-0.5">
+                <Drawer.Description className={SUGGEST_DRAWER_DESCRIPTION}>
                   Create a multi-option poll for the community to vote on.
                 </Drawer.Description>
               </div>
@@ -3934,7 +3928,7 @@ export default function VotePage() {
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0 space-y-4">
+            <div className={SUGGEST_DRAWER_BODY}>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm font-medium">Question / Title *</label>
@@ -4000,7 +3994,7 @@ export default function VotePage() {
                 <p className="text-xs text-muted-foreground mt-1">{opinionSuggestDescription.length}/140</p>
               </div>
             </div>
-            <div className="border-t border-border/40 px-4 py-3 flex justify-end gap-2">
+            <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
               <Button variant="outline" onClick={() => setOpinionSuggestOpen(false)} data-testid="button-cancel-opinion-suggest">Cancel</Button>
               <Button
                 onClick={handleOpinionSuggestSubmit}

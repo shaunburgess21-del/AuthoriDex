@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
-import { matchesCategoryFilter } from "@shared/constants";
+import { matchesCategoryFilter, CATEGORY_FILTER_SELECT_OPTIONS } from "@shared/constants";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
@@ -42,21 +42,7 @@ interface CurateViewAllOverlayProps {
   leaderboardCategories?: Set<string>;
 }
 
-const CURATE_CATEGORIES = [
-  { value: "all", label: "All Categories" },
-  { value: "favorites", label: "Favorites" },
-  { value: "trending", label: "Trending" },
-  { value: "tech", label: "Tech" },
-  { value: "business", label: "Business" },
-  { value: "politics", label: "Politics" },
-  { value: "music", label: "Music" },
-  { value: "sports", label: "Sports" },
-  { value: "film-tv", label: "Film & TV" },
-  { value: "gaming", label: "Gaming" },
-  { value: "creator", label: "Creator" },
-  { value: "food-drink", label: "Food & Drink" },
-  { value: "lifestyle", label: "Lifestyle" },
-];
+const CURATE_CATEGORIES = CATEGORY_FILTER_SELECT_OPTIONS;
 
 function CelebCard({ 
   person, 

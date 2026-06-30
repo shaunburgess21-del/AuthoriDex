@@ -22,51 +22,24 @@ import { resolve } from "path";
 import { db } from "../server/db";
 import { opinionPolls, opinionPollOptions, trackedPeople } from "../shared/schema";
 import { eq } from "drizzle-orm";
+import {
+  normalizeMarketCategory,
+  getMarketCategoryLabel,
+  CANONICAL_MARKET_CATEGORIES,
+} from "../shared/constants";
 
 const OPTION_LETTERS = "ABCDEFGHIJKLMNOPQRST".split("");
 
-const VALID_CATEGORIES = new Set([
-  "Tech",
-  "Politics",
-  "Business",
-  "Music",
-  "Sports",
-  "Film & TV",
-  "Gaming",
-  "Creator",
-  "misc",
-  "Food & Drink",
-  "Lifestyle",
-]);
-
-const CATEGORY_MAP: Record<string, string> = {
-  "custom topic": "misc",
-  "custom": "misc",
-  "misc": "misc",
-  "tech": "Tech",
-  "politics": "Politics",
-  "business": "Business",
-  "music": "Music",
-  "sports": "Sports",
-  "sport": "Sports",
-  "acting": "Film & TV",
-  "film-tv": "Film & TV",
-  "film & tv": "Film & TV",
-  "gaming": "Gaming",
-  "creator": "Creator",
-  "food-drink": "Food & Drink",
-  "food & drink": "Food & Drink",
-  "lifestyle": "Lifestyle",
-};
-
+/**
+ * Resolve a raw CSV category to its canonical Title Case label, or null if it
+ * isn't a recognized category. Derives entirely from the single source of truth
+ * (shared/constants.ts) so new categories and aliases propagate automatically.
+ */
 function normalizeCategory(raw: string): string | null {
-  const trimmed = raw.trim();
-  const lower = trimmed.toLowerCase();
-  if (CATEGORY_MAP[lower]) return CATEGORY_MAP[lower];
-  const canonical = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-  if (VALID_CATEGORIES.has(canonical)) return canonical;
-  if (VALID_CATEGORIES.has(trimmed)) return trimmed;
-  return null;
+  const id = normalizeMarketCategory(raw);
+  return (CANONICAL_MARKET_CATEGORIES as readonly string[]).includes(id)
+    ? getMarketCategoryLabel(id)
+    : null;
 }
 
 function parseCSV(content: string): string[][] {

@@ -17,9 +17,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft, ArrowUp, ArrowDown, Minus, Search, Trophy, Medal,
-  Users, BarChart3, Star, Heart, LayoutGrid, Flame, Crown, TrendingUp,
+  ArrowLeft, ArrowUp, ArrowDown, Minus, Search, Trophy, Medal, Users, BarChart3,
 } from "lucide-react";
+import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 import {
   BASE_CATEGORY_FILTER_OPTIONS,
   getMarketCategoryLabel,
@@ -55,23 +55,6 @@ const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: "fairlyRatedPct", label: "Most Fairly Rated" },
 ];
 
-const VOTE_CATEGORY_ICONS: Partial<Record<FilterCategory, React.ComponentType<{ className?: string }>>> = {
-  all: LayoutGrid,
-  favorites: Heart,
-  trending: Flame,
-  tech: BarChart3,
-  politics: Users,
-  business: TrendingUp,
-  music: Star,
-  sports: Trophy,
-  "film-tv": Medal,
-  gaming: Crown,
-  creator: Crown,
-  comedy: Users,
-  "food-drink": Users,
-  lifestyle: Heart,
-  misc: LayoutGrid,
-};
 
 function PerceptionBar({ uPct, fPct, oPct, height = "h-2.5" }: { uPct: number; fPct: number; oPct: number; height?: string }) {
   return (
@@ -312,7 +295,7 @@ export default function ValueRatingsPage() {
           <div ref={filterScrollRef} onWheel={handleFilterScroll} className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 sm:pb-0 sm:flex-1 sm:min-w-0">
             {categoryFilterOptions.map(({ id, label }) => {
               const isFavorites = id === "favorites";
-              const Icon = VOTE_CATEGORY_ICONS[id];
+              const Icon = getFilterCategoryIcon(id);
               const isActive = categoryFilter === id;
               return (
                 <button key={id} onClick={() => { if (isFavorites && !user) { navigateToLogin(setLocation); return; } setCategoryFilter(id); }}

@@ -14,8 +14,9 @@ import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import type { FilterCategory } from "@shared/constants";
 
-type CategoryFilter = "all" | "favorites" | "trending" | "tech" | "politics" | "business" | "music" | "sports" | "film-tv" | "gaming" | "creator" | "food-drink" | "lifestyle" | "misc";
+type CategoryFilter = FilterCategory;
 
 export interface HeadToHeadMarket {
   id: string;

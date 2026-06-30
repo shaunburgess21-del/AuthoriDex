@@ -59,10 +59,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
 
 type HomeView = "leaderboard" | "predict" | "vote";
-const CATEGORY_OPTIONS = ["All", "Tech", "Business", "Politics", "Sports", "Music", "Film & TV", "Gaming", "Creator", "Food & Drink", "Lifestyle"] as const;
+const CATEGORY_OPTIONS: string[] = ["All", ...CANONICAL_CATEGORIES.map((c) => c.label)];
 
 // Clickable "Trend Score" column header. Doubles as the column header on every
 // breakpoint and, when tapped, opens the Trend Score launchpad — a menu of
