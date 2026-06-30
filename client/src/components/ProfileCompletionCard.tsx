@@ -1,11 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiRequest } from "@/lib/queryClient";
-import type { BadgeCardData } from "@/components/BadgeCard";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { CURRENCY } from "@/lib/currency";
 
@@ -33,36 +30,19 @@ const TOTAL_PROFILE_CREDITS = PROFILE_CREDIT_KEYS.reduce((sum, key) => {
 }, 0);
 
 /**
- * Compact "Complete your profile" prompt rendered on /me. Hidden once
- * the user holds the `full_voxmaxer` badge — the same key the
- * checkAndAwardProfileBadges helper awards when every tracked field
- * is filled. Reads earned state from /api/me/badges so the surface
- * stays consistent with the trophy cabinet and the badge toasts
- * (one source of truth, no drift).
+ * Compact "Complete your profile" prompt rendered on /me. Hidden only
+ * once every tracked profile field is filled.
  *
  * Progress count tracks the same fields the backend uses to decide
  * the full_voxmaxer threshold (avatar, bio, dateOfBirth, gender,
  * countryOfResidence, at least one social handle, occupation).
- * Total = 7. Hide rather than render at 100% even if the badge
- * hasn't been awarded yet — the next save round-trip will catch up.
+ * Total = 7.
  */
 export function ProfileCompletionCard() {
-  const { profile, isLoggedIn } = useAuth();
+  const { profile } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: badges } = useQuery<BadgeCardData[]>({
-    queryKey: ["/api/me/badges"],
-    enabled: isLoggedIn,
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/me/badges");
-      return res.json();
-    },
-  });
-
   if (!profile) return null;
-
-  const fullVoxmaxer = badges?.find((b) => b.key === "full_voxmaxer");
-  if (fullVoxmaxer?.earned) return null;
 
   const checks = [
     Boolean(profile.avatarUrl),
@@ -78,6 +58,8 @@ export function ProfileCompletionCard() {
   const completed = checks.filter(Boolean).length;
   const total = checks.length;
   const pct = Math.round((completed / total) * 100);
+
+  if (completed === total) return null;
 
   return (
     <Card className="p-4 my-4 border-violet-500/30 bg-gradient-to-br from-violet-500/8 to-fuchsia-500/8">

@@ -11,7 +11,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 import { ProfileCompletionCard } from "@/components/ProfileCompletionCard";
+import { REFERRAL_PANEL_GLOW_CLASS } from "@/components/referral/ReferralFriendPanel";
 import { formatVox } from "@/lib/currency";
+import { cn } from "@/lib/utils";
 import { getRankByName } from "@shared/rank-config";
 import {
   getProfileTheme,
@@ -42,7 +44,7 @@ export default function MePage() {
     <div className="min-h-screen pb-20 md:pb-0">
       <SiteHeader />
 
-      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-3xl">
+      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-[964px]">
         <h1 className="text-3xl font-serif font-bold mb-6" data-testid="text-me-title">
           My Account
         </h1>
@@ -98,7 +100,7 @@ export default function MePage() {
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-6 text-center">
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/votes")}
                   data-testid="link-me-votes-stat"
                 >
@@ -107,7 +109,7 @@ export default function MePage() {
                 </button>
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/predictions?tab=predictions")}
                   data-testid="link-me-predictions-stat"
                 >
@@ -116,7 +118,7 @@ export default function MePage() {
                 </button>
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/predictions")}
                   data-testid="link-me-win-rate-stat"
                 >
@@ -125,7 +127,7 @@ export default function MePage() {
                 </button>
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/30 dark:border-violet-500/20 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/credits")}
                   data-testid="link-me-credits-stat"
                 >
@@ -137,7 +139,7 @@ export default function MePage() {
                 </button>
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/30 dark:border-orange-500/20 hover:bg-orange-500/20 dark:hover:bg-orange-500/15 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/how-it-works#streak")}
                   data-testid="link-me-streak-stat"
                 >
@@ -149,7 +151,7 @@ export default function MePage() {
                 </button>
                 <button
                   type="button"
-                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="p-3 sm:p-4 rounded-lg bg-muted/50 hover:bg-muted/70 transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/comments")}
                   data-testid="link-me-comments-stat"
                 >
@@ -161,8 +163,6 @@ export default function MePage() {
                 </button>
               </div>
               
-              <ProfileCompletionCard />
-
               <div className="space-y-3">
                 {profile?.username && (
                   <Button 
@@ -244,7 +244,7 @@ export default function MePage() {
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className={cn(REFERRAL_PANEL_GLOW_CLASS, "p-6")}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Predictor Stats</h3>
                 <Badge variant="outline" className="px-3 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
@@ -257,7 +257,7 @@ export default function MePage() {
                     silently clipped at the pill edge. */}
                 <button
                   type="button"
-                  className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 overflow-hidden w-full hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-violet-500/40 dark:border-violet-500/30 overflow-hidden w-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   onClick={() => setLocation("/me/credits")}
                   data-testid="link-me-credits-balance"
                 >
@@ -272,7 +272,7 @@ export default function MePage() {
                     {formatVox(profile?.predictCredits || 0)}
                   </span>
                 </button>
-                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg bg-orange-500/15 dark:bg-orange-500/10 border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <Flame className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
                     <span className="text-sm text-muted-foreground truncate">Streak</span>
@@ -285,18 +285,18 @@ export default function MePage() {
                   </span>
                 </div>
               </div>
-              {/* Top-up CTA lives on the Predictor Stats card (rather than
+              {/* Earn CTA lives on the Predictor Stats card (rather than
                   inside the dense 5-stat grid above) so there's room for a
                   proper button that doesn't squeeze the Vox number on
-                  mobile. /pricing is public, so logged-out viewers of this
+                  mobile. /how-it-works is public, so logged-out viewers of this
                   card never reach this surface anyway. */}
               <Button
                 className="w-full mt-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                onClick={() => setLocation("/pricing")}
-                data-testid="button-buy-credits-me"
+                onClick={() => setLocation("/how-it-works?tab=credits")}
+                data-testid="button-earn-credits-me"
               >
                 <Wallet className="h-4 w-4 mr-2" />
-                Buy Vox
+                Earn Vox
               </Button>
               <p className="text-xs text-muted-foreground mt-3">
                 Vox powers your predictions. It never expires and has no cash value.
@@ -304,6 +304,8 @@ export default function MePage() {
             </Card>
 
             <ReferAFriendCard />
+
+            <ProfileCompletionCard />
 
             {isAdmin && (
               <Card className="p-6 border-red-500/40 dark:border-red-500/30 bg-red-500/8 dark:bg-red-500/5">

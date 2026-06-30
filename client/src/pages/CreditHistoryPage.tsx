@@ -74,7 +74,7 @@ export default function CreditHistoryPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 max-w-2xl space-y-6">
+      <main className="container mx-auto px-4 py-6 max-w-[964px] space-y-6">
         <Card className="p-6 bg-gradient-to-br from-violet-500/10 to-transparent border-violet-500/30">
           <div className="flex items-center gap-3 mb-2">
             <Wallet className="h-5 w-5 text-violet-600 dark:text-violet-400" />

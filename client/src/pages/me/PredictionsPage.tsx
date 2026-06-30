@@ -460,7 +460,7 @@ export default function PredictionsPage() {
         id="profile-tabs-section"
         className="sticky top-14 z-40 border-b bg-background/80 backdrop-blur-xl"
       >
-        <div className="container mx-auto px-2 sm:px-4 py-2 max-w-3xl">
+        <div className="container mx-auto px-2 sm:px-4 py-2 max-w-[964px]">
           <ProfileTabs
             activeTab={activeTab}
             onTabChange={handleTabChange}
@@ -470,7 +470,7 @@ export default function PredictionsPage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl space-y-6">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-[964px] space-y-6">
         {profileIsPrivate && (
           <Card className="p-3 border-amber-500/30 bg-amber-500/5">
             <div className="flex items-start gap-2 text-xs sm:text-sm">

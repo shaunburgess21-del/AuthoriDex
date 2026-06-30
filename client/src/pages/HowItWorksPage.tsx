@@ -972,13 +972,6 @@ function CreditsSection() {
               Every prediction deducts Vox the moment you place it — your stake
               size is your call.
             </ConceptTile>
-            <ConceptTile icon={Coins} label="Top up anytime" accent={accent}>
-              Need more? Buy Vox from the{" "}
-              <a className="underline" href="/pricing">
-                pricing page
-              </a>{" "}
-              (our phase-1 revenue model).
-            </ConceptTile>
           </div>
         </div>
       </Card>

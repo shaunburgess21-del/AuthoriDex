@@ -238,7 +238,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl space-y-5">
+      <div className="container mx-auto px-2 sm:px-4 py-6 max-w-[964px] space-y-5">
         <SettingsTabsBar
           tabs={TABS}
           activeTab={activeTab}
