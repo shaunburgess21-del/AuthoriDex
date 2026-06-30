@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +32,7 @@ import { formatDate } from "@/lib/formatDate";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
 import { OpinionPollOptionRow } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
 import { SuggestOptionCard } from "@/components/opinion-polls/SuggestOptionCard";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
@@ -48,11 +49,12 @@ import {
   Clock,
   Users,
   Loader2,
-  CheckCircle2,
   MessageSquare,
   Share2,
   BarChart3,
+  Images,
   Info,
+  List,
   ListChecks,
 } from "lucide-react";
 
@@ -98,6 +100,9 @@ export default function OpinionPollDetailPage() {
   const [changeDialogOpen, setChangeDialogOpen] = useState(false);
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
+  const [optionsViewMode, setOptionsViewMode] = useState<"list" | "gallery">("list");
+  const [galleryScrollTargetId, setGalleryScrollTargetId] = useState<string | null>(null);
+  const galleryOptionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const supabaseUrl = useSupabaseUrl();
 
   const { data: poll, isLoading } = useQuery<any>({
@@ -122,6 +127,18 @@ export default function OpinionPollDetailPage() {
   );
 
   const budget = useAnonBudget();
+
+  useEffect(() => {
+    if (optionsViewMode !== "gallery" || !galleryScrollTargetId) return;
+    const raf = window.requestAnimationFrame(() => {
+      galleryOptionRefs.current[galleryScrollTargetId]?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+      setGalleryScrollTargetId(null);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [optionsViewMode, galleryScrollTargetId]);
 
   const voteMutation = useMutation({
     mutationFn: async (optionId: string) => {
@@ -244,6 +261,36 @@ export default function OpinionPollDetailPage() {
     }
   };
 
+  const openOptionImageReview = useCallback((optionId?: string) => {
+    setOptionsViewMode("gallery");
+    setGalleryScrollTargetId(optionId ?? null);
+  }, []);
+
+  const handleDetailVote = useCallback((option: any) => {
+    if (!poll) return;
+    const decision = checkVoteGate(budget, "opinion_poll", poll.id, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { kind: "vote", optionId: option.id },
+        },
+      });
+      return;
+    }
+    setOptionsViewMode("list");
+    voteMutation.mutate(option.id);
+  }, [budget, poll, setLocation, voteMutation]);
+
+  const handleDetailChangeVote = useCallback((option: any) => {
+    setOptionsViewMode("list");
+    setPendingOption({ id: option.id, name: option.name });
+    setChangeDialogOpen(true);
+  }, []);
+
   const handleShare = () => {
     sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
   };
@@ -288,6 +335,8 @@ export default function OpinionPollDetailPage() {
   const options = poll.options || [];
   const voteSortedOptions = sortOpinionPollOptionsByVotes(options);
   const votedOption = options.find((o: any) => o.id === poll.userVote);
+  const detailDisplayOptions = hasVoted ? voteSortedOptions : options;
+  const detailMaxPercent = Math.max(...voteSortedOptions.map((o: any) => o.percent || 0), 0);
 
   return (
     <div className="min-h-screen bg-background" data-testid="opinion-poll-detail-page">
@@ -400,12 +449,74 @@ export default function OpinionPollDetailPage() {
           className={voteDetailSectionCardClass("p-5 sm:p-6 mb-6")}
           data-testid="section-vote-module"
         >
-          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
-            Cast Your Vote
-          </h2>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-serif font-bold">
+              <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
+              Cast Your Vote
+            </h2>
+            <div className="flex rounded-lg border border-border/50 bg-muted/30 p-0.5" role="group" aria-label="Option view mode">
+              <button
+                type="button"
+                onClick={() => setOptionsViewMode("list")}
+                className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:flex-none ${
+                  optionsViewMode === "list"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                aria-pressed={optionsViewMode === "list"}
+                data-testid="button-opinion-detail-options-list"
+              >
+                <List className="h-3.5 w-3.5" />
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => openOptionImageReview()}
+                className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors sm:flex-none ${
+                  optionsViewMode === "gallery"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                aria-pressed={optionsViewMode === "gallery"}
+                data-testid="button-opinion-detail-options-gallery"
+              >
+                <Images className="h-3.5 w-3.5" />
+                Image review
+              </button>
+            </div>
+          </div>
 
-          {!hasVoted ? (
+          {optionsViewMode === "gallery" ? (
+            <div className="max-h-[80dvh] space-y-3 overflow-y-auto pr-1 snap-y snap-mandatory overscroll-contain" data-testid="opinion-detail-image-review">
+              {detailDisplayOptions.map((option: any, idx: number) => {
+                const isSelected = poll.userVote === option.id;
+                const percent = option.percent || 0;
+                const isLeading = percent === detailMaxPercent && percent > 0;
+                return (
+                  <div
+                    key={option.id}
+                    className="snap-start"
+                    ref={(node) => {
+                      galleryOptionRefs.current[option.id] = node;
+                    }}
+                  >
+                    <OpinionPollGalleryOption
+                      pollId={poll.id}
+                      option={option}
+                      orderLabel={(option.orderIndex ?? idx) + 1}
+                      mode={!hasVoted ? "vote" : isSelected ? "result-selected" : "result-other"}
+                      percent={percent}
+                      isLeading={isLeading}
+                      disabled={voteMutation.isPending}
+                      onVote={() => handleDetailVote(option)}
+                      onChangeVote={() => handleDetailChangeVote(option)}
+                      testIdPrefix={!hasVoted ? "opinion-detail-gallery-option" : "opinion-detail-gallery-result"}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : !hasVoted ? (
             <div className="flex flex-col gap-2.5">
               {options.map((option: any, idx: number) => (
                 <OpinionPollOptionRow
@@ -415,23 +526,8 @@ export default function OpinionPollDetailPage() {
                   orderLabel={(option.orderIndex ?? idx) + 1}
                   mode="vote"
                   disabled={voteMutation.isPending}
-                  onVote={() => {
-                    const decision = checkVoteGate(budget, "opinion_poll", poll.id, false);
-                    if (!decision.proceed) {
-                      navigateToLogin(setLocation, {
-                        mode: "signup",
-                        reason: "vote_limit_reached",
-                        resumeAction: {
-                          ...decision.resumeAction,
-                          cardRoute: window.location.pathname,
-                          pendingVote: { kind: "vote", optionId: option.id },
-                        },
-                      });
-                      return;
-                    }
-                    voteMutation.mutate(option.id);
-                  }}
-                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  onVote={() => handleDetailVote(option)}
+                  onExpandImage={() => openOptionImageReview(option.id)}
                   testIdPrefix="button-vote-option"
                 />
               ))}
@@ -450,8 +546,7 @@ export default function OpinionPollDetailPage() {
               {voteSortedOptions.map((option: any, idx: number) => {
                 const isSelected = poll.userVote === option.id;
                 const percent = option.percent || 0;
-                const maxPercent = Math.max(...voteSortedOptions.map((o: any) => o.percent || 0), 0);
-                const isLeading = percent === maxPercent && percent > 0;
+                const isLeading = percent === detailMaxPercent && percent > 0;
                 return (
                   <OpinionPollOptionRow
                     key={option.id}
@@ -462,11 +557,8 @@ export default function OpinionPollDetailPage() {
                     percent={percent}
                     isLeading={isLeading}
                     disabled={voteMutation.isPending}
-                    onChangeVote={() => {
-                      setPendingOption({ id: option.id, name: option.name });
-                      setChangeDialogOpen(true);
-                    }}
-                    onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                    onChangeVote={() => handleDetailChangeVote(option)}
+                    onExpandImage={() => openOptionImageReview(option.id)}
                     testIdPrefix="opinion-poll-cast-result"
                   />
                 );

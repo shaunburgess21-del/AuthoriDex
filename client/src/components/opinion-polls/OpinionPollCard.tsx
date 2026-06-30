@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, type KeyboardEvent, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { Users, ListChecks, MessageSquare, X } from "lucide-react";
+import { Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Drawer } from "vaul";
 import { Card } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { sortOpinionPollOptionsForCard } from "@/lib/opinionPollOptions";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
@@ -72,6 +73,7 @@ export interface OpinionPollCardPoll {
 
 type OpinionPollOption = NonNullable<OpinionPollCardPoll["options"]>[number];
 type OptionRowMode = OpinionPollOptionRowMode;
+type OptionsViewMode = "list" | "gallery";
 
 export function OpinionPollCard({
   poll,
@@ -101,6 +103,7 @@ export function OpinionPollCard({
   const [pendingOption, setPendingOption] = useState<{ id: string; name: string } | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
+  const [optionsViewMode, setOptionsViewMode] = useState<OptionsViewMode>("list");
   const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
   const supabaseUrl = useSupabaseUrl();
   const { currentSrc: headerImageSrc, onImageError: onHeaderImageError } = useOpinionPollHeaderImage(
@@ -131,6 +134,12 @@ export function OpinionPollCard({
     }
   }, [optionsDrawerOpen, pendingChangeOption]);
 
+  useEffect(() => {
+    if (optionsDrawerOpen) {
+      setOptionsViewMode("list");
+    }
+  }, [optionsDrawerOpen]);
+
   const snapDismiss = useContext(SnapDismissContext);
   useEffect(() => {
     if (snapDismiss > 0) {
@@ -142,14 +151,13 @@ export function OpinionPollCard({
   const handleVote = async (optionId: string, e: MouseEvent) => {
     e.stopPropagation();
     if (!voted) {
+      const previousVote = voted;
+      setVoted(optionId);
+      setOptionsDrawerOpen(false);
       try {
         await onVote(poll.slug, optionId);
-        setVoted(optionId);
-        // Close the "all options" drawer if the vote came from inside it, so
-        // the card surfaces its results (selected pinned to top) before it
-        // animates into the Hidden toggle.
-        setOptionsDrawerOpen(false);
       } catch (err) {
+        setVoted(poll.userVote ?? previousVote);
         if (isUnauthorizedApiError(err)) {
           toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
         } else if (isBudgetExhaustedVoteError(err)) {
@@ -467,27 +475,72 @@ export function OpinionPollCard({
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-[70] bg-black/40" />
           <Drawer.Content
-            className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]"
+            className={`fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background ${
+              optionsViewMode === "gallery" ? "h-[95dvh] max-h-[95dvh]" : "max-h-[85dvh]"
+            }`}
             data-interactive="true"
             data-testid={`opinion-poll-options-drawer-${poll.id}`}
           >
             <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
-            <div className="flex items-center justify-between px-4 pb-2">
-              <Drawer.Title className="text-sm font-semibold text-foreground">All options</Drawer.Title>
-              <Drawer.Description className="sr-only">
-                All options for {poll.title}
-              </Drawer.Description>
-              <button
-                type="button"
-                onClick={() => setOptionsDrawerOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
+            <div className="px-4 pb-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Drawer.Title className="text-sm font-semibold text-foreground">All options</Drawer.Title>
+                  <Drawer.Description className="sr-only">
+                    All options for {poll.title}
+                  </Drawer.Description>
+                  {optionsViewMode === "gallery" ? (
+                    <p className="mt-1 text-xs text-muted-foreground">Review large images, then tap one to vote.</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOptionsDrawerOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="mt-3 flex rounded-lg border border-border/50 bg-muted/30 p-0.5" role="group" aria-label="Option view mode">
+                <button
+                  type="button"
+                  onClick={() => setOptionsViewMode("list")}
+                  className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    optionsViewMode === "list"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={optionsViewMode === "list"}
+                  data-testid={`button-opinion-options-list-${poll.id}`}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOptionsViewMode("gallery")}
+                  className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    optionsViewMode === "gallery"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-pressed={optionsViewMode === "gallery"}
+                  data-testid={`button-opinion-options-gallery-${poll.id}`}
+                >
+                  <Images className="h-3.5 w-3.5" />
+                  Image review
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-2 min-h-0 space-y-1.5">
-              {displayOptions.map((option, idx) => {
+            <div
+              className={
+                optionsViewMode === "gallery"
+                  ? "flex-1 overflow-y-auto px-3 pb-8 min-h-0 space-y-3 snap-y snap-mandatory overscroll-contain"
+                  : "flex-1 overflow-y-auto px-4 pb-2 min-h-0 space-y-1.5"
+              }
+            >
+              {optionsViewMode === "list" ? displayOptions.map((option, idx) => {
                 const orderLabel = (option.orderIndex ?? idx) + 1;
                 if (!hasVoted) {
                   return (
@@ -518,6 +571,37 @@ export function OpinionPollCard({
                     onChangeVote={(e) => handleDrawerChangeVote(option, e)}
                     onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
                     testIdPrefix="opinion-poll-drawer-result"
+                  />
+                );
+              }) : displayOptions.map((option, idx) => {
+                const orderLabel = (option.orderIndex ?? idx) + 1;
+                if (!hasVoted) {
+                  return (
+                    <OpinionPollGalleryOption
+                      key={option.id}
+                      pollId={poll.id}
+                      option={option}
+                      orderLabel={orderLabel}
+                      mode="vote"
+                      onVote={(e) => handleVote(option.id, e)}
+                      testIdPrefix="opinion-poll-gallery-option"
+                    />
+                  );
+                }
+                const isSelected = voted === option.id;
+                const percent = totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0;
+                const isLeading = percent === drawerMaxPercent && percent > 0;
+                return (
+                  <OpinionPollGalleryOption
+                    key={option.id}
+                    pollId={poll.id}
+                    option={option}
+                    orderLabel={orderLabel}
+                    mode={isSelected ? "result-selected" : "result-other"}
+                    percent={percent}
+                    isLeading={isLeading}
+                    onChangeVote={(e) => handleDrawerChangeVote(option, e)}
+                    testIdPrefix="opinion-poll-gallery-result"
                   />
                 );
               })}
