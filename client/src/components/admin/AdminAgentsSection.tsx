@@ -20,6 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Activity,
   AlertTriangle,
   Bot,
@@ -63,6 +68,8 @@ interface PnlRow {
   username: string;
   isActive: boolean;
   profitLoss: number;
+  realisedPnl?: number;
+  unrealisedPnl?: number;
   totalBets: number;
   volume: number;
 }
@@ -1192,7 +1199,7 @@ export function AdminAgentsSection() {
             <Badge variant="outline" className="ml-2">{v2Agents.length}</Badge>
           </CardTitle>
           <CardDescription>
-            Sorted by P&amp;L, descending. Pause an agent to freeze them without banning their profile; clear pending to drop their queued actions.
+            Sorted by P&amp;L (all-time, same accounting as Top Predictors: realised + open-position MTM). Hover P&amp;L for the split. Pause an agent to freeze them without banning their profile; clear pending to drop their queued actions.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1246,7 +1253,20 @@ export function AdminAgentsSection() {
                           </Badge>
                         </TableCell>
                         <TableCell className={`text-right font-mono ${pnlTone(pnl?.profitLoss ?? 0)}`}>
-                          {formatCredits(pnl?.profitLoss ?? 0)}
+                          <Tooltip delayDuration={200}>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help underline decoration-dotted decoration-muted-foreground/50 underline-offset-2">
+                                {formatCredits(pnl?.profitLoss ?? 0)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="font-mono text-xs space-y-1">
+                              <div>Realised: {formatCredits(pnl?.realisedPnl ?? 0)}</div>
+                              <div>Open MTM: {formatCredits(pnl?.unrealisedPnl ?? 0)}</div>
+                              <div className="text-muted-foreground pt-1 border-t border-border/50">
+                                Matches Top Predictors (all-time)
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">{pnl?.totalBets ?? 0}</TableCell>
                         <TableCell className="text-right text-muted-foreground">

@@ -26388,23 +26388,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(scheduledAgentActions)
         .where(eq(scheduledAgentActions.status, "failed"));
 
-      const pnlRows = await db.execute(sql`
-        SELECT
-          ac.id,
-          ac.username,
-          ac.is_active AS "isActive",
-          COALESCE(SUM(CASE
-            WHEN mb.status = 'won' THEN COALESCE(mb.payout_amount, 0) - mb.stake_amount
-            WHEN mb.status = 'lost' THEN -mb.stake_amount
-            ELSE 0
-          END), 0)::int AS "profitLoss",
-          COUNT(mb.id)::int AS "totalBets",
-          COALESCE(SUM(mb.stake_amount), 0)::int AS "volume"
-        FROM agent_configs ac
-        LEFT JOIN market_bets mb ON mb.agent_id = ac.id
-        GROUP BY ac.id, ac.username, ac.is_active
-        ORDER BY "profitLoss" DESC
-      `);
+      const { buildAdminAgentPnlRows } = await import("./services/admin-agent-pnl");
+      const pnlRows = await buildAdminAgentPnlRows(agents);
 
       const activityRows = await db.execute(sql`
         SELECT
@@ -26528,7 +26513,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         executed_count: executedCount[0]?.count ?? 0,
         failed_count: failedCount[0]?.count ?? 0,
         next_actions: pendingActions,
-        pnl: pnlRows.rows,
+        pnl: pnlRows,
         comments: activityRows.rows[0] ?? { comments_24h: 0, comments_7d: 0, replies_7d: 0 },
         likes: likeRows.rows[0] ?? { likes_24h: 0, likes_7d: 0, upvotes_7d: 0, downvotes_7d: 0 },
         ratings: ratingRows.rows[0] ?? { ratings_24h: 0, ratings_7d: 0, avg_rating_7d: 0 },
