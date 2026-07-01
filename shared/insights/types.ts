@@ -319,6 +319,51 @@ export interface VoterDemographics {
   bySurface: VoteSurfaceRow[];
 }
 
+export interface VoteFeedItem {
+  id: string;
+  surface: string;
+  surfaceLabel: string;
+  actorName: string;
+  avatarUrl: string | null;
+  isAgent: boolean;
+  actionText: string;
+  targetTitle: string;
+  targetHref: string | null;
+  choiceLabel: string;
+  votedAt: string;
+}
+
+export interface VoteConsensusStat {
+  avgLeaderSharePct: number;
+  contestCount: number;
+  label: string;
+}
+
+export interface VoteActiveVoterRow {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  isAgent: boolean;
+  voteCount: number;
+}
+
+export interface VoteApprovalMoverRow {
+  personId: string;
+  name: string;
+  approvalNow: number;
+  deltaPts: number;
+  direction: "up" | "down";
+}
+
+export interface VoteInsightsExtras {
+  consensus: VoteConsensusStat;
+  mostActiveVoters: VoteActiveVoterRow[];
+  approvalMovers: {
+    rising: VoteApprovalMoverRow[];
+    falling: VoteApprovalMoverRow[];
+  };
+}
+
 /** Thumbnail participant for vote insights tiles (polls, matchups). */
 export interface PolarisationParticipant {
   name: string;

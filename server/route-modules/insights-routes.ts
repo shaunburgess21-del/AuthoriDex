@@ -26,6 +26,8 @@ import { loadCategoryHeatmap } from "../services/insights/category-heatmap";
 import { loadMarketsAnalytics, loadBiggestMovers, loadPredictorDemographics } from "../services/insights/markets-analytics";
 import { loadTopVoted } from "../services/insights/vote-analytics";
 import { loadVoterDemographics } from "../services/insights/vote-demographics";
+import { loadRecentVoteActivity } from "../services/insights/vote-recent-activity";
+import { loadVoteInsightsExtras } from "../services/insights/vote-extras";
 import {
   loadCrowdWebSentimentPage,
   WEB_SENTIMENT_DEFAULT_PAGE_SIZE,
@@ -247,6 +249,27 @@ export function registerInsightsRoutes(app: Express): void {
     } catch (error) {
       console.error("[insights] vote demographics", error);
       res.status(500).json({ error: "Failed to load voter demographics" });
+    }
+  });
+
+  app.get("/api/insights/vote/recent-activity", async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit ?? "8"), 10) || 8, 50);
+      const data = await loadRecentVoteActivity(limit);
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] vote recent-activity", error);
+      res.status(500).json({ error: "Failed to load recent vote activity" });
+    }
+  });
+
+  app.get("/api/insights/vote/extras", async (_req, res) => {
+    try {
+      const data = await loadVoteInsightsExtras();
+      res.json({ data });
+    } catch (error) {
+      console.error("[insights] vote extras", error);
+      res.status(500).json({ error: "Failed to load vote insights extras" });
     }
   });
 

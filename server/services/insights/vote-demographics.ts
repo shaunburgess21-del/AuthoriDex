@@ -1,5 +1,6 @@
 /**
  * Platform-wide voter demographics for Insights Vote tab.
+ * Sources canonical surface vote tables (includes simulation agents).
  */
 import { sql } from "drizzle-orm";
 import { db } from "../../db";
@@ -18,7 +19,6 @@ const CORE_VOTE_TYPES = [
   "trending_poll",
   "overall_rating",
   "value_vote",
-  "sentiment",
 ] as const;
 
 const GENDER_LABELS: Record<string, string> = {
@@ -51,6 +51,42 @@ const genderBucketSql = sql`
     ) THEN 'prefer_not_to_say'
     ELSE LOWER(TRIM(p.gender))
   END
+`;
+
+/** Unified vote positions from surface tables (agents included). */
+const allVotesCte = sql`
+  all_votes AS (
+    SELECT
+      v.user_id,
+      'face_off'::text AS vote_type,
+      v.voted_at AS voted_at
+    FROM votes v
+    WHERE v.vote_type = 'face_off'
+    UNION ALL
+    SELECT
+      tpv.user_id,
+      'trending_poll',
+      GREATEST(tpv.created_at, tpv.updated_at)
+    FROM trending_poll_votes tpv
+    UNION ALL
+    SELECT
+      opv.user_id,
+      'opinion_poll',
+      GREATEST(opv.created_at, opv.updated_at)
+    FROM opinion_poll_votes opv
+    UNION ALL
+    SELECT
+      uv.user_id,
+      'overall_rating',
+      uv.voted_at
+    FROM user_votes uv
+    UNION ALL
+    SELECT
+      cvv.user_id,
+      'value_vote',
+      GREATEST(cvv.created_at, cvv.updated_at)
+    FROM celebrity_value_votes cvv
+  )
 `;
 
 function mapRows(result: unknown): Record<string, unknown>[] {
@@ -102,42 +138,29 @@ function mapSurfaceRows(rows: Record<string, unknown>[]): VoteSurfaceRow[] {
 
 export type DemographicsWindow = "all" | "30d" | "7d";
 
-function demographicsCreatedAtFilter(window: DemographicsWindow) {
-  if (window === "7d") return sql`AND va.created_at >= NOW() - INTERVAL '7 days'`;
-  if (window === "30d") return sql`AND va.created_at >= NOW() - INTERVAL '30 days'`;
+function surfaceTimeFilter(window: DemographicsWindow) {
+  if (window === "7d") return sql`AND av.voted_at >= NOW() - INTERVAL '7 days'`;
+  if (window === "30d") return sql`AND av.voted_at >= NOW() - INTERVAL '30 days'`;
   return sql``;
 }
 
-const voteTypeFilter = sql`va.vote_type IN (
-  'face_off', 'opinion_poll', 'trending_poll',
-  'overall_rating', 'value_vote', 'sentiment'
-)`;
-
-const humanVoterFilter = sql`
-  p.is_agent = false
-  AND p.is_house = false
-`;
+const profileFilter = sql`p.is_house = false`;
 
 export async function loadVoterDemographics(
   window: DemographicsWindow = "all",
 ): Promise<VoterDemographics> {
-  const timeFilter = demographicsCreatedAtFilter(window);
-  return withDiscoverCache(`vote:demographics:${window}`, async () => {
-    const baseWhere = sql`
-      va.action_kind = 'create'
-      AND ${voteTypeFilter}
-      AND ${humanVoterFilter}
-    `;
-
+  const timeFilter = surfaceTimeFilter(window);
+  return withDiscoverCache(`vote:demographics:v2:${window}`, async () => {
     const [countryResult, genderResult, surfaceResult, totalsResult] = await Promise.all([
       db.execute(sql`
+        WITH ${allVotesCte}
         SELECT
           p.country_of_residence AS country_code,
           COUNT(DISTINCT p.id)::int AS voters,
-          COUNT(va.id)::int AS votes
-        FROM vote_actions va
-        INNER JOIN profiles p ON p.id = va.user_id
-        WHERE ${baseWhere}
+          COUNT(*)::int AS votes
+        FROM all_votes av
+        INNER JOIN profiles p ON p.id = av.user_id
+        WHERE ${profileFilter}
           AND p.country_of_residence IS NOT NULL
           AND p.country_of_residence != ''
           ${timeFilter}
@@ -145,13 +168,14 @@ export async function loadVoterDemographics(
         ORDER BY votes DESC
       `),
       db.execute(sql`
+        WITH ${allVotesCte}
         SELECT
           ${genderBucketSql} AS gender_key,
           COUNT(DISTINCT p.id)::int AS voters,
-          COUNT(va.id)::int AS votes
-        FROM vote_actions va
-        INNER JOIN profiles p ON p.id = va.user_id
-        WHERE ${baseWhere}
+          COUNT(*)::int AS votes
+        FROM all_votes av
+        INNER JOIN profiles p ON p.id = av.user_id
+        WHERE ${profileFilter}
           AND p.gender IS NOT NULL
           AND TRIM(p.gender) != ''
           ${timeFilter}
@@ -159,27 +183,29 @@ export async function loadVoterDemographics(
         ORDER BY votes DESC
       `),
       db.execute(sql`
+        WITH ${allVotesCte}
         SELECT
-          va.vote_type,
+          av.vote_type,
           COUNT(DISTINCT p.id)::int AS voters,
-          COUNT(va.id)::int AS votes
-        FROM vote_actions va
-        INNER JOIN profiles p ON p.id = va.user_id
-        WHERE ${baseWhere}
+          COUNT(*)::int AS votes
+        FROM all_votes av
+        INNER JOIN profiles p ON p.id = av.user_id
+        WHERE ${profileFilter}
           ${timeFilter}
-        GROUP BY va.vote_type
+        GROUP BY av.vote_type
         ORDER BY votes DESC
       `),
       db.execute(sql`
+        WITH ${allVotesCte}
         SELECT
           COUNT(DISTINCT p.id)::int AS voter_count,
           COUNT(DISTINCT p.country_of_residence) FILTER (
             WHERE p.country_of_residence IS NOT NULL AND p.country_of_residence != ''
           )::int AS country_count,
-          COUNT(va.id)::int AS total_votes
-        FROM vote_actions va
-        INNER JOIN profiles p ON p.id = va.user_id
-        WHERE ${baseWhere}
+          COUNT(*)::int AS total_votes
+        FROM all_votes av
+        INNER JOIN profiles p ON p.id = av.user_id
+        WHERE ${profileFilter}
           ${timeFilter}
       `),
     ]);

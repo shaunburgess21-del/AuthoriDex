@@ -5,15 +5,18 @@ import {
   ArrowUp,
   BarChart3,
   LayoutGrid,
+  Radio,
   Scale,
   Swords,
   Star,
   TrendingDown,
   TrendingUp,
   Users,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { PersonAvatar } from "@/components/PersonAvatar";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InsightsSection, InsightsEmptyState } from "./insights-ui";
 import {
@@ -36,6 +39,8 @@ import type {
   PolarisationResponse,
   TopVoteMatchup,
   TopVotedResponse,
+  VoteFeedItem,
+  VoteInsightsExtras,
   VoterDemographics,
 } from "@shared/insights/types";
 import { cn } from "@/lib/utils";
@@ -972,6 +977,235 @@ function VoteSurfaceSection({
   );
 }
 
+function LiveVoteFeedTile() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/insights/vote/recent-activity", 8],
+    queryFn: async () => {
+      const res = await fetch("/api/insights/vote/recent-activity?limit=8", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load vote feed");
+      const json = await res.json();
+      return (json.data ?? []) as VoteFeedItem[];
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  const rows = data ?? [];
+  if (rows.length === 0) {
+    return <InsightsEmptyState message="No recent vote activity yet." />;
+  }
+
+  return (
+    <ul className="space-y-1.5">
+      {rows.slice(0, 8).map((item) => {
+        const inner = (
+          <>
+            <PersonAvatar name={item.actorName} avatar={item.avatarUrl} size="xs" />
+            <div className="min-w-0 flex-1 text-xs">
+              <p className="truncate">
+                <span className="font-medium text-foreground">{item.actorName}</span>{" "}
+                <span className="text-muted-foreground">{item.actionText}</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground truncate">{item.targetTitle}</p>
+            </div>
+            <Badge
+              variant="outline"
+              className="shrink-0 text-[9px] px-1.5 py-0 border-cyan-500/30 text-cyan-600 dark:text-cyan-400"
+            >
+              {item.surfaceLabel}
+            </Badge>
+          </>
+        );
+
+        return (
+          <li key={item.id}>
+            {item.targetHref ? (
+              <Link
+                href={item.targetHref}
+                className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-muted/40 transition-colors"
+                onClick={() =>
+                  logInsightsEvent("vote", "feed_click", {
+                    voteId: item.id,
+                    surface: item.surface,
+                  })
+                }
+              >
+                {inner}
+              </Link>
+            ) : (
+              <div className="flex items-center gap-2.5 p-2.5 rounded-lg">{inner}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function VoteConsensusTile() {
+  const { data, isLoading } = useInsightsQuery<VoteInsightsExtras>("/api/insights/vote/extras", {
+    queryKey: ["/api/insights/vote/extras"],
+  });
+
+  if (isLoading) return <Skeleton className="h-24 w-full" />;
+  const consensus = data?.consensus;
+  if (!consensus || consensus.contestCount === 0) {
+    return <InsightsEmptyState message="Not enough matchup data for consensus yet." />;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-2xl font-bold tabular-nums text-foreground">
+          {consensus.avgLeaderSharePct}%
+        </span>
+        <span className="text-xs text-muted-foreground">{consensus.label}</span>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Average leading-side share across {consensus.contestCount} active matchups (min 5 votes each).
+      </p>
+      <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-cyan-500/80 to-cyan-300/60"
+          style={{ width: `${Math.max(4, consensus.avgLeaderSharePct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MostActiveVotersTile() {
+  const { data, isLoading } = useInsightsQuery<VoteInsightsExtras>("/api/insights/vote/extras", {
+    queryKey: ["/api/insights/vote/extras"],
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  const voters = data?.mostActiveVoters ?? [];
+  if (voters.length === 0) {
+    return <InsightsEmptyState message="No voter activity this week yet." />;
+  }
+
+  return (
+    <ul className="space-y-1.5">
+      {voters.map((v, idx) => (
+        <li
+          key={v.userId}
+          className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+        >
+          <span className="text-xs font-mono text-muted-foreground w-5 tabular-nums shrink-0">
+            {idx + 1}
+          </span>
+          <PersonAvatar name={v.displayName} avatar={v.avatarUrl} size="xs" />
+          <span className="text-sm font-medium truncate flex-1">{v.displayName}</span>
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+            {v.voteCount} {v.voteCount === 1 ? "vote" : "votes"}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ApprovalMoversTile() {
+  const { data, isLoading } = useInsightsQuery<VoteInsightsExtras>("/api/insights/vote/extras", {
+    queryKey: ["/api/insights/vote/extras"],
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  const rising = data?.approvalMovers.rising ?? [];
+  const falling = data?.approvalMovers.falling ?? [];
+  if (rising.length === 0 && falling.length === 0) {
+    return <InsightsEmptyState message="No approval movers in the last 7 days yet." />;
+  }
+
+  const renderRow = (row: (typeof rising)[number]) => {
+    const href = `/person/${row.personId}`;
+    const up = row.direction === "up";
+    return (
+      <li key={row.personId}>
+        <Link
+          href={href}
+          className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+        >
+          <span className="text-sm font-medium truncate flex-1">{row.name}</span>
+          <span
+            className={cn(
+              "text-xs font-mono tabular-nums shrink-0 inline-flex items-center gap-0.5",
+              up ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400",
+            )}
+          >
+            {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {up ? "+" : ""}
+            {row.deltaPts.toFixed(2)}
+          </span>
+        </Link>
+      </li>
+    );
+  };
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+          Rising (7d)
+        </p>
+        <ul className="space-y-0.5">{rising.map(renderRow)}</ul>
+      </div>
+      <div>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+          Falling (7d)
+        </p>
+        <ul className="space-y-0.5">{falling.map(renderRow)}</ul>
+      </div>
+    </div>
+  );
+}
+
+function VoteExtrasRow() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      <InsightsSection
+        tab="vote"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Radio className="h-4 w-4 text-cyan-500" /> Matchup consensus
+          </span>
+        }
+        description="How decisively matchups are breaking across the community."
+      >
+        <VoteConsensusTile />
+      </InsightsSection>
+
+      <InsightsSection
+        tab="vote"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Zap className="h-4 w-4 text-cyan-500" /> Most active voters
+          </span>
+        }
+        description="Who cast the most votes in the last 7 days."
+      >
+        <MostActiveVotersTile />
+      </InsightsSection>
+
+      <InsightsSection
+        tab="vote"
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <TrendingUp className="h-4 w-4 text-cyan-500" /> Approval movers
+          </span>
+        }
+        description="Biggest approval rating shifts over the past week."
+      >
+        <ApprovalMoversTile />
+      </InsightsSection>
+    </div>
+  );
+}
+
 function VoteAnalyticsSections() {
   const [timeWindow, setTimeWindow] = useState<DemographicWindow>("all");
   const apiPath = voterDemographicsPath(timeWindow);
@@ -981,20 +1215,32 @@ function VoteAnalyticsSections() {
 
   return (
     <>
-      <InsightsSection
-        tab="vote"
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <LayoutGrid className="h-4 w-4 text-cyan-500" /> Where people vote
-          </span>
-        }
-        description="How activity splits across vote surfaces."
-        action={
-          <DemographicsWindowToggle value={timeWindow} onChange={setTimeWindow} />
-        }
-      >
-        <VoteSurfaceSection data={data} isLoading={isLoading} />
-      </InsightsSection>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <InsightsSection
+          tab="vote"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              <LayoutGrid className="h-4 w-4 text-cyan-500" /> Where people vote
+            </span>
+          }
+          description="How activity splits across vote surfaces."
+          action={
+            <DemographicsWindowToggle value={timeWindow} onChange={setTimeWindow} />
+          }
+        >
+          <VoteSurfaceSection data={data} isLoading={isLoading} />
+        </InsightsSection>
+
+        <InsightsSection
+          tab="vote"
+          title="Live vote feed"
+          description="The latest votes across matchups, polls, and ratings."
+        >
+          <LiveVoteFeedTile />
+        </InsightsSection>
+      </div>
+
+      <VoteExtrasRow />
 
       <InsightsSection
         tab="vote"
