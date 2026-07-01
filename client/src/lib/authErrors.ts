@@ -88,8 +88,8 @@ export function mapAuthError(err: unknown): MappedAuthError {
   ) {
     return {
       code: "rate_limited",
-      message: "Too many attempts.",
-      suggestion: "Please wait a minute before trying again.",
+      message: "Too many requests right now.",
+      suggestion: "Please wait about a minute, then try again.",
     };
   }
 

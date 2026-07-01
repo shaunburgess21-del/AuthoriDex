@@ -36,6 +36,13 @@ function parseReason(value: string | null): AuthReason | null {
     : null;
 }
 
+/**
+ * Cooldown (seconds) applied after any email-code send attempt. Prevents a user
+ * who doesn't receive the code immediately from re-clicking and burning through
+ * Supabase's project-wide email send rate limit. Matches VerifyPage's cadence.
+ */
+const OTP_COOLDOWN_S = 30;
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { user, profile, loading: authLoading, profileLoading } = useAuth();
@@ -48,6 +55,7 @@ export default function LoginPage() {
   );
   const [loading, setLoading] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
   const [fieldError, setFieldError] = useState<{
     field: "email" | "password" | "form";
     message: string;
@@ -93,8 +101,21 @@ export default function LoginPage() {
     return () => window.removeEventListener("popstate", handler);
   }, []);
 
+  // Email-code cooldown ticker. Decremented each second; the send button/link
+  // stay disabled until it reaches 0.
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const id = setInterval(() => {
+      setOtpCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [otpCooldown]);
+
   const sendOtp = async (targetEmail: string): Promise<boolean> => {
     setOtpSending(true);
+    // Start the cooldown up front so a failed send (e.g. rate limit) still locks
+    // the button; a successful send navigates away to /login/verify anyway.
+    setOtpCooldown(OTP_COOLDOWN_S);
     emailAuthInProgressRef.current = true;
     try {
       const supabase = await getSupabase();
@@ -388,10 +409,13 @@ export default function LoginPage() {
                       <button
                         type="button"
                         onClick={handleEmailCodeFallback}
-                        className="underline underline-offset-2 hover:text-foreground"
+                        disabled={otpSending || otpCooldown > 0}
+                        className="underline underline-offset-2 hover:text-foreground disabled:no-underline disabled:opacity-60"
                         data-testid="link-inline-email-code"
                       >
-                        Use an email code instead.
+                        {otpCooldown > 0
+                          ? `Try email code in ${otpCooldown}s`
+                          : "Use an email code instead."}
                       </button>
                     ) : null}
                   </p>
@@ -400,11 +424,15 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={handleEmailCodeFallback}
-                      disabled={otpSending}
-                      className="text-xs text-primary underline underline-offset-2 hover:opacity-80 disabled:opacity-60"
+                      disabled={otpSending || otpCooldown > 0}
+                      className="text-xs text-primary underline underline-offset-2 hover:opacity-80 disabled:no-underline disabled:opacity-60"
                       data-testid="button-use-email-code"
                     >
-                      Sign in with email code instead
+                      {otpSending
+                        ? "Sending code…"
+                        : otpCooldown > 0
+                          ? `Resend code in ${otpCooldown}s`
+                          : "Sign in with email code instead"}
                     </button>
                   </div>
                 ) : (
