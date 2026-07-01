@@ -1,6 +1,6 @@
 ## 1. Who we are
 
-This Privacy Policy describes how **VoxDex (Pty) Ltd** ("**VoxDex**", "**we**", "**us**", or "**our**") collects, uses, and shares personal information about you when you use voxdex.com and related services (the "**Service**").
+This Privacy Policy describes how **VoxDex** ("**VoxDex**", "**we**", "**us**", or "**our**") collects, uses, and shares personal information about you when you use voxdex.com and related services (the "**Service**").
 
 VoxDex is a private company incorporated in the Republic of South Africa and is the **responsible party** under the Protection of Personal Information Act, 2013 ("**POPIA**"). Where applicable, we are also the **data controller** for purposes of the EU and UK General Data Protection Regulations ("**GDPR**" / "**UK GDPR**").
 
@@ -197,11 +197,11 @@ We will not retroactively reduce your rights with respect to previously collecte
 
 For privacy-related questions:
 
-**VoxDex (Pty) Ltd**
+**VoxDex**
 Information Officer: Andrew Burgess
 Email: [legal@voxdex.com](mailto:legal@voxdex.com)
 General contact: [hello@voxdex.com](mailto:hello@voxdex.com)
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
+*VoxDex is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*

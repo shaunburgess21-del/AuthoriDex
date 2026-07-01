@@ -145,7 +145,7 @@ We may update this policy from time to time. The "Last updated" date will reflec
 
 ## 12. Contact
 
-**VoxDex (Pty) Ltd**
+**VoxDex**
 Email: [legal@voxdex.com](mailto:legal@voxdex.com)
 General contact: [hello@voxdex.com](mailto:hello@voxdex.com)
 
@@ -153,4 +153,4 @@ We aim to respond to all takedown requests within 14 days of receiving a complet
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
+*VoxDex is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*

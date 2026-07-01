@@ -1,6 +1,6 @@
 ## 1. Overview
 
-VoxDex (Pty) Ltd ("VoxDex", "we", "us", or "our") sells Vox (our in-app virtual currency, denoted "Ꝟ" in the user interface and referred to in earlier versions of this policy and in some internal systems as "Credits") and other paid features through a third-party payment provider acting as our Merchant of Record (the "Merchant of Record"). The Merchant of Record is the seller of record for all transactions on the Service and handles billing, refunds, and payment disputes on our behalf.
+VoxDex ("VoxDex", "we", "us", or "our") sells Vox (our in-app virtual currency, denoted "Ꝟ" in the user interface and referred to in earlier versions of this policy and in some internal systems as "Credits") and other paid features through a third-party payment provider acting as our Merchant of Record (the "Merchant of Record"). The Merchant of Record is the seller of record for all transactions on the Service and handles billing, refunds, and payment disputes on our behalf.
 
 Refunds for purchases made through the Merchant of Record are governed by the Merchant of Record's refund policy, which sets out the statutory withdrawal and refund rights available to consumers in different jurisdictions, as well as the Merchant of Record's discretionary refund process. The applicable policy is linked from your transaction confirmation email and from the Merchant of Record's billing portal.
 
@@ -49,7 +49,7 @@ We may update this policy from time to time. The version in effect at the time o
 
 ## 8. Contact
 
-**VoxDex (Pty) Ltd**
+**VoxDex**
 
 General and refund queries: [hello@voxdex.com](mailto:hello@voxdex.com)
 Legal queries: [legal@voxdex.com](mailto:legal@voxdex.com)
@@ -57,4 +57,4 @@ Merchant of Record billing support: see the link in your transaction confirmatio
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
+*VoxDex is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*

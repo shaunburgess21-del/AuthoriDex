@@ -1,6 +1,6 @@
 ## 1. Welcome to VoxDex
 
-These Terms of Service ("**Terms**") form a binding agreement between you and **VoxDex (Pty) Ltd** ("**VoxDex**", "**we**", "**us**", or "**our**"), a private company incorporated in the Republic of South Africa. They govern your access to and use of voxdex.com and any related applications, content, or services we offer (together, the "**Service**").
+These Terms of Service ("**Terms**") form a binding agreement between you and **VoxDex** ("**VoxDex**", "**we**", "**us**", or "**our**"), a private company incorporated in the Republic of South Africa. They govern your access to and use of voxdex.com and any related applications, content, or services we offer (together, the "**Service**").
 
 By creating an account or using the Service in any way, you agree to these Terms. If you do not agree, do not use the Service.
 
@@ -211,10 +211,10 @@ If a dispute cannot be resolved informally, it will be resolved in the courts of
 
 For questions about these Terms, contact us at:
 
-**VoxDex (Pty) Ltd**
+**VoxDex**
 Email: [hello@voxdex.com](mailto:hello@voxdex.com)
 Legal & privacy: [legal@voxdex.com](mailto:legal@voxdex.com)
 
 ---
 
-*VoxDex (Pty) Ltd is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
+*VoxDex is a private company registered in the Republic of South Africa. Company registration number: 2026/350989/07.*
