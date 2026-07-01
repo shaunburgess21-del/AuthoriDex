@@ -84,6 +84,12 @@ interface PollData {
   userVote: string | null;
 }
 
+interface SentimentVoteVariables {
+  slug: string;
+  choice: SentimentChoice;
+  pollId: string;
+}
+
 export default function PollDetailPage() {
   const params = useParams<{ slug: string }>();
   const slugParam = params.slug;
@@ -113,6 +119,11 @@ export default function PollDetailPage() {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [imgIdx, setImgIdx] = useState(0);
   const supabaseUrl = useSupabaseUrl();
+
+  useEffect(() => {
+    setShowVoteChange(false);
+    setExpandedImage(null);
+  }, [slug]);
 
   const conventionImageUrl = useMemo(() => {
     if (!supabaseUrl?.trim() || !slug.trim()) return null;
@@ -154,36 +165,35 @@ export default function PollDetailPage() {
 
   const budget = useAnonBudget();
 
-  const pollQueryKey = ["/api/polls", slug] as const;
-
   const voteMutation = useMutation({
-    mutationFn: async (choice: SentimentChoice) => {
-      const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
+    mutationFn: async ({ slug: voteSlug, choice }: SentimentVoteVariables) => {
+      const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(voteSlug)}/vote`, { choice });
       return res.json();
     },
-    onMutate: (choice) => {
-      const previousPoll = queryClient.getQueryData<PollData>(pollQueryKey);
+    onMutate: ({ slug: voteSlug, choice }) => {
+      const votePollQueryKey = ["/api/polls", voteSlug] as const;
+      const previousPoll = queryClient.getQueryData<PollData>(votePollQueryKey);
       if (previousPoll) {
         queryClient.setQueryData<PollData>(
-          pollQueryKey,
+          votePollQueryKey,
           optimisticSentimentVotePatch(previousPoll, choice),
         );
       }
-      void queryClient.cancelQueries({ queryKey: pollQueryKey });
-      return { previousPoll };
+      void queryClient.cancelQueries({ queryKey: votePollQueryKey });
+      return { previousPoll, votePollQueryKey };
     },
-    onError: (error, choice, context) => {
+    onError: (error, { slug: voteSlug, choice, pollId }, context) => {
       if (context?.previousPoll) {
-        queryClient.setQueryData(pollQueryKey, context.previousPoll);
+        queryClient.setQueryData(context.votePollQueryKey, context.previousPoll);
       }
-      if (poll && isBudgetExhaustedVoteError(error)) {
+      if (isBudgetExhaustedVoteError(error)) {
         navigateToLogin(setLocation, {
           mode: "signup",
           reason: "vote_limit_reached",
           resumeAction: {
             surfaceType: "trending_poll",
-            targetId: poll.id,
-            cardRoute: window.location.pathname,
+            targetId: pollId,
+            cardRoute: `/polls/${encodeURIComponent(voteSlug)}`,
             pendingVote: { choice },
           },
         });
@@ -191,10 +201,11 @@ export default function PollDetailPage() {
       }
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { slug: voteSlug }) => {
+      const votePollQueryKey = ["/api/polls", voteSlug] as const;
       applyBudgetFromVoteResponse(queryClient, data);
       if (data?.poll && typeof data.poll === "object") {
-        queryClient.setQueryData<PollData>(pollQueryKey, (current) =>
+        queryClient.setQueryData<PollData>(votePollQueryKey, (current) =>
           current ? { ...current, ...data.poll } : data.poll,
         );
       }
@@ -205,10 +216,11 @@ export default function PollDetailPage() {
     },
   });
 
-  const pendingChoice = voteMutation.isPending ? voteMutation.variables : undefined;
+  const isCurrentPollVotePending = voteMutation.isPending && voteMutation.variables?.slug === slug;
+  const pendingChoice = isCurrentPollVotePending ? voteMutation.variables?.choice : undefined;
   const displayUserVote = poll?.userVote ?? pendingChoice ?? null;
   const showVoteButtons = !displayUserVote || showVoteChange;
-  const voteButtonsDisabled = voteMutation.isPending && !displayUserVote;
+  const voteButtonsDisabled = isCurrentPollVotePending && !displayUserVote;
 
   const handleVote = (choice: SentimentChoice) => {
     if (!poll) return;
@@ -226,7 +238,7 @@ export default function PollDetailPage() {
       return;
     }
     setShowVoteChange(false);
-    voteMutation.mutate(choice);
+    voteMutation.mutate({ slug, choice, pollId: poll.id });
   };
 
   const handleShare = () => {
