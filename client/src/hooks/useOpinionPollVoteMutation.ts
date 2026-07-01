@@ -25,7 +25,7 @@ export type OpinionPollLike = {
 };
 
 export type OpinionVoteAction =
-  | { kind: "vote"; slug: string; optionId: string }
+  | { kind: "vote"; slug: string; optionId: string; suppressXpBurst?: boolean }
   | { kind: "remove"; slug: string };
 
 type VoteResponse = {
@@ -125,7 +125,7 @@ export function useOpinionPollVoteMutation() {
         queryClient.setQueryData(OPINION_POLLS_LIST_KEY, ctx.previousPolls);
       }
     },
-    onSuccess: (data) => {
+    onSuccess: (data, action) => {
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response. No-op for authed users (response.budget
       // is null), so safe to call unconditionally.
@@ -138,15 +138,15 @@ export function useOpinionPollVoteMutation() {
         });
         queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", serverPoll.slug] });
       }
-      if (data?.xp?.xpAwarded) {
+      if (data?.xp?.xpAwarded && (action.kind !== "vote" || !action.suppressXpBurst)) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
   });
 
   return {
-    vote: async (slug: string, optionId: string) => {
-      await mutation.mutateAsync({ kind: "vote", slug, optionId });
+    vote: async (slug: string, optionId: string, options?: { suppressXpBurst?: boolean }) => {
+      await mutation.mutateAsync({ kind: "vote", slug, optionId, suppressXpBurst: options?.suppressXpBurst });
     },
     removeVote: async (slug: string) => {
       await mutation.mutateAsync({ kind: "remove", slug });
@@ -158,8 +158,8 @@ export function useOpinionPollVoteMutation() {
      * (slug, optionId) is sufficient. Provided for callers that prefer to
      * be explicit about the intent.
      */
-    changeVote: async (slug: string, optionId: string, _previousOptionId: string) => {
-      await mutation.mutateAsync({ kind: "vote", slug, optionId });
+    changeVote: async (slug: string, optionId: string, _previousOptionId: string, options?: { suppressXpBurst?: boolean }) => {
+      await mutation.mutateAsync({ kind: "vote", slug, optionId, suppressXpBurst: options?.suppressXpBurst });
     },
   };
 }

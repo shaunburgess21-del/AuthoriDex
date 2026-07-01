@@ -15,9 +15,16 @@ import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import "swiper/css/virtual";
 import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/WindowedDotIndicator";
+import { HIDE_EXIT_DWELL_MS } from "@/hooks/useHideExitQueue";
 
 export interface CardSectionHandle {
   slideToKey: (key: string) => boolean;
+  /**
+   * After a successful mobile vote/prediction in inactive filter mode, let the
+   * result state breathe briefly, then advance to the next card without hiding
+   * or removing the voted card.
+   */
+  playVoteAdvance: (key: string) => void;
   /**
    * Advance the carousel as a voted card hides (Vote hub "Hidden" mode).
    * Slides the next card in from the right to hint swipeability, then the
@@ -32,6 +39,10 @@ export function mobileSlideKey(item: ReactNode, index: number): string {
     return String(item.key);
   }
   return `slide-${index}`;
+}
+
+function normalizeSlideKey(key: string): string {
+  return key.startsWith(".$") ? key.slice(2) : key.startsWith(".") ? key.slice(1) : key;
 }
 
 export interface MobileCardCarouselProps {
@@ -67,6 +78,7 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
     const swiperRef = useRef<SwiperType | null>(null);
     const pendingSlideKeyRef = useRef<string | null>(null);
     const userOrParentControlledRef = useRef(false);
+    const voteAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Set when a hide-exit advance is in flight so the length-change effect
     // corrects the active index (instead of resetting to 0) once the voted
     // slide is spliced out of `items`.
@@ -115,13 +127,22 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
 
     const resolveKeyToIndex = useCallback(
       (key: string): number => {
+        const normalizedKey = normalizeSlideKey(key);
         for (let i = 0; i < items.length; i++) {
-          if (mobileSlideKey(items[i], i) === key) return i;
+          if (normalizeSlideKey(mobileSlideKey(items[i], i)) === normalizedKey) return i;
         }
         return -1;
       },
       [items],
     );
+
+    useEffect(() => {
+      return () => {
+        if (voteAdvanceTimerRef.current) {
+          clearTimeout(voteAdvanceTimerRef.current);
+        }
+      };
+    }, []);
 
     useImperativeHandle(
       ref,
@@ -135,6 +156,23 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
             pendingSlideKeyRef.current = key;
           }
           return true;
+        },
+        playVoteAdvance: (key: string) => {
+          const idx = resolveKeyToIndex(key);
+          if (idx < 0 || idx >= items.length - 1) return;
+          if (voteAdvanceTimerRef.current) {
+            clearTimeout(voteAdvanceTimerRef.current);
+          }
+          voteAdvanceTimerRef.current = setTimeout(() => {
+            voteAdvanceTimerRef.current = null;
+            const swiper = swiperRef.current;
+            if (!swiper || swiper.destroyed) return;
+            const currentIdx = resolveKeyToIndex(key);
+            if (currentIdx < 0 || currentIdx >= items.length - 1) return;
+            if (swiper.activeIndex !== currentIdx) return;
+            userOrParentControlledRef.current = true;
+            swiper.slideNext(300);
+          }, HIDE_EXIT_DWELL_MS);
         },
         playHideExit: (key: string) => {
           const swiper = swiperRef.current;

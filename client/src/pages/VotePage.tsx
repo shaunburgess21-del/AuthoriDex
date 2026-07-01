@@ -312,6 +312,7 @@ const HIDE_EXIT_FLY = { opacity: 0, scale: 0.12, x: -160, y: -200 } as const;
 const HIDE_EXIT_FLY_TRANSITION = { duration: 0.45, ease: "easeIn" } as const;
 const HIDE_EXIT_SETTLE_TRANSITION = { duration: 0.2, ease: "easeOut" } as const;
 const HIDE_EXIT_LAYOUT_TRANSITION = { duration: 0.3, ease: "easeOut" } as const;
+const OPTIMISTIC_VOTE_XP = 20;
 
 /**
  * Card wrapper for the Vote-hub Hidden-mode transition. The outer layer owns
@@ -1682,6 +1683,38 @@ export default function VotePage() {
   const sentimentSectionRef = useRef<CardSectionHandle | null>(null);
   const matchupsSectionRef = useRef<CardSectionHandle | null>(null);
   const opinionSectionRef = useRef<CardSectionHandle | null>(null);
+  const playInactiveVoteAdvance = useCallback(
+    (section: "sentiment" | "matchups" | "opinion", id: string) => {
+      if (!isMobile || myVotesFilter !== "all") return;
+      const ref =
+        section === "sentiment"
+          ? sentimentSectionRef
+          : section === "matchups"
+            ? matchupsSectionRef
+            : opinionSectionRef;
+      ref.current?.playVoteAdvance(id);
+    },
+    [isMobile, myVotesFilter],
+  );
+  const showOptimisticVoteFeedback = useCallback(
+    (
+      section: "sentiment" | "matchups" | "opinion",
+      id: string,
+      toastTitle: string,
+      toastDescription: string,
+      xpReason: string,
+    ) => {
+      if (!isMobile || myVotesFilter !== "all") return false;
+      hapticSuccess();
+      toast(toastTitle, { description: toastDescription });
+      if (user) {
+        triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, xpReason);
+      }
+      playInactiveVoteAdvance(section, id);
+      return true;
+    },
+    [isMobile, myVotesFilter, playInactiveVoteAdvance, triggerXpBurst, user],
+  );
   const hideExit = useHideExitQueue({
     onExiting: (key) => {
       if (!isMobile) return;
@@ -1726,7 +1759,7 @@ export default function VotePage() {
   }, [hidePulseTick, hideTogglePulse]);
 
   const matchupVoteMutation = useMutation({
-    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b' | 'neutral'; previousVote?: string | null }) => {
+    mutationFn: async ({ matchupId, option }: { matchupId: string; option: 'option_a' | 'option_b' | 'neutral'; previousVote?: string | null; optimisticFeedbackShown?: boolean }) => {
       const response = await apiRequest('POST', `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
@@ -1734,14 +1767,21 @@ export default function VotePage() {
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
-      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      if (data?.xp?.xpAwarded) {
+      if (!variables.optimisticFeedbackShown) {
+        hapticSuccess();
+      }
+      if (data?.xp?.xpAwarded && !variables.optimisticFeedbackShown) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const isChange = !!variables.previousVote;
-      toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted." });
+      if (!isChange && !variables.optimisticFeedbackShown) {
+        playInactiveVoteAdvance("matchups", variables.matchupId);
+      }
+      if (!variables.optimisticFeedbackShown) {
+        toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted." });
+      }
     },
     onError: (error: any, variables) => {
       // Roll back the optimistic vote and abort any pending hide animation so
@@ -1849,7 +1889,14 @@ export default function VotePage() {
       beginHideExit(`matchups:${matchupId}`);
     }
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
-    matchupVoteMutation.mutate({ matchupId, option, previousVote });
+    const optimisticFeedbackShown = !previousVote && showOptimisticVoteFeedback(
+      "matchups",
+      matchupId,
+      "Vote recorded!",
+      "Your Matchup vote has been counted.",
+      "Matchup Vote",
+    );
+    matchupVoteMutation.mutate({ matchupId, option, previousVote, optimisticFeedbackShown });
   };
   
   const handleMatchupRemoveVote = (matchupId: string) => {
@@ -2553,17 +2600,18 @@ export default function VotePage() {
       slug: string;
       choice: string;
       topicId: string;
+      optimisticFeedbackShown?: boolean;
     }) => {
       const res = await apiRequest('POST', `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
-      if (data?.xp?.xpAwarded) {
+      if (data?.xp?.xpAwarded && !variables.optimisticFeedbackShown) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
@@ -2616,7 +2664,15 @@ export default function VotePage() {
     if (!topic?.slug) {
       throw new Error("Topic not found");
     }
-    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
+    const wasFirstVote = !topic.userVote;
+    const optimisticFeedbackShown = wasFirstVote && showOptimisticVoteFeedback(
+      "sentiment",
+      topicId,
+      "Vote recorded!",
+      "Your Sentiment Poll vote has been counted.",
+      "Sentiment Vote",
+    );
+    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId, optimisticFeedbackShown });
     if (myVotesFilter === "hide-mine") {
       beginHideExit(`sentiment:${topicId}`);
     }
@@ -2629,21 +2685,29 @@ export default function VotePage() {
   const handleOpinionVote = useCallback(
     async (slug: string, optionId: string) => {
       let exitKey: string | null = null;
+      const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
+      const wasFirstVote = !poll?.userVote;
       if (myVotesFilter === "hide-mine") {
-        const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
         if (poll) {
           exitKey = `opinion:${poll.id}`;
           beginHideExit(exitKey);
         }
       }
+      const optimisticFeedbackShown = !!(wasFirstVote && poll?.id && showOptimisticVoteFeedback(
+        "opinion",
+        String(poll.id),
+        "Vote recorded!",
+        "Your Opinion Poll vote has been counted.",
+        "Opinion Poll Vote",
+      ));
       try {
-        await voteOnOpinionPoll(slug, optionId);
+        await voteOnOpinionPoll(slug, optionId, { suppressXpBurst: optimisticFeedbackShown });
       } catch (err) {
         if (exitKey) cancelHideExit(exitKey);
         throw err;
       }
     },
-    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit],
+    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit, playInactiveVoteAdvance],
   );
 
   const openSuggestModal = (open: () => void) => {

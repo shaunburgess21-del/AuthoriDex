@@ -1217,6 +1217,19 @@ export default function PredictPage() {
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
 
   const isMobile = useIsMobile();
+  const playInactivePredictionAdvance = useCallback(
+    (section: "updown" | "h2h" | "gainer", marketId: string) => {
+      if (!isMobile || myPositionsFilter !== "all") return;
+      const ref =
+        section === "updown"
+          ? updownSectionRef
+          : section === "h2h"
+            ? h2hSectionRef
+            : gainerSectionRef;
+      ref.current?.playVoteAdvance(marketId);
+    },
+    [isMobile, myPositionsFilter],
+  );
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("world-markets");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
@@ -1944,6 +1957,8 @@ export default function PredictPage() {
       return res.json();
     },
     onSuccess: async (data, variables) => {
+      const marketId = String(variables.marketId);
+      const hadPositionBefore = userBetsByMarket.has(marketId);
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -1993,10 +2008,9 @@ export default function PredictPage() {
       };
 
       queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
-        const mid = String(variables.marketId);
         const newBet = {
           betId: `optimistic-${Date.now()}`,
-          marketId: mid,
+          marketId,
           entryId: variables.entryId,
           entryLabel,
           stakeAmount: variables.stakeAmount,
@@ -2008,11 +2022,11 @@ export default function PredictPage() {
           return { predictions: [newBet], stats: seededStats };
         }
         if (Array.isArray(old)) {
-          const already = old.some((b: any) => String(b.marketId) === mid);
+          const already = old.some((b: any) => String(b.marketId) === marketId);
           return already ? old : [...old, newBet];
         }
         const preds = old.predictions ?? [];
-        const already = preds.some((b: any) => String(b.marketId) === mid);
+        const already = preds.some((b: any) => String(b.marketId) === marketId);
         if (already) return old;
         return { ...old, predictions: [...preds, newBet] };
       });
@@ -2023,6 +2037,9 @@ export default function PredictPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
+      if (!hadPositionBefore) {
+        playInactivePredictionAdvance("updown", marketId);
+      }
     },
     onError: (err: Error) => {
       hapticError();
@@ -2042,6 +2059,8 @@ export default function PredictPage() {
       return res.json();
     },
     onSuccess: async (data, variables) => {
+      const marketId = String(variables.marketId);
+      const hadPositionBefore = userBetsByMarket.has(marketId);
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -2113,6 +2132,12 @@ export default function PredictPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
+      if (!hadPositionBefore) {
+        playInactivePredictionAdvance(
+          variables.marketType === "h2h" ? "h2h" : "gainer",
+          marketId,
+        );
+      }
     },
     onError: (err: Error) => {
       hapticError();

@@ -1,7 +1,7 @@
 export type HubActivityFilter = "all" | "show-mine" | "hide-mine";
 export type HubActivityFilterScope = "vote" | "predict";
 
-export const DEFAULT_HUB_ACTIVITY_FILTER: HubActivityFilter = "hide-mine";
+export const DEFAULT_HUB_ACTIVITY_FILTER: HubActivityFilter = "all";
 
 const VALID_FILTERS = new Set<HubActivityFilter>(["all", "show-mine", "hide-mine"]);
 
@@ -16,7 +16,7 @@ function parseStoredFilter(raw: string | null): HubActivityFilter | null {
   return null;
 }
 
-/** Read saved hub activity filter; defaults to Hidden when no preference exists. */
+/** Read saved hub activity filter; defaults to inactive/all when no preference exists. */
 export function readHubActivityFilter(
   scope: HubActivityFilterScope,
   userId?: string | null,
