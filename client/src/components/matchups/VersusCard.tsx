@@ -1,14 +1,19 @@
 import { type MouseEvent, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
-import { Users, X } from "lucide-react";
+import { Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { CardImage } from "@/components/ui/card-image";
 import { normalizeMarketCategory } from "@shared/constants";
-import { useMatchupHelpDismissed } from "@/hooks/useMatchupHelpDismissed";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { useMatchupNeutralNudge } from "@/hooks/useMatchupNeutralNudge";
+import {
+  removeTrackedMatchupNeutralVote,
+  trackMatchupNeutralVote,
+} from "@/lib/matchup-neutral-nudge";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -70,12 +75,12 @@ export function VersusCard({
   const votedA = userVote === "option_a";
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
-  const { dismissed: helpDismissed, dismissHelp } = useMatchupHelpDismissed();
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!matchup.slug;
+  const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted);
 
   return (
-    <div className="relative group h-full">
+    <div ref={neutralNudge.cardRef} className="relative group h-full">
       <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
       <Card className="relative overflow-visible bg-card dark:bg-[#11151D] border border-border/40 dark:border-0 md:border md:border-border/40 dark:md:border-transparent shadow-sm dark:shadow-none md:shadow-sm group-hover:shadow-lg dark:md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] md:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
@@ -132,7 +137,9 @@ export function VersusCard({
             <button
               type="button"
               onClick={(e) => {
-                if (!votedA) onVote(matchup.id, "option_a", e);
+                if (votedA) return;
+                trackMatchupNeutralVote(matchup.id, "option_a");
+                onVote(matchup.id, "option_a", e);
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
@@ -168,20 +175,86 @@ export function VersusCard({
             </button>
 
             <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
-              <button
+              <AnimatePresence>
+                {neutralNudge.showHesitationNudge && !hasVoted && (
+                  <motion.div
+                    initial={neutralNudge.prefersReducedMotion ? false : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                    animate={neutralNudge.prefersReducedMotion ? { opacity: 1, x: "-50%" } : { opacity: 1, x: "-50%", y: 0, scale: 1 }}
+                    exit={neutralNudge.prefersReducedMotion ? { opacity: 0, x: "-50%" } : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                    transition={{ duration: neutralNudge.prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
+                    className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 w-max max-w-[210px] rounded-full border border-slate-300/70 bg-card/95 px-2.5 py-1 text-center text-[11px] font-medium leading-tight text-slate-600 shadow-lg backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-900/95 dark:text-slate-300"
+                  >
+                    Can't decide? Tap VS to stay neutral
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <motion.button
                 type="button"
                 onClick={(e) => {
-                  if (!votedNeutral) onVote(matchup.id, "neutral", e);
+                  if (votedNeutral) return;
+                  trackMatchupNeutralVote(matchup.id, "neutral");
+                  onVote(matchup.id, "neutral", e);
                 }}
+                aria-label="Vote neutral"
+                title="Vote neutral"
                 data-testid={`button-vote-neutral-${matchup.id}`}
-                className={`h-14 w-14 rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+                animate={
+                  neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion
+                    ? {
+                        scale: [1, 1.06, 1],
+                        boxShadow: [
+                          "0 10px 18px rgba(15, 23, 42, 0.22)",
+                          "0 0 0 5px rgba(148, 163, 184, 0.28)",
+                          "0 10px 18px rgba(15, 23, 42, 0.22)",
+                        ],
+                      }
+                    : { scale: 1 }
+                }
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className={`relative h-14 w-14 overflow-hidden rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
                   votedNeutral
                     ? "bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40"
                     : "bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-border dark:border-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer"
                 }`}
               >
-                <span className={`text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>VS</span>
-              </button>
+                <AnimatePresence>
+                  {neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion && (
+                    <motion.span
+                      aria-hidden="true"
+                      className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent"
+                      initial={{ x: "-140%" }}
+                      animate={{ x: "260%" }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.75, ease: "easeOut" }}
+                    />
+                  )}
+                </AnimatePresence>
+                <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
+                  <AnimatePresence mode="wait" initial={false}>
+                    {neutralNudge.showMorph ? (
+                      <motion.span
+                        key="tie"
+                        initial={{ opacity: 0, scale: 0.92 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.92 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                      >
+                        Tie?
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="vs"
+                        initial={{ opacity: 0, scale: 0.92 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.92 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                      >
+                        VS
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </span>
+              </motion.button>
               {votedNeutral && (
                 <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 bg-card dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
                   Your pick
@@ -192,7 +265,9 @@ export function VersusCard({
             <button
               type="button"
               onClick={(e) => {
-                if (!votedB) onVote(matchup.id, "option_b", e);
+                if (votedB) return;
+                trackMatchupNeutralVote(matchup.id, "option_b");
+                onVote(matchup.id, "option_b", e);
               }}
               className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
@@ -298,7 +373,10 @@ export function VersusCard({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => onRemoveVote(matchup.id)}
+                      onClick={() => {
+                        removeTrackedMatchupNeutralVote(matchup.id);
+                        onRemoveVote(matchup.id);
+                      }}
                       className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
                       data-testid={`button-remove-vote-${matchup.id}`}
                     >
@@ -340,23 +418,6 @@ export function VersusCard({
                     {votedA ? matchup.optionAText : votedB ? matchup.optionBText : "Neutral"}
                   </span>
                 </div>
-              </div>
-            ) : !helpDismissed ? (
-              <div className="flex w-full items-center justify-center gap-2 text-xs text-slate-500/70">
-                <span className="font-medium">Tap an image to vote or VS to remain Neutral</span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    dismissHelp();
-                  }}
-                  aria-label="Dismiss matchup help"
-                  title="Dismiss"
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-slate-500/10 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400"
-                  data-testid="button-dismiss-matchup-help"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
               </div>
             ) : null}
           </div>
