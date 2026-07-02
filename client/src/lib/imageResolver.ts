@@ -85,15 +85,28 @@ export function stripImageExtension(url: string): string | null {
   return url.slice(0, url.length - (path.length - path.lastIndexOf(ext)));
 }
 
-/** Ordered candidates: alternate extensions for `primary`, then optional `fallback`. */
+/** Ordered candidates: primary as-is when it already has an extension, then alternates, then optional `fallback`. */
 export function buildImageLoadCandidates(
   primary: string,
   fallback?: string | null,
 ): string[] {
-  const base = stripImageExtension(primary);
-  const extensionVariants = base
-    ? IMG_EXTENSIONS.map((ext) => base + ext)
-    : [primary];
+  const path = primary.split("?")[0].toLowerCase();
+  const currentExt = IMG_EXTENSIONS.find((e) => path.endsWith(e));
+  const base = currentExt
+    ? primary.slice(0, primary.length - (path.length - path.lastIndexOf(currentExt)))
+    : stripImageExtension(primary);
+
+  let extensionVariants: string[];
+  if (base) {
+    const alternates = IMG_EXTENSIONS.filter((ext) => ext !== currentExt).map(
+      (ext) => base + ext,
+    );
+    extensionVariants = currentExt
+      ? [primary, ...alternates]
+      : alternates;
+  } else {
+    extensionVariants = [primary];
+  }
 
   const seen = new Set<string>();
   const out: string[] = [];

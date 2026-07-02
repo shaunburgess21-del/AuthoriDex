@@ -3203,7 +3203,7 @@ export default function VotePage() {
             </div>
           ) : (
             <CardSection ref={matchupsSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
-              {displayMatchups.map((matchup) => (
+              {displayMatchups.map((matchup, index) => (
                 <HideExitCard
                   key={matchup.id}
                   isMobile={isMobile}
@@ -3222,6 +3222,7 @@ export default function VotePage() {
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                     enableDiscussion
+                    priority={index < 3}
                   />
                 </HideExitCard>
               ))}
@@ -4252,7 +4253,7 @@ export default function VotePage() {
             
             <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {displayMatchups.map((matchup) => (
+                {displayMatchups.map((matchup, index) => (
                   <VersusCard
                     key={matchup.id}
                     matchup={matchup}
@@ -4265,6 +4266,7 @@ export default function VotePage() {
                     onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                     enableDiscussion
+                    priority={index < 3}
                   />
                 ))}
               </div>
