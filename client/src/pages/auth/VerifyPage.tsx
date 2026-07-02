@@ -7,7 +7,7 @@
  *
  * UX details handled here:
  *   - Auto-submits when 6 digits are entered (no extra Verify click).
- *   - 30s resend cooldown with a live label.
+ *   - 45s resend cooldown with a live label.
  *   - "Edit email" returns to /login with `?email=...&mode=signup` so the
  *     LoginPage can keep the user's progress without restarting from blank.
  *   - Auto-resends one fresh code if Supabase reports otp_expired.
@@ -36,7 +36,7 @@ import {
   type PendingAuth,
 } from "@/lib/pendingAuth";
 
-const RESEND_COOLDOWN_S = 30;
+const RESEND_COOLDOWN_S = 45;
 const CODE_LENGTH = 6;
 
 export default function VerifyPage() {
@@ -49,6 +49,7 @@ export default function VerifyPage() {
   const [resending, setResending] = useState(false);
   const [resendIn, setResendIn] = useState(RESEND_COOLDOWN_S);
   const [error, setError] = useState<string | null>(null);
+  const [hasResent, setHasResent] = useState(false);
 
   const verifiedRef = useRef(false);
   const autoResubmittedRef = useRef(false);
@@ -112,9 +113,10 @@ export default function VerifyPage() {
         setPending(pending.email, pending.intent);
         setPendingState(getPending());
         setResendIn(RESEND_COOLDOWN_S);
+        setHasResent(true);
         if (!auto) {
           toast("New code sent", {
-            description: `We just sent another 6-digit code to ${pending.email}.`,
+            description: "Use the newest code — your previous code no longer works.",
           });
         } else {
           toast("Sent a fresh code", {
@@ -159,7 +161,11 @@ export default function VerifyPage() {
         if (verifyErr) {
           const mapped = mapAuthError(verifyErr);
 
-          if (mapped.code === "otp_expired" && !autoResubmittedRef.current) {
+          if (
+            mapped.code === "otp_expired" &&
+            !autoResubmittedRef.current &&
+            !hasResent
+          ) {
             autoResubmittedRef.current = true;
             setError(mapped.message);
             setCode("");
@@ -170,7 +176,13 @@ export default function VerifyPage() {
             return;
           }
 
-          setError(mapped.message);
+          if (hasResent && mapped.code === "otp_expired") {
+            setError(
+              "That code didn't work. If you requested more than one, only the most recent code is valid.",
+            );
+          } else {
+            setError(mapped.message);
+          }
           setCode("");
           return;
         }
@@ -187,7 +199,7 @@ export default function VerifyPage() {
         setVerifying(false);
       }
     },
-    [pending, verifying, handleResend],
+    [pending, verifying, handleResend, hasResent],
   );
 
   const handleChange = (next: string) => {
@@ -273,14 +285,23 @@ export default function VerifyPage() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Verifying…
                 </p>
-              ) : error ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  The code expires in 10 minutes.
-                </p>
+                <div className="flex flex-col items-center gap-1 text-center">
+                  {error ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      {error}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      The code expires in 10 minutes.
+                    </p>
+                  )}
+                  {hasResent ? (
+                    <p className="text-xs text-muted-foreground">
+                      Requested more than one code? Only the most recent email works.
+                    </p>
+                  ) : null}
+                </div>
               )}
             </div>
 
