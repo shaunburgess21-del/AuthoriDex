@@ -28,7 +28,11 @@ import {
 } from "./constants";
 import { getSimulationProfile } from "./simulationProfile";
 import { JACKPOT_TICKET_COST } from "../config/constants";
-import { WORLD_MARKETS_LLM_ENABLED, MIN_SHARES_TO_SELL } from "./constants";
+import {
+  WORLD_MARKETS_LLM_ENABLED,
+  MIN_SHARES_TO_SELL,
+  isCommunityConvergenceEnabled,
+} from "./constants";
 import type { PredictionDecision, SellDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
 import { getMarketBettingCutoff, getAmmTradingClosedMessage } from "../native-markets/lifecycle";
@@ -189,12 +193,48 @@ async function executeAction(action: {
     // Honour the world-markets kill switch even for actions queued BEFORE
     // the switch was flipped. Without this, agents keep executing pending
     // community-market bets for hours after the operator pauses LLM spend.
+    //
+    // Two carve-outs:
+    //   - `sell` actions always execute — exit management. Agents holding
+    //     positions when the kill switch flips off must still be able to
+    //     manage their exits (this was always the sell sweep's documented
+    //     contract; the worker previously skipped sells here too).
+    //   - Community convergence buys (deterministic, zero LLM cost, tagged
+    //     `communityConvergenceSweep` by the arb sweep) are governed by
+    //     their own kill switch (COMMUNITY_CONVERGENCE_ENABLED), not the
+    //     LLM budget switch.
     if (!WORLD_MARKETS_LLM_ENABLED && market.marketType === "community") {
+      const isSell = action.actionType === "sell";
+      const isConvergenceBuy =
+        (action.decisionPayload as Record<string, unknown> | null)?.communityConvergenceSweep === true &&
+        isCommunityConvergenceEnabled();
+      if (!isSell && !isConvergenceBuy) {
+        await db
+          .update(scheduledAgentActions)
+          .set({
+            status: "skipped",
+            errorMessage: "World markets paused (WORLD_MARKETS_LLM_ENABLED=false)",
+            executedAt: new Date(),
+          })
+          .where(eq(scheduledAgentActions.id, action.id));
+        return;
+      }
+    }
+
+    // Community convergence buys have their own kill switch: if the
+    // operator turned COMMUNITY_CONVERGENCE_ENABLED off after actions
+    // were queued, drain the queue without trading.
+    if (
+      market.marketType === "community" &&
+      (action.decisionPayload as Record<string, unknown> | null)?.communityConvergenceSweep === true &&
+      action.actionType === "buy" &&
+      !isCommunityConvergenceEnabled()
+    ) {
       await db
         .update(scheduledAgentActions)
         .set({
           status: "skipped",
-          errorMessage: "World markets paused (WORLD_MARKETS_LLM_ENABLED=false)",
+          errorMessage: "Community convergence paused (COMMUNITY_CONVERGENCE_ENABLED=false)",
           executedAt: new Date(),
         })
         .where(eq(scheduledAgentActions.id, action.id));

@@ -179,6 +179,58 @@ export function computeArbPredictionH2H(
 }
 
 /**
+ * Community (World Market) arb — converge AMM prices toward the scouted
+ * source anchor (`readSourceFairByEntryId`). N-way max-edge buy: whichever
+ * entry is most underpriced vs its source fair gets bought, including
+ * unfavored sides (mirrors the mid-week `allowUnfavoredSide` semantics —
+ * an overpriced favorite is corrected by buying the underpriced rest).
+ * No decisive gate: the external consensus IS the signal; the edge bar
+ * (`COMMUNITY_ARB_MIN_EDGE_PP`, deliberately above the native 4pp) is the
+ * safety control. Caller owns the flag gating (shadow vs enabled).
+ */
+export function computeArbPredictionCommunity(
+  entries: MarketEntryData[],
+  fairByEntryId: Record<string, number>,
+  currentPrices: Record<string, number>,
+  options?: { minEdgePp?: number },
+): PredictionDecision {
+  const abstain = (
+    reason: PredictionDecision["abstainReason"],
+  ): PredictionDecision => ({ abstain: true, abstainReason: reason });
+
+  if (entries.length < 2) return abstain("low_edge");
+
+  const minEdgePp = options?.minEdgePp ?? ARB_MIN_EDGE_PP;
+
+  let chosen: MarketEntryData | null = null;
+  let chosenFair = 0;
+  let bestEdge = -Infinity;
+  for (const entry of entries) {
+    const fair = fairByEntryId[entry.id];
+    if (fair == null || !Number.isFinite(fair)) continue;
+    const edge = fair - (currentPrices[entry.id] ?? 1 / entries.length);
+    if (edge > bestEdge) {
+      bestEdge = edge;
+      chosen = entry;
+      chosenFair = fair;
+    }
+  }
+
+  if (!chosen || bestEdge < minEdgePp) {
+    return abstain("low_edge");
+  }
+
+  return {
+    abstain: false,
+    entryId: chosen.id,
+    direction: "yes",
+    confidence: Math.min(LOCKIN_FAIR_MAX, chosenFair),
+    edge: bestEdge,
+    source: "deterministic",
+  };
+}
+
+/**
  * Gainer arb — buy favored entry when live price is below lock-in fair by ARB_MIN_EDGE_PP.
  */
 export function computeArbPredictionGainer(

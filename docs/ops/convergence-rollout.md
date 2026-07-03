@@ -115,6 +115,54 @@ Optional tuning: `ARB_MIDWEEK_MIN_EDGE_PP` (default `0.12`), `ARB_MIDWEEK_DECISI
 
 Flip `LATCH_REVERT_ENABLED` / `MIDWEEK_CONVERGENCE_ENABLED` off; next agent sweep picks up. Positions settle normally.
 
+## Community (World Market) source-anchored convergence (Jul 2026)
+
+Scouted World Markets (Market Scout imports from Polymarket) carry the source
+market's consensus prices in `metadata.source` — `pricesAtImport` at import,
+`livePrices` refreshed daily by the source watcher. The arb cohort converges
+AMM prices toward that anchor. **Deterministic, zero LLM cost** — independent
+of `WORLD_MARKETS_LLM_ENABLED` (the LLM switch governs regular agents'
+belief-driven world bets, not convergence). Manual (non-scouted) world markets
+have no anchor and are never touched.
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| 1 | `COMMUNITY_CONVERGENCE_SHADOW=true` | Logs `[CommunityConvergence][shadow] market=… anchor=… wouldBuy=… edge=…`; no bet changes |
+| 2 | `COMMUNITY_CONVERGENCE_ENABLED=true` | Arb cohort buys the most underpriced outcome vs the source anchor when `fair − price ≥ COMMUNITY_ARB_MIN_EDGE_PP` (default 0.06); max `COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP` (default 10) per sweep; one convergence action per market per UTC day (anchor refreshes daily) |
+| 3 | `COMMUNITY_SELL_SWEEP_ENABLED=true` | Agent sell sweep includes community positions (price-band exits, no updown score-reversal) so simulated flow moves prices both ways |
+
+Requires `ARB_COHORT_ENABLED=true` (same cohort as native convergence).
+
+Design notes:
+
+- Fair anchor prefers `metadata.source.livePrices` (daily watcher refresh),
+  falls back to `pricesAtImport`. Anchor is label-matched to current entries —
+  renamed/reordered entries beyond recognition reject the anchor (no trade)
+  rather than risk converging to the wrong outcome.
+- Once the source resolves upstream (`source.upstreamResolvedAt`), the anchor
+  deactivates — the settlement queue takes over.
+- N-way max-edge buy (works for binary and multi) with unfavored sides allowed,
+  mirroring the mid-week sweep's overpriced-favorite correction.
+- Edge bar is deliberately above the native 4pp because the anchor can be up
+  to ~24h stale between watcher runs.
+
+Optional tuning: `COMMUNITY_ARB_MIN_EDGE_PP` (default `0.06`),
+`COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP` (default `10`).
+
+### Validation
+
+1. Shadow logs — scouted markets with a visible gap vs Polymarket should log
+   `wouldBuy` with plausible edges.
+2. `npm run amm:convergence` — new "Community (World Market) convergence"
+   section; mispriced count should drop after enable.
+3. AMM health check 9 now includes a community line (advisory only).
+
+### Rollback
+
+Flip `COMMUNITY_CONVERGENCE_ENABLED` / `COMMUNITY_SELL_SWEEP_ENABLED` off; the
+action worker also drains already-queued convergence buys as `skipped` when
+the enable flag is off. Positions settle normally.
+
 ### Validation (union news smoothing)
 
 ```bash

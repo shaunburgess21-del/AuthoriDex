@@ -24,6 +24,7 @@ import {
   LOCKIN_GAINER_BETA,
 } from "./constants";
 import { OFFICIAL_SNAPSHOT_ORIGIN_SQL } from "../scoring/official-snapshots";
+import { readSourceFairByEntryId } from "./sourceFair";
 
 /** |fair − price| above this counts as mispriced (10pp, same as lock-in decisive band). */
 const MISPRICED_GAP_PP = LOCKIN_DECISIVE_PCT;
@@ -582,6 +583,158 @@ export async function fetchLiveGainerConvergence(
     summary: summarizeConvergenceGaps(markets, (m) =>
       m.favoredFair != null && m.favoredFair >= LOCKIN_GAINER_DECISIVE_FAIR,
     ),
+    sampledAt: now.toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Community (World Market) convergence — source-anchored
+// ---------------------------------------------------------------------------
+
+export interface LiveCommunityConvergenceMarketRow {
+  marketId: string;
+  title: string | null;
+  hoursRemaining: number;
+  entryCount: number;
+  /** "live" (daily-refreshed Polymarket prices) or "import" (at-import snapshot). */
+  anchor: "live" | "import";
+  favoredLabel: string | null;
+  favoredFair: number | null;
+  favoredPrice: number | null;
+  /** favoredFair − favoredPrice on the anchor's favoured outcome. */
+  gap: number | null;
+  /** Largest fair-minus-price edge across ALL outcomes (what the arb buys). */
+  bestEdge: number | null;
+  volume: number;
+  liquidityB: number;
+}
+
+export interface LiveCommunityConvergenceResult {
+  markets: LiveCommunityConvergenceMarketRow[];
+  summary: LiveConvergenceSummary;
+  sampledAt: string;
+}
+
+/**
+ * Gap diagnostics for scouted community markets vs their source anchor
+ * (metadata.source livePrices / pricesAtImport). Manual world markets
+ * have no anchor and are excluded — they have no convergence target.
+ */
+export async function fetchLiveCommunityConvergence(
+  now: Date = new Date(),
+): Promise<LiveCommunityConvergenceResult> {
+  const marketRows = await db.execute(sql`
+    SELECT
+      pm.id AS market_id,
+      pm.title,
+      pm.end_at,
+      pm.metadata,
+      mas.liquidity_b,
+      mas.share_quantities AS sq,
+      COALESCE(mas.total_user_credits_in, 0)::float AS volume
+    FROM prediction_markets pm
+    INNER JOIN market_amm_state mas ON mas.market_id = pm.id
+    WHERE pm.engine = 'amm'
+      AND pm.market_type = 'community'
+      AND pm.status = 'OPEN'
+      AND pm.visibility = 'live'
+      AND pm.end_at > ${now}
+      AND pm.metadata->'source'->>'provider' = 'polymarket'
+  `);
+
+  const marketIds = (marketRows.rows as Array<{ market_id: string }>).map(
+    (r) => r.market_id,
+  );
+  if (marketIds.length === 0) {
+    return {
+      markets: [],
+      summary: summarizeConvergenceGaps([], () => false),
+      sampledAt: now.toISOString(),
+    };
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      entryId: marketEntries.id,
+      label: marketEntries.label,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, marketIds));
+
+  const entriesByMarket = new Map<string, Array<{ id: string; label: string | null }>>();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.entryId, label: row.label });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const markets: LiveCommunityConvergenceMarketRow[] = [];
+
+  for (const row of marketRows.rows as Array<{
+    market_id: string;
+    title: string | null;
+    end_at: Date | string;
+    metadata: unknown;
+    liquidity_b: string | number;
+    sq: Record<string, number>;
+    volume: number;
+  }>) {
+    const entries = entriesByMarket.get(row.market_id) ?? [];
+    if (entries.length < 2) continue;
+
+    const sourceFair = readSourceFairByEntryId(row.metadata, entries);
+    if (!sourceFair) continue;
+
+    const b = Number(row.liquidity_b);
+    const sq = row.sq ?? {};
+    const entryIds = entries.map((e) => e.id);
+    const endAt = row.end_at instanceof Date ? row.end_at : new Date(row.end_at);
+    const hrs = hoursUntilEnd(endAt, now);
+
+    let favoredEntryId: string | null = null;
+    let favoredFair: number | null = null;
+    let bestEdge: number | null = null;
+    for (const entry of entries) {
+      const fair = sourceFair.fairByEntryId[entry.id];
+      if (fair == null) continue;
+      if (favoredFair == null || fair > favoredFair) {
+        favoredFair = fair;
+        favoredEntryId = entry.id;
+      }
+      const edge = fair - lmsrEntryPrice(b, sq, entry.id, entryIds);
+      if (bestEdge == null || edge > bestEdge) bestEdge = edge;
+    }
+    if (!favoredEntryId || favoredFair == null) continue;
+
+    const favoredPrice = lmsrEntryPrice(b, sq, favoredEntryId, entryIds);
+    const gap = favoredFair - favoredPrice;
+    const favoredEntry = entries.find((e) => e.id === favoredEntryId);
+
+    markets.push({
+      marketId: row.market_id,
+      title: row.title,
+      hoursRemaining: hrs,
+      entryCount: entries.length,
+      anchor: sourceFair.anchor,
+      favoredLabel: favoredEntry?.label ?? null,
+      favoredFair,
+      favoredPrice,
+      gap,
+      bestEdge,
+      volume: Number(row.volume) || 0,
+      liquidityB: b,
+    });
+  }
+
+  markets.sort((a, b) => Math.abs(b.gap ?? 0) - Math.abs(a.gap ?? 0));
+
+  return {
+    markets,
+    // "Decided" for community = the anchor has a usable fair at all —
+    // the external consensus is always the signal, so every anchored
+    // market counts toward the mispricing stats.
+    summary: summarizeConvergenceGaps(markets, (m) => m.favoredFair != null),
     sampledAt: now.toISOString(),
   };
 }

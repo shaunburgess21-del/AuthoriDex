@@ -709,6 +709,8 @@ export interface SourceWatchResult {
   resolvedUpstream: number;
   /** Upstream resolved but the winner couldn't be mapped to an entry. */
   unmappable: number;
+  /** Markets whose live source prices were refreshed this run. */
+  livePricesRefreshed: number;
   errors: number;
   findings: Array<{
     marketId: string;
@@ -737,6 +739,7 @@ export async function runSourceResolutionWatch(): Promise<SourceWatchResult> {
     checked: 0,
     resolvedUpstream: 0,
     unmappable: 0,
+    livePricesRefreshed: 0,
     errors: 0,
     findings: [],
   };
@@ -759,6 +762,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     checked: 0,
     resolvedUpstream: 0,
     unmappable: 0,
+    livePricesRefreshed: 0,
     errors: 0,
     findings: [],
   };
@@ -866,6 +870,50 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
           `[MarketScout] Source event ${source.externalId} closed without a mappable winner ` +
             `for market=${row.id.slice(0, 8)} (winners=${winners.length})`,
         );
+      } else {
+        // Source still open: refresh the live consensus prices. These are
+        // the fair-value anchor for agent convergence on scouted markets
+        // (metadata.source.livePrices, aligned with pricesAtImport /
+        // entry displayOrder). Best effort — any gap skips the refresh.
+        const livePrices: number[] = [];
+        let pricesComplete = true;
+        for (const m of mapping) {
+          if (!m.sourceMarketId || typeof m.sourceOutcomeIndex !== "number") {
+            pricesComplete = false;
+            break;
+          }
+          const res = resolutions.get(m.sourceMarketId);
+          const p = res?.prices?.[m.sourceOutcomeIndex];
+          if (typeof p !== "number" || !Number.isFinite(p)) {
+            pricesComplete = false;
+            break;
+          }
+          livePrices.push(Number(p.toFixed(4)));
+        }
+        if (pricesComplete && livePrices.length === mapping.length) {
+          try {
+            const payload = {
+              source: {
+                ...source,
+                livePrices,
+                livePricesAt: new Date().toISOString(),
+              },
+            };
+            await db
+              .update(predictionMarkets)
+              .set({
+                metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, row.id));
+            result.livePricesRefreshed += 1;
+          } catch (err) {
+            result.errors += 1;
+            log(
+              `[MarketScout] Live price refresh failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
       }
       continue;
     }
@@ -958,7 +1006,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
   if (result.checked > 0) {
     log(
       `[MarketScout] Source watch — checked=${result.checked} resolvedUpstream=${result.resolvedUpstream} ` +
-        `unmappable=${result.unmappable} errors=${result.errors}`,
+        `unmappable=${result.unmappable} livePricesRefreshed=${result.livePricesRefreshed} errors=${result.errors}`,
     );
   }
 

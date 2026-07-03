@@ -256,13 +256,19 @@ export async function fetchTrendingPolymarketEvents(
 export interface PolymarketMarketResolution {
   marketId: string;
   closed: boolean;
-  /** Outcome labels, aligned with `winningOutcomeIndex`. */
+  /** Outcome labels, aligned with `winningOutcomeIndex` and `prices`. */
   outcomes: string[];
   /**
    * Index of the outcome whose settlement price is ~1, or null while the
    * market is unresolved / ambiguous.
    */
   winningOutcomeIndex: number | null;
+  /**
+   * Live outcome prices in [0,1], aligned with `outcomes`. While the
+   * market is open these are the order-book consensus — the source
+   * fair-value anchor for agent convergence on scouted markets.
+   */
+  prices: number[];
 }
 
 function toMarketResolution(raw: GammaMarket): PolymarketMarketResolution | null {
@@ -282,6 +288,7 @@ function toMarketResolution(raw: GammaMarket): PolymarketMarketResolution | null
     closed: raw.closed === true,
     outcomes,
     winningOutcomeIndex,
+    prices: prices.map((p) => Math.max(0, Math.min(1, p))),
   };
 }
 

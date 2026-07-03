@@ -173,3 +173,6 @@ main().catch((err) => {
   console.error("E2E ERROR:", err);
   process.exit(1);
 });
+
+// Module scope (prevents `main` clashing with other script files in tsc).
+export {};

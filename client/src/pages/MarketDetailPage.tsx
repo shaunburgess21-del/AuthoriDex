@@ -37,6 +37,7 @@ import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
+import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
@@ -110,6 +111,8 @@ interface ResolutionSummary {
   jackpotPayout?: number | null;
   jackpotTiedWinners?: number | null;
   notesText?: string | null;
+  /** Post-settlement AI one-liner (prediction_markets.resolution_summary). */
+  aiSummary?: string | null;
 }
 
 interface JackpotWinnerRow {
@@ -1474,6 +1477,22 @@ export default function MarketDetailPage() {
               ))}
             </div>
           )}
+
+          {/* Native-parity timing strip: "Trading closes … / Results …"
+              with a live countdown. Community only (jackpot rows on this
+              page keep their own weekly cutoff hero) and only while the
+              market is OPEN — the result card owns closed/resolved copy,
+              and the strip's RESOLVED variant carries weekly-native
+              wording that doesn't fit world events. */}
+          {market.marketType === "community" && market.status === "OPEN" && (market.closeAt || market.endAt) && (
+            <MarketCycleStrip
+              bettingCutoff={market.closeAt || market.endAt}
+              resolveAt={market.endAt}
+              variant="full"
+              engine="amm"
+              className="mt-4"
+            />
+          )}
         </div>
 
         {/* Live "My Position" / "Your Result" card. Renders for both
@@ -1913,7 +1932,7 @@ export default function MarketDetailPage() {
               </div>
             </div>
 
-            {(market.resolutionSummary?.outcomeLabel || market.resolutionSummary?.notesText || market.voidReason) && (
+            {(market.resolutionSummary?.outcomeLabel || market.resolutionSummary?.notesText || market.resolutionSummary?.aiSummary || market.voidReason) && (
               <div className="rounded-lg border border-border/50 bg-background/40 px-4 py-3 mb-4">
                 {market.resolutionSummary?.outcomeLabel && (
                   <p className="text-sm">
@@ -1921,9 +1940,14 @@ export default function MarketDetailPage() {
                     <span className="font-semibold text-foreground">{market.resolutionSummary.outcomeLabel}</span>
                   </p>
                 )}
-                {!market.resolutionSummary?.outcomeLabel && (market.resolutionSummary?.notesText || market.voidReason) && (
+                {!market.resolutionSummary?.outcomeLabel && !market.resolutionSummary?.aiSummary && (market.resolutionSummary?.notesText || market.voidReason) && (
                   <p className="text-sm text-muted-foreground">
                     {market.voidReason || market.resolutionSummary?.notesText}
+                  </p>
+                )}
+                {market.resolutionSummary?.aiSummary && (
+                  <p className="text-sm italic text-muted-foreground mt-1" data-testid="text-ai-resolution-summary">
+                    {market.resolutionSummary.aiSummary}
                   </p>
                 )}
               </div>

@@ -913,7 +913,10 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
 
-  const endDate = market.endAt ? new Date(market.endAt) : null;
+  // Time badge counts down to the actual trading cutoff (closeAt =
+  // endAt − pre-resolve cooldown) rather than endAt, so "Nd left" means
+  // "days you can still trade" — matching the native MarketCycleStrip.
+  const endDate = market.closeAt ? new Date(market.closeAt) : market.endAt ? new Date(market.endAt) : null;
   const now = new Date();
   const daysLeft = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
   const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";

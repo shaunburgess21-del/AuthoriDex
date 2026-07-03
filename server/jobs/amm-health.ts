@@ -635,6 +635,7 @@ async function checkLiveConvergence(): Promise<CheckResult> {
     fetchLiveUpDownConvergence,
     fetchLiveH2HConvergence,
     fetchLiveGainerConvergence,
+    fetchLiveCommunityConvergence,
     LIVE_CONVERGENCE_AVG_GAP_WARN,
     LIVE_CONVERGENCE_MISPRICED_WARN_PCT,
   } = await import("../agents/liveConvergence.ts");
@@ -642,15 +643,19 @@ async function checkLiveConvergence(): Promise<CheckResult> {
   const live = await fetchLiveUpDownConvergence();
   const h2h = await fetchLiveH2HConvergence();
   const gainer = await fetchLiveGainerConvergence();
+  const community = await fetchLiveCommunityConvergence();
   const { summary } = live;
   const h2hSummary = h2h.summary;
   const gainerSummary = gainer.summary;
+  const communitySummary = community.summary;
   const mispricedPct = summary.decidedMispricedPct;
   const avgGap = summary.avgAbsGapOnDecided;
   const h2hMispricedPct = h2hSummary.decidedMispricedPct;
   const h2hAvgGap = h2hSummary.avgAbsGapOnDecided;
   const gainerMispricedPct = gainerSummary.decidedMispricedPct;
   const gainerAvgGap = gainerSummary.avgAbsGapOnDecided;
+  const communityMispricedPct = communitySummary.decidedMispricedPct;
+  const communityAvgGap = communitySummary.avgAbsGapOnDecided;
 
   let status: CheckStatus = "pass";
   if (
@@ -659,7 +664,9 @@ async function checkLiveConvergence(): Promise<CheckResult> {
     (h2hMispricedPct != null && h2hMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
     (h2hAvgGap != null && h2hAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN) ||
     (gainerMispricedPct != null && gainerMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
-    (gainerAvgGap != null && gainerAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
+    (gainerAvgGap != null && gainerAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN) ||
+    (communityMispricedPct != null && communityMispricedPct >= LIVE_CONVERGENCE_MISPRICED_WARN_PCT) ||
+    (communityAvgGap != null && communityAvgGap >= LIVE_CONVERGENCE_AVG_GAP_WARN)
   ) {
     status = "warn";
   }
@@ -676,12 +683,20 @@ async function checkLiveConvergence(): Promise<CheckResult> {
     gainerSummary.decidedCount === 0
       ? "gainer: no decisive open fields (fav fair < 45%)."
       : `gainer: ${gainerSummary.decidedMispricedCount}/${gainerSummary.decidedCount} mispriced (${gainerMispricedPct != null ? `${(gainerMispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${gainerAvgGap?.toFixed(3) ?? "n/a"}`;
+  const communityDetail =
+    communitySummary.decidedCount === 0
+      ? "community: no anchored (scouted) open markets."
+      : `community: ${communitySummary.decidedMispricedCount}/${communitySummary.decidedCount} mispriced (${communityMispricedPct != null ? `${(communityMispricedPct * 100).toFixed(0)}%` : "n/a"}), avg |gap|=${communityAvgGap?.toFixed(3) ?? "n/a"}`;
 
   return {
-    name: "Live native convergence (up/down + h2h + gainer)",
+    name: "Live convergence (up/down + h2h + gainer + community)",
     status,
-    rowCount: summary.decidedCount + h2hSummary.decidedCount + gainerSummary.decidedCount,
-    details: `${updownDetail}; ${h2hDetail}; ${gainerDetail}. Run: npm run amm:convergence`,
+    rowCount:
+      summary.decidedCount +
+      h2hSummary.decidedCount +
+      gainerSummary.decidedCount +
+      communitySummary.decidedCount,
+    details: `${updownDetail}; ${h2hDetail}; ${gainerDetail}; ${communityDetail}. Run: npm run amm:convergence`,
     sample: [
       ...live.markets.slice(0, 3).map((m) => ({
         type: "updown",
@@ -705,6 +720,15 @@ async function checkLiveConvergence(): Promise<CheckResult> {
         price: m.favoredPrice,
         fair: m.favoredFair,
         favored: m.favoredLabel,
+      })),
+      ...community.markets.slice(0, 3).map((m) => ({
+        type: "community",
+        marketId: m.marketId.slice(0, 8),
+        gap: m.gap,
+        price: m.favoredPrice,
+        fair: m.favoredFair,
+        favored: m.favoredLabel,
+        anchor: m.anchor,
       })),
     ],
   };

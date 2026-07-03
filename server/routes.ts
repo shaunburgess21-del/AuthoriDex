@@ -9620,7 +9620,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           personAvatar: isNative ? b.personAvatar : null,
           startAt: b.startAt,
           endAt: b.endAt,
-          resolutionSummary: isNative ? b.resolutionSummary ?? null : null,
+          // Community markets now get an AI resolution summary too
+          // (generateResolutionSummary handles marketType 'community').
+          resolutionSummary: b.resolutionSummary ?? null,
           hidden: hiddenSet.has(`market_bet:${b.betId}`),
         };
       });
@@ -17888,6 +17890,9 @@ Target length: about 90-150 words.`;
           resolutionCriteria: predictionMarkets.resolutionCriteria,
           resolutionSources: predictionMarkets.resolutionSources,
           resolutionNotes: predictionMarkets.resolutionNotes,
+          // AI post-settlement one-liner (text column); merged into the
+          // synthesized resolutionSummary object below as `aiSummary`.
+          resolutionSummary: predictionMarkets.resolutionSummary,
           resolveMethod: predictionMarkets.resolveMethod,
           voidReason: predictionMarkets.voidReason,
           closeAt: predictionMarkets.closeAt,
@@ -18005,7 +18010,18 @@ Target length: about 90-150 words.`;
         }
       }
 
-      const resolutionSummary = buildMarketResolutionSummary(market.resolutionNotes);
+      const resolutionSummaryBase = buildMarketResolutionSummary(market.resolutionNotes);
+      // Attach the post-settlement AI one-liner (prediction_markets.
+      // resolution_summary — now generated for community markets too) so
+      // the detail page can show the same blurb as /me/predictions.
+      const aiResolutionSummary =
+        typeof market.resolutionSummary === "string" && market.resolutionSummary.trim()
+          ? market.resolutionSummary.trim()
+          : null;
+      const resolutionSummary =
+        resolutionSummaryBase || aiResolutionSummary
+          ? { ...(resolutionSummaryBase ?? {}), aiSummary: aiResolutionSummary }
+          : null;
 
       // Jackpot resolved markets get an additional winner block so the
       // detail page can render "@username won 1,000 credits" while still

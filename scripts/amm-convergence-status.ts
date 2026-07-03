@@ -9,6 +9,7 @@ import {
   fetchLiveUpDownConvergence,
   fetchLiveH2HConvergence,
   fetchLiveGainerConvergence,
+  fetchLiveCommunityConvergence,
 } from "../server/agents/liveConvergence.ts";
 import { fetchDrainBreakerSnapshot } from "../server/agents/drainBreaker.ts";
 
@@ -30,10 +31,11 @@ const skipDrain = process.argv.includes("--no-drain");
 const updown = await fetchLiveUpDownConvergence();
 const h2h = await fetchLiveH2HConvergence();
 const gainer = await fetchLiveGainerConvergence();
+const community = await fetchLiveCommunityConvergence();
 
 if (jsonOut) {
   const drain = skipDrain ? null : await fetchDrainBreakerSnapshot();
-  console.log(JSON.stringify({ updown, h2h, gainer, drainBreaker: drain }, null, 2));
+  console.log(JSON.stringify({ updown, h2h, gainer, community, drainBreaker: drain }, null, 2));
   process.exit(0);
 }
 
@@ -84,6 +86,12 @@ printSummary(
   gainer.sampledAt,
   "LOCKIN_FAIR_GAINER_ENABLED",
 );
+printSummary(
+  "Live Community (World Market) convergence — scouted source anchors",
+  community.summary,
+  community.sampledAt,
+  "COMMUNITY_CONVERGENCE_ENABLED",
+);
 
 console.log(`\nTop ${topN} Up/Down by |fair − price|:\n`);
 console.log("Market\tSide\tPrice\tFair\tGap\tpctOpen\tHrs\tVol");
@@ -122,6 +130,16 @@ for (const m of gainer.markets.slice(0, topN)) {
       : "n/a";
   console.log(
     `${title} (${id})\t${(m.favoredLabel ?? "?").slice(0, 16)}\t${(m.favoredPrice ?? 0).toFixed(3)}\t${(m.favoredFair ?? 0).toFixed(3)}\t${(m.gap ?? 0) >= 0 ? "+" : ""}${(m.gap ?? 0).toFixed(3)}\t${leaderPct}\t${m.hoursRemaining.toFixed(0)}\t${Math.round(m.volume)}\t${m.entryCount}`,
+  );
+}
+
+console.log(`\nTop ${topN} Community (scouted) by |fair − price|:\n`);
+console.log("Market\tFavored\tPrice\tFair\tGap\tBestEdge\tAnchor\tHrs\tVol\tN");
+for (const m of community.markets.slice(0, topN)) {
+  const id = m.marketId.slice(0, 8);
+  const title = (m.title ?? "?").slice(0, 24).replace(/\t/g, " ");
+  console.log(
+    `${title} (${id})\t${(m.favoredLabel ?? "?").slice(0, 16)}\t${(m.favoredPrice ?? 0).toFixed(3)}\t${(m.favoredFair ?? 0).toFixed(3)}\t${(m.gap ?? 0) >= 0 ? "+" : ""}${(m.gap ?? 0).toFixed(3)}\t${(m.bestEdge ?? 0) >= 0 ? "+" : ""}${(m.bestEdge ?? 0).toFixed(3)}\t${m.anchor}\t${m.hoursRemaining.toFixed(0)}\t${Math.round(m.volume)}\t${m.entryCount}`,
   );
 }
 

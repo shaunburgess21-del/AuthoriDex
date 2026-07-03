@@ -282,6 +282,47 @@ export function isMidweekConvergenceEnabled(): boolean {
   return envFlag(process.env.MIDWEEK_CONVERGENCE_ENABLED);
 }
 
+// ---------------------------------------------------------------------------
+// Community (World Market) source-anchored convergence
+// ---------------------------------------------------------------------------
+// Scouted World Markets carry the source market's consensus prices in
+// metadata.source (pricesAtImport at import, livePrices refreshed daily by
+// the source watcher). The arb cohort can converge AMM prices toward that
+// anchor — deterministic, zero LLM cost. Same shadow -> enable rollout
+// pattern as the native lock-in flags. All read at call time so a Railway
+// flag flip applies on the next sweep without restart-order concerns.
+
+/** Log community convergence candidates without scheduling trades. */
+export function isCommunityConvergenceShadow(): boolean {
+  return envFlag(process.env.COMMUNITY_CONVERGENCE_SHADOW);
+}
+
+/** Arb cohort trades scouted community markets toward the source anchor. */
+export function isCommunityConvergenceEnabled(): boolean {
+  return envFlag(process.env.COMMUNITY_CONVERGENCE_ENABLED);
+}
+
+/** Agent sell sweep may exit community positions (price-band anchors). */
+export function isCommunitySellSweepEnabled(): boolean {
+  return envFlag(process.env.COMMUNITY_SELL_SWEEP_ENABLED);
+}
+
+/**
+ * Edge bar for community arb buys. Higher than the native near-close
+ * ARB_MIN_EDGE_PP (0.04) because the anchor refreshes daily — a stale
+ * anchor plus a thin edge would let agents chase yesterday's news.
+ */
+export const COMMUNITY_ARB_MIN_EDGE_PP = (() => {
+  const raw = Number(process.env.COMMUNITY_ARB_MIN_EDGE_PP);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.06;
+})();
+
+/** Max community markets per convergence sweep (canary cap). */
+export const COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP = (() => {
+  const raw = Number(process.env.COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP);
+  return Number.isInteger(raw) && raw > 0 ? raw : 10;
+})();
+
 export const REPREDICT_PCT_THRESHOLD = 0.06;
 export const REPREDICT_MAX_PER_MARKET = 2;
 export const CONVICTION_SCORE_AGREE_FLIP = 0.12;

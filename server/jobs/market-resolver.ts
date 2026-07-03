@@ -179,9 +179,12 @@ export async function generateResolutionSummary(marketId: string): Promise<void>
     if (!market) return;
     if (market.resolutionSummary) return; // idempotent — don't regenerate
     if (market.status !== "RESOLVED") return; // only summarize successful settlements
-    // Only native markets — community markets use a different resolutionSummary
-    // shape (synthesized object) on their detail endpoint.
-    if (!["h2h", "updown", "gainer", "jackpot"].includes(market.marketType)) return;
+    // Native + community (World Markets). The community detail endpoint
+    // still synthesizes its own resolutionSummary OBJECT from
+    // resolutionNotes (and overrides the raw column in its response), so
+    // writing the text column is safe there; /me/predictions surfaces the
+    // text directly for both.
+    if (!["h2h", "updown", "gainer", "jackpot", "community"].includes(market.marketType)) return;
 
     const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -197,10 +200,14 @@ export async function generateResolutionSummary(marketId: string): Promise<void>
     const loser = entries.find(e => e.resolutionStatus === "loser");
     if (!winner) return;
 
+    const isCommunity = market.marketType === "community";
+
     // For H2H / gainer / updown, try to anchor the summary in one headline
     // about the winning person. updown's "winner" is Up/Down (no person), so
-    // we fall back to the market's linked personId in that case.
-    let winningPersonId: string | null = winner.personId ?? null;
+    // we fall back to the market's linked personId in that case. Community
+    // (world-event) markets skip the person/news anchor — the market title
+    // and resolution criteria carry the context.
+    let winningPersonId: string | null = isCommunity ? null : (winner.personId ?? null);
     if (!winningPersonId && market.marketType === "updown" && market.personId) {
       winningPersonId = market.personId;
     }
@@ -228,9 +235,10 @@ export async function generateResolutionSummary(marketId: string): Promise<void>
     }
 
     // Extract the percent margin for updown / gainer from resolutionNotes
-    // (it's JSON-stringified by the resolvers above).
+    // (it's JSON-stringified by the resolvers above). Community notes carry
+    // no margin; use the resolution criteria as factual context instead.
     let marginLine = "";
-    if (market.resolutionNotes) {
+    if (!isCommunity && market.resolutionNotes) {
       try {
         const notes = JSON.parse(market.resolutionNotes);
         if (typeof notes?.percentChange === "string") {
@@ -241,13 +249,20 @@ export async function generateResolutionSummary(marketId: string): Promise<void>
       } catch {}
     }
 
+    let criteriaLine = "";
+    if (isCommunity && Array.isArray(market.resolutionCriteria) && market.resolutionCriteria.length > 0) {
+      criteriaLine = `Resolution criteria: ${market.resolutionCriteria.slice(0, 3).join("; ")}`;
+    }
+
     const marketTypeLabel = market.marketType === "h2h"
       ? "head-to-head"
       : market.marketType === "gainer"
         ? "top-gainer"
         : market.marketType === "updown"
           ? "up/down"
-          : market.marketType;
+          : isCommunity
+            ? "real-world event"
+            : market.marketType;
 
     const systemPrompt = `You write one-sentence neutral summaries for resolved prediction markets, in the style of a wire-service headline. Past tense. No opinions. No hype words (never use: backlash, scandal, controversy, embattled, slammed, blasted, divisive, polarizing). If a headline is provided, you may reference its event only as a factual anchor — never characterize public reaction.`;
 
@@ -255,8 +270,9 @@ export async function generateResolutionSummary(marketId: string): Promise<void>
 
 Market title: ${market.title}
 Winner: ${winner.label}${winningPersonName && winningPersonName !== winner.label ? ` (${winningPersonName})` : ""}
-${loser ? `Loser: ${loser.label}` : ""}
+${loser && !isCommunity ? `Loser: ${loser.label}` : ""}
 ${marginLine}
+${criteriaLine}
 ${headlineLine}
 
 Rules:

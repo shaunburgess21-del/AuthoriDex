@@ -27,8 +27,10 @@ import {
   computeArbPrediction,
   computeArbPredictionH2H,
   computeArbPredictionGainer,
+  computeArbPredictionCommunity,
   isArbAgent,
 } from "./arbAgent";
+import { readSourceFairByEntryId } from "./sourceFair";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { prefetchNativeAssessmentsForSweep } from "./nativeMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
@@ -37,6 +39,7 @@ import { getMarketBettingCutoff } from "../native-markets/lifecycle";
 import type {
   AgentConfigData,
   MarketWithEntries,
+  MarketEntryData,
   TrendSignals,
   TrendDirection,
   TrendMomentum,
@@ -86,6 +89,11 @@ import {
   ARB_MIDWEEK_DECISIVE_PCT,
   isMidweekConvergenceShadow,
   isMidweekConvergenceEnabled,
+  isCommunityConvergenceShadow,
+  isCommunityConvergenceEnabled,
+  isCommunitySellSweepEnabled,
+  COMMUNITY_ARB_MIN_EDGE_PP,
+  COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP,
   AGENT_STAKE_OVERRIDES,
   WORLD_REEVAL_INTERVAL_DAYS,
   WORLD_CONVICTION_INTERVAL_DAYS,
@@ -763,7 +771,15 @@ async function runAgentBatchOnce(): Promise<{
 
       let decision: PredictionDecision;
 
-      if (isCommunity) {
+      if (isCommunity && isArbAgent(agentData)) {
+        // Arb cohort never burns LLM budget on World Markets — no
+        // computeWorldMarketPrediction call. Community convergence trading
+        // happens exclusively via `runConvergenceSweepCommunity` (which has
+        // the market-per-day dedupe and per-sweep cap); letting the 8 arb
+        // agents ALSO trade here would pile onto the same anchor gap once
+        // per agent per sweep.
+        decision = { abstain: true, abstainReason: "low_edge" };
+      } else if (isCommunity) {
         decision = await computeWorldMarketPrediction(agentData, marketData, entries);
       } else {
         const sharpFetch = getSimulationProfile(agent.simulationProfile).personaBand === "sharp";
@@ -1107,6 +1123,7 @@ async function runAgentBatchOnce(): Promise<{
       now,
       updownSweepCtx,
     );
+    convergenceScheduled += await runConvergenceSweepCommunity(agents, markets, now);
   } catch (convSweepErr) {
     log(
       `[AgentRunner] Convergence sweep error: ${convSweepErr instanceof Error ? convSweepErr.message : convSweepErr}`,
@@ -2319,6 +2336,208 @@ async function runMidweekConvergenceSweep(
   return scheduled;
 }
 
+/**
+ * Community convergence — arb cohort trades scouted World Markets toward
+ * their source anchor (Polymarket consensus prices in metadata.source,
+ * refreshed daily by the source watcher). Deterministic, zero LLM cost.
+ *
+ * Mirrors the mid-week up/down sweep: shadow/enable flags, one convergence
+ * action per market per UTC day (the anchor refreshes daily, so more would
+ * be thrash), biggest-gap markets first, capped per sweep. Manual
+ * (non-scouted) markets have no anchor and are never touched.
+ */
+async function runConvergenceSweepCommunity(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+): Promise<number> {
+  const shadow = isCommunityConvergenceShadow();
+  const enabled = isCommunityConvergenceEnabled();
+  if (!shadow && !enabled) return 0;
+  if (!ARB_COHORT_ENABLED) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const communityAmm = allMarkets.filter(
+    (m) => m.marketType === "community" && m.engine === "amm",
+  );
+  if (!communityAmm.length) return 0;
+
+  const marketIds = communityAmm.map((m) => m.id);
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, marketIds));
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entriesByMarket = new Map<string, { id: string; label: string | null }[]>();
+  const entryRows = await db
+    .select({ marketId: marketEntries.marketId, id: marketEntries.id, label: marketEntries.label })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, marketIds));
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  // Rank candidates by best available edge vs the source anchor, biggest
+  // first, so the per-sweep cap always lands on the worst mispricings.
+  const candidates: Array<{
+    market: UpdownMarketRow;
+    entries: { id: string; label: string | null }[];
+    fairByEntryId: Record<string, number>;
+    anchor: "live" | "import";
+    prices: Record<string, number>;
+    bestEdge: number;
+  }> = [];
+
+  for (const market of communityAmm) {
+    // Respect the trading cutoff with a small pad so a queued action
+    // can't race the pre-resolve cooldown.
+    if (market.endAt) {
+      const cutoff = getMarketBettingCutoff(market.endAt, "amm", "community");
+      if (now.getTime() >= cutoff.getTime() - 10 * 60 * 1000) continue;
+    }
+
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length < 2) continue;
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+
+    const sourceFair = readSourceFairByEntryId(market.metadata, entries);
+    if (!sourceFair) continue;
+
+    const prices = ammCurrentPrices(snap);
+    let bestEdge = -Infinity;
+    for (const entry of entries) {
+      const fair = sourceFair.fairByEntryId[entry.id];
+      if (fair == null) continue;
+      const edge = fair - (prices[entry.id] ?? 1 / entries.length);
+      if (edge > bestEdge) bestEdge = edge;
+    }
+    if (!Number.isFinite(bestEdge)) continue;
+
+    candidates.push({
+      market,
+      entries,
+      fairByEntryId: sourceFair.fairByEntryId,
+      anchor: sourceFair.anchor,
+      prices,
+      bestEdge,
+    });
+  }
+
+  candidates.sort((a, b) => b.bestEdge - a.bestEdge);
+  const targets = candidates.slice(0, COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP);
+  if (!targets.length) return 0;
+
+  const dayStart = startOfUtcDay(now);
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const target of targets) {
+    const { market, entries } = target;
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const entryData: MarketEntryData[] = entries.map((e) => ({
+      id: e.id,
+      label: e.label ?? "",
+      totalStake: 0,
+      noStake: 0,
+    }));
+
+    const decision = computeArbPredictionCommunity(
+      entryData,
+      target.fairByEntryId,
+      target.prices,
+      { minEdgePp: COMMUNITY_ARB_MIN_EDGE_PP },
+    );
+
+    if (shadow && !enabled) {
+      if (!decision.abstain && decision.entryId) {
+        const label = entries.find((e) => e.id === decision.entryId)?.label ?? "?";
+        log(
+          `[CommunityConvergence][shadow] market=${market.id.slice(0, 8)} anchor=${target.anchor} ` +
+            `wouldBuy=${label} edge=${decision.edge?.toFixed(3)} conf=${decision.confidence?.toFixed(3)}`,
+        );
+      }
+      continue;
+    }
+    if (decision.abstain || !decision.entryId) continue;
+
+    // One community convergence action per market per UTC day.
+    const [recentCommunity] = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.decisionPayload}->>'communityConvergenceSweep' = 'true'`,
+          gte(scheduledAgentActions.createdAt, dayStart),
+        ),
+      )
+      .limit(1);
+    if (recentCommunity) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, communityConvergenceSweep: true, sourceAnchor: target.anchor },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] Community convergence ${agent.displayName} → ${market.title?.slice(0, 28)} ` +
+        `anchor=${target.anchor} edge=${decision.edge?.toFixed(3)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] Community convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
+}
+
 function lmsrH2HEntryPrice(
   b: number,
   sq: Record<string, number>,
@@ -2975,17 +3194,27 @@ async function runSellSweep(
   // live price. Jackpot is parimutuel (engine !== 'amm') so it's
   // excluded automatically by the `engine === 'amm'` gate.
   //
-  // `personId` filter retained because the Town Square log lines + the
-  // sell-engine telemetry use the person identity for context; the
-  // few admin-built generic races without a personId sit out the
+  // `personId` filter retained for NATIVE markets because the Town Square
+  // log lines + sell-engine telemetry use the person identity for context;
+  // the few admin-built generic races without a personId sit out the
   // sweep until that wiring exists. Documented limitation, not a bug.
+  //
+  // Community (World Market) parity: most world events have no linked
+  // person, which used to exclude them entirely and made agent flow
+  // buy-only (prices only ever pushed one way by simulated traders).
+  // Gated behind COMMUNITY_SELL_SWEEP_ENABLED so the rollout can watch
+  // the price-band exits before they go live. The sell engine's
+  // anchor-vs-live-price cascade is market-type agnostic; community
+  // positions simply never get an updown scoreContext.
   //
   // Note on community markets: when `WORLD_MARKETS_LLM_ENABLED=false`
   // we block community BUYS in actionWorker, but sells fire here
   // regardless — agents holding positions when the kill switch flips
   // off must still be able to manage their exits.
+  const communitySells = isCommunitySellSweepEnabled();
   const ammMarkets = allMarkets.filter((m) =>
-    m.engine === "amm" && m.personId,
+    m.engine === "amm" &&
+    (m.personId || (communitySells && m.marketType === "community")),
   );
   if (!ammMarkets.length) return 0;
 
