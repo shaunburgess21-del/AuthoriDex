@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import type { AuthReason } from "@/lib/authReturn";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -10,6 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SignupReasonHeroPlaceholder } from "@/components/auth/SignupReasonHero";
+
+const SignupReasonHero = lazy(() =>
+  import("@/components/auth/SignupReasonHero").then((m) => ({
+    default: m.SignupReasonHero,
+  })),
+);
 
 /**
  * Phase 4 — pre-signup context modal.
@@ -48,11 +56,10 @@ interface VariantCopy {
   primaryAccentClass: string;
 }
 
-// TODO(phase4-copy): finalise variants via user testing per brief line 213.
 const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
   vote_limit_reached: {
-    heading: "You're getting into it.",
-    body: "Create a free account to keep voting and start contributing to the rankings.",
+    heading: "You've made your voice heard.",
+    body: "Create a free account to keep voting and count toward the live rankings.",
     primaryCta: "Create account",
     secondaryCta: "Already have an account? Sign in.",
     primaryCtaSubtext: "Free to sign up. No credit card.",
@@ -60,8 +67,8 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
       "bg-cyan-500 hover:bg-cyan-600 text-white border-cyan-600",
   },
   predict_signup: {
-    heading: "Predicting needs an account.",
-    body: "Create a free account to start predicting and build your track record.",
+    heading: "You've got the instinct.",
+    body: "Create a free account to place predictions and build your track record.",
     primaryCta: "Create account",
     secondaryCta: "Already have an account? Sign in.",
     primaryCtaSubtext: "Free to sign up. No credit card.",
@@ -110,7 +117,7 @@ export function SignupReasonModal({
         <DialogOverlay className="bg-black/50 backdrop-blur-md" />
         <DialogPrimitive.Content
           className={cn(
-            "fixed left-[50%] top-[50%] z-50 grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg sm:rounded-lg",
+            "fixed left-[50%] top-[50%] z-50 flex w-[calc(100%-2rem)] max-w-md max-h-[85vh] translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-2xl border bg-card shadow-xl",
             "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -118,7 +125,7 @@ export function SignupReasonModal({
           data-testid="modal-signup-reason"
         >
           <DialogPrimitive.Close
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full opacity-70 ring-offset-background transition-opacity hover:bg-muted/60 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             aria-label="Close"
             data-testid="button-signup-reason-dismiss"
           >
@@ -126,38 +133,44 @@ export function SignupReasonModal({
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
 
-          <div className="flex flex-col space-y-2 text-center sm:text-left">
-            <DialogTitle className="text-xl font-semibold leading-tight tracking-tight">
-              {variant.heading}
-            </DialogTitle>
-            <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
-              {variant.body}
-            </DialogDescription>
-          </div>
+          <div className="flex flex-col px-6 pb-6 pt-4">
+            <Suspense fallback={<SignupReasonHeroPlaceholder reason={reason} />}>
+              <SignupReasonHero reason={reason} />
+            </Suspense>
 
-          <div className="flex flex-col space-y-2 pt-2">
-            <Button
-              type="button"
-              size="lg"
-              className={cn("w-full min-h-11", variant.primaryAccentClass)}
-              onClick={onContinueToSignUp}
-              data-testid="button-signup-reason-primary"
-            >
-              {variant.primaryCta}
-            </Button>
-            {variant.primaryCtaSubtext ? (
-              <p className="text-center text-xs text-muted-foreground">
-                {variant.primaryCtaSubtext}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              onClick={onSwitchToSignIn}
-              className="pt-1 text-center text-sm text-primary hover:underline"
-              data-testid="button-signup-reason-secondary"
-            >
-              {variant.secondaryCta}
-            </button>
+            <div className="flex flex-col space-y-2 text-center">
+              <DialogTitle className="text-xl font-semibold leading-tight tracking-tight">
+                {variant.heading}
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
+                {variant.body}
+              </DialogDescription>
+            </div>
+
+            <div className="mt-5 flex flex-col space-y-2">
+              <Button
+                type="button"
+                size="lg"
+                className={cn("w-full min-h-11", variant.primaryAccentClass)}
+                onClick={onContinueToSignUp}
+                data-testid="button-signup-reason-primary"
+              >
+                {variant.primaryCta}
+              </Button>
+              {variant.primaryCtaSubtext ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  {variant.primaryCtaSubtext}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={onSwitchToSignIn}
+                className="pt-1 text-center text-sm text-primary hover:underline"
+                data-testid="button-signup-reason-secondary"
+              >
+                {variant.secondaryCta}
+              </button>
+            </div>
           </div>
         </DialogPrimitive.Content>
       </DialogPortal>

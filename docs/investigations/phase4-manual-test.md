@@ -37,10 +37,11 @@ Useful test IDs baked into the modal:
 ## 1. Direct visit `/login?reason=vote_limit_reached` (cyan variant)
 
 - [ ] Modal renders centred over LoginPage
-- [ ] Heading reads exactly: **"You're getting into it."**
-- [ ] Body reads exactly: **"Create a free account to keep voting and start contributing to the rankings."**
+- [ ] Heading reads exactly: **"You've made your voice heard."**
+- [ ] Body reads exactly: **"Create a free account to keep voting and count toward the live rankings."**
 - [ ] Primary button reads **"Create account"** with cyan-500 background
-- [ ] Subtext below primary reads **"Free forever. No credit card."**
+- [ ] Subtext below primary reads **"Free to sign up. No credit card."**
+- [ ] Hero zone shows ballot-box animation (cyan) above the heading
 - [ ] Secondary link reads **"Already have an account? Sign in."**
 - [ ] X button visible top-right
 - [ ] Click X → modal dismisses, URL becomes `/login` (no `?reason=`)
@@ -53,10 +54,11 @@ Useful test IDs baked into the modal:
 ## 2. Direct visit `/login?reason=predict_signup` (violet variant)
 
 - [ ] Modal renders centred over LoginPage
-- [ ] Heading reads exactly: **"Predicting needs an account."**
-- [ ] Body reads exactly: **"Create a free account to start predicting and build your track record."**
+- [ ] Heading reads exactly: **"You've got the instinct."**
+- [ ] Body reads exactly: **"Create a free account to place predictions and build your track record."**
 - [ ] Primary button reads **"Create account"** with violet-500 background
-- [ ] Subtext below primary reads **"Free forever. No credit card."**
+- [ ] Subtext below primary reads **"Free to sign up. No credit card."**
+- [ ] Hero zone shows chart/prediction animation (violet) above the heading
 - [ ] Secondary link reads **"Already have an account? Sign in."**
 - [ ] X / ESC / backdrop-click all dismiss; URL clears each time
 - [ ] Refresh on `/login` shows no modal
@@ -135,7 +137,8 @@ Two sub-tests cover the popstate handler.
 
 DevTools → Toggle device toolbar → iPhone SE (375 × 667).
 
-- [ ] Modal fits within 375px viewport with comfortable margins
+- [ ] Modal fits within 375px viewport with ~16px side gutters (not edge-to-edge)
+- [ ] Modal has rounded corners (`rounded-2xl`) on mobile — not square/sharp edges
 - [ ] No horizontal scroll on body or modal
 - [ ] Primary button is full-width inside modal
 - [ ] Primary button height ≥ 44px (inspect element → check computed `height`)
@@ -164,7 +167,8 @@ to `reduce`.
 - NVDA: Insert+N to access menu, or Ctrl to silence as needed.
 
 - [ ] Visit `/login?reason=vote_limit_reached`
-- [ ] Screen reader announces the modal heading on mount (e.g. "You're getting into it., heading" or similar)
+- [ ] Screen reader announces the modal heading on mount (e.g. "You've made your voice heard., heading" or similar)
+- [ ] Hero animation is `aria-hidden` — not announced by screen reader
 - [ ] Screen reader announces the body text via aria-describedby
 - [ ] Screen reader identifies the dialog as modal (e.g. "dialog, modal" / "Web dialog")
 - [ ] Tab key cycles through interactive elements within the modal: X button → primary CTA → secondary CTA → back to X (focus trap)
@@ -354,7 +358,7 @@ Phase 4a deferred: vote button is NOT auto-pressed (expected).
 
 PredictPage has no anon-budget surface. All 13 auth-required entry
 points should redirect with `reason=predict_signup` and render the
-**Variant B** modal (violet accent, "Predicting needs an account.").
+**Variant B** modal (violet accent, "You've got the instinct.").
 
 #### Mutation handlers (5 toast-replacement sites)
 
