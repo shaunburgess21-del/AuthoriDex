@@ -3,11 +3,14 @@
  * Keeps inactive surfaces aligned with filter search inputs without changing global Input.
  */
 
-/** Inactive rounded-full category pills — Vote page / overlay (cyan family hovers). */
+/** Shared corner radius for category filter chips and card category pills. */
+export const CATEGORY_CHIP_RADIUS = "rounded-md";
+
+/** Inactive category filter chips — Vote page / overlay (cyan family hovers). */
 export const FILTER_INACTIVE_PILL_VOTE =
   "bg-background border border-border/60 text-muted-foreground hover:border-foreground/30 dark:text-slate-400 dark:hover:border-slate-600";
 
-/** Inactive rounded-full category pills — Predict section bars / overlay (violet hovers). */
+/** Inactive category filter chips — Predict section bars / overlay (violet hovers). */
 export const FILTER_INACTIVE_PILL_PREDICT =
   "bg-background border border-border/60 text-muted-foreground hover:border-violet-400/30 dark:text-slate-400 dark:hover:border-violet-400/20";
 

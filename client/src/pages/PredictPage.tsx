@@ -58,7 +58,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
-import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
+import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_SECTION_TOGGLE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -383,7 +383,7 @@ function SectionFilterBar({
               key={cat.id}
               onClick={() => handleCategoryClick(cat.id)}
               data-scroll-chip={cat.id}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 categoryFilter === cat.id
                   ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
                   : FILTER_INACTIVE_PILL_PREDICT

@@ -1,8 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Filter, Trophy, Users, ExternalLink, Maximize2 } from "lucide-react";
+import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown } from "lucide-react";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { getCategoryStyle } from "@/components/CategoryPill";
+import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Popover,
@@ -218,10 +220,21 @@ export function InteractiveCategoryPill({
   const pillButton = (
     <button
       type="button"
-      className={`inline-flex items-center rounded-full border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer bg-transparent ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
+      aria-label={`${label}, more options`}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      className={`group inline-flex items-center gap-0.5 ${CATEGORY_CHIP_RADIUS} border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer bg-transparent ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
-      {label}
+      <span className="truncate">{label}</span>
+      <ChevronDown
+        aria-hidden
+        className={cn(
+          "shrink-0 opacity-45 transition-all duration-200 group-hover:opacity-75",
+          size === "sm" ? "h-2 w-2" : "h-2.5 w-2.5",
+          open && "rotate-180 opacity-75",
+        )}
+      />
     </button>
   );
 

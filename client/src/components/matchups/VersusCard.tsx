@@ -9,6 +9,7 @@ import { CardImage } from "@/components/ui/card-image";
 import { normalizeMarketCategory } from "@shared/constants";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { useMatchupNeutralNudge } from "@/hooks/useMatchupNeutralNudge";
 import {
   removeTrackedMatchupNeutralVote,
@@ -444,7 +445,7 @@ export function VersusCard({
                 </div>
                 <div className="flex-1 min-w-0 flex items-center justify-end">
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium border truncate max-w-full ${
+                    className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border truncate max-w-full ${
                       votedA
                         ? "border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400"
                         : votedB

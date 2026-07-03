@@ -1,4 +1,5 @@
 import { getMarketCategoryLabel, resolveCategoryColorKey, type CanonicalMarketCategory } from "@shared/constants";
+import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 
 const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: string; text: string }> = {
   tech: {
@@ -256,7 +257,7 @@ export function CategoryPill({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
+      className={`inline-flex items-center ${CATEGORY_CHIP_RADIUS} border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
       {displayLabel ?? getMarketCategoryLabel(category)}

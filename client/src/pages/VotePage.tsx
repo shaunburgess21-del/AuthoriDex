@@ -104,7 +104,7 @@ import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
-import { FILTER_INACTIVE_PILL_VOTE, FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
+import { FILTER_INACTIVE_PILL_VOTE, FILTER_INACTIVE_SECTION_TOGGLE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import {
@@ -1094,7 +1094,7 @@ function DiscourseCard({
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-end">
               <div
-                className="px-2 py-0.5 rounded-full text-xs font-medium border border-white/20"
+                className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border border-white/20`}
                 style={getSentimentPollVotedPillStyle(voted)}
                 data-testid={`badge-voted-${topic.id}`}
               >
@@ -1256,7 +1256,7 @@ function FilterChip({
     <button
       onClick={handleClick}
       data-scroll-chip={category}
-      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
+      className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
           ? "border bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
           : FILTER_INACTIVE_PILL_VOTE

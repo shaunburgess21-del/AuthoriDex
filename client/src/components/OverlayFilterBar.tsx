@@ -1,5 +1,5 @@
 import { Input } from "@/components/ui/input";
-import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_PILL_VOTE, FILTER_ROW_SEARCH_INPUT } from "@/lib/filterControlStyles";
+import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_PILL_VOTE, FILTER_ROW_SEARCH_INPUT, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
@@ -81,7 +81,7 @@ export function OverlayFilterBar({
                   }
                   onChange(cat.value);
                 }}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   isActive ? activeClasses : inactiveClasses
                 }`}
                 data-testid={`${testIdPrefix}-pill-${cat.value.toLowerCase()}`}

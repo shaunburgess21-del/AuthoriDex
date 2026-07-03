@@ -2,6 +2,7 @@ import { Star, Sparkles, Flame } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFavorites } from "@/hooks/useFavorites";
 import { getFilterCategories, type FilterCategory } from "@shared/constants";
+import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 
 interface CategoryFilterBarProps {
   categories?: readonly string[];
@@ -82,7 +83,7 @@ export function CategoryFilterBar({
               <div key="favorites-insert" className="contents">
                 <button
                   onClick={() => handleCategoryClick("Favorites")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                     activeFilter === "Favorites" ? styles.active : styles.inactive
                   }`}
                   data-testid={`${testIdPrefix}-favorites`}
@@ -94,7 +95,7 @@ export function CategoryFilterBar({
                 <button
                   key={cat}
                   onClick={() => handleCategoryClick(cat)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all whitespace-nowrap ${
+                  className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all whitespace-nowrap ${
                     activeFilter === cat ? styles.active : styles.inactive
                   }`}
                   data-testid={`${testIdPrefix}-${cat.toLowerCase()}`}
@@ -110,7 +111,7 @@ export function CategoryFilterBar({
               <button
                 key={cat}
                 onClick={() => handleCategoryClick("Favorites")}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   activeFilter === "Favorites" ? styles.active : styles.inactive
                 }`}
                 data-testid={`${testIdPrefix}-favorites`}
@@ -127,7 +128,7 @@ export function CategoryFilterBar({
               <button
                 key={cat}
                 onClick={() => handleCategoryClick("Trending")}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   activeFilter === "Trending" ? styles.active : styles.inactive
                 }`}
                 data-testid={`${testIdPrefix}-trending`}
@@ -144,7 +145,7 @@ export function CategoryFilterBar({
               <button
                 key={cat}
                 onClick={() => handleCategoryClick(cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   activeFilter === "misc" ? styles.active : styles.inactive
                 }`}
                 data-testid={`${testIdPrefix}-custom-topic`}
@@ -160,7 +161,7 @@ export function CategoryFilterBar({
             <button
               key={cat}
               onClick={() => handleCategoryClick(cat)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium border transition-all whitespace-nowrap ${
+              className={`${CATEGORY_CHIP_RADIUS} px-3 py-1.5 text-xs font-medium border transition-all whitespace-nowrap ${
                 activeFilter === cat ? styles.active : styles.inactive
               }`}
               data-testid={`${testIdPrefix}-${cat.toLowerCase()}`}

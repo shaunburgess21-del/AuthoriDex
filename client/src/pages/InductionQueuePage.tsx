@@ -24,7 +24,7 @@ import {
   SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
 import { cn } from "@/lib/utils";
-import { FILTER_INACTIVE_PILL_VOTE } from "@/lib/filterControlStyles";
+import { FILTER_INACTIVE_PILL_VOTE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -380,7 +380,7 @@ export default function InductionQueuePage() {
               <button
                 key={cat.value}
                 onClick={() => setCategoryFilter(cat.value)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
+                className={`shrink-0 px-3 py-1.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border transition-all whitespace-nowrap ${
                   categoryFilter === cat.value
                     ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
                     : FILTER_INACTIVE_PILL_VOTE

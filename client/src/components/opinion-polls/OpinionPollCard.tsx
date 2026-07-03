@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
+import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -416,7 +417,7 @@ export function OpinionPollCard({
             <div className="flex-1 min-w-0 flex items-center justify-end">
               {hasVoted && (
                 <span
-                  className="px-2 py-0.5 rounded-full text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 shrink-0"
+                  className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 shrink-0`}
                   data-testid={`badge-voted-opinion-${poll.id}`}
                 >
                   Voted

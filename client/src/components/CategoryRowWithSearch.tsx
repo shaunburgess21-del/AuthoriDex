@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
-import { FILTER_ROW_SEARCH_INPUT } from "@/lib/filterControlStyles";
+import { FILTER_ROW_SEARCH_INPUT, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 
 type FilterVariant = "vote" | "predict";
@@ -55,7 +55,8 @@ export function CategoryRowWithSearch({
       <ScrollMaskedChipRow className="flex-1 min-w-0" activeChipKey={activeCategory}>
         <div
           className={cn(
-            "flex flex-none items-center gap-1 rounded-full border text-xs font-medium transition-all md:hidden",
+            "flex flex-none items-center gap-1 border text-xs font-medium transition-all md:hidden",
+            CATEGORY_CHIP_RADIUS,
             expanded && "invisible",
             hasQuery ? SEARCH_CHIP_ACTIVE[variant] : SEARCH_CHIP_INACTIVE,
           )}
