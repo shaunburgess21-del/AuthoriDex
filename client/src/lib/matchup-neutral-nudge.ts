@@ -131,6 +131,7 @@ interface NudgeCache {
   hesitationCount: number;
   hesitationIds: Set<string>;
   voteStats: StoredMatchupNeutralVotes;
+  sessionGuaranteedShimmerIds: Set<string>;
 }
 
 let cache: NudgeCache | null = null;
@@ -150,6 +151,7 @@ function getCache(): NudgeCache {
     hesitationCount: readNumber(session, SESSION_HESITATION_COUNT_KEY),
     hesitationIds: readStringSet(session, SESSION_HESITATION_IDS_KEY),
     voteStats: readStoredVotes(local),
+    sessionGuaranteedShimmerIds: new Set(),
   };
   return cache;
 }
@@ -214,6 +216,16 @@ export function isMorphPossible(matchupId: string): boolean {
 export function isHesitationPossible(matchupId: string): boolean {
   const state = getCache();
   return !state.hesitationIds.has(matchupId) && state.hesitationCount < HESITATION_NUDGE_LIMIT;
+}
+
+/** Whether this card has received its guaranteed-once shimmer this session. */
+export function hasGuaranteedShimmer(matchupId: string): boolean {
+  return getCache().sessionGuaranteedShimmerIds.has(matchupId);
+}
+
+/** Mark guaranteed shimmer as shown for this card this session. */
+export function markGuaranteedShimmer(matchupId: string): void {
+  getCache().sessionGuaranteedShimmerIds.add(matchupId);
 }
 
 export function consumeMatchupNeutralMorph(matchupId: string): boolean {

@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   consumeMatchupNeutralHesitation,
   consumeMatchupNeutralMorph,
+  hasGuaranteedShimmer,
   isHesitationPossible,
   isMorphPossible,
+  markGuaranteedShimmer,
 } from "@/lib/matchup-neutral-nudge";
 
 const MORPH_DURATION_MS = 2000;
@@ -13,7 +15,22 @@ const MORPH_DURATION_MS = 2000;
 const MORPH_DWELL_MS = 600;
 const HESITATION_DELAY_MS = 4000;
 const HESITATION_LABEL_DURATION_MS = 3000;
+const SHIMMER_DWELL_MS = 600;
+const SHIMMER_DURATION_MS = 900;
+const SHIMMER_REPEAT_MS = 10_000;
 const IN_VIEW_RATIO = 0.55;
+
+export interface MatchupNeutralNudgeOptions {
+  morph?: boolean;
+  hesitation?: boolean;
+  shimmer?: boolean;
+}
+
+const DEFAULT_NUDGE_OPTIONS: Required<MatchupNeutralNudgeOptions> = {
+  morph: true,
+  hesitation: true,
+  shimmer: true,
+};
 
 /**
  * Shared IntersectionObserver: one instance for every mounted matchup card
@@ -109,29 +126,26 @@ function usePrefersReducedMotion(): boolean {
 export function useMatchupNeutralNudge(
   matchupId: string,
   hasVoted: boolean,
-  enabled = true,
+  options: MatchupNeutralNudgeOptions = DEFAULT_NUDGE_OPTIONS,
 ) {
+  const { morph, hesitation, shimmer } = { ...DEFAULT_NUDGE_OPTIONS, ...options };
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [showMorph, setShowMorph] = useState(false);
-  const [showHesitationNudge, setShowHesitationNudge] = useState(false);
+  const [showVsShimmer, setShowVsShimmer] = useState(false);
+  const [showHesitationLabel, setShowHesitationLabel] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    if (!enabled) {
-      setShowMorph(false);
-      setShowHesitationNudge(false);
-      return;
-    }
-
     const node = cardRef.current;
-    // Cheap in-memory eligibility gate: once session budgets are spent (the
-    // common case), cards do no observer/timer/render work at all on scroll.
-    const morphEligible = !prefersReducedMotion && isMorphPossible(matchupId);
-    const hesitationEligible = isHesitationPossible(matchupId);
+    const morphEligible = morph && !prefersReducedMotion && !hasVoted && isMorphPossible(matchupId);
+    const hesitationEligible = hesitation && !hasVoted && isHesitationPossible(matchupId);
+    const shimmerEligible = shimmer && !prefersReducedMotion;
+    const needsObserver = shimmerEligible || morphEligible || hesitationEligible;
 
-    if (!node || hasVoted || (!morphEligible && !hesitationEligible)) {
+    if (!node || !needsObserver) {
       setShowMorph(false);
-      setShowHesitationNudge(false);
+      setShowVsShimmer(false);
+      setShowHesitationLabel(false);
       return;
     }
 
@@ -146,6 +160,9 @@ export function useMatchupNeutralNudge(
     let morphHideTimeout: number | null = null;
     let hesitationDelayTimeout: number | null = null;
     let hesitationHideTimeout: number | null = null;
+    let shimmerDwellTimeout: number | null = null;
+    let shimmerHideTimeout: number | null = null;
+    let shimmerRepeatTimeout: number | null = null;
 
     const cancelMorph = () => {
       if (dwellTimeout !== null) {
@@ -168,7 +185,51 @@ export function useMatchupNeutralNudge(
         window.clearTimeout(hesitationHideTimeout);
         hesitationHideTimeout = null;
       }
-      setShowHesitationNudge(false);
+      setShowHesitationLabel(false);
+    };
+
+    const cancelShimmer = () => {
+      if (shimmerDwellTimeout !== null) {
+        window.clearTimeout(shimmerDwellTimeout);
+        shimmerDwellTimeout = null;
+      }
+      if (shimmerHideTimeout !== null) {
+        window.clearTimeout(shimmerHideTimeout);
+        shimmerHideTimeout = null;
+      }
+      if (shimmerRepeatTimeout !== null) {
+        window.clearTimeout(shimmerRepeatTimeout);
+        shimmerRepeatTimeout = null;
+      }
+      setShowVsShimmer(false);
+    };
+
+    const runShimmerBurst = (isGuaranteed: boolean) => {
+      if (isGuaranteed) markGuaranteedShimmer(matchupId);
+      setShowVsShimmer(true);
+      shimmerHideTimeout = window.setTimeout(() => {
+        shimmerHideTimeout = null;
+        setShowVsShimmer(false);
+        if (!inView || hasVoted) return;
+        shimmerRepeatTimeout = window.setTimeout(() => {
+          shimmerRepeatTimeout = null;
+          if (inView && !hasVoted) runShimmerBurst(false);
+        }, SHIMMER_REPEAT_MS);
+      }, SHIMMER_DURATION_MS);
+    };
+
+    const scheduleShimmer = () => {
+      if (!shimmerEligible || !inView) return;
+
+      const needsGuaranteed = !hasGuaranteedShimmer(matchupId);
+      if (!needsGuaranteed && hasVoted) return;
+
+      const delay = needsGuaranteed ? SHIMMER_DWELL_MS : SHIMMER_REPEAT_MS;
+      shimmerDwellTimeout = window.setTimeout(() => {
+        shimmerDwellTimeout = null;
+        if (!inView) return;
+        runShimmerBurst(needsGuaranteed);
+      }, delay);
     };
 
     const startHesitationCountdown = () => {
@@ -182,10 +243,12 @@ export function useMatchupNeutralNudge(
         }
         hesitationFired = true;
         hesitationDone = true;
-        setShowHesitationNudge(true);
+        setShowHesitationLabel(true);
+        setShowVsShimmer(true);
         hesitationHideTimeout = window.setTimeout(() => {
           hesitationHideTimeout = null;
-          setShowHesitationNudge(false);
+          setShowHesitationLabel(false);
+          setShowVsShimmer(false);
           unsubscribeActivity(onActivity);
         }, HESITATION_LABEL_DURATION_MS);
       }, HESITATION_DELAY_MS);
@@ -203,14 +266,9 @@ export function useMatchupNeutralNudge(
 
       if (inView) {
         if (!morphDone) {
-          // Dwell before consuming budget so a fast scroll-past never burns
-          // a morph; consume at the moment the animation actually starts.
           dwellTimeout = window.setTimeout(() => {
             dwellTimeout = null;
             if (!consumeMatchupNeutralMorph(matchupId)) {
-              // Failure may be the transient single-morph lock — only mark
-              // done when the budget itself is spent, so a later view entry
-              // can still morph.
               if (!isMorphPossible(matchupId)) morphDone = true;
               return;
             }
@@ -226,9 +284,11 @@ export function useMatchupNeutralNudge(
           subscribeActivity(onActivity);
           startHesitationCountdown();
         }
+        scheduleShimmer();
       } else {
         cancelMorph();
         cancelHesitation();
+        cancelShimmer();
         unsubscribeActivity(onActivity);
       }
     };
@@ -240,14 +300,16 @@ export function useMatchupNeutralNudge(
       unsubscribeActivity(onActivity);
       cancelMorph();
       cancelHesitation();
+      cancelShimmer();
       setShowMorph(false);
     };
-  }, [enabled, hasVoted, matchupId, prefersReducedMotion]);
+  }, [hasVoted, hesitation, matchupId, morph, prefersReducedMotion, shimmer]);
 
   return {
     cardRef,
     showMorph,
-    showHesitationNudge,
+    showVsShimmer,
+    showHesitationLabel,
     prefersReducedMotion,
   };
 }

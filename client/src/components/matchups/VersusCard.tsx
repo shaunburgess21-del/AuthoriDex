@@ -58,6 +58,7 @@ export function VersusCard({
   enableDiscussion = false,
   priority = false,
   enableNeutralNudge = true,
+  enableVsShimmer = true,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -71,8 +72,10 @@ export function VersusCard({
   enableDiscussion?: boolean;
   /** Eagerly load this card's images (active/first visible card). */
   priority?: boolean;
-  /** Disable morph/hesitation nudge (dense scroll lists like View All overlay). */
+  /** Disable morph/hesitation label (dense scroll lists like View All overlay). */
   enableNeutralNudge?: boolean;
+  /** VS button shimmer pulse; enabled on View All even when morph/label are off. */
+  enableVsShimmer?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -80,7 +83,11 @@ export function VersusCard({
   const votedNeutral = userVote === "neutral";
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!matchup.slug;
-  const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted, enableNeutralNudge);
+  const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted, {
+    morph: enableNeutralNudge,
+    hesitation: enableNeutralNudge,
+    shimmer: enableVsShimmer,
+  });
   const footerBarClass = enableNeutralNudge
     ? "bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm"
     : "bg-muted/60 dark:bg-[#0B0F1A]";
@@ -191,21 +198,23 @@ export function VersusCard({
             </button>
 
             <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
-              {enableNeutralNudge ? (
+              {enableVsShimmer || enableNeutralNudge ? (
                 <>
-                  <AnimatePresence>
-                    {neutralNudge.showHesitationNudge && !hasVoted && (
-                      <motion.div
-                        initial={neutralNudge.prefersReducedMotion ? false : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
-                        animate={neutralNudge.prefersReducedMotion ? { opacity: 1, x: "-50%" } : { opacity: 1, x: "-50%", y: 0, scale: 1 }}
-                        exit={neutralNudge.prefersReducedMotion ? { opacity: 0, x: "-50%" } : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
-                        transition={{ duration: neutralNudge.prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
-                        className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 w-max max-w-[210px] rounded-full border border-slate-300/70 bg-card/95 px-2.5 py-1 text-center text-[11px] font-medium leading-tight text-slate-600 shadow-lg backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-900/95 dark:text-slate-300"
-                      >
-                        Can't decide? Tap VS to stay neutral
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {enableNeutralNudge && (
+                    <AnimatePresence>
+                      {neutralNudge.showHesitationLabel && !hasVoted && (
+                        <motion.div
+                          initial={neutralNudge.prefersReducedMotion ? false : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                          animate={neutralNudge.prefersReducedMotion ? { opacity: 1, x: "-50%" } : { opacity: 1, x: "-50%", y: 0, scale: 1 }}
+                          exit={neutralNudge.prefersReducedMotion ? { opacity: 0, x: "-50%" } : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                          transition={{ duration: neutralNudge.prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
+                          className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 w-max max-w-[210px] rounded-full border border-slate-300/70 bg-card/95 px-2.5 py-1 text-center text-[11px] font-medium leading-tight text-slate-600 shadow-lg backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-900/95 dark:text-slate-300"
+                        >
+                          Can't decide? Tap VS to stay neutral
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
                   <motion.button
                     type="button"
                     onClick={handleNeutralVote}
@@ -213,7 +222,7 @@ export function VersusCard({
                     title="Vote neutral"
                     data-testid={`button-vote-neutral-${matchup.id}`}
                     animate={
-                      neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion
+                      neutralNudge.showVsShimmer && !neutralNudge.prefersReducedMotion
                         ? {
                             scale: [1, 1.06, 1],
                             boxShadow: [
@@ -228,7 +237,7 @@ export function VersusCard({
                     className={vsButtonClassName}
                   >
                     <AnimatePresence>
-                      {neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion && (
+                      {neutralNudge.showVsShimmer && !neutralNudge.prefersReducedMotion && (
                         <motion.span
                           aria-hidden="true"
                           className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent"
@@ -240,29 +249,33 @@ export function VersusCard({
                       )}
                     </AnimatePresence>
                     <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
-                      <AnimatePresence mode="wait" initial={false}>
-                        {neutralNudge.showMorph ? (
-                          <motion.span
-                            key="tie"
-                            initial={{ opacity: 0, scale: 0.92 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.92 }}
-                            transition={{ duration: 0.18, ease: "easeOut" }}
-                          >
-                            Tie?
-                          </motion.span>
-                        ) : (
-                          <motion.span
-                            key="vs"
-                            initial={{ opacity: 0, scale: 0.92 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.92 }}
-                            transition={{ duration: 0.18, ease: "easeOut" }}
-                          >
-                            VS
-                          </motion.span>
-                        )}
-                      </AnimatePresence>
+                      {enableNeutralNudge ? (
+                        <AnimatePresence mode="wait" initial={false}>
+                          {neutralNudge.showMorph ? (
+                            <motion.span
+                              key="tie"
+                              initial={{ opacity: 0, scale: 0.92 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.92 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                            >
+                              Tie?
+                            </motion.span>
+                          ) : (
+                            <motion.span
+                              key="vs"
+                              initial={{ opacity: 0, scale: 0.92 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.92 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                            >
+                              VS
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      ) : (
+                        "VS"
+                      )}
                     </span>
                   </motion.button>
                 </>
