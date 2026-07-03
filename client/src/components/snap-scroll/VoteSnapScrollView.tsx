@@ -1033,6 +1033,7 @@ export function VoteSnapScrollView({
                                                 onDetail={navigateToDetail}
                                                 onShare={handleShare}
                                                 fetchEnabled={isNearVisible}
+                                                snapHeader
                                               />
                                             ) : (
                                               <CardComments
@@ -1046,6 +1047,7 @@ export function VoteSnapScrollView({
                                                 onDetail={navigateToDetail}
                                                 onShare={handleShare}
                                                 fetchEnabled={isNearVisible}
+                                                snapHeader
                                               />
                                             )}
                                           </div>

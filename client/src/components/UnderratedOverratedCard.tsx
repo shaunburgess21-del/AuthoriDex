@@ -41,6 +41,7 @@ export interface UnderratedOverratedCardProps {
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
 }
 
 export function UnderratedOverratedCard({ 
@@ -51,6 +52,7 @@ export function UnderratedOverratedCard({
   categoryRaceMap,
   onBrowseFullScreen,
   leaderboardCategories,
+  categoryMenuDisabled = false,
 }: UnderratedOverratedCardProps) {
   const [localVote, setLocalVote] = useState<VoteType | null>(
     person.userValueVote ?? null
@@ -137,6 +139,7 @@ export function UnderratedOverratedCard({
             detailHref={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
             detailLabel="See How They Compare"
             onBrowseFullScreen={onBrowseFullScreen}
+            menuDisabled={categoryMenuDisabled}
             data-testid={`badge-category-${person.id}`}
           />
         </div>

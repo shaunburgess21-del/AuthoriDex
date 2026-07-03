@@ -63,6 +63,7 @@ export function WeeklyUpDownCard({
   leaderboardCategories,
   pendingPosition,
   onBrowseFullScreen,
+  categoryMenuDisabled = false,
   unrealisedPnl = null,
 }: {
   market: PredictionMarket;
@@ -74,6 +75,7 @@ export function WeeklyUpDownCard({
   leaderboardCategories?: Set<string>;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
   onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
   /**
    * AMM live unrealised P&L for the current user's open position on
    * this market. Threaded through to the position banner so the card
@@ -143,6 +145,7 @@ export function WeeklyUpDownCard({
           detailHref={`/predict/updown/${market.id}`}
           detailLabel="View Up/Down Details"
           onBrowseFullScreen={onBrowseFullScreen}
+          menuDisabled={categoryMenuDisabled}
         />
       </div>
 

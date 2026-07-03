@@ -5,11 +5,12 @@ import { Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { CardImage } from "@/components/ui/card-image";
 import { normalizeMarketCategory } from "@shared/constants";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
-import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { toast } from "sonner";
 import { useMatchupNeutralNudge } from "@/hooks/useMatchupNeutralNudge";
 import {
   removeTrackedMatchupNeutralVote,
@@ -60,6 +61,7 @@ export function VersusCard({
   priority = false,
   enableNeutralNudge = true,
   enableVsShimmer = true,
+  categoryMenuDisabled = false,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -77,6 +79,8 @@ export function VersusCard({
   enableNeutralNudge?: boolean;
   /** VS button shimmer pulse; enabled on View All even when morph/label are off. */
   enableVsShimmer?: boolean;
+  /** Static category chip in snap view (no drawer menu). */
+  categoryMenuDisabled?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -120,6 +124,7 @@ export function VersusCard({
               detailOnNavigate={onNavigateToDetail}
               detailLabel="View Matchup Details"
               onBrowseFullScreen={onBrowseFullScreen}
+              menuDisabled={categoryMenuDisabled}
               data-testid={`badge-matchup-${matchup.id}`}
             />
           </div>
@@ -409,19 +414,7 @@ export function VersusCard({
                       onClick={() => setDiscussionOpen(true)}
                       testId={`button-discussion-matchup-${matchup.id}`}
                     />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        removeTrackedMatchupNeutralVote(matchup.id);
-                        onRemoveVote(matchup.id);
-                      }}
-                      className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                      data-testid={`button-remove-vote-${matchup.id}`}
-                    >
-                      Remove vote
-                    </button>
-                  )}
+                  ) : null}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center justify-center">
                   {matchup.slug && onNavigateToDetail ? (
@@ -444,18 +437,22 @@ export function VersusCard({
                   ) : null}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center justify-end">
-                  <span
-                    className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border truncate max-w-full ${
+                  <InteractiveVotedPill
+                    label={votedA ? matchup.optionAText : votedB ? matchup.optionBText : "Neutral"}
+                    onChangeVote={() => toast("Tap another option to change your vote")}
+                    onRemoveVote={() => {
+                      removeTrackedMatchupNeutralVote(matchup.id);
+                      onRemoveVote(matchup.id);
+                    }}
+                    pillClassName={
                       votedA
                         ? "border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400"
                         : votedB
                           ? "border-amber-500/50 dark:border-amber-500/40 text-amber-600 dark:text-amber-400"
                           : "border-slate-400/50 dark:border-slate-500/40 text-slate-500 dark:text-slate-400"
-                    }`}
+                    }
                     data-testid={`badge-voted-matchup-${matchup.id}`}
-                  >
-                    {votedA ? matchup.optionAText : votedB ? matchup.optionBText : "Neutral"}
-                  </span>
+                  />
                 </div>
               </div>
             ) : null}

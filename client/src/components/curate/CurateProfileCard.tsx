@@ -90,6 +90,7 @@ interface CurateProfileCardProps {
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
 }
 
 export function CurateProfileCard({
@@ -103,6 +104,7 @@ export function CurateProfileCard({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  categoryMenuDisabled = false,
 }: CurateProfileCardProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [showShimmer, setShowShimmer] = useState(false);
@@ -235,6 +237,7 @@ export function CurateProfileCard({
             onFilter={() => onFilterCategory?.(person.category)}
             leaderboardCategories={leaderboardCategories}
             onBrowseFullScreen={onBrowseFullScreen}
+            menuDisabled={categoryMenuDisabled}
           />
         </div>
 

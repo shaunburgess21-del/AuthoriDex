@@ -12,6 +12,7 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
@@ -612,16 +613,7 @@ function FeaturedPollCard({
                     onClick={() => setDiscussionOpen(true)}
                     testId={`button-discussion-${poll.id}`}
                   />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleChangeVote}
-                    className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                    data-testid={`button-change-vote-${poll.id}`}
-                  >
-                    Remove vote
-                  </button>
-                )}
+                ) : null}
               </div>
               <div className="flex-1 min-w-0 text-center">
                 {pollDetailHref && (
@@ -635,13 +627,14 @@ function FeaturedPollCard({
                 )}
               </div>
               <div className="flex-1 min-w-0 flex justify-end">
-                <div
-                  className="px-2 py-0.5 rounded-full text-xs font-medium border border-white/20"
-                  style={getSentimentPollVotedPillStyle(voted)}
+                <InteractiveVotedPill
+                  label={voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
+                  onChangeVote={handleChangeVote}
+                  onRemoveVote={handleChangeVote}
+                  pillClassName="border-white/20"
+                  pillStyle={getSentimentPollVotedPillStyle(voted)}
                   data-testid={`badge-voted-poll-${poll.id}`}
-                >
-                  {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
-                </div>
+                />
               </div>
             </div>
           </div>

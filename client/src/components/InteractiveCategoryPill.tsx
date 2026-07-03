@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown } from "lucide-react";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
-import { getCategoryStyle } from "@/components/CategoryPill";
+import { getCategoryStyle, CategoryPill } from "@/components/CategoryPill";
 import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -87,6 +87,8 @@ interface InteractiveCategoryPillProps {
   detailLabel?: string;
   /** When set, replaces the "View on Leaderboard" option with "Browse {label} Full Screen". */
   onBrowseFullScreen?: () => void;
+  /** When true, render a static label chip (e.g. snap view — no drawer/menu). */
+  menuDisabled?: boolean;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
   "data-testid"?: string;
@@ -206,6 +208,7 @@ export function InteractiveCategoryPill({
   detailOnNavigate,
   detailLabel,
   onBrowseFullScreen,
+  menuDisabled = false,
   size = "default",
   className = "",
   "data-testid": testId,
@@ -216,6 +219,17 @@ export function InteractiveCategoryPill({
   const style = getCategoryStyle(category);
   const sizeClass = SIZE_CLASSES[size];
   const label = getMarketCategoryLabel(category);
+
+  if (menuDisabled) {
+    return (
+      <CategoryPill
+        category={category}
+        size={size}
+        className={className}
+        data-testid={testId}
+      />
+    );
+  }
 
   const pillButton = (
     <button

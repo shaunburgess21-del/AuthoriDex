@@ -6,8 +6,8 @@ import { Drawer } from "vaul";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
-import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -86,6 +86,7 @@ export function OpinionPollCard({
   onNavigateToDetail,
   onBrowseFullScreen,
   enableDiscussion = false,
+  categoryMenuDisabled = false,
 }: {
   poll: OpinionPollCardPoll;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
@@ -96,6 +97,7 @@ export function OpinionPollCard({
   onNavigateToDetail?: () => void;
   onBrowseFullScreen?: () => void;
   enableDiscussion?: boolean;
+  categoryMenuDisabled?: boolean;
 }) {
   const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
@@ -234,8 +236,8 @@ export function OpinionPollCard({
     }
   };
 
-  const handleRemoveVote = async (e: MouseEvent) => {
-    e.stopPropagation();
+  const handleRemoveVote = async (e?: MouseEvent) => {
+    e?.stopPropagation();
     try {
       await onRemoveVote(poll.slug);
       setVoted(null);
@@ -261,6 +263,8 @@ export function OpinionPollCard({
   };
 
   const hasVoted = !!voted;
+  const votedOption = options.find((o) => o.id === voted);
+  const votedPillLabel = votedOption?.name ?? "Voted";
   const showDiscussion = enableDiscussion && !!poll.slug;
   const totalVotes = poll.totalVotes || 0;
   const maxPercent = Math.max(
@@ -293,6 +297,7 @@ export function OpinionPollCard({
             detailOnNavigate={onNavigateToDetail}
             detailLabel="View Poll Details"
             onBrowseFullScreen={onBrowseFullScreen}
+            menuDisabled={categoryMenuDisabled}
             data-testid={`badge-opinion-category-${poll.id}`}
           />
         </div>
@@ -405,15 +410,6 @@ export function OpinionPollCard({
                   onClick={() => setDiscussionOpen(true)}
                   testId={`button-discussion-opinion-${poll.id}`}
                 />
-              ) : hasVoted ? (
-                <button
-                  type="button"
-                  onClick={handleRemoveVote}
-                  className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                  data-testid={`button-remove-vote-opinion-${poll.id}`}
-                >
-                  Remove vote
-                </button>
               ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">
@@ -433,12 +429,16 @@ export function OpinionPollCard({
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-end">
               {hasVoted && (
-                <span
-                  className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90 shrink-0`}
+                <InteractiveVotedPill
+                  label={votedPillLabel}
+                  onChangeVote={() => {
+                    setOptionsViewMode("list");
+                    setOptionsDrawerOpen(true);
+                  }}
+                  onRemoveVote={() => void handleRemoveVote()}
+                  pillClassName="bg-white/[0.06] border-[#EFEFEF]/35 text-foreground/90"
                   data-testid={`badge-voted-opinion-${poll.id}`}
-                >
-                  Voted
-                </span>
+                />
               )}
             </div>
           </div>

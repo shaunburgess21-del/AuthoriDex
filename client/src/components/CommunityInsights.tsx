@@ -92,6 +92,8 @@ interface CommunityInsightsProps {
   focusContextTitle?: string | null;
   /** When false, defers insight fetch until card is near-visible in snap view. */
   fetchEnabled?: boolean;
+  /** Snap scroll toolbar: compact count + centered sort toggles. */
+  snapHeader?: boolean;
 }
 
 export function CommunityInsights({
@@ -105,6 +107,7 @@ export function CommunityInsights({
   disableFocusMode = false,
   focusContextTitle,
   fetchEnabled = true,
+  snapHeader = false,
 }: CommunityInsightsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -418,6 +421,7 @@ export function CommunityInsights({
           count={thread.visibleCount}
           countLabel="Discussion"
           variant={variant}
+          snapHeader={snapHeader}
           sort={thread.sort}
           onSortChange={thread.setSort}
           onDetail={onDetail}

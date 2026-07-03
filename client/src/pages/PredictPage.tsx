@@ -4132,6 +4132,7 @@ export default function PredictPage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4159,6 +4160,7 @@ export default function PredictPage() {
                   leaderboardCategories={leaderboardCats}
                   pendingPosition={buildCardPendingPosition(String(market.id))}
                   unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                  categoryMenuDisabled
                 />
               );
             }}

@@ -161,6 +161,8 @@ interface CardCommentsProps {
   focusContextTitle?: string | null;
   /** When false, defers comment fetch until card is near-visible in snap view. */
   fetchEnabled?: boolean;
+  /** Snap scroll toolbar: compact count + centered sort toggles. */
+  snapHeader?: boolean;
 }
 
 function CardCommentsEmbedded({
@@ -175,6 +177,7 @@ function CardCommentsEmbedded({
   expandTriggerRef,
   onOpenFocusMode,
   fetchEnabled = true,
+  snapHeader = false,
 }: {
   entityType: CommentEntityType;
   slug: string;
@@ -187,6 +190,7 @@ function CardCommentsEmbedded({
   expandTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   onOpenFocusMode?: () => void;
   fetchEnabled?: boolean;
+  snapHeader?: boolean;
 }) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -245,6 +249,7 @@ function CardCommentsEmbedded({
           count={fetchEnabled ? thread.visibleCount : 0}
           countLabel="Discussion"
           variant={variant}
+          snapHeader={snapHeader}
           sort={thread.sort}
           onSortChange={thread.setSort}
           onDetail={onDetail}
@@ -556,6 +561,7 @@ export function CardComments({
   disableFocusMode = false,
   focusContextTitle,
   fetchEnabled = true,
+  snapHeader = false,
 }: CardCommentsProps) {
   const [focusOpen, setFocusOpen] = useState(false);
   const expandTriggerRef = useRef<HTMLButtonElement>(null);
@@ -579,6 +585,7 @@ export function CardComments({
         expandTriggerRef={disableFocusMode ? undefined : expandTriggerRef}
         onOpenFocusMode={disableFocusMode ? undefined : () => setFocusOpen(true)}
         fetchEnabled={fetchEnabled}
+        snapHeader={snapHeader}
       />
       {!disableFocusMode && (
         <CommentsFocusShell open={focusOpen} onClose={handleCloseFocus} contextTitle={focusContextTitle}>

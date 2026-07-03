@@ -16,6 +16,7 @@ import {
   InteractiveCategoryPill,
   isCategoryPillDrawerDismissSuppressed,
 } from "@/components/InteractiveCategoryPill";
+import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -409,6 +410,7 @@ function InductionCandidateCard({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  categoryMenuDisabled = false,
 }: { 
   candidate: InductionCandidate;
   rank: number;
@@ -420,6 +422,7 @@ function InductionCandidateCard({
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -474,6 +477,7 @@ function InductionCandidateCard({
           detailHref="/vote/induction"
           detailLabel="View Induction Queue"
           onBrowseFullScreen={onBrowseFullScreen}
+          menuDisabled={categoryMenuDisabled}
           data-testid={`badge-category-${candidate.id}`}
         />
       </div>
@@ -836,6 +840,7 @@ function DiscourseCard({
   onNavigateToPollDetail,
   onBrowseFullScreen,
   enableDiscussion = false,
+  categoryMenuDisabled = false,
 }: {
   topic: any;
   onVote: (choice: 'support' | 'neutral' | 'oppose') => Promise<void>;
@@ -846,6 +851,7 @@ function DiscourseCard({
   onNavigateToPollDetail?: () => void;
   onBrowseFullScreen?: () => void;
   enableDiscussion?: boolean;
+  categoryMenuDisabled?: boolean;
 }) {
   const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -904,6 +910,7 @@ function DiscourseCard({
           detailOnNavigate={onNavigateToPollDetail}
           detailLabel="View Poll Details"
           onBrowseFullScreen={onBrowseFullScreen}
+          menuDisabled={categoryMenuDisabled}
           data-testid={`badge-category-${topic.id}`}
         />
       </div>
@@ -1060,16 +1067,7 @@ function DiscourseCard({
                   onClick={() => setDiscussionOpen(true)}
                   testId={`button-discussion-${topic.id}`}
                 />
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleChangeVote}
-                  className="text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400 transition-colors underline-offset-4 hover:underline truncate"
-                  data-testid={`button-change-vote-${topic.id}`}
-                >
-                  Remove vote
-                </button>
-              )}
+              ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">
               {topic.slug &&
@@ -1093,13 +1091,14 @@ function DiscourseCard({
                 ))}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-end">
-              <div
-                className={`px-2 py-0.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border border-white/20`}
-                style={getSentimentPollVotedPillStyle(voted)}
+              <InteractiveVotedPill
+                label={voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
+                onChangeVote={handleChangeVote}
+                onRemoveVote={handleChangeVote}
+                pillClassName="border-white/20"
+                pillStyle={getSentimentPollVotedPillStyle(voted)}
                 data-testid={`badge-voted-${topic.id}`}
-              >
-                {voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
-              </div>
+              />
             </div>
           </div>
         </>
@@ -4452,6 +4451,7 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   onNavigateToDetail={m.slug ? () => goMatchupDetail(m.slug!) : undefined}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4476,6 +4476,7 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   onNavigateToPollDetail={t.slug ? () => goSentimentDetail(t.slug) : undefined}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4501,6 +4502,7 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   onNavigateToDetail={p.slug ? () => goOpinionDetail(p.slug) : undefined}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4524,6 +4526,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4552,6 +4555,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  categoryMenuDisabled
                 />
               );
             }}
@@ -4576,6 +4580,7 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  categoryMenuDisabled
                 />
               );
             }}
