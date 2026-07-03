@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, type KeyboardEvent, type MouseEvent } from "react";
+import { useState, useEffect, useContext, useRef, useCallback, type KeyboardEvent, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -105,6 +105,8 @@ export function OpinionPollCard({
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const [optionsViewMode, setOptionsViewMode] = useState<OptionsViewMode>("list");
+  const [galleryScrollTargetId, setGalleryScrollTargetId] = useState<string | null>(null);
+  const galleryOptionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
   const supabaseUrl = useSupabaseUrl();
   const { currentSrc: headerImageSrc, onImageError: onHeaderImageError } = useOpinionPollHeaderImage(
@@ -136,10 +138,22 @@ export function OpinionPollCard({
   }, [optionsDrawerOpen, pendingChangeOption]);
 
   useEffect(() => {
-    if (optionsDrawerOpen) {
-      setOptionsViewMode("list");
-    }
-  }, [optionsDrawerOpen]);
+    if (optionsViewMode !== "gallery" || !galleryScrollTargetId) return;
+    const raf = window.requestAnimationFrame(() => {
+      galleryOptionRefs.current[galleryScrollTargetId]?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+      setGalleryScrollTargetId(null);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [optionsViewMode, galleryScrollTargetId]);
+
+  const openCardOptionImageReview = useCallback((optionId: string) => {
+    setOptionsViewMode("gallery");
+    setGalleryScrollTargetId(optionId);
+    setOptionsDrawerOpen(true);
+  }, []);
 
   const snapDismiss = useContext(SnapDismissContext);
   useEffect(() => {
@@ -351,7 +365,7 @@ export function OpinionPollCard({
                   orderLabel={orderLabel}
                   mode="vote"
                   onVote={(e) => handleVote(option.id, e)}
-                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  onExpandImage={() => openCardOptionImageReview(option.id)}
                   testIdPrefix="opinion-poll-option"
                 />
               );
@@ -374,7 +388,7 @@ export function OpinionPollCard({
                   percent={percent}
                   isLeading={isLeading}
                   onChangeVote={(e) => openChangeDialog(option, e)}
-                  onExpandImage={(url, alt) => setExpandedImage({ url, alt })}
+                  onExpandImage={() => openCardOptionImageReview(option.id)}
                   testIdPrefix="opinion-poll-result"
                 />
               );
@@ -406,7 +420,10 @@ export function OpinionPollCard({
               {remainingCount > 0 && (
                 <button
                   type="button"
-                  onClick={() => setOptionsDrawerOpen(true)}
+                  onClick={() => {
+                    setOptionsViewMode("list");
+                    setOptionsDrawerOpen(true);
+                  }}
                   className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate"
                   data-testid={`link-more-options-${poll.id}`}
                 >
@@ -576,34 +593,39 @@ export function OpinionPollCard({
                 );
               }) : displayOptions.map((option, idx) => {
                 const orderLabel = (option.orderIndex ?? idx) + 1;
-                if (!hasVoted) {
-                  return (
-                    <OpinionPollGalleryOption
-                      key={option.id}
-                      pollId={poll.id}
-                      option={option}
-                      orderLabel={orderLabel}
-                      mode="vote"
-                      onVote={(e) => handleVote(option.id, e)}
-                      testIdPrefix="opinion-poll-gallery-option"
-                    />
-                  );
-                }
                 const isSelected = voted === option.id;
                 const percent = totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0;
                 const isLeading = percent === drawerMaxPercent && percent > 0;
                 return (
-                  <OpinionPollGalleryOption
+                  <div
                     key={option.id}
-                    pollId={poll.id}
-                    option={option}
-                    orderLabel={orderLabel}
-                    mode={isSelected ? "result-selected" : "result-other"}
-                    percent={percent}
-                    isLeading={isLeading}
-                    onChangeVote={(e) => handleDrawerChangeVote(option, e)}
-                    testIdPrefix="opinion-poll-gallery-result"
-                  />
+                    className="snap-start"
+                    ref={(node) => {
+                      galleryOptionRefs.current[option.id] = node;
+                    }}
+                  >
+                    {!hasVoted ? (
+                      <OpinionPollGalleryOption
+                        pollId={poll.id}
+                        option={option}
+                        orderLabel={orderLabel}
+                        mode="vote"
+                        onVote={(e) => handleVote(option.id, e)}
+                        testIdPrefix="opinion-poll-gallery-option"
+                      />
+                    ) : (
+                      <OpinionPollGalleryOption
+                        pollId={poll.id}
+                        option={option}
+                        orderLabel={orderLabel}
+                        mode={isSelected ? "result-selected" : "result-other"}
+                        percent={percent}
+                        isLeading={isLeading}
+                        onChangeVote={(e) => handleDrawerChangeVote(option, e)}
+                        testIdPrefix="opinion-poll-gallery-result"
+                      />
+                    )}
+                  </div>
                 );
               })}
             </div>
