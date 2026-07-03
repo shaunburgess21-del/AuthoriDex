@@ -1271,8 +1271,20 @@ function FilterChip({
 const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
 type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
 
+const overlayScrollPending = new Map<string, { rafId: number; scrollTop: number }>();
+
 function saveOverlayScroll(name: string, scrollTop: number) {
-  sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(scrollTop)));
+  const existing = overlayScrollPending.get(name);
+  if (existing) {
+    existing.scrollTop = scrollTop;
+    return;
+  }
+  const entry = { scrollTop, rafId: 0 };
+  entry.rafId = requestAnimationFrame(() => {
+    overlayScrollPending.delete(name);
+    sessionStorage.setItem(OVERLAY_SCROLL_PREFIX + name, String(Math.round(entry.scrollTop)));
+  });
+  overlayScrollPending.set(name, entry);
 }
 function restoreOverlayScroll(name: string, el: HTMLElement | null) {
   const saved = sessionStorage.getItem(OVERLAY_SCROLL_PREFIX + name);
@@ -4251,23 +4263,25 @@ export default function VotePage() {
               onAuthRequired={handleAuthRequired}
             />
             
-            <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
+            <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto overscroll-y-contain p-4 premium-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {displayMatchups.map((matchup, index) => (
-                  <VersusCard
-                    key={matchup.id}
-                    matchup={matchup}
-                    userVote={matchupUserVotes[matchup.id] || null}
-                    onVote={handleMatchupVote}
-                    onRemoveVote={handleMatchupRemoveVote}
-                    onFilterCategory={handleCategoryPillFilter}
-                    categoryRaceMap={raceMap}
-                    leaderboardCategories={leaderboardCats}
-                    onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
-                    enableDiscussion
-                    priority={index < 3}
-                  />
+                  <div key={matchup.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+                    <VersusCard
+                      matchup={matchup}
+                      userVote={matchupUserVotes[matchup.id] || null}
+                      onVote={handleMatchupVote}
+                      onRemoveVote={handleMatchupRemoveVote}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
+                      enableDiscussion
+                      enableNeutralNudge={false}
+                      priority={index < 6}
+                    />
+                  </div>
                 ))}
               </div>
               {displayMatchups.length === 0 && (

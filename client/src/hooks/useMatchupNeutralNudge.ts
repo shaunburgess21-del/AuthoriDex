@@ -106,13 +106,23 @@ function usePrefersReducedMotion(): boolean {
   return prefersReducedMotion;
 }
 
-export function useMatchupNeutralNudge(matchupId: string, hasVoted: boolean) {
+export function useMatchupNeutralNudge(
+  matchupId: string,
+  hasVoted: boolean,
+  enabled = true,
+) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [showMorph, setShowMorph] = useState(false);
   const [showHesitationNudge, setShowHesitationNudge] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
+    if (!enabled) {
+      setShowMorph(false);
+      setShowHesitationNudge(false);
+      return;
+    }
+
     const node = cardRef.current;
     // Cheap in-memory eligibility gate: once session budgets are spent (the
     // common case), cards do no observer/timer/render work at all on scroll.
@@ -232,7 +242,7 @@ export function useMatchupNeutralNudge(matchupId: string, hasVoted: boolean) {
       cancelHesitation();
       setShowMorph(false);
     };
-  }, [hasVoted, matchupId, prefersReducedMotion]);
+  }, [enabled, hasVoted, matchupId, prefersReducedMotion]);
 
   return {
     cardRef,

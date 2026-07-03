@@ -57,6 +57,7 @@ export function VersusCard({
   onBrowseFullScreen,
   enableDiscussion = false,
   priority = false,
+  enableNeutralNudge = true,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -70,6 +71,8 @@ export function VersusCard({
   enableDiscussion?: boolean;
   /** Eagerly load this card's images (active/first visible card). */
   priority?: boolean;
+  /** Disable morph/hesitation nudge (dense scroll lists like View All overlay). */
+  enableNeutralNudge?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -77,7 +80,20 @@ export function VersusCard({
   const votedNeutral = userVote === "neutral";
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!matchup.slug;
-  const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted);
+  const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted, enableNeutralNudge);
+  const footerBarClass = enableNeutralNudge
+    ? "bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm"
+    : "bg-muted/60 dark:bg-[#0B0F1A]";
+  const vsButtonClassName = `relative h-14 w-14 overflow-hidden rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
+    votedNeutral
+      ? "bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40"
+      : "bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-border dark:border-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer"
+  }`;
+  const handleNeutralVote = (e: MouseEvent<HTMLButtonElement>) => {
+    if (votedNeutral) return;
+    trackMatchupNeutralVote(matchup.id, "neutral");
+    onVote(matchup.id, "neutral", e);
+  };
 
   return (
     <div ref={neutralNudge.cardRef} className="relative group h-full">
@@ -108,7 +124,7 @@ export function VersusCard({
             </div>
           </div>
 
-          <div className="rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm px-4 py-2 text-center mb-0 mt-[5px]">
+          <div className={`rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 ${footerBarClass} px-4 py-2 text-center mb-0 mt-[5px]`}>
             {matchup.slug && onNavigateToDetail ? (
               <button
                 type="button"
@@ -167,7 +183,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className="px-2 py-2 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
                 <span className={`font-semibold text-sm truncate block ${votedA ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                   {matchup.optionAText}
                 </span>
@@ -175,86 +191,95 @@ export function VersusCard({
             </button>
 
             <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
-              <AnimatePresence>
-                {neutralNudge.showHesitationNudge && !hasVoted && (
-                  <motion.div
-                    initial={neutralNudge.prefersReducedMotion ? false : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
-                    animate={neutralNudge.prefersReducedMotion ? { opacity: 1, x: "-50%" } : { opacity: 1, x: "-50%", y: 0, scale: 1 }}
-                    exit={neutralNudge.prefersReducedMotion ? { opacity: 0, x: "-50%" } : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
-                    transition={{ duration: neutralNudge.prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
-                    className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 w-max max-w-[210px] rounded-full border border-slate-300/70 bg-card/95 px-2.5 py-1 text-center text-[11px] font-medium leading-tight text-slate-600 shadow-lg backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-900/95 dark:text-slate-300"
-                  >
-                    Can't decide? Tap VS to stay neutral
-                  </motion.div>
-                )}
-              </AnimatePresence>
-              <motion.button
-                type="button"
-                onClick={(e) => {
-                  if (votedNeutral) return;
-                  trackMatchupNeutralVote(matchup.id, "neutral");
-                  onVote(matchup.id, "neutral", e);
-                }}
-                aria-label="Vote neutral"
-                title="Vote neutral"
-                data-testid={`button-vote-neutral-${matchup.id}`}
-                animate={
-                  neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion
-                    ? {
-                        scale: [1, 1.06, 1],
-                        boxShadow: [
-                          "0 10px 18px rgba(15, 23, 42, 0.22)",
-                          "0 0 0 5px rgba(148, 163, 184, 0.28)",
-                          "0 10px 18px rgba(15, 23, 42, 0.22)",
-                        ],
-                      }
-                    : { scale: 1 }
-                }
-                transition={{ duration: 0.7, ease: "easeOut" }}
-                className={`relative h-14 w-14 overflow-hidden rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
-                  votedNeutral
-                    ? "bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40"
-                    : "bg-gradient-to-br from-muted to-card dark:from-slate-700 dark:to-slate-900 border-border dark:border-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:ring-2 hover:ring-slate-300/30 cursor-pointer"
-                }`}
-              >
-                <AnimatePresence>
-                  {neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion && (
-                    <motion.span
-                      aria-hidden="true"
-                      className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent"
-                      initial={{ x: "-140%" }}
-                      animate={{ x: "260%" }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.75, ease: "easeOut" }}
-                    />
-                  )}
-                </AnimatePresence>
-                <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
-                  <AnimatePresence mode="wait" initial={false}>
-                    {neutralNudge.showMorph ? (
-                      <motion.span
-                        key="tie"
-                        initial={{ opacity: 0, scale: 0.92 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.92 }}
-                        transition={{ duration: 0.18, ease: "easeOut" }}
+              {enableNeutralNudge ? (
+                <>
+                  <AnimatePresence>
+                    {neutralNudge.showHesitationNudge && !hasVoted && (
+                      <motion.div
+                        initial={neutralNudge.prefersReducedMotion ? false : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                        animate={neutralNudge.prefersReducedMotion ? { opacity: 1, x: "-50%" } : { opacity: 1, x: "-50%", y: 0, scale: 1 }}
+                        exit={neutralNudge.prefersReducedMotion ? { opacity: 0, x: "-50%" } : { opacity: 0, x: "-50%", y: 4, scale: 0.96 }}
+                        transition={{ duration: neutralNudge.prefersReducedMotion ? 0 : 0.18, ease: "easeOut" }}
+                        className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 w-max max-w-[210px] rounded-full border border-slate-300/70 bg-card/95 px-2.5 py-1 text-center text-[11px] font-medium leading-tight text-slate-600 shadow-lg backdrop-blur-sm dark:border-slate-600/70 dark:bg-slate-900/95 dark:text-slate-300"
                       >
-                        Tie?
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="vs"
-                        initial={{ opacity: 0, scale: 0.92 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.92 }}
-                        transition={{ duration: 0.18, ease: "easeOut" }}
-                      >
-                        VS
-                      </motion.span>
+                        Can't decide? Tap VS to stay neutral
+                      </motion.div>
                     )}
                   </AnimatePresence>
-                </span>
-              </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={handleNeutralVote}
+                    aria-label="Vote neutral"
+                    title="Vote neutral"
+                    data-testid={`button-vote-neutral-${matchup.id}`}
+                    animate={
+                      neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion
+                        ? {
+                            scale: [1, 1.06, 1],
+                            boxShadow: [
+                              "0 10px 18px rgba(15, 23, 42, 0.22)",
+                              "0 0 0 5px rgba(148, 163, 184, 0.28)",
+                              "0 10px 18px rgba(15, 23, 42, 0.22)",
+                            ],
+                          }
+                        : { scale: 1 }
+                    }
+                    transition={{ duration: 0.7, ease: "easeOut" }}
+                    className={vsButtonClassName}
+                  >
+                    <AnimatePresence>
+                      {neutralNudge.showHesitationNudge && !neutralNudge.prefersReducedMotion && (
+                        <motion.span
+                          aria-hidden="true"
+                          className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent"
+                          initial={{ x: "-140%" }}
+                          animate={{ x: "260%" }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.75, ease: "easeOut" }}
+                        />
+                      )}
+                    </AnimatePresence>
+                    <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
+                      <AnimatePresence mode="wait" initial={false}>
+                        {neutralNudge.showMorph ? (
+                          <motion.span
+                            key="tie"
+                            initial={{ opacity: 0, scale: 0.92 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.92 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                          >
+                            Tie?
+                          </motion.span>
+                        ) : (
+                          <motion.span
+                            key="vs"
+                            initial={{ opacity: 0, scale: 0.92 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.92 }}
+                            transition={{ duration: 0.18, ease: "easeOut" }}
+                          >
+                            VS
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </span>
+                  </motion.button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleNeutralVote}
+                  aria-label="Vote neutral"
+                  title="Vote neutral"
+                  data-testid={`button-vote-neutral-${matchup.id}`}
+                  className={vsButtonClassName}
+                >
+                  <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
+                    VS
+                  </span>
+                </button>
+              )}
               {votedNeutral && (
                 <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 bg-card dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1 py-px leading-none whitespace-nowrap shadow-sm">
                   Your pick
@@ -295,7 +320,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className="px-2 py-2 bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm border-t border-border/40 dark:border-slate-700/30 text-center">
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
                 <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
                   {matchup.optionBText}
                 </span>
