@@ -297,6 +297,8 @@ export function VoteSnapScrollView({
   const columnScrollRootRefs = useRef<Record<string, { current: HTMLDivElement | null }>>({});
   const [columnVisibleIndices, setColumnVisibleIndices] = useState<Record<string, number>>({});
   const [dismissCounter, setDismissCounter] = useState(0);
+  /** True after open-init runs; prevents vote refetch from resetting scroll/category. */
+  const openInitializedRef = useRef(false);
 
   // Canonical category ids (same pipeline as buildSectionCategoryOptions / filters)
   // so alias strings like "Food & Drink" vs "food-drink" collapse to one snap tab.
@@ -361,23 +363,47 @@ export function VoteSnapScrollView({
   }, [normalizedItems, categories]);
 
   useEffect(() => {
-    if (open) {
-      setActiveCategoryIdx(initialCategoryIdx);
-      setVisualCategoryIdx(initialCategoryIdx);
-      setExpandedItemId(null);
-      dragX.set(0);
-      positionMemoryRef.current.clear();
-      columnScrollRefs.current = {};
-      columnScrollRootRefs.current = {};
-      isAnimatingRef.current = false;
-      hPanRef.current = null;
-
-      const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
-      const catItems = categoryItems.get(cat) || [];
-      const idx = initialItemId ? catItems.findIndex((i) => i.id === initialItemId) : 0;
-      setColumnVisibleIndices(idx >= 0 ? { [cat]: idx } : {});
+    if (!open) {
+      openInitializedRef.current = false;
+      return;
     }
-  }, [open, initialCategoryIdx, dragX, initialCategoryAll, categories, categoryItems, initialItemId]);
+    if (openInitializedRef.current) return;
+    openInitializedRef.current = true;
+
+    setActiveCategoryIdx(initialCategoryIdx);
+    setVisualCategoryIdx(initialCategoryIdx);
+    setExpandedItemId(null);
+    dragX.set(0);
+    positionMemoryRef.current.clear();
+    columnScrollRefs.current = {};
+    columnScrollRootRefs.current = {};
+    isAnimatingRef.current = false;
+    hPanRef.current = null;
+
+    const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
+    const catItems = categoryItems.get(cat) || [];
+    const idx = initialItemId ? catItems.findIndex((i) => i.id === initialItemId) : 0;
+    setColumnVisibleIndices(idx >= 0 ? { [cat]: idx } : {});
+  }, [open, initialCategoryIdx, dragX, initialCategoryAll, initialItemId, categories, categoryItems]);
+
+  // Clamp scroll index when the active column shrinks (e.g. hide-mine) while snap stays open.
+  useEffect(() => {
+    if (!open || !openInitializedRef.current) return;
+
+    const cat = categories[activeCategoryIdx] || "All";
+    const colItems = categoryItems.get(cat) || [];
+    if (colItems.length === 0) return;
+
+    const currentIdx = columnVisibleIndices[cat] ?? 0;
+    const maxIdx = colItems.length - 1;
+    if (currentIdx <= maxIdx) return;
+
+    setColumnVisibleIndices((prev) => ({ ...prev, [cat]: maxIdx }));
+    const el = columnScrollRefs.current[cat];
+    if (el) {
+      el.scrollTo({ top: maxIdx * el.clientHeight, behavior: "auto" });
+    }
+  }, [open, activeCategoryIdx, categories, categoryItems, columnVisibleIndices]);
 
   // Windowed: [prev | null, current, next | null]
   const windowedCats = useMemo(() => {
@@ -454,9 +480,9 @@ export function VoteSnapScrollView({
     return catItems[Math.min(idx, catItems.length - 1)] || null;
   }, [categoryItems, activeCategory]);
 
-  // ── Initial scroll on open ────────────────────────────────────────────
+  // ── Initial scroll on open (once per open — not on items refetch) ─────
   useLayoutEffect(() => {
-    if (!open || !initialItemId) return;
+    if (!open || !initialItemId || openInitializedRef.current) return;
 
     const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
     const catItems = categoryItems.get(cat) || [];

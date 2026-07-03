@@ -1698,7 +1698,7 @@ export default function VotePage() {
   const opinionSectionRef = useRef<CardSectionHandle | null>(null);
   const playInactiveVoteAdvance = useCallback(
     (section: "sentiment" | "matchups" | "opinion", id: string) => {
-      if (!isMobile || myVotesFilter !== "all") return;
+      if (!isMobile || myVotesFilter !== "all" || snapScrollOpen) return;
       const ref =
         section === "sentiment"
           ? sentimentSectionRef
@@ -1707,7 +1707,7 @@ export default function VotePage() {
             : opinionSectionRef;
       ref.current?.playVoteAdvance(id);
     },
-    [isMobile, myVotesFilter],
+    [isMobile, myVotesFilter, snapScrollOpen],
   );
   const showOptimisticVoteFeedback = useCallback(
     (
