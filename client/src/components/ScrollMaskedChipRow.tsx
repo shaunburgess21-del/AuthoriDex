@@ -7,13 +7,32 @@ type ScrollState = "start" | "middle" | "end" | "none";
 export function ScrollMaskedChipRow({
   children,
   className = "",
+  activeChipKey,
 }: {
   children: ReactNode;
   className?: string;
+  activeChipKey?: string;
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
   useScrollHint(dragScrollRef);
   const [scrollState, setScrollState] = useState<ScrollState>("start");
+
+  useEffect(() => {
+    if (!activeChipKey) return;
+    const frameId = requestAnimationFrame(() => {
+      const container = dragScrollRef.current;
+      if (!container) return;
+      const chip = container.querySelector<HTMLElement>(
+        `[data-scroll-chip="${CSS.escape(activeChipKey)}"]`,
+      );
+      if (!chip) return;
+      // Horizontal-only centering — scrollIntoView also scrolls the window vertically
+      // when this row is off-screen (e.g. Curate section at the bottom of Vote page).
+      const offset = chip.offsetLeft - container.clientWidth / 2 + chip.offsetWidth / 2;
+      container.scrollTo({ left: Math.max(0, offset), behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [activeChipKey]);
 
   useEffect(() => {
     const el = dragScrollRef.current;

@@ -14,6 +14,7 @@ interface CategoryRowWithSearchProps {
   placeholder?: string;
   testId?: string;
   variant?: FilterVariant;
+  activeCategory?: string;
 }
 
 /** Accent styling for the active mobile search chip, per page family. */
@@ -33,6 +34,7 @@ export function CategoryRowWithSearch({
   placeholder = "Search...",
   testId,
   variant = "vote",
+  activeCategory,
 }: CategoryRowWithSearchProps) {
   const [expanded, setExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,7 +52,7 @@ export function CategoryRowWithSearch({
     <div className="relative flex items-center gap-3">
       {/* Chips row (rendered once, shared across breakpoints). On mobile the search
           pill is the first item so it scrolls/disappears with the chips. */}
-      <ScrollMaskedChipRow className="flex-1 min-w-0">
+      <ScrollMaskedChipRow className="flex-1 min-w-0" activeChipKey={activeCategory}>
         <div
           className={cn(
             "flex flex-none items-center gap-1 rounded-full border text-xs font-medium transition-all md:hidden",

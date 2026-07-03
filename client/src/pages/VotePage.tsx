@@ -1255,6 +1255,7 @@ function FilterChip({
   return (
     <button
       onClick={handleClick}
+      data-scroll-chip={category}
       className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
         isActive
           ? "border bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
@@ -3080,6 +3081,7 @@ export default function VotePage() {
               onSearchChange={setTopicsSearchQuery}
               placeholder="Search topics..."
               testId="filter-topics-search"
+              activeCategory={topicsCategoryFilter}
             >
               {topicsCategoryOptions.map((opt) => (
                 <FilterChip
@@ -3192,6 +3194,7 @@ export default function VotePage() {
               onSearchChange={setMatchupsSearchQuery}
               placeholder="Search matchups..."
               testId="filter-matchups-search"
+              activeCategory={matchupsCategoryFilter}
             >
               {matchupsCategoryOptions.map((opt) => (
                 <FilterChip
@@ -3313,6 +3316,7 @@ export default function VotePage() {
               onSearchChange={setOpinionPollsSearchQuery}
               placeholder="Search opinion polls..."
               testId="filter-opinion-search"
+              activeCategory={opinionPollsCategoryFilter}
             >
               {opinionCategoryOptions.map((opt) => (
                 <FilterChip
@@ -3423,6 +3427,7 @@ export default function VotePage() {
               onSearchChange={setValuePerceptionSearchQuery}
               placeholder="Search celebrities..."
               testId="filter-value-search"
+              activeCategory={valuePerceptionCategoryFilter}
             >
               {valueCategoryOptions.map((opt) => (
                 <FilterChip
@@ -3527,6 +3532,7 @@ export default function VotePage() {
               onSearchChange={setInductionSearchQuery}
               placeholder="Search candidates..."
               testId="filter-induction-search"
+              activeCategory={inductionCategoryFilter}
             >
               {inductionCategoryOptions.map((opt) => (
                 <FilterChip
@@ -3635,6 +3641,7 @@ export default function VotePage() {
               onSearchChange={setCurateSearchQuery}
               placeholder="Search profiles..."
               testId="filter-curate-search"
+              activeCategory={curateCategoryFilter}
             >
               {curateCategoryOptions.map((opt) => (
                 <FilterChip
