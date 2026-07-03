@@ -159,6 +159,8 @@ interface CardCommentsProps {
   onShare?: () => void;
   disableFocusMode?: boolean;
   focusContextTitle?: string | null;
+  /** When false, defers comment fetch until card is near-visible in snap view. */
+  fetchEnabled?: boolean;
 }
 
 function CardCommentsEmbedded({
@@ -172,6 +174,7 @@ function CardCommentsEmbedded({
   onShare,
   expandTriggerRef,
   onOpenFocusMode,
+  fetchEnabled = true,
 }: {
   entityType: CommentEntityType;
   slug: string;
@@ -183,6 +186,7 @@ function CardCommentsEmbedded({
   onShare?: () => void;
   expandTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   onOpenFocusMode?: () => void;
+  fetchEnabled?: boolean;
 }) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -227,8 +231,10 @@ function CardCommentsEmbedded({
     [parentType, slug, queryKey, base, entityType, handlePosted],
   );
 
-  const thread = useCommentThread(adapter);
-  const { highlightedId, highlight } = useCommentDeepLink(!thread.isLoading && thread.comments.length > 0);
+  const thread = useCommentThread(adapter, { fetchEnabled });
+  const { highlightedId, highlight } = useCommentDeepLink(
+    fetchEnabled && !thread.isLoading && thread.comments.length > 0,
+  );
   postedHighlightRef.current = highlight;
   const isAuthenticated = isLoggedIn || !!user;
 
@@ -236,7 +242,7 @@ function CardCommentsEmbedded({
     <>
       <div className={`${variant === "inline" ? "flex flex-col h-full min-h-0" : "mb-6 px-1"}`} data-testid="section-comments">
         <CommentSortHeader
-          count={thread.visibleCount}
+          count={fetchEnabled ? thread.visibleCount : 0}
           countLabel="Discussion"
           variant={variant}
           sort={thread.sort}
@@ -249,7 +255,7 @@ function CardCommentsEmbedded({
         {variant === "inline" ? (
           <>
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {thread.isLoading ? (
+              {thread.isLoading || !fetchEnabled ? (
                 <CommentSkeleton />
               ) : (
                 <CommentList
@@ -549,6 +555,7 @@ export function CardComments({
   onShare,
   disableFocusMode = false,
   focusContextTitle,
+  fetchEnabled = true,
 }: CardCommentsProps) {
   const [focusOpen, setFocusOpen] = useState(false);
   const expandTriggerRef = useRef<HTMLButtonElement>(null);
@@ -571,6 +578,7 @@ export function CardComments({
         onShare={onShare}
         expandTriggerRef={disableFocusMode ? undefined : expandTriggerRef}
         onOpenFocusMode={disableFocusMode ? undefined : () => setFocusOpen(true)}
+        fetchEnabled={fetchEnabled}
       />
       {!disableFocusMode && (
         <CommentsFocusShell open={focusOpen} onClose={handleCloseFocus} contextTitle={focusContextTitle}>

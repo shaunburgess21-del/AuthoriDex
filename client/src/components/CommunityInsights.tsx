@@ -90,6 +90,8 @@ interface CommunityInsightsProps {
   disableFocusMode?: boolean;
   /** Subtitle in focus shell header; defaults to personName. */
   focusContextTitle?: string | null;
+  /** When false, defers insight fetch until card is near-visible in snap view. */
+  fetchEnabled?: boolean;
 }
 
 export function CommunityInsights({
@@ -102,6 +104,7 @@ export function CommunityInsights({
   onShare,
   disableFocusMode = false,
   focusContextTitle,
+  fetchEnabled = true,
 }: CommunityInsightsProps) {
   const { user, isLoggedIn, profile } = useAuth();
   const [, setLocation] = useLocation();
@@ -213,8 +216,10 @@ export function CommunityInsights({
     supportsReplies: false,
   }), [personId, triggerXpBurst]);
 
-  const thread = useCommentThread(adapter);
-  const { highlightedId, highlight } = useCommentDeepLink(!thread.isLoading && thread.comments.length > 0);
+  const thread = useCommentThread(adapter, { fetchEnabled });
+  const { highlightedId, highlight } = useCommentDeepLink(
+    fetchEnabled && !thread.isLoading && thread.comments.length > 0,
+  );
   postedHighlightRef.current = highlight;
   const isAuthenticated = isLoggedIn || !!user;
 

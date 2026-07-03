@@ -31,8 +31,17 @@ export interface UseCommentThreadResult {
   resetComposer: () => void;
 }
 
+export interface UseCommentThreadOptions {
+  /** When false, skips network fetch until enabled (snap view near-visible gating). */
+  fetchEnabled?: boolean;
+}
+
 /** Adapter-driven hook used by every comment surface (card detail, insights overlay, etc.). */
-export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResult {
+export function useCommentThread(
+  adapter: CommentAdapter,
+  options?: UseCommentThreadOptions,
+): UseCommentThreadResult {
+  const fetchEnabled = options?.fetchEnabled ?? true;
   const queryClient = useQueryClient();
   const [composerBody, setComposerBody] = useState("");
   const [sort, setSort] = useState<CommentSort>("top");
@@ -44,12 +53,13 @@ export function useCommentThread(adapter: CommentAdapter): UseCommentThreadResul
   const { data: rawComments = [], isLoading } = useQuery<CommentItem[]>({
     queryKey,
     queryFn: () => adapter.fetchList(),
+    enabled: fetchEnabled,
   });
 
   const { data: userVotesMap } = useQuery<Record<string, VoteType>>({
     queryKey: userVotesKey,
     queryFn: () => adapter.fetchUserVotes!(),
-    enabled: !!adapter.fetchUserVotes,
+    enabled: fetchEnabled && !!adapter.fetchUserVotes,
   });
 
   const comments = useMemo<CommentItem[]>(() => {

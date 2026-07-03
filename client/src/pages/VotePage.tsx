@@ -4431,12 +4431,13 @@ export default function VotePage() {
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, ctx) => {
               const m = matchups.find(x => x.id === item.id);
               if (!m) return null;
               return (
                 <VersusCard
                   matchup={m}
+                  priority={ctx.priority}
                   userVote={matchupUserVotes[m.id] || null}
                   onVote={handleMatchupVote}
                   onRemoveVote={handleMatchupRemoveVote}
@@ -4457,7 +4458,7 @@ export default function VotePage() {
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setStartPollModalOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const t = dbPolls.find((x: any) => x.id === item.id);
               if (!t) return null;
               return (
@@ -4481,7 +4482,7 @@ export default function VotePage() {
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
             onSuggest={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const p = opinionPolls.find((x: any) => x.id === item.id);
               if (!p) return null;
               return (
@@ -4506,7 +4507,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const person = filteredValueCelebrities.find((p: any) => p.id === item.id);
               if (!person) return null;
               return (
@@ -4529,7 +4530,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const idx = filteredCandidates.findIndex((c: any) => c.id === item.id);
               const candidate = idx >= 0 ? filteredCandidates[idx] : null;
               if (!candidate) return null;
@@ -4557,7 +4558,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const person: CuratePerson = { id: item.id, name: item.title, category: item.category, imageUrl: null };
               return (
                 <CurateProfileCardComponent

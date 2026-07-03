@@ -4115,7 +4115,7 @@ export default function PredictPage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const market = openMarkets.find((m: any) => String(m.id) === item.id);
               if (!market) return null;
               return (
@@ -4143,7 +4143,7 @@ export default function PredictPage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             onSuggest={() => openSuggestModal(() => setCreateModalOpen(true))}
-            renderCard={(item) => {
+            renderCard={(item, _ctx) => {
               const market = filteredUpDown.find((m: any) => String(m.id) === item.id);
               if (!market) return null;
               return (

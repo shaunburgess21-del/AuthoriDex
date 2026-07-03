@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, createContext, type ReactNode, type UIEvent } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, createContext, type ReactNode, type UIEvent, type CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
@@ -6,12 +6,14 @@ import { getCategoryStyle } from "@/components/CategoryPill";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   buildVoteListState,
   navigateWithVoteList,
   type VoteListNavType,
 } from "@/lib/voteListNavigation";
 import { CategoryTabStrip } from "./CategoryTabStrip";
+import { SnapPageVisibility } from "./SnapPageVisibility";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
 import { CommunityInsights } from "@/components/CommunityInsights";
 
@@ -37,13 +39,19 @@ export interface SnapItem {
 /** Incremented on horizontal category commit — descendants auto-dismiss overlays. */
 export const SnapDismissContext = createContext(0);
 
+export interface SnapRenderContext {
+  /** Eager-load card images when true (visible / buffered snap page). */
+  priority: boolean;
+  index: number;
+}
+
 interface VoteSnapScrollViewProps {
   open: boolean;
   onClose: () => void;
   sectionType: SnapSectionType;
   items: SnapItem[];
   initialItemId?: string;
-  renderCard: (item: SnapItem) => ReactNode;
+  renderCard: (item: SnapItem, ctx: SnapRenderContext) => ReactNode;
   onSuggest?: () => void;
   commentMode?: SnapCommentMode;
   /** Vote hub section filter when opening detail (defaults to "All"). */
@@ -100,11 +108,39 @@ const COMMENT_TAP_THRESHOLD = 12;
 const COMMENT_SWIPE_TOP_THRESHOLD = 8;
 const COMMENT_SWIPE_VELOCITY_THRESHOLD = 0.5;
 
-const H_PAN_LOCK_THRESHOLD = 10;
+const H_PAN_LOCK_THRESHOLD = 6;
 const H_VERTICAL_BIAS = 0.7;
 const H_COMMIT_RATIO = 0.3;
 const H_COMMIT_VELOCITY = 500;
 const H_BOUNCE_RESISTANCE = 3;
+const H_COMMIT_TWEEN_DURATION = 0.24;
+const VERTICAL_BUFFER = 1;
+
+const SNAP_PAGE_HEIGHT = "calc(100dvh - 52px)";
+const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
+
+const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
+  matchup: "matchup",
+  poll: "trending_poll",
+  "opinion-poll": "opinion_poll",
+  "open-market": "open_market",
+};
+
+function snapPageStyle(): CSSProperties {
+  return {
+    height: SNAP_PAGE_HEIGHT,
+    scrollSnapAlign: "start",
+    paddingBottom: SNAP_PAGE_PADDING,
+  };
+}
+
+function scheduleIdleTask(task: () => void): void {
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => task());
+  } else {
+    window.setTimeout(task, 1);
+  }
+}
 
 function SnapEndCard({
   category,
@@ -132,9 +168,9 @@ function SnapEndCard({
     <div
       className="snap-start flex flex-col items-center justify-center px-6 text-center"
       style={{
-        height: "calc(100dvh - 52px)",
+        height: SNAP_PAGE_HEIGHT,
         scrollSnapAlign: "start",
-        paddingBottom: "env(safe-area-inset-bottom, 16px)",
+        paddingBottom: SNAP_PAGE_PADDING,
         background: "linear-gradient(to bottom, hsl(var(--background)), hsl(var(--card) / 0.6))",
       }}
     >
@@ -258,6 +294,8 @@ export function VoteSnapScrollView({
   const isAnimatingRef = useRef(false);
   const positionMemoryRef = useRef<Map<string, number>>(new Map());
   const columnScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const columnScrollRootRefs = useRef<Record<string, { current: HTMLDivElement | null }>>({});
+  const [columnVisibleIndices, setColumnVisibleIndices] = useState<Record<string, number>>({});
   const [dismissCounter, setDismissCounter] = useState(0);
 
   // Canonical category ids (same pipeline as buildSectionCategoryOptions / filters)
@@ -307,19 +345,6 @@ export function VoteSnapScrollView({
   const categoriesRef = useRef(categories);
   categoriesRef.current = categories;
 
-  useEffect(() => {
-    if (open) {
-      setActiveCategoryIdx(initialCategoryIdx);
-      setVisualCategoryIdx(initialCategoryIdx);
-      setExpandedItemId(null);
-      dragX.set(0);
-      positionMemoryRef.current.clear();
-      columnScrollRefs.current = {};
-      isAnimatingRef.current = false;
-      hPanRef.current = null;
-    }
-  }, [open, initialCategoryIdx, dragX]);
-
   const categoryItems = useMemo(() => {
     const map = new Map<string, SnapItem[]>();
     map.set("All", normalizedItems);
@@ -334,6 +359,25 @@ export function VoteSnapScrollView({
     }
     return map;
   }, [normalizedItems, categories]);
+
+  useEffect(() => {
+    if (open) {
+      setActiveCategoryIdx(initialCategoryIdx);
+      setVisualCategoryIdx(initialCategoryIdx);
+      setExpandedItemId(null);
+      dragX.set(0);
+      positionMemoryRef.current.clear();
+      columnScrollRefs.current = {};
+      columnScrollRootRefs.current = {};
+      isAnimatingRef.current = false;
+      hPanRef.current = null;
+
+      const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
+      const catItems = categoryItems.get(cat) || [];
+      const idx = initialItemId ? catItems.findIndex((i) => i.id === initialItemId) : 0;
+      setColumnVisibleIndices(idx >= 0 ? { [cat]: idx } : {});
+    }
+  }, [open, initialCategoryIdx, dragX, initialCategoryAll, categories, categoryItems, initialItemId]);
 
   // Windowed: [prev | null, current, next | null]
   const windowedCats = useMemo(() => {
@@ -358,9 +402,46 @@ export function VoteSnapScrollView({
     if (idx != null && idx > 0) {
       requestAnimationFrame(() => {
         el.scrollTo({ top: idx * el.clientHeight, behavior: "auto" });
+        setColumnVisibleIndices((prev) => ({ ...prev, [cat]: idx }));
       });
     }
   }, []);
+
+  // ── Image warming (preload upcoming cards) ────────────────────────────
+  const warmImagesInColumn = useCallback((el: HTMLElement) => {
+    const h = el.clientHeight;
+    const cr = el.getBoundingClientRect();
+    el.querySelectorAll("img").forEach((node) => {
+      const img = node as HTMLImageElement;
+      if (img.loading === "eager") return;
+      const r = img.getBoundingClientRect();
+      const top = r.top - cr.top;
+      if (top < h * 2 && r.bottom - cr.top > -h) {
+        img.loading = "eager";
+      }
+    });
+  }, []);
+
+  const updateColumnVisibleIndex = useCallback((cat: string, el: HTMLDivElement) => {
+    const h = el.clientHeight;
+    if (h === 0) return;
+    const idx = Math.round(el.scrollTop / h);
+    setColumnVisibleIndices((prev) => (prev[cat] === idx ? prev : { ...prev, [cat]: idx }));
+  }, []);
+
+  const warmRafRef = useRef<number | null>(null);
+  const handleColumnScroll = useCallback(
+    (cat: string) => (e: UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      updateColumnVisibleIndex(cat, el);
+      if (warmRafRef.current != null) return;
+      warmRafRef.current = requestAnimationFrame(() => {
+        warmRafRef.current = null;
+        warmImagesInColumn(el);
+      });
+    },
+    [updateColumnVisibleIndex, warmImagesInColumn],
+  );
 
   // ── getVisibleItem (current column) ───────────────────────────────────
   const getVisibleItem = useCallback((): SnapItem | null => {
@@ -374,19 +455,32 @@ export function VoteSnapScrollView({
   }, [categoryItems, activeCategory]);
 
   // ── Initial scroll on open ────────────────────────────────────────────
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !initialItemId) return;
-    const timer = setTimeout(() => {
-      const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
-      const catItems = categoryItems.get(cat) || [];
-      const idx = catItems.findIndex((i) => i.id === initialItemId);
+
+    const cat = initialCategoryAll ? "All" : (categories[initialCategoryIdx] || "All");
+    const catItems = categoryItems.get(cat) || [];
+    const idx = catItems.findIndex((i) => i.id === initialItemId);
+
+    const scrollToInitial = () => {
       const el = columnScrollRefs.current[cat];
-      if (el && idx > 0) {
+      if (!el) return false;
+      if (idx > 0) {
         el.scrollTo({ top: idx * el.clientHeight, behavior: "auto" });
+      } else {
+        el.scrollTop = 0;
       }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [open, initialItemId, initialCategoryAll, initialCategoryIdx, categories, categoryItems]);
+      if (idx >= 0) {
+        setColumnVisibleIndices((prev) => (prev[cat] === idx ? prev : { ...prev, [cat]: idx }));
+      }
+      warmImagesInColumn(el);
+      return true;
+    };
+
+    if (!scrollToInitial()) {
+      requestAnimationFrame(scrollToInitial);
+    }
+  }, [open, initialItemId, initialCategoryAll, initialCategoryIdx, categories, categoryItems, warmImagesInColumn]);
 
   // ── Comment swipe native listener ─────────────────────────────────────
   useEffect(() => {
@@ -488,8 +582,13 @@ export function VoteSnapScrollView({
 
     motionAnimate(dragX, 0, {
       type: "tween",
-      duration: 0.35,
+      duration: H_COMMIT_TWEEN_DURATION,
       ease: [0.32, 0.72, 0, 1],
+      onUpdate: (v) => {
+        if (Math.abs(v) < 2) {
+          isAnimatingRef.current = false;
+        }
+      },
       onComplete: () => {
         isAnimatingRef.current = false;
       },
@@ -508,13 +607,23 @@ export function VoteSnapScrollView({
   // ── Horizontal pan: touchstart / touchend ─────────────────────────────
   const handleHPanTouchStart = useCallback((e: React.TouchEvent) => {
     if (isAnimatingRef.current) return;
+
+    const idx = activeCategoryIdxRef.current;
+    const cats = categoriesRef.current;
+    for (const offset of [-1, 1] as const) {
+      const adjCat = cats[idx + offset];
+      if (!adjCat) continue;
+      const el = columnScrollRefs.current[adjCat];
+      if (el) warmImagesInColumn(el);
+    }
+
     hPanRef.current = {
       startX: e.touches[0].clientX,
       startY: e.touches[0].clientY,
       startTime: performance.now(),
       locked: null,
     };
-  }, []);
+  }, [warmImagesInColumn]);
 
   const handleHPanTouchEnd = useCallback((e: React.TouchEvent) => {
     const pan = hPanRef.current;
@@ -571,8 +680,13 @@ export function VoteSnapScrollView({
 
     motionAnimate(dragX, 0, {
       type: "tween",
-      duration: 0.35,
+      duration: H_COMMIT_TWEEN_DURATION,
       ease: [0.32, 0.72, 0, 1],
+      onUpdate: (v) => {
+        if (Math.abs(v) < 2) {
+          isAnimatingRef.current = false;
+        }
+      },
       onComplete: () => {
         isAnimatingRef.current = false;
       },
@@ -698,38 +812,6 @@ export function VoteSnapScrollView({
   const commentEntityType = SECTION_COMMENT_TYPE[sectionType] ?? "matchup";
   const hasComments = commentMode !== "none";
 
-  // ── Image warming (preload upcoming cards) ────────────────────────────
-  // The active column keeps all cards in the DOM but their images are lazy,
-  // so a fast scroll lands on a card whose image hasn't started loading
-  // (the "black box"). Warm images within ~2 screens of the scroll position
-  // by flipping them to eager — windowed so we never fetch the whole column.
-  const warmImagesInColumn = useCallback((el: HTMLElement) => {
-    const h = el.clientHeight;
-    const cr = el.getBoundingClientRect();
-    el.querySelectorAll("img").forEach((node) => {
-      const img = node as HTMLImageElement;
-      if (img.loading === "eager") return;
-      const r = img.getBoundingClientRect();
-      const top = r.top - cr.top;
-      if (top < h * 2 && r.bottom - cr.top > -h) {
-        img.loading = "eager";
-      }
-    });
-  }, []);
-
-  const warmRafRef = useRef<number | null>(null);
-  const handleColumnScroll = useCallback(
-    (e: UIEvent<HTMLDivElement>) => {
-      const el = e.currentTarget;
-      if (warmRafRef.current != null) return;
-      warmRafRef.current = requestAnimationFrame(() => {
-        warmRafRef.current = null;
-        warmImagesInColumn(el);
-      });
-    },
-    [warmImagesInColumn],
-  );
-
   useEffect(
     () => () => {
       if (warmRafRef.current != null) cancelAnimationFrame(warmRafRef.current);
@@ -737,12 +819,54 @@ export function VoteSnapScrollView({
     [],
   );
 
+  // Prefetch comment data for the next few cards after open (idle time).
+  useEffect(() => {
+    if (!open || commentMode === "none") return;
+    const cat = categories[activeCategoryIdx] || "All";
+    const colItems = categoryItems.get(cat) || [];
+    const visibleIdx = columnVisibleIndices[cat] ?? 0;
+
+    scheduleIdleTask(() => {
+      const prefetchItems = colItems.slice(visibleIdx, visibleIdx + 3);
+      for (const item of prefetchItems) {
+        if (commentMode === "person" && item.personId) {
+          void queryClient.prefetchQuery({
+            queryKey: [`/api/community-insights/${item.personId}`],
+            queryFn: async () => {
+              const res = await apiRequest("GET", `/api/community-insights/${item.personId}`);
+              return res.json();
+            },
+          });
+        } else if (item.slug) {
+          const parentType = COMMENT_PARENT_TYPE[commentEntityType];
+          void queryClient.prefetchQuery({
+            queryKey: ["/api/comments", parentType, item.slug] as const,
+            queryFn: async () => {
+              const res = await apiRequest(
+                "GET",
+                `/api/comments?parentType=${parentType}&parentSlug=${encodeURIComponent(item.slug)}&limit=100`,
+              );
+              return res.json();
+            },
+          });
+        }
+      }
+    });
+  }, [open, activeCategoryIdx, categories, categoryItems, columnVisibleIndices, commentMode, commentEntityType]);
+
+  const getColumnScrollRoot = useCallback((cat: string): { current: HTMLDivElement | null } => {
+    if (!columnScrollRootRefs.current[cat]) {
+      columnScrollRootRefs.current[cat] = { current: null };
+    }
+    return columnScrollRootRefs.current[cat];
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={false}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
@@ -781,7 +905,6 @@ export function VoteSnapScrollView({
                     return <div key={`empty-${slotIdx}`} className="shrink-0 h-full" style={{ width: "100vw" }} />;
                   }
                   const colItems = categoryItems.get(cat) || [];
-                  const isCurrent = slotIdx === 1;
                   return (
                     <div key={cat} className="shrink-0 h-full" style={{ width: "100vw" }}>
                       {colItems.length === 0 ? (
@@ -796,111 +919,118 @@ export function VoteSnapScrollView({
                         <div
                           ref={(el) => {
                             columnScrollRefs.current[cat] = el;
-                            if (el && !isCurrent) {
-                              el.querySelectorAll("img").forEach((img) => {
-                                (img as HTMLImageElement).loading = "lazy";
-                              });
+                            getColumnScrollRoot(cat).current = el;
+                            if (el) {
                               restoreScrollPosition(cat, el);
-                            } else if (el && isCurrent) {
                               requestAnimationFrame(() => warmImagesInColumn(el));
                             }
                           }}
-                          onScroll={isCurrent ? handleColumnScroll : undefined}
+                          onScroll={handleColumnScroll(cat)}
                           className="h-full overflow-y-auto snap-y snap-mandatory"
                           style={{ scrollSnapType: "y mandatory" }}
                         >
-                          {colItems.map((item) => {
-                            const isExpanded = expandedItemId === item.id;
+                          {(() => {
+                            const visibleIdx = columnVisibleIndices[cat] ?? 0;
+                            const windowStart = Math.max(0, visibleIdx - VERTICAL_BUFFER);
+                            const windowEnd = Math.min(colItems.length - 1, visibleIdx + VERTICAL_BUFFER);
+                            const scrollRoot = getColumnScrollRoot(cat);
 
-                            if (!hasComments) {
+                            return colItems.map((item, index) => {
+                              const inWindow = index >= windowStart && index <= windowEnd;
+                              const isExpanded = expandedItemId === item.id;
+                              const renderCtx: SnapRenderContext = { priority: inWindow, index };
+
+                              if (!hasComments) {
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className="snap-start flex flex-col items-center justify-center px-3 pt-3"
+                                    style={snapPageStyle()}
+                                  >
+                                    {inWindow ? (
+                                      <div className="w-full max-w-lg mx-auto">
+                                        {renderCard(item, renderCtx)}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={item.id}
-                                  className="snap-start flex flex-col items-center justify-center px-3 pt-3"
-                                  style={{
-                                    height: "calc(100dvh - 52px)",
-                                    scrollSnapAlign: "start",
-                                    paddingBottom: "env(safe-area-inset-bottom, 16px)",
-                                  }}
+                                  className="snap-start flex flex-col px-3 pt-3"
+                                  style={snapPageStyle()}
                                 >
-                                  <div className="w-full max-w-lg mx-auto">
-                                    {renderCard(item)}
-                                  </div>
+                                  {inWindow ? (
+                                    <SnapPageVisibility scrollRoot={scrollRoot}>
+                                      {({ isNearVisible }) => (
+                                        <>
+                                          <div
+                                            className={`w-full max-w-lg mx-auto shrink-0 transition-all duration-200 overflow-hidden ${
+                                              isExpanded ? "max-h-0 opacity-0" : "max-h-[2000px] opacity-100"
+                                            }`}
+                                          >
+                                            {renderCard(item, renderCtx)}
+                                          </div>
+
+                                          <div className="flex justify-center">
+                                            <div
+                                              className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
+                                              onTouchStart={handleDragStart}
+                                              onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                                              onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                                              role="button"
+                                              aria-label={isExpanded ? "Collapse" : "Expand"}
+                                            >
+                                              <div className="w-16 h-[3px] rounded-full bg-muted-foreground/[0.42]" />
+                                            </div>
+                                          </div>
+
+                                          <div
+                                            ref={isExpanded ? commentScrollRef : undefined}
+                                            className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
+                                            style={isExpanded ? { overscrollBehavior: "contain" } : undefined}
+                                            onTouchStart={(e) => handleCommentTouchStart(e, item.id, isExpanded)}
+                                            onTouchMove={handleCommentTouchMove}
+                                            onTouchEnd={(e) => handleCommentTouchEnd(e, item.id, isExpanded)}
+                                            onTouchCancel={handleCommentTouchCancel}
+                                          >
+                                            {commentMode === "person" && item.personId ? (
+                                              <CommunityInsights
+                                                personId={item.personId}
+                                                personName={item.personName || item.title}
+                                                compact
+                                                placeholder="Add a comment..."
+                                                parentExpanded={isExpanded}
+                                                disableFocusMode={isExpanded}
+                                                onDetail={navigateToDetail}
+                                                onShare={handleShare}
+                                                fetchEnabled={isNearVisible}
+                                              />
+                                            ) : (
+                                              <CardComments
+                                                entityType={commentEntityType}
+                                                slug={item.slug}
+                                                variant="inline"
+                                                maxHeight="none"
+                                                placeholder="Add a comment..."
+                                                parentExpanded={isExpanded}
+                                                disableFocusMode={isExpanded}
+                                                onDetail={navigateToDetail}
+                                                onShare={handleShare}
+                                                fetchEnabled={isNearVisible}
+                                              />
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
+                                    </SnapPageVisibility>
+                                  ) : null}
                                 </div>
                               );
-                            }
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="snap-start flex flex-col px-3 pt-3"
-                                style={{
-                                  height: "calc(100dvh - 52px)",
-                                  scrollSnapAlign: "start",
-                                  paddingBottom: "env(safe-area-inset-bottom, 16px)",
-                                }}
-                              >
-                                {/* Card — hidden when comments expanded */}
-                                <div
-                                  className={`w-full max-w-lg mx-auto shrink-0 transition-all duration-200 overflow-hidden ${
-                                    isExpanded ? "max-h-0 opacity-0" : "max-h-[2000px] opacity-100"
-                                  }`}
-                                >
-                                  {renderCard(item)}
-                                </div>
-
-                                {/* Drag handle / expand toggle */}
-                                <div className="flex justify-center">
-                                  <div
-                                    className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
-                                    onTouchStart={handleDragStart}
-                                    onTouchEnd={(e) => handleDragEnd(e, item.id)}
-                                    onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                                    role="button"
-                                    aria-label={isExpanded ? "Collapse" : "Expand"}
-                                  >
-                                    <div className="w-16 h-[3px] rounded-full bg-muted-foreground/[0.42]" />
-                                  </div>
-                                </div>
-
-                                {/* Comments / insights section */}
-                                <div
-                                  ref={isExpanded ? commentScrollRef : undefined}
-                                  className="flex-1 min-h-0 overflow-y-auto max-w-lg mx-auto w-full"
-                                  style={isExpanded ? { overscrollBehavior: "contain" } : undefined}
-                                  onTouchStart={(e) => handleCommentTouchStart(e, item.id, isExpanded)}
-                                  onTouchMove={handleCommentTouchMove}
-                                  onTouchEnd={(e) => handleCommentTouchEnd(e, item.id, isExpanded)}
-                                  onTouchCancel={handleCommentTouchCancel}
-                                >
-                                  {commentMode === "person" && item.personId ? (
-                                    <CommunityInsights
-                                      personId={item.personId}
-                                      personName={item.personName || item.title}
-                                      compact
-                                      placeholder="Add a comment..."
-                                      parentExpanded={isExpanded}
-                                      disableFocusMode={isExpanded}
-                                      onDetail={navigateToDetail}
-                                      onShare={handleShare}
-                                    />
-                                  ) : (
-                                    <CardComments
-                                      entityType={commentEntityType}
-                                      slug={item.slug}
-                                      variant="inline"
-                                      maxHeight="none"
-                                      placeholder="Add a comment..."
-                                      parentExpanded={isExpanded}
-                                      disableFocusMode={isExpanded}
-                                      onDetail={navigateToDetail}
-                                      onShare={handleShare}
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                            });
+                          })()}
                           <SnapEndCard
                             category={cat}
                             sectionType={sectionType}
