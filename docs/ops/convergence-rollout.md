@@ -96,12 +96,14 @@ Optional tuning: `DECISIVE_REVERT_PCT` (must stay &lt; `DECISIVE_WEEKLY_MOVE_PCT
 
 | Stage | Variables | Notes |
 |-------|-----------|--------|
-| 1 | `MIDWEEK_CONVERGENCE_SHADOW=true` | Logs `[MidweekConvergence][shadow] market=… gap=… wouldSchedule=…` for markets outside the final-6h window |
-| 2 | `MIDWEEK_CONVERGENCE_ENABLED=true` | Arb cohort buys underpriced favored side when `|fair − price| ≥ ARB_MIDWEEK_MIN_EDGE_PP` (default 0.12); max `ARB_CONVERGENCE_MARKETS_PER_SWEEP` per sweep; one mid-week action per market per UTC day |
+| 1 | `MIDWEEK_CONVERGENCE_SHADOW=true` | Logs `[MidweekConvergence][shadow] market=… gap=… wouldSchedule=… side=… pct=…` for markets outside the final-6h window |
+| 2 | `MIDWEEK_CONVERGENCE_ENABLED=true` | Arb cohort buys the most underpriced side when its `fair − price ≥ ARB_MIDWEEK_MIN_EDGE_PP` (default 0.12); max `ARB_CONVERGENCE_MARKETS_PER_SWEEP` per sweep; one mid-week action per market per UTC day |
 
-Requires `ARB_COHORT_ENABLED=true` (same as near-close convergence). Reverted flat markets (|pct| &lt; 0.10) are handled by Phase 1, not mid-week arb.
+Requires `ARB_COHORT_ENABLED=true` (same as near-close convergence).
 
-Optional tuning: `ARB_MIDWEEK_MIN_EDGE_PP` (default `0.12`).
+**Jul 2026 update** (first shadow week showed 100% `wouldSchedule=false` despite gaps of 0.13–0.35): the midweek sweep now (a) may buy the **unfavored** side when it is the underpriced one — corrects overpriced favorites (e.g. Up at 0.99 when fair is 0.65) that the favored-side-only near-close arb skips; and (b) uses its own decisive gate `ARB_MIDWEEK_DECISIVE_PCT` (default `0.02`) instead of `LOCKIN_DECISIVE_PCT` (0.10), so mispriced near-flat markets (score reverted after an early pile-on) are tradeable. The 12pp edge bar is the primary thrash control. The near-close arb sweep is unchanged.
+
+Optional tuning: `ARB_MIDWEEK_MIN_EDGE_PP` (default `0.12`), `ARB_MIDWEEK_DECISIVE_PCT` (default `0.02`).
 
 ### Validation
 

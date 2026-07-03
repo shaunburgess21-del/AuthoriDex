@@ -83,6 +83,7 @@ import {
   LATCH_TRAILING_SAMPLE_COUNT,
   isLatchRevertShadow,
   ARB_MIDWEEK_MIN_EDGE_PP,
+  ARB_MIDWEEK_DECISIVE_PCT,
   isMidweekConvergenceShadow,
   isMidweekConvergenceEnabled,
   AGENT_STAKE_OVERRIDES,
@@ -2244,6 +2245,8 @@ async function runMidweekConvergenceSweep(
 
     const decision = computeArbPrediction(marketData, signals, hoursRemaining, prices, {
       minEdgePp: ARB_MIDWEEK_MIN_EDGE_PP,
+      allowUnfavoredSide: true,
+      decisivePct: ARB_MIDWEEK_DECISIVE_PCT,
     });
 
     const fairUp = computeLockInFairUp(signals.pctChangeVsOpen ?? null, hoursRemaining);
@@ -2252,9 +2255,13 @@ async function runMidweekConvergenceSweep(
     const gap = upFair != null ? Math.abs(upFair - upPrice) : 0;
 
     if (shadow) {
+      const chosenLabel = decision.entryId
+        ? entries.find((e) => e.id === decision.entryId)?.label ?? "?"
+        : "-";
       log(
         `[MidweekConvergence][shadow] market=${market.id.slice(0, 8)} gap=${gap.toFixed(3)} ` +
-          `wouldSchedule=${!decision.abstain && decision.entryId != null}`,
+          `wouldSchedule=${!decision.abstain && decision.entryId != null} ` +
+          `side=${chosenLabel} pct=${((signals.pctChangeVsOpen ?? 0) * 100).toFixed(1)}%`,
       );
     }
 

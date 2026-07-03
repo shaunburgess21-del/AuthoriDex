@@ -37,12 +37,29 @@ export function isArbAgent(agent: AgentConfigData): boolean {
   return getSimulationProfile(agent.simulationProfile).personaBand === "arb";
 }
 
+export interface ArbPredictionOptions {
+  minEdgePp?: number;
+  /**
+   * Convergence mode: buy whichever side is most underpriced vs its fair —
+   * including the unfavored side (e.g. Down at 0.01 when fair Down is 0.35).
+   * The legacy favored-side-only path cannot correct overpriced favorites.
+   */
+  allowUnfavoredSide?: boolean;
+  /**
+   * Override the |pctChangeVsOpen| decisive gate. The near-close arb keeps
+   * LOCKIN_DECISIVE_PCT; the midweek sweep passes a lower bar so mispriced
+   * near-flat markets (score reverted after an early pile-on) are tradeable —
+   * the edge bar remains the real safety control.
+   */
+  decisivePct?: number;
+}
+
 export function computeArbPrediction(
   market: MarketWithEntries,
   signals: TrendSignals,
   hoursRemaining: number,
   currentPrices: Record<string, number>,
-  options?: { minEdgePp?: number },
+  options?: ArbPredictionOptions,
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"],
@@ -54,29 +71,48 @@ export function computeArbPrediction(
   }
 
   const pct = signals.pctChangeVsOpen;
-  if (pct == null || Math.abs(pct) < LOCKIN_DECISIVE_PCT) {
+  const decisivePct = options?.decisivePct ?? LOCKIN_DECISIVE_PCT;
+  if (pct == null || Math.abs(pct) < decisivePct) {
     return abstain("low_edge");
   }
 
   const fairUp = computeLockInFairUp(pct, hoursRemaining);
   if (fairUp == null) return abstain("low_edge");
 
+  const minEdgePp = options?.minEdgePp ?? ARB_MIN_EDGE_PP;
+
   let chosen = entries[0];
   let fairSide =
     fairForEntry(fairUp, chosen.label, POSITIVE_HINTS, NEGATIVE_HINTS) ?? 0.5;
 
-  for (const entry of entries) {
-    const f = fairForEntry(fairUp, entry.label, POSITIVE_HINTS, NEGATIVE_HINTS);
-    if (f != null && f > fairSide) {
-      chosen = entry;
-      fairSide = f;
+  if (options?.allowUnfavoredSide) {
+    let bestEdge = -Infinity;
+    for (const entry of entries) {
+      const f = fairForEntry(fairUp, entry.label, POSITIVE_HINTS, NEGATIVE_HINTS);
+      if (f == null) continue;
+      const edge = f - (currentPrices[entry.id] ?? 0.5);
+      if (edge > bestEdge) {
+        bestEdge = edge;
+        chosen = entry;
+        fairSide = f;
+      }
     }
-  }
+    if (bestEdge < minEdgePp) {
+      return abstain("low_edge");
+    }
+  } else {
+    for (const entry of entries) {
+      const f = fairForEntry(fairUp, entry.label, POSITIVE_HINTS, NEGATIVE_HINTS);
+      if (f != null && f > fairSide) {
+        chosen = entry;
+        fairSide = f;
+      }
+    }
 
-  const cur = currentPrices[chosen.id] ?? 0.5;
-  const minEdgePp = options?.minEdgePp ?? ARB_MIN_EDGE_PP;
-  if (fairSide - cur < minEdgePp) {
-    return abstain("low_edge");
+    const cur = currentPrices[chosen.id] ?? 0.5;
+    if (fairSide - cur < minEdgePp) {
+      return abstain("low_edge");
+    }
   }
 
   return {

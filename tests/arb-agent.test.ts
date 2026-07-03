@@ -59,6 +59,101 @@ test("computeArbPrediction buys UP when underpriced vs fair", () => {
   assert.ok((decision.confidence ?? 0) > 0.7);
 });
 
+test("computeArbPrediction legacy path cannot correct an overpriced favorite", () => {
+  const signals: TrendSignals = {
+    trendScore: 500_000,
+    fameIndex: 500_000,
+    scoreBaseline: 400_000,
+    scoreDelta7d: 50_000,
+    change24h: 5,
+    momentum: "Breakout",
+    trendDirection: "UP",
+    pctChangeVsOpen: 0.15,
+  };
+  // Favored (Up) is overpriced vs fair — legacy favored-side-only abstains.
+  const decision = computeArbPrediction(market, signals, 48, {
+    up: 0.99,
+    down: 0.01,
+  });
+  assert.equal(decision.abstain, true);
+});
+
+test("computeArbPrediction allowUnfavoredSide buys the cheap side of an overpriced favorite", () => {
+  const signals: TrendSignals = {
+    trendScore: 500_000,
+    fameIndex: 500_000,
+    scoreBaseline: 400_000,
+    scoreDelta7d: 50_000,
+    change24h: 5,
+    momentum: "Steady",
+    trendDirection: "UP",
+    pctChangeVsOpen: 0.059,
+  };
+  // Score +5.9% → fair Up ≈ 0.66 at 48h, but Up priced 0.99. Convergence
+  // trade is buying Down at 0.01 (fair ≈ 0.34, edge ≈ 0.33).
+  const decision = computeArbPrediction(
+    market,
+    signals,
+    48,
+    { up: 0.99, down: 0.01 },
+    { minEdgePp: 0.12, allowUnfavoredSide: true, decisivePct: 0.02 },
+  );
+  assert.equal(decision.abstain, false);
+  assert.equal(decision.entryId, "down");
+  assert.ok((decision.confidence ?? 0) < 0.5);
+});
+
+test("computeArbPrediction decisivePct override trades mispriced near-flat markets", () => {
+  const signals: TrendSignals = {
+    trendScore: 500_000,
+    fameIndex: 500_000,
+    scoreBaseline: 490_000,
+    scoreDelta7d: 10_000,
+    change24h: 1,
+    momentum: "Steady",
+    trendDirection: "UP",
+    pctChangeVsOpen: 0.032,
+  };
+  const prices = { up: 0.31, down: 0.69 };
+
+  // Legacy gate (10%) blocks the +3.2% market entirely.
+  const legacy = computeArbPrediction(market, signals, 48, prices, {
+    minEdgePp: 0.12,
+  });
+  assert.equal(legacy.abstain, true);
+
+  // Midweek options: fair Up ≈ 0.59 vs price 0.31 → edge ≈ 0.28, trades Up.
+  const midweek = computeArbPrediction(market, signals, 48, prices, {
+    minEdgePp: 0.12,
+    allowUnfavoredSide: true,
+    decisivePct: 0.02,
+  });
+  assert.equal(midweek.abstain, false);
+  assert.equal(midweek.entryId, "up");
+});
+
+test("computeArbPrediction allowUnfavoredSide still enforces the edge bar", () => {
+  const signals: TrendSignals = {
+    trendScore: 500_000,
+    fameIndex: 500_000,
+    scoreBaseline: 400_000,
+    scoreDelta7d: 50_000,
+    change24h: 5,
+    momentum: "Steady",
+    trendDirection: "UP",
+    pctChangeVsOpen: 0.059,
+  };
+  // Fairly priced both sides (fair Up ≈ 0.66) — no side clears 0.12 edge.
+  const decision = computeArbPrediction(
+    market,
+    signals,
+    48,
+    { up: 0.65, down: 0.35 },
+    { minEdgePp: 0.12, allowUnfavoredSide: true, decisivePct: 0.02 },
+  );
+  assert.equal(decision.abstain, true);
+});
+
 test("computeArbPredictionH2H abstains when flag off", () => {
   const prev = process.env.LOCKIN_FAIR_H2H_ENABLED;
   delete process.env.LOCKIN_FAIR_H2H_ENABLED;

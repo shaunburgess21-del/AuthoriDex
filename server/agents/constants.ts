@@ -254,6 +254,17 @@ export const ARB_MIDWEEK_MIN_EDGE_PP = (() => {
   const raw = Number(process.env.ARB_MIDWEEK_MIN_EDGE_PP);
   return Number.isFinite(raw) && raw > 0 ? raw : 0.12;
 })();
+/**
+ * Decisive-score gate for the MIDWEEK sweep only (near-close arb keeps
+ * LOCKIN_DECISIVE_PCT = 0.10). Lower so mispriced near-flat markets — e.g.
+ * a score that reverted after an early pile-on — are tradeable midweek;
+ * the 12pp edge bar stays the real safety control. Default 0.02 still
+ * filters pure-noise flats (±2%).
+ */
+export const ARB_MIDWEEK_DECISIVE_PCT = (() => {
+  const raw = Number(process.env.ARB_MIDWEEK_DECISIVE_PCT);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 0.02;
+})();
 
 export function isLatchRevertShadow(): boolean {
   return envFlag(process.env.LATCH_REVERT_SHADOW);
