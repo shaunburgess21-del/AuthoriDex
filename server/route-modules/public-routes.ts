@@ -16,6 +16,7 @@ import {
   contactSubmissionSubject,
 } from "../emails/templates/lifecycle/ContactSubmission";
 import type { AuthRequest } from "../auth-middleware";
+import { generateAvailablePseudonym } from "../utils/suggested-username";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,30}$/;
 
@@ -129,6 +130,17 @@ export function registerPublicRoutes(app: Express): void {
     } catch (error: any) {
       console.error("Error checking username availability:", error?.message);
       res.status(500).json({ error: "Failed to check username availability" });
+    }
+  });
+
+  // Guaranteed-available pseudonym for onboarding Step 0 (/login/welcome).
+  app.get("/api/profile/suggested-username", async (_req, res) => {
+    try {
+      const username = await generateAvailablePseudonym();
+      res.json({ username });
+    } catch (error: any) {
+      console.error("Error generating suggested username:", error?.message);
+      res.status(500).json({ error: "Failed to generate suggested username" });
     }
   });
 

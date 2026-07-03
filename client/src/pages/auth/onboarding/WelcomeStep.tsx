@@ -6,7 +6,8 @@
  * exactly:
  *
  *   - Generative avatar preview, "Change" opens AvatarPicker.
- *   - Username with debounced availability check.
+ *   - Username with debounced availability check; new users get a
+ *     server-suggested pseudonym they can shuffle or edit.
  *   - ToS + Privacy checkbox is required.
  *   - On submit: best-effort save the seeded avatar via PATCH
  *     /api/profile/avatar, then PATCH /api/profile/me/username
@@ -19,7 +20,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Dices, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,21 +58,72 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
   const [availability, setAvailability] = useState<Availability>({ status: "idle" });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [shuffling, setShuffling] = useState(false);
 
   const initializedRef = useRef(false);
   const initialUsernameRef = useRef<string>("");
+  const serverVerifiedRef = useRef<string | null>(null);
 
-  // Pre-fill from the auto-generated handle once the profile lands.
-  // Mirrors the original WelcomePage's defensive behaviour: we treat
-  // a pre-existing handle as "available" without firing a check.
+  const applyServerVerifiedUsername = useCallback((value: string) => {
+    serverVerifiedRef.current = value;
+    setUsername(value);
+    setAvailability({ status: "ok" });
+  }, []);
+
+  const fetchSuggestedUsername = useCallback(async (): Promise<string | null> => {
+    try {
+      const res = await apiRequest("GET", "/api/profile/suggested-username");
+      const data = (await res.json()) as { username?: string };
+      return typeof data.username === "string" ? data.username : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Pre-fill: saved handle for returning users, or a fresh suggestion for new users.
   useEffect(() => {
     if (initializedRef.current) return;
-    if (!profile?.username) return;
+    if (!profile) return;
+
+    if (profile.username) {
+      initializedRef.current = true;
+      initialUsernameRef.current = profile.username;
+      setUsername(profile.username);
+      setAvailability({ status: "ok" });
+      return;
+    }
+
     initializedRef.current = true;
-    initialUsernameRef.current = profile.username;
-    setUsername(profile.username);
-    setAvailability({ status: "ok" });
-  }, [profile?.username]);
+    let cancelled = false;
+    void (async () => {
+      const suggested = await fetchSuggestedUsername();
+      if (cancelled) return;
+      if (suggested) {
+        applyServerVerifiedUsername(suggested);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, fetchSuggestedUsername, applyServerVerifiedUsername]);
+
+  const handleShuffleUsername = useCallback(async () => {
+    setShuffling(true);
+    setSubmitError(null);
+    try {
+      const suggested = await fetchSuggestedUsername();
+      if (suggested) {
+        applyServerVerifiedUsername(suggested);
+      } else {
+        toast.error("Couldn't generate a username", {
+          description: "Please try again in a moment.",
+        });
+      }
+    } finally {
+      setShuffling(false);
+    }
+  }, [fetchSuggestedUsername, applyServerVerifiedUsername]);
 
   useEffect(() => {
     const trimmed = username.trim();
@@ -80,6 +132,10 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
       return;
     }
     if (trimmed === initialUsernameRef.current) {
+      setAvailability({ status: "ok" });
+      return;
+    }
+    if (trimmed === serverVerifiedRef.current) {
       setAvailability({ status: "ok" });
       return;
     }
@@ -246,6 +302,10 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
 
       <div className="space-y-2">
         <Label htmlFor="welcome-username">Username</Label>
+        <p className="text-xs text-muted-foreground leading-snug">
+          Your votes are your business. We&apos;ve suggested a pseudonym — keep it, shuffle it, or
+          type your own.
+        </p>
         <div className="relative">
           <Input
             id="welcome-username"
@@ -253,13 +313,35 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
             autoCapitalize="none"
             spellCheck={false}
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (next.trim() !== serverVerifiedRef.current) {
+                serverVerifiedRef.current = null;
+              }
+              setUsername(next);
+            }}
             onFocus={(e) => e.currentTarget.select()}
             placeholder="username"
             data-testid="input-welcome-username"
-            className="h-12 pr-10 text-base"
+            className="h-12 pr-[4.75rem] text-base"
           />
-          <div className="absolute inset-y-0 right-3 flex items-center">
+          <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={() => void handleShuffleUsername()}
+              disabled={shuffling || submitting}
+              aria-label="Shuffle suggested username"
+              data-testid="button-welcome-shuffle-username"
+            >
+              {shuffling ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Dices className="h-4 w-4" />
+              )}
+            </Button>
             <UsernameStatusIcon availability={availability} />
           </div>
         </div>
