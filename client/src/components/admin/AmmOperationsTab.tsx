@@ -12,9 +12,12 @@
  *
  *   - Operations (this file): "is anything operationally wrong right now,
  *     and was anything wrong overnight?" — auto-refreshing, persisted,
- *     trend-aware. Surfaces the 6 audits in `server/jobs/amm-health.ts`
+ *     trend-aware. Surfaces every audit in `server/jobs/amm-health.ts`
  *     (orphan ledger, seed-return drift, stuck CLOSED_PENDING markets,
- *     negative credits, dup idempotency keys, agent pause).
+ *     negative credits, dup idempotency keys, agent pause, live
+ *     convergence, calibration, and friends — the card list renders
+ *     whatever the latest run returned, so new checks appear without
+ *     touching this file).
  *
  * Three sections, top-to-bottom:
  *   1. Status header  — overall pill, last-run timestamp, source badge,
@@ -537,10 +540,10 @@ export function AmmOperationsTab() {
             AMM operational health
           </CardTitle>
           <CardDescription>
-            Live view of the in-process health-check scheduler. Six audits run every 15 minutes:
-            orphan ledger rows, seed-return drift, stuck markets, negative Vox, duplicate
-            idempotency keys, and agent pause state. See the AMM Monitoring Runbook for the
-            failure-mode playbook.
+            Live view of the in-process health-check scheduler, run every 15 minutes: orphan
+            ledger rows, seed-return drift, stuck markets, negative Vox, duplicate idempotency
+            keys, agent pause state, live convergence, calibration, and more — one card per
+            audit below. See the AMM Monitoring Runbook for the failure-mode playbook.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

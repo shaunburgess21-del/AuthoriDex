@@ -475,13 +475,24 @@ async function executeAmmBuy(
     return;
   }
 
+  // Persist the decision's reasoning into betMetadata.rationale so the
+  // market cards' "latest rationale" bubble (market-engagement.ts) has
+  // real content. This plumbing existed (buildAgentBetMetadata takes a
+  // rationale) but was never fed — the feed rendered nothing for every
+  // agent trade, native and world alike. Deterministic arb/convergence
+  // decisions carry no reasoning and correctly stay silent.
+  const rationale =
+    typeof decision.reasoning === "string" && decision.reasoning.trim()
+      ? decision.reasoning.trim().slice(0, 240)
+      : undefined;
+
   const result = await executeBuy({
     marketId: action.marketId,
     userId: agent.userId,
     entryId: action.entryId,
     creditBudget: sizing.creditBudget,
     agentId: agent.id,
-    betMetadata: buildAgentBetMetadata(action.id),
+    betMetadata: buildAgentBetMetadata(action.id, rationale),
   });
 
   if ("error" in result) {

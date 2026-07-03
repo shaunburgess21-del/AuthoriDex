@@ -777,9 +777,13 @@ async function runAgentBatchOnce(): Promise<{
         // happens exclusively via `runConvergenceSweepCommunity` (which has
         // the market-per-day dedupe and per-sweep cap); letting the 8 arb
         // agents ALSO trade here would pile onto the same anchor gap once
-        // per agent per sweep.
-        decision = { abstain: true, abstainReason: "low_edge" };
-      } else if (isCommunity) {
+        // per agent per sweep. Silent skip — logging 8 abstains per
+        // community market per 30-min sweep is pure noise.
+        skipped++;
+        continue;
+      }
+
+      if (isCommunity) {
         decision = await computeWorldMarketPrediction(agentData, marketData, entries);
       } else {
         const sharpFetch = getSimulationProfile(agent.simulationProfile).personaBand === "sharp";
@@ -3211,10 +3215,15 @@ async function runSellSweep(
   // we block community BUYS in actionWorker, but sells fire here
   // regardless — agents holding positions when the kill switch flips
   // off must still be able to manage their exits.
+  // Community markets (with OR without a linked person) are gated behind
+  // the flag as a unit: before this flag existed, person-linked world
+  // markets scheduled sells here that the action worker then killed via
+  // the LLM switch — hundreds of skipped rows of queue churn. Now the
+  // founder decides when world-market sells go live, in one place.
   const communitySells = isCommunitySellSweepEnabled();
   const ammMarkets = allMarkets.filter((m) =>
     m.engine === "amm" &&
-    (m.personId || (communitySells && m.marketType === "community")),
+    (m.marketType === "community" ? communitySells : Boolean(m.personId)),
   );
   if (!ammMarkets.length) return 0;
 

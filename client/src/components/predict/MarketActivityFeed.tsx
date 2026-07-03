@@ -19,6 +19,8 @@ interface MarketTrade {
   pricePerShare: number | null;
   stakeAmount: number;
   payoutAmount: number | null;
+  /** One-line "why" captured at trade time (null for most trades). */
+  rationale: string | null;
   displayName: string;
   username: string | null;
   avatarUrl: string | null;
@@ -215,6 +217,14 @@ export function MarketActivityFeed({
                       ? `${voxWord(proceeds)} in`
                       : voxWord(t.stakeAmount)}
                   </p>
+                  {t.rationale && (
+                    <p
+                      className="text-[11px] italic text-muted-foreground/90 mt-1 line-clamp-2"
+                      data-testid={`text-trade-rationale-${t.id}`}
+                    >
+                      &ldquo;{t.rationale}&rdquo;
+                    </p>
+                  )}
                 </div>
               </div>
             );
