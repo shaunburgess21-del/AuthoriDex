@@ -7,6 +7,7 @@ import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
@@ -24,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
+import { cn } from "@/lib/utils";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
@@ -52,6 +54,7 @@ import {
   BarChart3,
   Zap,
   Activity,
+  Banknote,
 } from "lucide-react";
 
 type GainerCandidate = {
@@ -90,13 +93,13 @@ export default function CategoryRaceDetailPage() {
     pendingSelection?.entryId,
     pendingSelection?.choice,
   ]);
-  /**
-   * Sprint 5 / Phase 3.4: seeds which StakeModal tab opens. Buy-side
-   * flows from the leaderboard or "Back another candidate" CTA set
-   * this to "buy"; the per-candidate Sell button below the Live
-   * Market card sets it to "sell". Mirrors the Up/Down + H2H pattern.
-   */
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Cash-out flow lives in its own sheet (CashOutSheet), not the
+  // StakeModal — buy and sell are fully separate surfaces now.
+  const [cashOutOpen, setCashOutOpen] = useState(false);
+  const [cashOutSelection, setCashOutSelection] = useState<CashOutSelection | null>(null);
+  const cashOutIdempotencyKey = useIdempotencyKey(cashOutOpen, [
+    cashOutSelection?.entryId,
+  ]);
   // Race trades target one of N candidates — `pendingSelection.choice`
   // is the candidate name, but we also need the avatar for the share
   // card hero. Captured at click-time alongside the pending selection;
@@ -331,7 +334,6 @@ export default function CategoryRaceDetailPage() {
         engine: "amm",
         ammState: (market as any)?.ammState ?? null,
       } as StakeSelection);
-      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [isMarketClosed, marketId, categoryLabel, market, serverResolutionDeadline, existingStakeFor, ammPriceMap]
@@ -466,7 +468,7 @@ export default function CategoryRaceDetailPage() {
           shares,
           minPricePerShare,
         },
-        { idempotencyKey: tradeIdempotencyKey },
+        { idempotencyKey: cashOutIdempotencyKey },
       );
       return res.json();
     },
@@ -476,14 +478,14 @@ export default function CategoryRaceDetailPage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
+      toast("Cashed out", {
         description:
           proceeds > 0
             ? `Proceeds credited: +${formatVox(proceeds)}`
             : "Proceeds have been credited to your wallet.",
       });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      setCashOutOpen(false);
+      setCashOutSelection(null);
       await Promise.all([
         refreshProfile?.(),
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/gainer"] }),
@@ -497,59 +499,48 @@ export default function CategoryRaceDetailPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
+      const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
     },
   });
 
-  const handleConfirmAmmSell = useCallback(
+  const handleConfirmCashOut = useCallback(
     async (shares: number, meta?: { minPricePerShare?: number }) => {
-      if (!pendingSelection?.entryId) return;
+      if (!cashOutSelection?.entryId) return;
       await sellMutation.mutateAsync({
-        entryId: pendingSelection.entryId,
+        entryId: cashOutSelection.entryId,
         shares,
         minPricePerShare: meta?.minPricePerShare,
       });
     },
-    [pendingSelection, sellMutation]
+    [cashOutSelection, sellMutation]
   );
 
-  const openSellModal = useCallback(
-    (candidate: GainerCandidate, netShares: number) => {
+  const openCashOut = useCallback(
+    (
+      candidate: GainerCandidate,
+      pos: { netShares: number; netCreditsIn: number; avgEntryPrice: number },
+    ) => {
       if (!candidate.entryId) return;
-      const livePrice = ammPriceMap && candidate.entryId ? Number(ammPriceMap[candidate.entryId] ?? 0) : 0;
-      const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
-      // Note: pendingShareCandidateRef is only read by the BUY mutation
-      // success handler to build the share toast — sells use a leaner
-      // proceeds-only toast so we deliberately don't stash a candidate
-      // here. Leaving the ref alone also avoids leaking a stale buy
-      // share candidate if the user sells then immediately re-buys a
-      // different entry (handleCandidateSelect will overwrite it).
-      setPendingSelection({
-        type: "gainer",
+      if (pos.netShares <= 1e-6) return;
+      setCashOutSelection({
         marketId,
         entryId: candidate.entryId,
-        choice: candidate.name,
+        sideLabel: candidate.name,
+        sideTone: "neutral",
         marketName: `Category Race: ${categoryLabel}`,
-        candidateRank: candidate.rank,
-        candidatePercentGain: candidate.percentGain,
-        candidatePointsAdded: candidate.currentGain,
-        crowdSentiment,
-        endAt: serverResolutionDeadline ?? undefined,
+        netShares: pos.netShares,
+        netCreditsIn: pos.netCreditsIn,
+        avgEntryPrice: pos.avgEntryPrice,
         bettingCutoff: market?.bettingCutoff || null,
-        engine: "amm",
+        endAt: serverResolutionDeadline ?? undefined,
         ammState: (market as any)?.ammState ?? null,
-        // Sprint 5 / Phase 3.4 fix: thread the user's netShares for
-        // this entry so `canSellAmm` in StakeModal (which gates on
-        // `ammNetShares > 1e-6`) actually reveals the Sell tab. Without
-        // this the modal opens with `initialAmmMode="sell"` but the
-        // Sell tab is hidden, leaving the user staring at a Buy form.
-        ammNetShares: netShares,
-      } as StakeSelection);
-      setModalIntent("sell");
-      setStakeModalOpen(true);
+        statusLabel: candidate.rank === 1 ? "Leading" : candidate.rank ? `Rank #${candidate.rank}` : null,
+        statusTone: candidate.rank === 1 ? "positive" : "warning",
+      });
+      setCashOutOpen(true);
     },
-    [ammPriceMap, marketId, categoryLabel, serverResolutionDeadline, market],
+    [marketId, categoryLabel, serverResolutionDeadline, market],
   );
 
   const { timeRemaining } = marketState;
@@ -914,7 +905,7 @@ export default function CategoryRaceDetailPage() {
                                   {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                                  Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
                                   <span className={`font-mono font-medium ${pnlClass}`}>
                                     ({formatVoxDelta(unrealisedPnl)})
                                   </span>
@@ -930,21 +921,22 @@ export default function CategoryRaceDetailPage() {
                             <div className="mt-2 flex items-center justify-end gap-2">
                               <Button
                                 size="sm"
+                                disabled={isMarketClosed || !candidate}
+                                onClick={() => candidate && openCashOut(candidate, pos)}
+                                data-testid={`race-position-sell-${pos.entryId}`}
+                                className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                              >
+                                <Banknote className="h-3.5 w-3.5" />
+                                <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 disabled={isMarketClosed || !candidate}
                                 onClick={() => candidate && handleCandidateSelect(candidate)}
                                 data-testid={`race-position-add-${pos.entryId}`}
                               >
                                 Add
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isMarketClosed || !candidate}
-                                onClick={() => candidate && openSellModal(candidate, pos.netShares)}
-                                data-testid={`race-position-sell-${pos.entryId}`}
-                              >
-                                Sell
                               </Button>
                               <Button
                                 size="sm"
@@ -1120,6 +1112,9 @@ export default function CategoryRaceDetailPage() {
               ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
               : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30";
             const leaderStatusLabel = isLeader ? "Leading" : "Behind leader";
+            const stickyPos = (ammPositionData?.positions ?? []).find(
+              (p) => p.entryId === userPick.entryId && p.netShares > 1e-6,
+            );
             return (
               <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
@@ -1127,19 +1122,36 @@ export default function CategoryRaceDetailPage() {
                   <p className="text-sm font-semibold truncate">{userPick.name}</p>
                 </div>
                 <Badge className={leaderStatusClass}>{leaderStatusLabel}</Badge>
+                {/* Secondary badge yields to the Cash out button on
+                    phones — the % gain is still visible in the
+                    leaderboard rows above. */}
                 <Badge
                   variant="outline"
-                  className={
+                  className={cn(
+                    stickyPos && !isMarketClosed ? "hidden sm:inline-flex" : "",
                     userPick.percentGain >= 0
                       ? "text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
-                      : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
-                  }
+                      : "text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30",
+                  )}
                 >
                   {formatSignedPercent(userPick.percentGain)}
                 </Badge>
                 <span className="text-xs text-muted-foreground hidden sm:inline">
                   #{userPickRank}/{candidates.length}
                 </span>
+                {/* Cash-out entry on the always-visible bar — only when
+                    the user holds live AMM shares and trading is open. */}
+                {!isMarketClosed && stickyPos && (
+                  <Button
+                    size="sm"
+                    onClick={() => openCashOut(userPick, stickyPos)}
+                    data-testid="button-sticky-cashout"
+                    className="gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Cash out
+                  </Button>
+                )}
               </div>
             );
           })() : (
@@ -1162,7 +1174,7 @@ export default function CategoryRaceDetailPage() {
         </div>
       </div>
 
-      {/* Stake Modal */}
+      {/* Stake Modal — buy only; cash-out lives in CashOutSheet below. */}
       <StakeModal
         selection={pendingSelection}
         open={stakeModalOpen}
@@ -1171,14 +1183,23 @@ export default function CategoryRaceDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
         liveAmmState={(market as any)?.ammState ?? null}
-        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
         onChangePick={() => {
           setStakeModalOpen(false);
           setPendingSelection(null);
         }}
+      />
+
+      <CashOutSheet
+        selection={cashOutSelection}
+        open={cashOutOpen}
+        onClose={() => {
+          setCashOutOpen(false);
+          setCashOutSelection(null);
+        }}
+        onConfirmSell={handleConfirmCashOut}
+        liveAmmState={(market as any)?.ammState ?? null}
       />
     </div>
   );

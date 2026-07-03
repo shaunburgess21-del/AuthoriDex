@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,7 +20,6 @@ import { RULES_CONTENT, RulesExplainer } from "@/components/predict/RulesContent
 import {
   type ApiAmmStateBlock,
   deriveBuyQuote,
-  deriveSellQuote,
   pricesFor,
   priceToPercent,
   snapshotFromApi,
@@ -107,8 +106,9 @@ export interface StakeSelection {
    *   - `ammState` is the canonical snapshot from the API; quotes are
    *     computed off it client-side so we don't round-trip on every
    *     keystroke.
-   *   - `ammNetShares` is the user's current netShares for THIS entry
-   *     (used to enable / disable the Sell tab).
+   *   - `ammNetShares` is the user's current netShares for THIS entry.
+   *     Unused by the modal since selling moved to CashOutSheet, but
+   *     call sites still populate it; kept for compatibility.
    *   - `engine` is kept for backward compat but always treated as AMM
    *     post-parimutuel-sunset. Future cleanup can drop it entirely.
    */
@@ -141,33 +141,12 @@ interface StakeModalProps {
     amount: number,
     meta: { confidence?: number; thesis?: string; maxPricePerShare?: number },
   ) => void | Promise<void>;
-  /**
-   * AMM-only sell handler. Called with a fractional share count when
-   * the user confirms in Sell mode. Parent should call
-   * `/api/native-markets/:id/bet` with `actionType:'sell'`.
-   *
-   * `meta.minPricePerShare` is the 5% floor mirror of the buy-side cap,
-   * applied automatically. Forward it so the server can abort the sell
-   * with `slippage_exceeded` when the market moves before execution.
-   */
-  onConfirmAmmSell?: (
-    shares: number,
-    meta?: { minPricePerShare?: number },
-  ) => void | Promise<void>;
   walletBalance: number;
   /** Up/Down for `updown` markets, Yes/No for `community` markets.
    *  When provided, the modal renders an in-place toggle so a misclick on
    *  the card doesn't require closing + reopening the modal. */
   onDirectionChange?: (direction: "up" | "down" | "yes" | "no") => void;
   onChangePick?: () => void;
-  /**
-   * AMM-only intent flag. When set to `"sell"` the modal opens with
-   * the Sell tab pre-selected and rewrites the title + mission copy
-   * to read as a cash-out action. Defaults to `"buy"`. The user can
-   * still flip between Buy and Sell via the tab toggle inside the
-   * modal — this prop only seeds the initial mode.
-   */
-  initialAmmMode?: "buy" | "sell";
   /**
    * Optional live AMM state from the parent. When provided, the
    * modal prefers this over the static `selection.ammState` for
@@ -193,25 +172,12 @@ export function StakeModal({
   selection,
   onConfirm,
   onConfirmWithMeta,
-  onConfirmAmmSell,
   walletBalance,
   onDirectionChange,
   onChangePick,
-  initialAmmMode,
   liveAmmState,
 }: StakeModalProps) {
   const [stakeAmount, setStakeAmount] = useState("");
-  const [ammMode, setAmmMode] = useState<"buy" | "sell">(initialAmmMode ?? "buy");
-  const [sellShares, setSellShares] = useState("");
-  // Re-seed ammMode whenever the parent's intent changes (e.g. user
-  // clicks the inline Sell button on the detail page after the modal
-  // has already been opened once for a Buy). Without this the modal
-  // would stick to whatever mode was last selected interactively.
-  useEffect(() => {
-    if (open && initialAmmMode) {
-      setAmmMode(initialAmmMode);
-    }
-  }, [open, initialAmmMode]);
   const parsedAmount = parseInt(stakeAmount) || 0;
   const balanceAfter = walletBalance - parsedAmount;
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
@@ -243,8 +209,6 @@ export function StakeModal({
   const isH2H = selection.type === "h2h";
   const isGainer = selection.type === "gainer";
   const isCommunity = selection.type === "community";
-  const ammNetShares = Number(selection.ammNetShares ?? 0);
-  const canSellAmm = ammNetShares > 1e-6 && !!onConfirmAmmSell;
   const effectiveAmmState = liveAmmState ?? selection.ammState ?? null;
   const ammSnapshot = snapshotFromApi(effectiveAmmState);
   const ammPriceMap = ammSnapshot ? pricesFor(ammSnapshot) : null;
@@ -269,12 +233,8 @@ export function StakeModal({
     ammPriceMap && oppositeEntryId
       ? ammPriceMap[oppositeEntryId] ?? null
       : null;
-  const ammBuyQuote = ammMode === "buy" && parsedAmount >= MIN_STAKE && selection.entryId
+  const ammBuyQuote = parsedAmount >= MIN_STAKE && selection.entryId
     ? deriveBuyQuote(effectiveAmmState, selection.entryId, parsedAmount)
-    : null;
-  const parsedSellShares = Number(sellShares);
-  const ammSellQuote = ammMode === "sell" && Number.isFinite(parsedSellShares) && parsedSellShares > 0 && selection.entryId
-    ? deriveSellQuote(effectiveAmmState, selection.entryId, Math.min(parsedSellShares, ammNetShares))
     : null;
   const isCommunityNo = isCommunity && selection.direction === "no";
   // Yes/No badge + toggle is only meaningful for community-multi
@@ -289,25 +249,6 @@ export function StakeModal({
   const isDown = selection.choice.includes("DOWN");
 
   const isTopUp = !!selection.isTopUp;
-  const isAmmSellMode = ammMode === "sell";
-  // Sell-mode header: the user reached this modal by clicking a Sell
-  // button on the detail page (or by toggling the Sell tab inside an
-  // already-open modal), so the title + mission text need to reflect
-  // "cash out" intent — not "buy more shares". Builds the side label
-  // off `choice` so UP/DOWN reads naturally.
-  const sellHeading = (() => {
-    if (!isAmmSellMode) return null;
-    if (isUpDown) {
-      if (isUp) return "Sell UP shares";
-      if (isDown) return "Sell DOWN shares";
-      return "Sell shares";
-    }
-    if (isH2H) return `Sell ${selection.personName ?? selection.choice} shares`;
-    if (isCommunity) {
-      return `Sell ${selection.direction === "no" ? "No" : "Yes"} shares`;
-    }
-    return "Sell shares";
-  })();
   // Header copy. On a follow-up bet we surface "Add to your X stake" so users
   // know the new Vox compounds onto an existing position rather than
   // creating a separate one. Same-side only — opposite-side hedges are
@@ -326,14 +267,10 @@ export function StakeModal({
     }
     return "Add to your stake";
   })();
-  // Sell mode takes precedence over top-up because a user can only be
-  // in one or the other (`isTopUp` is buy-only at the call sites).
-  const dialogTitleText = sellHeading ?? topUpHeading ?? "Confirm Prediction";
-  const missionText = isAmmSellMode
-    ? "Cash out at the live market price. Bigger orders push the price along the curve."
-    : isTopUp
-      ? "Adding more Vox compounds onto your existing position."
-      : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
+  const dialogTitleText = topUpHeading ?? "Confirm Prediction";
+  const missionText = isTopUp
+    ? "Adding more Vox compounds onto your existing position."
+    : MISSION_HEADERS[selection.type] || "Place your prediction on this market.";
 
   const fireConfetti = (origin: { x: number; y: number }) => {
     confetti({
@@ -351,13 +288,7 @@ export function StakeModal({
   const handleConfirm = async () => {
     if (submitting) return;
 
-    const isAmmSell = ammMode === "sell" && !!onConfirmAmmSell;
-    if (isAmmSell) {
-      const sharesToSell = Math.min(parsedSellShares, ammNetShares);
-      if (!Number.isFinite(sharesToSell) || sharesToSell <= 0) return;
-    } else {
-      if (parsedAmount < MIN_STAKE || balanceAfter < 0) return;
-    }
+    if (parsedAmount < MIN_STAKE || balanceAfter < 0) return;
 
     let confettiOrigin: { x: number; y: number } | null = null;
     if (confirmButtonRef.current) {
@@ -368,25 +299,18 @@ export function StakeModal({
       };
     }
 
-    // Derive the quote-staleness cap (buy) or floor (sell) from the live
-    // AMM price and DEFAULT_SLIPPAGE_TOLERANCE. Clamp into the LMSR domain
-    // (0, 1] so price * (1 + tolerance) > 1 doesn't no-op on the server.
+    // Derive the quote-staleness cap from the live AMM price and
+    // DEFAULT_SLIPPAGE_TOLERANCE. Clamp into the LMSR domain (0, 1] so
+    // price * (1 + tolerance) > 1 doesn't no-op on the server.
     const maxPricePerShare =
       ammEntryPrice != null
         ? Math.min(1, ammEntryPrice * (1 + DEFAULT_SLIPPAGE_TOLERANCE))
-        : undefined;
-    const minPricePerShare =
-      ammEntryPrice != null
-        ? Math.max(1e-6, ammEntryPrice * (1 - DEFAULT_SLIPPAGE_TOLERANCE))
         : undefined;
 
     setSubmitting(true);
     try {
       let result: void | Promise<void>;
-      if (isAmmSell && onConfirmAmmSell) {
-        const sharesToSell = Math.min(parsedSellShares, ammNetShares);
-        result = onConfirmAmmSell(sharesToSell, { minPricePerShare });
-      } else if (onConfirmWithMeta) {
+      if (onConfirmWithMeta) {
         result = onConfirmWithMeta(parsedAmount, {
           confidence: confidence || undefined,
           thesis: thesis.trim() || undefined,
@@ -409,7 +333,6 @@ export function StakeModal({
       }
 
       setStakeAmount("");
-      setSellShares("");
       setConfidence(0);
       setThesis("");
       setShowThesisSection(false);
@@ -425,7 +348,6 @@ export function StakeModal({
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) {
         setStakeAmount("");
-        setSellShares("");
         setConfidence(0);
         setThesis("");
         setShowThesisSection(false);
@@ -867,82 +789,7 @@ export function StakeModal({
             </div>
           )}
 
-          {canSellAmm && (
-            <div className="flex gap-2 rounded-md border border-border/50 p-1 bg-muted/30">
-              <button
-                type="button"
-                onClick={() => setAmmMode("buy")}
-                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
-                  ammMode === "buy"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="button-amm-tab-buy"
-              >
-                Buy
-              </button>
-              <button
-                type="button"
-                onClick={() => setAmmMode("sell")}
-                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${
-                  ammMode === "sell"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid="button-amm-tab-sell"
-              >
-                Sell · {ammNetShares.toFixed(2)} shares
-              </button>
-            </div>
-          )}
-
-          {ammMode === "sell" ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Shares to sell</label>
-              <Input
-                type="number"
-                min={0}
-                max={ammNetShares}
-                step="any"
-                placeholder={`Up to ${ammNetShares.toFixed(2)} shares`}
-                value={sellShares}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "") {
-                    setSellShares("");
-                    return;
-                  }
-                  const n = Number(v);
-                  if (!Number.isFinite(n)) {
-                    setSellShares(v);
-                    return;
-                  }
-                  setSellShares(String(Math.max(0, Math.min(n, ammNetShares))));
-                }}
-                className="font-mono"
-                data-testid="input-amm-sell-shares"
-              />
-              <div className="flex gap-2">
-                {[0.25, 0.5, 1].map((frac) => {
-                  const amount = Math.max(0, ammNetShares * frac);
-                  return (
-                    <Button
-                      key={frac}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSellShares(amount > 0 ? amount.toFixed(4) : "")}
-                      className="flex-1"
-                      data-testid={`button-sell-preset-${Math.round(frac * 100)}`}
-                    >
-                      {frac === 1 ? "All" : `${Math.round(frac * 100)}%`}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <>
+          <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   Vox budget
@@ -1010,8 +857,7 @@ export function StakeModal({
                   Max
                 </Button>
               </div>
-            </>
-          )}
+          </>
 
           {/* Polymarket pass: restyled AMM receipt. Big "Payout if win"
               number is the hero; share count + avg price are demoted to
@@ -1020,21 +866,14 @@ export function StakeModal({
               same pattern Polymarket uses with their "To win $X" line.
               Slippage warning still surfaces on >=1pp moves. */}
           {ammEntryPrice != null && (() => {
-            const buyFinalPrice =
-              ammMode === "buy" && ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
+            const finalPrice =
+              ammBuyQuote && ammBuyQuote.shares > 0 && selection.entryId
                 ? Number(ammBuyQuote.newPrices[selection.entryId] ?? 0)
                 : null;
-            const sellFinalPrice =
-              ammMode === "sell" && ammSellQuote && selection.entryId
-                ? Number(ammSellQuote.newPrices[selection.entryId] ?? 0)
-                : null;
-            const finalPrice = buyFinalPrice ?? sellFinalPrice;
             const showSlippage =
               finalPrice != null && Math.abs(finalPrice - ammEntryPrice) >= 0.01;
 
-            const isBuyMode = ammMode === "buy";
-            const hasBuyQuote = isBuyMode && ammBuyQuote && ammBuyQuote.shares > 0;
-            const hasSellQuote = !isBuyMode && ammSellQuote;
+            const hasBuyQuote = !!(ammBuyQuote && ammBuyQuote.shares > 0);
             // Direction-aware label for the "shares" line so it reads
             // naturally on Up/Down ("226 UP shares") and falls back to
             // a neutral "shares" everywhere else.
@@ -1043,11 +882,6 @@ export function StakeModal({
                 ? "UP shares"
                 : "DOWN shares"
               : "shares";
-
-            // Receipt header copy switches between buy and sell to make
-            // the primary number unambiguous: "Payout if win" in buy
-            // mode, "Sell proceeds" in sell mode.
-            const heroLabel = isBuyMode ? "PAYOUT IF WIN" : "SELL PROCEEDS";
 
             return (
               <div
@@ -1058,13 +892,13 @@ export function StakeModal({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {heroLabel}
+                        PAYOUT IF WIN
                       </p>
                       {/* Live indicator: shown only when parent passed a
                           fresh ammState via `liveAmmState`. Pulsing dot
                           conveys "this estimate updates as the market
                           moves" without taking real estate. */}
-                      {liveAmmState != null && (hasBuyQuote || hasSellQuote) && (
+                      {liveAmmState != null && hasBuyQuote && (
                         <span
                           className="inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400"
                           data-testid="amm-receipt-live-indicator"
@@ -1080,10 +914,6 @@ export function StakeModal({
                     {hasBuyQuote && ammBuyQuote ? (
                       <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
                         ~{formatVox(Math.floor(ammBuyQuote.shares))}
-                      </p>
-                    ) : hasSellQuote && ammSellQuote ? (
-                      <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
-                        +{formatVox(ammSellQuote.proceeds)}
                       </p>
                     ) : (
                       <p className="text-2xl font-bold leading-tight font-mono text-muted-foreground/50">
@@ -1111,29 +941,9 @@ export function StakeModal({
                   </p>
                 )}
 
-                {hasSellQuote && ammSellQuote && (
-                  <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
-                    Selling {Math.min(parsedSellShares, ammNetShares).toFixed(2)} {sideShareLabel}
-                    <span className="text-muted-foreground/70">
-                      {" · Avg price "}
-                      {/* Use the *quote's* avg (proceeds / shares)
-                          instead of ammEntryPrice — that's the start
-                          price, not what you actually receive. For
-                          large sells the curve walks down as you go,
-                          so avg < entry by a noticeable margin and
-                          that gap IS where the "I lost Ꝟ1 on
-                          round-trip" Vox lives. Matches the buy
-                          receipt's framing one row up. */}
-                      {formatVoxPrice(ammSellQuote.pricePerShareAvg, 3)}/share
-                    </span>
-                  </p>
-                )}
-
-                {!hasBuyQuote && !hasSellQuote && (
+                {!hasBuyQuote && (
                   <p className="text-[11px] text-muted-foreground/70 italic border-t border-violet-500/15 pt-1.5">
-                    {isBuyMode
-                      ? `Enter at least ${formatVox(MIN_STAKE)} to see your potential payout.`
-                      : "Enter shares to sell to see proceeds."}
+                    Enter at least {formatVox(MIN_STAKE)} to see your potential payout.
                   </p>
                 )}
 
@@ -1165,23 +975,13 @@ export function StakeModal({
                       </PopoverTrigger>
                       <PopoverContent className="text-xs max-w-64 space-y-1.5" side="top">
                         <p className="font-semibold">Price impact</p>
-                        {hasSellQuote ? (
-                          <p>
-                            Big sells push the share price down as
-                            they fill. Your{" "}
-                            <span className="font-semibold">Avg price</span>{" "}
-                            above already factors this in — it's
-                            what you'll actually receive per share.
-                          </p>
-                        ) : (
-                          <p>
-                            Big buys push the share price up as
-                            they fill. Your{" "}
-                            <span className="font-semibold">Avg price</span>{" "}
-                            above already factors this in — it's
-                            what you'll actually pay per share.
-                          </p>
-                        )}
+                        <p>
+                          Big buys push the share price up as
+                          they fill. Your{" "}
+                          <span className="font-semibold">Avg price</span>{" "}
+                          above already factors this in — it's
+                          what you'll actually pay per share.
+                        </p>
                         <p className="text-muted-foreground">
                           The arrow shows where the market price
                           settles after your trade.{" "}
@@ -1194,24 +994,6 @@ export function StakeModal({
                   </div>
                 )}
 
-                {/* Spread / round-trip hint. Only on sell mode —
-                    answers the common "I bought for 500, sold for
-                    499, where did Ꝟ1 go?" question. Kept
-                    deliberately general so it also reads correctly
-                    for users sitting on a winning or losing
-                    position (where the price move dwarfs the
-                    spread). Muted so it doesn't dominate; users
-                    who don't care just see "sell proceeds: X" and
-                    move on. */}
-                {hasSellQuote && (
-                  <p className="text-[10px] text-muted-foreground/70 leading-snug border-t border-violet-500/15 pt-1.5">
-                    A small spread applies on every trade — selling
-                    nudges the price down the curve, so proceeds
-                    are a touch below the live price × shares.
-                    Already factored above.
-                  </p>
-                )}
-
                 {/* Live-quote disclaimer. Only shown when the parent
                     is feeding us `liveAmmState` (so the receipt is
                     actually re-deriving on each refetch) AND the
@@ -1219,10 +1001,9 @@ export function StakeModal({
                     these guards we'd be lying ("Live estimate" while
                     the modal is using a stale snapshot) or pointless
                     ("Live estimate" next to "Enter at least Ꝟ5..."). */}
-                {liveAmmState != null && (hasBuyQuote || hasSellQuote) && (
+                {liveAmmState != null && hasBuyQuote && (
                   <p className="text-[10px] text-muted-foreground/70 leading-snug">
-                    Live estimate — actual{" "}
-                    {hasSellQuote ? "proceeds" : "shares"} depend on
+                    Live estimate — actual shares depend on
                     the price at the moment your trade executes.
                   </p>
                 )}
@@ -1235,21 +1016,12 @@ export function StakeModal({
               <span className="text-muted-foreground">Current Balance: </span>
               <span className="font-mono font-medium">{formatVox(walletBalance)}</span>
             </div>
-            {ammMode === "sell" ? (
-              <div>
-                <span className="text-muted-foreground">After Sell: </span>
-                <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                  +{formatVox(ammSellQuote?.proceeds ?? 0)}
-                </span>
-              </div>
-            ) : (
-              <div>
-                <span className="text-muted-foreground">After Buy: </span>
-                <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
-                  {balanceAfter >= 0 ? formatVox(balanceAfter) : 'Insufficient'}
-                </span>
-              </div>
-            )}
+            <div>
+              <span className="text-muted-foreground">After Buy: </span>
+              <span className={`font-mono font-medium ${balanceAfter < 0 ? 'text-red-700 dark:text-red-500' : 'text-green-700 dark:text-green-500'}`}>
+                {balanceAfter >= 0 ? formatVox(balanceAfter) : 'Insufficient'}
+              </span>
+            </div>
           </div>
 
           {/* Highest-intent earn moment — the user wants to predict and
@@ -1391,22 +1163,16 @@ export function StakeModal({
                 ref={confirmButtonRef}
                 onClick={handleConfirm}
                 className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                disabled={(() => {
-                  if (submitting) return true;
-                  if (ammMode === "sell") {
-                    return !parsedSellShares || parsedSellShares <= 0 || parsedSellShares > ammNetShares + 1e-6;
-                  }
-                  return !stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0;
-                })()}
+                disabled={submitting || !stakeAmount || parsedAmount < MIN_STAKE || balanceAfter < 0}
                 data-testid="button-confirm-stake"
               >
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                    {ammMode === "sell" ? "Selling…" : "Placing…"}
+                    Placing…
                   </>
                 ) : (
-                  ammMode === "sell" ? "Sell" : "Buy"
+                  "Buy"
                 )}
               </Button>
             )

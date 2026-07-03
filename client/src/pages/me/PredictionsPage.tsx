@@ -18,12 +18,17 @@ import {
   Share2,
   Check,
   Info,
+  Banknote,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
+import { usePollingAmmState, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { PLChart } from "@/components/predict/PLChart";
@@ -1471,14 +1476,17 @@ function AmmOpenPositionCard({
   position,
   onView,
   onShare,
+  onCashOut,
 }: {
   position: AmmOpenPosition;
   onView: () => void;
-  // Sprint 2: side-by-side Share affordance next to View / Sell. We
+  // Sprint 2: side-by-side Share affordance next to View. We
   // accept a handler rather than wiring `useShareCard()` here so the
   // parent can attach username + market URL context the card itself
   // doesn't have.
   onShare: () => void;
+  // Opens the CashOutSheet in place — no detour via the detail page.
+  onCashOut: () => void;
 }) {
   const projectedPnl = position.netShares - position.netCreditsIn;
   const directionLabel = position.entryLabel?.toUpperCase?.() ?? position.entryLabel;
@@ -1550,14 +1558,26 @@ function AmmOpenPositionCard({
         <div className="flex items-center gap-2">
           <Button
             size="sm"
+            className="flex-1 gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCashOut();
+            }}
+            data-testid={`amm-open-cashout-${position.marketId}-${position.entryId}`}
+          >
+            <Banknote className="h-3.5 w-3.5" />
+            Cash out ~{formatVox(Math.round(position.currentValue))}
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
-            className="flex-1"
+            className="shrink-0 px-3"
             onClick={(e) => {
               e.stopPropagation();
               onView();
             }}
           >
-            View / Sell
+            View
           </Button>
           <Button
             size="sm"
@@ -1575,6 +1595,135 @@ function AmmOpenPositionCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Self-contained cash-out flow for the Predictions page: fetches the
+ * market's live AMM state on open, dispatches the sell to the right
+ * endpoint (native bet route vs community sell route), and renders
+ * the shared CashOutSheet. Positions come from /api/me/amm-positions
+ * which never includes jackpot (parimutuel) rows.
+ */
+function AmmPositionCashOut({
+  position,
+  onClose,
+}: {
+  position: AmmOpenPosition | null;
+  onClose: () => void;
+}) {
+  const { refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
+  const open = !!position;
+  const idempotencyKey = useIdempotencyKey(open, [
+    position?.marketId,
+    position?.entryId,
+  ]);
+
+  // GET /api/markets/:id — polls while the sheet is open so the
+  // proceeds estimate tracks the market. Also carries the market's
+  // cutoff metadata (nativeDetail.bettingCutoff for native, closeAt /
+  // endAt for community).
+  const { data: marketDetail } = usePollingAmmState(position?.marketId, {
+    enabled: open,
+  });
+  const detail = marketDetail as
+    | {
+        market?: { endAt?: string | null; closeAt?: string | null };
+        ammState?: ApiAmmStateBlock | null;
+        nativeDetail?: { bettingCutoff?: string | null } | null;
+      }
+    | undefined;
+
+  const isCommunity = position?.marketType === "community";
+
+  const sellMutation = useMutation({
+    mutationFn: async ({
+      shares,
+      minPricePerShare,
+    }: {
+      shares: number;
+      minPricePerShare?: number;
+    }) => {
+      if (!position) throw new Error("No position selected");
+      const res = isCommunity
+        ? await apiRequest(
+            "POST",
+            `/api/markets/${position.marketId}/sell`,
+            { entryId: position.entryId, shares, minPricePerShare },
+            { idempotencyKey },
+          )
+        : await apiRequest(
+            "POST",
+            `/api/native-markets/${position.marketId}/bet`,
+            { entryId: position.entryId, actionType: "sell", shares, minPricePerShare },
+            { idempotencyKey },
+          );
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      const proceeds = Math.round(Number(data?.proceeds ?? 0));
+      toast("Cashed out", {
+        description:
+          proceeds > 0
+            ? `Proceeds credited: +${formatVox(proceeds)}`
+            : "Proceeds have been credited to your wallet.",
+      });
+      onClose();
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error) => {
+      const { title, description } = parseApiError(err, "Failed to cash out position");
+      toast.error(title, { description });
+    },
+  });
+
+  const selection = useMemo((): CashOutSelection | null => {
+    if (!position) return null;
+    const label = (position.entryLabel || "").toLowerCase();
+    const sideTone =
+      label === "up" ? ("up" as const) : label === "down" ? ("down" as const) : ("neutral" as const);
+    return {
+      marketId: position.marketId,
+      entryId: position.entryId,
+      sideLabel:
+        label === "up" || label === "down"
+          ? position.entryLabel.toUpperCase()
+          : position.entryLabel,
+      sideTone,
+      marketName: position.marketTitle || "Open prediction",
+      netShares: position.netShares,
+      netCreditsIn: position.netCreditsIn,
+      avgEntryPrice: position.avgEntryPrice,
+      bettingCutoff:
+        detail?.nativeDetail?.bettingCutoff ??
+        detail?.market?.closeAt ??
+        detail?.market?.endAt ??
+        position.marketEndAt ??
+        null,
+      endAt: detail?.market?.endAt ?? position.marketEndAt ?? null,
+      ammState: detail?.ammState ?? null,
+    };
+  }, [position, detail]);
+
+  return (
+    <CashOutSheet
+      open={open}
+      onClose={onClose}
+      selection={selection}
+      liveAmmState={detail?.ammState ?? null}
+      onConfirmSell={async (shares, meta) => {
+        await sellMutation.mutateAsync({
+          shares,
+          minPricePerShare: meta?.minPricePerShare,
+        });
+      }}
+    />
   );
 }
 
@@ -1609,6 +1758,8 @@ function OpenTabPanel({
     () => (ammPositionsData?.positions ?? []).filter((p) => Math.abs(p.netShares) > 1e-6),
     [ammPositionsData],
   );
+  // Position currently being cashed out via the in-place sheet.
+  const [cashOutPosition, setCashOutPosition] = useState<AmmOpenPosition | null>(null);
 
   // Don't double-count: AMM markets are aggregated via /amm-positions, so
   // hide their per-bet rows in the open list. Jackpot tickets are the only
@@ -1704,6 +1855,7 @@ function OpenTabPanel({
               if (path !== "/predict") setLocation(path);
             }}
             onShare={() => onSharePosition(p)}
+            onCashOut={() => setCashOutPosition(p)}
           />
         ))}
         {jackpotOpenBets.map((p) => (
@@ -1717,6 +1869,11 @@ function OpenTabPanel({
           />
         ))}
       </div>
+
+      <AmmPositionCashOut
+        position={cashOutPosition}
+        onClose={() => setCashOutPosition(null)}
+      />
     </div>
   );
 }

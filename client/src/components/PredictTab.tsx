@@ -522,21 +522,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
   const [, setLocation] = useLocation();
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
-  /**
-   * Sprint 5 / Phase 1.3: parity with PredictPage + HomePage. The
-   * PersonDetail predict tab launches the StakeModal from three different
-   * pickers (Up/Down, H2H, Race) — all of them open into buy mode for
-   * now, but the modal's internal Sell toggle needs an honest initial
-   * mode so it can settle on the right tab without flicker.
-   */
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
   // Idempotency key for the active trade-modal intent. See
   // `client/src/lib/useIdempotencyKey.ts`. Mirrors PredictPage's
   // dependency set.
   const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
     pendingSelection?.marketId,
     pendingSelection?.entryId,
-    modalIntent,
   ]);
   const walletCredits = profile?.predictCredits ?? 0;
 
@@ -827,7 +818,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       engine: "amm",
       ammState: market.ammState ?? null,
     });
-    setModalIntent("buy");
     setStakeModalOpen(true);
   };
 
@@ -864,7 +854,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
-    setModalIntent("buy");
     setStakeModalOpen(true);
   };
 
@@ -904,7 +893,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
-    setModalIntent("buy");
     setStakeModalOpen(true);
   };
 
@@ -1000,77 +988,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       });
     }
   };
-
-  /**
-   * Sprint 5 / Phase 1.3: AMM sell parity for the PersonDetail predict
-   * tab. Mirrors the dispatch shape used by PredictPage so the same
-   * StakeModal can finish a sell regardless of which page hosts it.
-   */
-  const predictTabAmmSellMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number; marketType: "updown" | "h2h" | "gainer" }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/native-markets/${marketId}/bet`,
-        {
-          entryId,
-          actionType: "sell",
-          shares,
-        },
-        { idempotencyKey: tradeIdempotencyKey },
-      );
-      return res.json();
-    },
-    onSuccess: async (data: any, variables) => {
-      if (data?.xp?.xpAwarded) {
-        // Reuse the XP burst helper used by the buy path so the
-        // celebration is consistent.
-        // (No-op outside the imported `triggerXpBurst` scope — this
-        // tab only imports the burst hook conditionally; if it
-        // doesn't exist, the toast still fires below.)
-      }
-      const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
-        description:
-          proceeds > 0
-            ? `Proceeds credited: +${formatVox(proceeds)}`
-            : "Proceeds have been credited to your wallet.",
-      });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      await Promise.all([
-        refreshProfile?.(),
-        queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
-    },
-    onError: (err: Error) => {
-      const { title, description } = parseApiError(err, "Failed to sell position");
-      toast.error(title, { description });
-    },
-  });
-
-  const handleConfirmAmmSell = useCallback(async (shares: number) => {
-    if (!pendingSelection?.marketId || !pendingSelection.entryId) {
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      return;
-    }
-    if (pendingSelection.type !== "updown" && pendingSelection.type !== "h2h" && pendingSelection.type !== "gainer") {
-      // Community markets aren't reached from this tab today; keep the
-      // dispatch narrow to mirror the bet handler above.
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      return;
-    }
-    await predictTabAmmSellMutation.mutateAsync({
-      marketId: String(pendingSelection.marketId),
-      entryId: String(pendingSelection.entryId),
-      shares,
-      marketType: pendingSelection.type,
-    });
-  }, [pendingSelection, predictTabAmmSellMutation]);
 
   /**
    * Live AMM state for the currently-open selection. Keeps modal
@@ -1340,8 +1257,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         onClose={() => { setStakeModalOpen(false); setPendingSelection(null); }}
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
-        initialAmmMode={modalIntent}
         liveAmmState={liveAmmStateForPending}
         walletBalance={walletCredits}
         onDirectionChange={(dir) => {

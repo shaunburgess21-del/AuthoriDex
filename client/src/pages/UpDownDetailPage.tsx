@@ -7,6 +7,7 @@ import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -53,6 +54,7 @@ import {
   Activity,
   Plus,
   Share2,
+  Banknote,
 } from "lucide-react";
 
 interface AmmPositionRow {
@@ -100,11 +102,13 @@ export default function UpDownDetailPage() {
     pendingSelection?.entryId,
     pendingSelection?.choice,
   ]);
-  // Tracks whether the modal was opened via the Buy / Up / Down CTAs
-  // ("buy") or via the inline Sell button ("sell"). Threaded into
-  // StakeModal as `initialAmmMode` so the Sell tab + sell-flavoured
-  // title/mission render on first frame instead of after a tab tap.
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Cash-out flow lives in its own sheet (CashOutSheet), not the
+  // StakeModal — buy and sell are fully separate surfaces now.
+  const [cashOutOpen, setCashOutOpen] = useState(false);
+  const [cashOutSelection, setCashOutSelection] = useState<CashOutSelection | null>(null);
+  const cashOutIdempotencyKey = useIdempotencyKey(cashOutOpen, [
+    cashOutSelection?.entryId,
+  ]);
 
   const handleGoBack = useCallback(() => {
     goBack(setLocation, "/predict");
@@ -286,7 +290,6 @@ export default function UpDownDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: ammNetSharesFor(entryId),
       });
-      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [hydrated, isMarketClosed, userPick, marketId, userPickTotalStake, ammNetSharesFor]
@@ -406,7 +409,7 @@ export default function UpDownDetailPage() {
           shares,
           minPricePerShare,
         },
-        { idempotencyKey: tradeIdempotencyKey },
+        { idempotencyKey: cashOutIdempotencyKey },
       );
       return res.json();
     },
@@ -415,8 +418,8 @@ export default function UpDownDetailPage() {
       // Sell is always AMM (parimutuel has no sell). Build a `trade`
       // share card with actionType="sell" — same headline DNA as the
       // buy card, but emphasises proceeds-out instead of stake-in.
-      if (hydrated && pendingSelection) {
-        const choice = pendingSelection.choice.toLowerCase();
+      if (hydrated && cashOutSelection) {
+        const choice = cashOutSelection.sideLabel.toLowerCase();
         const direction: "up" | "down" | "other" =
           choice === "up" ? "up" : choice === "down" ? "down" : "other";
         const shares = Number(data?.sharesSold) || 0;
@@ -429,7 +432,7 @@ export default function UpDownDetailPage() {
           personAvatar: hydrated.personAvatar || null,
           marketTitle: `${hydrated.personName}: Up or Down?`,
           category: hydrated.category,
-          entryLabel: pendingSelection.choice,
+          entryLabel: cashOutSelection.sideLabel,
           direction,
           shares,
           pricePerShare,
@@ -444,8 +447,8 @@ export default function UpDownDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
         const fallbackText = `Just took ${voxWord(proceeds)} off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
-        toast("Position sold", {
-          description: `Sold ${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · +${formatVox(proceeds)}`,
+        toast("Cashed out", {
+          description: `Sold ${Math.round(shares).toLocaleString()} ${cashOutSelection.sideLabel} shares · +${formatVox(proceeds)}`,
           action: {
             label: "Share",
             onClick: () =>
@@ -458,17 +461,17 @@ export default function UpDownDetailPage() {
           },
         });
       } else {
-        toast("Position sold", {
+        toast("Cashed out", {
           description: "Proceeds have been credited to your wallet.",
         });
       }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      setCashOutOpen(false);
+      setCashOutSelection(null);
       await invalidateAfterTrade();
     },
     onError: (err: Error) => {
       hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
+      const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
     },
   });
@@ -485,45 +488,50 @@ export default function UpDownDetailPage() {
     [pendingSelection, betMutation]
   );
 
-  const handleConfirmAmmSell = useCallback(
+  const handleConfirmCashOut = useCallback(
     async (shares: number, meta?: { minPricePerShare?: number }) => {
-      if (!pendingSelection?.entryId) return;
+      if (!cashOutSelection?.entryId) return;
       await sellMutation.mutateAsync({
-        entryId: pendingSelection.entryId,
+        entryId: cashOutSelection.entryId,
         shares,
         minPricePerShare: meta?.minPricePerShare,
       });
     },
-    [pendingSelection, sellMutation]
+    [cashOutSelection, sellMutation]
   );
 
-  const openSellModal = useCallback(
+  const openCashOut = useCallback(
     (choice: "up" | "down") => {
       if (!hydrated) return;
       const entryId = choice === "up" ? hydrated.upEntryId : hydrated.downEntryId;
-      setPendingSelection({
-        type: "updown",
-        marketId,
-        entryId,
-        choice: choice.toUpperCase(),
-        marketName: `${hydrated.personName}: Up or Down?`,
-        personName: hydrated.personName,
-        startScore: hydrated.baselineScore,
+      if (!entryId) return;
+      const pos = ammPositionByEntry.get(entryId);
+      if (!pos || pos.netShares <= 1e-6) return;
+      const state = getUpDownWinningState({
+        pick: choice,
         currentScore: hydrated.currentScore,
         baselineScore: hydrated.baselineScore,
-        baselineTimestamp: hydrated.startAt,
-        crowdSentiment: choice === "up" ? hydrated.upPercent : 100 - hydrated.upPercent,
         tieRule: hydrated.tieRule,
-        endAt: hydrated.endAt,
-        bettingCutoff: hydrated.bettingCutoff,
-        engine: hydrated.engine,
-        ammState: hydrated.ammState,
-        ammNetShares: ammNetSharesFor(entryId),
       });
-      setModalIntent("sell");
-      setStakeModalOpen(true);
+      setCashOutSelection({
+        marketId,
+        entryId,
+        sideLabel: choice.toUpperCase(),
+        sideTone: choice,
+        marketName: `${hydrated.personName}: Up or Down?`,
+        netShares: pos.netShares,
+        netCreditsIn: pos.netCreditsIn,
+        avgEntryPrice: pos.avgEntryPrice,
+        bettingCutoff: hydrated.bettingCutoff,
+        endAt: hydrated.endAt,
+        ammState: hydrated.ammState,
+        statusLabel: UP_DOWN_STATE_LABELS[state],
+        statusTone:
+          state === "winning" ? "positive" : state === "behind" ? "negative" : "warning",
+      });
+      setCashOutOpen(true);
     },
-    [hydrated, marketId, ammNetSharesFor],
+    [hydrated, marketId, ammPositionByEntry],
   );
 
   const handleDirectionChange = useCallback(
@@ -704,7 +712,7 @@ export default function UpDownDetailPage() {
 
         {/* AMM live probability + per-side position card. Surfaces
             netShares + avg entry price + current value, plus an
-            inline "Sell" button so users can close out without
+            inline "Cash out" button so users can close out without
             hunting through MyPredictions. */}
         {(() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
@@ -800,8 +808,8 @@ export default function UpDownDetailPage() {
                         });
                       };
                       return (
-                        <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                          <div className="min-w-0 flex-1">
+                        <div key={side} className="rounded-lg bg-muted/30 px-3 py-2">
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold">{label} on {firstName}</p>
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
@@ -816,7 +824,7 @@ export default function UpDownDetailPage() {
                                 the second line ties the resolution back
                                 to the user's pick. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
                                 ({formatVoxDelta(unrealisedPnl)})
                               </span>
@@ -828,7 +836,23 @@ export default function UpDownDetailPage() {
                               </span>
                             </p>
                           </div>
-                          <div className="flex flex-row items-center gap-1 shrink-0">
+                          {/* Cash out is the primary action — value on
+                              the button so users see money, not jargon.
+                              Add + Share are secondary. Full-width row
+                              below the numbers (same pattern as Race /
+                              World rows) so nothing squeezes on narrow
+                              phones. */}
+                          <div className="mt-2 flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              disabled={isMarketClosed}
+                              onClick={() => openCashOut(side)}
+                              data-testid={`button-sell-${side}-position`}
+                              className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                            >
+                              <Banknote className="h-3.5 w-3.5" />
+                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -839,16 +863,6 @@ export default function UpDownDetailPage() {
                             >
                               <Plus className="h-3.5 w-3.5" />
                               <span>Add</span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isMarketClosed}
-                              onClick={() => openSellModal(side)}
-                              data-testid={`button-sell-${side}-position`}
-                              className="px-2.5"
-                            >
-                              Sell
                             </Button>
                             <Button
                               type="button"
@@ -996,7 +1010,7 @@ export default function UpDownDetailPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground">Your position</p>
-                <p className="text-sm font-semibold">
+                <p className="text-sm font-semibold truncate">
                   {userPick.toUpperCase()} on {firstName}
                 </p>
               </div>
@@ -1015,6 +1029,24 @@ export default function UpDownDetailPage() {
                     : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30";
                 return <Badge className={className}>{UP_DOWN_STATE_LABELS[state]}</Badge>;
               })()}
+              {/* Cash-out entry on the best real estate on the page —
+                  the bar is fixed for the entire visit. Only when the
+                  user actually holds live AMM shares on their pick and
+                  trading is still open. */}
+              {!isMarketClosed &&
+                ammNetSharesFor(
+                  userPick === "up" ? hydrated.upEntryId : hydrated.downEntryId,
+                ) > 1e-6 && (
+                  <Button
+                    size="sm"
+                    onClick={() => openCashOut(userPick)}
+                    data-testid="button-sticky-cashout"
+                    className="gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Cash out
+                  </Button>
+                )}
             </div>
           ) : userBet && !userPick ? (
             <div className="flex items-center gap-3">
@@ -1062,7 +1094,7 @@ export default function UpDownDetailPage() {
         </div>
       </div>
 
-      {/* Stake Modal */}
+      {/* Stake Modal — buy only; cash-out lives in CashOutSheet below. */}
       <StakeModal
         selection={pendingSelection}
         open={stakeModalOpen}
@@ -1071,13 +1103,22 @@ export default function UpDownDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
         walletBalance={walletCredits}
         onDirectionChange={handleDirectionChange}
-        initialAmmMode={modalIntent}
         // Detail page polls /api/native-markets/updown every 60 s so
         // the modal can lean on the parent's refreshed state instead
         // of the snapshot frozen at `handleSelect` time.
+        liveAmmState={hydrated.ammState ?? null}
+      />
+
+      <CashOutSheet
+        selection={cashOutSelection}
+        open={cashOutOpen}
+        onClose={() => {
+          setCashOutOpen(false);
+          setCashOutSelection(null);
+        }}
+        onConfirmSell={handleConfirmCashOut}
         liveAmmState={hydrated.ammState ?? null}
       />
     </div>

@@ -8,6 +8,7 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { formatVoxCompact, formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ import {
   MessageSquare,
   ChevronRight,
   Activity,
+  Banknote,
 } from "lucide-react";
 
 interface MarketEntry {
@@ -602,12 +604,17 @@ export default function MarketDetailPage() {
    */
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
   // Idempotency key per trade-modal intent. See `useIdempotencyKey.ts`.
   const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
     pendingSelection?.entryId,
     pendingSelection?.direction,
-    modalIntent,
+  ]);
+  // Cash-out flow lives in its own sheet (CashOutSheet), not the
+  // StakeModal — buy and sell are fully separate surfaces now.
+  const [cashOutOpen, setCashOutOpen] = useState(false);
+  const [cashOutSelection, setCashOutSelection] = useState<CashOutSelection | null>(null);
+  const cashOutIdempotencyKey = useIdempotencyKey(cashOutOpen, [
+    cashOutSelection?.entryId,
   ]);
 
   // Refs for the "Add another entry / Increase stake" CTA on
@@ -1094,14 +1101,14 @@ export default function MarketDetailPage() {
           shares,
           minPricePerShare,
         },
-        { idempotencyKey: tradeIdempotencyKey },
+        { idempotencyKey: cashOutIdempotencyKey },
       );
       return res.json();
     },
     onSuccess: async (data: any) => {
       hapticSuccess();
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
+      toast("Cashed out", {
         description:
           proceeds > 0
             ? `Proceeds credited: +${formatVox(proceeds)}`
@@ -1110,8 +1117,8 @@ export default function MarketDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      setCashOutOpen(false);
+      setCashOutSelection(null);
       await Promise.all([
         refreshProfile(),
         queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
@@ -1126,7 +1133,7 @@ export default function MarketDetailPage() {
     },
     onError: (err: Error) => {
       hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
+      const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
     },
   });
@@ -1175,42 +1182,36 @@ export default function MarketDetailPage() {
       ammState: market.ammState ?? null,
       ammNetShares: netSharesForEntry,
     } as StakeSelection);
-    setModalIntent("buy");
     setStakeModalOpen(true);
   };
 
   /**
-   * Sprint 5 / Phase 4.2: Open the StakeModal in sell mode for a
-   * specific AMM entry. Only meaningful when the user holds netShares
-   * on the entry — the per-entry Sell buttons are hidden otherwise.
+   * Open the CashOutSheet for a specific AMM entry. Only meaningful
+   * when the user holds netShares on the entry — the per-entry Cash
+   * out buttons are hidden otherwise.
    */
-  const openSellModal = (entry: MarketEntry) => {
+  const openCashOut = (entry: MarketEntry) => {
     if (!isLoggedIn) {
       navigateToLogin(setLocation);
       return;
     }
     if (!market) return;
-    const livePrice = ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
-    const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
-    const netSharesForEntry =
-      ammPositionData?.positions?.find((p) => p.entryId === entry.id)?.netShares ?? 0;
-    setPendingSelection({
-      type: "community",
+    const pos = ammPositionData?.positions?.find((p) => p.entryId === entry.id);
+    if (!pos || pos.netShares <= 1e-6) return;
+    setCashOutSelection({
       marketId: market.id,
       entryId: entry.id,
-      choice: entry.label,
+      sideLabel: entry.label,
+      sideTone: "neutral",
       marketName: market.title,
-      personName: market.linkedPersonName ?? undefined,
-      crowdSentiment,
+      netShares: pos.netShares,
+      netCreditsIn: pos.netCreditsIn,
+      avgEntryPrice: pos.avgEntryPrice,
       bettingCutoff: market.closeAt || market.endAt || null,
       endAt: market.endAt || undefined,
-      openMarketType: effectiveOpenMarketType,
-      engine: "amm",
       ammState: market.ammState ?? null,
-      ammNetShares: netSharesForEntry,
-    } as StakeSelection);
-    setModalIntent("sell");
-    setStakeModalOpen(true);
+    });
+    setCashOutOpen(true);
   };
 
   /**
@@ -1239,16 +1240,16 @@ export default function MarketDetailPage() {
   };
 
   /**
-   * Sprint 5 / Phase 4.2: StakeModal sell confirm. Sends `shares` to
-   * the community sell endpoint via `ammSellMutation`.
+   * CashOutSheet sell confirm. Sends `shares` to the community sell
+   * endpoint via `ammSellMutation`.
    */
-  const handleConfirmAmmSellFromModal = async (
+  const handleConfirmCashOut = async (
     shares: number,
     meta?: { minPricePerShare?: number },
   ) => {
-    if (!pendingSelection?.entryId) return;
+    if (!cashOutSelection?.entryId) return;
     await ammSellMutation.mutateAsync({
-      entryId: pendingSelection.entryId,
+      entryId: cashOutSelection.entryId,
       shares,
       minPricePerShare: meta?.minPricePerShare,
     });
@@ -1651,7 +1652,7 @@ export default function MarketDetailPage() {
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlClass}`}>
                                 ({formatVoxDelta(unrealisedPnl)})
                               </span>
@@ -1666,21 +1667,22 @@ export default function MarketDetailPage() {
                           <div className="mt-2 flex items-center justify-end gap-2">
                             <Button
                               size="sm"
+                              disabled={!isOpen}
+                              onClick={() => openCashOut(entry)}
+                              data-testid={`community-position-sell-${pos.entryId}`}
+                              className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                            >
+                              <Banknote className="h-3.5 w-3.5" />
+                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="outline"
                               disabled={!isOpen}
                               onClick={() => openBuyModal(entry, "yes")}
                               data-testid={`community-position-add-${pos.entryId}`}
                             >
                               Add
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!isOpen}
-                              onClick={() => openSellModal(entry)}
-                              data-testid={`community-position-sell-${pos.entryId}`}
-                            >
-                              Sell
                             </Button>
                           </div>
                         </div>
@@ -2289,11 +2291,11 @@ export default function MarketDetailPage() {
         zIndexClass="z-50"
       />
 
-      {/* Sprint 5 / Phase 4.1+4.2: StakeModal for community AMM
-          markets. The buy flow is opened from per-entry buttons
-          inside the Live Market card above; the sell flow is opened
-          from per-position rows. Jackpot markets use their own inline
-          form and never reach this modal. */}
+      {/* StakeModal for community AMM markets — buy only. The buy
+          flow is opened from per-entry buttons inside the Live Market
+          card above; cash-out lives in the CashOutSheet below. Jackpot
+          markets use their own inline form and never reach this
+          modal. */}
       <StakeModal
         open={stakeModalOpen}
         onClose={() => {
@@ -2302,8 +2304,6 @@ export default function MarketDetailPage() {
         }}
         selection={pendingSelection}
         onConfirm={handleConfirmStakeFromModal}
-        onConfirmAmmSell={handleConfirmAmmSellFromModal}
-        initialAmmMode={modalIntent}
         walletBalance={walletBalance}
         liveAmmState={market?.ammState ?? null}
         onDirectionChange={(dir) => {
@@ -2322,6 +2322,17 @@ export default function MarketDetailPage() {
             crowdSentiment,
           });
         }}
+      />
+
+      <CashOutSheet
+        selection={cashOutSelection}
+        open={cashOutOpen}
+        onClose={() => {
+          setCashOutOpen(false);
+          setCashOutSelection(null);
+        }}
+        onConfirmSell={handleConfirmCashOut}
+        liveAmmState={market?.ammState ?? null}
       />
     </div>
   );

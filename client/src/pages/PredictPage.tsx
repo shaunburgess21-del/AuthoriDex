@@ -1297,25 +1297,15 @@ export default function PredictPage() {
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   /**
-   * Sprint 5 / Phase 1.1: seed which StakeModal tab (buy / sell) opens
-   * when the user triggers the overlay from the predict page. The
-   * carousel doesn't currently have its own "Sell" affordance, but the
-   * modal's internal toggle does flip this, so we still honour an
-   * external override (e.g. future "Sell from card banner") instead of
-   * hard-coding "buy" at the call site.
-   */
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
-  /**
    * Client-supplied `Idempotency-Key` for AMM trade requests. See
    * `client/src/lib/useIdempotencyKey.ts` for the full contract. The
-   * dep tuple here means: modal close+reopen, swap selection, or flip
-   * buy↔sell each spawn a fresh key; retries within the same intent
-   * reuse it so the server can short-circuit the duplicate.
+   * dep tuple here means: modal close+reopen or swap selection each
+   * spawn a fresh key; retries within the same intent reuse it so the
+   * server can short-circuit the duplicate.
    */
   const tradeIdempotencyKey = useIdempotencyKey(stakeModalOpen, [
     pendingSelection?.marketId,
     pendingSelection?.entryId,
-    modalIntent,
   ]);
   const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
   const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
@@ -2146,9 +2136,8 @@ export default function PredictPage() {
     },
   });
 
-  const openStakeModal = (intent: "buy" | "sell" = "buy") => {
+  const openStakeModal = () => {
     refreshProfile?.();
-    setModalIntent(intent);
     setStakeModalOpen(true);
   };
 
@@ -2224,135 +2213,6 @@ export default function PredictPage() {
       toast.error(title, { description });
     },
   });
-
-  /**
-   * Sprint 5 / Phase 1.1: AMM sell mutation shared by every type of
-   * native market (Up/Down, H2H, Race). Server-side the same
-   * `/api/native-markets/:marketId/bet` endpoint with `actionType:"sell"`
-   * handles all three — it dispatches by the market's engine flag —
-   * so we can collapse them into one mutation here. Cache invalidation
-   * is type-aware though because the detail/list queryKeys differ.
-   */
-  const nativeAmmSellMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number; marketType: "updown" | "h2h" | "gainer" }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/native-markets/${marketId}/bet`,
-        {
-          entryId,
-          actionType: "sell",
-          shares,
-        },
-        { idempotencyKey: tradeIdempotencyKey },
-      );
-      return res.json();
-    },
-    onSuccess: async (data: any, variables) => {
-      hapticSuccess();
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-      }
-      // Best-effort proceeds readout in the toast. We avoid hammering
-      // the user with a full share-card flow here — the modal closes
-      // on success and the cards re-hydrate with the new netCreditsIn
-      // / unrealisedPnl, which is the value most users want to see.
-      const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
-        description:
-          proceeds > 0
-            ? `Proceeds credited: +${formatVox(proceeds)}`
-            : "Proceeds have been credited to your wallet.",
-      });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      await Promise.all([
-        refreshProfile(),
-        queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
-    },
-    onError: (err: Error) => {
-      hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
-      toast.error(title, { description });
-    },
-  });
-
-  const communityAmmSellMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, shares }: { marketId: string; entryId: string; shares: number }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/markets/${marketId}/sell`,
-        { entryId, shares },
-        { idempotencyKey: tradeIdempotencyKey },
-      );
-      return res.json();
-    },
-    onSuccess: async (data: any) => {
-      hapticSuccess();
-      if (data?.xp?.xpAwarded) {
-        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
-      }
-      const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Position sold", {
-        description:
-          proceeds > 0
-            ? `Proceeds credited: +${formatVox(proceeds)}`
-            : "Proceeds have been credited to your wallet.",
-      });
-      setStakeModalOpen(false);
-      setPendingSelection(null);
-      await Promise.all([
-        refreshProfile(),
-        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
-    },
-    onError: (err: Error) => {
-      hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
-      toast.error(title, { description });
-    },
-  });
-
-  /**
-   * Unified sell-confirm handler. StakeModal only enables its Sell tab
-   * when `onConfirmAmmSell` is wired, so this is the gate that decides
-   * whether the predict-page overlay can complete a sell at all. We
-   * dispatch by `pendingSelection.type` and bail safely for any future
-   * market type that isn't yet wired (no-op + close).
-   */
-  const handleConfirmAmmSell = useCallback(
-    async (shares: number) => {
-      if (!pendingSelection?.marketId || !pendingSelection.entryId) {
-        setStakeModalOpen(false);
-        setPendingSelection(null);
-        return;
-      }
-      if (pendingSelection.type === "updown" || pendingSelection.type === "h2h" || pendingSelection.type === "gainer") {
-        await nativeAmmSellMutation.mutateAsync({
-          marketId: String(pendingSelection.marketId),
-          entryId: String(pendingSelection.entryId),
-          shares,
-          marketType: pendingSelection.type,
-        });
-        return;
-      }
-      if (pendingSelection.type === "community") {
-        await communityAmmSellMutation.mutateAsync({
-          marketId: String(pendingSelection.marketId),
-          entryId: String(pendingSelection.entryId),
-          shares,
-        });
-        return;
-      }
-    },
-    [pendingSelection, nativeAmmSellMutation, communityAmmSellMutation],
-  );
 
   const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
     if (market.status !== "OPEN" || market.visibility !== "live") {
@@ -4156,8 +4016,6 @@ export default function PredictPage() {
         }}
         selection={pendingSelection}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
-        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
         liveAmmState={liveAmmStateForPending}
         onChangePick={pendingSelection?.type === "gainer" ? () => {

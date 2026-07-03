@@ -7,6 +7,7 @@ import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
+import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
@@ -50,6 +51,7 @@ import {
   Shield,
   Crown,
   Activity,
+  Banknote,
 } from "lucide-react";
 
 interface HydratedH2H {
@@ -104,13 +106,13 @@ export default function H2HDetailPage() {
     pendingSelection?.entryId,
     pendingSelection?.choice,
   ]);
-  /**
-   * Sprint 5 / Phase 2.3: seed which StakeModal tab opens (buy / sell).
-   * Buy-side flows (Add, score-row tiles) set this to "buy"; the
-   * per-pick Sell button below sets it to "sell" so the modal lands on
-   * the right tab without flicker. Mirrors the Up/Down detail page.
-   */
-  const [modalIntent, setModalIntent] = useState<"buy" | "sell">("buy");
+  // Cash-out flow lives in its own sheet (CashOutSheet), not the
+  // StakeModal — buy and sell are fully separate surfaces now.
+  const [cashOutOpen, setCashOutOpen] = useState(false);
+  const [cashOutSelection, setCashOutSelection] = useState<CashOutSelection | null>(null);
+  const cashOutIdempotencyKey = useIdempotencyKey(cashOutOpen, [
+    cashOutSelection?.entryId,
+  ]);
 
   const { market, isLoading, notFound } = useNativeMarketDetail(
     marketId,
@@ -306,7 +308,6 @@ export default function H2HDetailPage() {
         ammState: hydrated.ammState,
         ammNetShares: ammNetSharesFor(entryId),
       });
-      setModalIntent("buy");
       setStakeModalOpen(true);
     },
     [hydrated, isMarketClosed, userPickSide, marketId, userPickTotalStake, ammNetSharesFor]
@@ -433,15 +434,15 @@ export default function H2HDetailPage() {
           shares,
           minPricePerShare,
         },
-        { idempotencyKey: tradeIdempotencyKey },
+        { idempotencyKey: cashOutIdempotencyKey },
       );
       return res.json();
     },
     onSuccess: async (data) => {
       hapticSuccess();
-      if (hydrated && pendingSelection?.entryId) {
+      if (hydrated && cashOutSelection?.entryId) {
         const picked =
-          pendingSelection.entryId === hydrated.person1EntryId
+          cashOutSelection.entryId === hydrated.person1EntryId
             ? hydrated.person1
             : hydrated.person2;
         const shares = Number(data?.sharesSold) || 0;
@@ -467,7 +468,7 @@ export default function H2HDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
         const fallbackText = `Just took ${voxWord(proceeds)} off the table on "${hydrated.title}" on VoxDex!\n${shareUrl}`;
-        toast("Position sold", {
+        toast("Cashed out", {
           description: `Sold ${Math.round(shares).toLocaleString()} ${picked.name} shares · +${formatVox(proceeds)}`,
           action: {
             label: "Share",
@@ -481,17 +482,17 @@ export default function H2HDetailPage() {
           },
         });
       } else {
-        toast("Position sold", {
+        toast("Cashed out", {
           description: "Proceeds have been credited to your wallet.",
         });
       }
-      setStakeModalOpen(false);
-      setPendingSelection(null);
+      setCashOutOpen(false);
+      setCashOutSelection(null);
       await invalidateAfterTrade();
     },
     onError: (err: Error) => {
       hapticError();
-      const { title, description } = parseApiError(err, "Failed to sell position");
+      const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
     },
   });
@@ -508,47 +509,46 @@ export default function H2HDetailPage() {
     [pendingSelection, betMutation]
   );
 
-  const handleConfirmAmmSell = useCallback(
+  const handleConfirmCashOut = useCallback(
     async (shares: number, meta?: { minPricePerShare?: number }) => {
-      if (!pendingSelection?.entryId) return;
+      if (!cashOutSelection?.entryId) return;
       await sellMutation.mutateAsync({
-        entryId: pendingSelection.entryId,
+        entryId: cashOutSelection.entryId,
         shares,
         minPricePerShare: meta?.minPricePerShare,
       });
     },
-    [pendingSelection, sellMutation]
+    [cashOutSelection, sellMutation]
   );
 
-  const openSellModal = useCallback(
+  const openCashOut = useCallback(
     (person: 1 | 2) => {
       if (!hydrated) return;
       const picked = person === 1 ? hydrated.person1 : hydrated.person2;
       const opponent = person === 1 ? hydrated.person2 : hydrated.person1;
       const entryId = person === 1 ? hydrated.person1EntryId : hydrated.person2EntryId;
-      const sentiment = person === 1 ? hydrated.person1Percent : 100 - hydrated.person1Percent;
-      setPendingSelection({
-        type: "h2h",
+      if (!entryId) return;
+      const pos = ammPositionByEntry.get(entryId);
+      if (!pos || pos.netShares <= 1e-6) return;
+      const scoreDiff = picked.currentScore - opponent.currentScore;
+      setCashOutSelection({
         marketId,
         entryId,
-        choice: picked.name,
+        sideLabel: picked.name,
+        sideTone: "neutral",
         marketName: hydrated.title,
-        personName: picked.name,
-        opponentName: opponent.name,
-        currentScore: picked.currentScore,
-        opponentScore: opponent.currentScore,
-        crowdSentiment: sentiment,
-        tieRule: hydrated.tieRule ?? "refund",
-        endAt: hydrated.endAt,
+        netShares: pos.netShares,
+        netCreditsIn: pos.netCreditsIn,
+        avgEntryPrice: pos.avgEntryPrice,
         bettingCutoff: hydrated.bettingCutoff,
-        engine: hydrated.engine,
+        endAt: hydrated.endAt,
         ammState: hydrated.ammState,
-        ammNetShares: ammNetSharesFor(entryId),
+        statusLabel: scoreDiff > 0 ? "Winning" : scoreDiff < 0 ? "Behind" : "Tied",
+        statusTone: scoreDiff > 0 ? "positive" : scoreDiff < 0 ? "negative" : "warning",
       });
-      setModalIntent("sell");
-      setStakeModalOpen(true);
+      setCashOutOpen(true);
     },
-    [hydrated, marketId, ammNetSharesFor],
+    [hydrated, marketId, ammPositionByEntry],
   );
 
   const { timeRemaining } = marketState;
@@ -748,7 +748,7 @@ export default function H2HDetailPage() {
 
         {/* AMM live probability + per-side position card. Surfaces
             netShares + avg entry price + current value, plus an
-            inline "Sell" button so users can close out without
+            inline "Cash out" button so users can close out without
             hunting through MyPredictions. */}
         {(() => {
           const ammSnap = snapshotFromApi(hydrated.ammState);
@@ -811,8 +811,8 @@ export default function H2HDetailPage() {
                           ? "text-green-700 dark:text-green-500"
                           : "text-red-700 dark:text-red-500";
                       return (
-                        <div key={side} className="flex items-center justify-between gap-2 rounded-lg bg-muted/30 px-3 py-2">
-                          <div className="min-w-0 flex-1">
+                        <div key={side} className="rounded-lg bg-muted/30 px-3 py-2">
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
@@ -823,7 +823,7 @@ export default function H2HDetailPage() {
                                 Up/Down detail page: what you'd get if you sold
                                 now, and what the position pays if it wins. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Sell now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
                                 ({formatVoxDelta(unrealisedPnl)})
                               </span>
@@ -835,14 +835,21 @@ export default function H2HDetailPage() {
                               </span>
                             </p>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isMarketClosed}
-                            onClick={() => openSellModal(side)}
-                          >
-                            Sell
-                          </Button>
+                          {/* Full-width action row below the numbers —
+                              same pattern as the other detail pages so
+                              nothing squeezes on narrow phones. */}
+                          <div className="mt-2 flex items-center justify-end">
+                            <Button
+                              size="sm"
+                              disabled={isMarketClosed}
+                              onClick={() => openCashOut(side)}
+                              data-testid={`button-cashout-p${side}-position`}
+                              className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                            >
+                              <Banknote className="h-3.5 w-3.5" />
+                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1049,6 +1056,22 @@ export default function H2HDetailPage() {
                   ? "Tied"
                   : "Behind"}
               </Badge>
+              {/* Cash-out entry on the always-visible bar — only when
+                  the user holds live AMM shares and trading is open. */}
+              {!isMarketClosed &&
+                ammNetSharesFor(
+                  userPickSide === 1 ? hydrated.person1EntryId : hydrated.person2EntryId,
+                ) > 1e-6 && (
+                  <Button
+                    size="sm"
+                    onClick={() => openCashOut(userPickSide)}
+                    data-testid="button-sticky-cashout"
+                    className="gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Cash out
+                  </Button>
+                )}
             </div>
           ) : (
             <>
@@ -1081,7 +1104,7 @@ export default function H2HDetailPage() {
         </div>
       </div>
 
-      {/* Stake Modal */}
+      {/* Stake Modal — buy only; cash-out lives in CashOutSheet below. */}
       <StakeModal
         selection={pendingSelection}
         open={stakeModalOpen}
@@ -1090,10 +1113,19 @@ export default function H2HDetailPage() {
           setPendingSelection(null);
         }}
         onConfirm={handleConfirmStake}
-        onConfirmAmmSell={handleConfirmAmmSell}
         liveAmmState={hydrated?.ammState ?? null}
-        initialAmmMode={modalIntent}
         walletBalance={walletCredits}
+      />
+
+      <CashOutSheet
+        selection={cashOutSelection}
+        open={cashOutOpen}
+        onClose={() => {
+          setCashOutOpen(false);
+          setCashOutSelection(null);
+        }}
+        onConfirmSell={handleConfirmCashOut}
+        liveAmmState={hydrated?.ammState ?? null}
       />
     </div>
   );
