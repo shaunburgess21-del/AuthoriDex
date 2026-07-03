@@ -843,6 +843,15 @@ async function startServer() {
     } else {
       log("[MarketOpsDigest] Skipped - serverless mode. Use POST /api/cron/market-ops-digest.");
     }
+
+    // Market Scout: sources trending World Market drafts from Polymarket
+    // (daily 07:00 UTC, before the ops digest). Kill switch:
+    // MARKET_SCOUT_ENABLED (default off) — the job no-ops when disabled.
+    if (!SERVERLESS_MODE) {
+      startScheduler("MarketScout", startMarketScoutScheduler);
+    } else {
+      log("[MarketScout] Skipped - serverless mode. Use POST /api/cron/market-scout.");
+    }
   });
 }
 
@@ -1226,6 +1235,50 @@ function startMarketOpsDigestScheduler() {
   setTimeout(() => {
     void runScheduledMarketOpsDigest();
     setInterval(() => void runScheduledMarketOpsDigest(), MARKET_OPS_DIGEST_INTERVAL_MS);
+  }, initialDelay);
+}
+
+// ─── Market Scout scheduler ──────────────────────────────────────────────────
+// Once daily at 07:00 UTC (an hour before the ops digest). Pulls trending
+// Polymarket events, curates them with GPT, and inserts DRAFT World Markets
+// for founder review. Advisory-locked and kill-switch-gated inside the job
+// (MARKET_SCOUT_ENABLED), so an accidental double trigger is harmless.
+const MARKET_SCOUT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MARKET_SCOUT_UTC_HOUR = 7;
+
+async function runScheduledMarketScout(): Promise<void> {
+  try {
+    const { runMarketScout, runSourceResolutionWatch } = await import("./jobs/market-scout");
+    // Source resolution watch runs first and unconditionally — it costs
+    // no LLM budget and pre-fills settlement winners for scouted markets
+    // whose upstream source has resolved.
+    const watch = await runSourceResolutionWatch();
+    if (watch.checked > 0) {
+      log(
+        `[MarketScout] Source watch OK — checked=${watch.checked} ` +
+          `resolvedUpstream=${watch.resolvedUpstream} errors=${watch.errors}`,
+      );
+    }
+    const result = await runMarketScout();
+    if (!result.enabled) return;
+    log(
+      `[MarketScout] OK — fetched=${result.fetched} deduped=${result.deduped} ` +
+        `created=${result.created} skipped=${result.skipped} errors=${result.errors}`,
+    );
+  } catch (err: any) {
+    log(`[MarketScout] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startMarketScoutScheduler() {
+  if (SERVERLESS_MODE) return;
+  const initialDelay = msUntilNextUtcHour(MARKET_SCOUT_UTC_HOUR);
+  log(
+    `[MarketScout] Starting (daily ~${MARKET_SCOUT_UTC_HOUR}:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`,
+  );
+  setTimeout(() => {
+    void runScheduledMarketScout();
+    setInterval(() => void runScheduledMarketScout(), MARKET_SCOUT_INTERVAL_MS);
   }, initialDelay);
 }
 

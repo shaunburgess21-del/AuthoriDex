@@ -18134,7 +18134,12 @@ Target length: about 90-150 words.`;
             timezone: timezone || "UTC",
             startAt: startAt ? new Date(startAt) : new Date(),
             endAt: new Date(endAt),
-            closeAt: closeAt ? new Date(closeAt) : null,
+            // Default closeAt to the AMM trading cutoff (endAt − cooldown)
+            // when the admin didn't set one. Previously a null closeAt let
+            // the fast trade path (amm-trades) accept buys until the 5-min
+            // resolver cron flipped status, while the slug bet route
+            // rejected at endAt — inconsistent cutoffs between endpoints.
+            closeAt: closeAt ? new Date(closeAt) : getMarketBettingCutoff(new Date(endAt), "amm", "community"),
             resolutionCriteria: resolutionCriteria || null,
             resolutionSources: resolutionSources || null,
             resolveMethod: resolveMethod || null,
@@ -18871,7 +18876,9 @@ Target length: about 90-150 words.`;
         // ── Insert ──
         try {
           const endAt = new Date(endAtRaw);
-          const closeAt = closeAtRaw ? new Date(closeAtRaw) : endAt;
+          // Default to the AMM trading cutoff (endAt − cooldown) so imported
+          // markets close trading consistently with admin-created ones.
+          const closeAt = closeAtRaw ? new Date(closeAtRaw) : getMarketBettingCutoff(endAt, "amm", "community");
           const metadata: Record<string, unknown> = {};
           if (sourceNote) metadata.source = sourceNote;
           if (secondaryPersonName) metadata.secondaryPerson = secondaryPersonName;
@@ -19041,6 +19048,26 @@ Target length: about 90-150 words.`;
     } catch (error) {
       console.error("[Open Markets] Admin detail error:", error);
       res.status(500).json({ error: "Failed to fetch market" });
+    }
+  });
+
+  // Manual Market Scout trigger ("Scan now" in the admin World Markets tab).
+  // Runs the same job as the daily scheduler: fetch trending Polymarket
+  // events, GPT-curate, insert DRAFT markets. Advisory-locked + budget-
+  // railed inside the job, so double clicks are harmless. Returns the run
+  // summary so the UI can toast created/deduped counts.
+  app.post("/api/admin/market-scout/run", requireAuth, requireAdmin, async (_req, res) => {
+    try {
+      const { runMarketScout, runSourceResolutionWatch } = await import("./jobs/market-scout");
+      // Source watch first (LLM-free): pre-fills settlement winners for
+      // scouted markets whose upstream source has resolved, so a manual
+      // scan doubles as a resolution check.
+      const sourceWatch = await runSourceResolutionWatch();
+      const result = await runMarketScout();
+      res.json({ ...result, sourceWatch });
+    } catch (error: any) {
+      console.error("[MarketScout] Manual run error:", error);
+      res.status(500).json({ error: "Market scout run failed" });
     }
   });
 

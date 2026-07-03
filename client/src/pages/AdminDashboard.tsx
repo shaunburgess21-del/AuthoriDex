@@ -1444,9 +1444,10 @@ export default function AdminDashboard() {
   const [rwCatFilter, setRwCatFilter] = useState("all");
   const [rwStatusFilter, setRwStatusFilter] = useState("all");
   const [rwTypeFilter, setRwTypeFilter] = useState("all");
-  const [rwSortBy, setRwSortBy] = useState<"manual" | "created" | "endAt">("manual");
+  const [rwSortBy, setRwSortBy] = useState<"manual" | "created" | "endAt" | "fit">("manual");
   const [rwSelectedIds, setRwSelectedIds] = useState<Set<string>>(new Set());
   const [rwBatchPublishing, setRwBatchPublishing] = useState(false);
+  const [rwScoutRunning, setRwScoutRunning] = useState(false);
   const [h2hMarketSearch, setH2hMarketSearch] = useState("");
   const [gainerMarketSearch, setGainerMarketSearch] = useState("");
   const [pollSearchQuery, setPollSearchQuery] = useState("");
@@ -2981,6 +2982,15 @@ export default function AdminDashboard() {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
       if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
+      if (rwSortBy === "fit") {
+        const readFit = (m: typeof a) => {
+          const fit = ((m as PredictionMarket).metadata as { fitScore?: number } | null)?.fitScore;
+          return typeof fit === "number" ? fit : -1;
+        };
+        const delta = readFit(b) - readFit(a);
+        if (delta !== 0) return delta;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
     return list;
@@ -4247,6 +4257,51 @@ export default function AdminDashboard() {
                           Archive {rwSelectedIds.size}
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={rwScoutRunning}
+                        onClick={async () => {
+                          setRwScoutRunning(true);
+                          try {
+                            const resp = await apiRequest("POST", "/api/admin/market-scout/run");
+                            const data = await resp.json();
+                            if (data.sourceWatch?.resolvedUpstream > 0) {
+                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+                              toast("Source markets resolved", {
+                                description: `${data.sourceWatch.resolvedUpstream} scouted market(s) resolved upstream — winner pre-filled in Settlement.`,
+                              });
+                            }
+                            if (!data.enabled) {
+                              toast("Market Scout is disabled", {
+                                description: "Set MARKET_SCOUT_ENABLED=true on the server to enable scanning.",
+                              });
+                            } else if (data.budgetBlocked) {
+                              toast("Scout budget exhausted", {
+                                description: "Daily LLM budget reached — try again tomorrow or raise MARKET_SCOUT_DAILY_BUDGET_USD.",
+                              });
+                            } else if (data.created > 0) {
+                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+                              setRwVisFilter("draft");
+                              toast("Scout complete", {
+                                description: `${data.created} new draft${data.created === 1 ? "" : "s"} created (${data.deduped} already imported). Review under Visibility: Draft.`,
+                              });
+                            } else {
+                              toast("Scout complete", {
+                                description: `No new drafts — ${data.fetched} trending candidates, ${data.deduped} already imported.`,
+                              });
+                            }
+                          } catch {
+                            toast.error("Error", { description: "Market scout run failed." });
+                          } finally {
+                            setRwScoutRunning(false);
+                          }
+                        }}
+                        data-testid="button-market-scout-run"
+                      >
+                        {rwScoutRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                        {rwScoutRunning ? "Scanning..." : "Scan now"}
+                      </Button>
                       <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
                         <Plus className="h-4 w-4 mr-1" />
                         Create
@@ -4302,12 +4357,13 @@ export default function AdminDashboard() {
                           <SelectItem value="updown">Up/Down</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "manual" | "created" | "endAt")}>
+                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "manual" | "created" | "endAt" | "fit")}>
                         <SelectTrigger className="w-[140px]"><SelectValue placeholder="Sort" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="manual">Manual order</SelectItem>
                           <SelectItem value="endAt">Resolution date</SelectItem>
                           <SelectItem value="created">Newest first</SelectItem>
+                          <SelectItem value="fit">Fit score</SelectItem>
                         </SelectContent>
                       </Select>
                       <span className="text-xs text-muted-foreground ml-auto">
@@ -4444,6 +4500,35 @@ export default function AdminDashboard() {
                                           Linked
                                         </Badge>
                                       )}
+                                      {(() => {
+                                        // Market Scout provenance chip: provider + fit score,
+                                        // linking to the source market for review side-by-side.
+                                        const meta = (market as PredictionMarket).metadata as
+                                          | { source?: { provider?: string; url?: string }; fitScore?: number }
+                                          | null
+                                          | undefined;
+                                        if (!meta?.source?.provider) return null;
+                                        const label = meta.source.provider === "polymarket" ? "Polymarket" : meta.source.provider;
+                                        const chip = (
+                                          <Badge variant="outline" className="text-xs border-sky-500/40 dark:border-sky-500/30 text-sky-600 dark:text-sky-400">
+                                            <Sparkles className="h-3 w-3 mr-1" />
+                                            {label}
+                                            {typeof meta.fitScore === "number" ? ` · Fit ${meta.fitScore}` : ""}
+                                          </Badge>
+                                        );
+                                        return meta.source.url ? (
+                                          <a
+                                            href={meta.source.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex"
+                                            title="Open source market"
+                                            data-testid={`link-scout-source-${market.id}`}
+                                          >
+                                            {chip}
+                                          </a>
+                                        ) : chip;
+                                      })()}
                                       <span className="text-xs text-muted-foreground">
                                         {daysUntilEnd >= 0
                                           ? `Resolves in ${daysUntilEnd}d`

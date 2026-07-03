@@ -603,6 +603,13 @@
       "when": 1782950500000,
       "tag": "0085_comments_user_created_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1783100000000,
+      "tag": "0086_market_scout_profile",
+      "breakpoints": true
     }
   ]
 }

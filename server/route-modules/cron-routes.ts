@@ -535,6 +535,42 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Market Scout: sources trending World Market drafts from Polymarket via
+  // GPT curation. Mirrors the in-process daily scheduler in server/index.ts
+  // so external cron / SERVERLESS_MODE deployments can drive it. Advisory-
+  // locked + kill-switch-gated (MARKET_SCOUT_ENABLED), so calling it
+  // alongside the in-process scheduler is safe. Only ever creates DRAFT
+  // markets — nothing goes live without founder review.
+  app.post("/api/cron/market-scout", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runMarketScout, runSourceResolutionWatch } = await import("../jobs/market-scout");
+      // Source watch first: LLM-free, runs even when the scout kill
+      // switch is off. Pre-fills settlement winners for scouted markets
+      // whose upstream source market has resolved.
+      const sourceWatch = await runSourceResolutionWatch();
+      const result = await runMarketScout();
+      res.json({
+        success: true,
+        message: result.enabled
+          ? "Market scout completed"
+          : "Market scout disabled (MARKET_SCOUT_ENABLED is off)",
+        ...result,
+        sourceWatch,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Market scout error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // Standalone AI resolution scout. Writes scout assessments to market
   // metadata and returns actionable findings WITHOUT sending the digest
   // email — useful for manual testing / inspection. The daily digest runs

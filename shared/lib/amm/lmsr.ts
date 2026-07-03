@@ -349,3 +349,80 @@ export function initialSeedCost(numOutcomes: number, b: number): number {
   validateB(b);
   return b * Math.log(numOutcomes);
 }
+
+// ---------------------------------------------------------------------------
+// Price-matched seeding (Market Scout Phase 2)
+// ---------------------------------------------------------------------------
+//
+// Markets imported from an external prediction market carry a consensus
+// price vector. Opening the LMSR at q = 0 would price every outcome at
+// 1/N — e.g. 50/50 on an event the world prices at 92/8 — letting early
+// traders farm risk-free credits off the gap. Instead we open at a
+// virtual q₀ whose softmax equals the target prices:
+//
+//     q₀ᵢ = b · (ln pᵢ − ln p_min)        (shifted so min q₀ = 0)
+//
+// No user owns the q₀ shares — they are a pricing offset. Settlement
+// stays exact because payouts are computed from user bet rows, and the
+// house-return formula `seed + totalUserCreditsIn − payoutLiability`
+// is state-independent. Worst-case house loss for outcome i winning is
+//
+//     C(q₀) − q₀ᵢ   ≤   C(q₀) − min(q₀)   =   C(q₀) = b · ln(1 / p_min)
+//
+// so choosing `b = targetMaxLoss / ln(1 / p_min)` keeps the house's
+// worst case at exactly `targetMaxLoss`, same guarantee as the uniform
+// path (where p_min = 1/N recovers b = targetMaxLoss / ln N).
+
+/** Prices are clamped into [SEED_PRICE_MIN, SEED_PRICE_MAX] before
+ *  normalization so a 0.1% longshot doesn't collapse `b` (and with it
+ *  the market's liquidity depth) to nothing. */
+export const SEED_PRICE_MIN = 0.02;
+export const SEED_PRICE_MAX = 0.98;
+
+/**
+ * Validate + clamp + renormalize a target opening-price vector.
+ * Returns null when the input is unusable (wrong length, non-finite,
+ * non-positive sum) — callers should fall back to uniform seeding.
+ */
+export function normalizeSeedPrices(
+  prices: number[] | null | undefined,
+  numOutcomes: number,
+): number[] | null {
+  validateNumOutcomes(numOutcomes);
+  if (!Array.isArray(prices) || prices.length !== numOutcomes) return null;
+  if (prices.some((p) => !Number.isFinite(p) || p < 0)) return null;
+  const clamped = prices.map((p) => Math.min(SEED_PRICE_MAX, Math.max(SEED_PRICE_MIN, p)));
+  const sum = clamped.reduce((s, p) => s + p, 0);
+  if (!(sum > 0)) return null;
+  return clamped.map((p) => p / sum);
+}
+
+/**
+ * Liquidity parameter for a price-matched seed: worst-case house loss
+ * is exactly `targetMaxLoss` (see derivation above). `prices` must be
+ * the output of `normalizeSeedPrices`.
+ */
+export function seedBFromPrices(prices: number[], targetMaxLoss: number): number {
+  if (!Number.isFinite(targetMaxLoss) || targetMaxLoss <= 0) {
+    throw new Error(`LMSR: targetMaxLoss must be a positive finite number, got ${targetMaxLoss}`);
+  }
+  const pMin = Math.min(...prices);
+  if (!(pMin > 0) || pMin >= 1) {
+    throw new Error(`LMSR: seedBFromPrices requires normalized prices in (0,1), got min ${pMin}`);
+  }
+  return targetMaxLoss / Math.log(1 / pMin);
+}
+
+/**
+ * Initial virtual share vector whose marginal prices equal `prices`.
+ * Shifted so min(q₀) = 0. `prices` must be the output of
+ * `normalizeSeedPrices`.
+ */
+export function seedQFromPrices(prices: number[], b: number): number[] {
+  validateB(b);
+  const pMin = Math.min(...prices);
+  if (!(pMin > 0)) {
+    throw new Error(`LMSR: seedQFromPrices requires positive prices, got min ${pMin}`);
+  }
+  return prices.map((p) => b * (Math.log(p) - Math.log(pMin)));
+}

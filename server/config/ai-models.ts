@@ -11,6 +11,7 @@ const MODEL_ENV_BY_SCOPE = {
   sharpRanker: "SHARP_RANKER_MODEL",
   nativeMarkets: "NATIVE_MARKETS_MODEL",
   resolutionScout: "RESOLUTION_SCOUT_MODEL",
+  marketScout: "MARKET_SCOUT_MODEL",
 } as const;
 
 export type AiModelScope = keyof typeof MODEL_ENV_BY_SCOPE;

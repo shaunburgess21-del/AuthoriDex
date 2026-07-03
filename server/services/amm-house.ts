@@ -19,10 +19,18 @@ import { eq, sql } from "drizzle-orm";
 import {
   creditLedger,
   marketAmmState,
+  marketEntries,
   predictionMarkets,
   profiles,
 } from "@shared/schema";
-import { initialSeedCost, seedB } from "@shared/lib/amm/lmsr";
+import {
+  cost,
+  initialSeedCost,
+  normalizeSeedPrices,
+  seedB,
+  seedBFromPrices,
+  seedQFromPrices,
+} from "@shared/lib/amm/lmsr";
 import { db } from "../db";
 import { getTargetMaxLoss } from "../config/amm";
 
@@ -49,6 +57,14 @@ export interface SeedAmmMarketInput {
   entryIdsInOrder: string[];
   /** Override the default `targetMaxLoss` for this market. */
   targetMaxLoss?: number | null;
+  /**
+   * Optional target opening prices aligned with `entryIdsInOrder`
+   * (Market Scout price-matched seeding). When provided and valid, the
+   * market opens at these prices via a virtual q₀ vector instead of
+   * uniform 1/N. Worst-case house loss stays exactly `targetMaxLoss`.
+   * Invalid/missing → silent fallback to the uniform path.
+   */
+  initialPrices?: number[] | null;
 }
 
 export interface SeedAmmMarketResult {
@@ -112,6 +128,48 @@ export function pickB(
   return { liquidityB, houseSeedAmount, targetMaxLoss };
 }
 
+/**
+ * Compute the full initial AMM state for a market: `b`, the integer
+ * house seed, and the initial q vector. When `initialPrices` is a
+ * valid vector (Market Scout imports), the market opens price-matched
+ * via a virtual q₀ (see `shared/lib/amm/lmsr.ts` derivation); worst-
+ * case house loss stays exactly `targetMaxLoss` on both paths. Pure —
+ * exported for unit testing.
+ */
+export function pickSeedState(
+  entryIdsInOrder: string[],
+  marketType?: string | null,
+  targetMaxLossOverride?: number | null,
+  initialPrices?: number[] | null,
+): {
+  liquidityB: number;
+  houseSeedAmount: number;
+  targetMaxLoss: number;
+  outcomeOrder: string[];
+  shareQuantities: Record<string, number>;
+  priceMatched: boolean;
+} {
+  const numOutcomes = entryIdsInOrder.length;
+  const { outcomeOrder, shareQuantities } = buildInitialQVector(entryIdsInOrder);
+
+  const normPrices = normalizeSeedPrices(initialPrices ?? null, numOutcomes);
+  if (!normPrices) {
+    const uniform = pickB(numOutcomes, marketType, targetMaxLossOverride);
+    return { ...uniform, outcomeOrder, shareQuantities, priceMatched: false };
+  }
+
+  const targetMaxLoss = getTargetMaxLoss(marketType, targetMaxLossOverride);
+  const liquidityB = seedBFromPrices(normPrices, targetMaxLoss);
+  const q0 = seedQFromPrices(normPrices, liquidityB);
+  for (let i = 0; i < outcomeOrder.length; i++) {
+    shareQuantities[outcomeOrder[i]] = q0[i];
+  }
+  // House deposits C(q₀) = worst-case loss (min q₀ = 0). Rounded UP at
+  // the credit boundary, same convention as the uniform path.
+  const houseSeedAmount = Math.ceil(cost(q0, liquidityB));
+  return { liquidityB, houseSeedAmount, targetMaxLoss, outcomeOrder, shareQuantities, priceMatched: true };
+}
+
 // ---------------------------------------------------------------------------
 // DB-touching seed helper
 // ---------------------------------------------------------------------------
@@ -139,8 +197,12 @@ export async function seedAmmMarket(
   const { marketId, entryIdsInOrder } = input;
   const numOutcomes = entryIdsInOrder.length;
 
-  const { outcomeOrder, shareQuantities } = buildInitialQVector(entryIdsInOrder);
-  const { liquidityB, houseSeedAmount } = pickB(numOutcomes, input.marketType, input.targetMaxLoss);
+  const { outcomeOrder, shareQuantities, liquidityB, houseSeedAmount, priceMatched } = pickSeedState(
+    entryIdsInOrder,
+    input.marketType,
+    input.targetMaxLoss,
+    input.initialPrices,
+  );
 
   const idempotencyKey = `amm_seed_${marketId}`;
 
@@ -234,6 +296,7 @@ export async function seedAmmMarket(
         liquidityB,
         numOutcomes,
         marketType: input.marketType ?? null,
+        ...(priceMatched ? { priceMatched: true, initialPrices: input.initialPrices } : {}),
       },
     });
 
@@ -245,8 +308,60 @@ export async function seedAmmMarket(
 }
 
 /**
+ * Read `metadata.source.pricesAtImport` from a market row's metadata —
+ * the consensus prices captured when the Market Scout imported the
+ * market from an external source (aligned with entry displayOrder).
+ * Returns null when absent/malformed so callers fall back to uniform
+ * seeding. Exported for unit testing.
+ */
+export function readPricesAtImport(metadata: unknown): number[] | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const source = (metadata as Record<string, unknown>).source;
+  if (!source || typeof source !== "object") return null;
+  const prices = (source as Record<string, unknown>).pricesAtImport;
+  if (!Array.isArray(prices) || prices.length < 2) return null;
+  if (prices.some((p) => typeof p !== "number" || !Number.isFinite(p) || p < 0)) return null;
+  return prices as number[];
+}
+
+/**
+ * Verify that the market's CURRENT entry labels still line up with the
+ * `metadata.source.outcomeMapping` captured at import (which shares its
+ * ordering with `pricesAtImport`). An admin who reordered or replaced
+ * entries after import would otherwise get the source prices applied to
+ * the wrong outcomes. Missing mapping (non-scouted market) or any
+ * positional mismatch → false → caller seeds uniform. Exported for
+ * unit testing.
+ */
+export function entriesMatchImportMapping(
+  metadata: unknown,
+  entryLabelsInOrder: string[],
+): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const source = (metadata as Record<string, unknown>).source;
+  if (!source || typeof source !== "object") return false;
+  const mapping = (source as Record<string, unknown>).outcomeMapping;
+  if (!Array.isArray(mapping) || mapping.length !== entryLabelsInOrder.length) return false;
+  return mapping.every((m, i) => {
+    if (!m || typeof m !== "object") return false;
+    const current = entryLabelsInOrder[i]?.trim().toLowerCase();
+    if (!current) return false;
+    const { entryLabel, sourceLabel } = m as { entryLabel?: unknown; sourceLabel?: unknown };
+    return [entryLabel, sourceLabel].some(
+      (l) => typeof l === "string" && l.trim().toLowerCase() === current,
+    );
+  });
+}
+
+/**
  * Seed a world (community) market when it goes live. No-op if AMM state
  * already exists (idempotent).
+ *
+ * Scout-imported markets (with `metadata.source.pricesAtImport`) open
+ * price-matched to the source market's consensus instead of uniform
+ * 1/N — otherwise an obviously-decided event would open at coin-flip
+ * odds and early traders could farm the gap. The price lookup is
+ * best-effort: any mismatch falls back to uniform seeding.
  */
 export async function ensureWorldMarketAmmSeeded(
   marketId: string,
@@ -260,7 +375,40 @@ export async function ensureWorldMarketAmmSeeded(
     .where(eq(marketAmmState.marketId, marketId))
     .limit(1);
   if (existing) return;
-  await seedAmmMarket({ marketId, marketType: "community", entryIdsInOrder }, txOpt);
+
+  let initialPrices: number[] | null = null;
+  try {
+    const [marketRow] = await conn
+      .select({ metadata: predictionMarkets.metadata })
+      .from(predictionMarkets)
+      .where(eq(predictionMarkets.id, marketId))
+      .limit(1);
+    const prices = readPricesAtImport(marketRow?.metadata);
+    // Alignment guards: pricesAtImport is stored aligned with entry
+    // displayOrder, which is exactly the order of entryIdsInOrder at
+    // both call sites. A length mismatch — or entry labels that no
+    // longer line up with the import's outcomeMapping (admin edited or
+    // reordered entries before publishing) — means the price vector
+    // can't be trusted; fall back to uniform rather than guess.
+    if (prices && prices.length === entryIdsInOrder.length) {
+      const entryRows = await conn
+        .select({ id: marketEntries.id, label: marketEntries.label })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, marketId));
+      const labelById = new Map(entryRows.map((e) => [e.id, e.label]));
+      const labelsInOrder = entryIdsInOrder.map((id) => labelById.get(id) ?? "");
+      if (entriesMatchImportMapping(marketRow?.metadata, labelsInOrder)) {
+        initialPrices = prices;
+      }
+    }
+  } catch {
+    initialPrices = null;
+  }
+
+  await seedAmmMarket(
+    { marketId, marketType: "community", entryIdsInOrder, initialPrices },
+    txOpt,
+  );
 }
 
 // ---------------------------------------------------------------------------
