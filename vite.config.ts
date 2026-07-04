@@ -9,7 +9,15 @@ export default defineConfig({
     react(),
     runtimeErrorOverlay(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt": a new deploy's service worker installs and then WAITS
+      // instead of seizing the page. "autoUpdate" injects skipWaiting +
+      // clientsClaim and its register runtime force-reloads the page the
+      // moment the new worker activates — users mid-scroll got silently
+      // yanked back to the top ~10-15s after opening a stale browser
+      // (the delay is the new SW precaching this glob set). The waiting
+      // worker is activated invisibly by PWAUpdatePrompt when the tab is
+      // hidden, or by the browser once all tabs close.
+      registerType: "prompt",
       includeAssets: [
         "voxdex-logo.svg",
         "voxdex-logo-email.png",
@@ -36,7 +44,6 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // autoUpdate: new SW activates on deploy; next navigation loads fresh assets.
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         navigateFallback: "/index.html",
         // Do not serve the SPA for /api/* navigations (e.g. opening OG JPG URLs in a tab).
