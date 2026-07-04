@@ -32,9 +32,5 @@ export function getSentimentPollChoiceColor(choice: string): string {
 export function getSentimentPollVotedPillStyle(choice: string | null): { color?: string; borderColor?: string } {
   if (!choice) return {};
   const color = getSentimentPollChoiceColor(choice);
-  const c = choice.trim().toLowerCase();
-  if (c === "support" || c === "oppose") {
-    return { color, borderColor: color };
-  }
-  return { color };
+  return { color, borderColor: color };
 }

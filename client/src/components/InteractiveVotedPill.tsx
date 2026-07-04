@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { CATEGORY_CHIP_RADIUS, POLL_CARD_PILL_SIZE_CLASSES } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -113,7 +113,8 @@ export function InteractiveVotedPill({
       className={cn(
         "inline-flex items-center max-w-full shrink-0",
         CATEGORY_CHIP_RADIUS,
-        "border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer",
+        POLL_CARD_PILL_SIZE_CLASSES,
+        "border whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer",
         pillClassName,
         className,
       )}

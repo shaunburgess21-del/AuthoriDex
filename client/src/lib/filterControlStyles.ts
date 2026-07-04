@@ -6,6 +6,10 @@
 /** Shared corner radius for category filter chips and card category pills. */
 export const CATEGORY_CHIP_RADIUS = "rounded-md";
 
+/** Matched sizing for category (top) and voted (bottom) pills on poll result cards. */
+export const POLL_CARD_PILL_SIZE_CLASSES =
+  "px-2 py-[4px] text-[11px] leading-none font-medium";
+
 /** Inactive category filter chips — Vote page / overlay (cyan family hovers). */
 export const FILTER_INACTIVE_PILL_VOTE =
   "bg-background border border-border/60 text-muted-foreground hover:border-foreground/30 dark:text-slate-400 dark:hover:border-slate-600";

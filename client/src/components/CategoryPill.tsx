@@ -1,5 +1,5 @@
 import { getMarketCategoryLabel, resolveCategoryColorKey, type CanonicalMarketCategory } from "@shared/constants";
-import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { CATEGORY_CHIP_RADIUS, POLL_CARD_PILL_SIZE_CLASSES } from "@/lib/filterControlStyles";
 
 const CATEGORY_STYLES: Record<CanonicalMarketCategory, { bg: string; border: string; text: string }> = {
   tech: {
@@ -230,6 +230,7 @@ const SIZE_CLASSES = {
   default: "px-2 py-0.5 text-[10px]",
   /** Dense UI: rankings, spotlight cards on value page */
   sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
+  pollCard: POLL_CARD_PILL_SIZE_CLASSES,
 } as const;
 
 interface CategoryPillProps {

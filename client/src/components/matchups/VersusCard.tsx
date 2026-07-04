@@ -125,6 +125,7 @@ export function VersusCard({
               detailLabel="View Matchup Details"
               onBrowseFullScreen={onBrowseFullScreen}
               menuDisabled={categoryMenuDisabled}
+              size="pollCard"
               data-testid={`badge-matchup-${matchup.id}`}
             />
           </div>

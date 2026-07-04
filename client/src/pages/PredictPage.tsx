@@ -141,6 +141,11 @@ import {
   SUGGEST_DRAWER_TITLE,
   SUGGEST_DRAWER_DESCRIPTION,
 } from "@/components/suggest";
+import {
+  GeoCountryTargeting,
+  isGeoTargetingValid,
+  visibleCountriesPayload,
+} from "@/components/geo/GeoCountryTargeting";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { PredictCard } from "@/components/predict/PredictCard";
@@ -720,6 +725,8 @@ function CreatePredictionModal({
   const [strike, setStrike] = useState("");
   const [unit, setUnit] = useState("$");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [geoEnabled, setGeoEnabled] = useState(false);
+  const [geoCountries, setGeoCountries] = useState<string[]>([]);
 
   const resetAll = () => {
     setTitle("");
@@ -734,6 +741,8 @@ function CreatePredictionModal({
     setMetric("");
     setStrike("");
     setUnit("$");
+    setGeoEnabled(false);
+    setGeoCountries([]);
   };
 
   const handleTypeChange = (next: MarketTypeOption) => {
@@ -764,6 +773,7 @@ function CreatePredictionModal({
       if (!underlying.trim()) return false;
       if (!strike.trim() || Number.isNaN(strikeNumber)) return false;
     }
+    if (!isGeoTargetingValid(geoEnabled, geoCountries)) return false;
     return true;
   })();
 
@@ -778,6 +788,7 @@ function CreatePredictionModal({
         description: description.trim() || undefined,
         sourceUrl: sourceUrl.trim() || undefined,
         endAt: duration === "custom" ? (customDate || undefined) : toTimelineWireValue(duration),
+        visibleCountries: visibleCountriesPayload(geoEnabled, geoCountries),
       };
 
       if (marketType === "multi") {
@@ -1009,6 +1020,14 @@ function CreatePredictionModal({
               customDate={customDate}
               onCustomDateChange={setCustomDate}
               testIdPrefix="prediction"
+            />
+
+            <GeoCountryTargeting
+              enabled={geoEnabled}
+              onEnabledChange={setGeoEnabled}
+              selectedCodes={geoCountries}
+              onSelectedCodesChange={setGeoCountries}
+              testIdPrefix="suggest-market"
             />
 
             <div>

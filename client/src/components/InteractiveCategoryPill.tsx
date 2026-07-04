@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown } from "lucide-react";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { getCategoryStyle, CategoryPill } from "@/components/CategoryPill";
-import { CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { CATEGORY_CHIP_RADIUS, POLL_CARD_PILL_SIZE_CLASSES } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -23,6 +23,7 @@ import {
 const SIZE_CLASSES = {
   default: "px-2 py-0.5 text-[10px]",
   sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
+  pollCard: POLL_CARD_PILL_SIZE_CLASSES,
 } as const;
 
 const BROWSE_INTENT_TOKEN_MS = 1000;

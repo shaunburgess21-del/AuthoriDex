@@ -484,6 +484,7 @@ function FeaturedPollCard({
             leaderboardCategories={leaderboardCategories}
             detailHref={pollDetailHref}
             detailLabel="View Poll Details"
+            size="pollCard"
             data-testid={`badge-category-${poll.id}`}
           />
         </div>
@@ -631,7 +632,6 @@ function FeaturedPollCard({
                   label={voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
                   onChangeVote={handleChangeVote}
                   onRemoveVote={handleChangeVote}
-                  pillClassName="border-white/20"
                   pillStyle={getSentimentPollVotedPillStyle(voted)}
                   data-testid={`badge-voted-poll-${poll.id}`}
                 />

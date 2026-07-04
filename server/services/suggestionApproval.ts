@@ -1,4 +1,5 @@
 import { canonicalizePersonCategory } from "@shared/constants";
+import { sanitizeVisibleCountries } from "@shared/geoVisibility";
 import { db } from "../db";
 import {
   suggestions,
@@ -83,6 +84,16 @@ function mergeOverrides<T extends Record<string, unknown>>(
   return { ...base, ...overrides } as T;
 }
 
+function resolveVisibleCountries(
+  userPayload: Record<string, unknown>,
+  adminOverrides?: Record<string, unknown>,
+): string[] {
+  if (adminOverrides && "visibleCountries" in adminOverrides) {
+    return sanitizeVisibleCountries(adminOverrides.visibleCountries);
+  }
+  return sanitizeVisibleCountries(userPayload.visibleCountries);
+}
+
 // ===========================================================================
 // Pure translators — userPayload + adminOverrides → admin-insert-ready shape.
 // No side effects; safe to unit-test.
@@ -104,6 +115,7 @@ type MatchupAdminPayload = {
   featured: boolean;
   seedVotesA: number;
   seedVotesB: number;
+  visibleCountries: string[];
 };
 
 export function translateMatchupPayload(
@@ -126,6 +138,7 @@ export function translateMatchupPayload(
     featured: false,
     seedVotesA: 0,
     seedVotesB: 0,
+    visibleCountries: resolveVisibleCountries(userPayload, adminOverrides),
   };
   return mergeOverrides(base, adminOverrides);
 }
@@ -145,6 +158,7 @@ type SentimentPollAdminPayload = {
   seedSupportCount: number;
   seedNeutralCount: number;
   seedOpposeCount: number;
+  visibleCountries: string[];
 };
 
 export function translateSentimentPollPayload(
@@ -166,6 +180,7 @@ export function translateSentimentPollPayload(
     seedSupportCount: 0,
     seedNeutralCount: 0,
     seedOpposeCount: 0,
+    visibleCountries: resolveVisibleCountries(userPayload, adminOverrides),
   };
   return mergeOverrides(base, adminOverrides);
 }
@@ -187,6 +202,7 @@ type OpinionPollAdminPayload = {
   featured: boolean;
   visibility: string;
   options: OpinionPollOptionAdminPayload[];
+  visibleCountries: string[];
 };
 
 export function translateOpinionPollPayload(
@@ -209,6 +225,7 @@ export function translateOpinionPollPayload(
       personId: opt?.personId ?? null,
       seedCount: 0,
     })),
+    visibleCountries: resolveVisibleCountries(userPayload, adminOverrides),
   };
   return mergeOverrides(base, adminOverrides);
 }
@@ -320,6 +337,7 @@ type OpenMarketAdminPayload = {
   strike: string | null; // numeric stored as string in Drizzle
   unit: string | null;
   entries: OpenMarketEntryAdminPayload[];
+  visibleCountries: string[];
 };
 
 export function translateOpenMarketPayload(
@@ -385,6 +403,7 @@ export function translateOpenMarketPayload(
     strike: strikeStr,
     unit: userPayload.unit ?? null,
     entries,
+    visibleCountries: resolveVisibleCountries(userPayload, adminOverrides),
   };
   return mergeOverrides(base, adminOverrides);
 }
@@ -443,6 +462,7 @@ export async function dispatchApproval(
           displayOrder: nextOrder,
           seedVotesA: p.seedVotesA,
           seedVotesB: p.seedVotesB,
+          visibleCountries: p.visibleCountries,
         })
         .returning();
 
@@ -485,6 +505,7 @@ export async function dispatchApproval(
           visibility: p.visibility,
           displayOrder: nextTpOrder,
           createdBy: adminId,
+          visibleCountries: p.visibleCountries,
         })
         .returning();
 
@@ -519,6 +540,7 @@ export async function dispatchApproval(
           visibility: p.visibility,
           displayOrder: nextOpOrder,
           createdBy: adminId,
+          visibleCountries: p.visibleCountries,
         })
         .returning();
 
@@ -622,6 +644,7 @@ export async function dispatchApproval(
             strike: p.strike,
             unit: p.unit,
             createdBy: adminId,
+            visibleCountries: p.visibleCountries,
           })
           .returning();
 

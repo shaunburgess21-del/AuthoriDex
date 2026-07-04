@@ -786,6 +786,7 @@ function RankRewardsCard() {
  */
 function AboutMeTab() {
   const { profile, refreshProfile } = useAuth();
+  const queryClient = useQueryClient();
 
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [birthYear, setBirthYear] = useState<number | null>(
@@ -855,6 +856,12 @@ function AboutMeTab() {
     },
     onSuccess: async () => {
       await refreshProfile();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/trending-polls"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/matchups"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+      ]);
       setDirty(false);
       toast("Saved", { description: "Your About Me details were updated." });
     },

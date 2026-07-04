@@ -42,6 +42,18 @@ import {
   INSIGHTS_DIVERGENCE_LABELS,
   INSIGHTS_SOURCE_LABELS,
 } from "@shared/insights/constants";
+import { isGloballyVisible } from "@shared/geoVisibility";
+
+function geoRestrictedOgFallback(canonicalUrl: string): OgPreviewResult {
+  return withPreviewMeta(
+    {
+      title: SITE_NAME,
+      description: DEFAULT_DESCRIPTION,
+      canonicalUrl,
+    },
+    "site",
+  );
+}
 
 export const SITE_URL =
   process.env.PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://voxdex.com";
@@ -206,6 +218,7 @@ async function lookupCommunityMarket(slug: string) {
       summary: predictionMarkets.summary,
       slug: predictionMarkets.slug,
       engine: predictionMarkets.engine,
+      visibleCountries: predictionMarkets.visibleCountries,
     })
     .from(predictionMarkets)
     .where(eq(predictionMarkets.slug, slug))
@@ -497,6 +510,9 @@ export async function resolveCommunityMarketOg(slug: string): Promise<OgPreviewR
   if (!market) {
     return fallbackPayload(canonicalUrl, "Community market not found — using generic preview.", "community_market");
   }
+  if (!isGloballyVisible(market.visibleCountries)) {
+    return geoRestrictedOgFallback(canonicalUrl);
+  }
 
   let subtitle = "World market • Predict on VoxDex";
   let chips: AmmPriceChip[] | undefined;
@@ -625,6 +641,9 @@ export async function resolveSentimentPollOg(slug: string): Promise<OgPreviewRes
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Sentiment poll not found — using generic preview.", "sentiment_poll");
   }
+  if (!isGloballyVisible(ctx.visibleCountries)) {
+    return geoRestrictedOgFallback(canonicalUrl);
+  }
   return withPreviewMeta(
     {
       title: `${ctx.headline} • VoxDex`,
@@ -644,6 +663,9 @@ export async function resolveOpinionPollOg(slug: string): Promise<OgPreviewResul
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Opinion poll not found — using generic preview.", "opinion_poll");
   }
+  if (!isGloballyVisible(ctx.visibleCountries)) {
+    return geoRestrictedOgFallback(canonicalUrl);
+  }
   return withPreviewMeta(
     {
       title: `${ctx.title} • VoxDex`,
@@ -662,6 +684,9 @@ export async function resolveMatchupOg(slug: string): Promise<OgPreviewResult> {
   const ctx = await loadMatchupOgContext(slug);
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Matchup not found — using generic preview.", "matchup");
+  }
+  if (!isGloballyVisible(ctx.visibleCountries)) {
+    return geoRestrictedOgFallback(canonicalUrl);
   }
   return withPreviewMeta(
     {

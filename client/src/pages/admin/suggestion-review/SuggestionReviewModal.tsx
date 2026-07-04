@@ -14,6 +14,14 @@ import { OpinionPollReviewFields, type OpinionPollReviewValues, type OpinionOpti
 import { InductionReviewFields, type InductionReviewValues } from "./InductionReviewFields";
 import { OpenMarketReviewFields, type OpenMarketReviewValues } from "./OpenMarketReviewFields";
 import { ProfileImageReviewFields, type ProfileImageReviewValues } from "./ProfileImageReviewFields";
+import {
+  GeoCountryTargeting,
+  geoStateFromAllowlist,
+  isGeoTargetingValid,
+  visibleCountriesPayload,
+} from "@/components/geo/GeoCountryTargeting";
+
+const GEO_CONTENT_TYPES = new Set(["matchup", "sentiment_poll", "opinion_poll", "open_market"]);
 
 type SuggestionRow = {
   id: string;
@@ -105,7 +113,8 @@ export function SuggestionReviewModal({
   onClose: () => void;
   suggestion: SuggestionRow | null;
   onApproved: () => void;
-}) {  const [showRaw, setShowRaw] = useState(false);
+}) {
+  const [showRaw, setShowRaw] = useState(false);
   const payload = suggestion?.payload ?? {};
   const type = suggestion?.type ?? "";
 
@@ -179,6 +188,8 @@ export function SuggestionReviewModal({
   const [induction, setInduction] = useState<InductionReviewValues>(initInduction);
   const [openMarket, setOpenMarket] = useState<OpenMarketReviewValues>(initOpenMarket);
   const [profileImage, setProfileImage] = useState<ProfileImageReviewValues>({ sourceCredit: "" });
+  const [geoEnabled, setGeoEnabled] = useState(false);
+  const [geoCountries, setGeoCountries] = useState<string[]>([]);
 
   // Reset state when a new suggestion opens.
   useMemo(() => {
@@ -188,6 +199,11 @@ export function SuggestionReviewModal({
     setInduction(initInduction);
     setOpenMarket(initOpenMarket);
     setProfileImage({ sourceCredit: "" });
+    const geo = geoStateFromAllowlist(
+      Array.isArray(payload.visibleCountries) ? (payload.visibleCountries as string[]) : [],
+    );
+    setGeoEnabled(geo.enabled);
+    setGeoCountries(geo.codes);
     setShowRaw(false);
   }, [suggestion?.id]);
 
@@ -238,6 +254,10 @@ export function SuggestionReviewModal({
       if (openMarket.unit !== init.unit) ov.unit = openMarket.unit;
     } else if (type === "profile_image") {
       if (profileImage.sourceCredit) ov.sourceCredit = profileImage.sourceCredit;
+    }
+
+    if (GEO_CONTENT_TYPES.has(type)) {
+      ov.visibleCountries = visibleCountriesPayload(geoEnabled, geoCountries);
     }
 
     return ov;
@@ -298,6 +318,16 @@ export function SuggestionReviewModal({
                 imageUrl={g(payload, "imageUrl")}
               />
             )}
+
+            {GEO_CONTENT_TYPES.has(type) && (
+              <GeoCountryTargeting
+                enabled={geoEnabled}
+                onEnabledChange={setGeoEnabled}
+                selectedCodes={geoCountries}
+                onSelectedCodesChange={setGeoCountries}
+                testIdPrefix="review"
+              />
+            )}
           </>
 
           <div>
@@ -322,7 +352,13 @@ export function SuggestionReviewModal({
             Cancel
           </Button>
           <Button
-            onClick={() => approveMutation.mutate()}
+            onClick={() => {
+              if (GEO_CONTENT_TYPES.has(type) && !isGeoTargetingValid(geoEnabled, geoCountries)) {
+                toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+                return;
+              }
+              approveMutation.mutate();
+            }}
             disabled={approveMutation.isPending}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
           >

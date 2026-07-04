@@ -117,6 +117,12 @@ import { formatDate } from "@/lib/formatDate";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { AdminCategoryMultiSelect } from "@/components/admin/AdminCategoryMultiSelect";
+import {
+  GeoCountryTargeting,
+  geoStateFromAllowlist,
+  isGeoTargetingValid,
+  visibleCountriesPayload,
+} from "@/components/geo/GeoCountryTargeting";
 import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import * as Flags from "country-flag-icons/react/3x2";
 import type { TrendingPoll } from "@shared/schema";
@@ -322,6 +328,8 @@ function CreateMarketModal({
   const [selectedMarketCelebName, setSelectedMarketCelebName] = useState("");
   const latestEditMarketIdRef = useRef<string | null>(null);
   const [relatedPeople, setRelatedPeople] = useState<{ id: string; name: string }[]>([]);
+  const [geoEnabled, setGeoEnabled] = useState(false);
+  const [geoCountries, setGeoCountries] = useState<string[]>([]);
   const [expandedEntryImage, setExpandedEntryImage] = useState<number | null>(null);
   const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
   const [entrySearchResults, setEntrySearchResults] = useState<Record<number, any[]>>({});
@@ -404,6 +412,13 @@ function CreateMarketModal({
   };
 
   useEffect(() => {
+    if (open && !editMarket) {
+      setGeoEnabled(false);
+      setGeoCountries([]);
+    }
+  }, [open, editMarket]);
+
+  useEffect(() => {
     const generated = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
     setSlug(generated);
   }, [title]);
@@ -458,6 +473,9 @@ function CreateMarketModal({
       setPersonId(editMarket.personId || "");
       setImageUrl(editMarket.coverImageUrl || "");
       setRelatedPeople(editMarket.relatedPeople || []);
+      const geo = geoStateFromAllowlist(editMarket.visibleCountries);
+      setGeoEnabled(geo.enabled);
+      setGeoCountries(geo.codes);
       if (editMarket.personId) {
         setSelectedMarketCelebName("Loading...");
         setMarketCelebSearch("Loading...");
@@ -653,6 +671,7 @@ function CreateMarketModal({
     if (!title.trim() || !slug.trim() || !endAt) return false;
     if (openMarketType === "updown" && (!underlying.trim() || !strike.trim())) return false;
     if (openMarketType === "multi" && entries.some(e => !e.label.trim())) return false;
+    if (!isGeoTargetingValid(geoEnabled, geoCountries)) return false;
     return true;
   };
 
@@ -681,6 +700,7 @@ function CreateMarketModal({
       personId: personId && personId.trim() ? personId : null,
       coverImageUrl: imageUrl || null,
       relatedPersonIds: relatedPeople.map(p => p.id),
+      visibleCountries: visibleCountriesPayload(geoEnabled, geoCountries),
       entries: entries.map((e, i) => ({
         label: e.label,
         description: e.description || undefined,
@@ -842,6 +862,14 @@ function CreateMarketModal({
             onChange={setSecondaryCategories}
             primaryValue={category}
             testId="market-secondary-categories"
+          />
+
+          <GeoCountryTargeting
+            enabled={geoEnabled}
+            onEnabledChange={setGeoEnabled}
+            selectedCodes={geoCountries}
+            onSelectedCodesChange={setGeoCountries}
+            testIdPrefix="market"
           />
 
           <div className="grid grid-cols-2 gap-4">
@@ -1384,6 +1412,8 @@ export default function AdminDashboard() {
   const [matchupSearchA, setMatchupSearchA] = useState("");
   const [matchupSearchB, setMatchupSearchB] = useState("");
   const [matchupRelatedPeople, setMatchupRelatedPeople] = useState<{ id: string; name: string }[]>([]);
+  const [matchupGeoEnabled, setMatchupGeoEnabled] = useState(false);
+  const [matchupGeoCountries, setMatchupGeoCountries] = useState<string[]>([]);
   
   const [showPollModal, setShowPollModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
@@ -1416,6 +1446,8 @@ export default function AdminDashboard() {
   const [selectedCelebrityName, setSelectedCelebrityName] = useState("");
   const celebritySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pollRelatedPeople, setPollRelatedPeople] = useState<{ id: string; name: string }[]>([]);
+  const [pollGeoEnabled, setPollGeoEnabled] = useState(false);
+  const [pollGeoCountries, setPollGeoCountries] = useState<string[]>([]);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
@@ -1486,6 +1518,8 @@ export default function AdminDashboard() {
   const [opOptionSearchResults, setOpOptionSearchResults] = useState<any[][]>([[], [], []]);
   const [opOptionShowDropdown, setOpOptionShowDropdown] = useState<boolean[]>([false, false, false]);
   const [opinionPollRelatedPeople, setOpinionPollRelatedPeople] = useState<{ id: string; name: string }[]>([]);
+  const [opinionPollGeoEnabled, setOpinionPollGeoEnabled] = useState(false);
+  const [opinionPollGeoCountries, setOpinionPollGeoCountries] = useState<string[]>([]);
   const [isGeneratingPollSubject, setIsGeneratingPollSubject] = useState(false);
   const [isGeneratingPollDescription, setIsGeneratingPollDescription] = useState(false);
   const [isGeneratingOpSubject, setIsGeneratingOpSubject] = useState(false);
@@ -2343,6 +2377,7 @@ export default function AdminDashboard() {
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
+      setMatchupGeoEnabled(false); setMatchupGeoCountries([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -2365,6 +2400,7 @@ export default function AdminDashboard() {
       setEditingMatchup(null);
       setMatchupForm({ title: "", category: "tech", secondaryCategories: [], optionAText: "", optionBText: "", optionAImage: "", optionBImage: "", personAId: "", personBId: "", promptText: "", description: "", isActive: true, visibility: "live", featured: false, slug: "", seedVotesA: 0, seedVotesB: 0 });
       setMatchupSearchA(""); setMatchupSearchB(""); setMatchupRelatedPeople([]);
+      setMatchupGeoEnabled(false); setMatchupGeoCountries([]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/matchups"] });
     },
     onError: (error: any) => {
@@ -3166,6 +3202,9 @@ export default function AdminDashboard() {
     setMatchupSearchA("");
     setMatchupSearchB("");
     setMatchupRelatedPeople((matchup as any).relatedPeople || []);
+    const geo = geoStateFromAllowlist((matchup as any).visibleCountries);
+    setMatchupGeoEnabled(geo.enabled);
+    setMatchupGeoCountries(geo.codes);
     setShowMatchupModal(true);
   };
 
@@ -3185,6 +3224,10 @@ export default function AdminDashboard() {
   };
 
   const handleSaveMatchup = () => {
+    if (!isGeoTargetingValid(matchupGeoEnabled, matchupGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
     const dataToSend: any = {
       ...matchupForm,
       title: matchupForm.optionAText && matchupForm.optionBText 
@@ -3195,6 +3238,7 @@ export default function AdminDashboard() {
       optionAImage: matchupForm.optionAImage || null,
       optionBImage: matchupForm.optionBImage || null,
       relatedPersonIds: matchupRelatedPeople.map(p => p.id),
+      visibleCountries: visibleCountriesPayload(matchupGeoEnabled, matchupGeoCountries),
     };
     if (editingMatchup) {
       updateMatchupMutation.mutate({ id: editingMatchup.id, data: dataToSend });
@@ -3227,6 +3271,8 @@ export default function AdminDashboard() {
     setCelebritySearchResults([]);
     setShowCelebrityDropdown(false);
     setPollRelatedPeople([]);
+    setPollGeoEnabled(false);
+    setPollGeoCountries([]);
   };
 
   const handleCelebritySearchChange = (value: string) => {
@@ -3303,11 +3349,22 @@ export default function AdminDashboard() {
       setSelectedCelebrityName("");
     }
     setPollRelatedPeople((poll as any).relatedPeople || []);
+    const geo = geoStateFromAllowlist((poll as any).visibleCountries);
+    setPollGeoEnabled(geo.enabled);
+    setPollGeoCountries(geo.codes);
     setShowPollModal(true);
   };
 
   const handleSavePoll = () => {
-    const dataToSend = { ...pollForm, relatedPersonIds: pollRelatedPeople.map(p => p.id) };
+    if (!isGeoTargetingValid(pollGeoEnabled, pollGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
+    const dataToSend = {
+      ...pollForm,
+      relatedPersonIds: pollRelatedPeople.map(p => p.id),
+      visibleCountries: visibleCountriesPayload(pollGeoEnabled, pollGeoCountries),
+    };
     if (editingPoll) {
       updatePollMutation.mutate({ id: editingPoll.id, data: dataToSend });
     } else {
@@ -3405,6 +3462,8 @@ export default function AdminDashboard() {
     setOpOptionSearchResults([[], [], []]);
     setOpOptionShowDropdown([false, false, false]);
     setOpinionPollRelatedPeople([]);
+    setOpinionPollGeoEnabled(false);
+    setOpinionPollGeoCountries([]);
   };
 
   const openEditOpinionPoll = (poll: any) => {
@@ -3432,11 +3491,22 @@ export default function AdminDashboard() {
     setOpOptionSearchResults(opts.map(() => []));
     setOpOptionShowDropdown(opts.map(() => false));
     setOpinionPollRelatedPeople(poll.relatedPeople || []);
+    const geo = geoStateFromAllowlist(poll.visibleCountries);
+    setOpinionPollGeoEnabled(geo.enabled);
+    setOpinionPollGeoCountries(geo.codes);
     setShowOpinionPollModal(true);
   };
 
   const handleSaveOpinionPoll = () => {
-    const dataToSend = { ...opinionPollForm, relatedPersonIds: opinionPollRelatedPeople.map(p => p.id) };
+    if (!isGeoTargetingValid(opinionPollGeoEnabled, opinionPollGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
+    const dataToSend = {
+      ...opinionPollForm,
+      relatedPersonIds: opinionPollRelatedPeople.map(p => p.id),
+      visibleCountries: visibleCountriesPayload(opinionPollGeoEnabled, opinionPollGeoCountries),
+    };
     if (editingOpinionPoll) {
       updateOpinionPollMutation.mutate({ id: editingOpinionPoll.id, data: dataToSend });
     } else {
@@ -9393,6 +9463,14 @@ export default function AdminDashboard() {
               testId="matchup-secondary-categories"
             />
 
+            <GeoCountryTargeting
+              enabled={matchupGeoEnabled}
+              onEnabledChange={setMatchupGeoEnabled}
+              selectedCodes={matchupGeoCountries}
+              onSelectedCodesChange={setMatchupGeoCountries}
+              testIdPrefix="matchup"
+            />
+
             <Label className="text-sm font-medium">Option A</Label>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 relative">
@@ -9742,6 +9820,13 @@ export default function AdminDashboard() {
                 testId="opinion-poll-secondary-categories"
               />
             </div>
+            <GeoCountryTargeting
+              enabled={opinionPollGeoEnabled}
+              onEnabledChange={setOpinionPollGeoEnabled}
+              selectedCodes={opinionPollGeoCountries}
+              onSelectedCodesChange={setOpinionPollGeoCountries}
+              testIdPrefix="opinion-poll"
+            />
             <div className="space-y-2 min-w-0">
               <Label>Title</Label>
               <Input
@@ -10052,6 +10137,13 @@ export default function AdminDashboard() {
                 testId="poll-secondary-categories"
               />
             </div>
+            <GeoCountryTargeting
+              enabled={pollGeoEnabled}
+              onEnabledChange={setPollGeoEnabled}
+              selectedCodes={pollGeoCountries}
+              onSelectedCodesChange={setPollGeoCountries}
+              testIdPrefix="poll"
+            />
             <div className="space-y-2">
               <Label htmlFor="poll-headline">Headline</Label>
               <Input

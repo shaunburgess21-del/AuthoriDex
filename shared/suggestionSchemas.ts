@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "./constants";
+import { visibleCountriesSchema } from "./geoVisibility";
+
+const geoCountriesField = {
+  visibleCountries: visibleCountriesSchema.optional(),
+};
 
 export const SUGGESTION_TYPES = [
   "matchup",
@@ -28,6 +33,7 @@ export const matchupSuggestionSchema = z.object({
   optionBImage: z.string().url().optional(),
   description: z.string().max(200).optional(),
   promptText: z.string().max(200).optional(),
+  ...geoCountriesField,
 });
 
 export const sentimentPollSuggestionSchema = z.object({
@@ -40,6 +46,7 @@ export const sentimentPollSuggestionSchema = z.object({
   description: z.string().max(140).optional(),
   timeline: z.enum(["no_deadline", "1_week", "1_month", "custom"]),
   deadlineAt: z.string().optional(),
+  ...geoCountriesField,
 });
 
 export const opinionPollSuggestionSchema = z.object({
@@ -64,6 +71,7 @@ export const opinionPollSuggestionSchema = z.object({
     )
     .min(OPINION_POLL_MIN_OPTIONS)
     .max(OPINION_POLL_MAX_OPTIONS),
+  ...geoCountriesField,
 });
 
 export const inductionSuggestionSchema = z.object({
@@ -119,6 +127,7 @@ export const openMarketSuggestionSchema = z
         })
       )
       .optional(),
+    ...geoCountriesField,
   })
   .superRefine((data, ctx) => {
     if (data.openMarketType !== "updown") return;

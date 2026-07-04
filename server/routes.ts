@@ -170,6 +170,15 @@ import {
 import { upsertEngagement } from "./lib/engagementWriter";
 import { captureBackgroundError } from "./sentry";
 import { computeBlendStateForUser, resolveBlendState } from "./lib/blendedRank";
+import {
+  resolveUserGeoContext,
+  geoVisibilitySql,
+  assertCardVisibleForRead,
+  assertCardVisibleForAction,
+  GeoNotEligibleError,
+  GeoNotFoundError,
+} from "./lib/geoVisibility";
+import { isCardVisibleToUser, sanitizeVisibleCountries } from "@shared/geoVisibility";
 import { getMarketEngagementPreview } from "./services/predict/market-engagement";
 import { loadNativeMarkets, updownOrderingKey, type OrderTerm } from "./services/predict/native-markets";
 import {
@@ -6374,6 +6383,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Public API: Only show live and inactive matchups (not draft/hidden/archived)
       matchupList = matchupList.filter(f => f.visibility === 'live' || f.visibility === 'inactive');
+
+      const geo = await resolveUserGeoContext(req);
+      if (!geo.bypass) {
+        matchupList = matchupList.filter((m) =>
+          isCardVisibleToUser(m.visibleCountries, geo.residence),
+        );
+      }
       
       // Build lookup maps for celebrity avatars (by ID and by name).
       // Only fetch the rows actually referenced by this matchup batch
@@ -6501,13 +6517,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.get("/api/matchups/by-slug/:slug", async (req, res) => {
+  app.get("/api/matchups/by-slug/:slug", optionalAuth, async (req, res) => {
     try {
       const { slug } = req.params;
+      const authReq = req as AuthRequest;
 
       const matchup = await resolvePublicMatchupBySlugOrId(slug);
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
+      }
+
+      const geo = await resolveUserGeoContext(authReq);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForRead(matchup.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotFoundError) {
+            return res.status(404).json({ error: "Matchup not found" });
+          }
+          throw e;
+        }
       }
 
       const celebrities = await db.select({
@@ -6639,6 +6668,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [matchup] = await db.select().from(matchups).where(eq(matchups.id, id));
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
+      }
+
+      const geo = await resolveUserGeoContext(req);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForAction(matchup.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotEligibleError) {
+            return res.status(403).json({ error: "geo_not_eligible" });
+          }
+          throw e;
+        }
       }
       
       // Check if user/session already voted
@@ -15015,12 +15056,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
       const adminId = req.userId!;
       
       if (!title || !optionAText || !optionBText) {
         return res.status(400).json({ error: "Title and both options are required" });
       }
+
+      const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
       const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category || 'General', allowedCategoryIds);
@@ -15057,6 +15100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: description || null,
         seedVotesA: parseInt(seedVotesA) || 0,
         seedVotesB: parseInt(seedVotesB) || 0,
+        visibleCountries: cleanVisibleCountries,
       }).returning();
 
       if (Array.isArray(relatedPersonIds)) {
@@ -15097,7 +15141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/matchups/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories } = req.body;
+      const { title, category, optionAText, optionAImage, optionBText, optionBImage, isActive, displayOrder, visibility, featured, slug, personAId, personBId, promptText, description, seedVotesA, seedVotesB, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
       const adminId = req.userId!;
       
       const [existing] = await db.select().from(matchups).where(eq(matchups.id, id));
@@ -15131,6 +15175,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (description !== undefined) updates.description = description || null;
       if (seedVotesA !== undefined) updates.seedVotesA = parseInt(seedVotesA) || 0;
       if (seedVotesB !== undefined) updates.seedVotesB = parseInt(seedVotesB) || 0;
+      if (visibleCountries !== undefined) {
+        updates.visibleCountries = sanitizeVisibleCountries(visibleCountries);
+      }
 
       const linkedSides = await applyInductionMatchupSideLinksFromDb({
         optionAText: updates.optionAText ?? existing.optionAText,
@@ -15361,6 +15408,7 @@ Target length: about 90-150 words.`;
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
+      const geo = await resolveUserGeoContext(req as AuthRequest);
 
       const orderTerms = await orderRecencyForUser(
         req as AuthRequest,
@@ -15391,7 +15439,12 @@ Target length: about 90-150 words.`;
         .from(trendingPolls)
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
-        .where(eq(trendingPolls.status, 'live'))
+        .where(and(
+          eq(trendingPolls.status, 'live'),
+          ...(geo.bypass
+            ? []
+            : [geoVisibilitySql(trendingPolls.visibleCountries, geo.residence)]),
+        ))
         .orderBy(...orderTerms, asc(trendingPolls.displayOrder));
 
       const pollIds = polls.map(p => p.id);
@@ -15509,6 +15562,7 @@ Target length: about 90-150 words.`;
           seedNeutralCount: trendingPolls.seedNeutralCount,
           seedOpposeCount: trendingPolls.seedOpposeCount,
           createdAt: trendingPolls.createdAt,
+          visibleCountries: trendingPolls.visibleCountries,
           personName: trackedPeople.name,
           personAvatar: trendingPeople.avatar,
         })
@@ -15520,6 +15574,18 @@ Target length: about 90-150 words.`;
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const geo = await resolveUserGeoContext(authReq);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForRead(poll.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotFoundError) {
+            return res.status(404).json({ error: "Poll not found" });
+          }
+          throw e;
+        }
       }
 
       const realVotes = await db
@@ -15597,13 +15663,25 @@ Target length: about 90-150 words.`;
       }
 
       const [poll] = await db
-        .select({ id: trendingPolls.id, category: trendingPolls.category })
+        .select({ id: trendingPolls.id, category: trendingPolls.category, visibleCountries: trendingPolls.visibleCountries })
         .from(trendingPolls)
         .where(eq(trendingPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const geo = await resolveUserGeoContext(req);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForAction(poll.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotEligibleError) {
+            return res.status(403).json({ error: "geo_not_eligible" });
+          }
+          throw e;
+        }
       }
 
       // Phase 4 — anonymous-budget gate. surface = 'trending_poll',
@@ -15735,12 +15813,14 @@ Target length: about 90-150 words.`;
 
   app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds, secondaryCategories } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
       const adminId = req.userId!;
 
       if (!headline || !subjectText || !category) {
         return res.status(400).json({ error: "Headline, subject text, and category are required" });
       }
+
+      const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
       const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
@@ -15768,6 +15848,7 @@ Target length: about 90-150 words.`;
         visibility: effectiveVisibility,
         displayOrder: nextDisplayOrder,
         createdBy: adminId,
+        visibleCountries: cleanVisibleCountries,
       }).returning();
 
       if (Array.isArray(relatedPersonIds)) {
@@ -15805,7 +15886,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds, secondaryCategories } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) {
@@ -15836,6 +15917,9 @@ Target length: about 90-150 words.`;
       if (slug !== undefined) updates.slug = slug || null;
       if (featured !== undefined) updates.featured = featured;
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
+      if (visibleCountries !== undefined) {
+        updates.visibleCountries = sanitizeVisibleCountries(visibleCountries);
+      }
 
       if ((slug !== undefined || headline !== undefined) && imageUrl === undefined) {
         if (isConventionImageUrl(existing.imageUrl)) {
@@ -16470,12 +16554,13 @@ Target length: about 90-150 words.`;
     };
   }
 
-  app.get("/api/opinion-polls", async (req, res) => {
+  app.get("/api/opinion-polls", optionalAuth, async (req, res) => {
     try {
       // Global /api/* middleware already populates req.userId from the
       // Authorization header (best-effort), so we read it directly instead
       // of paying for a duplicate Supabase getUser() round-trip.
       const userId = (req as AuthRequest).userId ?? null;
+      const geo = await resolveUserGeoContext(req as AuthRequest);
 
       const orderTerms = await orderRecencyForUser(
         req as AuthRequest,
@@ -16487,7 +16572,12 @@ Target length: about 90-150 words.`;
       const polls = await db
         .select()
         .from(opinionPolls)
-        .where(eq(opinionPolls.visibility, 'live'))
+        .where(and(
+          eq(opinionPolls.visibility, 'live'),
+          ...(geo.bypass
+            ? []
+            : [geoVisibilitySql(opinionPolls.visibleCountries, geo.residence)]),
+        ))
         .orderBy(...orderTerms, asc(opinionPolls.displayOrder));
 
       const opPollIds = polls.map(p => p.id);
@@ -16611,6 +16701,18 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Opinion poll not found" });
       }
 
+      const geo = await resolveUserGeoContext(authReq);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForRead(poll.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotFoundError) {
+            return res.status(404).json({ error: "Opinion poll not found" });
+          }
+          throw e;
+        }
+      }
+
       const options = await db
         .select({
           id: opinionPollOptions.id,
@@ -16706,13 +16808,25 @@ Target length: about 90-150 words.`;
       }
 
       const [poll] = await db
-        .select({ id: opinionPolls.id, category: opinionPolls.category })
+        .select({ id: opinionPolls.id, category: opinionPolls.category, visibleCountries: opinionPolls.visibleCountries })
         .from(opinionPolls)
         .where(eq(opinionPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
+      }
+
+      const geo = await resolveUserGeoContext(req);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForAction(poll.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotEligibleError) {
+            return res.status(403).json({ error: "geo_not_eligible" });
+          }
+          throw e;
+        }
       }
 
       if (wantsRemove) {
@@ -17128,7 +17242,7 @@ Target length: about 90-150 words.`;
 
   app.post("/api/admin/opinion-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds, secondaryCategories } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, options, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
       const adminId = req.userId!;
 
       if (!title || !slug || !category) {
@@ -17138,6 +17252,8 @@ Target length: about 90-150 words.`;
       if (!options || !Array.isArray(options) || options.length < OPINION_POLL_MIN_OPTIONS || options.length > OPINION_POLL_MAX_OPTIONS) {
         return res.status(400).json({ error: `Between ${OPINION_POLL_MIN_OPTIONS} and ${OPINION_POLL_MAX_OPTIONS} options are required` });
       }
+
+      const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
       const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
@@ -17156,6 +17272,7 @@ Target length: about 90-150 words.`;
         visibility: visibility || 'draft',
         displayOrder: nextDisplayOrder,
         createdBy: adminId,
+        visibleCountries: cleanVisibleCountries,
       }).returning();
 
       if (options.length > 0) {
@@ -17200,7 +17317,7 @@ Target length: about 90-150 words.`;
     try {
       const { id } = req.params;
       const adminId = req.userId!;
-      const { title, slug, category, description, summary, imageUrl, featured, visibility, displayOrder, options, relatedPersonIds, secondaryCategories } = req.body;
+      const { title, slug, category, description, summary, imageUrl, featured, visibility, displayOrder, options, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
 
       const [existing] = await db.select().from(opinionPolls).where(eq(opinionPolls.id, id));
       if (!existing) {
@@ -17225,6 +17342,9 @@ Target length: about 90-150 words.`;
       if (featured !== undefined) updates.featured = featured;
       if (visibility !== undefined) updates.visibility = visibility;
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
+      if (visibleCountries !== undefined) {
+        updates.visibleCountries = sanitizeVisibleCountries(visibleCountries);
+      }
 
       const [updated] = await db.update(opinionPolls).set(updates).where(eq(opinionPolls.id, id)).returning();
 
@@ -17709,12 +17829,18 @@ Target length: about 90-150 words.`;
   app.get("/api/open-markets", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { category, featured, limit } = req.query;
+      const geo = await resolveUserGeoContext(req);
 
       const conditions = [
         eq(predictionMarkets.marketType, "community"),
         eq(predictionMarkets.status, "OPEN"),
         inArray(predictionMarkets.visibility, ["live", "inactive"]),
       ];
+      if (!geo.bypass) {
+        conditions.push(
+          geoVisibilitySql(predictionMarkets.visibleCountries, geo.residence),
+        );
+      }
 
       if (category && typeof category === "string") {
         // Match primary category OR any secondary category (array overlap).
@@ -17873,9 +17999,10 @@ Target length: about 90-150 words.`;
     }
   });
 
-  app.get("/api/open-markets/:slug", async (req, res) => {
+  app.get("/api/open-markets/:slug", optionalAuth, async (req, res) => {
     try {
       const { slug } = req.params;
+      const authReq = req as AuthRequest;
 
       const [market] = await db
         .select({
@@ -17920,6 +18047,7 @@ Target length: about 90-150 words.`;
           strike: predictionMarkets.strike,
           unit: predictionMarkets.unit,
           createdAt: predictionMarkets.createdAt,
+          visibleCountries: predictionMarkets.visibleCountries,
         })
         .from(predictionMarkets)
         .where(
@@ -17932,6 +18060,18 @@ Target length: about 90-150 words.`;
 
       if (!market) {
         return res.status(404).json({ error: "Market not found" });
+      }
+
+      const geo = await resolveUserGeoContext(authReq);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForRead(market.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotFoundError) {
+            return res.status(404).json({ error: "Market not found" });
+          }
+          throw e;
+        }
       }
 
       // Phase 13: surface the LMSR state block on AMM community markets
@@ -18106,10 +18246,12 @@ Target length: about 90-150 words.`;
         underlying, metric, strike, unit,
         entries: entryList, personId, isLive, visibility, inactiveMessage,
         relatedPersonIds, scoutWatch, secondaryCategories,
+        visibleCountries,
       } = req.body;
 
       const allowedCategoryIds = await getAllowedCategoryIds();
       const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       // Watch criteria for the AI resolution scout (leading indicators to
       // monitor). Stored in metadata so no schema migration is needed.
@@ -18203,6 +18345,7 @@ Target length: about 90-150 words.`;
             inactiveMessage: inactiveMessage || null,
             cmsDisplayOrder: nextCmsOrder,
             metadata: scoutWatchValue ? { scoutWatch: scoutWatchValue } : null,
+            visibleCountries: cleanVisibleCountries,
           })
           .returning();
 
@@ -18289,6 +18432,7 @@ Target length: about 90-150 words.`;
         underlying, metric, strike, unit,
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
         relatedPersonIds, scoutWatch, secondaryCategories,
+        visibleCountries,
       } = req.body;
 
       const updates: Record<string, any> = { updatedAt: new Date() };
@@ -18329,6 +18473,9 @@ Target length: about 90-150 words.`;
         updates.isLive = visibility === "live" || visibility === "inactive";
       }
       if (inactiveMessage !== undefined) updates.inactiveMessage = inactiveMessage || null;
+      if (visibleCountries !== undefined) {
+        updates.visibleCountries = sanitizeVisibleCountries(visibleCountries);
+      }
 
       // Merge scout watch criteria into metadata via a JSONB merge so we
       // never clobber the cached worldAssessment / scoutAssessment the agents
@@ -19384,6 +19531,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           closeAt: predictionMarkets.closeAt,
           endAt: predictionMarkets.endAt,
           category: predictionMarkets.category,
+          visibleCountries: predictionMarkets.visibleCountries,
         })
         .from(predictionMarkets)
         .where(
@@ -19400,6 +19548,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       if (!market) {
         return res.status(404).json({ error: "Market not found or not open" });
+      }
+
+      const geo = await resolveUserGeoContext(authReq);
+      if (!geo.bypass) {
+        try {
+          assertCardVisibleForAction(market.visibleCountries, geo.residence);
+        } catch (e) {
+          if (e instanceof GeoNotEligibleError) {
+            return res.status(403).json({ error: "geo_not_eligible" });
+          }
+          throw e;
+        }
       }
 
       // Match native-market parity: defend against late bets if the resolver

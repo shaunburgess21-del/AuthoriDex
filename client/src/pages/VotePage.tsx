@@ -144,6 +144,12 @@ import {
 } from "@/components/suggest/drawerStyles";
 import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
 import { SuggestDurationPicker } from "@/components/suggest/SuggestDurationPicker";
+import {
+  GeoCountryTargeting,
+  geoStateFromAllowlist,
+  isGeoTargetingValid,
+  visibleCountriesPayload,
+} from "@/components/geo/GeoCountryTargeting";
 import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
 import { ContenderSelector, type ContenderSelection } from "@/components/suggest/ContenderSelector";
@@ -911,6 +917,7 @@ function DiscourseCard({
           detailLabel="View Poll Details"
           onBrowseFullScreen={onBrowseFullScreen}
           menuDisabled={categoryMenuDisabled}
+          size="pollCard"
           data-testid={`badge-category-${topic.id}`}
         />
       </div>
@@ -1095,7 +1102,6 @@ function DiscourseCard({
                 label={voted ? getSentimentPollChoiceLabel(voted) : "You voted"}
                 onChangeVote={handleChangeVote}
                 onRemoveVote={handleChangeVote}
-                pillClassName="border-white/20"
                 pillStyle={getSentimentPollVotedPillStyle(voted)}
                 data-testid={`badge-voted-${topic.id}`}
               />
@@ -1315,6 +1321,8 @@ export default function VotePage() {
   const [matchupContenderA, setMatchupContenderA] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupContenderB, setMatchupContenderB] = useState<ContenderSelection>({ type: null, name: '' });
   const [matchupCategory, setMatchupCategory] = useState("");
+  const [matchupGeoEnabled, setMatchupGeoEnabled] = useState(false);
+  const [matchupGeoCountries, setMatchupGeoCountries] = useState<string[]>([]);
   const [isSuggestSubmitting, setIsSuggestSubmitting] = useState(false);
   const { data: userStats } = useUserStats(!!user);
   const xp = userStats?.xpPoints ?? 0;
@@ -1458,6 +1466,8 @@ export default function VotePage() {
   const [selectedCuratePerson, setSelectedCuratePerson] = useState<CurateProfilePoll | null>(null);
   const [pollDuration, setPollDuration] = useState<string>("none");
   const [pollCustomDate, setPollCustomDate] = useState("");
+  const [pollGeoEnabled, setPollGeoEnabled] = useState(false);
+  const [pollGeoCountries, setPollGeoCountries] = useState<string[]>([]);
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
   const [myVotesFilter, setMyVotesFilterState] = useState<HubActivityFilter>(() =>
@@ -1514,6 +1524,8 @@ export default function VotePage() {
   const [opinionSuggestOptions, setOpinionSuggestOptions] = useState<OpinionOptionInput[]>(
     Array.from({ length: OPINION_POLL_MIN_OPTIONS }, () => ({ name: "" }))
   );
+  const [opinionGeoEnabled, setOpinionGeoEnabled] = useState(false);
+  const [opinionGeoCountries, setOpinionGeoCountries] = useState<string[]>([]);
 
   const inductionScrollRef = useRef<HTMLDivElement>(null);
   const topicsScrollRef = useRef<HTMLDivElement>(null);
@@ -2732,6 +2744,10 @@ export default function VotePage() {
 
   const handlePollSubmit = async () => {
     if (!pollHeadline || !pollEntitySearch) return;
+    if (!isGeoTargetingValid(pollGeoEnabled, pollGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
     setIsSuggestSubmitting(true);
     try {
       let pollImageUrl: string | undefined;
@@ -2763,6 +2779,7 @@ export default function VotePage() {
           description: pollDescription || undefined,
           timeline: toTimelineWireValue(pollDuration),
           deadlineAt: pollDuration === "custom" ? pollCustomDate || undefined : undefined,
+          visibleCountries: visibleCountriesPayload(pollGeoEnabled, pollGeoCountries),
         },
       });
       const suggestData = await suggestRes.json();
@@ -2779,6 +2796,8 @@ export default function VotePage() {
       setPollSubjectImagePreview(null);
       setPollDuration("none");
       setPollCustomDate("");
+      setPollGeoEnabled(false);
+      setPollGeoCountries([]);
       toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
@@ -2788,6 +2807,10 @@ export default function VotePage() {
   };
 
   const handleMatchupSuggestSubmit = async () => {
+    if (!isGeoTargetingValid(matchupGeoEnabled, matchupGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
     setIsSuggestSubmitting(true);
     try {
       // Resolve images: celebrities use imageUrl directly; custom contenders upload their file first.
@@ -2825,6 +2848,7 @@ export default function VotePage() {
           personBId: matchupContenderB.type === "celebrity" ? matchupContenderB.celebrityId : undefined,
           optionAImage,
           optionBImage,
+          visibleCountries: visibleCountriesPayload(matchupGeoEnabled, matchupGeoCountries),
         },
       });
       const suggestData = await suggestRes.json();
@@ -2835,6 +2859,8 @@ export default function VotePage() {
       setMatchupContenderA({ type: null, name: "" });
       setMatchupContenderB({ type: null, name: "" });
       setMatchupCategory("");
+      setMatchupGeoEnabled(false);
+      setMatchupGeoCountries([]);
       setMatchupSuggestOpen(false);
       toast("Matchup suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
@@ -2894,6 +2920,10 @@ export default function VotePage() {
       toast.error("Not enough options", { description: `Please provide at least ${OPINION_POLL_MIN_OPTIONS} options.` });
       return;
     }
+    if (!isGeoTargetingValid(opinionGeoEnabled, opinionGeoCountries)) {
+      toast.error("Country required", { description: "Select at least one country or turn off geo targeting." });
+      return;
+    }
     setIsSuggestSubmitting(true);
     try {
       // Upload any pending custom image files sequentially
@@ -2932,6 +2962,7 @@ export default function VotePage() {
           timeline: toTimelineWireValue(opinionSuggestDuration),
           deadlineAt: opinionSuggestDuration === "custom" ? opinionSuggestCustomDate || undefined : undefined,
           options: resolvedOptions,
+          visibleCountries: visibleCountriesPayload(opinionGeoEnabled, opinionGeoCountries),
         },
       });
       const suggestData = await suggestRes.json();
@@ -2944,6 +2975,8 @@ export default function VotePage() {
       setOpinionSuggestCategory("misc");
       setOpinionSuggestDuration("none");
       setOpinionSuggestCustomDate("");
+      setOpinionGeoEnabled(false);
+      setOpinionGeoCountries([]);
       setOpinionSuggestOpen(false);
       toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
     } catch (err: any) {
@@ -3797,6 +3830,13 @@ export default function VotePage() {
                 )}
               </div>
               <SuggestDurationPicker value={pollDuration} onChange={setPollDuration} customDate={pollCustomDate} onCustomDateChange={setPollCustomDate} testIdPrefix="poll" />
+              <GeoCountryTargeting
+                enabled={pollGeoEnabled}
+                onEnabledChange={setPollGeoEnabled}
+                selectedCodes={pollGeoCountries}
+                onSelectedCodesChange={setPollGeoCountries}
+                testIdPrefix="suggest-poll"
+              />
               <div>
                 <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
                 <Input
@@ -3871,6 +3911,13 @@ export default function VotePage() {
                 testIdPrefix="matchup-contender-b"
               />
               <SuggestCategorySelect value={matchupCategory} onChange={setMatchupCategory} data-testid="select-matchup-category" />
+              <GeoCountryTargeting
+                enabled={matchupGeoEnabled}
+                onEnabledChange={setMatchupGeoEnabled}
+                selectedCodes={matchupGeoCountries}
+                onSelectedCodesChange={setMatchupGeoCountries}
+                testIdPrefix="suggest-matchup"
+              />
             </div>
             <div className={`${SUGGEST_DRAWER_FOOTER} justify-end`}>
               <Button variant="outline" onClick={() => setMatchupSuggestOpen(false)} data-testid="button-cancel-matchup">Cancel</Button>
@@ -4066,6 +4113,13 @@ export default function VotePage() {
               </div>
               <SuggestCategorySelect value={opinionSuggestCategory} onChange={setOpinionSuggestCategory} label="Category" data-testid="select-opinion-category" />
               <SuggestDurationPicker value={opinionSuggestDuration} onChange={setOpinionSuggestDuration} customDate={opinionSuggestCustomDate} onCustomDateChange={setOpinionSuggestCustomDate} testIdPrefix="opinion" />
+              <GeoCountryTargeting
+                enabled={opinionGeoEnabled}
+                onEnabledChange={setOpinionGeoEnabled}
+                selectedCodes={opinionGeoCountries}
+                onSelectedCodesChange={setOpinionGeoCountries}
+                testIdPrefix="suggest-opinion"
+              />
               <div>
                 <label className="text-sm font-medium mb-1 block">Short description (max 140 characters)</label>
                 <Input

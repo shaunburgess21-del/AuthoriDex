@@ -34,6 +34,7 @@ export interface OpinionPollOgContext {
   totalVotes: number;
   displayOptions: OpinionPollOgOption[];
   overflowCount: number;
+  visibleCountries: string[];
 }
 
 export async function loadOpinionPollOgContext(
@@ -51,6 +52,7 @@ export async function loadOpinionPollOgContext(
       imageUrl: opinionPolls.imageUrl,
       category: opinionPolls.category,
       pollSlug: opinionPolls.slug,
+      visibleCountries: opinionPolls.visibleCountries,
     })
     .from(opinionPolls)
     .where(eq(opinionPolls.slug, slug))
@@ -136,5 +138,6 @@ export async function loadOpinionPollOgContext(
     totalVotes,
     displayOptions: sorted.slice(0, OPINION_POLL_OG_MAX_DISPLAY_OPTIONS),
     overflowCount,
+    visibleCountries: poll.visibleCountries ?? [],
   };
 }

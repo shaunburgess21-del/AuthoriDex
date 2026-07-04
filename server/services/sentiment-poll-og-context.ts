@@ -15,6 +15,7 @@ export interface SentimentPollOgContext {
   description: string | null;
   category: string;
   imageUrl: string | null;
+  visibleCountries: string[];
 }
 
 export async function loadSentimentPollOgContext(
@@ -31,6 +32,7 @@ export async function loadSentimentPollOgContext(
       imageUrl: trendingPolls.imageUrl,
       category: trendingPolls.category,
       pollSlug: trendingPolls.slug,
+      visibleCountries: trendingPolls.visibleCountries,
       personAvatar: trackedPeople.avatar,
     })
     .from(trendingPolls)
@@ -53,5 +55,6 @@ export async function loadSentimentPollOgContext(
     description: row.description,
     category: row.category,
     imageUrl,
+    visibleCountries: row.visibleCountries ?? [],
   };
 }

@@ -666,6 +666,8 @@ export const matchups = pgTable("face_offs", {
   scheduledAt: timestamp("scheduled_at"),
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  /** ISO alpha-2 allowlist; empty = visible globally. */
+  visibleCountries: text("visible_countries").array().notNull().default(sql`'{}'`),
 }, (table) => ({
   slugUniqueIdx: uniqueIndex("face_offs_slug_unique").on(table.slug),
   slugIdx: index("face_offs_slug_idx").on(table.slug),
@@ -724,6 +726,8 @@ export const trendingPolls = pgTable("trending_polls", {
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  /** ISO alpha-2 allowlist; empty = visible globally. */
+  visibleCountries: text("visible_countries").array().notNull().default(sql`'{}'`),
 }, (table) => ({
   slugUniqueIdx: uniqueIndex("trending_polls_slug_unique").on(table.slug),
   statusIdx: index("trending_polls_status_idx").on(table.status),
@@ -1383,6 +1387,8 @@ export const predictionMarkets = pgTable("prediction_markets", {
   resolutionSummary: text("resolution_summary"), // AI-generated one-sentence summary of the resolution; null until generated
   /** Manual ordering in admin / Vote page for world (community) markets; other market types stay 0. */
   cmsDisplayOrder: integer("cms_display_order").notNull().default(0),
+  /** ISO alpha-2 allowlist; empty = visible globally. */
+  visibleCountries: text("visible_countries").array().notNull().default(sql`'{}'`),
 }, (table) => ({
   statusEndIdx: index("prediction_markets_status_end_idx").on(table.status, table.endAt),
   personIdx: index("prediction_markets_person_idx").on(table.personId),
@@ -1870,6 +1876,8 @@ export const opinionPolls = pgTable("opinion_polls", {
   createdBy: varchar("created_by"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  /** ISO alpha-2 allowlist; empty = visible globally. */
+  visibleCountries: text("visible_countries").array().notNull().default(sql`'{}'`),
 }, (table) => ({
   slugUniqueIdx: uniqueIndex("opinion_polls_slug_unique").on(table.slug),
   slugIdx: index("opinion_polls_slug_idx").on(table.slug),

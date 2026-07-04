@@ -298,6 +298,7 @@ export function OpinionPollCard({
             detailLabel="View Poll Details"
             onBrowseFullScreen={onBrowseFullScreen}
             menuDisabled={categoryMenuDisabled}
+            size="pollCard"
             data-testid={`badge-opinion-category-${poll.id}`}
           />
         </div>

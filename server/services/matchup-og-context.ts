@@ -20,6 +20,7 @@ export interface MatchupOgContext {
   category: string;
   optionAImageUrl: string | null;
   optionBImageUrl: string | null;
+  visibleCountries: string[];
 }
 
 /**
@@ -78,5 +79,6 @@ export async function loadMatchupOgContext(
     category: matchup.category,
     optionAImageUrl: pickMatchupImageUrl(optA),
     optionBImageUrl: pickMatchupImageUrl(optB),
+    visibleCountries: matchup.visibleCountries ?? [],
   };
 }
