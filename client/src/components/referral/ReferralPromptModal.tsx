@@ -41,7 +41,7 @@ export function ReferralPromptModal({ open, onOpenChange, source }: Props) {
 
   const goToEarnMore = () => {
     onOpenChange(false);
-    setLocation("/how-it-works?tab=credits");
+    setLocation("/how-it-works?tab=credits#earn-vox");
   };
 
   const showPanel = !isLoading && !isError && hasCode && referralUrl;

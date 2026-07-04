@@ -1060,7 +1060,7 @@ export function StakeModal({
                   className="gap-1 text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     onClose();
-                    setLocation("/how-it-works?tab=credits");
+                    setLocation("/how-it-works?tab=credits#earn-vox");
                   }}
                   data-testid="button-earn-more-vox-stake"
                 >
