@@ -62,14 +62,54 @@ process.on("unhandledRejection", (reason) => {
 process.on("exit", (code) => {
   process.stderr.write(`[EXIT] Process exiting with code ${code}\n`);
 });
-process.on("SIGTERM", () => {
-  process.stderr.write("[SIGNAL] Received SIGTERM - shutting down\n");
-  process.exit(0);
-});
-process.on("SIGINT", () => {
-  process.stderr.write("[SIGNAL] Received SIGINT - interrupted\n");
-  process.exit(0);
-});
+// ===========================================
+// GRACEFUL SHUTDOWN
+// ===========================================
+// Railway sends SIGTERM on redeploy/restart. Stop accepting new connections,
+// let in-flight requests drain, then close the DB pool — all bounded by a
+// grace timeout so a stuck request can't block the restart. Job schedulers
+// keep running during the grace window: settlement/ingest are idempotent, so
+// a mid-tick kill after the timeout is acceptable.
+const SHUTDOWN_GRACE_MS = parseInt(process.env.SHUTDOWN_GRACE_MS || "10000", 10);
+let httpServer: import("http").Server | null = null;
+let shuttingDown = false;
+
+function gracefulShutdown(signal: string) {
+  if (shuttingDown) {
+    process.stderr.write(`[SIGNAL] Received ${signal} during shutdown - exiting immediately\n`);
+    process.exit(0);
+  }
+  shuttingDown = true;
+  process.stderr.write(`[SIGNAL] Received ${signal} - draining connections (grace ${SHUTDOWN_GRACE_MS}ms)\n`);
+
+  const forceTimer = setTimeout(() => {
+    process.stderr.write("[SIGNAL] Shutdown grace period elapsed - forcing exit\n");
+    process.exit(0);
+  }, SHUTDOWN_GRACE_MS);
+  forceTimer.unref();
+
+  const finish = () => {
+    // Best-effort pool close; the force timer above bounds a hung pool.
+    Promise.resolve(pool.end())
+      .catch(() => {})
+      .finally(() => {
+        process.stderr.write("[SIGNAL] Graceful shutdown complete\n");
+        process.exit(0);
+      });
+  };
+
+  if (httpServer) {
+    httpServer.close(() => finish());
+    // Destroy idle keep-alive sockets so close() isn't held open by them;
+    // sockets with in-flight requests are left alone until they finish.
+    httpServer.closeIdleConnections?.();
+  } else {
+    finish();
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("SIGHUP", () => {
   process.stderr.write("[SIGNAL] Received SIGHUP - ignoring (kept alive)\n");
 });
@@ -607,6 +647,7 @@ app.use((req, res, next) => {
 
 async function startServer() {
   const server = await registerRoutes(app);
+  httpServer = server;
 
   // Sentry first — so it sees the raw error before our JSON responder swallows
   // it into a 500. No-op when SENTRY_DSN isn't configured.

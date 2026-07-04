@@ -531,11 +531,16 @@ class GamificationService {
         };
       }
 
+      // Lock the profile row for the duration of the transaction so the
+      // absolute `predictCredits = newBalance` write below can't clobber a
+      // concurrent relative update (AMM buy/sell debits, settlement payouts).
+      // Without this, read-compute-write here is a classic lost-update race.
       const [profile] = await tx
         .select({ predictCredits: profiles.predictCredits, rank: profiles.rank })
         .from(profiles)
         .where(eq(profiles.id, userId))
-        .limit(1);
+        .limit(1)
+        .for("update");
 
       if (!profile) {
         return {

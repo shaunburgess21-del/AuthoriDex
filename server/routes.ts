@@ -12546,17 +12546,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "userId, amount, and reason are required" });
       }
       
-      // Get current user balance
-      const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      
-      const { appliedAmount, newBalance, wasClamped } = applyAdminCreditAdjustment(user.predictCredits, numericAmount);
       const idempotencyKey = `admin_adjust_${adminId}_${userId}_${Date.now()}`;
-      
-      // Use transaction to ensure ledger and profile stay in sync
-      await db.transaction(async (tx) => {
+
+      // Read the balance inside the transaction with a row lock so the
+      // absolute `predictCredits = newBalance` write can't clobber a
+      // concurrent relative update (AMM trades, settlement payouts).
+      const adjustment = await db.transaction(async (tx) => {
+        const [user] = await tx
+          .select()
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1)
+          .for("update");
+        if (!user) {
+          return null;
+        }
+
+        const { appliedAmount, newBalance, wasClamped } = applyAdminCreditAdjustment(user.predictCredits, numericAmount);
+
         // Create credit ledger entry
         await tx.insert(creditLedger).values({
           userId,
@@ -12582,7 +12589,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           newData: { predictCredits: newBalance },
           metadata: { requestedAmount: numericAmount, appliedAmount, reason, wasClamped },
         });
+
+        return { appliedAmount, newBalance, wasClamped };
       });
+
+      if (!adjustment) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      const { appliedAmount, newBalance, wasClamped } = adjustment;
       
       // Notify the user when credits are granted (positive adjustment).
       // We deliberately don't ping for deductions — those are usually
@@ -20684,6 +20698,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         SELECT DISTINCT ON (person_id) person_id, fame_index, timestamp
         FROM trend_snapshots
         WHERE person_id IN (${personAId}, ${personBId})
+          AND timestamp > NOW() - INTERVAL '14 days'
         ORDER BY person_id, timestamp DESC
       `);
       const h2hOpeningScores: any[] = [];
@@ -26900,7 +26915,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     "/api/suggestions/upload-image",
     requireAuth,
     suggestionImageUpload.single("file"),
-    async (req: AuthRequest, res) => {
+    handleMulterUploadErrors,
+    async (req: AuthRequest, res: Response) => {
       try {
         const file = req.file;
         if (!file) {

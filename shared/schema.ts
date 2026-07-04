@@ -115,6 +115,8 @@ export const trendSnapshots = pgTable("trend_snapshots", {
   runIdIdx: index("trend_snapshots_run_id_idx").on(table.runId),
   personTsIdx: index("trend_snapshots_person_ts_idx").on(table.personId, table.timestamp),
   personOriginTsIdx: index("trend_snapshots_person_origin_ts_idx").on(table.personId, table.snapshotOrigin, table.timestamp),
+  // Global-time index: MAX(timestamp) freshness checks + retention pruning.
+  tsIdx: index("trend_snapshots_ts_idx").on(table.timestamp.desc()),
 }));
 
 // API Cache - stores raw API responses to prevent redundant calls

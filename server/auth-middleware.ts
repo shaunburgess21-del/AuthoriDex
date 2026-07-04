@@ -81,12 +81,21 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   try {
     if (req.userId && req.userRole) {
       // Global middleware already resolved auth — reuse it.
+      if (req.userRole === "banned") {
+        return res.status(403).json({ error: "Account suspended" });
+      }
       return next();
     }
 
     const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
     if (!authContext) {
       return res.status(401).json({ error: "Unauthorized - Invalid or missing token" });
+    }
+
+    // Bans only flip profiles.role — the Supabase JWT stays valid until it
+    // expires, so the API layer has to be the enforcement point.
+    if (authContext.userRole === "banned") {
+      return res.status(403).json({ error: "Account suspended" });
     }
 
     req.userId = authContext.userId;
@@ -200,11 +209,18 @@ export async function optionalAuth(req: AuthRequest, res: Response, next: NextFu
   try {
     if (!(req.userId && req.userRole)) {
       const authContext = await resolveAuthContextFromHeader(req.headers.authorization);
-      if (authContext) {
+      if (authContext && authContext.userRole !== "banned") {
         req.userId = authContext.userId;
         req.userEmail = authContext.userEmail;
         req.userRole = authContext.userRole;
       }
+    } else if (req.userRole === "banned") {
+      // Banned users are treated as anonymous on mixed-auth routes: reads
+      // keep working, but nothing is attributed to (or credited to) the
+      // banned account. Fully-authed routes reject via requireAuth instead.
+      req.userId = undefined;
+      req.userEmail = undefined;
+      req.userRole = undefined;
     }
     const fdxSid = readFdxSid(req);
     if (fdxSid) {
