@@ -188,7 +188,6 @@ import {
   type AdminUsersListResponse,
   ADMIN_USERS_PAGE_SIZE,
   type PredictionMarket,
-  type MarketEntryForm,
   type AuditLogEntry,
   type Celebrity,
   type SeedRatingKey,
