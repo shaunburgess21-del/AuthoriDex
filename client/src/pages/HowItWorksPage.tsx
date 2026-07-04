@@ -1100,7 +1100,23 @@ function CreditsSection() {
 
       <Separator />
 
-      <div className="space-y-1 pt-1">
+      {/* `earn-vox` hash-anchor deep-link target
+          (/how-it-works?tab=credits#earn-vox) used by the "Earn Vox"
+          CTAs that replaced the old Buy Vox / pricing entry points.
+          Lives on this header block so deep links land on the
+          "How to earn Vox" title (referral card + earn table follow).
+
+          Inline scrollMarginTop (not a Tailwind scroll-mt-*): the global
+          `[data-hash-anchor] { scroll-margin-top: 72px }` rule in
+          index.css is un-layered CSS, so it overrides layered Tailwind
+          utilities — and 72px only clears ONE of this page's two sticky
+          bars. HIW_HASH_ANCHOR_OFFSET clears both plus breathing room. */}
+      <div
+        className="space-y-1 pt-1"
+        id="earn-vox"
+        data-hash-anchor
+        style={{ scrollMarginTop: HIW_HASH_ANCHOR_OFFSET }}
+      >
         <p
           className="text-[11px] font-semibold uppercase tracking-wider"
           style={{ color: accent }}
@@ -1346,23 +1362,10 @@ function CreditEarnTable({ accent }: { accent: string }) {
   })();
 
   return (
-    // `earn-vox` is a hash-anchor deep-link target
-    // (/how-it-works?tab=credits#earn-vox) used by the "Earn Vox" CTAs
-    // that replaced the old Buy Vox / pricing entry points.
-    //
-    // Inline scrollMarginTop (not a Tailwind scroll-mt-*): the global
-    // `[data-hash-anchor] { scroll-margin-top: 72px }` rule in index.css
-    // is un-layered CSS, so it overrides layered Tailwind utilities.
-    // 72px only clears ONE sticky bar; this page stacks two (h-14
-    // header + the sticky knowledge tab bar ≈ 118px), which left the
-    // heading hidden behind the tab bar. HIW_HASH_ANCHOR_OFFSET clears
-    // both bars plus breathing room.
-    <div
-      className="space-y-4"
-      id="earn-vox"
-      data-hash-anchor
-      style={{ scrollMarginTop: HIW_HASH_ANCHOR_OFFSET }}
-    >
+    // The `earn-vox` hash anchor lives on the "How to earn Vox" header
+    // block in CreditsSection (above the referral slot), so deep links
+    // land on the section title rather than partway down at this table.
+    <div className="space-y-4">
       {/* Section title lives above (the "How to earn Vox" header in
           CreditsSection) — this is just the explanatory lead line. */}
       <p className="text-sm text-muted-foreground">
