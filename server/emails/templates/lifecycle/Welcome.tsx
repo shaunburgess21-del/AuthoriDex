@@ -96,9 +96,8 @@ export function WelcomeEmail({
       <Heading style={typography.h1}>Welcome to VoxDex.</Heading>
 
       <Text style={typography.body}>
-        VoxDex is a global trend index for the people and events shaping
-        the world — powered by real-time signals, public votes, and
-        prediction markets.
+        VoxDex turns the voice of the people into a living, real-time index — a
+        cultural barometer the world shapes by itself, one vote at a time.
       </Text>
 
       {/* Vox callout — mirrors the VerifyEmail codeBox pattern so

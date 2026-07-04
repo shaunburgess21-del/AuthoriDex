@@ -35,6 +35,7 @@ import {
   logEmailSuppressed,
   type EmailPreferenceKey,
 } from "./marketing-gate";
+import { voxDexLogoInlineAttachment } from "./inline-attachments";
 
 // ---- Types ----------------------------------------------------------------
 
@@ -234,6 +235,7 @@ export async function sendEmail(
       to,
       subject,
       react: template,
+      attachments: [voxDexLogoInlineAttachment()],
       ...(text ? { text } : {}),
       ...(effectiveReplyTo ? { replyTo: effectiveReplyTo } : {}),
       ...(tags && tags.length > 0 ? { tags } : {}),

@@ -45,6 +45,9 @@ export function voxMarkEmailUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${VOX_MARK_EMAIL_PATH}`;
 }
 
+/** Display size in email headers; source PNG is 128px for retina. */
+export const VOXDEX_LOGO_EMAIL_DISPLAY_PX = 32;
+
 function formatIntEmail(n: number): string {
   if (!Number.isFinite(n)) return "0";
   return Math.round(Math.abs(n)).toLocaleString("en-US");
