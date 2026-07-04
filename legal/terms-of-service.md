@@ -28,13 +28,12 @@ The Service, as currently offered, uses an internal virtual currency ("**Vox**",
 - Vox is **not redeemable** for money, goods, or services outside the Service
 - Vox **cannot be transferred** to other users, withdrawn, exchanged for cryptocurrency, or converted into anything of monetary value
 - Vox is **not a security, derivative, or financial instrument** of any kind
-- Purchases of additional Vox are **non-refundable** except as required by applicable law
 
 Vox exists solely to enable participation in the Service. Its use is for entertainment and skill-development purposes — to track your prediction record, compete on leaderboards, and engage with content about people and events you care about.
 
 We may change, expire, or revoke Vox at any time, including for inactive accounts, for breaches of these Terms, or for operational reasons. We may also adjust how Vox is awarded, spent, or earned, with reasonable notice for material changes.
 
-**No purchase is necessary to use VoxDex or to earn Vox.** New accounts receive a free Vox grant on signup, and additional Vox can be earned through engagement (voting, posting, streaks, approved suggestions) at no cost. Purchasing Vox is optional and provides no advantage other than a faster top-up.
+**No purchase is necessary to use VoxDex.** The Service is currently free to use, and Vox cannot be purchased. New accounts receive a free Vox grant on signup, and additional Vox can be earned through engagement (voting, posting, streaks, approved suggestions) at no cost.
 
 **Looking ahead:** We may, in future, introduce additional services, features, or products — including services that involve real money, cryptocurrency, or other forms of consideration. Such services would be governed by separate or additional terms, may be available only in certain jurisdictions, and may require additional verification or eligibility checks. Nothing in these Terms commits us to keeping the Service play-money only, but nothing in these Terms changes the play-money nature of Vox as currently offered.
 
@@ -123,17 +122,11 @@ You may use the Service for personal, non-commercial purposes consistent with th
 
 If you believe content on the Service infringes your intellectual property rights, please follow the process in our [Content & Takedown Policy](/takedown).
 
-## 10. Purchases
+## 10. No purchases or payments
 
-You may purchase additional Vox through the Service. All purchases are processed by a third-party payment provider acting as a Merchant of Record on our behalf. The Merchant of Record is the seller of record for tax and consumer-protection purposes.
+The Service is currently free to use. VoxDex does not sell Vox, accept payments, or offer any paid features. All Vox is granted at no cost — through the signup grant, engagement rewards, and prediction payouts — and, as set out in Section 3, has no cash value.
 
-Pricing may be displayed in your local currency for convenience. The actual transaction may be processed in a different currency, and your payment provider may apply foreign-exchange fees that VoxDex does not control.
-
-Refunds for Vox purchases are processed by our Merchant of Record in line with its applicable refund policy and consumer-law obligations. Where required by applicable law, you may have statutory rights that provide cancellation or refund remedies.
-
-If you need help with a refund request, use the Merchant of Record links in your transaction email, or contact us at [hello@voxdex.com](mailto:hello@voxdex.com) and we will help direct your request.
-
-We reserve the right to change prices, introduce new Vox packages, or discontinue purchases at any time.
+If we introduce paid features in the future, they will be governed by updated or additional terms, and we will give you reasonable notice before any such changes take effect.
 
 ## 11. Service availability
 

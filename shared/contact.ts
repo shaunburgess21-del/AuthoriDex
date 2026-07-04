@@ -25,7 +25,10 @@ export type ContactTopic = (typeof CONTACT_TOPICS)[number];
 export const CONTACT_TOPIC_LABELS: Record<ContactTopic, string> = {
   general: "General question",
   support: "Account or product support",
-  billing: "Billing or credits",
+  // Free-to-play launch: no payments accepted, so the user-facing label
+  // drops "Billing". The `billing` id is kept for enum stability (server
+  // email triage + any stored submissions) and for when payments return.
+  billing: "Vox / credits",
   bug: "Report a bug",
   feature: "Feature suggestion",
   partnership: "Partnership / press",

@@ -3,6 +3,23 @@
   "framework": "vite",
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
+  "redirects": [
+    {
+      "source": "/pricing",
+      "destination": "/how-it-works?tab=credits",
+      "permanent": false
+    },
+    {
+      "source": "/checkout/:packageId",
+      "destination": "/how-it-works?tab=credits",
+      "permanent": false
+    },
+    {
+      "source": "/refund-policy",
+      "destination": "/terms",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

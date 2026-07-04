@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
@@ -111,9 +111,10 @@ const WelcomePage = lazyWithRetry(() => import("@/pages/auth/WelcomePage"));
 const TermsPage = lazyWithRetry(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazyWithRetry(() => import("@/pages/PrivacyPage"));
 const TakedownPage = lazyWithRetry(() => import("@/pages/TakedownPage"));
-const RefundPolicyPage = lazyWithRetry(() => import("@/pages/RefundPolicyPage"));
-const PricingPage = lazyWithRetry(() => import("@/pages/PricingPage"));
-const CheckoutPage = lazyWithRetry(() => import("@/pages/CheckoutPage"));
+// RefundPolicyPage / PricingPage / CheckoutPage are intentionally not
+// routed while VoxDex runs free-to-play (no payment provider yet). The
+// page components are kept in the repo for when purchases return; the
+// old URLs redirect below so external links don't 404.
 const ContactPage = lazyWithRetry(() => import("@/pages/ContactPage"));
 const UnsubscribePage = lazyWithRetry(() => import("@/pages/UnsubscribePage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
@@ -176,9 +177,18 @@ function Router() {
         <Route path="/terms" component={TermsPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/takedown" component={TakedownPage} />
-        <Route path="/refund-policy" component={RefundPolicyPage} />
-        <Route path="/pricing" component={PricingPage} />
-        <Route path="/checkout/:packageId" component={CheckoutPage} />
+        {/* Free-to-play launch: purchases are disabled, so the old
+            commerce URLs redirect. Refund questions belong in Terms;
+            pricing/checkout intent lands on the "Earn Vox" guide. */}
+        <Route path="/refund-policy">
+          <Redirect to="/terms" replace />
+        </Route>
+        <Route path="/pricing">
+          <Redirect to="/how-it-works?tab=credits#earn-vox" replace />
+        </Route>
+        <Route path="/checkout/:packageId">
+          <Redirect to="/how-it-works?tab=credits#earn-vox" replace />
+        </Route>
         <Route path="/contact" component={ContactPage} />
         <Route path="/unsubscribe" component={UnsubscribePage} />
         <Route path="/profile" component={UserProfilePage} />
@@ -303,16 +313,14 @@ function ShareAttributionWatcher() {
  * back into the flow to resume where they left off.
  *
  * Excludes /login/* (so the email signup flow can stay in place) and the
- * legal / pricing reference pages — opening Terms, Privacy, Takedown,
- * Refund Policy, or Pricing mid-onboarding shouldn't force-redirect the
- * user back to welcome before they finish reading.
+ * legal reference pages — opening Terms, Privacy, Takedown, or Contact
+ * mid-onboarding shouldn't force-redirect the user back to welcome
+ * before they finish reading.
  */
 const NEW_USER_GATE_ALLOWLIST = new Set([
   "/terms",
   "/privacy",
   "/takedown",
-  "/refund-policy",
-  "/pricing",
   "/contact",
 ]);
 

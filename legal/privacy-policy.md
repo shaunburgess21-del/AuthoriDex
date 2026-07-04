@@ -16,7 +16,8 @@ We collect personal information in three ways: information you give us, informat
 - **Authentication identifiers** when you sign in via Google or another third-party provider (typically your email address, name, and a unique account identifier)
 - **User content:** votes, predictions, comments, and any other content you submit
 - **Communications:** messages you send to us, including support requests
-- **Payment information** when you purchase Credits — handled by our third-party Merchant of Record. We do not see, store, or process your full card details. We receive a transaction record (date, amount, currency, last four digits of the card, country code) for our records
+
+The Service is currently free to use — we do not sell anything, so we do not collect payment or billing information. If we introduce paid features in the future, we will update this Privacy Policy before collecting any payment-related information.
 
 ### 2.2 Information we collect automatically
 
@@ -53,7 +54,6 @@ We use personal information for the following purposes:
 | **Improve the Service** | Analyzing usage patterns, fixing bugs, designing new features, A/B testing | Legitimate interest |
 | **Communicate with you** | Service announcements, account notifications, responses to support requests, occasional product updates (you can opt out of non-essential email at any time) | Performance of contract; legitimate interest; consent (where required) |
 | **Personalize your experience** | Remembering preferences, suggesting markets, ranking content | Legitimate interest |
-| **Process payments** | Issuing Credit purchases, recording transactions, handling refunds | Performance of contract |
 | **Protect the Service** | Detecting fraud, preventing abuse, enforcing our [Terms of Service](/terms) | Legitimate interest |
 | **Comply with legal obligations** | Tax records, responding to lawful requests, enforcing rights | Legal obligation |
 
@@ -79,7 +79,6 @@ We use trusted third-party service providers ("**operators**" in POPIA terms; "*
 | **Resend** | Transactional email delivery | United States |
 | **Microsoft 365** | Business email, internal communication | Global |
 | **Google (OAuth, optional analytics)** | Optional sign-in; aggregated usage analytics | Global |
-| **Merchant of Record (currently being onboarded)** | Payment processing, tax handling, refunds | Global |
 
 These providers may process your personal information only to the extent necessary to provide their services to us. We have written agreements with each that require appropriate confidentiality and security protections.
 

@@ -8,9 +8,13 @@ interface FooterLink {
 }
 
 /** Inline links shown in the footer row. Order is intentional:
- * the "load-bearing" legal docs come first (Terms / Privacy /
- * Refund), and Contact closes the row as the human-help
- * affordance.
+ * the "load-bearing" legal docs come first (Terms / Privacy),
+ * and Contact closes the row as the human-help affordance.
+ *
+ * Refund Policy is intentionally absent while VoxDex runs
+ * free-to-play — there are no purchases to refund. Restore the
+ * link (and the /refund-policy route in App.tsx) when payments
+ * return.
  *
  * Content & Takedown is intentionally absent here. Its audience
  * is external (celebrities, managers, lawyers, copyright
@@ -26,7 +30,6 @@ interface FooterLink {
 const FOOTER_LINKS: FooterLink[] = [
   { label: "Terms", href: "/terms", testId: "footer-terms" },
   { label: "Privacy", href: "/privacy", testId: "footer-privacy" },
-  { label: "Refund", href: "/refund-policy", testId: "footer-refund" },
   { label: "Contact", href: "/contact", testId: "footer-contact" },
 ];
 

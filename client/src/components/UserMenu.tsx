@@ -392,8 +392,8 @@ function UserMenuContent({
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         {/* How It Works — knowledge base for XP, Ranks, Vox, Badges,
-            Vote, Predict. Sits above Buy Vox so users can understand the
-            economy before being asked to spend on it. */}
+            Vote, Predict. Sits above Earn Vox so users can understand
+            the economy before diving into the earn loop. */}
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => handleNavClick("/how-it-works")}
@@ -405,7 +405,7 @@ function UserMenuContent({
         </button>
         {/* Always-available referral entry — Phase 1 leads with earning
             (refer-and-earn pays both sides) rather than buying, so this
-            sits right above Buy Vox in the same accented treatment. */}
+            sits right above Earn Vox in the same accented treatment. */}
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={handleReferClick}
@@ -417,19 +417,18 @@ function UserMenuContent({
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
-        {/* Visually accented (violet matches the Vox pill above) so the
-            monetization CTA stands out from the muted activity links
-            without becoming the loudest thing in the menu. Uses Wallet
-            for the icon — CreditCard implied billing/payment cards
-            rather than the in-app currency we're selling. */}
+        {/* Free-to-play launch: "Buy Vox" (→ /pricing) is replaced by
+            "Earn Vox", which deep-links to the How It Works Vox tab's
+            "Earn Vox by participating" section. Keeps the accented
+            violet treatment so the economy CTA still stands out. */}
         <button
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-violet-500/10 dark:hover:bg-violet-500/15 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          onClick={() => handleNavClick("/pricing")}
-          data-testid="link-buy-credits"
+          onClick={() => handleNavClick("/how-it-works?tab=credits#earn-vox")}
+          data-testid="link-earn-vox"
         >
           <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <span className="flex-1 text-sm font-medium text-violet-700 dark:text-violet-300">
-            Buy Vox
+            Earn Vox
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>

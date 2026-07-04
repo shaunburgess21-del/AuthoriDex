@@ -92,11 +92,11 @@ export default function CreditHistoryPage() {
           </p>
           <Button
             className="mt-4 w-full sm:w-auto bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-700 hover:to-violet-600"
-            onClick={() => setLocation("/pricing")}
-            data-testid="button-buy-credits-history"
+            onClick={() => setLocation("/how-it-works?tab=credits#earn-vox")}
+            data-testid="button-earn-vox-history"
           >
             <Wallet className="h-4 w-4 mr-2" />
-            Buy Vox
+            Earn Vox
           </Button>
         </Card>
 

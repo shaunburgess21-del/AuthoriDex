@@ -143,6 +143,20 @@ function accentFor(id: KnowledgeTabId): string {
 }
 
 /**
+ * Scroll offset for hash anchors on this page (#earn-vox, #streak).
+ *
+ * How It Works stacks TWO sticky bars — the h-14 page header (56px) and
+ * the sticky knowledge tab bar (~66px incl. padding) — so anchored
+ * sections need ~122px of clearance before the heading is visible,
+ * plus breathing room so the heading doesn't sit flush against the bar.
+ * Applied as an inline style because the global
+ * `[data-hash-anchor] { scroll-margin-top: 72px }` rule in index.css
+ * out-cascades Tailwind `scroll-mt-*` utilities (same specificity,
+ * later in the sheet).
+ */
+const HIW_HASH_ANCHOR_OFFSET = 144;
+
+/**
  * Shared knowledge-base table cell classes. Header cells are vertically
  * centered with the same row height as body cells (matches the XP-tab
  * polish) so every table on the page reads consistently.
@@ -558,9 +572,15 @@ function XpSection({ onJumpToTab }: XpSectionProps) {
       {grouped.map(({ category, rows }) => (
         <div
           key={category}
-          className={category === "Streak" ? "scroll-mt-28 space-y-2" : "space-y-2"}
+          className="space-y-2"
           {...(category === "Streak"
-            ? { id: "streak", "data-hash-anchor": true }
+            ? {
+                id: "streak",
+                "data-hash-anchor": true,
+                // See the #earn-vox anchor for why this is an inline
+                // style rather than a scroll-mt-* utility.
+                style: { scrollMarginTop: HIW_HASH_ANCHOR_OFFSET },
+              }
             : {})}
         >
           <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1012,7 +1032,23 @@ function CreditEarnTable({ accent }: { accent: string }) {
   })();
 
   return (
-    <div className="space-y-4">
+    // `earn-vox` is a hash-anchor deep-link target
+    // (/how-it-works?tab=credits#earn-vox) used by the "Earn Vox" CTAs
+    // that replaced the old Buy Vox / pricing entry points.
+    //
+    // Inline scrollMarginTop (not a Tailwind scroll-mt-*): the global
+    // `[data-hash-anchor] { scroll-margin-top: 72px }` rule in index.css
+    // is un-layered CSS, so it overrides layered Tailwind utilities.
+    // 72px only clears ONE sticky bar; this page stacks two (h-14
+    // header + the sticky knowledge tab bar ≈ 118px), which left the
+    // heading hidden behind the tab bar. HIW_HASH_ANCHOR_OFFSET clears
+    // both bars plus breathing room.
+    <div
+      className="space-y-4"
+      id="earn-vox"
+      data-hash-anchor
+      style={{ scrollMarginTop: HIW_HASH_ANCHOR_OFFSET }}
+    >
       <div className="space-y-1">
         <h3 className="font-semibold">Earn Vox by participating</h3>
         <p className="text-sm text-muted-foreground">
@@ -1536,7 +1572,7 @@ function PredictSection({
         >
           Vox tab
         </button>{" "}
-        for earn rates, signup grants, and purchase options.
+        for earn rates and signup grants.
       </p>
 
       <Card className={cn("space-y-4 p-4 sm:p-5 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>
@@ -1715,8 +1751,10 @@ function writeKnowledgeTabQuery(tab: KnowledgeTabId): void {
   const url = new URL(window.location.href);
   if (tab === "xp") url.searchParams.delete("tab");
   else url.searchParams.set("tab", tab);
-  // A shared #streak hash should not stick once the user navigates tabs.
-  if (url.hash.replace(/^#/, "") === "streak") url.hash = "";
+  // A shared section hash (#streak, #earn-vox) should not stick once the
+  // user navigates tabs.
+  const hash = url.hash.replace(/^#/, "");
+  if (hash === "streak" || hash === "earn-vox") url.hash = "";
   window.history.replaceState({}, "", url.toString());
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
