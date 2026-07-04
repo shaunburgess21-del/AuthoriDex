@@ -1464,6 +1464,10 @@ export const marketBets = pgTable("market_bets", {
   marketStatusIdx: index("market_bets_market_status_idx").on(table.marketId, table.status),
   userStatusIdx: index("market_bets_user_status_idx").on(table.userId, table.status),
   entryIdx: index("market_bets_entry_idx").on(table.entryId),
+  // Leaderboard period filters + weekly digest (settled bets by time).
+  statusSettledAtIdx: index("market_bets_status_settled_at_idx").on(table.status, table.settledAt),
+  // Per-user history ordered by recency (/api/me/predictions, profile tabs).
+  userCreatedIdx: index("market_bets_user_created_idx").on(table.userId, table.createdAt.desc()),
 }));
 
 export const insertMarketBetSchema = createInsertSchema(marketBets).omit({
@@ -1616,6 +1620,8 @@ export const ammPriceSnapshots = pgTable(
       t.entryId,
       t.recordedAt.desc(),
     ),
+    // Global age index: retention pruning deletes by recorded_at alone.
+    recordedAtIdx: index("amm_price_snapshots_recorded_at_idx").on(t.recordedAt),
   }),
 );
 
@@ -2074,6 +2080,32 @@ export const ammRuntimeSettings = pgTable("amm_runtime_settings", {
 });
 
 export type AmmRuntimeSettings = typeof ammRuntimeSettings.$inferSelect;
+
+/**
+ * Persisted daily LLM spend counters, keyed by (feature, UTC day).
+ *
+ * Backs the budget gates in server/agents/worldMarketBudget.ts
+ * (feature = 'world_markets') and nativeMarketBudget.ts
+ * (feature = 'native_markets'). Before this table the counters were
+ * in-memory only, so every redeploy reset the day's spend and the
+ * effective cap was `cap × deploys`. The in-process modules keep an
+ * in-memory fast path and treat this table as the source of truth:
+ * reservations do an atomic conditional UPDATE against the cap, and
+ * boot/rollover hydrates from the current day's row.
+ *
+ * Backend-only (service role). RLS enabled with no policies.
+ */
+export const llmDailySpend = pgTable("llm_daily_spend", {
+  feature: text("feature").notNull(),
+  day: date("day").notNull(),
+  spendUsd: numeric("spend_usd").notNull().default("0"),
+  calls: integer("calls").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ name: "llm_daily_spend_pk", columns: [t.feature, t.day] }),
+}));
+
+export type LlmDailySpend = typeof llmDailySpend.$inferSelect;
 
 /**
  * Persisted history of every AMM operational health-check run.

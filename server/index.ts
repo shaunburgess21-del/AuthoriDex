@@ -15,6 +15,7 @@ import { startNotificationsDerivationScheduler } from "./jobs/notifications-deri
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runMarketOpsDigest } from "./jobs/market-ops-digest";
 import { startAmmPriceSamplerScheduler } from "./jobs/amm-price-sampler";
+import { startRetentionCleanupScheduler } from "./jobs/retention-cleanup";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
 import { startActionWorkerScheduler } from "./agents/actionWorker";
 import { generateAllWeeklyMarkets, startMarketGeneratorScheduler } from "./jobs/market-generator";
@@ -710,6 +711,18 @@ async function startServer() {
       await resolveExpiredMarkets();
       log(`[Startup] Weekly market reconcile complete for week ${generation.weekNumber}`);
     });
+    runStartupTask("hydrate LLM budgets", async () => {
+      // Enables write-through persistence of the daily LLM spend caps to
+      // llm_daily_spend and resumes today's counters, so a redeploy no
+      // longer resets the budget (previously: effective cap = cap × deploys).
+      const { initBudgetPersistence, getBudgetSnapshot } = await import("./agents/worldMarketBudget");
+      const { initNativeBudgetPersistence, getNativeBudgetSnapshot } = await import("./agents/nativeMarketBudget");
+      await Promise.all([initBudgetPersistence(), initNativeBudgetPersistence()]);
+      log(
+        `[Startup] LLM budgets hydrated: world=$${getBudgetSnapshot().spendUsd.toFixed(2)}, ` +
+          `native=$${getNativeBudgetSnapshot().spendUsd.toFixed(2)} spent today`,
+      );
+    });
 
     // ─── Ingest mode announcement ─────────────────────────────────────────
     // The app supports two mutually-exclusive ingest modes:
@@ -770,6 +783,15 @@ async function startServer() {
     // Start market auto-resolver (resolves expired prediction markets every 5 min)
     if (!SERVERLESS_MODE) {
       startScheduler("MarketResolver", startMarketResolverScheduler);
+    }
+
+    // Daily data-retention cleanup (amm_price_snapshots, trend_snapshots,
+    // page_views, terminal agent actions, ...). Previously cron-endpoint-only
+    // and never triggered in production — tables grew unbounded.
+    if (!SERVERLESS_MODE) {
+      startScheduler("RetentionCleanup", startRetentionCleanupScheduler);
+    } else {
+      log("[Retention] Skipped - serverless mode. Use POST /api/cron/retention-cleanup.");
     }
 
     // Start staleness monitor (alerts when snapshots are >2h old)

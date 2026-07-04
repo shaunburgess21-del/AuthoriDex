@@ -199,6 +199,9 @@ export function registerCronRoutes(app: Express): void {
         cacheEntriesDeleted: result.cacheEntriesDeleted,
         ingestionRunsDeleted: result.ingestionRunsDeleted,
         pageViewsDeleted: result.pageViewsDeleted,
+        ammPriceSnapshotsDeleted: result.ammPriceSnapshotsDeleted,
+        agentActionsDeleted: result.agentActionsDeleted,
+        ammHealthRunsDeleted: result.ammHealthRunsDeleted,
         duration: result.durationMs,
         timestamp: new Date().toISOString(),
       });

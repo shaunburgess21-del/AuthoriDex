@@ -69,6 +69,31 @@ export const db = drizzle(pool, { schema });
 
 let dbPoolMonitorStarted = false;
 
+/**
+ * Session-level advisory lock on a dedicated pooled connection. The lock is
+ * held for the lifetime of `fn()` and released in a finally block, so on the
+ * happy path this is pooler-safe (the connection is pinned via pool.connect).
+ *
+ * ── ADVISORY LOCK KEY REGISTRY ─────────────────────────────────────────────
+ * Keys are global integers shared across the whole database. Two jobs using
+ * the same key silently mutually exclude each other (this actually happened:
+ * the AMM price sampler and notifications derivation both used 5_207 until
+ * Phase 2). Check this list — and grep for LOCK_KEY — before picking one.
+ *
+ *   5_201      agentRunner.ts            agent prediction batch
+ *   5_202      market-resolver.ts        market resolution sweep
+ *   5_203      live-tick.ts              cosmetic live rank tick
+ *   5_204      market-generator.ts       weekly market generation
+ *   5_207      amm-price-sampler.ts      AMM price snapshots
+ *   5_208      notifications-derivation  notification fanout pipeline
+ *   5_210      market-ops-digest.ts      daily World Markets ops digest
+ *   5_211      resolution-scout.ts       AI resolution scout
+ *   5_212      market-scout.ts           market scout draft creation
+ *   5_213      market-scout.ts           source resolution watch
+ *   12_345     ingest.ts                 trending_people writes (xact lock)
+ *   2_704_2026 induction-cycle.ts        weekly induction cycle
+ * ───────────────────────────────────────────────────────────────────────────
+ */
 export async function withDbAdvisoryLock<T>(
   lockKey: number,
   label: string,

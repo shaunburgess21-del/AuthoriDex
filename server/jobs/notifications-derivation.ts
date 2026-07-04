@@ -59,7 +59,10 @@ import { STREAK_MILESTONES } from "@shared/streak-config";
  * woken up tick) can't fan out duplicate notifications.
  */
 
-const DERIVATION_LOCK_KEY = 5_207;
+// 5_208 — was 5_207 until Phase 2, which collided with the AMM price
+// sampler's lock: the two jobs silently mutually excluded each other.
+// See the lock-key registry in server/db.ts before picking new keys.
+const DERIVATION_LOCK_KEY = 5_208;
 
 // Lookahead window for the closing-soon scanner. Markets whose close
 // lies inside this window are considered for milestone gating below;

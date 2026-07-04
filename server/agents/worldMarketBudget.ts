@@ -28,10 +28,16 @@
  * today's date to the stored one — if different, logs a one-line summary
  * of the previous day, then resets.
  *
- * Per-process: a Railway redeploy mid-day resets the counter. Worst case
- * is "cap × number of redeploys", typically 1-2x. Acceptable for a safety
- * rail; the DB-persistence complexity (locking, advisory locks, cross-
- * instance sync) isn't worth it at this stage.
+ * The synchronous in-memory counter stays the decision point (keeps the
+ * reserve API sync and this module dependency-free for tests), but since
+ * Phase 2 it is mirrored to the `llm_daily_spend` table when the server
+ * boot calls `initBudgetPersistence()` (see llmSpendStore.ts): every
+ * reserve/release is written through fire-and-forget, and boot/rollover
+ * hydrates the counter from the DB row. A redeploy therefore no longer
+ * resets the day's spend. Tests and scripts never enable persistence and
+ * keep the old pure in-memory behavior. DB failures are logged once per
+ * day and otherwise ignored — the budget rail must never take down the
+ * LLM path itself.
  *
  * --------------------------------------------------------------------------
  * Logging
@@ -124,6 +130,67 @@ function freshStateFor(dateUtc: string): BudgetState {
 let state: BudgetState = freshStateFor(todayUtcDateString());
 
 // ---------------------------------------------------------------------------
+// Persistence (Phase 2) — write-through mirror to llm_daily_spend
+// ---------------------------------------------------------------------------
+
+type SpendStore = typeof import("./llmSpendStore");
+
+const FEATURE_KEY = "world_markets";
+let store: SpendStore | null = null;
+let loggedPersistErrorToday = false;
+
+/**
+ * Enable DB persistence. Called once from the server boot path — never from
+ * tests, so the module stays pure in-memory there. Hydrates today's counter
+ * from the DB so a redeploy resumes the day's spend instead of resetting it.
+ */
+export async function initBudgetPersistence(): Promise<void> {
+  store = await import("./llmSpendStore");
+  await hydrateFromDb();
+}
+
+async function hydrateFromDb(): Promise<void> {
+  if (!store) return;
+  const day = state.dateUtc;
+  try {
+    const persisted = await store.loadPersistedSpend(FEATURE_KEY, day);
+    if (persisted && state.dateUtc === day && persisted.spendUsd > state.spendUsd) {
+      state.spendUsd = persisted.spendUsd;
+    }
+  } catch (err) {
+    logPersistErrorOnce(err);
+  }
+}
+
+function logPersistErrorOnce(err: unknown): void {
+  if (loggedPersistErrorToday) return;
+  loggedPersistErrorToday = true;
+  console.error(
+    "[WorldEngineBudget] DB persistence error (falling back to in-memory):",
+    err,
+  );
+}
+
+/**
+ * Fire-and-forget write-through. The in-memory counter is already updated
+ * synchronously by the caller; this mirrors the delta to the DB and, if
+ * another process pushed the persisted total higher, converges the local
+ * counter UP to it. Never converges down — local reserves may not have
+ * landed in the DB yet.
+ */
+function persistDelta(day: string, deltaUsd: number, deltaCalls: number): void {
+  if (!store) return;
+  store
+    .persistSpendDelta(FEATURE_KEY, day, deltaUsd, deltaCalls)
+    .then((persisted) => {
+      if (persisted && state.dateUtc === day && persisted.spendUsd > state.spendUsd) {
+        state.spendUsd = persisted.spendUsd;
+      }
+    })
+    .catch(logPersistErrorOnce);
+}
+
+// ---------------------------------------------------------------------------
 // Snapshot — read-only view for ops / tests
 // ---------------------------------------------------------------------------
 
@@ -173,6 +240,10 @@ function rolloverIfNewDay(): void {
   );
 
   state = freshStateFor(today);
+  loggedPersistErrorToday = false;
+  // Usually a no-op (fresh day, no row yet), but covers restarts that
+  // happen to coincide with rollover and multi-instance overlap.
+  void hydrateFromDb();
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +314,10 @@ export function tryReserveLlmCall(estimatedCostUsd?: number): Reservation {
   // returns. If the call fails the caller invokes release() to refund.
   state.spendUsd += cost;
   state.callsReserved += 1;
+  // Capture the day at reserve time so a release that straddles UTC
+  // midnight refunds the row it actually debited.
+  const reservedDay = state.dateUtc;
+  persistDelta(reservedDay, cost, 1);
 
   let consumed = false;
   return {
@@ -258,6 +333,7 @@ export function tryReserveLlmCall(estimatedCostUsd?: number): Reservation {
       consumed = true; // also defends against double-release
       state.spendUsd = Math.max(0, state.spendUsd - cost);
       state.callsReleased += 1;
+      persistDelta(reservedDay, -cost, -1);
     },
   };
 }
@@ -291,6 +367,8 @@ export function _resetBudgetForTesting(): void {
   CAP_USD = resolveDailyBudgetUsd();
   DEFAULT_ESTIMATE_USD = resolvePerCallEstimateUsd();
   state = freshStateFor(todayUtcDateString());
+  store = null; // persistence is never active in tests
+  loggedPersistErrorToday = false;
 }
 
 /**

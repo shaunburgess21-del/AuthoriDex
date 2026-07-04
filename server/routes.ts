@@ -113,6 +113,7 @@ import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
+import { memoizeAsyncSwr } from "./services/insights/request-memo";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
@@ -5289,14 +5290,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/leaderboard/users - User prediction leaderboard ranked by P&L
+  //
+  // Perf: the ranking itself (full market_bets aggregation + AMM avg-cost
+  // P&L for every user + sort) is computed at most once per period per
+  // 60s and shared across all callers — search, pagination, and viewer
+  // identity are applied per request on top of the cached array. Without
+  // this, every page load recomputed every user's P&L; pagination was
+  // cosmetic (`.slice()` after ranking the whole board).
+  //
+  // Stale-while-revalidate: the compute takes multi-second (full AMM
+  // P&L scan), so once the TTL lapses we keep serving the expired
+  // ranking (up to 10 min old) while ONE background refresh recomputes
+  // it. Only a fully cold cache (boot, or idle >10 min) blocks a caller.
+  const USER_LEADERBOARD_MEMO_MS = 60_000;
+  const USER_LEADERBOARD_STALE_MAX_MS = 10 * 60_000;
   app.get("/api/leaderboard/users", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const period = (req.query.period as string) || 'all';
+      const rawPeriod = (req.query.period as string) || 'all';
+      // Normalise so unknown values share the 'all' cache entry instead of
+      // minting unbounded memo keys. (Client only ever sends these four.)
+      const period = ['today', 'week', 'month'].includes(rawPeriod) ? rawPeriod : 'all';
       const search = (req.query.search as string) || '';
       const page = Math.max(parseInt(req.query.page as string) || 0, 0);
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
-      const userId = req.userId;
+      const viewerId = req.userId;
 
+      const baseRows = await memoizeAsyncSwr(
+        `leaderboard:users:${period}`,
+        USER_LEADERBOARD_MEMO_MS,
+        USER_LEADERBOARD_STALE_MAX_MS,
+        async () => computeUserLeaderboardBase(period),
+      );
+
+      const searchLower = search.trim().toLowerCase();
+      const ranked = baseRows
+        .map((r) => {
+          // positionsPublic=false anonymises identity on the leaderboard
+          // while still letting their P&L count toward the ranking — rank
+          // is earned regardless of visibility. Viewers always see their
+          // own row un-anonymised.
+          const shouldRevealIdentity = r.userId === viewerId || r.revealPublicly;
+          return {
+            rank: r.rank,
+            userId: r.userId,
+            username: shouldRevealIdentity ? r.username : null,
+            displayName: shouldRevealIdentity ? (r.username || 'Anonymous') : 'Private Predictor',
+            avatarUrl: shouldRevealIdentity ? r.avatarUrl : null,
+            isPublic: r.isPublic,
+            userRank: r.userRank,
+            currentStreak: r.currentStreak,
+            lastActiveAt: r.lastActiveAt,
+            // `profitLoss` stays as the sortable total (= realised +
+            // unrealised) for back-compat with the existing UI. The
+            // split is exposed on `realisedPnl` / `unrealisedPnl` so
+            // tooltips can show the breakdown.
+            profitLoss: r.realisedPnl + r.unrealisedPnl,
+            realisedPnl: r.realisedPnl,
+            unrealisedPnl: r.unrealisedPnl,
+            totalPnl: r.realisedPnl + r.unrealisedPnl,
+            volume: r.volume,
+            winCount: r.winCount,
+            totalResolved: r.totalResolved,
+            winRate: r.totalResolved > 0 ? Math.round((r.winCount / r.totalResolved) * 100) : 0,
+          };
+        })
+        .filter(r => !searchLower || (r.username || '').toLowerCase().includes(searchLower) || r.displayName.toLowerCase().includes(searchLower));
+
+      const total = ranked.length;
+
+      // Find logged-in user's entry (before pagination)
+      let userEntry = null;
+      if (viewerId) {
+        const found = ranked.find(r => r.userId === viewerId);
+        if (found) userEntry = found;
+      }
+
+      const data = ranked.slice(page * limit, page * limit + limit);
+
+      res.json({ data, total, userEntry });
+    } catch (error: any) {
+      console.error("[leaderboard/users] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch user leaderboard" });
+    }
+  });
+
+  /**
+   * Viewer-independent leaderboard ranking for one period. Everything
+   * per-viewer (identity reveal, search, pagination) happens in the
+   * route handler on top of this cached result.
+   */
+  async function computeUserLeaderboardBase(period: string) {
       // Build period filter on settledAt. Also keep the cutoff as a
       // Date so we can pass it to the AMM helper (which can't easily
       // share the same `sql` fragment because it aggregates in JS).
@@ -5387,7 +5470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (statsRows.length === 0) {
-        return res.json({ data: [], total: 0, userEntry: null });
+        return [];
       }
 
       // Fetch profile info for all user IDs, including public AI agents
@@ -5454,63 +5537,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return a.userId.localeCompare(b.userId);
       });
 
-      const searchLower = search.trim().toLowerCase();
-      const ranked = statsRows
-        .map((r, i) => {
-          const profile = profileMap.get(r.userId);
-          const isViewer = userId === r.userId;
-          const isPublic = profile?.isPublic ?? true;
-          // positionsPublic=false anonymises identity on the
-          // leaderboard while still letting their P&L count toward
-          // the ranking — rank is earned regardless of visibility.
-          const positionsPublic = profile?.positionsPublic ?? true;
-          const shouldRevealIdentity =
-            isViewer || (isPublic && positionsPublic);
-          const realisedPnl = realisedFor(r.userId);
-          const unrealisedPnl = unrealisedFor(r.userId);
-          return {
-            rank: i + 1,
-            userId: r.userId,
-            username: shouldRevealIdentity ? (profile?.username || null) : null,
-            displayName: shouldRevealIdentity ? (profile?.username || 'Anonymous') : 'Private Predictor',
-            avatarUrl: shouldRevealIdentity ? (profile?.avatarUrl || null) : null,
-            isPublic,
-            userRank: profile?.rank || 'Citizen',
-            currentStreak: profile?.currentStreak || 0,
-            lastActiveAt: profile?.lastActiveAt || null,
-            // `profitLoss` stays as the sortable total (= realised +
-            // unrealised) for back-compat with the existing UI. The
-            // split is exposed on `realisedPnl` / `unrealisedPnl` so
-            // tooltips can show the breakdown.
-            profitLoss: realisedPnl + unrealisedPnl,
-            realisedPnl,
-            unrealisedPnl,
-            totalPnl: realisedPnl + unrealisedPnl,
-            volume: volumeFor(r.userId),
-            winCount: Number(r.winCount) || 0,
-            totalResolved: Number(r.totalResolved) || 0,
-            winRate: Number(r.totalResolved) > 0 ? Math.round((Number(r.winCount) / Number(r.totalResolved)) * 100) : 0,
-          };
-        })
-        .filter(r => !searchLower || (r.username || '').toLowerCase().includes(searchLower) || r.displayName.toLowerCase().includes(searchLower));
-
-      const total = ranked.length;
-
-      // Find logged-in user's entry (before pagination)
-      let userEntry = null;
-      if (userId) {
-        const found = ranked.find(r => r.userId === userId);
-        if (found) userEntry = found;
-      }
-
-      const data = ranked.slice(page * limit, page * limit + limit);
-
-      res.json({ data, total, userEntry });
-    } catch (error: any) {
-      console.error("[leaderboard/users] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch user leaderboard" });
-    }
-  });
+      // Viewer-independent projection. Identity is NOT stripped here:
+      // the route handler decides per viewer whether to anonymise
+      // (a private predictor must still see their own row).
+      return statsRows.map((r, i) => {
+        const profile = profileMap.get(r.userId);
+        const isPublic = profile?.isPublic ?? true;
+        const positionsPublic = profile?.positionsPublic ?? true;
+        return {
+          rank: i + 1,
+          userId: r.userId,
+          username: profile?.username || null,
+          avatarUrl: profile?.avatarUrl || null,
+          isPublic,
+          revealPublicly: isPublic && positionsPublic,
+          userRank: profile?.rank || 'Citizen',
+          currentStreak: profile?.currentStreak || 0,
+          lastActiveAt: profile?.lastActiveAt || null,
+          realisedPnl: realisedFor(r.userId),
+          unrealisedPnl: unrealisedFor(r.userId),
+          volume: volumeFor(r.userId),
+          winCount: Number(r.winCount) || 0,
+          totalResolved: Number(r.totalResolved) || 0,
+        };
+      });
+  }
 
   // POST /api/celebrity-metrics/sync - Sync all celebrity metrics (admin)
   app.post("/api/celebrity-metrics/sync", requireAuth, requireAdmin, async (req, res) => {

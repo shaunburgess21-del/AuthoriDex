@@ -624,6 +624,13 @@
       "when": 1783275000000,
       "tag": "0088_trend_snapshots_ts_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1783375000000,
+      "tag": "0089_phase2_indexes",
+      "breakpoints": true
     }
   ]
 }

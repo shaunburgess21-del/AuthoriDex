@@ -46,6 +46,50 @@ export async function memoizeAsync<T>(
   return promise;
 }
 
+/**
+ * Stale-while-revalidate variant of `memoizeAsync` for expensive loaders
+ * (multi-second aggregates like the user leaderboard). Within `ttlMs` the
+ * cached value is served as usual. Between `ttlMs` and `ttlMs + staleMaxMs`
+ * the EXPIRED value is served immediately while one background refresh
+ * recomputes it — so after the first cold compute, callers never block on
+ * the loader again. Only a value older than the stale window (or a cold
+ * cache) makes the caller wait.
+ *
+ * A failed background refresh keeps the stale value in place; the next
+ * caller triggers another attempt.
+ */
+export async function memoizeAsyncSwr<T>(
+  key: string,
+  ttlMs: number,
+  staleMaxMs: number,
+  loader: () => Promise<T>,
+): Promise<T> {
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > now) {
+    return hit.value as T;
+  }
+
+  if (hit && hit.expiresAt + staleMaxMs > now) {
+    if (!inFlight.has(key)) {
+      const refresh = (async () => {
+        try {
+          const value = await loader();
+          cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+          return value;
+        } finally {
+          inFlight.delete(key);
+        }
+      })();
+      inFlight.set(key, refresh);
+      refresh.catch(() => {});
+    }
+    return hit.value as T;
+  }
+
+  return memoizeAsync(key, ttlMs, loader);
+}
+
 const inFlightOnly = new Map<string, Promise<unknown>>();
 
 /**

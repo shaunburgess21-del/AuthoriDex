@@ -1,7 +1,9 @@
 /**
  * Daily LLM budget cap for native-market assessments (updown / h2h / gainer).
  * Mirrors worldMarketBudget.ts — separate counter so world + native caps
- * don't compete.
+ * don't compete. Like the world budget, the in-memory counter is mirrored
+ * to `llm_daily_spend` once the server boot calls
+ * `initNativeBudgetPersistence()`; tests stay pure in-memory.
  */
 
 function resolveDailyBudgetUsd(): number {
@@ -46,6 +48,54 @@ function freshStateFor(dateUtc: string): BudgetState {
 
 let state: BudgetState = freshStateFor(todayUtcDateString());
 
+// --- Persistence (Phase 2): write-through mirror to llm_daily_spend. ---
+// See worldMarketBudget.ts for the full design commentary.
+
+type SpendStore = typeof import("./llmSpendStore");
+
+const FEATURE_KEY = "native_markets";
+let store: SpendStore | null = null;
+let loggedPersistErrorToday = false;
+
+export async function initNativeBudgetPersistence(): Promise<void> {
+  store = await import("./llmSpendStore");
+  await hydrateFromDb();
+}
+
+async function hydrateFromDb(): Promise<void> {
+  if (!store) return;
+  const day = state.dateUtc;
+  try {
+    const persisted = await store.loadPersistedSpend(FEATURE_KEY, day);
+    if (persisted && state.dateUtc === day && persisted.spendUsd > state.spendUsd) {
+      state.spendUsd = persisted.spendUsd;
+    }
+  } catch (err) {
+    logPersistErrorOnce(err);
+  }
+}
+
+function logPersistErrorOnce(err: unknown): void {
+  if (loggedPersistErrorToday) return;
+  loggedPersistErrorToday = true;
+  console.error(
+    "[NativeEngineBudget] DB persistence error (falling back to in-memory):",
+    err,
+  );
+}
+
+function persistDelta(day: string, deltaUsd: number, deltaCalls: number): void {
+  if (!store) return;
+  store
+    .persistSpendDelta(FEATURE_KEY, day, deltaUsd, deltaCalls)
+    .then((persisted) => {
+      if (persisted && state.dateUtc === day && persisted.spendUsd > state.spendUsd) {
+        state.spendUsd = persisted.spendUsd;
+      }
+    })
+    .catch(logPersistErrorOnce);
+}
+
 export interface NativeBudgetSnapshot {
   dateUtc: string;
   spendUsd: number;
@@ -85,6 +135,8 @@ function rolloverIfNewDay(): void {
       `in ${successfulCalls} successful calls, ${state.callsBlocked} blocked. Resetting for ${today}.`,
   );
   state = freshStateFor(today);
+  loggedPersistErrorToday = false;
+  void hydrateFromDb();
 }
 
 export type NativeReservation =
@@ -125,6 +177,10 @@ export function tryReserveNativeLlmCall(estimatedCostUsd?: number): NativeReserv
 
   state.spendUsd += cost;
   state.callsReserved += 1;
+  // Day captured at reserve time so a midnight-straddling release
+  // refunds the row it debited.
+  const reservedDay = state.dateUtc;
+  persistDelta(reservedDay, cost, 1);
   let consumed = false;
   return {
     allowed: true,
@@ -136,6 +192,7 @@ export function tryReserveNativeLlmCall(estimatedCostUsd?: number): NativeReserv
       consumed = true;
       state.spendUsd = Math.max(0, state.spendUsd - cost);
       state.callsReleased += 1;
+      persistDelta(reservedDay, -cost, -1);
     },
   };
 }
@@ -144,6 +201,8 @@ export function _resetNativeBudgetForTesting(): void {
   CAP_USD = resolveDailyBudgetUsd();
   DEFAULT_ESTIMATE_USD = resolvePerCallEstimateUsd();
   state = freshStateFor(todayUtcDateString());
+  store = null; // persistence is never active in tests
+  loggedPersistErrorToday = false;
 }
 
 export function _overrideNativeClockForTesting(clock: ClockFn | null): void {
