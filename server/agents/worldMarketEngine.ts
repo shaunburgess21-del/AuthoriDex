@@ -44,7 +44,13 @@ function getOpenAIClient(): OpenAI {
 }
 
 const API_TIMEOUT_MS = 45_000;
-const MAX_OUTPUT_TOKENS = 400;
+/**
+ * Generous on purpose: on reasoning models `max_output_tokens` also covers
+ * invisible reasoning tokens, and with web_search a tight cap truncates the
+ * JSON mid-string (the resolution scout hit ~60% failures at 500 in Jul
+ * 2026 production). Cost delta is negligible under the daily budget rail.
+ */
+const MAX_OUTPUT_TOKENS = 2_000;
 
 // In-process dedupe: when 56 agents simultaneously evaluate the same market in
 // a single sweep, only one of them should fire the LLM call. The rest await
@@ -319,6 +325,13 @@ async function callWorldMarketLlm(
     let jsonText = outputText.trim();
     if (jsonText.startsWith("```")) {
       jsonText = jsonText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+    // Resilience: parse the outermost {...} span in case the model wrapped
+    // the object in prose or citation markup despite the instructions.
+    const firstBrace = jsonText.indexOf("{");
+    const lastBrace = jsonText.lastIndexOf("}");
+    if (firstBrace > 0 && lastBrace > firstBrace) {
+      jsonText = jsonText.slice(firstBrace, lastBrace + 1);
     }
 
     let parsed: any;

@@ -52,7 +52,15 @@ function envFlag(value: string | undefined): boolean {
 }
 
 const API_TIMEOUT_MS = 45_000;
-const MAX_OUTPUT_TOKENS = 500;
+/**
+ * Generous on purpose: on reasoning models (gpt-5.x) `max_output_tokens`
+ * also covers invisible reasoning tokens, and with web_search in the loop
+ * a 500 cap truncated the JSON mid-string on ~60% of calls (Jul 2026
+ * production logs: "Unterminated string in JSON" / "Empty response").
+ * 2000 leaves the model room to reason AND emit the full object; the cost
+ * delta is fractions of a cent per call under the daily budget rail.
+ */
+const MAX_OUTPUT_TOKENS = 2_000;
 
 function scoutEnabled(): boolean {
   return envFlag(process.env.RESOLUTION_SCOUT_LLM_ENABLED);
@@ -338,6 +346,13 @@ async function assessMarket(
     let jsonText = outputText.trim();
     if (jsonText.startsWith("```")) {
       jsonText = jsonText.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+    }
+    // Resilience: models sometimes wrap the object in prose or citation
+    // markup despite the instructions. Parse the outermost {...} span.
+    const firstBrace = jsonText.indexOf("{");
+    const lastBrace = jsonText.lastIndexOf("}");
+    if (firstBrace > 0 && lastBrace > firstBrace) {
+      jsonText = jsonText.slice(firstBrace, lastBrace + 1);
     }
     const parsed = JSON.parse(jsonText);
 
