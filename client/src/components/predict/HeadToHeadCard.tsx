@@ -14,6 +14,7 @@ import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import { h2hShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
 
 type CategoryFilter = FilterCategory;
@@ -207,6 +208,7 @@ export function HeadToHeadCard({
               leaderboardCategories={leaderboardCategories}
               detailHref={`/predict/h2h/${market.id}`}
               detailLabel="View Battle Details"
+              share={market.id ? h2hShare(market.id, market.title) : undefined}
             />
           </div>
         </div>

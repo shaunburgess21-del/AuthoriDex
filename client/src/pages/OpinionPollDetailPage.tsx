@@ -528,6 +528,7 @@ export default function OpinionPollDetailPage() {
                   disabled={voteMutation.isPending}
                   onVote={() => handleDetailVote(option)}
                   onExpandImage={() => openOptionImageReview(option.id)}
+                  imageInteraction="gallery"
                   testIdPrefix="button-vote-option"
                 />
               ))}
@@ -559,6 +560,7 @@ export default function OpinionPollDetailPage() {
                     disabled={voteMutation.isPending}
                     onChangeVote={() => handleDetailChangeVote(option)}
                     onExpandImage={() => openOptionImageReview(option.id)}
+                    imageInteraction="gallery"
                     testIdPrefix="opinion-poll-cast-result"
                   />
                 );

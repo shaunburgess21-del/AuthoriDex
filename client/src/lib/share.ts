@@ -31,6 +31,73 @@ interface SharePageOptions {
   url?: string;
 }
 
+/** Share payload for card category-pill menus (list pages need an explicit path). */
+export interface CardShareConfig {
+  title: string;
+  path: string;
+  surface: ShareSurface;
+}
+
+export function resolveShareUrl(path: string): string {
+  return new URL(path, window.location.origin).toString();
+}
+
+export function sentimentPollShare(slug: string, headline: string): CardShareConfig {
+  return {
+    title: `${headline} on VoxDex`,
+    path: `/polls/${encodeURIComponent(slug)}`,
+    surface: "poll",
+  };
+}
+
+export function matchupShare(slug: string, prompt: string): CardShareConfig {
+  return {
+    title: `${prompt} on VoxDex`,
+    path: `/vote/matchups/${encodeURIComponent(slug)}`,
+    surface: "matchup",
+  };
+}
+
+export function opinionPollShare(slug: string, title: string): CardShareConfig {
+  return {
+    title: `${title} on VoxDex`,
+    path: `/vote/opinion-polls/${encodeURIComponent(slug)}`,
+    surface: "poll",
+  };
+}
+
+export function upDownShare(marketId: string, personName: string): CardShareConfig {
+  return {
+    title: `${personName}: Up or Down? on VoxDex`,
+    path: `/predict/updown/${encodeURIComponent(marketId)}`,
+    surface: "market",
+  };
+}
+
+export function h2hShare(marketId: string, title: string): CardShareConfig {
+  return {
+    title: `${title} on VoxDex`,
+    path: `/predict/h2h/${encodeURIComponent(marketId)}`,
+    surface: "market",
+  };
+}
+
+export function categoryRaceShare(marketId: string, categoryLabel: string): CardShareConfig {
+  return {
+    title: `Category Race: ${categoryLabel} on VoxDex`,
+    path: `/predict/race/${encodeURIComponent(marketId)}`,
+    surface: "market",
+  };
+}
+
+export function worldMarketShare(slug: string, title: string): CardShareConfig {
+  return {
+    title: `${title} on VoxDex`,
+    path: `/markets/${encodeURIComponent(slug)}`,
+    surface: "market",
+  };
+}
+
 /**
  * Append attribution params to a share URL.
  *

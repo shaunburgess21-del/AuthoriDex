@@ -1,11 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { Link } from "wouter";
-import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown } from "lucide-react";
+import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown, Share2 } from "lucide-react";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { getCategoryStyle, CategoryPill } from "@/components/CategoryPill";
 import { CATEGORY_CHIP_RADIUS, POLL_CARD_PILL_SIZE_CLASSES } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  sharePage,
+  resolveShareUrl,
+  type CardShareConfig,
+} from "@/lib/share";
 import {
   Popover,
   PopoverTrigger,
@@ -90,6 +96,8 @@ interface InteractiveCategoryPillProps {
   onBrowseFullScreen?: () => void;
   /** When true, render a static label chip (e.g. snap view — no drawer/menu). */
   menuDisabled?: boolean;
+  /** When set, adds a Share row that mirrors the card's detail-page share link. */
+  share?: CardShareConfig;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
   "data-testid"?: string;
@@ -106,6 +114,8 @@ function MenuItems({
   onFilter,
   onBrowseFullScreen,
   onBrowseIntentStart,
+  share,
+  sharerUserId,
   CloseWrapper,
 }: {
   label: string;
@@ -118,6 +128,8 @@ function MenuItems({
   onFilter: () => void;
   onBrowseFullScreen?: () => void;
   onBrowseIntentStart?: () => void;
+  share?: CardShareConfig;
+  sharerUserId?: string | null;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
   const showLeaderboard = !leaderboardCategories || leaderboardCategories.has(normalizeMarketCategory(category));
@@ -172,6 +184,25 @@ function MenuItems({
         )
       )}
 
+      {share && (
+        <CloseWrapper asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+            onClick={() => {
+              void sharePage(share.title, {
+                sharerUserId,
+                surface: share.surface,
+                url: resolveShareUrl(share.path),
+              });
+            }}
+          >
+            <Share2 className="h-4 w-4 opacity-60 shrink-0" />
+            Share
+          </button>
+        </CloseWrapper>
+      )}
+
       {onBrowseFullScreen ? (
         <CloseWrapper asChild>
           <button
@@ -210,6 +241,7 @@ export function InteractiveCategoryPill({
   detailLabel,
   onBrowseFullScreen,
   menuDisabled = false,
+  share,
   size = "default",
   className = "",
   "data-testid": testId,
@@ -217,6 +249,7 @@ export function InteractiveCategoryPill({
   const [open, setOpen] = useState(false);
   const pendingBrowseFullScreenRef = useRef(false);
   const isMobile = useIsMobile();
+  const { user } = useAuth();
   const style = getCategoryStyle(category);
   const sizeClass = SIZE_CLASSES[size];
   const label = getMarketCategoryLabel(category);
@@ -330,6 +363,8 @@ export function InteractiveCategoryPill({
             <DrawerTitle className="sr-only">{label} actions</DrawerTitle>
             <MenuItems
               {...menuProps}
+              share={share}
+              sharerUserId={user?.id}
               onDetailNavigate={detailNavHandler}
               onBrowseIntentStart={markCategoryPillBrowseIntent}
               onBrowseFullScreen={browseFullScreenHandler}
@@ -351,6 +386,8 @@ export function InteractiveCategoryPill({
       <PopoverContent align="end" className="w-56 p-1">
         <MenuItems
           {...menuProps}
+          share={share}
+          sharerUserId={user?.id}
           onDetailNavigate={detailNavHandler}
           onBrowseIntentStart={markCategoryPillBrowseIntent}
           onBrowseFullScreen={browseFullScreenHandler}

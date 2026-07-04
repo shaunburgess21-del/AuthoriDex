@@ -17,6 +17,7 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { opinionPollShare } from "@/lib/share";
 import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -297,6 +298,7 @@ export function OpinionPollCard({
             detailOnNavigate={onNavigateToDetail}
             detailLabel="View Poll Details"
             onBrowseFullScreen={onBrowseFullScreen}
+            share={poll.slug ? opinionPollShare(poll.slug, poll.title) : undefined}
             menuDisabled={categoryMenuDisabled}
             size="pollCard"
             data-testid={`badge-opinion-category-${poll.id}`}
@@ -372,6 +374,7 @@ export function OpinionPollCard({
                   mode="vote"
                   onVote={(e) => handleVote(option.id, e)}
                   onExpandImage={() => openCardOptionImageReview(option.id)}
+                  imageInteraction="gallery"
                   testIdPrefix="opinion-poll-option"
                 />
               );
@@ -395,6 +398,7 @@ export function OpinionPollCard({
                   isLeading={isLeading}
                   onChangeVote={(e) => openChangeDialog(option, e)}
                   onExpandImage={() => openCardOptionImageReview(option.id)}
+                  imageInteraction="gallery"
                   testIdPrefix="opinion-poll-result"
                 />
               );

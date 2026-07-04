@@ -16,6 +16,8 @@ import {
   removeTrackedMatchupNeutralVote,
   trackMatchupNeutralVote,
 } from "@/lib/matchup-neutral-nudge";
+import { matchupShare } from "@/lib/share";
+import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -124,6 +126,11 @@ export function VersusCard({
               detailOnNavigate={onNavigateToDetail}
               detailLabel="View Matchup Details"
               onBrowseFullScreen={onBrowseFullScreen}
+              share={
+                matchup.slug
+                  ? matchupShare(matchup.slug, matchup.promptText?.trim() || matchup.title)
+                  : undefined
+              }
               menuDisabled={categoryMenuDisabled}
               size="pollCard"
               data-testid={`badge-matchup-${matchup.id}`}
@@ -450,8 +457,9 @@ export function VersusCard({
                         ? "border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400"
                         : votedB
                           ? "border-amber-500/50 dark:border-amber-500/40 text-amber-600 dark:text-amber-400"
-                          : "border-slate-400/50 dark:border-slate-500/40 text-slate-500 dark:text-slate-400"
+                          : undefined
                     }
+                    pillStyle={votedNeutral ? getSentimentPollVotedPillStyle("neutral") : undefined}
                     data-testid={`badge-voted-matchup-${matchup.id}`}
                   />
                 </div>

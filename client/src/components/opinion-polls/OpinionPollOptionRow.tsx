@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Maximize2 } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
+import { cn } from "@/lib/utils";
 
 export type OpinionPollOptionRowOption = {
   id: string;
@@ -11,6 +12,7 @@ export type OpinionPollOptionRowOption = {
 };
 
 export type OpinionPollOptionRowMode = "vote" | "result-selected" | "result-other";
+export type OpinionPollOptionImageInteraction = "lightbox" | "gallery";
 
 export function OpinionPollOptionRow({
   pollId,
@@ -24,6 +26,7 @@ export function OpinionPollOptionRow({
   onExpandImage,
   testIdPrefix,
   disabled = false,
+  imageInteraction = "lightbox",
 }: {
   pollId: string;
   option: OpinionPollOptionRowOption;
@@ -36,16 +39,29 @@ export function OpinionPollOptionRow({
   onExpandImage: (url: string, alt: string) => void;
   testIdPrefix: string;
   disabled?: boolean;
+  imageInteraction?: OpinionPollOptionImageInteraction;
 }) {
+  const opensGallery = imageInteraction === "gallery";
   const imageColumn = option.imageUrl ? (
     <button
       type="button"
-      aria-label="View larger image"
+      aria-label={opensGallery ? "Open image review" : "View larger image"}
       disabled={disabled}
       onClick={() => onExpandImage(option.imageUrl!, option.name)}
-      className="relative shrink-0 w-14 self-stretch min-h-[2.75rem] cursor-zoom-in border-0 p-0 disabled:cursor-not-allowed"
+      className={cn(
+        "group/thumb relative shrink-0 w-14 self-stretch min-h-[2.75rem] overflow-hidden border-0 p-0 disabled:cursor-not-allowed",
+        opensGallery ? "cursor-pointer" : "cursor-zoom-in",
+      )}
     >
       <img src={getDisplayImageUrl(option.imageUrl!, { width: 200 })} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+      {opensGallery ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition-opacity duration-200 [@media(hover:hover)_and_(pointer:fine)]:group-hover/thumb:opacity-100"
+        >
+          <Maximize2 className="h-4 w-4 text-white" />
+        </span>
+      ) : null}
     </button>
   ) : (
     <div className="relative flex shrink-0 w-14 items-center justify-center self-stretch min-h-[2.75rem] bg-cyan-500/15 dark:bg-cyan-500/10">

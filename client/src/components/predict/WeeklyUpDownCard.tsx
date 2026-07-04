@@ -13,6 +13,7 @@ import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { formatVoxCompact } from "@/lib/currency";
+import { upDownShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
 
 type CategoryFilter = FilterCategory;
@@ -145,6 +146,7 @@ export function WeeklyUpDownCard({
           detailHref={`/predict/updown/${market.id}`}
           detailLabel="View Up/Down Details"
           onBrowseFullScreen={onBrowseFullScreen}
+          share={market.id ? upDownShare(market.id, market.personName) : undefined}
           menuDisabled={categoryMenuDisabled}
         />
       </div>

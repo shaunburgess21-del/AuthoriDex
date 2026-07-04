@@ -11,8 +11,9 @@ import { Link, useLocation } from "wouter";
 import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink } from "lucide-react";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
-import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { worldMarketShare } from "@/lib/share";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 
 /**
  * Sprint 5 / Phase 0: build the predict-page return anchor key for a
@@ -220,7 +221,18 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
             </Badge>
           )}
         </div>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" onBrowseFullScreen={onBrowseFullScreen} menuDisabled={categoryMenuDisabled} />}
+        {market.category && (
+          <InteractiveCategoryPill
+            category={market.category}
+            onFilter={() => onFilterCategory?.(market.category)}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={`/markets/${market.slug}`}
+            detailLabel="View Market Details"
+            onBrowseFullScreen={onBrowseFullScreen}
+            share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            menuDisabled={categoryMenuDisabled}
+          />
+        )}
       </div>
 
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
@@ -588,7 +600,18 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
             </Badge>
           )}
         </div>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" onBrowseFullScreen={onBrowseFullScreen} menuDisabled={categoryMenuDisabled} />}
+        {market.category && (
+          <InteractiveCategoryPill
+            category={market.category}
+            onFilter={() => onFilterCategory?.(market.category)}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={`/markets/${market.slug}`}
+            detailLabel="View Market Details"
+            onBrowseFullScreen={onBrowseFullScreen}
+            share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            menuDisabled={categoryMenuDisabled}
+          />
+        )}
       </div>
 
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
@@ -806,7 +829,18 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
             </Badge>
           )}
         </div>
-        {market.category && <InteractiveCategoryPill category={market.category} onFilter={() => onFilterCategory?.(market.category)} leaderboardCategories={leaderboardCategories} detailHref={`/markets/${market.slug}`} detailLabel="View Market Details" onBrowseFullScreen={onBrowseFullScreen} menuDisabled={categoryMenuDisabled} />}
+        {market.category && (
+          <InteractiveCategoryPill
+            category={market.category}
+            onFilter={() => onFilterCategory?.(market.category)}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={`/markets/${market.slug}`}
+            detailLabel="View Market Details"
+            onBrowseFullScreen={onBrowseFullScreen}
+            share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            menuDisabled={categoryMenuDisabled}
+          />
+        )}
       </div>
 
       <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>

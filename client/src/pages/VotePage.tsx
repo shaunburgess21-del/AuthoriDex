@@ -106,6 +106,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { FILTER_INACTIVE_PILL_VOTE, FILTER_INACTIVE_SECTION_TOGGLE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import { sentimentPollShare } from "@/lib/share";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import {
@@ -916,6 +917,7 @@ function DiscourseCard({
           detailOnNavigate={onNavigateToPollDetail}
           detailLabel="View Poll Details"
           onBrowseFullScreen={onBrowseFullScreen}
+          share={topic.slug ? sentimentPollShare(topic.slug, topic.headline) : undefined}
           menuDisabled={categoryMenuDisabled}
           size="pollCard"
           data-testid={`badge-category-${topic.id}`}

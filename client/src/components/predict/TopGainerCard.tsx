@@ -12,6 +12,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } 
 import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { categoryRaceShare } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
 
@@ -153,6 +154,11 @@ export function TopGainerCard({
             onFilter={() => onFilterCategory?.(market.category)}
             raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
             leaderboardCategories={leaderboardCategories}
+            share={
+              market.id
+                ? categoryRaceShare(market.id, getMarketCategoryLabel(market.category))
+                : undefined
+            }
           />
         </div>
       </div>
