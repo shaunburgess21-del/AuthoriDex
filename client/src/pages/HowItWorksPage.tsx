@@ -61,6 +61,9 @@ import {
 import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
+import { ReferAFriendCard } from "@/components/ReferAFriendCard";
+import { REFERRAL_PANEL_GLOW_CLASS } from "@/components/referral/ReferralFriendPanel";
+import { navigateToLogin } from "@/lib/authReturn";
 import { HowItWorksWelcomeModal } from "@/components/HowItWorksWelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
@@ -918,6 +921,46 @@ function RanksSection() {
   );
 }
 
+/**
+ * Referral CTA slot under the "How to earn Vox" header. Logged-in
+ * users get the full ReferAFriendCard (personal link + share);
+ * logged-out visitors get a matching-glow teaser with a signup CTA
+ * so the flagship earn action is visible pre-account.
+ */
+function EarnVoxReferralSlot() {
+  const { isLoggedIn } = useAuth();
+  const [, navigate] = useLocation();
+
+  if (isLoggedIn) return <ReferAFriendCard />;
+
+  const referralBonus =
+    CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
+      ?.proposedCredits ?? 0;
+  const headStart = SIGNUP_CREDIT_GRANT + referralBonus;
+
+  return (
+    <Card
+      className={cn(REFERRAL_PANEL_GLOW_CLASS, "space-y-3 p-6")}
+      data-testid="refer-a-friend-signup-teaser"
+    >
+      <h3 className="font-semibold">Refer a Friend</h3>
+      <p className="text-sm text-muted-foreground">
+        Create an account to get your personal referral link. Friends who join
+        through it start with {formatVox(headStart)} (
+        {formatVox(SIGNUP_CREDIT_GRANT)} signup grant + {formatVox(referralBonus)}{" "}
+        bonus) — and you earn Vox when they make their first move.
+      </p>
+      <Button
+        className="w-full sm:w-auto"
+        onClick={() => navigateToLogin(navigate, { mode: "signup" })}
+        data-testid="button-referral-teaser-signup"
+      >
+        Create account
+      </Button>
+    </Card>
+  );
+}
+
 function CreditsSection() {
   const accent = accentFor("credits");
   return (
@@ -996,6 +1039,24 @@ function CreditsSection() {
         </div>
       </Card>
 
+      <Separator />
+
+      <div className="space-y-1 pt-1">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-wider"
+          style={{ color: accent }}
+        >
+          Earn
+        </p>
+        <h2 className="text-xl font-semibold tracking-tight">How to earn Vox</h2>
+        <p className="text-sm text-muted-foreground">
+          Referrals pay the most, then daily engagement — here&apos;s every way
+          to top up.
+        </p>
+      </div>
+
+      <EarnVoxReferralSlot />
+
       <CreditEarnTable accent={accent} />
     </section>
   );
@@ -1010,11 +1071,203 @@ const CREDIT_CATEGORY_LABELS: Record<CreditCategory, string> = {
   SPECIAL: "Special",
 };
 
+interface EngagementSectionRow {
+  /** Surface name shown in the Section column. */
+  name: string;
+  /** Credit action key whose live values this row displays. */
+  creditKey: string;
+  /** Optional per-row clarification (hidden below md). */
+  note?: string;
+}
+
+interface EngagementBand {
+  /** Action heading, e.g. "Vote" / "Post Comment". */
+  action: string;
+  /** Credit key that carries the band's headline rate + shared cap. */
+  creditKey: string;
+  /** One-line explainer under the band heading. */
+  blurb: string;
+  rows: EngagementSectionRow[];
+}
+
+/**
+ * Display-only breakdown of the three Engagement credit actions into
+ * the concrete surfaces users can earn on. The credit keys are still
+ * the single source of truth for values and caps (admins tune them in
+ * the DB); this metadata just tells users where each action applies.
+ *
+ * Induction Queue has no comment thread, so it only appears under
+ * Vote. Under/Overrated, Curate Profile, and Weekly Up/Down open the
+ * celebrity's profile insight thread — noted per row.
+ */
+const VIA_PROFILE_THREAD = "Via the celebrity's profile thread";
+
+const COMMENT_SECTION_ROWS: EngagementSectionRow[] = [
+  {
+    name: "Celebrity Profile (insight)",
+    creditKey: "comment_insight",
+    note: "Comment on any insight thread",
+  },
+  { name: "Sentiment Poll", creditKey: "comment_insight" },
+  { name: "Matchup", creditKey: "comment_insight" },
+  { name: "Opinion Poll", creditKey: "comment_insight" },
+  { name: "Under/Overrated", creditKey: "comment_insight", note: VIA_PROFILE_THREAD },
+  { name: "Curate Profile", creditKey: "comment_insight", note: VIA_PROFILE_THREAD },
+  {
+    name: "Weekly Up/Down Prediction",
+    creditKey: "comment_insight",
+    note: VIA_PROFILE_THREAD,
+  },
+  { name: "World Market Prediction", creditKey: "comment_insight" },
+];
+
+const ENGAGEMENT_BANDS: EngagementBand[] = [
+  {
+    action: "Vote",
+    creditKey: "vote_any",
+    blurb: "First vote on each item pays — changing your vote doesn't re-pay.",
+    rows: [
+      { name: "Sentiment Poll", creditKey: "vote_any" },
+      { name: "Matchup", creditKey: "vote_any" },
+      { name: "Opinion Poll", creditKey: "vote_any" },
+      { name: "Under/Overrated", creditKey: "vote_any" },
+      { name: "Induction Queue", creditKey: "vote_any" },
+      { name: "Curate Profile", creditKey: "vote_any" },
+    ],
+  },
+  {
+    action: "Post Insight",
+    creditKey: "post_insight",
+    blurb: "A top-level post on a celebrity's profile — the highest-paying engagement action.",
+    rows: [
+      {
+        name: "Celebrity Profile (insight)",
+        creditKey: "post_insight",
+        note: "Also reachable from Under/Overrated, Curate Profile, and Weekly Up/Down cards",
+      },
+    ],
+  },
+  {
+    action: "Post Comment",
+    creditKey: "comment_insight",
+    blurb: "Min 20 characters. The daily cap is shared across all comment surfaces.",
+    rows: COMMENT_SECTION_ROWS,
+  },
+  {
+    action: "Reply to Comment",
+    creditKey: "comment_insight",
+    blurb: "Same rate as posting a comment — replies count toward the same daily cap.",
+    rows: COMMENT_SECTION_ROWS,
+  },
+];
+
+function engagementRowTestId(action: string, section: string): string {
+  const slug = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  return `credit-earn-row-${slug(action)}-${slug(section)}`;
+}
+
+/**
+ * Per-surface Engagement breakdown. Each action gets a sub-band with a
+ * headline rate (live from credit config) and a Section table beneath
+ * it — Section | Vox | Daily cap | Notes. Notes collapse below md; the
+ * column layout stays four-wide so no horizontal scroll is needed on
+ * mobile.
+ */
+function EngagementEarnBands({ accent }: { accent: string }) {
+  const byKey = new Map(CREDIT_ACTIONS.map((a) => [a.key, a]));
+
+  return (
+    <>
+      {ENGAGEMENT_BANDS.map((band, bandIdx) => {
+        const bandAction = byKey.get(band.creditKey);
+        if (!bandAction) return null;
+        return (
+          <div key={band.action} className={bandIdx > 0 ? "border-t border-border/60" : undefined}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-5 pt-4">
+              <p className="text-sm font-semibold">{band.action}</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-mono font-semibold" style={{ color: accent }}>
+                  +{bandAction.proposedCredits}
+                </span>{" "}
+                Vox ·{" "}
+                {bandAction.dailyCap === null
+                  ? "no cap"
+                  : `up to ${bandAction.dailyCap}/day (shared cap)`}
+              </p>
+            </div>
+            <p className="px-5 pb-1 text-xs text-muted-foreground">{band.blurb}</p>
+            {/* table-fixed + shared colgroup keeps column edges identical
+                across all four band tables (auto layout would size each
+                band independently and break vertical alignment). */}
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-[46%] md:w-[30%]" />
+                <col className="w-[22%] md:w-[10%]" />
+                <col className="w-[32%] md:w-[14%]" />
+                <col className="hidden md:table-column md:w-[46%]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+                  <th className={cn("pl-5 pr-3", KB_TH)}>Section</th>
+                  <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>Vox</th>
+                  <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>
+                    Daily cap
+                  </th>
+                  <th className={cn("px-3 hidden md:table-cell", KB_TH)}>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {band.rows.map((row) => {
+                  const rowAction = byKey.get(row.creditKey);
+                  if (!rowAction) return null;
+                  return (
+                    <tr
+                      key={row.name}
+                      className="border-t border-border/60 align-middle"
+                      data-testid={engagementRowTestId(band.action, row.name)}
+                    >
+                      <td className="pl-5 pr-3 py-3.5 align-middle font-medium">
+                        {row.name}
+                      </td>
+                      <td className={cn("text-right", KB_TD)}>
+                        <span
+                          className="font-mono text-xs font-semibold"
+                          style={{ color: accent }}
+                        >
+                          +{rowAction.proposedCredits}
+                        </span>
+                      </td>
+                      <td className={cn("text-right text-xs text-muted-foreground", KB_TD)}>
+                        {rowAction.dailyCap === null
+                          ? "No cap"
+                          : `${rowAction.dailyCap}/day`}
+                      </td>
+                      <td className={cn("hidden text-muted-foreground md:table-cell", KB_TD)}>
+                        {row.note ?? ""}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /**
  * Live earn-loop table sourced from shared/credit-config.ts. The
  * SPECIAL category (signup grant, admin adjustment) is intentionally
  * omitted from the user-facing table — those rows are bookkeeping
  * for the admin Credit Actions screen, not actions a user can earn.
+ * The ENGAGEMENT category renders a per-surface breakdown (see
+ * EngagementEarnBands); other categories keep the flat action table.
  * (Internal "credit" naming is kept on the file/type; the user-facing
  * label is "Vox".)
  */
@@ -1049,14 +1302,13 @@ function CreditEarnTable({ accent }: { accent: string }) {
       data-hash-anchor
       style={{ scrollMarginTop: HIW_HASH_ANCHOR_OFFSET }}
     >
-      <div className="space-y-1">
-        <h3 className="font-semibold">Earn Vox by participating</h3>
-        <p className="text-sm text-muted-foreground">
-          Engagement actions earn small daily-capped top-ups. Approved
-          suggestions and streak milestones pay out larger one-offs. Values
-          below are live — admins can tune them at any time.
-        </p>
-      </div>
+      {/* Section title lives above (the "How to earn Vox" header in
+          CreditsSection) — this is just the explanatory lead line. */}
+      <p className="text-sm text-muted-foreground">
+        Engagement actions earn small daily-capped top-ups. Approved
+        suggestions and streak milestones pay out larger one-offs. Values
+        below are live — admins can tune them at any time.
+      </p>
 
       {grouped.map(([category, actions]) => (
         <div
@@ -1075,45 +1327,49 @@ function CreditEarnTable({ accent }: { accent: string }) {
               {CREDIT_CATEGORY_LABELS[category]}
             </p>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
-                <th className={cn("pl-5 pr-3", KB_TH)}>Action</th>
-                <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>Vox</th>
-                <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>
-                  Daily cap
-                </th>
-                <th className={cn("px-3 hidden md:table-cell", KB_TH)}>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {actions.map((action) => (
-                <tr
-                  key={action.key}
-                  className="border-t border-border/60 align-middle"
-                  data-testid={`credit-earn-row-${action.key}`}
-                >
-                  <td className={cn("pl-5 pr-3 py-3.5 align-middle font-medium")}>
-                    {action.label}
-                  </td>
-                  <td className={cn("text-right", KB_TD)}>
-                    <span
-                      className="font-mono text-xs font-semibold"
-                      style={{ color: accent }}
-                    >
-                      +{action.proposedCredits}
-                    </span>
-                  </td>
-                  <td className={cn("text-right text-xs text-muted-foreground", KB_TD)}>
-                    {action.dailyCap === null ? "No cap" : `${action.dailyCap}/day`}
-                  </td>
-                  <td className={cn("hidden text-muted-foreground md:table-cell", KB_TD)}>
-                    {action.notes ?? ""}
-                  </td>
+          {category === CREDIT_CATEGORIES.ENGAGEMENT ? (
+            <EngagementEarnBands accent={accent} />
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground align-middle">
+                  <th className={cn("pl-5 pr-3", KB_TH)}>Action</th>
+                  <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>Vox</th>
+                  <th className={cn("px-3 text-right whitespace-nowrap", KB_TH)}>
+                    Daily cap
+                  </th>
+                  <th className={cn("px-3 hidden md:table-cell", KB_TH)}>Notes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {actions.map((action) => (
+                  <tr
+                    key={action.key}
+                    className="border-t border-border/60 align-middle"
+                    data-testid={`credit-earn-row-${action.key}`}
+                  >
+                    <td className={cn("pl-5 pr-3 py-3.5 align-middle font-medium")}>
+                      {action.label}
+                    </td>
+                    <td className={cn("text-right", KB_TD)}>
+                      <span
+                        className="font-mono text-xs font-semibold"
+                        style={{ color: accent }}
+                      >
+                        +{action.proposedCredits}
+                      </span>
+                    </td>
+                    <td className={cn("text-right text-xs text-muted-foreground", KB_TD)}>
+                      {action.dailyCap === null ? "No cap" : `${action.dailyCap}/day`}
+                    </td>
+                    <td className={cn("hidden text-muted-foreground md:table-cell", KB_TD)}>
+                      {action.notes ?? ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       ))}
 
@@ -1926,7 +2182,7 @@ export default function HowItWorksPage() {
         id="profile-tabs-section"
         className="sticky top-14 z-40 border-b bg-background/80 backdrop-blur-xl"
       >
-        <div className="container mx-auto max-w-3xl px-2 py-2 sm:px-4">
+        <div className="container mx-auto max-w-4xl px-2 py-2 sm:px-4">
           <KnowledgeTabsBar
             tabs={KNOWLEDGE_TABS}
             activeTab={activeTab}
@@ -1943,7 +2199,7 @@ export default function HowItWorksPage() {
         ignoreSelector="[data-no-tab-swipe]"
         commitOffsetPx={96}
       >
-        <div className="container mx-auto max-w-3xl space-y-6 px-2 py-6 sm:px-4">
+        <div className="container mx-auto max-w-4xl space-y-6 px-2 py-6 sm:px-4">
           <ProgressHeader />
 
           <ActiveSection onJumpToTab={selectTab} />

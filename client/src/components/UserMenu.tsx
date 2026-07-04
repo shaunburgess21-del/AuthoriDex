@@ -206,6 +206,15 @@ function UserMenuContent({
           <span className="text-sm">Insights</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => handleNavClick("/how-it-works")}
+          data-testid="link-how-it-works-loggedout"
+        >
+          <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <span className="text-sm">How It Works</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+        </button>
 
         <Separator />
         

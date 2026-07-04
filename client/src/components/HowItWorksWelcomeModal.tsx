@@ -9,11 +9,10 @@ import {
 } from "@/components/OnboardingDrawer";
 
 /**
- * Single, holistic orientation flow for the How It Works page. Replaces the
- * old always-on "canonical reference" card with a friendly, plain-language
- * guide that auto-opens on a member's first visit and can be replayed from
- * the page footer. Copy is intentionally jargon-free — the tabs themselves
- * are the deep dive, so this just orients people to what's on offer.
+ * Orientation flow for the How It Works page. On a visitor's first visit
+ * (anonymous or signed-in), a floating pill invites them to take the tour;
+ * the drawer only opens when they tap it. Replay anytime from the page footer.
+ * Copy is intentionally jargon-free — the tabs are the deep dive.
  */
 const STEPS: readonly OnboardingStep[] = [
   {
@@ -57,8 +56,10 @@ export const HowItWorksWelcomeModal = forwardRef<OnboardingDrawerHandle>(
         ref={ref}
         storageKey="voxdex_seen_how_it_works"
         steps={STEPS}
-        autoOpenOnFirstVisit
+        toastLabel="First time here?"
+        toastCtaLabel="Take the tour"
         lastStepCta="Got it"
+        reShowAfterDays={Infinity}
       />
     );
   },

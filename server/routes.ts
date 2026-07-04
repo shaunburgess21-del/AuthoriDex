@@ -5745,12 +5745,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // post_comment XP gates ported from the legacy insight comment handler:
-      // min 20 trimmed chars, no XP on own insight, action key post_comment,
-      // and idempotency key comment_${commentId}_${userId}.
+      // post_comment XP gates: min 20 trimmed chars, idempotency key
+      // comment_${commentId}_${userId}. Awards fire on every discussion
+      // surface (insight threads plus matchup / sentiment poll / opinion
+      // poll / world market cards) — the shared post_comment daily cap
+      // is the anti-spam control. voices_post timeline replies stay
+      // excluded for now. The "not on own insight" gate only applies to
+      // community_insight threads (cards have no author to self-farm).
+      const REWARDABLE_COMMENT_PARENT_TYPES: ReadonlySet<string> = new Set([
+        "community_insight",
+        "matchup",
+        "trending_poll",
+        "opinion_poll",
+        "open_market",
+      ]);
       const trimmedContent = parsed.body.trim();
-      let shouldAwardXp = parsed.parentType === "community_insight" && trimmedContent.length >= 20;
-      if (shouldAwardXp) {
+      let shouldAwardXp =
+        REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
+        trimmedContent.length >= 20;
+      if (shouldAwardXp && parsed.parentType === "community_insight") {
         const [insight] = await db
           .select({ userId: communityInsights.userId, deletedAt: communityInsights.deletedAt })
           .from(communityInsights)
@@ -5763,16 +5776,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let xpResult;
       if (shouldAwardXp) {
+        const awardMetadata =
+          parsed.parentType === "community_insight"
+            ? { commentId: newComment.id, insightId: resolvedParentId }
+            : { commentId: newComment.id, parentType: parsed.parentType, parentId: resolvedParentId };
         try {
           xpResult = await gamificationService.awardXp(
             userId, 'post_comment',
             `comment_${newComment.id}_${userId}`,
-            { commentId: newComment.id, insightId: resolvedParentId }
+            awardMetadata
           );
         } catch (e) { console.error("XP award failed:", e); }
-        // shouldAwardXp already enforces "min 20 chars" + "not on
-        // own insight" gates, so credits piggy-back the same check.
-        await awardCommentCredits(userId, newComment.id, { insightId: resolvedParentId });
+        // shouldAwardXp already enforces "min 20 chars" (+ "not on own
+        // insight" for insight threads), so credits piggy-back the check.
+        await awardCommentCredits(
+          userId,
+          newComment.id,
+          parsed.parentType === "community_insight"
+            ? { insightId: resolvedParentId }
+            : { parentType: parsed.parentType, parentId: resolvedParentId },
+        );
         await maybeFireReferralCredit(userId);
       }
 

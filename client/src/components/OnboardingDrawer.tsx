@@ -40,20 +40,14 @@ interface Props {
   storageKey: string;
   steps: readonly OnboardingStep[];
   toastLabel?: string;
+  /** CTA label on the floating first-visit pill. Defaults to "How It Works". */
+  toastCtaLabel?: string;
   lastStepCta?: string;
   onComplete?: () => void;
   delayMs?: number;
   reShowAfterDays?: number;
   /** When true, never auto-show the bottom toast (e.g. signed-in users). Drawer still opens via ref / footer. */
   disableAutoToast?: boolean;
-  /**
-   * When true, the first-visit flow opens the drawer directly instead of
-   * surfacing the bottom toast. Used on pages where the steps ARE the point
-   * of visiting (e.g. How It Works) so users see the guide immediately.
-   * Honours the same `shouldShowToast` gate (localStorage + 21-day re-show),
-   * so it only auto-opens once per re-show window.
-   */
-  autoOpenOnFirstVisit?: boolean;
 }
 
 function shouldShowToast(storageKey: string, reShowAfterDays: number): boolean {
@@ -61,7 +55,7 @@ function shouldShowToast(storageKey: string, reShowAfterDays: number): boolean {
   try {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return true;
-    if (raw === "true") return true;
+    if (raw === "true") return false;
     const ts = Number(raw);
     if (isNaN(ts)) return true;
     return Date.now() - ts > reShowAfterDays * MS_PER_DAY;
@@ -78,10 +72,12 @@ function markSeen(storageKey: string) {
 
 function OnboardingToast({
   label,
+  ctaLabel,
   onOpen,
   onDismiss,
 }: {
   label: string;
+  ctaLabel: string;
   onOpen: () => void;
   onDismiss: () => void;
 }) {
@@ -102,7 +98,7 @@ function OnboardingToast({
             onClick={onOpen}
             className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:px-4"
           >
-            How It Works
+            {ctaLabel}
           </button>
           <button
             type="button"
@@ -159,12 +155,12 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
       storageKey,
       steps,
       toastLabel = "New here?",
+      toastCtaLabel = "How It Works",
       lastStepCta = "Get Started",
       onComplete,
       delayMs = 2000,
       reShowAfterDays = RE_SHOW_DAYS,
       disableAutoToast = false,
-      autoOpenOnFirstVisit = false,
     },
     ref,
   ) {
@@ -184,21 +180,10 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
 
     useEffect(() => {
       if (!shouldShowToast(storageKey, reShowAfterDays)) return;
-      if (autoOpenOnFirstVisit) {
-        // The guide itself is the destination — open it directly and mark
-        // seen so it doesn't auto-open again until the re-show window lapses.
-        const timer = setTimeout(() => {
-          setStep(0);
-          setDirection(1);
-          setDrawerOpen(true);
-          markSeen(storageKey);
-        }, delayMs);
-        return () => clearTimeout(timer);
-      }
       if (disableAutoToast) return;
       const timer = setTimeout(() => setShowToast(true), delayMs);
       return () => clearTimeout(timer);
-    }, [storageKey, delayMs, reShowAfterDays, disableAutoToast, autoOpenOnFirstVisit]);
+    }, [storageKey, delayMs, reShowAfterDays, disableAutoToast]);
 
     const dismiss = useCallback(() => {
       setShowToast(false);
@@ -240,7 +225,12 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
       <>
         <AnimatePresence>
           {showToast && (
-            <OnboardingToast label={toastLabel} onOpen={openDrawer} onDismiss={dismiss} />
+            <OnboardingToast
+              label={toastLabel}
+              ctaLabel={toastCtaLabel}
+              onOpen={openDrawer}
+              onDismiss={dismiss}
+            />
           )}
         </AnimatePresence>
 

@@ -94,12 +94,14 @@ export async function awardVoteCredits(
 }
 
 /**
- * Award `comment_insight` credits when a user posts a top-level
- * comment / insight reply. Daily-capped (default 5/day).
+ * Award `comment_insight` credits when a user posts a comment or
+ * reply on any discussion thread — insight threads plus matchup /
+ * sentiment poll / opinion poll / world market cards. Daily-capped
+ * (default 5/day, shared across all surfaces).
  *
- * Caller is responsible for the "min 20 chars" + "not on own
- * insight" gates — the credit helper only enforces the per-day
- * cap and idempotency.
+ * Caller is responsible for the "min 20 chars" gate (and "not on
+ * own insight" for insight threads) — the credit helper only
+ * enforces the per-day cap and idempotency.
  */
 export async function awardCommentCredits(
   userId: string,
