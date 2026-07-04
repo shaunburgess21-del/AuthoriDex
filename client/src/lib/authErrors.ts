@@ -11,6 +11,7 @@
  *   - rate_limited              Supabase 429 / Resend 429 / "rate limit".
  *   - network                   Fetch failed before the server responded.
  *   - otp_expired               Code expired or invalid (verifyOtp errors).
+ *   - email_send_failed         Send Email hook returned 500 (verification mail).
  *   - unknown                   Fallback.
  */
 
@@ -22,6 +23,7 @@ export type AuthErrorCode =
   | "rate_limited"
   | "network"
   | "otp_expired"
+  | "email_send_failed"
   | "unknown";
 
 export interface MappedAuthError {
@@ -137,6 +139,18 @@ export function mapAuthError(err: unknown): MappedAuthError {
       code: "network",
       message: "Network problem.",
       suggestion: "Check your connection and try again.",
+    };
+  }
+
+  if (
+    lc.includes("unexpected status code returned from hook") ||
+    lc.includes("hook: 500") ||
+    lc.includes("email send failed")
+  ) {
+    return {
+      code: "email_send_failed",
+      message: "We couldn't send your verification code.",
+      suggestion: "Please try again in a moment, or continue with Google.",
     };
   }
 
