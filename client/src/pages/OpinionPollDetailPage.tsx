@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -155,6 +156,7 @@ export default function OpinionPollDetailPage() {
       queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
         old?.map((p) => (p.slug === slug ? optimisticVotePatch(p, { kind: "vote", slug, optionId }) : p)),
       );
+      showVoteToast("opinion", "Vote recorded!", { description: "Your Opinion Poll vote has been counted." });
       return { previousDetail, previousList };
     },
     onSuccess: (data) => {
@@ -167,7 +169,6 @@ export default function OpinionPollDetailPage() {
         );
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
-      toast("Vote recorded");
     },
     onError: (error, optionId, ctx) => {
       if (ctx?.previousDetail !== undefined) {
@@ -210,6 +211,7 @@ export default function OpinionPollDetailPage() {
       queryClient.setQueryData<any[]>(["/api/opinion-polls"], (old: any[] | undefined) =>
         old?.map((p) => (p.slug === slug ? optimisticVotePatch(p, { kind: "remove", slug }) : p)),
       );
+      showVoteToast("opinion", "Vote removed", { description: "Your Opinion Poll vote has been removed." });
       return { previousDetail, previousList };
     },
     onSuccess: (data) => {
@@ -222,7 +224,6 @@ export default function OpinionPollDetailPage() {
         );
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
-      toast("Vote removed");
     },
     onError: (error, _vars, ctx) => {
       if (ctx?.previousDetail !== undefined) {

@@ -27,9 +27,9 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
   const isAuthenticated = isLoggedIn || !!user;
 
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (serializedBody: string) => {
       const payload: { body: string; attachment?: { type: "person"; idOrSlug: string } } = {
-        body: body.trim(),
+        body: serializedBody,
       };
       if (attachPerson) {
         payload.attachment = { type: "person", idOrSlug: attachPerson.id };
@@ -73,7 +73,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
       <CommentComposer
         value={body}
         onChange={setBody}
-        onSubmit={() => mutation.mutate()}
+        onSubmit={(serializedBody) => mutation.mutate(serializedBody)}
         placeholder={attachPerson ? `Share a take on ${attachPerson.name}…` : "Share your voice"}
         isPending={mutation.isPending}
         authorAvatarUrl={profile?.avatarUrl ?? null}

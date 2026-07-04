@@ -34,6 +34,7 @@ import { WeeklyUpDownNameBlock } from "@/components/WeeklyUpDownNameBlock";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrendingPerson } from "@shared/schema";
 import { toast } from "sonner";
+import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
@@ -1967,7 +1968,11 @@ export default function PredictPage() {
       );
       return res.json();
     },
-    onSuccess: async (data, variables) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("updown", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data, variables, context) => {
       const marketId = String(variables.marketId);
       const hadPositionBefore = userBetsByMarket.has(marketId);
       hapticSuccess();
@@ -1995,11 +2000,14 @@ export default function PredictPage() {
           category: market.category,
           entryLabel: entryLabel.toUpperCase(),
           direction: entryLabel.toLowerCase() === "down" ? "down" : "up",
+          marketKind: "updown",
           openShareCard,
           fallbackShareUrl: `${origin}/predict/updown/${market.id}`,
+          toastId: context?.toastId,
         });
       } else {
-        toast("Prediction placed!", {
+        showVoteToast("updown", "Prediction placed!", {
+          id: context?.toastId,
           description: "Your weekly up/down prediction has been recorded.",
         });
       }
@@ -2052,7 +2060,8 @@ export default function PredictPage() {
         playInactivePredictionAdvance("updown", marketId);
       }
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
@@ -2069,7 +2078,12 @@ export default function PredictPage() {
       );
       return res.json();
     },
-    onSuccess: async (data, variables) => {
+    onMutate: (variables) => {
+      const kind = variables.marketType === "h2h" ? "h2h" : "gainer";
+      const toastId = showPendingVoteToast(kind, "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data, variables, context) => {
       const marketId = String(variables.marketId);
       const hadPositionBefore = userBetsByMarket.has(marketId);
       hapticSuccess();
@@ -2099,11 +2113,14 @@ export default function PredictPage() {
             category: market.category,
             entryLabel,
             direction: "other",
+            marketKind: "h2h",
             openShareCard,
             fallbackShareUrl: `${origin}/predict/h2h/${market.id}`,
+            toastId: context?.toastId,
           });
         } else {
-          toast("Prediction placed!", {
+          showVoteToast("h2h", "Prediction placed!", {
+            id: context?.toastId,
             description: "Your head-to-head prediction has been recorded.",
           });
         }
@@ -2126,11 +2143,14 @@ export default function PredictPage() {
             category: categoryLabel,
             entryLabel: candidate.name,
             direction: "other",
+            marketKind: "gainer",
             openShareCard,
             fallbackShareUrl: `${origin}/predict/gainer/${market.id}`,
+            toastId: context?.toastId,
           });
         } else {
-          toast("Prediction placed!", {
+          showVoteToast("gainer", "Prediction placed!", {
+            id: context?.toastId,
             description: "Your top gainer prediction has been recorded.",
           });
         }
@@ -2150,7 +2170,8 @@ export default function PredictPage() {
         );
       }
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
@@ -2178,7 +2199,11 @@ export default function PredictPage() {
       );
       return res.json();
     },
-    onSuccess: async (data: any, variables) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("world", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data: any, variables, context) => {
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -2214,10 +2239,12 @@ export default function PredictPage() {
         category: market?.category ?? null,
         entryLabel: String(entryLabel),
         direction,
+        marketKind: "world",
         openShareCard,
         fallbackShareUrl: market?.slug
           ? `${origin}/markets/${market.slug}`
           : origin,
+        toastId: context?.toastId,
       });
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -2228,7 +2255,8 @@ export default function PredictPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });

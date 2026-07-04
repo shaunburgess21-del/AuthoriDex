@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  AtSign,
   Award,
   Bell,
   Flame,
@@ -130,6 +131,13 @@ export const NOTIFICATION_REGISTRY: Record<NotificationKind, KindMeta> = {
   },
   comment_upvote_milestone: {
     icon: ThumbsUp,
+    accent: SOCIAL_ACCENT,
+    bgAccent: SOCIAL_BG,
+    category: "social",
+    priority: 0,
+  },
+  mention: {
+    icon: AtSign,
     accent: SOCIAL_ACCENT,
     bgAccent: SOCIAL_BG,
     category: "social",

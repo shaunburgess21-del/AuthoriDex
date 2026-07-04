@@ -4,6 +4,7 @@ import { UserRankBadge } from "@/components/UserRankBadge";
 import { VoteLabel } from "@/components/VoteLabel";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { MentionText } from "@/components/comments/MentionText";
 import { getRankByName } from "@shared/rank-config";
 import type { CommentItem, VoteType } from "./types";
 
@@ -123,7 +124,7 @@ export function CommentRow({
           className={`text-sm mt-1 whitespace-pre-wrap ${isDeleted ? "italic text-muted-foreground" : "text-foreground/90"}`}
           data-testid={`text-comment-body-${comment.id}`}
         >
-          {isDeleted ? "[deleted]" : comment.body}
+          {isDeleted ? "[deleted]" : <MentionText text={comment.body} />}
         </p>
         <div className="flex items-center gap-4 mt-2">
           {!isDeleted && (

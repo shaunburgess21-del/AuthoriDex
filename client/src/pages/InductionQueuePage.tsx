@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -194,6 +195,7 @@ export default function InductionQueuePage() {
     setVotedIds((prev) => new Set(prev).add(id));
     setShowVoteAnim(id);
     animRef.current = setTimeout(() => setShowVoteAnim(null), 800);
+    showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     voteMutation.mutate(id);
   };
 

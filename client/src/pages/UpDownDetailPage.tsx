@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -328,7 +329,11 @@ export default function UpDownDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("updown", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data, _variables, context) => {
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -365,7 +370,8 @@ export default function UpDownDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
         const fallbackText = `I just backed ${pendingSelection.choice} on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
-        toast("Prediction placed!", {
+        showVoteToast("updown", "Prediction placed!", {
+          id: context?.toastId,
           description: `${Math.round(shares).toLocaleString()} ${pendingSelection.choice} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
@@ -383,7 +389,8 @@ export default function UpDownDetailPage() {
       setPendingSelection(null);
       await invalidateAfterTrade();
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
@@ -413,9 +420,12 @@ export default function UpDownDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("updown", "Cashing out…");
+      return { toastId };
+    },
+    onSuccess: async (data, _variables, context) => {
       hapticSuccess();
-      // Sell is always AMM (parimutuel has no sell). Build a `trade`
       // share card with actionType="sell" — same headline DNA as the
       // buy card, but emphasises proceeds-out instead of stake-in.
       if (hydrated && cashOutSelection) {
@@ -447,7 +457,8 @@ export default function UpDownDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
         const fallbackText = `Just took ${voxWord(proceeds)} off the table on "${hydrated.personName}: Up or Down?" on VoxDex!\n${shareUrl}`;
-        toast("Cashed out", {
+        showVoteToast("updown", "Cashed out", {
+          id: context?.toastId,
           description: `Sold ${Math.round(shares).toLocaleString()} ${cashOutSelection.sideLabel} shares · +${formatVox(proceeds)}`,
           action: {
             label: "Share",
@@ -461,7 +472,8 @@ export default function UpDownDetailPage() {
           },
         });
       } else {
-        toast("Cashed out", {
+        showVoteToast("updown", "Cashed out", {
+          id: context?.toastId,
           description: "Proceeds have been credited to your wallet.",
         });
       }
@@ -469,7 +481,8 @@ export default function UpDownDetailPage() {
       setCashOutSelection(null);
       await invalidateAfterTrade();
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });

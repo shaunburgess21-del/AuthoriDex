@@ -11,6 +11,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
 import type { CuratePerson } from "./CurateProfileCard";
@@ -116,14 +117,12 @@ export function CurateViewResultsOverlay({
     },
     onMutate: ({ imageId }) => {
       setPendingVoteImageId(imageId);
+      showVoteToast("curate", "Vote recorded!", { description: "Your vote has been counted." });
     },
     onSuccess: (data: CurateImageVoteResponse, variables: { imageId: string }) => {
       queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
         applyCurateVoteToImages(currentImages, variables.imageId, data)
       );
-      toast(data?.alreadyVoted ? "Vote saved!" : "Vote recorded!", { description: data?.alreadyVoted
-          ? "This look is already your saved choice."
-          : "Your vote has been counted." });
       void queryClient.invalidateQueries({ queryKey: imageQueryKey });
     },
     onError: (error: Error) => {

@@ -19,6 +19,7 @@ export type NotificationKind =
   | "comment_reply"
   | "comment_like"
   | "comment_upvote_milestone"
+  | "mention"
   | "rank_up"
   | "streak_milestone"
   | "credits_low"

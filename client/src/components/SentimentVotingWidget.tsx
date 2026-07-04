@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { Card } from '@/components/ui/card';
 
 interface SentimentVotingWidgetProps {
@@ -73,7 +74,8 @@ export function SentimentVotingWidget({
   const [showFeedback, setShowFeedback] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const tempValueRef = useRef<number | null>(null);  // Check if user has already voted (stored in localStorage for now)
+  const tempValueRef = useRef<number | null>(null);
+  // Check if user has already voted (stored in localStorage for now)
   useEffect(() => {
     const storedVote = localStorage.getItem(`vote_${personId}`);
     if (storedVote) {
@@ -116,7 +118,7 @@ export function SentimentVotingWidget({
       setShowFeedback(true);
       setTimeout(() => setShowFeedback(false), 3000);
       
-      toast('Vote Submitted', { description: `You rated ${personName} as ${SENTIMENT_LABELS[value - 1]}` });
+      showVoteToast("sentiment", "Vote submitted!", { description: `You rated ${personName} as ${SENTIMENT_LABELS[value - 1]}` });
       
       onVoteSubmitted?.(value);
     } catch (error) {

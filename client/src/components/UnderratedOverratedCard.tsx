@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
 
@@ -72,6 +73,8 @@ export function UnderratedOverratedCard({
     },
     onMutate: (voteType) => {
       setLocalVote(voteType);
+      const label = voteType === 'underrated' ? 'Underrated' : voteType === 'overrated' ? 'Overrated' : 'Fairly Rated';
+      showVoteToast("overrated", "Vote recorded!", { description: `You voted ${person.name} as ${label}.` });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/celebrity', person.id, 'value-vote'] });

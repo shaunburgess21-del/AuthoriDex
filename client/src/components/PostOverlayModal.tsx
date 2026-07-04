@@ -6,6 +6,7 @@ import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react"
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { MentionText } from "@/components/comments/MentionText";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoteLabel } from "./VoteLabel";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
@@ -280,7 +281,7 @@ function PostOverlayModalContent({
                 </button>
               </div>
               <p className={`mt-3 text-base leading-relaxed break-words whitespace-pre-wrap ${isInsightDeleted ? "italic text-muted-foreground" : ""}`}>
-                {isInsightDeleted ? "[deleted]" : insight.content}
+                {isInsightDeleted ? "[deleted]" : <MentionText text={insight.content} />}
               </p>
 
               <div className="flex items-center gap-1 mt-4 pt-4 border-t border-border">

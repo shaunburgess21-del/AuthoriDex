@@ -28,6 +28,7 @@ export type NotificationKind =
   | "comment_reply"
   | "comment_like"
   | "comment_upvote_milestone"
+  | "mention"
   | "rank_up"
   | "streak_milestone"
   | "credits_low"
@@ -61,6 +62,7 @@ const KIND_REGISTRY: Record<NotificationKind, KindMeta> = {
   comment_reply: { category: "social", priority: 0 },
   comment_like: { category: "social", priority: 0 },
   comment_upvote_milestone: { category: "social", priority: 0 },
+  mention: { category: "social", priority: 0 },
   rank_up: { category: "account", priority: 1 },
   streak_milestone: { category: "account", priority: 0 },
   credits_low: { category: "account", priority: 0 },

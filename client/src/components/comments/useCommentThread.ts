@@ -24,7 +24,7 @@ export interface UseCommentThreadResult {
   isPostPending: boolean;
   isVotePending: boolean;
   isDeletePending: boolean;
-  submit: () => void;
+  submit: (serializedBody: string) => void;
   vote: (input: { commentId: string; voteType: VoteType }) => void;
   report: (input: { commentId: string; reason: string }) => void;
   deleteComment: (input: { commentId: string }) => void;
@@ -273,10 +273,13 @@ export function useCommentThread(
     },
   });
 
-  const submit = useCallback(() => {
-    if (!composerBody.trim()) return;
-    postMutation.mutate({ body: composerBody.trim(), parentId: replyTo?.id ?? null });
-  }, [composerBody, replyTo, postMutation]);
+  const submit = useCallback(
+    (serializedBody: string) => {
+      if (!serializedBody.trim()) return;
+      postMutation.mutate({ body: serializedBody.trim(), parentId: replyTo?.id ?? null });
+    },
+    [replyTo, postMutation],
+  );
 
   const startReply = useCallback((comment: CommentItem) => {
     setReplyTo({ id: comment.id, username: comment.username || "Anonymous" });

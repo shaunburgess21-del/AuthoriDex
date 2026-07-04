@@ -25,6 +25,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
@@ -1661,14 +1662,39 @@ function AmmPositionCashOut({
           );
       return res.json();
     },
-    onSuccess: async (data: any) => {
+    onMutate: () => {
+      const mt = position?.marketType;
+      const kind =
+        mt === "community"
+          ? "world"
+          : mt === "h2h"
+            ? "h2h"
+            : mt === "race" || mt === "gainer"
+              ? "gainer"
+              : "updown";
+      const toastId = showPendingVoteToast(kind, "Cashing out…");
+      return { toastId };
+    },
+    onSuccess: async (data: any, _variables, context) => {
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Cashed out", {
-        description:
-          proceeds > 0
-            ? `Proceeds credited: +${formatVox(proceeds)}`
-            : "Proceeds have been credited to your wallet.",
-      });
+      const mt = position?.marketType;
+      showVoteToast(
+        mt === "community"
+          ? "world"
+          : mt === "h2h"
+            ? "h2h"
+            : mt === "race" || mt === "gainer"
+              ? "gainer"
+              : "updown",
+        "Cashed out",
+        {
+          id: context?.toastId,
+          description:
+            proceeds > 0
+              ? `Proceeds credited: +${formatVox(proceeds)}`
+              : "Proceeds have been credited to your wallet.",
+        },
+      );
       onClose();
       await Promise.all([
         refreshProfile?.(),
@@ -1677,7 +1703,8 @@ function AmmPositionCashOut({
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
     },

@@ -33,6 +33,8 @@ import {
   resolveInsightEntities,
   entityKey,
 } from "../services/voices/entities";
+import { sanitizeMentions, notifyMentionedUsers } from "../services/mentions";
+import { mentionsToPlainText } from "@shared/lib/mentions";
 
 const VOICES_POST_MAX_LENGTH = 5000;
 const DELETED_USER = "[deleted user]";
@@ -196,6 +198,58 @@ async function resolveCardParentId(type: CardParentType, idOrSlug: string): Prom
     .where(and(eq(predictionMarkets.slug, idOrSlug), eq(predictionMarkets.marketType, "community")))
     .limit(1);
   return market?.id ?? null;
+}
+
+async function resolveCardHref(type: CardParentType, idOrSlug: string): Promise<string> {
+  if (type === "matchup") {
+    const [row] = await db.select({ slug: matchups.slug }).from(matchups).where(eq(matchups.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/vote/matchups/${row.slug}`;
+    const [byId] = await db.select({ slug: matchups.slug }).from(matchups).where(eq(matchups.id, idOrSlug)).limit(1);
+    return byId?.slug ? `/vote/matchups/${byId.slug}` : "/vote";
+  }
+  if (type === "trending_poll") {
+    const [row] = await db.select({ slug: trendingPolls.slug }).from(trendingPolls).where(eq(trendingPolls.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/polls/${row.slug}`;
+    const [byId] = await db.select({ slug: trendingPolls.slug }).from(trendingPolls).where(eq(trendingPolls.id, idOrSlug)).limit(1);
+    return byId?.slug ? `/polls/${byId.slug}` : "/vote";
+  }
+  if (type === "opinion_poll") {
+    const [row] = await db.select({ slug: opinionPolls.slug }).from(opinionPolls).where(eq(opinionPolls.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/vote/opinion-polls/${row.slug}`;
+    const [byId] = await db.select({ slug: opinionPolls.slug }).from(opinionPolls).where(eq(opinionPolls.id, idOrSlug)).limit(1);
+    return byId?.slug ? `/vote/opinion-polls/${byId.slug}` : "/vote";
+  }
+  const [market] = await db
+    .select({ slug: predictionMarkets.slug })
+    .from(predictionMarkets)
+    .where(and(eq(predictionMarkets.slug, idOrSlug), eq(predictionMarkets.marketType, "community")))
+    .limit(1);
+  return market?.slug ? `/markets/${market.slug}` : "/predict";
+}
+
+async function fanoutVoicePostMentions(input: {
+  userMentions: Awaited<ReturnType<typeof sanitizeMentions>>["userMentions"];
+  authorId: string;
+  authorUsername: string | null;
+  contentId: string;
+  entityType: "comment" | "community_insight";
+  href: string;
+  storedBody: string;
+}): Promise<void> {
+  if (input.userMentions.length === 0) return;
+  try {
+    await notifyMentionedUsers({
+      userMentions: input.userMentions,
+      authorId: input.authorId,
+      authorUsername: input.authorUsername,
+      contentId: input.contentId,
+      entityType: input.entityType,
+      href: input.href,
+      snippet: mentionsToPlainText(input.storedBody).trim().slice(0, 140),
+    });
+  } catch (err) {
+    console.error("[mentions] voices post fanout failed:", err);
+  }
 }
 
 function mapReplyRow(row: {
@@ -411,7 +465,11 @@ export function registerVoicesRoutes(app: Express): void {
       }
 
       const userId = req.userId!;
-      const body = parsed.body.trim();
+      const mentionResult = await sanitizeMentions(parsed.body.trim());
+      if (mentionResult.error) {
+        return res.status(400).json({ error: mentionResult.error });
+      }
+      const body = mentionResult.body;
       const attachment = parsed.attachment ?? null;
 
       // ── Person attachment → community insight ───────────────────────────────
@@ -450,6 +508,16 @@ export function registerVoicesRoutes(app: Express): void {
           .where(eq(profiles.id, userId))
           .limit(1);
 
+        await fanoutVoicePostMentions({
+          userMentions: mentionResult.userMentions,
+          authorId: userId,
+          authorUsername: author?.username ?? null,
+          contentId: newInsight.id,
+          entityType: "community_insight",
+          href: `/person/${person.id}#insight-${newInsight.id}`,
+          storedBody: body,
+        });
+
         return res.status(201).json({
           item: entity
             ? ({
@@ -487,6 +555,22 @@ export function registerVoicesRoutes(app: Express): void {
           .values({ parentType: cardType, parentId: resolvedParentId, userId, body })
           .returning();
 
+        const [author] = await db
+          .select({ username: profiles.username })
+          .from(profiles)
+          .where(eq(profiles.id, userId))
+          .limit(1);
+        const cardHref = await resolveCardHref(cardType, attachment.idOrSlug);
+        await fanoutVoicePostMentions({
+          userMentions: mentionResult.userMentions,
+          authorId: userId,
+          authorUsername: author?.username ?? null,
+          contentId: created.id,
+          entityType: "comment",
+          href: `${cardHref}#comment-${created.id}`,
+          storedBody: body,
+        });
+
         const item = await buildCommentFeedItem(created, userId);
         return res.status(201).json({ item });
       }
@@ -496,6 +580,21 @@ export function registerVoicesRoutes(app: Express): void {
         .insert(unifiedComments)
         .values({ parentType: "voices_post", parentId: VOICES_TIMELINE_ID, userId, body })
         .returning();
+
+      const [author] = await db
+        .select({ username: profiles.username })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+      await fanoutVoicePostMentions({
+        userMentions: mentionResult.userMentions,
+        authorId: userId,
+        authorUsername: author?.username ?? null,
+        contentId: created.id,
+        entityType: "comment",
+        href: `/voices#comment-${created.id}`,
+        storedBody: body,
+      });
 
       const item = await buildCommentFeedItem(created, userId);
       return res.status(201).json({ item });

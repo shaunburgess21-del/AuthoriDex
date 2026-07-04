@@ -15,8 +15,16 @@ import { VoteLabel } from "@/components/VoteLabel";
 import { getRankByName } from "@shared/rank-config";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  type CommunityInsight,
+  communityInsightsQueryKey,
+  fetchCommunityInsightThread,
+  fetchCommunityInsightUserVotes,
+} from "@/lib/communityInsightsQuery";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { MentionText } from "@/components/comments/MentionText";
+import { mentionsToPlainText } from "@shared/lib/mentions";
 import { toast } from "sonner";
 import { useXpBurst } from "./XpBurstProvider";
 import { PostOverlayModal } from "./PostOverlayModal";
@@ -31,7 +39,6 @@ import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView"
 import type {
   CommentAdapter,
   CommentItem,
-  ParentVoteLabel,
   VoteType,
 } from "./comments/types";
 
@@ -48,34 +55,13 @@ function getSentimentColor(vote: number): string {
 }
 
 function truncateText(text: string, limit: number): { preview: string; isTruncated: boolean } {
+  if (!text) {
+    return { preview: "", isTruncated: false };
+  }
   if (text.length <= limit) {
     return { preview: text, isTruncated: false };
   }
   return { preview: text.substring(0, limit), isTruncated: true };
-}
-
-/**
- * Server-side insight shape (the raw GET /api/community-insights/:personId
- * response). We keep this in a ref-cache so InsightCard can read insight-only
- * metadata (sentimentVote) without polluting CommentItem with surface-specific
- * fields. The PostOverlayModal also accepts this shape via its `insight` prop
- * (preserved from C3-untouched modal contract).
- */
-interface CommunityInsight {
-  id: string;
-  personId: string;
-  userId: string;
-  username: string | null;
-  avatarUrl: string | null;
-  /** Author's rank name — drives the inline qualifier (Tier 3+ only). */
-  authorRank?: string | null;
-  content: string;
-  sentimentVote?: number | null;
-  deletedAt: string | null;
-  createdAt: string;
-  upvotes: number;
-  downvotes: number;
-  parentVoteLabel?: ParentVoteLabel | null;
 }
 
 interface CommunityInsightsProps {
@@ -150,34 +136,13 @@ export function CommunityInsights({
   }, [personId]);
 
   const adapter = useMemo<CommentAdapter>(() => ({
-    queryKey: [`/api/community-insights/${personId}`] as const,
+    queryKey: communityInsightsQueryKey(personId),
     fetchList: async () => {
-      const res = await apiRequest("GET", `/api/community-insights/${personId}`);
-      const raw = (await res.json()) as CommunityInsight[];
-      insightsCacheRef.current = Object.fromEntries(raw.map((i) => [i.id, i]));
-      return raw.map<CommentItem>((i) => ({
-        id: i.id,
-        userId: i.userId,
-        username: i.username,
-        avatarUrl: i.avatarUrl,
-        authorRank: i.authorRank ?? null,
-        body: i.content,
-        parentId: null,
-        upvotes: i.upvotes ?? 0,
-        downvotes: i.downvotes ?? 0,
-        userVote: null,
-        deletedAt: i.deletedAt,
-        parentVoteLabel: i.parentVoteLabel ?? null,
-        createdAt: i.createdAt,
-      }));
+      const { comments, insightsById } = await fetchCommunityInsightThread(personId);
+      insightsCacheRef.current = insightsById;
+      return comments;
     },
-    fetchUserVotes: async () => {
-      const res = await apiRequest(
-        "GET",
-        `/api/community-insights/${personId}/votes`,
-      );
-      return (await res.json()) as Record<string, VoteType>;
-    },
+    fetchUserVotes: async () => fetchCommunityInsightUserVotes(personId),
     postComment: async ({ body }) => {
       const res = await apiRequest("POST", "/api/community-insights", {
         personId,
@@ -542,7 +507,7 @@ function InsightCard({
   const sentimentVote = isDeleted ? null : insight?.sentimentVote ?? null;
   const { preview, isTruncated } = isDeleted
     ? { preview: "[deleted]", isTruncated: false }
-    : truncateText(comment.body, 280);
+    : truncateText(mentionsToPlainText(comment.body), 280);
 
   // Inline rank qualifier — Tier 3+ only (same threshold as CommentRow).
   const authorTier = comment.authorRank
@@ -625,7 +590,13 @@ function InsightCard({
           className={`text-sm mt-1 whitespace-pre-wrap ${isDeleted ? "italic text-muted-foreground" : "text-foreground/90"}`}
           data-testid={`text-content-${comment.id}`}
         >
-          {isDeleted ? preview : isExpanded ? comment.body : preview}
+          {isDeleted ? (
+            preview
+          ) : isExpanded ? (
+            <MentionText text={comment.body} />
+          ) : (
+            preview
+          )}
           {isTruncated && !isExpanded && "..."}
         </p>
         {isTruncated && !isDeleted && (

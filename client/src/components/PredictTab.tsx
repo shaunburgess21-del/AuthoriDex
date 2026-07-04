@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
+import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -635,7 +636,11 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       );
       return res.json();
     },
-    onSuccess: async (data: any, variables) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("updown", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data: any, variables, context) => {
       let entryLabel = "Up";
       if (variables.entryId === weeklyMarket?.downEntryId) entryLabel = "Down";
       else if (variables.entryId === weeklyMarket?.upEntryId) entryLabel = "Up";
@@ -656,11 +661,14 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           category: weeklyMarket.category,
           entryLabel: entryLabel.toUpperCase(),
           direction: entryLabel.toLowerCase() === "down" ? "down" : "up",
+          marketKind: "updown",
           openShareCard,
           fallbackShareUrl: `${origin}/predict/updown/${weeklyMarket.id}`,
+          toastId: context?.toastId,
         });
       } else {
-        toast("Prediction placed!", {
+        showVoteToast("updown", "Prediction placed!", {
+          id: context?.toastId,
           description: "Your weekly up/down prediction has been recorded.",
         });
       }
@@ -711,7 +719,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
     },
@@ -752,7 +761,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       );
       return res.json();
     },
-    onSuccess: async (data: any, variables) => {
+    onMutate: (variables) => {
+      const kind = variables.marketType === "h2h" ? "h2h" : "gainer";
+      const toastId = showPendingVoteToast(kind, "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data: any, variables, context) => {
       // AMM share-toast on success when we have enough metadata to
       // build a sensible share card; legacy / non-AMM paths or callers
       // that didn't pass meta still get the simple confirmation toast.
@@ -767,11 +781,16 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           category: variables.toastMeta.category,
           entryLabel: variables.toastMeta.entryLabel,
           direction: variables.toastMeta.direction,
+          marketKind: variables.marketType === "h2h" ? "h2h" : "gainer",
           openShareCard,
           fallbackShareUrl: variables.toastMeta.fallbackShareUrl,
+          toastId: context?.toastId,
         });
       } else {
-        toast("Prediction placed!", { description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded." });
+        showVoteToast(variables.marketType === "h2h" ? "h2h" : "gainer", "Prediction placed!", {
+          id: context?.toastId,
+          description: variables.marketType === "h2h" ? "Your head-to-head prediction has been recorded." : "Your prediction has been recorded.",
+        });
       }
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -782,7 +801,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
     },

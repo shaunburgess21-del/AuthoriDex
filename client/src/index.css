@@ -1279,83 +1279,186 @@ textarea:-webkit-autofill:active {
   transition: background-color 600000s 0s, color 600000s 0s;
 }
 
-/* ===== SONNER TOAST THEME =====
- * Re-skin Sonner's `richColors` success/info palette to brand blue while
- * keeping the soft pastel feel Sonner uses by default — toasts should still
- * read as notifications, not solid alert bars.
+/* ===== SONNER TOAST THEME — iOS-style glass =====
+ * Standard toasts (data-styled="true") are re-skinned as a translucent
+ * frosted-glass card, mirroring the iOS notification banner: blurred
+ * backdrop, hairline border, soft layered shadow, and high-contrast text.
+ * Custom toasts (StreakToast/BadgeToast via `toast.custom`) render with
+ * data-styled="false" and keep their own design.
  *
- * Selector shape — verified against Sonner's bundled `dist/styles.css` and
- * `dist/index.mjs`:
- *
- *   - The theme is set on the wrapper as `data-sonner-theme="light|dark"`
- *     (NOT `data-theme`).
- *   - `data-rich-colors`, `data-sonner-toast`, and `data-type` are ALL on
- *     the same toast element. Sonner paints the success/info background
- *     via:  `[data-rich-colors='true'][data-sonner-toast][data-type='success']`.
- *
- * To definitively win the cascade we mirror that exact shape on the toast
- * and scope to the wrapper for theme-awareness. The leading `html` bumps
- * specificity above Sonner's (0,3,0) per-state rules regardless of CSS
- * import order.
- *
- * The values mirror Sonner's own pastel structure (very-light bg / slightly
- * darker border / saturated text) but pivoted to our brand hue 217. Errors
- * stay red and warnings stay amber — those carry semantic meaning users
- * expect from notification toasts. */
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"],
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] {
-  background: hsl(217 91% 96%);
-  border-color: hsl(217 91% 91%);
-  color: hsl(217 91% 38%);
+ * Selector shape — verified against Sonner's bundled `dist/styles.css`:
+ * the leading `html` bumps specificity above Sonner's per-state rules
+ * (including richColors backgrounds) regardless of CSS import order. */
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  background: hsl(var(--background) / 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid hsl(var(--border) / 0.55);
+  border-radius: 1rem;
+  box-shadow:
+    0 12px 32px -8px rgb(0 0 0 / 0.16),
+    0 2px 8px rgb(0 0 0 / 0.06);
+  color: hsl(var(--foreground));
 }
 
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-title],
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-title] {
-  color: hsl(217 91% 38%);
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-sonner-toast][data-styled="true"] {
+  background: hsl(var(--background) / 0.66);
+  border-color: hsl(var(--border) / 0.7);
+  box-shadow:
+    0 12px 32px -8px rgb(0 0 0 / 0.55),
+    0 2px 8px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06);
 }
 
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"],
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] {
-  background: hsl(217 91% 8%);
-  border-color: hsl(217 91% 16%);
-  color: hsl(217 91% 70%);
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-title] {
+  color: hsl(var(--foreground));
+  font-weight: 600;
 }
 
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-title],
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-title] {
-  color: hsl(217 91% 70%);
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-description] {
+  color: hsl(var(--muted-foreground));
 }
 
-/* Close button — Sonner styles `[data-close-button]` separately from the toast
- * body using its own success/info palette CSS vars, so the X stays green even
- * though the toast itself is re-skinned to blue above. Mirror the same blue
- * palette onto the close button so the dismiss affordance matches the toast.
- * The icon stroke is `currentColor`, so setting `color` recolors the X. */
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-close-button],
-html [data-sonner-toaster][data-sonner-theme="light"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-close-button] {
-  background: hsl(217 91% 96%);
-  border-color: hsl(217 91% 91%);
-  color: hsl(217 91% 38%);
+/* Semantic tints — a translucent wash layered over the glass base so
+ * success reads brand-blue and errors/warnings keep their meaning while
+ * the frosted look stays consistent across every toast type. */
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"][data-type="success"],
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"][data-type="info"] {
+  background:
+    linear-gradient(hsl(217 91% 60% / 0.1), hsl(217 91% 60% / 0.1)),
+    hsl(var(--background) / 0.72);
+  border-color: hsl(217 91% 60% / 0.35);
 }
 
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="success"] [data-close-button],
-html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][data-sonner-toast][data-type="info"] [data-close-button] {
-  background: hsl(217 91% 8%);
-  border-color: hsl(217 91% 16%);
-  color: hsl(217 91% 70%);
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"][data-type="error"] {
+  background:
+    linear-gradient(hsl(0 72% 51% / 0.12), hsl(0 72% 51% / 0.12)),
+    hsl(var(--background) / 0.72);
+  border-color: hsl(0 72% 51% / 0.35);
+}
+
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"][data-type="warning"] {
+  background:
+    linear-gradient(hsl(38 92% 50% / 0.12), hsl(38 92% 50% / 0.12)),
+    hsl(var(--background) / 0.72);
+  border-color: hsl(38 92% 50% / 0.4);
+}
+
+html [data-sonner-toaster][data-sonner-theme="light"] [data-sonner-toast][data-styled="true"][data-type="error"] [data-title] {
+  color: hsl(0 72% 38%);
+}
+
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-sonner-toast][data-styled="true"][data-type="error"] [data-title] {
+  color: hsl(0 90% 72%);
+}
+
+html [data-sonner-toaster][data-sonner-theme="light"] [data-sonner-toast][data-styled="true"][data-type="warning"] [data-title] {
+  color: hsl(30 90% 32%);
+}
+
+html [data-sonner-toaster][data-sonner-theme="dark"] [data-sonner-toast][data-styled="true"][data-type="warning"] [data-title] {
+  color: hsl(42 96% 62%);
+}
+
+/* Close button — match the glass surface (Sonner otherwise paints it with
+ * its own per-type palette vars). Icon stroke is currentColor. */
+html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
+  background: hsl(var(--background) / 0.92);
+  border-color: hsl(var(--border) / 0.8);
+  color: hsl(var(--muted-foreground));
+}
+
+/* Vote-type icon chip (see client/src/lib/vote-toast.tsx) — let the chip
+ * define the icon slot size instead of Sonner's fixed 16px box. */
+[data-sonner-toast].vd-toast [data-icon] {
+  height: auto;
+  width: auto;
+  margin: 0 2px 0 0;
 }
 
 /* Custom toasts (StreakToast, BadgeToast) set their own width; without
  * this, Sonner's top-center math drifts left when --width != card width.
- * See https://github.com/emilkowalski/sonner/issues/611 */
+ * See https://github.com/emilkowalski/sonner/issues/611
+ *
+ * The transform keeps Sonner's swipe-follow vars (--swipe-amount-x/y) in
+ * the chain so a drag moves the card with the finger, and excludes the
+ * swipe-out state so the fly-away animation below can win the cascade
+ * (an !important transform would otherwise freeze it). */
 [data-sonner-toast][data-x-position="center"] {
   left: 50% !important;
-  transform: translateX(-50%) var(--y) !important;
 }
 
-[data-sonner-toast][data-x-position="center"][data-expanded="true"] {
-  left: 50% !important;
-  transform: translateX(-50%) var(--y) !important;
+[data-sonner-toast][data-x-position="center"]:not([data-swipe-out="true"]) {
+  transform: translateX(-50%) var(--y) translateY(var(--swipe-amount-y, 0px))
+    translateX(var(--swipe-amount-x, 0px)) !important;
+}
+
+/* Swipe-out fly-away for centered toasts — Sonner's own swipe-out
+ * keyframes don't include the translateX(-50%) centering offset, so we
+ * substitute equivalents that do. Duration/easing/fill-mode come from
+ * Sonner's [data-swipe-out="true"] rule (200ms ease-out forwards). */
+[data-sonner-toast][data-x-position="center"][data-swipe-out="true"][data-swipe-direction="up"] {
+  animation-name: vd-center-swipe-out-up !important;
+}
+
+[data-sonner-toast][data-x-position="center"][data-swipe-out="true"][data-swipe-direction="down"] {
+  animation-name: vd-center-swipe-out-down !important;
+}
+
+[data-sonner-toast][data-x-position="center"][data-swipe-out="true"][data-swipe-direction="left"] {
+  animation-name: vd-center-swipe-out-left !important;
+}
+
+[data-sonner-toast][data-x-position="center"][data-swipe-out="true"][data-swipe-direction="right"] {
+  animation-name: vd-center-swipe-out-right !important;
+}
+
+@keyframes vd-center-swipe-out-up {
+  from {
+    transform: translateX(-50%) var(--y) translateY(var(--swipe-amount-y, 0px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) var(--y)
+      translateY(calc(var(--swipe-amount-y, 0px) - 250%));
+    opacity: 0;
+  }
+}
+
+@keyframes vd-center-swipe-out-down {
+  from {
+    transform: translateX(-50%) var(--y) translateY(var(--swipe-amount-y, 0px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) var(--y)
+      translateY(calc(var(--swipe-amount-y, 0px) + 250%));
+    opacity: 0;
+  }
+}
+
+@keyframes vd-center-swipe-out-left {
+  from {
+    transform: translateX(-50%) var(--y) translateX(var(--swipe-amount-x, 0px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) var(--y)
+      translateX(calc(var(--swipe-amount-x, 0px) - 60vw));
+    opacity: 0;
+  }
+}
+
+@keyframes vd-center-swipe-out-right {
+  from {
+    transform: translateX(-50%) var(--y) translateX(var(--swipe-amount-x, 0px));
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) var(--y)
+      translateX(calc(var(--swipe-amount-x, 0px) + 60vw));
+    opacity: 0;
+  }
 }
 
 /* StreakToast — slot width must match STREAK_TOAST_WIDTH_CSS in streak-config.ts */
@@ -1365,12 +1468,6 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
   margin-inline: auto !important;
   left: 50% !important;
   right: auto !important;
-  transform: translateX(-50%) var(--y) !important;
-}
-
-[data-sonner-toast].streak-toast-host[data-expanded="true"] {
-  left: 50% !important;
-  transform: translateX(-50%) var(--y) !important;
 }
 
 /* Sonner's built-in @media (max-width: 600px) pins top-center toasts to
@@ -1382,12 +1479,6 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-rich-colors="true"][d
     right: auto !important;
     width: min(384px, calc(100vw - 1rem)) !important;
     max-width: calc(100vw - 1rem) !important;
-    transform: translateX(-50%) var(--y) !important;
-  }
-
-  [data-sonner-toast].streak-toast-host[data-expanded="true"] {
-    left: 50% !important;
-    transform: translateX(-50%) var(--y) !important;
   }
 }
 

@@ -75,6 +75,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
 import { Drawer } from "vaul";
@@ -1392,7 +1393,6 @@ export default function VotePage() {
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
-      hapticSuccess();
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
       queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
       if (data?.xp?.xpAwarded) {
@@ -1730,9 +1730,13 @@ export default function VotePage() {
       toastDescription: string,
       xpReason: string,
     ) => {
-      if (!isMobile || myVotesFilter !== "all") return false;
+      // Instant feedback for everyone: haptic + toast fire at click time on
+      // every device/filter. The XP burst + carousel advance stay gated to
+      // the mobile "All" flow (the return value keeps its original meaning
+      // so onSuccess XP/advance fallbacks still run when this returns false).
       hapticSuccess();
-      toast(toastTitle, { description: toastDescription });
+      showVoteToast(section === "matchups" ? "matchup" : section, toastTitle, { description: toastDescription });
+      if (!isMobile || myVotesFilter !== "all") return false;
       if (user) {
         triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, xpReason);
       }
@@ -1795,18 +1799,13 @@ export default function VotePage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      if (!variables.optimisticFeedbackShown) {
-        hapticSuccess();
-      }
+      // Haptic + toast already fired at click time in handleMatchupVote.
       if (data?.xp?.xpAwarded && !variables.optimisticFeedbackShown) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const isChange = !!variables.previousVote;
       if (!isChange && !variables.optimisticFeedbackShown) {
         playInactiveVoteAdvance("matchups", variables.matchupId);
-      }
-      if (!variables.optimisticFeedbackShown) {
-        toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted." });
       }
     },
     onError: (error: any, variables) => {
@@ -1857,7 +1856,6 @@ export default function VotePage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      toast("Vote removed", { description: "Your Matchup vote has been removed." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [variables.matchupId]: variables.previousVote }));
@@ -1915,13 +1913,20 @@ export default function VotePage() {
       beginHideExit(`matchups:${matchupId}`);
     }
     setLocalMatchupVotes((prev: Record<string, string>) => ({ ...prev, [matchupId]: option }));
-    const optimisticFeedbackShown = !previousVote && showOptimisticVoteFeedback(
-      "matchups",
-      matchupId,
-      "Vote recorded!",
-      "Your Matchup vote has been counted.",
-      "Matchup Vote",
-    );
+    let optimisticFeedbackShown = false;
+    if (previousVote) {
+      // Re-vote: instant toast with change copy; XP/advance stay onSuccess-gated.
+      hapticSuccess();
+      showVoteToast("matchup", "Vote changed!", { description: "Your Matchup vote has been updated." });
+    } else {
+      optimisticFeedbackShown = showOptimisticVoteFeedback(
+        "matchups",
+        matchupId,
+        "Vote recorded!",
+        "Your Matchup vote has been counted.",
+        "Matchup Vote",
+      );
+    }
     matchupVoteMutation.mutate({ matchupId, option, previousVote, optimisticFeedbackShown });
   };
   
@@ -1933,6 +1938,7 @@ export default function VotePage() {
       next[matchupId] = '__removed__';
       return next;
     });
+    showVoteToast("matchup", "Vote removed", { description: "Your Matchup vote has been removed." });
     matchupRemoveVoteMutation.mutate({ matchupId, previousVote });
   };
   
@@ -2614,6 +2620,8 @@ export default function VotePage() {
       newSet.add(candidateId);
       return newSet;
     });
+    hapticSuccess();
+    showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     inductionVoteMutation.mutate(candidateId);
   };
 
@@ -2691,13 +2699,15 @@ export default function VotePage() {
       throw new Error("Topic not found");
     }
     const wasFirstVote = !topic.userVote;
-    const optimisticFeedbackShown = wasFirstVote && showOptimisticVoteFeedback(
+    const optimisticFeedbackShown = showOptimisticVoteFeedback(
       "sentiment",
       topicId,
-      "Vote recorded!",
-      "Your Sentiment Poll vote has been counted.",
+      wasFirstVote ? "Vote recorded!" : "Vote changed!",
+      wasFirstVote
+        ? "Your Sentiment Poll vote has been counted."
+        : "Your Sentiment Poll vote has been updated.",
       "Sentiment Vote",
-    );
+    ) && wasFirstVote;
     await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId, optimisticFeedbackShown });
     if (myVotesFilter === "hide-mine") {
       beginHideExit(`sentiment:${topicId}`);
@@ -2719,13 +2729,15 @@ export default function VotePage() {
           beginHideExit(exitKey);
         }
       }
-      const optimisticFeedbackShown = !!(wasFirstVote && poll?.id && showOptimisticVoteFeedback(
+      const optimisticFeedbackShown = !!(poll?.id && showOptimisticVoteFeedback(
         "opinion",
         String(poll.id),
-        "Vote recorded!",
-        "Your Opinion Poll vote has been counted.",
+        wasFirstVote ? "Vote recorded!" : "Vote changed!",
+        wasFirstVote
+          ? "Your Opinion Poll vote has been counted."
+          : "Your Opinion Poll vote has been updated.",
         "Opinion Poll Vote",
-      ));
+      ) && wasFirstVote);
       try {
         await voteOnOpinionPoll(slug, optionId, { suppressXpBurst: optimisticFeedbackShown });
       } catch (err) {
@@ -2733,7 +2745,7 @@ export default function VotePage() {
         throw err;
       }
     },
-    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit, playInactiveVoteAdvance],
+    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit, showOptimisticVoteFeedback],
   );
 
   const openSuggestModal = (open: () => void) => {
@@ -4397,7 +4409,7 @@ export default function VotePage() {
                   <OpinionPollCard
                     key={poll.id}
                     poll={poll}
-                    onVote={voteOnOpinionPoll}
+                    onVote={handleOpinionVote}
                     onRemoveVote={removeOpinionPollVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
@@ -4552,7 +4564,7 @@ export default function VotePage() {
               return (
                 <OpinionPollCard
                   poll={p}
-                  onVote={voteOnOpinionPoll}
+                  onVote={handleOpinionVote}
                   onRemoveVote={removeOpinionPollVote}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}

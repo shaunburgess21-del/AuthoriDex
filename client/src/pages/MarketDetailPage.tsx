@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { dismissVoteToast, marketToastKind, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
@@ -807,7 +808,11 @@ export default function MarketDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data: any) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast(marketToastKind(market?.marketType), "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data: any, _variables, context) => {
       const isAmmTrade = data?.engine === "amm";
       if (isAmmTrade && market) {
         // Find the entry the user picked so we can use its label as the
@@ -859,7 +864,8 @@ export default function MarketDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}/markets/${market.slug}`;
         const fallbackText = `I just backed ${entryLabel} on "${market.title}" on VoxDex!\n${shareUrl}`;
-        toast("Shares purchased", {
+        showVoteToast(marketToastKind(market?.marketType), "Shares purchased", {
+          id: context?.toastId,
           description: `${Math.round(shares).toLocaleString()} ${entryLabel} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
@@ -873,9 +879,11 @@ export default function MarketDetailPage() {
           },
         });
       } else {
-        toast(
+        showVoteToast(
+          marketToastKind(market?.marketType),
           isAmmTrade ? "Shares purchased" : "Prediction placed!",
           {
+            id: context?.toastId,
             description: isAmmTrade && Number.isFinite(Number(data?.sharesPurchased))
               ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${Number.isFinite(Number(data?.chargeCredits)) ? formatVox(Number(data.chargeCredits)) : "—"}.`
               : "Your prediction has been recorded.",
@@ -901,7 +909,8 @@ export default function MarketDetailPage() {
       setSelectedDirection("yes");
       setStakeAmount("");
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
     },
@@ -936,7 +945,6 @@ export default function MarketDetailPage() {
       return data as { predictedScore: number };
     },
     onSuccess: async (data: any) => {
-      toast("Jackpot entry placed!", { description: `Your prediction ${data.predictedScore.toLocaleString("en-US")} has been recorded.` });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -1108,10 +1116,15 @@ export default function MarketDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data: any) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast(marketToastKind(market?.marketType), "Cashing out…");
+      return { toastId };
+    },
+    onSuccess: async (data: any, _variables, context) => {
       hapticSuccess();
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Cashed out", {
+      showVoteToast(marketToastKind(market?.marketType), "Cashed out", {
+        id: context?.toastId,
         description:
           proceeds > 0
             ? `Proceeds credited: +${formatVox(proceeds)}`
@@ -1134,7 +1147,8 @@ export default function MarketDetailPage() {
         market?.id ? queryClient.invalidateQueries({ queryKey: ["/api/markets", market.id, "price-history"] }) : Promise.resolve(),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });
@@ -1895,7 +1909,13 @@ export default function MarketDetailPage() {
                 <Button
                   className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-semibold"
                   disabled={!jackpotPredictedScore || jackpotMutation.isPending}
-                  onClick={() => jackpotPredictedScore && jackpotMutation.mutate(jackpotPredictedScore)}
+                  onClick={() => {
+                    if (!jackpotPredictedScore) return;
+                    showVoteToast("jackpot", "Jackpot entry placed!", {
+                      description: `Your prediction ${jackpotPredictedScore.toLocaleString("en-US")} has been recorded.`,
+                    });
+                    jackpotMutation.mutate(jackpotPredictedScore);
+                  }}
                   data-testid="button-submit-jackpot-entry"
                 >
                   {jackpotMutation.isPending ? (

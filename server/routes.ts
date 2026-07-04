@@ -67,6 +67,8 @@ import {
 } from "@shared/profile-theme-config";
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
+import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
+import { mentionsToPlainText } from "@shared/lib/mentions";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
@@ -2510,6 +2512,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Combined typeahead for inline @-mentions: tracked people (leaderboard +
+  // induction-queue candidates) and VoxDex user profiles in one round trip.
+  app.get("/api/mentions/search", async (req, res) => {
+    try {
+      const rawQ = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      if (rawQ.length < 2) {
+        res.json({ people: [], users: [] });
+        return;
+      }
+
+      const likePattern = `%${rawQ}%`;
+      const [people, users] = await Promise.all([
+        db
+          .select({
+            id: trackedPeople.id,
+            name: trackedPeople.name,
+            avatar: trackedPeople.avatar,
+            category: trackedPeople.category,
+          })
+          .from(trackedPeople)
+          .where(sql`${trackedPeople.name} % ${rawQ} OR ${trackedPeople.name} ILIKE ${likePattern}`)
+          .orderBy(sql`similarity(${trackedPeople.name}, ${rawQ}) DESC, ${trackedPeople.displayOrder} ASC NULLS LAST`)
+          .limit(6),
+        db
+          .select({
+            id: profiles.id,
+            username: profiles.username,
+            avatarUrl: profiles.avatarUrl,
+          })
+          .from(profiles)
+          .where(sql`${profiles.username} IS NOT NULL AND ${profiles.username} ILIKE ${likePattern}`)
+          .orderBy(sql`(${profiles.username} ILIKE ${`${rawQ}%`}) DESC, length(${profiles.username}) ASC`)
+          .limit(6),
+      ]);
+
+      res.json({ people, users });
+    } catch (error) {
+      console.error("Error searching mentions:", error);
+      res.status(500).json({ error: "Failed to search mentions" });
+    }
+  });
+
   // ============ MOMENTUM SIGNALS ENDPOINT ============
   // Traffic-light level helper. Uses percentile cutoffs from the rolling
   // 14-day source stats, with safe fixed-threshold fallbacks when the stats
@@ -3747,6 +3791,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Content exceeds maximum length of 2500 characters" });
       }
 
+      const mentionResult = await sanitizeMentions(content);
+      if (mentionResult.error) {
+        return res.status(400).json({ error: mentionResult.error });
+      }
+      const storedContent = mentionResult.body;
+
       // Validate sentimentVote if provided (must be 1-10)
       if (sentimentVote !== undefined && sentimentVote !== null) {
         if (typeof sentimentVote !== 'number' || sentimentVote < 1 || sentimentVote > 10) {
@@ -3759,7 +3809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .values({
           personId,
           userId: req.userId!,
-          content,
+          content: storedContent,
           sentimentVote: sentimentVote || null,
         })
         .returning();
@@ -3781,6 +3831,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(profiles)
         .where(eq(profiles.id, req.userId!))
         .limit(1);
+
+      if (mentionResult.userMentions.length > 0) {
+        try {
+          await notifyMentionedUsers({
+            userMentions: mentionResult.userMentions,
+            authorId: req.userId!,
+            authorUsername: profile?.authorUsername ?? null,
+            contentId: newInsight.id,
+            entityType: "community_insight",
+            href: `/person/${personId}#insight-${newInsight.id}`,
+            snippet: mentionsToPlainText(storedContent).trim().slice(0, 140),
+          });
+        } catch (err) {
+          console.error("[mentions] insight fanout failed:", err);
+        }
+      }
 
       res.json({
         ...newInsight,
@@ -5769,6 +5835,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const resolvedParentId = await resolveUnifiedCommentParent(parsed);
       if (!resolvedParentId) return res.status(404).json({ error: "Comment parent not found" });
 
+      const mentionResult = await sanitizeMentions(parsed.body);
+      if (mentionResult.error) return sendBadRequest(res, mentionResult.error);
+      const storedBody = mentionResult.body;
+
       if (parsed.parentCommentId) {
         const [parentComment] = await db
           .select({
@@ -5792,7 +5862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentId: resolvedParentId,
           parentCommentId: parsed.parentCommentId || null,
           userId,
-          body: parsed.body,
+          body: storedBody,
         })
         .returning();
 
@@ -5810,7 +5880,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "opinion_poll",
         "open_market",
       ]);
-      const trimmedContent = parsed.body.trim();
+      const trimmedContent = storedBody.trim();
       let shouldAwardXp =
         REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
         trimmedContent.length >= 20;
@@ -5882,7 +5952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               parentRow.parentType as CommentParentType,
               parentRow.parentId,
             );
-            const snippet = parsed.body.trim().slice(0, 140);
+            const snippet = mentionsToPlainText(storedBody).trim().slice(0, 140);
             await createNotification({
               userId: parentRow.userId,
               kind: "comment_reply",
@@ -5926,7 +5996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (insightRow && !insightRow.deletedAt && insightRow.userId !== userId) {
             const replyAuthorName = profile?.authorUsername ?? "Someone";
-            const snippet = parsed.body.trim().slice(0, 140);
+            const snippet = mentionsToPlainText(storedBody).trim().slice(0, 140);
             const href = insightRow.personId
               ? `/person/${insightRow.personId}#insight-${newComment.parentId}`
               : "/me";
@@ -5949,6 +6019,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (err) {
           console.error("[notifications] insight reply fanout failed:", err);
+        }
+      }
+
+      if (mentionResult.userMentions.length > 0) {
+        try {
+          const baseHref = await resolveUnifiedCommentHref(
+            parsed.parentType as CommentParentType,
+            resolvedParentId,
+          );
+          await notifyMentionedUsers({
+            userMentions: mentionResult.userMentions,
+            authorId: userId,
+            authorUsername: profile?.authorUsername ?? null,
+            contentId: newComment.id,
+            entityType: "comment",
+            href: `${baseHref}#comment-${newComment.id}`,
+            snippet: mentionsToPlainText(storedBody).trim().slice(0, 140),
+          });
+        } catch (err) {
+          console.error("[mentions] comment fanout failed:", err);
         }
       }
 

@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { MentionText } from "@/components/comments/MentionText";
 import { VOICES_TIMELINE_ID } from "@shared/constants";
 import { toast } from "sonner";
 import type { VoicesFeedItem, VoicesReply } from "./types";
@@ -28,7 +29,10 @@ interface UnifiedCommentResponse extends Omit<CommentItem, "parentId"> {
   parentCommentId: string | null;
 }
 
-function replyToCommentItem(reply: VoicesReply): CommentItem {
+// Direct replies to a timeline post are stored with parentCommentId = post id
+// (the server thread-walker needs this), but buildThreadedComments treats only
+// parentId = null rows as top-level — so normalize the post id away here.
+function replyToCommentItem(reply: VoicesReply, postId: string): CommentItem {
   return {
     id: reply.id,
     userId: reply.userId,
@@ -36,7 +40,7 @@ function replyToCommentItem(reply: VoicesReply): CommentItem {
     avatarUrl: reply.avatarUrl,
     authorRank: reply.authorRank,
     body: reply.body,
-    parentId: reply.parentCommentId,
+    parentId: reply.parentCommentId === postId ? null : reply.parentCommentId,
     upvotes: reply.upvotes,
     downvotes: reply.downvotes,
     userVote: reply.userVote,
@@ -69,7 +73,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       fetchList: async () => {
         const res = await apiRequest("GET", `/api/voices/post/${item.id}`);
         const json = (await res.json()) as { replies?: VoicesReply[] };
-        return (json.replies ?? []).map(replyToCommentItem);
+        return (json.replies ?? []).map((reply) => replyToCommentItem(reply, item.id));
       },
       postComment: async ({ body, parentId }) => {
         const res = await apiRequest("POST", "/api/comments", {
@@ -79,7 +83,10 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
           body,
         });
         const raw = (await res.json()) as UnifiedCommentResponse;
-        return { ...raw, parentId: raw.parentCommentId } as CommentItem;
+        return {
+          ...raw,
+          parentId: raw.parentCommentId === item.id ? null : raw.parentCommentId,
+        } as CommentItem;
       },
       voteComment: async ({ commentId, voteType }) => {
         const res = await apiRequest("POST", `/api/comments/${commentId}/vote`, { voteType });
@@ -200,7 +207,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                   postDeleted ? "italic text-muted-foreground" : ""
                 }`}
               >
-                {postDeleted ? "[deleted]" : item.body}
+                {postDeleted ? "[deleted]" : <MentionText text={item.body} />}
               </p>
 
               <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">

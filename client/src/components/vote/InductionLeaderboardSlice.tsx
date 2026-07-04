@@ -10,6 +10,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -234,6 +235,7 @@ export function InductionLeaderboardSlice({
       next.add(id);
       return next;
     });
+    showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     inductionVoteMutation.mutate(id);
   });
 

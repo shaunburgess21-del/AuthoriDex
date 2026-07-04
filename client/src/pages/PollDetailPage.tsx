@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -180,6 +181,7 @@ export default function PollDetailPage() {
         );
       }
       void queryClient.cancelQueries({ queryKey: votePollQueryKey });
+      showVoteToast("sentiment", "Vote recorded!", { description: "Your Sentiment Poll vote has been counted." });
       return { previousPoll, votePollQueryKey };
     },
     onError: (error, { slug: voteSlug, choice, pollId }, context) => {
@@ -212,7 +214,6 @@ export default function PollDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Vote Recorded", { description: "Your vote has been counted." });
     },
   });
 

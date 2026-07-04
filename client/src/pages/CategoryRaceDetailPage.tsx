@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -361,7 +362,11 @@ export default function CategoryRaceDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("gainer", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data, _variables, context) => {
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
@@ -390,7 +395,8 @@ export default function CategoryRaceDetailPage() {
           ? `${origin}/share/bet/${data.betId}`
           : `${origin}${pathname}`;
         const fallbackText = `I just backed ${candidate.name} in the ${categoryLabel} Race on VoxDex!\n${shareUrl}`;
-        toast("Shares purchased", {
+        showVoteToast("gainer", "Shares purchased", {
+          id: context?.toastId,
           description: `${Math.round(shares).toLocaleString()} ${candidate.name} shares · ${formatVox(chargeCredits)}`,
           action: {
             label: "Share",
@@ -404,7 +410,8 @@ export default function CategoryRaceDetailPage() {
           },
         });
       } else {
-        toast("Shares purchased", {
+        showVoteToast("gainer", "Shares purchased", {
+          id: context?.toastId,
           description: Number.isFinite(Number(data?.sharesPurchased))
             ? `You bought ${Number(data.sharesPurchased).toFixed(2)} shares for ${Number.isFinite(Number(data?.chargeCredits)) ? formatVox(Number(data.chargeCredits)) : "—"}.`
             : "Your race prediction has been recorded.",
@@ -422,7 +429,8 @@ export default function CategoryRaceDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "price-history"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to place prediction");
       toast.error(title, { description });
@@ -472,13 +480,18 @@ export default function CategoryRaceDetailPage() {
       );
       return res.json();
     },
-    onSuccess: async (data: any) => {
+    onMutate: () => {
+      const toastId = showPendingVoteToast("gainer", "Cashing out…");
+      return { toastId };
+    },
+    onSuccess: async (data: any, _variables, context) => {
       hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
-      toast("Cashed out", {
+      showVoteToast("gainer", "Cashed out", {
+        id: context?.toastId,
         description:
           proceeds > 0
             ? `Proceeds credited: +${formatVox(proceeds)}`
@@ -497,7 +510,8 @@ export default function CategoryRaceDetailPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/markets", marketId, "price-history"] }),
       ]);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
       hapticError();
       const { title, description } = parseApiError(err, "Failed to cash out position");
       toast.error(title, { description });

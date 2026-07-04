@@ -53,6 +53,7 @@ import { TrendingPerson } from "@shared/schema";
 import { normalizeMarketCategory } from "@shared/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
@@ -976,8 +977,12 @@ export default function PersonDetailPage() {
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
-    onMutate: ({ matchupId, option }) => {
+    onMutate: ({ matchupId, option, previousVote }) => {
       setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: option }));
+      const isChange = !!previousVote;
+      showVoteToast("matchup", isChange ? "Vote changed!" : "Vote recorded!", {
+        description: isChange ? "Your matchup vote has been updated." : "Your matchup vote has been counted.",
+      });
     },
     onSuccess: (data, variables) => {
       // Phase 4 — sync the anon-budget cache from the server-authoritative
@@ -985,8 +990,6 @@ export default function PersonDetailPage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      const isChange = !!variables.previousVote;
-      toast(isChange ? "Vote changed!" : "Vote recorded!", { description: isChange ? "Your matchup vote has been updated." : "Your matchup vote has been counted." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -1025,6 +1028,7 @@ export default function PersonDetailPage() {
     },
     onMutate: ({ matchupId }) => {
       setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: "__removed__" }));
+      showVoteToast("matchup", "Vote removed", { description: "Your matchup vote has been removed." });
     },
     onSuccess: (data) => {
       // Phase 4 — sync budget cache. Remove paths return budget: null
@@ -1032,7 +1036,6 @@ export default function PersonDetailPage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
-      toast("Vote removed", { description: "Your matchup vote has been removed." });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -1153,6 +1156,7 @@ export default function PersonDetailPage() {
     if (!topic?.slug) {
       throw new Error("Topic not found");
     }
+    showVoteToast("sentiment", "Vote recorded!", { description: "Your Sentiment Poll vote has been counted." });
     await sentimentVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
   };
 

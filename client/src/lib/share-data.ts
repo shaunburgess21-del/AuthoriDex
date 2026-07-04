@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { showVoteToast, type VoteToastKind } from "@/lib/vote-toast";
 import type {
   ShareCardData,
   ShareCardTradeData,
@@ -175,6 +175,11 @@ export interface FireAmmTradeToastArgs {
   /** Display label of the entry traded ("UP", "DOWN", candidate name). */
   entryLabel: string;
   direction: "up" | "down" | "other";
+  /**
+   * Market type for the toast's leading icon chip (mirrors the desktop
+   * section-header icon). Defaults to "updown" for legacy callers.
+   */
+  marketKind?: VoteToastKind;
   /** Callback from `useShareCard()`. */
   openShareCard: (args: {
     data: ShareCardData;
@@ -195,6 +200,8 @@ export interface FireAmmTradeToastArgs {
    * undefined and the URL stays attribution-free.
    */
   sharerUserId?: string | null;
+  /** Reuse an existing toast id (from showPendingVoteToast) to update in place. */
+  toastId?: string | number;
 }
 
 /**
@@ -254,7 +261,8 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
 
   const title = isBuy ? "Prediction placed!" : "Position sold";
 
-  toast(title, {
+  showVoteToast(args.marketKind ?? "updown", title, {
+    id: args.toastId,
     description,
     // 6s instead of Sonner's 4s default so the Share action stays
     // clickable on mobile — testers reported the previous 4s window

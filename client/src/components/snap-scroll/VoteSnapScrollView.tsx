@@ -8,6 +8,10 @@ import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
+  communityInsightsQueryKey,
+  fetchCommunityInsightComments,
+} from "@/lib/communityInsightsQuery";
+import {
   buildVoteListState,
   navigateWithVoteList,
   type VoteListNavType,
@@ -856,12 +860,10 @@ export function VoteSnapScrollView({
       const prefetchItems = colItems.slice(visibleIdx, visibleIdx + 3);
       for (const item of prefetchItems) {
         if (commentMode === "person" && item.personId) {
+          const personId = item.personId;
           void queryClient.prefetchQuery({
-            queryKey: [`/api/community-insights/${item.personId}`],
-            queryFn: async () => {
-              const res = await apiRequest("GET", `/api/community-insights/${item.personId}`);
-              return res.json();
-            },
+            queryKey: communityInsightsQueryKey(personId),
+            queryFn: () => fetchCommunityInsightComments(personId),
           });
         } else if (item.slug) {
           const parentType = COMMENT_PARENT_TYPE[commentEntityType];

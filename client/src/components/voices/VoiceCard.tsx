@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { formatTimeAgo } from "@/lib/formatDate";
+import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import type { VoicesEntity, VoicesFeedItem } from "./types";
 
@@ -95,7 +96,11 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
 
           {/* Body */}
           <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words line-clamp-6">
-            {isDeleted ? <span className="italic text-muted-foreground">[deleted]</span> : item.body}
+            {isDeleted ? (
+              <span className="italic text-muted-foreground">[deleted]</span>
+            ) : (
+              <MentionText text={item.body} />
+            )}
           </p>
 
           {/* Context chip (deep link to source) */}

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -139,6 +140,10 @@ export default function MatchupDetailPage() {
         ...(current ?? {}),
         [matchupId]: option,
       }));
+      const isChange = !!previousVote;
+      showVoteToast("matchup", isChange ? "Vote changed!" : "Vote recorded!", {
+        description: isChange ? "Your Matchup vote has been updated." : "Your Matchup vote has been counted.",
+      });
       return { previousMatchup, previousUserVotes };
     },
     onError: (error, variables, context) => {
@@ -181,7 +186,6 @@ export default function MatchupDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
-      toast("Vote Recorded", { description: "Your vote has been counted." });
     },
   });
 
@@ -208,6 +212,7 @@ export default function MatchupDetailPage() {
         delete next[matchupId];
         return next;
       });
+      showVoteToast("matchup", "Vote removed", { description: "Your Matchup vote has been removed." });
       return { previousMatchup, previousUserVotes };
     },
     onError: (_error, _matchupId, context) => {

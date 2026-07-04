@@ -4,6 +4,9 @@ import { createPortal } from "react-dom";
 import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
+import { mentionAwareLength, serializeBodyWithMentions } from "@shared/lib/mentions";
+import { MentionSuggestions } from "./MentionSuggestions";
+import { useMentionAutocomplete } from "./useMentionAutocomplete";
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
 const DEFAULT_COMMENT_MAX_LENGTH = 5000;
@@ -16,7 +19,8 @@ type ComposerMode = "auto" | "manual" | "fullscreen";
 export interface CommentComposerProps {
   value: string;
   onChange: (v: string) => void;
-  onSubmit: () => void;
+  /** Receives the body with mention tokens serialized for the API. */
+  onSubmit: (serializedBody: string) => void;
   placeholder?: string;
   isPending: boolean;
   disabled?: boolean;
@@ -66,6 +70,7 @@ export function CommentComposer({
 }: CommentComposerProps) {
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
   const [isFocused, setIsFocused] = useState(false);
+  const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fullscreenInputRef = useRef<HTMLTextAreaElement>(null);
   const composerContainerRef = useRef<HTMLDivElement>(null);
@@ -73,11 +78,47 @@ export function CommentComposer({
 
   const isManualComposer = composerMode === "manual";
   const isFullscreenComposer = composerMode === "fullscreen";
+  const activeTextareaRef = isFullscreenComposer ? fullscreenInputRef : inputRef;
+
+  const {
+    mentions,
+    clearMentions,
+    activeMention,
+    people,
+    users,
+    isFetching,
+    activeIndex,
+    setActiveIndex,
+    selectMention,
+    moveActiveIndex,
+    suggestionCount,
+    isOpen: mentionMenuOpen,
+  } = useMentionAutocomplete(value, cursor);
 
   const showButtons = isFocused || value.length > 0;
-  const overLimit = value.length > maxLength;
-  const nearLimit = value.length > maxLength - 200;
+  const perceivedLength = mentionAwareLength(value);
+  const overLimit = perceivedLength > maxLength;
+  const nearLimit = perceivedLength > maxLength - 200;
   const submitDisabled = disabled || !value.trim() || isPending || overLimit;
+
+  const syncCursorFromTextarea = useCallback(() => {
+    const el = activeTextareaRef.current;
+    if (el) setCursor(el.selectionStart ?? value.length);
+  }, [activeTextareaRef, value.length]);
+
+  const insertMentionText = useCallback(
+    (nextValue: string, nextCursor: number) => {
+      onChange(nextValue);
+      setCursor(nextCursor);
+      requestAnimationFrame(() => {
+        const el = activeTextareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(nextCursor, nextCursor);
+      });
+    },
+    [activeTextareaRef, onChange],
+  );
 
   const resizeAutoComposer = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -117,11 +158,16 @@ export function CommentComposer({
   useEffect(() => {
     if (wasPendingRef.current && !isPending && !value) {
       setComposerMode("auto");
+      clearMentions();
       inputRef.current?.blur();
       fullscreenInputRef.current?.blur();
     }
     wasPendingRef.current = isPending;
-  }, [isPending, value]);
+  }, [isPending, value, clearMentions]);
+
+  useEffect(() => {
+    if (!value) clearMentions();
+  }, [value, clearMentions]);
 
   // When a reply target is set, switch to manual mode and focus the inline
   // textarea (mirrors the old CardComments startReply imperative path).
@@ -154,11 +200,17 @@ export function CommentComposer({
   // showButtons because both isFocused and value end up falsy.
   const handleCancel = useCallback(() => {
     onChange("");
+    clearMentions();
     onCancelReply();
     setComposerMode("auto");
     inputRef.current?.blur();
     fullscreenInputRef.current?.blur();
-  }, [onChange, onCancelReply]);
+  }, [onChange, clearMentions, onCancelReply]);
+
+  const handleSubmit = useCallback(() => {
+    if (submitDisabled) return;
+    onSubmit(serializeBodyWithMentions(value, mentions));
+  }, [submitDisabled, onSubmit, value, mentions]);
 
   // Keyboard semantics (Q10 Option B):
   // - Enter alone: insert newline (default browser behaviour, no preventDefault)
@@ -166,9 +218,44 @@ export function CommentComposer({
   // - Escape: cancel (clear + cancel reply + exit fullscreen + blur)
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (mentionMenuOpen && suggestionCount > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          moveActiveIndex(1);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          moveActiveIndex(-1);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          const flat: Array<{ type: "person" | "user"; id: string; display: string; avatarUrl: string | null; subtitle?: string | null }> = [
+            ...people.map((p) => ({
+              type: "person" as const,
+              id: p.id,
+              display: p.name,
+              avatarUrl: p.avatar,
+              subtitle: p.category,
+            })),
+            ...users.map((u) => ({
+              type: "user" as const,
+              id: u.id,
+              display: u.username,
+              avatarUrl: u.avatarUrl,
+              subtitle: "VoxDex user",
+            })),
+          ];
+          const picked = flat[activeIndex];
+          if (picked) selectMention(picked, insertMentionText);
+          return;
+        }
+      }
+
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
-        onSubmit();
+        handleSubmit();
         return;
       }
       if (e.key === "Escape") {
@@ -176,7 +263,18 @@ export function CommentComposer({
         handleCancel();
       }
     },
-    [onSubmit, handleCancel],
+    [
+      mentionMenuOpen,
+      suggestionCount,
+      moveActiveIndex,
+      people,
+      users,
+      activeIndex,
+      selectMention,
+      insertMentionText,
+      handleSubmit,
+      handleCancel,
+    ],
   );
 
   const buttonRowClass = `flex items-center justify-end gap-2 overflow-hidden motion-safe:transition-all motion-safe:duration-150 motion-safe:ease-out ${
@@ -198,7 +296,7 @@ export function CommentComposer({
           <span className="hidden sm:inline">Ctrl + Enter to post</span>
           {nearLimit && (
             <span className={overLimit ? "text-rose-500" : "text-amber-500"}>
-              {value.length}/{maxLength}
+              {perceivedLength}/{maxLength}
             </span>
           )}
         </div>
@@ -216,7 +314,7 @@ export function CommentComposer({
         <button
           type="button"
           disabled={submitDisabled}
-          onClick={onSubmit}
+          onClick={handleSubmit}
           tabIndex={showButtons ? 0 : -1}
           className={postButtonClass}
           data-testid={(isFullscreen ? testIds?.submitFullscreen : testIds?.submit) ?? `button-submit-comment${idSuffix}`}
@@ -257,15 +355,31 @@ export function CommentComposer({
           ref={fullscreenInputRef}
           placeholder={replyTo ? `Reply to @${replyTo.username}...` : placeholder}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setCursor(e.target.selectionStart ?? e.target.value.length);
+          }}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          onClick={syncCursorFromTextarea}
+          onKeyUp={syncCursorFromTextarea}
+          onSelect={syncCursorFromTextarea}
           onKeyDown={handleKeyDown}
-          maxLength={maxLength}
           className={`h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base ${TEXTAREA_BASE_CLASS}`}
           data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
         />
       </div>
+      {mentionMenuOpen && activeMention && (
+        <MentionSuggestions
+          people={people}
+          users={users}
+          isLoading={isFetching}
+          query={activeMention.query}
+          activeIndex={activeIndex}
+          onSelect={(item) => selectMention(item, insertMentionText)}
+          onHoverIndex={setActiveIndex}
+        />
+      )}
       {renderActionRow("-fullscreen")}
     </div>
   ) : null;
@@ -307,18 +421,32 @@ export function CommentComposer({
                 value={value}
                 onChange={(e) => {
                   onChange(e.target.value);
+                  setCursor(e.target.selectionStart ?? e.target.value.length);
                   if (composerMode === "auto") {
                     resizeAutoComposer(e.currentTarget);
                   }
                 }}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
+                onClick={syncCursorFromTextarea}
+                onKeyUp={syncCursorFromTextarea}
+                onSelect={syncCursorFromTextarea}
                 onKeyDown={handleKeyDown}
-                maxLength={maxLength}
                 className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none ${TEXTAREA_BASE_CLASS}${isManualComposer ? " h-40 overflow-y-auto" : ""}`}
                 rows={1}
                 data-testid={testIds?.input ?? "input-comment"}
               />
+              {mentionMenuOpen && activeMention && !isFullscreenComposer && (
+                <MentionSuggestions
+                  people={people}
+                  users={users}
+                  isLoading={isFetching}
+                  query={activeMention.query}
+                  activeIndex={activeIndex}
+                  onSelect={(item) => selectMention(item, insertMentionText)}
+                  onHoverIndex={setActiveIndex}
+                />
+              )}
               {supportsFullscreen && (
                 <div className="absolute right-2 bottom-1.5 flex items-center">
                   <button

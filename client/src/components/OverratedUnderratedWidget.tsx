@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { ArrowUp, ArrowDown, BarChart3, LogIn, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { showVoteToast } from "@/lib/vote-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -66,6 +67,9 @@ export function OverratedUnderratedWidget({
       return;
     }
     setLocalVote(voteType);
+    showVoteToast("overrated", "Vote recorded!", {
+      description: `You voted ${personName} as ${voteType === 'underrated' ? 'Underrated' : 'Overrated'}.`,
+    });
     voteMutation.mutate(voteType);
   };
 
