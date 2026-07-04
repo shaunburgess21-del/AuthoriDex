@@ -2,7 +2,7 @@
  * VoxDex email layout shell.
  *
  * Wraps every VoxDex email with a consistent HTML document,
- * branded header (VoxDex wordmark), and footer (unsubscribe +
+ * branded header (logo + VoxDex wordmark), and footer (unsubscribe +
  * address). Individual templates drop their body content in
  * as children.
  *
@@ -16,15 +16,22 @@
 import * as React from "react";
 import {
   Body,
+  Column,
   Container,
   Head,
   Html,
+  Img,
   Link,
   Preview,
+  Row,
   Section,
   Text,
 } from "react-email";
 
+import {
+  VOXDEX_LOGO_EMAIL_DISPLAY_PX,
+} from "@shared/currency";
+import { VOXDEX_LOGO_EMAIL_SRC } from "../../inline-attachments";
 import {
   colors,
   fonts,
@@ -75,9 +82,24 @@ export function Layout({
 
       <Body style={bodyStyle}>
         <Container style={containerStyle}>
-          {/* ---- Header: VoxDex wordmark ---- */}
+          {/* ---- Header: logo + VoxDex wordmark ---- */}
           <Section style={headerStyle}>
-            <Text style={wordmarkStyle}>VoxDex</Text>
+            <Row>
+              <Column style={logoColumnStyle}>
+                <Link href={canonicalBaseUrl} style={logoLinkStyle}>
+                  <Img
+                    src={VOXDEX_LOGO_EMAIL_SRC}
+                    width={VOXDEX_LOGO_EMAIL_DISPLAY_PX}
+                    height={VOXDEX_LOGO_EMAIL_DISPLAY_PX}
+                    alt=""
+                    style={logoImgStyle}
+                  />
+                </Link>
+              </Column>
+              <Column style={wordmarkColumnStyle}>
+                <Text style={wordmarkStyle}>VoxDex</Text>
+              </Column>
+            </Row>
           </Section>
 
           {/* ---- Main content (from child template) ---- */}
@@ -140,6 +162,25 @@ const headerStyle: React.CSSProperties = {
   paddingBottom: spacing.section,
   borderBottom: `1px solid ${colors.border}`,
   marginBottom: spacing.section,
+};
+
+const logoColumnStyle: React.CSSProperties = {
+  width: `${VOXDEX_LOGO_EMAIL_DISPLAY_PX + 8}px`,
+  verticalAlign: "middle",
+};
+
+const logoLinkStyle: React.CSSProperties = {
+  textDecoration: "none",
+};
+
+const logoImgStyle: React.CSSProperties = {
+  border: 0,
+  display: "block",
+  margin: 0,
+};
+
+const wordmarkColumnStyle: React.CSSProperties = {
+  verticalAlign: "middle",
 };
 
 const wordmarkStyle: React.CSSProperties = {

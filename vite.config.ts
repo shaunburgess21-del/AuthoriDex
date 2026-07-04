@@ -12,6 +12,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: [
         "voxdex-logo.svg",
+        "voxdex-logo-email.png",
         "voxdex-favicon.svg",
         "fonts/vox-mark.woff2",
       ],
