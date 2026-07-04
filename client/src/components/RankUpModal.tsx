@@ -1,73 +1,19 @@
-import { useEffect, useState, useCallback } from "react";
-import confetti from "canvas-confetti";
+import { useEffect } from "react";
 import { Trophy, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { getRankConfig } from "@/lib/gamification-content";
 import { capabilitiesUnlockedAtTier } from "@shared/rank-config";
+import { type RankUpPayload } from "@/lib/rank-up-events";
 
-/**
- * Payload shape published by the realtime notifications path
- * (see useNotificationsRealtime.ts → rank_up branch).
- *
- * Mirrors the metadata persisted by gamificationService.awardXp() —
- * keeping these names in lock-step with the server is the contract
- * that lets the modal show the right "new personal best" treatment
- * without a second round-trip to /api/gamification/stats.
- */
-export interface RankUpPayload {
-  /** New rank name. Resolved against shared/rank-config.ts. */
-  newRank: string;
-  /** Previous rank name, if any. Used in the subtext only. */
-  previousRank: string | null;
-  /** Total XP after the promoting award landed. */
-  xp: number;
-  /** True when this promotion also raised highest_rank. */
-  newPersonalBest: boolean;
-}
+// Re-export so existing `from "@/components/RankUpModal"` imports keep
+// working; new dispatch call sites should import "@/lib/rank-up-events"
+// directly (it avoids pulling this modal chunk).
+export { dispatchRankUp, type RankUpPayload } from "@/lib/rank-up-events";
 
-const RANK_UP_EVENT = "voxdex:rank-up";
-
-/**
- * Imperative entry point — dispatches a custom DOM event that the
- * mounted <RankUpModalHost /> listens for. Using a DOM event (rather
- * than React Context) means the realtime hook in
- * useNotificationsRealtime.ts can stay decoupled from the modal's
- * mount tree, which matters because the realtime hook lives high in
- * the App tree and the modal renders its own portal.
- */
-export function dispatchRankUp(payload: RankUpPayload): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent<RankUpPayload>(RANK_UP_EVENT, { detail: payload }),
-  );
-}
-
-/**
- * Mount once at the app root (alongside <Toaster />). Listens for
- * `voxdex:rank-up` events and renders <RankUpModal /> when one
- * arrives. We keep the host separate from the modal body so the
- * modal stays a pure presentational component (easier to story-test
- * in isolation).
- */
-export function RankUpModalHost() {
-  const [payload, setPayload] = useState<RankUpPayload | null>(null);
-
-  useEffect(() => {
-    function onEvent(e: Event) {
-      const detail = (e as CustomEvent<RankUpPayload>).detail;
-      if (!detail) return;
-      setPayload(detail);
-    }
-    window.addEventListener(RANK_UP_EVENT, onEvent);
-    return () => window.removeEventListener(RANK_UP_EVENT, onEvent);
-  }, []);
-
-  const handleClose = useCallback(() => setPayload(null), []);
-
-  if (!payload) return null;
-  return <RankUpModal payload={payload} onClose={handleClose} />;
-}
+// NOTE: the event-listening host now lives in App.tsx (RankUpModalGate) so
+// this module — Dialog, confetti, rank config — is only fetched when a
+// promotion actually fires.
 
 interface RankUpModalProps {
   payload: RankUpPayload;
@@ -102,21 +48,31 @@ export function RankUpModal({ payload, onClose }: RankUpModalProps) {
 
   // Confetti on mount. Two bursts staggered ~150ms apart give a
   // richer feel than a single shot without bumping particle count
-  // high enough to jank low-end devices.
+  // high enough to jank low-end devices. canvas-confetti is dynamic-
+  // imported so it stays out of the entry bundle — a promotion is a
+  // rare event and a few frames of import latency are invisible.
   useEffect(() => {
-    const fireBurst = (originX: number) => {
-      confetti({
-        particleCount: 70,
-        spread: 70,
-        startVelocity: 35,
-        origin: { x: originX, y: 0.4 },
-        colors: [config.color, "#ffffff", "#fbbf24"],
-        disableForReducedMotion: true,
-      });
+    let cancelled = false;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    void import("canvas-confetti").then(({ default: confetti }) => {
+      if (cancelled) return;
+      const fireBurst = (originX: number) => {
+        confetti({
+          particleCount: 70,
+          spread: 70,
+          startVelocity: 35,
+          origin: { x: originX, y: 0.4 },
+          colors: [config.color, "#ffffff", "#fbbf24"],
+          disableForReducedMotion: true,
+        });
+      };
+      fireBurst(0.3);
+      t = setTimeout(() => fireBurst(0.7), 150);
+    });
+    return () => {
+      cancelled = true;
+      if (t) clearTimeout(t);
     };
-    fireBurst(0.3);
-    const t = setTimeout(() => fireBurst(0.7), 150);
-    return () => clearTimeout(t);
   }, [config.color]);
 
   return (

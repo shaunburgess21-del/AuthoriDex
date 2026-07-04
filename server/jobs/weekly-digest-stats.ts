@@ -64,138 +64,193 @@ async function loadTopWeeklyGainers(): Promise<
   }));
 }
 
-async function loadRankDelta(
-  userId: string,
+/** Rank deltas for a cohort in two queries' worth of rows (one query). */
+async function loadRankDeltaBatch(
+  userIds: string[],
   isoWeek: string,
-): Promise<FullWeeklyDigestStats["rankDelta"]> {
+): Promise<Map<string, FullWeeklyDigestStats["rankDelta"]>> {
+  const deltas = new Map<string, FullWeeklyDigestStats["rankDelta"]>();
   const prevWeek = previousIsoYearWeek(isoWeek);
-  if (!prevWeek) return null;
+  if (!prevWeek || userIds.length === 0) return deltas;
 
   const rows = await db
     .select({
+      userId: userRankSnapshots.userId,
       isoWeek: userRankSnapshots.isoWeek,
       rank: userRankSnapshots.rank,
     })
     .from(userRankSnapshots)
     .where(
       and(
-        eq(userRankSnapshots.userId, userId),
+        inArray(userRankSnapshots.userId, userIds),
         eq(userRankSnapshots.period, RANK_SNAPSHOT_PERIOD),
         inArray(userRankSnapshots.isoWeek, [isoWeek, prevWeek]),
       ),
     );
 
-  const current = rows.find((r) => r.isoWeek === isoWeek)?.rank;
-  const previous = rows.find((r) => r.isoWeek === prevWeek)?.rank;
-  if (current == null || previous == null) return null;
-
-  return { previous, current };
+  const byUser = new Map<string, { current?: number; previous?: number }>();
+  for (const row of rows) {
+    const entry = byUser.get(row.userId) ?? {};
+    if (row.isoWeek === isoWeek) entry.current = row.rank;
+    else if (row.isoWeek === prevWeek) entry.previous = row.rank;
+    byUser.set(row.userId, entry);
+  }
+  for (const [userId, entry] of byUser) {
+    if (entry.current != null && entry.previous != null) {
+      deltas.set(userId, { previous: entry.previous, current: entry.current });
+    }
+  }
+  return deltas;
 }
 
 /**
- * Per-user weekly roll-up. Window matches deriveWeeklyDigest():
- * rolling 7 days ending at `asOf` (default now).
+ * Batched weekly roll-up for a cohort of users. Runs a fixed number of
+ * queries regardless of cohort size (~5 total vs ~5 per user before):
+ * settled buys / sells / jackpot rows are fetched with inArray(userId)
+ * and grouped in JS through the same pure roll-up helpers the per-user
+ * path used; topWeeklyGainers is user-independent and computed once.
+ *
+ * Returns an entry for EVERY requested userId (all-zero stats when the
+ * user had no qualifying rows) so callers can index without fallbacks.
  */
-export async function getWeeklyDigestStats(
-  userId: string,
+export async function getWeeklyDigestStatsBatch(
+  userIds: string[],
   options: WeeklyDigestStatsOptions = {},
-): Promise<FullWeeklyDigestStats> {
+): Promise<Map<string, FullWeeklyDigestStats>> {
+  const out = new Map<string, FullWeeklyDigestStats>();
+  if (userIds.length === 0) return out;
+
   const asOf = options.asOf ?? new Date();
   const isoWeek = options.isoWeek ?? isoYearWeek(asOf);
   const windowEnd = asOf;
   const windowStart = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = sql`NOW() - INTERVAL '7 days'`;
 
-  const settledBuys = await db
-    .select({
-      marketId: marketBets.marketId,
-      stakeAmount: marketBets.stakeAmount,
-      payoutAmount: marketBets.payoutAmount,
-      status: marketBets.status,
-      marketTitle: predictionMarkets.title,
-      marketType: predictionMarkets.marketType,
-      entryLabel: marketEntries.label,
-      candidateName: entryPerson.name,
-      personName: trackedPeople.name,
-    })
-    .from(marketBets)
-    .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
-    .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
-    .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
-    .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
-    .where(
-      and(
-        eq(marketBets.userId, userId),
-        eq(marketBets.actionType, "buy"),
-        inArray(marketBets.status, ["won", "lost"]),
-        gte(marketBets.settledAt, sevenDaysAgo),
-      ),
-    );
+  const [settledBuys, sellRows, jackpotRows, rankDeltas, topWeeklyGainers] =
+    await Promise.all([
+      db
+        .select({
+          userId: marketBets.userId,
+          marketId: marketBets.marketId,
+          stakeAmount: marketBets.stakeAmount,
+          payoutAmount: marketBets.payoutAmount,
+          status: marketBets.status,
+          marketTitle: predictionMarkets.title,
+          marketType: predictionMarkets.marketType,
+          entryLabel: marketEntries.label,
+          candidateName: entryPerson.name,
+          personName: trackedPeople.name,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .innerJoin(marketEntries, eq(marketBets.entryId, marketEntries.id))
+        .leftJoin(entryPerson, eq(marketEntries.personId, entryPerson.id))
+        .leftJoin(trackedPeople, eq(predictionMarkets.personId, trackedPeople.id))
+        .where(
+          and(
+            inArray(marketBets.userId, userIds),
+            eq(marketBets.actionType, "buy"),
+            inArray(marketBets.status, ["won", "lost"]),
+            gte(marketBets.settledAt, sevenDaysAgo),
+          ),
+        ),
+      db
+        .select({ userId: marketBets.userId, stakeAmount: marketBets.stakeAmount })
+        .from(marketBets)
+        .where(
+          and(
+            inArray(marketBets.userId, userIds),
+            eq(marketBets.actionType, "sell"),
+            gte(marketBets.createdAt, sevenDaysAgo),
+          ),
+        ),
+      db
+        .select({
+          userId: marketBets.userId,
+          stakeAmount: marketBets.stakeAmount,
+          payoutAmount: marketBets.payoutAmount,
+          status: marketBets.status,
+        })
+        .from(marketBets)
+        .where(
+          and(
+            inArray(marketBets.userId, userIds),
+            eq(marketBets.actionType, "parimutuel"),
+            inArray(marketBets.status, ["won", "lost"]),
+            gte(marketBets.settledAt, sevenDaysAgo),
+          ),
+        ),
+      loadRankDeltaBatch(userIds, isoWeek),
+      loadTopWeeklyGainers(),
+    ]);
 
-  const sellRows = await db
-    .select({ stakeAmount: marketBets.stakeAmount })
-    .from(marketBets)
-    .where(
-      and(
-        eq(marketBets.userId, userId),
-        eq(marketBets.actionType, "sell"),
-        gte(marketBets.createdAt, sevenDaysAgo),
-      ),
-    );
-
-  const jackpotRows = await db
-    .select({
-      stakeAmount: marketBets.stakeAmount,
-      payoutAmount: marketBets.payoutAmount,
-      status: marketBets.status,
-    })
-    .from(marketBets)
-    .where(
-      and(
-        eq(marketBets.userId, userId),
-        eq(marketBets.actionType, "parimutuel"),
-        inArray(marketBets.status, ["won", "lost"]),
-        gte(marketBets.settledAt, sevenDaysAgo),
-      ),
-    );
-
-  const rollUp = rollUpSettledBuys(
-    settledBuys.map((bet) => ({
-      status: bet.status,
-      stakeAmount: bet.stakeAmount,
-      payoutAmount: bet.payoutAmount,
-      marketTitle: bet.marketTitle,
-      pickLabel: resolvePickContextLabel({
-        marketType: bet.marketType,
-        candidateName: bet.candidateName,
-        entryLabel: bet.entryLabel,
-        personName: bet.personName,
-      }),
-    })),
-  );
-  let { wins, losses, netCredits, bestPick, worstPick } = rollUp;
-
-  for (const sell of sellRows) {
-    netCredits += -(sell.stakeAmount ?? 0);
+  const buysByUser = new Map<string, typeof settledBuys>();
+  for (const row of settledBuys) {
+    const list = buysByUser.get(row.userId) ?? [];
+    list.push(row);
+    buysByUser.set(row.userId, list);
+  }
+  const sellsByUser = new Map<string, typeof sellRows>();
+  for (const row of sellRows) {
+    const list = sellsByUser.get(row.userId) ?? [];
+    list.push(row);
+    sellsByUser.set(row.userId, list);
+  }
+  const jackpotByUser = new Map<string, typeof jackpotRows>();
+  for (const row of jackpotRows) {
+    const list = jackpotByUser.get(row.userId) ?? [];
+    list.push(row);
+    jackpotByUser.set(row.userId, list);
   }
 
-  const jackpot = summariseJackpotRows(jackpotRows);
+  for (const userId of userIds) {
+    const rollUp = rollUpSettledBuys(
+      (buysByUser.get(userId) ?? []).map((bet) => ({
+        status: bet.status,
+        stakeAmount: bet.stakeAmount,
+        payoutAmount: bet.payoutAmount,
+        marketTitle: bet.marketTitle,
+        pickLabel: resolvePickContextLabel({
+          marketType: bet.marketType,
+          candidateName: bet.candidateName,
+          entryLabel: bet.entryLabel,
+          personName: bet.personName,
+        }),
+      })),
+    );
+    let { wins, losses, netCredits, bestPick, worstPick } = rollUp;
 
-  const [rankDelta, topWeeklyGainers] = await Promise.all([
-    loadRankDelta(userId, isoWeek),
-    loadTopWeeklyGainers(),
-  ]);
+    for (const sell of sellsByUser.get(userId) ?? []) {
+      netCredits += -(sell.stakeAmount ?? 0);
+    }
 
-  return {
-    wins,
-    losses,
-    netCredits,
-    bestPick,
-    worstPick,
-    rankDelta,
-    jackpot,
-    topWeeklyGainers,
-    windowStart,
-    windowEnd,
-  };
+    out.set(userId, {
+      wins,
+      losses,
+      netCredits,
+      bestPick,
+      worstPick,
+      rankDelta: rankDeltas.get(userId) ?? null,
+      jackpot: summariseJackpotRows(jackpotByUser.get(userId) ?? []),
+      topWeeklyGainers,
+      windowStart,
+      windowEnd,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Per-user weekly roll-up. Window matches deriveWeeklyDigest():
+ * rolling 7 days ending at `asOf` (default now). Thin wrapper over the
+ * batch loader so both paths share one implementation.
+ */
+export async function getWeeklyDigestStats(
+  userId: string,
+  options: WeeklyDigestStatsOptions = {},
+): Promise<FullWeeklyDigestStats> {
+  const batch = await getWeeklyDigestStatsBatch([userId], options);
+  // Batch always yields an entry for each requested id.
+  return batch.get(userId)!;
 }

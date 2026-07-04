@@ -493,6 +493,11 @@ export async function fetchLiveGainerConvergence(
       ON ts.person_id = me.person_id
       AND ts.snapshot_origin = ${OFFICIAL_SNAPSHOT_ORIGIN_SQL}
       AND ts.timestamp <= pm.created_at
+      -- Bound the scan: snapshots are hourly, so the newest one at/before
+      -- market creation is always well inside 14 days. Without this the
+      -- DISTINCT ON walks the person's entire snapshot history (4-10s in
+      -- prod). Same bound as loadOpeningScoreMap in decisionEngine.
+      AND ts.timestamp >= pm.created_at - INTERVAL '14 days'
     WHERE me.market_id IN (${sql.join(marketIds.map((id) => sql`${id}`), sql`, `)})
       AND me.person_id IS NOT NULL
     ORDER BY me.market_id, me.id, ts.timestamp DESC

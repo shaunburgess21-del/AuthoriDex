@@ -631,6 +631,13 @@
       "when": 1783375000000,
       "tag": "0089_phase2_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1783380000000,
+      "tag": "0090_jackpot_score_unique",
+      "breakpoints": true
     }
   ]
 }

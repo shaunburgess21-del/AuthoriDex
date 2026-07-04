@@ -1468,6 +1468,12 @@ export const marketBets = pgTable("market_bets", {
   statusSettledAtIdx: index("market_bets_status_settled_at_idx").on(table.status, table.settledAt),
   // Per-user history ordered by recency (/api/me/predictions, profile tabs).
   userCreatedIdx: index("market_bets_user_created_idx").on(table.userId, table.createdAt.desc()),
+  // DB-level guard for jackpot exact-score claims (migration 0090): the
+  // route's check-then-insert is racy under concurrency. Partial + on a
+  // JSONB expression so AMM buy/sell rows and settled bets are untouched.
+  jackpotScoreUniqueIdx: uniqueIndex("market_bets_jackpot_score_unique_idx")
+    .on(table.marketId, sql`(${table.betMetadata}->>'predictedScore')`)
+    .where(sql`action_type = 'parimutuel' AND status = 'active' AND bet_metadata ? 'predictedScore'`),
 }));
 
 export const insertMarketBetSchema = createInsertSchema(marketBets).omit({

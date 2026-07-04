@@ -221,6 +221,37 @@ async function persistSystemKey(key: string, data: any): Promise<void> {
   }
 }
 
+// ── Provider last-fetch KV keys ──────────────────────────────────────────
+// Cadence gates (trends 12h, search volume 24h, web sentiment 7d) used to
+// derive "when did we last really fetch?" from MAX() over jsonb diagnostics
+// across the whole trend_snapshots table — a 6s+ seq scan per gate per run.
+// We now persist the timestamp in api_cache after each successful fetch and
+// only fall back to the slow scan on a cold cache (then heal the key).
+const LAST_FETCH_KEY_PREFIX = "ingest:last-fetch:";
+
+async function readLastFetchAt(source: string): Promise<Date | null> {
+  try {
+    const rows = await db
+      .select({ responseData: apiCache.responseData })
+      .from(apiCache)
+      .where(eq(apiCache.cacheKey, `${LAST_FETCH_KEY_PREFIX}${source}`));
+    if (rows.length > 0 && rows[0].responseData) {
+      const parsed = JSON.parse(rows[0].responseData) as { fetchedAt?: string };
+      if (parsed.fetchedAt) {
+        const at = new Date(parsed.fetchedAt);
+        if (Number.isFinite(at.getTime()) && at.getTime() > 0) return at;
+      }
+    }
+  } catch (err) {
+    console.warn(`[Ingest] last-fetch cache read failed for ${source}:`, (err as Error).message);
+  }
+  return null;
+}
+
+async function writeLastFetchAt(source: string, at: Date): Promise<void> {
+  await persistSystemKey(`${LAST_FETCH_KEY_PREFIX}${source}`, { fetchedAt: at.toISOString() });
+}
+
 export async function loadLastRunMetaFromDB(): Promise<void> {
   try {
     const rows = await db.select().from(apiCache).where(eq(apiCache.cacheKey, LAST_RUN_META_KEY));
@@ -1878,31 +1909,37 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       let shouldFetchTrends = true;
       let lastTrendsFetchAt: Date | null = null;
       try {
-        const lastTrendsRow = await db.execute(
-          sql`SELECT GREATEST(
-                COALESCE(
-                  MAX((diagnostics::jsonb->'raw'->>'trendsFetchedAt')::timestamptz)
-                    FILTER (
-                      WHERE diagnostics::jsonb->'raw'->>'trendsFetchedAt' IS NOT NULL
-                        AND diagnostics::jsonb->'raw'->>'trendsFetchedAt' <> ''
-                    ),
-                  '-infinity'::timestamptz
-                ),
-                COALESCE(
-                  MAX(timestamp) FILTER (
-                    WHERE diagnostics::jsonb->'fresh'->>'trends' = 'true'
+        lastTrendsFetchAt = await readLastFetchAt("trends");
+        if (!lastTrendsFetchAt) {
+          // Cold cache — one-time fallback to the slow diagnostics scan,
+          // then heal the KV key so future runs skip this path.
+          const lastTrendsRow = await db.execute(
+            sql`SELECT GREATEST(
+                  COALESCE(
+                    MAX((diagnostics::jsonb->'raw'->>'trendsFetchedAt')::timestamptz)
+                      FILTER (
+                        WHERE diagnostics::jsonb->'raw'->>'trendsFetchedAt' IS NOT NULL
+                          AND diagnostics::jsonb->'raw'->>'trendsFetchedAt' <> ''
+                      ),
+                    '-infinity'::timestamptz
                   ),
-                  '-infinity'::timestamptz
-                )
-              ) AS last_fetch_ts
-              FROM trend_snapshots
-              WHERE snapshot_origin = 'ingest'`,
-        );
-        const lastFetchRaw = (lastTrendsRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
-        if (lastFetchRaw) {
-          const parsed = new Date(lastFetchRaw);
-          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
-            lastTrendsFetchAt = parsed;
+                  COALESCE(
+                    MAX(timestamp) FILTER (
+                      WHERE diagnostics::jsonb->'fresh'->>'trends' = 'true'
+                    ),
+                    '-infinity'::timestamptz
+                  )
+                ) AS last_fetch_ts
+                FROM trend_snapshots
+                WHERE snapshot_origin = 'ingest'`,
+          );
+          const lastFetchRaw = (lastTrendsRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+          if (lastFetchRaw) {
+            const parsed = new Date(lastFetchRaw);
+            if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+              lastTrendsFetchAt = parsed;
+              await writeLastFetchAt("trends", parsed);
+            }
           }
         }
         shouldFetchTrends = shouldFetchGoogleTrends(lastTrendsFetchAt);
@@ -1963,7 +2000,12 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.trends = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.trends = "OK";
           else sourceStatuses.trends = "DEGRADED";
-          if (coveredCount > 0) _trendsMethodRolloutComplete = true;
+          if (coveredCount > 0) {
+            _trendsMethodRolloutComplete = true;
+            // Reset the 12h gate clock only on a fetch that returned data —
+            // a total failure keeps the old timestamp so next run retries.
+            await writeLastFetchAt("trends", new Date());
+          }
         } catch (e) {
           console.error("[Ingest] Search Momentum batch fetch failed:", (e as Error).message);
           if (!trendsFetchOk) sourceStatuses.trends = "FAILED";
@@ -1996,18 +2038,23 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       let shouldFetchSV = true;
       let lastSVFetchAt: Date | null = null;
       try {
-        const lastSVRow = await db.execute(
-          sql`SELECT MAX((diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt')::timestamptz) AS last_fetch_ts
-              FROM trend_snapshots
-              WHERE snapshot_origin = 'ingest'
-                AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' IS NOT NULL
-                AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' <> ''`,
-        );
-        const lastFetchRaw = (lastSVRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
-        if (lastFetchRaw) {
-          const parsed = new Date(lastFetchRaw);
-          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
-            lastSVFetchAt = parsed;
+        lastSVFetchAt = await readLastFetchAt("search-volume");
+        if (!lastSVFetchAt) {
+          // Cold cache — one-time fallback to the slow diagnostics scan.
+          const lastSVRow = await db.execute(
+            sql`SELECT MAX((diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt')::timestamptz) AS last_fetch_ts
+                FROM trend_snapshots
+                WHERE snapshot_origin = 'ingest'
+                  AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' IS NOT NULL
+                  AND diagnostics::jsonb->'raw'->>'googleSearchVolumeFetchedAt' <> ''`,
+          );
+          const lastFetchRaw = (lastSVRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+          if (lastFetchRaw) {
+            const parsed = new Date(lastFetchRaw);
+            if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+              lastSVFetchAt = parsed;
+              await writeLastFetchAt("search-volume", parsed);
+            }
           }
         }
         shouldFetchSV = shouldFetchSearchVolume(lastSVFetchAt);
@@ -2056,7 +2103,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.searchVolume = "FAILED";
           else if (coverage >= 0.7) sourceStatuses.searchVolume = "OK";
           else sourceStatuses.searchVolume = "DEGRADED";
-          if (coveredCount > 0) _searchVolumeClickstreamRolloutComplete = true;
+          if (coveredCount > 0) {
+            _searchVolumeClickstreamRolloutComplete = true;
+            await writeLastFetchAt("search-volume", new Date());
+          }
           console.log(`[Ingest] Search volume: ${coveredCount}/${people.length} people with volume, ${svStats.callsAttempted} API calls, $${svStats.totalCostUsd}, ${Date.now() - svStart}ms`);
         } catch (e) {
           console.error("[Ingest] Search volume batch fetch failed:", (e as Error).message);
@@ -2079,18 +2129,23 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       let shouldFetchWS = true;
       let lastWSFetchAt: Date | null = null;
       try {
-        const lastWSRow = await db.execute(
-          sql`SELECT MAX((diagnostics::jsonb->'raw'->>'webSentimentFetchedAt')::timestamptz) AS last_fetch_ts
-              FROM trend_snapshots
-              WHERE snapshot_origin = 'ingest'
-                AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' IS NOT NULL
-                AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' <> ''`,
-        );
-        const lastFetchRaw = (lastWSRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
-        if (lastFetchRaw) {
-          const parsed = new Date(lastFetchRaw);
-          if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
-            lastWSFetchAt = parsed;
+        lastWSFetchAt = await readLastFetchAt("web-sentiment");
+        if (!lastWSFetchAt) {
+          // Cold cache — one-time fallback to the slow diagnostics scan.
+          const lastWSRow = await db.execute(
+            sql`SELECT MAX((diagnostics::jsonb->'raw'->>'webSentimentFetchedAt')::timestamptz) AS last_fetch_ts
+                FROM trend_snapshots
+                WHERE snapshot_origin = 'ingest'
+                  AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' IS NOT NULL
+                  AND diagnostics::jsonb->'raw'->>'webSentimentFetchedAt' <> ''`,
+          );
+          const lastFetchRaw = (lastWSRow.rows[0] as { last_fetch_ts?: string | Date })?.last_fetch_ts;
+          if (lastFetchRaw) {
+            const parsed = new Date(lastFetchRaw);
+            if (Number.isFinite(parsed.getTime()) && parsed.getTime() > 0) {
+              lastWSFetchAt = parsed;
+              await writeLastFetchAt("web-sentiment", parsed);
+            }
           }
         }
         shouldFetchWS = shouldFetchWebSentiment(lastWSFetchAt);
@@ -2141,7 +2196,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           if (coveredCount === 0) sourceStatuses.webSentiment = "FAILED";
           else if (coverage >= 0.5) sourceStatuses.webSentiment = "OK";
           else sourceStatuses.webSentiment = "DEGRADED";
-          if (coveredCount > 0) _webSentimentRolloutComplete = true;
+          if (coveredCount > 0) {
+            _webSentimentRolloutComplete = true;
+            await writeLastFetchAt("web-sentiment", new Date());
+          }
           console.log(
             `[Ingest] Web Sentiment: ${coveredCount}/${people.length} with headline %, ${wsStats.callsAttempted} API calls, $${wsStats.totalCostUsd}, ${Date.now() - wsStart}ms`,
           );

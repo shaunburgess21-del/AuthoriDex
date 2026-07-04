@@ -12,7 +12,7 @@ import {
 import { buildUnsubscribeUrl } from "../emails/unsubscribe";
 import { getSupabaseAuthEmail } from "../services/supabase-auth-email";
 import {
-  getWeeklyDigestStats,
+  getWeeklyDigestStatsBatch,
   listActiveDigestUserIds,
 } from "./weekly-digest-stats";
 import { isoYearWeek, isWeeklyWrapFireWindow } from "./weekly-digest-utils";
@@ -36,11 +36,15 @@ export async function runWeeklyWrapEmail(): Promise<number> {
   let failed = 0;
   let skippedNoStats = 0;
 
+  // One batched roll-up for the whole cohort (~5 queries total). The
+  // per-user work below is just the email lookup + send.
+  const statsByUser = await getWeeklyDigestStatsBatch(activeUserIds, { isoWeek });
+
   for (const userId of activeUserIds) {
     attempted += 1;
     try {
-      const stats = await getWeeklyDigestStats(userId, { isoWeek });
-      if (stats.wins === 0 && stats.losses === 0) {
+      const stats = statsByUser.get(userId);
+      if (!stats || (stats.wins === 0 && stats.losses === 0)) {
         skippedNoStats += 1;
         continue;
       }

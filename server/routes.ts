@@ -18,6 +18,7 @@ import {
 } from "./lib/inductionGalleryStorage";
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
+import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
@@ -116,7 +117,7 @@ import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
-import { memoizeAsyncSwr } from "./services/insights/request-memo";
+import { memoizeAsync, memoizeAsyncSwr } from "./services/insights/request-memo";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
@@ -1447,7 +1448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: error
       });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      console.error("Seed supabase error:", error);
+      res.status(500).json({ success: false, error: "Seeding failed" });
     }
   });
   
@@ -1463,7 +1465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Ingestion error:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: "Data ingestion failed" });
     }
   });
   
@@ -1471,8 +1473,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/seed-history", requireAuth, requireAdmin, async (req, res) => {
     try {
       const { seedHistoricalSnapshots } = await import("./jobs/seed-history");
-      const { days = 7 } = req.body;
-      const result = await seedHistoricalSnapshots(days);
+      // Bound days: unbounded input could fan out an unbounded snapshot
+      // backfill. 90 days is far beyond any legitimate seeding need.
+      const seedHistorySchema = z.object({
+        days: z.coerce.number().int().min(1).max(90).default(7),
+      });
+      const seedParsed = seedHistorySchema.safeParse(req.body ?? {});
+      if (!seedParsed.success) {
+        return res.status(400).json({ success: false, error: "days must be an integer between 1 and 90" });
+      }
+      const result = await seedHistoricalSnapshots(seedParsed.data.days);
       res.json({ 
         success: true, 
         message: `Created ${result.created} historical snapshots`,
@@ -1480,7 +1490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Seed history error:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: "History seeding failed" });
     }
   });
 
@@ -1513,6 +1523,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const safeData = applyBaselineDegraded(paginated, snapshot.baselineMeta);
       const { baselineMeta } = snapshot;
 
+      // Viewer-independent payload — allow shared/browser caches a short
+      // hold so bursts (launch traffic, tab refreshes) coalesce upstream.
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
       res.json({
         data: safeData,
         totalCount,
@@ -2186,24 +2199,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Refresh trending data - DEPRECATED
-  // NOTE: This endpoint should NOT write mock data to the database
-  // Real data comes from the scheduled ingestion job (ingest.ts)
-  app.post("/api/trending/refresh", async (req, res) => {
-    try {
-      // Just return current database data - don't write mock data
-      const currentData = await storage.getTrendingPeople();
-      res.json({ 
-        success: true, 
-        count: currentData.length,
-        message: "Data is managed by scheduled ingestion job"
-      });
-    } catch (error) {
-      console.error("Error in trending/refresh:", error);
-      res.status(500).json({ error: "Failed to get data" });
-    }
-  });
-
   // ============ TREND CONTEXT API (Why Trending) ============
   
   // Get trend context for a single person
@@ -2236,34 +2231,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/trending/:id/neighbours", async (req, res) => {
     try {
       const { id } = req.params;
-      const people = await storage.getTrendingPeople();
-      if (people.length === 0) {
-        return res.json({ prev: null, next: null });
-      }
-      const idx = people.findIndex((p) => p.id === id);
-      if (idx < 0) {
-        // Person isn't on the current leaderboard (e.g. dropped
-        // out, archived). Returning nulls lets the client render
-        // the "edge" placeholder without a 404 — the rest of the
-        // profile page is still useful.
-        return res.json({ prev: null, next: null });
-      }
-      const slim = (p: (typeof people)[number] | undefined) =>
-        p
-          ? {
-              id: p.id,
-              name: p.name,
-              avatar: p.avatar,
-              rank: p.rank,
-              category: p.category,
-              trendScore: p.trendScore,
-              change24h: p.change24h,
-            }
-          : null;
-      res.json({
-        prev: slim(idx > 0 ? people[idx - 1] : undefined),
-        next: slim(idx < people.length - 1 ? people[idx + 1] : undefined),
-      });
+      // Viewer-independent (verified) — the whole payload only depends on
+      // the current leaderboard + path id. Memoised so an unauthenticated
+      // crawl of profile pages doesn't reload the full leaderboard per hit.
+      const payload = await memoizeAsync(
+        `trending:neighbours:${id}`,
+        30_000,
+        async () => {
+          const people = await storage.getTrendingPeople();
+          if (people.length === 0) {
+            return { prev: null, next: null };
+          }
+          const idx = people.findIndex((p) => p.id === id);
+          if (idx < 0) {
+            // Person isn't on the current leaderboard (e.g. dropped
+            // out, archived). Returning nulls lets the client render
+            // the "edge" placeholder without a 404 — the rest of the
+            // profile page is still useful.
+            return { prev: null, next: null };
+          }
+          const slim = (p: (typeof people)[number] | undefined) =>
+            p
+              ? {
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  rank: p.rank,
+                  category: p.category,
+                  trendScore: p.trendScore,
+                  change24h: p.change24h,
+                }
+              : null;
+          return {
+            prev: slim(idx > 0 ? people[idx - 1] : undefined),
+            next: slim(idx < people.length - 1 ? people[idx + 1] : undefined),
+          };
+        },
+      );
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.json(payload);
     } catch (error) {
       console.error("Error fetching trending neighbours:", error);
       res.status(500).json({ error: "Failed to fetch neighbours" });
@@ -2276,17 +2282,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/trending/:id/explore", async (req, res) => {
     try {
       const { id } = req.params;
-      const people = await storage.getTrendingPeople();
-      const slimPeople = people.map((p) => ({
-        id: p.id,
-        name: p.name,
-        avatar: p.avatar,
-        rank: p.rank,
-        category: p.category,
-        trendScore: p.trendScore,
-        change24h: p.change24h,
-      }));
-      const focusIndex = people.findIndex((p) => p.id === id);
+      // The slim strip is identical for every viewer; only focusIndex
+      // depends on the path id. Memoise the strip once and compute the
+      // index per request.
+      const slimPeople = await memoizeAsync(
+        "trending:explore-strip",
+        30_000,
+        async () => {
+          const people = await storage.getTrendingPeople();
+          return people.map((p) => ({
+            id: p.id,
+            name: p.name,
+            avatar: p.avatar,
+            rank: p.rank,
+            category: p.category,
+            trendScore: p.trendScore,
+            change24h: p.change24h,
+          }));
+        },
+      );
+      const focusIndex = slimPeople.findIndex((p) => p.id === id);
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
       res.json({ people: slimPeople, focusIndex });
     } catch (error) {
       console.error("Error fetching trending explore strip:", error);
@@ -2296,32 +2312,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/trending/context/batch", async (req, res) => {
     try {
-      const { personIds } = req.body;
-      
-      if (!Array.isArray(personIds) || personIds.length === 0) {
-        return res.status(400).json({ error: "personIds array required" });
-      }
-      
-      if (personIds.length > 100) {
-        return res.status(400).json({ error: "Max 100 person IDs per request" });
-      }
-      
-      const contexts = await getTrendContextBatch(personIds);
-      
-      const result: Record<string, TrendContext & { lastScoredAtFormatted: string; sourceTimestampsFormatted: Record<string, string> }> = {};
-      
-      contexts.forEach((context, id) => {
-        result[id] = {
-          ...context,
-          lastScoredAtFormatted: formatRelativeTime(context.lastScoredAt),
-          sourceTimestampsFormatted: {
-            wiki: formatRelativeTime(context.sourceTimestamps.wiki),
-            news: formatRelativeTime(context.sourceTimestamps.news),
-            search: formatRelativeTime(context.sourceTimestamps.search),
-          },
-        };
+      // Zod-gate the shape: UUID ids only, capped at 25 (the client sends
+      // the currently-visible cards, nowhere near the old 100 cap that
+      // let anonymous callers fan out ~17k-row snapshot scans per call).
+      const batchSchema = z.object({
+        personIds: z.array(z.string().uuid()).min(1).max(25),
       });
-      
+      const parsedBatch = batchSchema.safeParse(req.body ?? {});
+      if (!parsedBatch.success) {
+        return res.status(400).json({
+          error: "personIds must be an array of 1-25 person UUIDs",
+        });
+      }
+      // Canonical (sorted, deduped) memo key so shuffled id-sets share
+      // one cached computation for the TTL window.
+      const uniqueIds = Array.from(new Set(parsedBatch.data.personIds));
+      const memoKey = `trending:context-batch:${[...uniqueIds].sort().join(",")}`;
+
+      const result = await memoizeAsync(memoKey, 30_000, async () => {
+        const contexts = await getTrendContextBatch(uniqueIds);
+        const out: Record<string, TrendContext & { lastScoredAtFormatted: string; sourceTimestampsFormatted: Record<string, string> }> = {};
+        contexts.forEach((context, id) => {
+          out[id] = {
+            ...context,
+            lastScoredAtFormatted: formatRelativeTime(context.lastScoredAt),
+            sourceTimestampsFormatted: {
+              wiki: formatRelativeTime(context.sourceTimestamps.wiki),
+              news: formatRelativeTime(context.sourceTimestamps.news),
+              search: formatRelativeTime(context.sourceTimestamps.search),
+            },
+          };
+        });
+        return out;
+      });
+
       res.json(result);
     } catch (error) {
       console.error("Error fetching batch trend context:", error);
@@ -3841,29 +3865,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
       }
 
-      const { personId, content, sentimentVote } = req.body;
-
-      if (!personId || !content) {
-        return res.status(400).json({ error: "Missing required fields: personId, content" });
+      // Shared insert schema (userId comes from auth, not the body) with
+      // route-level tightening: UUID personId, bounded non-empty content,
+      // integer 1-10 sentiment.
+      const insightBodySchema = insertCommunityInsightSchema
+        .omit({ userId: true })
+        .extend({
+          personId: z.string().uuid(),
+          content: z.string().min(1, "Missing required fields: personId, content").max(2500, "Content exceeds maximum length of 2500 characters"),
+          sentimentVote: z.number().int().min(1, "Sentiment vote must be between 1 and 10").max(10, "Sentiment vote must be between 1 and 10").nullish(),
+        });
+      const insightParsed = insightBodySchema.safeParse(req.body ?? {});
+      if (!insightParsed.success) {
+        const first = insightParsed.error.issues[0];
+        return res.status(400).json({ error: first?.message || "Invalid insight body" });
       }
-
-      // Validate content length (max 2500 characters)
-      if (content.length > 2500) {
-        return res.status(400).json({ error: "Content exceeds maximum length of 2500 characters" });
-      }
+      const { personId, content, sentimentVote } = insightParsed.data;
 
       const mentionResult = await sanitizeMentions(content);
       if (mentionResult.error) {
         return res.status(400).json({ error: mentionResult.error });
       }
       const storedContent = mentionResult.body;
-
-      // Validate sentimentVote if provided (must be 1-10)
-      if (sentimentVote !== undefined && sentimentVote !== null) {
-        if (typeof sentimentVote !== 'number' || sentimentVote < 1 || sentimentVote > 10) {
-          return res.status(400).json({ error: "Sentiment vote must be between 1 and 10" });
-        }
-      }
 
       const [newInsight] = await db
         .insert(communityInsights)
@@ -4897,7 +4920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[source-health GET] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to get source health" });
+      res.status(500).json({ error: "Failed to get source health" });
     }
   });
 
@@ -5412,7 +5435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("[leaderboard] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch leaderboard" });
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
     }
   });
 
@@ -5497,7 +5520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ data, total, userEntry });
     } catch (error: any) {
       console.error("[leaderboard/users] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch user leaderboard" });
+      res.status(500).json({ error: "Failed to fetch user leaderboard" });
     }
   });
 
@@ -5704,7 +5727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, synced });
     } catch (error: any) {
       console.error("[celebrity-metrics/sync] Error:", error);
-      res.status(500).json({ error: error.message || "Failed to sync metrics" });
+      res.status(500).json({ error: "Failed to sync metrics" });
     }
   });
 
@@ -6485,7 +6508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error generating celebrity profile:", error);
-      res.status(500).json({ error: "Failed to generate profile", message: error.message });
+      res.status(500).json({ error: "Failed to generate profile" });
     }
   });
 
@@ -6558,7 +6581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error refreshing all profiles:", error);
-      res.status(500).json({ error: "Failed to refresh profiles", message: error.message });
+      res.status(500).json({ error: "Failed to refresh profiles" });
     }
   });
 
@@ -6586,7 +6609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch {
         /* best-effort lock cleanup */
       }
-      res.status(500).json({ error: "Failed to fetch trending context", message: error.message });
+      res.status(500).json({ error: "Failed to fetch trending context" });
     }
   });
 
@@ -6900,8 +6923,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { id } = req.params;
-      const { option, remove } = req.body;
-      
+      // Zod-gate the anonymous-reachable payload shape. `option` is
+      // re-checked below after the removal branch (removal doesn't need
+      // one), so it stays optional here.
+      const matchupVoteSchema = z.object({
+        option: z.enum(["option_a", "option_b", "neutral"]).optional(),
+        remove: z.boolean().optional(),
+      });
+      const matchupVoteParsed = matchupVoteSchema.safeParse(req.body ?? {});
+      if (!matchupVoteParsed.success) {
+        return res.status(400).json({ error: "Invalid option. Must be 'option_a', 'option_b', or 'neutral'" });
+      }
+      const { option, remove } = matchupVoteParsed.data;
+
       // Check if matchup exists
       const [matchup] = await db.select().from(matchups).where(eq(matchups.id, id));
       if (!matchup) {
@@ -10182,6 +10216,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enriched shape for native detail pages when the market is no
       // longer in the OPEN-only /api/native-markets/:type feed (resolved
       // / past-week markets users still deep-link to from notifications).
+      // Explicit projection — never spread raw market/person/entry rows
+      // (drops createdBy/settledBy/resolutionNotes/visibleCountries,
+      // scout metadata, and person live-lane columns).
       let nativeDetail: Record<string, unknown> | null = null;
       const nativeTypes = ["updown", "h2h", "gainer"] as const;
       if (nativeTypes.includes(market.marketType as (typeof nativeTypes)[number])) {
@@ -10202,6 +10239,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isCutoffPassed: lifecycle.isCutoffPassed,
         };
 
+        // metadata subset: openingScore/openingScores are load-bearing
+        // (Up/Down baselines via predict-market-baseline.ts, Race %
+        // gains) — but the raw blob can carry scout AI notes, so never
+        // pass it wholesale.
+        const rawMetadata = (market.metadata ?? null) as Record<string, unknown> | null;
+        const metadataSubset =
+          rawMetadata && (rawMetadata.openingScore || rawMetadata.openingScores)
+            ? {
+                ...(rawMetadata.openingScore ? { openingScore: rawMetadata.openingScore } : {}),
+                ...(rawMetadata.openingScores ? { openingScores: rawMetadata.openingScores } : {}),
+              }
+            : null;
+
+        const projectPerson = (p: typeof trendingPeople.$inferSelect | null) =>
+          p
+            ? {
+                id: p.id,
+                name: p.name,
+                avatar: p.avatar,
+                trendScore: p.trendScore,
+                fameIndex: p.fameIndex,
+                category: p.category,
+                change7d: p.change7d,
+                change24h: p.change24h,
+                rank: p.rank,
+              }
+            : null;
+
+        const nativeDetailBase = {
+          id: market.id,
+          status: market.status,
+          marketType: market.marketType,
+          engine: market.engine,
+          title: market.title,
+          category: market.category,
+          tieRule: market.tieRule,
+          startAt: market.startAt,
+          endAt: market.endAt,
+          personId: market.personId,
+          baselineScore: market.baselineScore,
+          metadata: metadataSubset,
+          ...lifecycleFields,
+          ammState,
+          volume,
+          activeParticipantCount:
+            engagement.activeParticipantCountByMarket.get(market.id) || 0,
+          recentParticipants:
+            engagement.recentParticipantsByMarket.get(market.id) || [],
+          latestRationale: engagement.latestRationaleByMarket.get(market.id) || null,
+        };
+
         if (market.marketType === "updown") {
           let person: (typeof trendingPeople.$inferSelect) | null = null;
           if (market.personId) {
@@ -10213,17 +10301,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             person = p ?? null;
           }
           nativeDetail = {
-            ...market,
-            ...lifecycleFields,
-            person,
-            entries,
-            ammState,
-            volume,
-            activeParticipantCount:
-              engagement.activeParticipantCountByMarket.get(market.id) || 0,
-            recentParticipants:
-              engagement.recentParticipantsByMarket.get(market.id) || [],
-            latestRationale: engagement.latestRationaleByMarket.get(market.id) || null,
+            ...nativeDetailBase,
+            person: projectPerson(person),
+            entries: entries.map((e) => ({
+              id: e.id,
+              label: e.label,
+              personId: e.personId,
+              totalStake: e.totalStake,
+              displayOrder: e.displayOrder,
+              resolutionStatus: e.resolutionStatus,
+            })),
           };
         } else if (market.marketType === "h2h" || market.marketType === "gainer") {
           const personEntryIds = entries
@@ -10237,21 +10324,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .where(inArray(trendingPeople.id, personEntryIds));
             personMap = Object.fromEntries(persons.map((p) => [p.id, p]));
           }
-          const entriesWithPerson = entries.map((e) => ({
-            ...e,
-            person: e.personId ? personMap[e.personId] || null : null,
-          }));
+          // Entry array order is load-bearing: H2H reads entries[0]/[1]
+          // positionally. `entries` is already ordered by displayOrder ASC.
           nativeDetail = {
-            ...market,
-            ...lifecycleFields,
-            entries: entriesWithPerson,
-            ammState,
-            volume,
-            activeParticipantCount:
-              engagement.activeParticipantCountByMarket.get(market.id) || 0,
-            recentParticipants:
-              engagement.recentParticipantsByMarket.get(market.id) || [],
-            latestRationale: engagement.latestRationaleByMarket.get(market.id) || null,
+            ...nativeDetailBase,
+            entries: entries.map((e) => ({
+              id: e.id,
+              label: e.label,
+              personId: e.personId,
+              totalStake: e.totalStake,
+              displayOrder: e.displayOrder,
+              resolutionStatus: e.resolutionStatus,
+              person: projectPerson(e.personId ? personMap[e.personId] ?? null : null),
+            })),
           };
         }
       }
@@ -10870,22 +10955,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/markets/:id/buy", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { entryId, creditBudget } = req.body ?? {};
       const isAdmin = req.userRole === "admin" || req.userRole === "moderator";
 
-      if (typeof entryId !== "string" || entryId.length === 0) {
-        return res.status(400).json({ error: "entryId is required" });
-      }
       // Match the service-layer floor (`MIN_AMM_BUY_CREDITS`) at the
       // route boundary so we reject the request before doing any DB work
       // — and so the user sees the same minimum they'd hit downstream.
       const { executeBuy, MIN_AMM_BUY_CREDITS } = await import("./services/amm-trades");
-      if (!Number.isInteger(creditBudget) || creditBudget < MIN_AMM_BUY_CREDITS) {
-        return res.status(400).json({
-          error: "validation",
-          message: `creditBudget must be an integer >= ${MIN_AMM_BUY_CREDITS}`,
-        });
+      const buySchema = z.object({
+        entryId: z.string().min(1).max(128),
+        creditBudget: z
+          .number()
+          .int(`creditBudget must be an integer >= ${MIN_AMM_BUY_CREDITS}`)
+          .min(MIN_AMM_BUY_CREDITS, `creditBudget must be an integer >= ${MIN_AMM_BUY_CREDITS}`)
+          .max(10_000_000),
+      });
+      let buyParsed: z.infer<typeof buySchema>;
+      try {
+        buyParsed = buySchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid buy body");
       }
+      const { entryId, creditBudget } = buyParsed;
       const { parseIdempotencyKey } = await import("./services/idempotency-key");
       const clientRequestId = parseIdempotencyKey({
         header: req.header("Idempotency-Key"),
@@ -10934,28 +11025,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/markets/:id/sell", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { entryId, shares } = req.body ?? {};
       const isAdmin = req.userRole === "admin" || req.userRole === "moderator";
-
-      if (typeof entryId !== "string" || entryId.length === 0) {
-        return res.status(400).json({ error: "entryId is required" });
-      }
-      const sharesNum = Number(shares);
-      if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
-        return res.status(400).json({ error: "shares must be a positive number" });
-      }
 
       // Surface the human-side minimum at the route boundary so we
       // bounce dust attempts before doing any DB work. The service
       // layer ALSO rejects sub-1-credit proceeds, but this gives a
-      // clearer up-front error for legitimate users.
+      // clearer up-front error for legitimate users. `coerce` preserves
+      // the historical tolerance for numeric-string `shares`.
       const { executeSell, MIN_HUMAN_SELL_SHARES } = await import("./services/amm-trades");
-      if (sharesNum < MIN_HUMAN_SELL_SHARES) {
-        return res.status(400).json({
-          error: "validation",
-          message: `shares must be >= ${MIN_HUMAN_SELL_SHARES}`,
-        });
+      const sellSchema = z.object({
+        entryId: z.string().min(1).max(128),
+        shares: z.coerce
+          .number()
+          .finite()
+          .min(MIN_HUMAN_SELL_SHARES, `shares must be >= ${MIN_HUMAN_SELL_SHARES}`)
+          .max(1_000_000_000),
+      });
+      let sellParsed: z.infer<typeof sellSchema>;
+      try {
+        sellParsed = sellSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid sell body");
       }
+      const { entryId } = sellParsed;
+      const sharesNum = sellParsed.shares;
       const { parseIdempotencyKey } = await import("./services/idempotency-key");
       const clientRequestId = parseIdempotencyKey({
         header: req.header("Idempotency-Key"),
@@ -12527,7 +12621,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Seed approval error:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: "Seeding approval data failed" });
     }
   });
 
@@ -12539,7 +12633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       console.error("Clear seed approval error:", error);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({ success: false, error: "Clearing seed approval data failed" });
     }
   });
 
@@ -12754,12 +12848,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/adjust-credits", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const adminId = req.userId!;
-      const { userId, amount, reason } = req.body;
-      const numericAmount = Number(amount);
-      
-      if (!userId || amount === undefined || !reason || !Number.isFinite(numericAmount)) {
-        return res.status(400).json({ error: "userId, amount, and reason are required" });
+      // Zod-gate: integer amount with sane bounds (was any finite float),
+      // bounded reason (was unbounded — landed verbatim in ledger metadata
+      // + notification body), UUID-shaped userId.
+      const adjustCreditsSchema = z.object({
+        userId: z.string().uuid(),
+        amount: z.coerce.number().int().min(-10_000_000).max(10_000_000)
+          .refine((n) => n !== 0, "amount must be non-zero"),
+        reason: z.string().trim().min(1).max(500),
+      });
+      let adjustParsed: z.infer<typeof adjustCreditsSchema>;
+      try {
+        adjustParsed = adjustCreditsSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "userId, amount, and reason are required");
       }
+      const { userId, reason } = adjustParsed;
+      const numericAmount = adjustParsed.amount;
       
       const idempotencyKey = `admin_adjust_${adminId}_${userId}_${Date.now()}`;
 
@@ -16532,8 +16638,8 @@ Target length: about 90-150 words.`;
 
       res.json({ success: true, created, updated, skipped, warnings, errors });
     } catch (error: any) {
-      console.error("Error importing sentiment polls CSV:", error.message);
-      res.status(500).json({ error: "Import failed", details: error.message });
+      console.error("Error importing sentiment polls CSV:", error);
+      res.status(500).json({ error: "Import failed" });
     }
   });
 
@@ -18368,8 +18474,19 @@ Target length: about 90-150 words.`;
         }
       }
 
+      // Public entry projection: drops admin/internal columns
+      // (resolutionNotes, personId, entryType, createdAt, imageUrl,
+      // marketId, description) — client + admin settle dialog only
+      // read the fields below.
       const entries = await db
-        .select()
+        .select({
+          id: marketEntries.id,
+          label: marketEntries.label,
+          totalStake: marketEntries.totalStake,
+          noStake: marketEntries.noStake,
+          displayOrder: marketEntries.displayOrder,
+          resolutionStatus: marketEntries.resolutionStatus,
+        })
         .from(marketEntries)
         .where(eq(marketEntries.marketId, market.id))
         .orderBy(asc(marketEntries.displayOrder));
@@ -18470,11 +18587,41 @@ Target length: about 90-150 words.`;
         }
       }
 
+      // Explicit public DTO — never spread the raw row. Dropped fields
+      // (admin/internal): rules, startAt, timezone, resolutionNotes,
+      // personId, weekNumber, tieRule, cadence, createdAt,
+      // visibleCountries, raw resolutionSummary column, comments.
       res.json({
-        ...market,
+        id: market.id,
+        marketType: market.marketType,
+        engine: market.engine,
+        status: market.status,
+        title: market.title,
+        slug: market.slug,
+        teaser: market.teaser,
+        summary: market.summary,
+        description: market.description,
+        category: market.category,
+        tags: market.tags,
+        coverImageUrl: market.coverImageUrl,
+        sourceUrl: market.sourceUrl,
+        featured: market.featured,
+        openMarketType: market.openMarketType,
+        resolutionCriteria: market.resolutionCriteria,
+        resolutionSources: market.resolutionSources,
+        resolveMethod: market.resolveMethod,
+        voidReason: market.voidReason,
+        resolvedAt: market.resolvedAt,
+        baselineScore: market.baselineScore,
+        underlying: market.underlying,
+        metric: market.metric,
+        strike: market.strike,
+        unit: market.unit,
+        endAt: market.endAt,
+        closeAt: market.closeAt,
+        visibility: market.visibility,
+        inactiveMessage: market.inactiveMessage,
         entries: entriesWithCounts,
-        // Deprecated in C2: client comment surfaces now fetch /api/comments explicitly.
-        comments: [],
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
         linkedPersonName,
         linkedPersonAvatar,
@@ -19754,11 +19901,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     try {
       const authReq = req as AuthRequest;
       const { slug } = req.params;
-      const { entryId, stakeAmount } = req.body;
 
-      if (!entryId || !stakeAmount || typeof stakeAmount !== "number" || stakeAmount <= 0) {
-        return res.status(400).json({ error: "Valid entryId and positive stakeAmount are required" });
+      // Zod-gate the money-moving payload: previously entryId shape and
+      // stakeAmount upper bound were unchecked (any huge float passed).
+      const openBetSchema = z.object({
+        entryId: z.string().min(1).max(128),
+        stakeAmount: z.number().positive().finite().max(10_000_000),
+        maxPricePerShare: z.number().positive().finite().max(1).optional(),
+      });
+      let openBetParsed: z.infer<typeof openBetSchema>;
+      try {
+        openBetParsed = openBetSchema.parse(req.body ?? {});
+      } catch (err) {
+        if (err instanceof ZodError) return sendZodError(res, err);
+        return sendBadRequest(res, "Invalid bet body");
       }
+      const { entryId, stakeAmount } = openBetParsed;
 
       // Parse the Idempotency-Key BEFORE the rate-limit check so an
       // identified retry can replay (via executeBuy's ledger short-
@@ -20274,7 +20432,71 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
       const { predictedScore } = parsed;
 
-      if (!checkBetRateLimit(authReq.userId!)) {
+      // Idempotency: parse the client key BEFORE the rate-limit check so
+      // an identified retry replays instead of hitting 429 (same contract
+      // as the AMM buy/sell routes).
+      const { parseIdempotencyKey } = await import("./services/idempotency-key");
+      const jackpotClientKey = parseIdempotencyKey({
+        header: req.header("Idempotency-Key"),
+        body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+      });
+      const jackpotLedgerKey = jackpotClientKey
+        ? `jackpot_bet_${authReq.userId}_${jackpotClientKey}`
+        : null;
+
+      // Replay short-circuit: a prior committed entry with this key means
+      // the retry already succeeded — return the original bet with current
+      // pool stats rather than double-charging.
+      const buildJackpotReplay = async () => {
+        if (!jackpotLedgerKey) return null;
+        const [prior] = await db
+          .select({ metadata: creditLedger.metadata })
+          .from(creditLedger)
+          .where(
+            and(
+              eq(creditLedger.userId, authReq.userId!),
+              eq(creditLedger.idempotencyKey, jackpotLedgerKey)
+            )
+          )
+          .limit(1);
+        if (!prior) return null;
+        const meta = (prior.metadata ?? {}) as {
+          betId?: string;
+          entryId?: string;
+          predictedScore?: number;
+        };
+        const [profileRow] = await db
+          .select({ predictCredits: profiles.predictCredits })
+          .from(profiles)
+          .where(eq(profiles.id, authReq.userId!))
+          .limit(1);
+        const [entryStats] = meta.entryId
+          ? await db
+              .select({ totalStake: marketEntries.totalStake })
+              .from(marketEntries)
+              .where(eq(marketEntries.id, meta.entryId))
+          : [];
+        const [betCount] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(marketBets)
+          .where(and(eq(marketBets.marketId, marketId), eq(marketBets.status, "active")));
+        return {
+          betId: meta.betId ?? null,
+          predictedScore: meta.predictedScore ?? predictedScore,
+          remainingCredits: profileRow?.predictCredits ?? 0,
+          totalPool: entryStats?.totalStake ?? 0,
+          totalEntries: betCount?.count ?? 0,
+          xp: null,
+          replayed: true,
+        };
+      };
+
+      const priorReplay = await buildJackpotReplay();
+      if (priorReplay) {
+        return res.json(priorReplay);
+      }
+
+      if (!jackpotClientKey && !checkBetRateLimit(authReq.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
 
@@ -20391,7 +20613,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           walletType: "VIRTUAL",
           balanceAfter: updatedProfile.predictCredits,
           source: "user_action",
-          idempotencyKey: `jackpot_stake_${marketId}_${insertedBet.id}`,
+          // Client-derived key when provided (enables retry replay);
+          // legacy bet-id key otherwise (no replay, but no duplicates
+          // either — the bet id is unique per insert).
+          idempotencyKey: jackpotLedgerKey ?? `jackpot_stake_${marketId}_${insertedBet.id}`,
           metadata: { marketId, entryId, betId: insertedBet.id, predictedScore },
         });
 
@@ -20468,6 +20693,66 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       if (error?.message === "Insufficient credits") {
         return res.status(400).json({ error: "Insufficient Vox. You need Ꝟ100 to enter." });
+      }
+      if (isUniqueViolation(error)) {
+        const constraint = pgConstraintName(error);
+        // Concurrent same-score claim slipped past the check-then-insert
+        // and hit the partial unique index (migration 0090). Same 409
+        // the pre-check path returns; client refreshes taken numbers.
+        if (constraint.includes("jackpot_score")) {
+          return res.status(409).json({
+            error: "NUMBER_TAKEN",
+            message: "That number is already claimed. Try a nearby number.",
+          });
+        }
+        // Concurrent retry with the same Idempotency-Key: both requests
+        // passed the replay pre-check, the loser trips the ledger unique.
+        // The winner's bet committed, so replay it.
+        if (constraint.includes("credit_ledger")) {
+          try {
+            const { parseIdempotencyKey } = await import("./services/idempotency-key");
+            const retryKey = parseIdempotencyKey({
+              header: req.header("Idempotency-Key"),
+              body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
+            });
+            const authReq = req as AuthRequest;
+            if (retryKey && authReq.userId) {
+              const ledgerKey = `jackpot_bet_${authReq.userId}_${retryKey}`;
+              const [prior] = await db
+                .select({ metadata: creditLedger.metadata })
+                .from(creditLedger)
+                .where(
+                  and(
+                    eq(creditLedger.userId, authReq.userId),
+                    eq(creditLedger.idempotencyKey, ledgerKey)
+                  )
+                )
+                .limit(1);
+              if (prior) {
+                const meta = (prior.metadata ?? {}) as {
+                  betId?: string;
+                  predictedScore?: number;
+                };
+                const [profileRow] = await db
+                  .select({ predictCredits: profiles.predictCredits })
+                  .from(profiles)
+                  .where(eq(profiles.id, authReq.userId))
+                  .limit(1);
+                return res.json({
+                  betId: meta.betId ?? null,
+                  predictedScore: meta.predictedScore ?? null,
+                  remainingCredits: profileRow?.predictCredits ?? 0,
+                  totalPool: 0,
+                  totalEntries: 0,
+                  xp: null,
+                  replayed: true,
+                });
+              }
+            }
+          } catch (replayErr) {
+            console.error("[Jackpot] Replay after ledger conflict failed:", replayErr);
+          }
+        }
       }
       console.error("[Jackpot] Bet error:", error);
       res.status(500).json({ error: "Failed to place jackpot entry" });
@@ -27153,7 +27438,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
         if (error) {
           console.error("Suggestion image upload error:", error);
-          return res.status(500).json({ error: `Failed to upload image: ${error.message}` });
+          return res.status(500).json({ error: "Failed to upload image" });
         }
 
         const { data: urlData } = supabaseServer.storage

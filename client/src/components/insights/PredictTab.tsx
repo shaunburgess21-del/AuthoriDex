@@ -24,6 +24,7 @@ import {
   type DemographicWindow,
 } from "./DemographicsTile";
 import { useInsightsQuery } from "@/lib/insights-hooks";
+import { useInsightsTabActive } from "./insightsTabActive";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { formatVox, formatVoxCompact, formatVoxPrice } from "@/lib/currency";
 import { marketThumbFromMarket } from "@/lib/marketThumbParticipants";
@@ -263,7 +264,7 @@ function HottestMarketsTile() {
 }
 
 function ClosingSoonTile() {
-  const { updownQ, h2hQ, gainerQ, openQ, isLoading } = useInsightsMarketLists(50, "closing");
+  const { updownQ, h2hQ, gainerQ, openQ, isLoading } = useInsightsMarketLists(50);
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
 
@@ -426,7 +427,7 @@ function ContestedTile() {
   const { data, isLoading } = useInsightsQuery<InsightsMarketsAnalytics>(
     "/api/insights/markets/analytics",
   );
-  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50, "closing");
+  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50);
 
   if (isLoading || listsLoading) return <Skeleton className="h-40 w-full" />;
   const contested = data?.contested;
@@ -495,11 +496,13 @@ function OpenInterestTile() {
 }
 
 function LiveBetFeedTile() {
+  const tabActive = useInsightsTabActive();
   const { data, isLoading } = useQuery({
     queryKey: ["/api/predict/recent-activity", 8],
     queryFn: () => fetchJson<RecentBet[]>("/api/predict/recent-activity?limit=8"),
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    // Pause the poll while this tab is kept mounted but hidden.
+    refetchInterval: tabActive ? 30_000 : false,
   });
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
@@ -667,7 +670,7 @@ function moverHref(m: MarketMover): string {
 
 function MoversTile() {
   const moversQ = useInsightsQuery<MarketMover[]>("/api/insights/markets/movers");
-  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50, "hottest");
+  const { marketById, isLoading: listsLoading } = useInsightsMarketLists(50);
 
   if (moversQ.isLoading || listsLoading) return <Skeleton className="h-40 w-full" />;
   const movers = moversQ.data ?? [];

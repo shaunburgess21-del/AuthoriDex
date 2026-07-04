@@ -1,6 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
-import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -17,10 +16,11 @@ import { XpBurstProvider } from "@/components/XpBurstProvider";
 import { ShareCardProvider } from "@/contexts/ShareCardContext";
 import { ReferralModalProvider } from "@/components/referral/ReferralModalProvider";
 import { ReferralPromptGate } from "@/components/referral/ReferralPromptGate";
-import { RankUpModalHost } from "@/components/RankUpModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
+import { RANK_UP_EVENT, type RankUpPayload } from "@/lib/rank-up-events";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 import {
   captureReferralFromUrl,
@@ -28,79 +28,8 @@ import {
 } from "@/lib/referral-capture";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
 
-const CHUNK_RETRY_KEY = "chunk_retry";
-/** Prevent reload loops within a single deploy window; allow retry after TTL. */
-const CHUNK_RETRY_TTL_MS = 5 * 60 * 1000;
-
-const CHUNK_LOAD_ERROR_PATTERNS = [
-  /Failed to fetch dynamically imported module/i,
-  /Importing a module script failed/i,
-  /error loading dynamically imported module/i,
-];
-
-// If we got here the page loaded successfully -- clear any leftover retry
-// flag from a previous stale-chunk reload so the mechanism works on the
-// next deploy too.
-if (typeof window !== "undefined") {
-  try {
-    sessionStorage.removeItem(CHUNK_RETRY_KEY);
-  } catch {
-    /* private mode / storage blocked */
-  }
-}
-
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
-}
-
-function isStaleChunkLoadError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return CHUNK_LOAD_ERROR_PATTERNS.some((pattern) => pattern.test(message));
-}
-
-function shouldAttemptChunkReload(): boolean {
-  try {
-    const raw = sessionStorage.getItem(CHUNK_RETRY_KEY);
-    if (!raw) return true;
-    const timestamp = Number(raw);
-    if (!Number.isFinite(timestamp)) {
-      sessionStorage.removeItem(CHUNK_RETRY_KEY);
-      return true;
-    }
-    if (Date.now() - timestamp > CHUNK_RETRY_TTL_MS) {
-      sessionStorage.removeItem(CHUNK_RETRY_KEY);
-      return true;
-    }
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Wraps React.lazy with automatic recovery from stale-chunk errors.
- * After a deploy the old HTML may reference chunk filenames that no longer
- * exist. When the dynamic import fails we do a single full-page reload so
- * the browser fetches the new HTML with correct chunk URLs.
- */
-function lazyWithRetry<T extends ComponentType<any>>(
-  factory: () => Promise<{ default: T }>
-) {
-  return lazy(() =>
-    factory().catch((err: unknown) => {
-      if (!isStaleChunkLoadError(err)) {
-        throw err;
-      }
-      if (shouldAttemptChunkReload()) {
-        console.warn("[lazyWithRetry] Stale chunk load failed, reloading once:", err);
-        sessionStorage.setItem(CHUNK_RETRY_KEY, String(Date.now()));
-        window.location.reload();
-        return new Promise<{ default: T }>(() => {});
-      }
-      sessionStorage.removeItem(CHUNK_RETRY_KEY);
-      throw err;
-    })
-  );
 }
 
 const HomePage = lazyWithRetry(() => import("@/pages/HomePage"));
@@ -153,6 +82,19 @@ const ShareBetRedirect = lazyWithRetry(
   () => import("@/pages/ShareBetRedirect"),
 );
 const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
+
+// Entry-bundle diet: these only render behind gates (interests picker) or on
+// rare events (rank-up celebration), so their chunks load off the critical path.
+const InterestsPicker = lazyWithRetry(() =>
+  import("@/components/interests/InterestsPicker").then((m) => ({
+    default: m.InterestsPicker,
+  })),
+);
+const RankUpModal = lazyWithRetry(() =>
+  import("@/components/RankUpModal").then((m) => ({
+    default: m.RankUpModal,
+  })),
+);
 
 function PageFallback() {
   return (
@@ -264,6 +206,34 @@ function NotificationsRealtimeWatcher() {
   return null;
 }
 
+/**
+ * Listens for `voxdex:rank-up` events (dispatched by the realtime
+ * notifications hook via lib/rank-up-events) and lazy-mounts the
+ * celebration modal when one arrives. The listener itself is a few
+ * lines in the entry bundle; the modal chunk (Dialog + confetti +
+ * rank config) is only fetched when a promotion actually fires.
+ */
+function RankUpModalGate() {
+  const [payload, setPayload] = useState<RankUpPayload | null>(null);
+
+  useEffect(() => {
+    function onEvent(e: Event) {
+      const detail = (e as CustomEvent<RankUpPayload>).detail;
+      if (!detail) return;
+      setPayload(detail);
+    }
+    window.addEventListener(RANK_UP_EVENT, onEvent);
+    return () => window.removeEventListener(RANK_UP_EVENT, onEvent);
+  }, []);
+
+  if (!payload) return null;
+  return (
+    <Suspense fallback={null}>
+      <RankUpModal payload={payload} onClose={() => setPayload(null)} />
+    </Suspense>
+  );
+}
+
 function AnalyticsWatcher() {
   const [location] = useLocation();
 
@@ -372,6 +342,13 @@ function InterestsGate() {
   const { user, profile, profileLoading, loading } = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  // Lazy-mount latch: the picker chunk only downloads once the modal has
+  // actually been asked to open; it stays mounted afterwards so the close
+  // animation still plays.
+  const [hasOpened, setHasOpened] = useState(false);
+  useEffect(() => {
+    if (open) setHasOpened(true);
+  }, [open]);
   // Once-per-session re-prompt latch: prevents the modal from popping back up
   // immediately after the user closes it via Save / Skip in the same tab.
   const repromptShownThisSession = useRef(false);
@@ -409,6 +386,7 @@ function InterestsGate() {
   }, [loading, profileLoading, user, profile, location]);
 
   if (!user || !profile || !profile.tosAcceptedAt) return null;
+  if (!hasOpened) return null;
 
   // Mode flips between onboarding (never dismissed) and reprompt (skipper).
   const mode: "onboarding" | "reprompt" = profile.interestsPromptDismissedAt
@@ -416,12 +394,14 @@ function InterestsGate() {
     : "onboarding";
 
   return (
-    <InterestsPicker
-      mode={mode}
-      open={open}
-      onOpenChange={setOpen}
-      defaultValue={profile.statedInterests ?? []}
-    />
+    <Suspense fallback={null}>
+      <InterestsPicker
+        mode={mode}
+        open={open}
+        onOpenChange={setOpen}
+        defaultValue={profile.statedInterests ?? []}
+      />
+    </Suspense>
   );
 }
 
@@ -447,7 +427,7 @@ function App() {
                 <InterestsGate />
                 <ReferralPromptGate />
                 <NotificationsRealtimeWatcher />
-                <RankUpModalHost />
+                <RankUpModalGate />
                 <AnalyticsWatcher />
                 <ShareAttributionWatcher />
                 <XpBurstProvider>

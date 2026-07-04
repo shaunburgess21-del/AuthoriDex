@@ -108,6 +108,98 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Live tick: re-ranks the leaderboard every 10 min from internal signals.
+  // Mirrors the in-process LiveTick scheduler so DISABLE_SCHEDULERS installs
+  // keep scores moving between full ingests. Advisory-locked
+  // (LIVE_TICK_LOCK_KEY) — double-trigger is a logged no-op.
+  // Recommended schedule: every 10 minutes.
+  app.post("/api/cron/live-tick", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runLiveTick } = await import("../jobs/live-tick");
+      const result = await runLiveTick();
+      res.json({
+        success: true,
+        message: "Live tick completed",
+        processed: result.processed,
+        moved: result.moved,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Live tick error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // AMM price sampler: records LMSR price snapshots on open AMM markets so
+  // price-history charts stay smooth on quiet markets. Mirrors the in-process
+  // AmmPriceSampler scheduler. Advisory-locked (SAMPLER_LOCK_KEY).
+  // Recommended schedule: every 5 minutes.
+  app.post("/api/cron/amm-price-sampler", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runAmmPriceSampler } = await import("../jobs/amm-price-sampler");
+      const result = await runAmmPriceSampler();
+      res.json({
+        success: true,
+        message: "AMM price sampler completed",
+        processed: result.processed,
+        sampled: result.sampled,
+        skipped: result.skipped,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] AMM price sampler error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Agent tick: one runner sweep (schedules new agent bets, advisory-locked,
+  // pause-switch gated) followed by one action-worker drain (executes queued
+  // bets whose executeAfter has passed; FOR UPDATE SKIP LOCKED claiming makes
+  // concurrent drains safe). Mirrors the in-process AgentRunner+ActionWorker
+  // pair so DISABLE_SCHEDULERS installs still get simulated market activity.
+  // Recommended schedule: every 5 minutes.
+  app.post("/api/cron/agent-tick", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runAgentBatch } = await import("../agents/agentRunner");
+      const { processDueActions } = await import("../agents/actionWorker");
+      const sweep = await runAgentBatch();
+      await processDueActions();
+      res.json({
+        success: true,
+        message: "Agent tick completed (runner sweep + action drain)",
+        scheduled: sweep.scheduled,
+        abstained: sweep.abstained,
+        skipped: sweep.skipped,
+        diagnostics: sweep.diagnostics ?? null,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Agent tick error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   app.post("/api/cron/resolve-induction", verifyCronSecret, async (_req, res) => {
     const startTime = Date.now();
     try {

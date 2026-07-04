@@ -13,6 +13,7 @@ import {
   parseFilters,
 } from "@shared/insights/filters";
 import { useInsightsRankings } from "@/lib/insights-hooks";
+import { useInsightsTabActive } from "./insightsTabActive";
 import { mergeDedupedRankingRows } from "@shared/insights/rankings-pagination";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
@@ -211,13 +212,15 @@ export function RankingsTab() {
   // Mirror the home leaderboard freshness pill so Rankings reflects the same
   // "Updated Xm ago" cadence rather than a precise (and for Wiki/Search,
   // misleading) clock time.
+  const tabActive = useInsightsTabActive();
   const { data: systemFreshness } = useQuery<{
     lastScoredAtFormatted: string;
     fullRefreshAtFormatted: string | null;
   }>({
     queryKey: ["/api/system/freshness"],
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    // Pause the poll while this tab is kept mounted but hidden.
+    refetchInterval: tabActive ? 60 * 1000 : false,
   });
   const freshnessLabel =
     systemFreshness?.fullRefreshAtFormatted ||

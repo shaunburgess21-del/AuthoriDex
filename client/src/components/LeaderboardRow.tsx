@@ -3,7 +3,7 @@ import { PersonAvatar } from "./PersonAvatar";
 import { Button } from "@/components/ui/button";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Popover, PopoverTrigger, PopoverContent, PopoverClose } from "@/components/ui/popover";
-import { useState, useEffect, useRef } from "react";
+import { memo, useState, useEffect, useRef } from "react";
 import { formatDelta, compactVotes, getApprovalColor } from "@/lib/formatNumber";
 import { resolveFameScore } from "@/lib/fameScore";
 import { Star, X, Flame, Eye } from "lucide-react";
@@ -232,7 +232,9 @@ function LeaderboardYourVoteCell({
   );
 }
 
-export function LeaderboardRow({
+// memo: the home leaderboard renders 150+ rows and re-renders the whole list
+// on every live-tick refetch; unchanged rows now skip reconciliation.
+export const LeaderboardRow = memo(function LeaderboardRow({
   person,
   activeTab = "fame",
   isHotMover = false,
@@ -351,9 +353,23 @@ export function LeaderboardRow({
 
   return (
     <div className="border-b">
+      {/* role=button (not a real <button>) because the row contains nested
+          interactive controls (Rate button, popovers) — nested buttons are
+          invalid HTML and break click handling. Keydown only fires for the
+          row itself so nested controls keep their own key behaviour. */}
       <div
-        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        aria-label={`View insights for ${person.name}`}
+        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={onOpenInsight}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenInsight();
+          }
+        }}
         data-testid={`row-person-${person.id}`}
       >
         <div
@@ -555,4 +571,4 @@ export function LeaderboardRow({
       </div>
     </div>
   );
-}
+});

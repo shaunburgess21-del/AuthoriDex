@@ -7,7 +7,7 @@ import { getSupabase } from "@/lib/supabase";
 import { shouldAutoToast } from "@/lib/notifications/registry";
 import { ToastBurstCoalescer } from "@/lib/notifications/toast-burst-coalesce";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
-import { dispatchRankUp } from "@/components/RankUpModal";
+import { dispatchRankUp } from "@/lib/rank-up-events";
 import { STREAK_BADGE_KEYS } from "@shared/badge-config";
 import { BadgeToast } from "@/components/BadgeToast";
 import { createElement } from "react";

@@ -1354,22 +1354,27 @@ export default function PredictPage() {
   });
   const openMarkets = useMemo(() => openMarketsData || [], [openMarketsData]);
 
+  // All list polls are visibility-gated (same pattern as the positions
+  // query below) so a backgrounded Predict tab costs zero requests.
+  const pollWhenVisible = (intervalMs: number) => () =>
+    typeof document !== "undefined" && document.hidden ? false : intervalMs;
+
   const { data: nativeUpdownData, isLoading: updownLoading, error: updownError, refetch: refetchUpdown } = useQuery<any[]>({
     queryKey: ['/api/native-markets/updown'],
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: pollWhenVisible(60_000),
     refetchOnWindowFocus: true,
   });
   const { data: nativeH2hData, isLoading: h2hLoading, error: h2hError, refetch: refetchH2h } = useQuery<any[]>({
     queryKey: ['/api/native-markets/h2h'],
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: pollWhenVisible(60_000),
     refetchOnWindowFocus: true,
   });
   const { data: nativeGainerData, isLoading: gainerLoading, error: gainerError, refetch: refetchGainers } = useQuery<any[]>({
     queryKey: ['/api/native-markets/gainer'],
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: pollWhenVisible(60_000),
     refetchOnWindowFocus: true,
   });
   // Sprint 4.3: pull the current user's AMM open positions so each
@@ -1415,7 +1420,7 @@ export default function PredictPage() {
   const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
     queryKey: ['/api/native-markets/jackpot'],
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: pollWhenVisible(60_000),
     refetchOnWindowFocus: true,
   });
 
@@ -1493,7 +1498,7 @@ export default function PredictPage() {
   } = useQuery<RecentPredictionActivity[]>({
     queryKey: ['/api/predict/recent-activity'],
     staleTime: 60_000,
-    refetchInterval: 90_000,
+    refetchInterval: pollWhenVisible(90_000),
   });
   const activityItems = recentActivity ?? [];
 

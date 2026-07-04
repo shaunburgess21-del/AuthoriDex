@@ -70,8 +70,11 @@ export function MarketActivityFeed({
       return res.json();
     },
     enabled: !!marketId,
-    refetchInterval: 15_000,
-    staleTime: 10_000,
+    // 45s is plenty for a social-proof feed (trades also arrive via the
+    // SSE price stream invalidations); paused entirely on hidden tabs.
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 45_000,
+    staleTime: 30_000,
   });
 
   const trades = data?.trades ?? [];

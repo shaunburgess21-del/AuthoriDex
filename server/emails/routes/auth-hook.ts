@@ -26,6 +26,7 @@ import { Webhook } from "standardwebhooks";
 
 import { sendEmail } from "../send";
 import { VerifyEmail, type VerifyEmailFlow } from "../templates/auth/VerifyEmail";
+import { sendOpsAlert } from "../../services/ops-alerts";
 
 // ---- Types ----------------------------------------------------------------
 //
@@ -99,6 +100,18 @@ function getWebhookVerifier(): Webhook {
   return new Webhook(secret);
 }
 
+/**
+ * Retry schedule for transient Resend failures. Auth emails are the one
+ * category where a failed send blocks the user (signup / sign-in / reset
+ * cannot proceed without the code), so we absorb brief blips here rather
+ * than immediately failing the hook. `sendEmail` releases its
+ * email_send_log idempotency claim on failure, so retries are not
+ * deduped away; a genuinely-delivered first attempt is deduped as usual.
+ */
+const AUTH_SEND_RETRY_DELAYS_MS = [400, 1200];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function sendAuthOtpEmail(args: {
   user: SupabaseAuthHookPayload["user"];
   subject: string;
@@ -112,31 +125,77 @@ async function sendAuthOtpEmail(args: {
    */
   userId?: string;
 }): Promise<void> {
-  const result = await sendEmail({
-    to: args.user.email,
-    subject: args.subject,
-    category: "auth",
-    templateName: "verify",
-    template: React.createElement(VerifyEmail, {
-      code: args.code,
-      flow: args.flow,
-    }),
-    userId: args.userId,
-    idempotencyKey: args.idempotencyKey,
-    tags: [
-      { name: "source", value: "supabase-auth-hook" },
-      { name: "action", value: args.action },
-    ],
-  });
+  let lastError = "unknown error";
+  const attempts = AUTH_SEND_RETRY_DELAYS_MS.length + 1;
 
-  if (!result.ok) {
-    throw new Error(result.error);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const result = await sendEmail({
+      to: args.user.email,
+      subject: args.subject,
+      category: "auth",
+      templateName: "verify",
+      template: React.createElement(VerifyEmail, {
+        code: args.code,
+        flow: args.flow,
+      }),
+      userId: args.userId,
+      idempotencyKey: args.idempotencyKey,
+      tags: [
+        { name: "source", value: "supabase-auth-hook" },
+        { name: "action", value: args.action },
+      ],
+    });
+
+    if (result.ok) {
+      if (result.skipped) {
+        console.log(
+          `[auth-hook] Send skipped (${result.reason}). action=${args.action} to=${args.user.email}`,
+        );
+      } else if (attempt > 1) {
+        console.log(
+          `[auth-hook] Send succeeded on retry ${attempt - 1}. action=${args.action} to=${args.user.email}`,
+        );
+      }
+      return;
+    }
+
+    lastError = result.error;
+    if (attempt < attempts) {
+      const delay = AUTH_SEND_RETRY_DELAYS_MS[attempt - 1];
+      console.warn(
+        `[auth-hook] Send attempt ${attempt}/${attempts} failed ` +
+          `(action=${args.action} to=${args.user.email}): ${lastError}. ` +
+          `Retrying in ${delay}ms.`,
+      );
+      await sleep(delay);
+    }
   }
 
-  if (result.skipped) {
-    console.log(
-      `[auth-hook] Send skipped (${result.reason}). action=${args.action} to=${args.user.email}`,
-    );
+  throw new Error(lastError);
+}
+
+/**
+ * Founder-facing alert when auth email is down or an unhandled action
+ * fires. Best-effort and never throws — `sendOpsAlert` swallows its own
+ * failures, and the Discord mirror still fires when Resend itself is
+ * the broken channel.
+ */
+async function alertAuthHookProblem(args: {
+  kind: string;
+  title: string;
+  summary: string;
+  idempotencyKeyBase: string;
+}): Promise<void> {
+  try {
+    await sendOpsAlert({
+      kind: args.kind,
+      severity: "critical",
+      title: args.title,
+      summary: args.summary,
+      idempotencyKeyBase: args.idempotencyKeyBase,
+    });
+  } catch (alertErr) {
+    console.error("[auth-hook] Ops alert dispatch failed:", alertErr);
   }
 }
 
@@ -256,6 +315,19 @@ export async function handleAuthHook(
             `implemented. Acknowledging to prevent Supabase retries, ` +
             `but NO email was sent to ${user.email}.`,
         );
+        // The client never triggers these flows today, so a hit here
+        // means something changed (Supabase config, a new client path).
+        // Silent 200s hide that — page the founders instead. Keyed per
+        // day so a burst doesn't spam the inbox.
+        void alertAuthHookProblem({
+          kind: "auth_hook_unimplemented_action",
+          title: `Auth hook received unimplemented action '${email_action_type}'`,
+          summary:
+            `Supabase asked the auth hook to send a '${email_action_type}' email ` +
+            `but no template is implemented — the hook acknowledged with 200 and ` +
+            `NO email was sent. If this flow is now in use, it needs a template.`,
+          idempotencyKeyBase: `auth_hook_unimplemented:${email_action_type}:${new Date().toISOString().slice(0, 10)}`,
+        });
         break;
       }
 
@@ -279,6 +351,18 @@ export async function handleAuthHook(
       `[auth-hook] Email send failed. action=${email_action_type} ` +
         `to=${user.email} error=${message}`,
     );
+    // Auth email is DOWN after retries — signups/sign-ins are blocked.
+    // Alert the founders (Discord mirror still fires when Resend is the
+    // broken channel), keyed per hour so a sustained outage re-pages
+    // without flooding.
+    void alertAuthHookProblem({
+      kind: "auth_hook_send_failed",
+      title: "Auth email send failed — signups/sign-ins may be blocked",
+      summary:
+        `Auth hook could not send a '${email_action_type}' email after ` +
+        `${AUTH_SEND_RETRY_DELAYS_MS.length + 1} attempts. Last error: ${message}`,
+      idempotencyKeyBase: `auth_hook_send_failed:${new Date().toISOString().slice(0, 13)}`,
+    });
     res.status(500).json({
       error: { message: "Email send failed", detail: message },
     });

@@ -30,7 +30,7 @@ import {
   WEEKLY_DIGEST_TITLE,
 } from "./weekly-digest-utils";
 import {
-  getWeeklyDigestStats,
+  getWeeklyDigestStatsBatch,
   listActiveDigestUserIds,
 } from "./weekly-digest-stats";
 import { runUserRankSnapshot } from "./user-rank-snapshot";
@@ -897,9 +897,15 @@ async function deriveWeeklyDigest(): Promise<number> {
   const weekBucket = isoYearWeek(new Date());
   let inserted = 0;
 
+  // One batched roll-up for the whole cohort (~5 queries total) instead
+  // of ~5 queries per user.
+  const statsByUser = await getWeeklyDigestStatsBatch(activeUserIds, {
+    isoWeek: weekBucket,
+  });
+
   for (const userId of activeUserIds) {
-    const stats = await getWeeklyDigestStats(userId, { isoWeek: weekBucket });
-    if (stats.wins === 0 && stats.losses === 0) continue;
+    const stats = statsByUser.get(userId);
+    if (!stats || (stats.wins === 0 && stats.losses === 0)) continue;
 
     const body = formatWeeklyDigestBody({
       wins: stats.wins,

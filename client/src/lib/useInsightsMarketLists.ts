@@ -42,27 +42,28 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 /** Shared native + community market lists for Insights Predict tiles. */
-export function useInsightsMarketLists(
-  openLimit = 12,
-  openQuerySuffix: "hottest" | "closing" = "hottest",
-) {
-  const updownQ = useQuery({
-    queryKey: ["/api/native-markets/updown", "insights"],
-    queryFn: () => fetchJson<InsightsNativeMarket[]>("/api/native-markets/updown"),
+export function useInsightsMarketLists(openLimit = 12) {
+  // Bare URL keys + default URL-keyed fetcher so these observers share the
+  // cache entries PredictPage (and useCategoryRaceMap) already maintain —
+  // switching Predict ⇄ Insights no longer refetches the same three lists.
+  const updownQ = useQuery<InsightsNativeMarket[]>({
+    queryKey: ["/api/native-markets/updown"],
     staleTime: 60_000,
   });
-  const h2hQ = useQuery({
-    queryKey: ["/api/native-markets/h2h", "insights"],
-    queryFn: () => fetchJson<InsightsNativeMarket[]>("/api/native-markets/h2h"),
+  const h2hQ = useQuery<InsightsNativeMarket[]>({
+    queryKey: ["/api/native-markets/h2h"],
     staleTime: 60_000,
   });
-  const gainerQ = useQuery({
-    queryKey: ["/api/native-markets/gainer", "insights"],
-    queryFn: () => fetchJson<InsightsNativeMarket[]>("/api/native-markets/gainer"),
+  const gainerQ = useQuery<InsightsNativeMarket[]>({
+    queryKey: ["/api/native-markets/gainer"],
     staleTime: 60_000,
   });
+  // Keyed by limit only (the old "hottest"/"closing" suffix changed the key
+  // but not the URL, so same-limit tiles fetched + cached identical data
+  // twice). Keeps the array form so `["/api/open-markets"]` prefix
+  // invalidations after bets still hit this entry.
   const openQ = useQuery({
-    queryKey: ["/api/open-markets", `insights-${openQuerySuffix}`, openLimit],
+    queryKey: ["/api/open-markets", openLimit],
     queryFn: () =>
       fetchJson<
         InsightsOpenMarket[] | { data?: InsightsOpenMarket[]; markets?: InsightsOpenMarket[] }

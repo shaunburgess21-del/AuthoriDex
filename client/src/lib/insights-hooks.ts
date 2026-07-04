@@ -86,5 +86,8 @@ export function useInsightsQuery<T>(
     queryFn: () => fetchInsightsJson<T>(path),
     staleTime: options?.staleTime ?? 90_000,
     enabled: options?.enabled,
+    // Key changes (window toggles, divergence type switches) keep the last
+    // tile visible while the new slice loads instead of flashing a skeleton.
+    placeholderData: keepPreviousData,
   });
 }

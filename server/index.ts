@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import helmet from "helmet";
+import compression from "compression";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
@@ -508,6 +509,19 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Gzip JSON/asset responses (the trending payload alone is several
+// hundred kB uncompressed). MUST skip SSE: compression buffers the
+// stream, so live price events would never flush to subscribers.
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.path.endsWith("/amm/stream")) return false;
+      if (res.getHeader("Content-Type")?.toString().includes("text/event-stream")) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
+
 // Global body parsers — SKIP for webhook endpoints that need raw bytes.
 // The /api/auth/email-hook route verifies a signature over the raw request
 // body, so it installs its own express.raw() middleware. If we let
@@ -744,7 +758,25 @@ async function startServer() {
       log("[Schedulers] FATAL MISCONFIG — DISABLE_SCHEDULERS=true but no CRON_SECRET is set. Nothing will drive ingestion. Either unset DISABLE_SCHEDULERS or configure CRON_SECRET + external cron.");
       return;
     } else if (schedulersDisabled) {
-      log("[Schedulers] Mode: EXTERNAL CRON. DISABLE_SCHEDULERS=true — skipping all background schedulers. Ingestion, LiveTick, etc. must be triggered via POST /api/cron/* with CRON_SECRET.");
+      log("[Schedulers] Mode: EXTERNAL CRON. DISABLE_SCHEDULERS=true — skipping ALL in-process background schedulers.");
+      log(
+        "[Schedulers] Jobs that REQUIRE an external cron hitting POST /api/cron/* (Bearer CRON_SECRET): " +
+          "Ingestion→/refresh-data, LiveTick→/live-tick, AmmPriceSampler→/amm-price-sampler, " +
+          "AgentRunner+ActionWorker→/agent-tick, NotificationsDerivation→/notifications-derivation, " +
+          "MarketResolver→/resolve-markets, MarketGenerator→/generate-weekly-markets, " +
+          "RetentionCleanup→/retention-cleanup, AmmHealthCheck→/amm-health-check, " +
+          "DrainBreaker→/drain-breaker-check, AccountDeletionSweeper→/process-account-deletions, " +
+          "CelebrityProfileRefresh→/refresh-celebrity-profiles, NetWorthRefresh→/refresh-net-worth, " +
+          "WhyTrendingRefresh→/refresh-why-trending, InsightsStoryRefresh→/refresh-insights-story, " +
+          "InsightsCacheRefresh→/refresh-insights-cache, MarketOpsDigest→/market-ops-digest, " +
+          "MarketScout→/market-scout, InductionCycle→/resolve-induction.",
+      );
+      log(
+        "[Schedulers] WARNING — jobs with NO cron fallback that will NOT run at all in this mode: " +
+          "Staleness Monitor (freshness alerts), VoteWorker / CommentWorker / CommentVoteWorker " +
+          "(agent votes+comments), ApprovalSnapshots (pulse chart history). " +
+          "If you need these, run at least one instance with DISABLE_SCHEDULERS unset.",
+      );
       return;
     } else if (cronSecretConfigured) {
       log("[Schedulers] Mode: IN-PROCESS (with CRON_SECRET also configured). Warning — if you have an external cron hitting /api/cron/*, you will get duplicate runs and `locked_out` ingestion_runs rows. Set DISABLE_SCHEDULERS=true to hand control to external cron.");

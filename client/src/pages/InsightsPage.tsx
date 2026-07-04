@@ -7,6 +7,7 @@ import { RankingsTab } from "@/components/insights/RankingsTab";
 import { CrowdTab } from "@/components/insights/CrowdTab";
 import { VoteTab } from "@/components/insights/VoteTab";
 import { PredictTab } from "@/components/insights/PredictTab";
+import { InsightsTabActiveContext } from "@/components/insights/insightsTabActive";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
@@ -20,10 +21,34 @@ function insightsScrollKey(tab: InsightsTab): string {
   return `voxdex:insights:scroll:${tab}`;
 }
 
+// Legacy "discover" resolves via URL canonicalization before render, so
+// only the five nav tabs need components here.
+const TAB_COMPONENTS: Partial<Record<InsightsTab, () => JSX.Element>> = {
+  today: OverviewTab,
+  rankings: RankingsTab,
+  vote: VoteTab,
+  predict: PredictTab,
+  crowd: CrowdTab,
+};
+
 export default function InsightsPage() {
   const [tab, setTab] = useState<InsightsTab>(() => readTabFromLocation());
   const prevTabRef = useRef<InsightsTab | null>(null);
   const isFirstMountRef = useRef(true);
+  // Tabs mount on first visit and stay mounted (CSS-hidden) afterwards, so
+  // returning to a tab restores instantly instead of re-running every tile
+  // skeleton. InsightsTabActiveContext lets polling tiles pause while hidden.
+  const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<InsightsTab>>(
+    () => new Set([tab]),
+  );
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, [tab]);
 
   useEffect(() => {
     const syncFromUrl = () => setTab(readTabFromLocation());
@@ -113,11 +138,17 @@ export default function InsightsPage() {
         commitOffsetPx={96}
       >
         <main className="container mx-auto px-2 sm:px-4 max-w-7xl py-6 md:py-8">
-          {tab === "today" && <OverviewTab />}
-          {tab === "rankings" && <RankingsTab />}
-          {tab === "vote" && <VoteTab />}
-          {tab === "predict" && <PredictTab />}
-          {tab === "crowd" && <CrowdTab />}
+          {INSIGHTS_NAV_TAB_ORDER.map((t) => {
+            const TabComponent = TAB_COMPONENTS[t];
+            if (!visitedTabs.has(t) || !TabComponent) return null;
+            return (
+              <div key={t} hidden={tab !== t}>
+                <InsightsTabActiveContext.Provider value={tab === t}>
+                  <TabComponent />
+                </InsightsTabActiveContext.Provider>
+              </div>
+            );
+          })}
         </main>
       </SwipeNavigator>
     </div>

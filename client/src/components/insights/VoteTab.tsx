@@ -28,6 +28,7 @@ import {
 } from "./DemographicsTile";
 import { MarketThumbCollage } from "@/components/predict/MarketThumbCollage";
 import { useInsightsQuery } from "@/lib/insights-hooks";
+import { useInsightsTabActive } from "./insightsTabActive";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { writeInsightsQuery } from "@shared/insights/filters";
 import type {
@@ -978,6 +979,7 @@ function VoteSurfaceSection({
 }
 
 function LiveVoteFeedTile() {
+  const tabActive = useInsightsTabActive();
   const { data, isLoading } = useQuery({
     queryKey: ["/api/insights/vote/recent-activity", 8],
     queryFn: async () => {
@@ -989,7 +991,8 @@ function LiveVoteFeedTile() {
       return (json.data ?? []) as VoteFeedItem[];
     },
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    // Pause the poll while this tab is kept mounted but hidden.
+    refetchInterval: tabActive ? 30_000 : false,
   });
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;

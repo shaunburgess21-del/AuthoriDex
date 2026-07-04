@@ -21,6 +21,7 @@ import { ChevronDown } from "lucide-react";
 import type { TrendingPerson } from "@shared/schema";
 import { formatVox, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
+import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 
 // Referral reward derives from credit-config so the out-of-Vox nudge
 // tracks the real award amount (same pattern as ReferAFriendCard).
@@ -80,6 +81,14 @@ export function JackpotEntryModal({
     const num = parseInt(cleaned, 10);
     return isNaN(num) || num <= 0 ? null : num;
   }, [scoreInput]);
+
+  // One key per (market, score) intent: a network-failure retry with the
+  // same score replays server-side instead of double-charging; changing
+  // the score is a new intent and gets a fresh key.
+  const idempotencyKey = useIdempotencyKey(open && parsedScore != null, [
+    marketId,
+    parsedScore,
+  ]);
 
   const isAuthReady = !!session?.access_token && !loading;
   const closedMarketMessage = useMemo(() => {
@@ -160,6 +169,7 @@ export function JackpotEntryModal({
       const { data: { session } } = await sb.auth.getSession();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+      if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
       const res = await fetch(`/api/native-markets/${marketId}/jackpot-bet`, {
         method: "POST",

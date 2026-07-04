@@ -83,17 +83,6 @@ interface MarketEntry {
   betCount: number;
 }
 
-interface MarketComment {
-  id: string;
-  userId: string;
-  username: string;
-  body: string;
-  parentId: string | null;
-  upvotes: number;
-  downvotes: number;
-  createdAt: string;
-}
-
 interface ResolutionSource {
   label: string;
   url: string;
@@ -152,10 +141,8 @@ interface MarketData {
   category?: string | null;
   tags?: string[] | null;
   coverImageUrl?: string | null;
-  personId?: string | null;
   sourceUrl?: string | null;
   featured?: boolean;
-  timezone?: string | null;
   resolutionCriteria?: string[] | null;
   resolutionSources?: ResolutionSource[] | null;
   resolveMethod?: string | null;
@@ -163,18 +150,14 @@ interface MarketData {
   metric?: string | null;
   strike?: string | null;
   unit?: string | null;
-  startAt?: string | null;
   endAt?: string | null;
   closeAt?: string | null;
   resolvedAt?: string | null;
   baselineScore?: string | number | null;
   voidReason?: string | null;
-  resolutionNotes?: string | null;
   resolutionSummary?: ResolutionSummary | null;
   jackpotWinners?: JackpotWinners | null;
-  createdAt: string;
   entries: MarketEntry[];
-  comments?: MarketComment[];
   totalParticipants?: number;
   linkedPersonName?: string | null;
   linkedPersonAvatar?: string | null;
@@ -922,6 +905,13 @@ export default function MarketDetailPage() {
     return parsed;
   }, [jackpotScoreInput]);
 
+  // One key per (market, score) intent — same-score retries replay
+  // server-side instead of double-charging (see useIdempotencyKey).
+  const jackpotIdempotencyKey = useIdempotencyKey(jackpotPredictedScore != null, [
+    market?.id,
+    jackpotPredictedScore,
+  ]);
+
   const jackpotMutation = useMutation({
     mutationFn: async (predictedScore: number) => {
       if (!market) throw new Error("Market not loaded");
@@ -929,6 +919,7 @@ export default function MarketDetailPage() {
         "Content-Type": "application/json",
         ...(await getAuthHeaders()),
       };
+      if (jackpotIdempotencyKey) headers["Idempotency-Key"] = jackpotIdempotencyKey;
       const res = await fetch(`/api/native-markets/${market.id}/jackpot-bet`, {
         method: "POST",
         headers,

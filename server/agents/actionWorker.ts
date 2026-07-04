@@ -49,7 +49,10 @@ import { type AmmStateSnapshot } from "@shared/lib/amm/positions";
 
 const STALE_IN_PROGRESS_TIMEOUT_MINUTES = 30;
 
-async function processDueActions(): Promise<void> {
+// Exported for POST /api/cron/agent-tick (external-cron mode). Safe to call
+// concurrently with the in-process scheduler: claiming uses
+// FOR UPDATE SKIP LOCKED, so two drains never execute the same action.
+export async function processDueActions(): Promise<void> {
   // Global "pause all agents" kill switch (admin Agents tab toggle).
   // Bail out before reclaiming or claiming any pending actions — those
   // stay queued and resume executing the moment the switch flips back on.
