@@ -188,6 +188,8 @@ interface InductionCandidate {
   avatar: string | null;
   category: string;
   votes: number;
+  /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
+  personId: string | null;
 }
 
 interface CelebrityImage {
@@ -498,10 +500,12 @@ function InductionCandidateCard({
       </div>
 
       <div className="flex flex-col items-center text-center mb-2 md:mb-4">
+        {/* Avatar/name link to the candidate's dormant profile page when the
+            shadow person row exists; otherwise fall back to the queue deep link. */}
         <Link
-          href={`/vote/induction#induction-card-${candidate.id}`}
+          href={candidate.personId ? `/person/${candidate.personId}` : `/vote/induction#induction-card-${candidate.id}`}
           className="relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-          aria-label={`View ${candidate.name} in the Induction Queue`}
+          aria-label={candidate.personId ? `View ${candidate.name}'s profile` : `View ${candidate.name} in the Induction Queue`}
           data-testid={`link-induction-avatar-${candidate.id}`}
         >
           <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
@@ -512,7 +516,7 @@ function InductionCandidateCard({
           )}
         </Link>
         <Link
-          href={`/vote/induction#induction-card-${candidate.id}`}
+          href={candidate.personId ? `/person/${candidate.personId}` : `/vote/induction#induction-card-${candidate.id}`}
           className="mt-2 md:mt-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
           data-testid={`link-induction-name-${candidate.id}`}
         >
@@ -1359,6 +1363,7 @@ export default function VotePage() {
       seedVotes: number;
       wikiSlug: string | null;
       isActive: boolean;
+      personId: string | null;
     }>;
   }
   
@@ -1435,6 +1440,7 @@ export default function VotePage() {
     avatar: c.avatar ?? null,
     category: c.category as InductionCandidate['category'],
     votes: c.seedVotes,
+    personId: c.personId ?? null,
   }));
 
   const [inductionCategoryFilter, setInductionCategoryFilter] = useState<FilterCategory>("all");

@@ -88,6 +88,7 @@ import {
   webSentimentLevel,
 } from "./providers/dataforseo-sentiment";
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
+import { toTrendingPerson } from "./jobs/celebrity-profile-cron";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
 import { MOVERS_PULSE_TOP_N, selectDailyMovers } from "./services/trending/daily-movers";
 import { HOT_MOVERS_CAP, selectHotMovers } from "./services/trending/hot-movers";
@@ -135,7 +136,7 @@ import {
 import { computeDriftDelta } from "./services/credit-drift";
 import { computeEarlyBirdMultiplier } from "./jobs/settlement-utils";
 import { recomputeCelebrityMetrics } from "./services/celebrity-metrics-recompute";
-import { enrichInductionCandidatesWithAvatars, enrichInductionVoteRows } from "./services/person-images";
+import { enrichInductionCandidatesWithAvatars, enrichInductionVoteRows, resolvePersonAvatarUrl } from "./services/person-images";
 import { z, ZodError } from "zod";
 import { sendError, sendBadRequest, sendZodError } from "./utils/api-response";
 import {
@@ -1651,7 +1652,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Only return real data from database - no mock data fallback
       if (!person) {
-        return res.status(404).json({ error: "Person not found" });
+        // Induction shadow fallback: candidates in the induction queue get a
+        // dormant profile page (no trend score data) served from their
+        // tracked_people shadow row (status = 'induction').
+        const [shadow] = await db
+          .select()
+          .from(trackedPeople)
+          .where(and(eq(trackedPeople.id, id), eq(trackedPeople.status, "induction")))
+          .limit(1);
+        if (!shadow) {
+          return res.status(404).json({ error: "Person not found" });
+        }
+
+        const [candidate] = await db
+          .select({
+            id: inductionCandidates.id,
+            seedVotes: inductionCandidates.seedVotes,
+          })
+          .from(inductionCandidates)
+          .where(and(
+            eq(inductionCandidates.displayName, shadow.name),
+            eq(inductionCandidates.isActive, true),
+          ))
+          .limit(1);
+
+        const shadowMetrics = await db
+          .select({
+            approvalPct: celebrityMetrics.approvalPct,
+            approvalAvgRating: celebrityMetrics.approvalAvgRating,
+            approvalVotesCount: celebrityMetrics.approvalVotesCount,
+          })
+          .from(celebrityMetrics)
+          .where(eq(celebrityMetrics.celebrityId, id))
+          .limit(1);
+        const sm = shadowMetrics[0];
+
+        return res.json({
+          id: shadow.id,
+          name: shadow.name,
+          avatar: resolvePersonAvatarUrl(shadow.avatar ?? null, shadow.imageSlug),
+          bio: shadow.bio ?? null,
+          rank: null,
+          trendScore: null,
+          fameIndex: null,
+          fameIndexLive: null,
+          liveRank: null,
+          liveUpdatedAt: null,
+          liveDampen: null,
+          change24h: null,
+          change7d: null,
+          category: shadow.category,
+          secondaryCategories: shadow.secondaryCategories ?? [],
+          profileViews10m: null,
+          approvalPct: sm?.approvalPct ?? null,
+          approvalAvgRating: sm?.approvalAvgRating ?? null,
+          approvalVotesCount: sm?.approvalVotesCount ?? 0,
+          wikiSlug: shadow.wikiSlug ?? null,
+          imageSlug: shadow.imageSlug ?? null,
+          isInductionCandidate: true,
+          inductionCandidateId: candidate?.id ?? null,
+          seedVotes: candidate?.seedVotes ?? 0,
+        });
       }
 
       if (!getSessionId(req)) {
@@ -6395,12 +6456,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/celebrity-profile/:personId", async (req, res) => {
     try {
       const { personId } = req.params;
-      const forceRefresh = req.query.refresh === 'true';
+      let forceRefresh = req.query.refresh === 'true';
       const model = typeof req.query.model === "string" ? req.query.model : undefined;
 
-      const person = await storage.getTrendingPerson(personId);
+      let person = await storage.getTrendingPerson(personId);
       if (!person) {
-        return res.status(404).json({ error: "Person not found" });
+        // Induction shadow fallback: candidates get an About section on their
+        // dormant profile page. Generation is capped at once per month via the
+        // standard 30-day bio TTL; force-refresh is ignored for these rows so
+        // nothing can bypass that cap.
+        const [shadow] = await db
+          .select()
+          .from(trackedPeople)
+          .where(and(eq(trackedPeople.id, personId), eq(trackedPeople.status, "induction")))
+          .limit(1);
+        if (!shadow) {
+          return res.status(404).json({ error: "Person not found" });
+        }
+        person = toTrendingPerson(shadow);
+        forceRefresh = false;
       }
 
       const result = await getOrGenerateCelebrityProfile(person, { forceRefresh, model });

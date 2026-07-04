@@ -56,6 +56,8 @@ interface InductionCandidate {
   seedVotes: number;
   wikiSlug: string | null;
   isActive: boolean;
+  /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
+  personId: string | null;
 }
 
 interface InductionAPIResponse {
@@ -464,23 +466,48 @@ export default function InductionQueuePage() {
                         />
                       </div>
 
-                      {/* Avatar + name */}
+                      {/* Avatar + name — link to the candidate's dormant profile page */}
                       <div className="flex flex-col items-center text-center mb-4">
                         <div className="relative mb-3">
-                          <PersonAvatar
-                            name={candidate.displayName}
-                            avatar={candidate.avatar}
-                            imageSlug={candidate.imageSlug}
-                            imageContext="induction"
-                            className="h-28 w-28 md:h-24 md:w-24"
-                          />
+                          {candidate.personId ? (
+                            <Link
+                              href={`/person/${candidate.personId}`}
+                              aria-label={`View ${candidate.displayName}'s profile`}
+                              className="block rounded-full transition-opacity hover:opacity-90"
+                            >
+                              <PersonAvatar
+                                name={candidate.displayName}
+                                avatar={candidate.avatar}
+                                imageSlug={candidate.imageSlug}
+                                imageContext="induction"
+                                className="h-28 w-28 md:h-24 md:w-24"
+                              />
+                            </Link>
+                          ) : (
+                            <PersonAvatar
+                              name={candidate.displayName}
+                              avatar={candidate.avatar}
+                              imageSlug={candidate.imageSlug}
+                              imageContext="induction"
+                              className="h-28 w-28 md:h-24 md:w-24"
+                            />
+                          )}
                           {isVoted && (
-                            <div className={`absolute -top-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center shadow-lg ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS} ${SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS}`}>
+                            <div className={`absolute -top-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center shadow-lg pointer-events-none ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS} ${SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS}`}>
                               <Check className="h-3.5 w-3.5 text-white" />
                             </div>
                           )}
                         </div>
-                        <h3 className="font-semibold text-base leading-tight">{candidate.displayName}</h3>
+                        {candidate.personId ? (
+                          <Link
+                            href={`/person/${candidate.personId}`}
+                            className="font-semibold text-base leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                          >
+                            {candidate.displayName}
+                          </Link>
+                        ) : (
+                          <h3 className="font-semibold text-base leading-tight">{candidate.displayName}</h3>
+                        )}
                       </div>
 
                       {/* Progress */}

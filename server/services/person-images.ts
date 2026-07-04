@@ -32,7 +32,7 @@ export type InductionCandidateAvatarInput = {
 
 export async function enrichInductionCandidatesWithAvatars<T extends InductionCandidateAvatarInput>(
   candidates: T[],
-): Promise<(T & { avatar: string | null })[]> {
+): Promise<(T & { avatar: string | null; personId: string | null })[]> {
   if (candidates.length === 0) return [];
 
   const candidateNames = Array.from(
@@ -42,6 +42,7 @@ export async function enrichInductionCandidatesWithAvatars<T extends InductionCa
   const trackedRows: TrackedRowForInductionAvatar[] = candidateNames.length
     ? await db
         .select({
+          id: trackedPeople.id,
           name: trackedPeople.name,
           avatar: trackedPeople.avatar,
           imageSlug: trackedPeople.imageSlug,
@@ -58,6 +59,9 @@ export async function enrichInductionCandidatesWithAvatars<T extends InductionCa
     return {
       ...candidate,
       avatar: resolveInductionCandidateAvatar(tracked, candidate.imageSlug),
+      // Shadow tracked_people id — links the candidate card to /person/:id.
+      // Only induction shadows get a dormant profile page.
+      personId: tracked?.status === "induction" ? tracked.id ?? null : null,
     };
   });
 }

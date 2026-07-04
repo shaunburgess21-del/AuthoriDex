@@ -9,7 +9,7 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
-import { ProfileTabs } from "@/components/ProfileTabs";
+import { ProfileTabs, DEFAULT_TABS } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
@@ -42,6 +42,8 @@ import {
   ChevronRight,
   ChevronDown,
   BarChart3,
+  UserPlus,
+  Vote as VoteIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -71,7 +73,9 @@ import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
   getSentimentPollVotedPillStyle,
+  SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
+import { cn } from "@/lib/utils";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -785,6 +789,75 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
   );
 }
 
+/**
+ * Vote-to-induct CTA shown on dormant induction-candidate profiles wherever
+ * trend-score content would normally render. Votes land in the same
+ * induction_votes table as the queue card.
+ */
+function InductionVoteCta({
+  personName,
+  seedVotes,
+  hasVoted,
+  canVote,
+  onVote,
+  testId,
+  className,
+}: {
+  personName: string;
+  seedVotes: number;
+  hasVoted: boolean;
+  canVote: boolean;
+  onVote: () => void;
+  testId: string;
+  className?: string;
+}) {
+  return (
+    <Card
+      className={cn(
+        "p-5 flex flex-col items-center justify-center text-center gap-3 border-cyan-500/30 dark:border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-500/[0.04]",
+        className,
+      )}
+      data-testid={testId}
+    >
+      <p className="text-base font-semibold leading-snug">
+        Want to see {personName} join the leaderboard?
+      </p>
+      <p className="text-xs text-muted-foreground max-w-md">
+        {personName} is an Induction Queue candidate. Trend scores, movement and
+        predictions unlock once the community votes them onto the main leaderboard.
+      </p>
+      {hasVoted ? (
+        <button
+          type="button"
+          disabled
+          className={cn(
+            SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
+            "disabled:opacity-100 disabled:cursor-default max-w-xs",
+          )}
+          data-testid={`${testId}-voted`}
+        >
+          <Check className="h-4 w-4 shrink-0" />
+          <span>Voted to Induct</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onVote}
+          disabled={!canVote}
+          className="group w-full max-w-xs flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid={`${testId}-button`}
+        >
+          <VoteIcon className="h-4 w-4 shrink-0" />
+          <span>Vote to Induct</span>
+        </button>
+      )}
+      <span className="text-xs text-muted-foreground">
+        {seedVotes.toLocaleString("en-US")} induction {seedVotes === 1 ? "vote" : "votes"}
+      </span>
+    </Card>
+  );
+}
+
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
@@ -898,11 +971,27 @@ export default function PersonDetailPage() {
       imageSlug?: string | null;
       categoryRank?: number;
       approvalAvgRating?: number | null;
+      isInductionCandidate?: boolean;
+      inductionCandidateId?: string | null;
+      seedVotes?: number;
     }
   >({
     queryKey: [`/api/trending/${params?.id}`],
     enabled: !!params?.id,
   });
+
+  // Induction candidates get a dormant profile: no trend-score sections or
+  // native predictions, but About / vote cards / curate stay live, and a
+  // "vote to induct" CTA replaces the score tiles.
+  const isInduction = !!person?.isInductionCandidate;
+  const inductionCandidateId = person?.inductionCandidateId ?? null;
+
+  // Predict tab doesn't exist for induction candidates; coerce deep links.
+  useEffect(() => {
+    if (isInduction && activeTab === "predict") {
+      setActiveTab("overview");
+    }
+  }, [isInduction, activeTab]);
 
   const { data: celebrityProfile } = useQuery<{
     shortBio: string;
@@ -939,7 +1028,7 @@ export default function PersonDetailPage() {
 
   const { data: valueMetrics } = useQuery<ValueVoteMetrics>({
     queryKey: ['/api/celebrity', person?.id, 'value-vote'],
-    enabled: isVoteTab && !!person,
+    enabled: isVoteTab && !!person && !isInduction,
   });
 
   // Shared voting data (matchups, sentiment polls, opinion polls) for the Vote tab
@@ -971,6 +1060,72 @@ export default function PersonDetailPage() {
   );
 
   const budget = useAnonBudget();
+
+  // Induction candidate: vote-to-induct CTA (mirrors the queue card flow —
+  // same endpoint, same induction_votes table, same anon-budget gating).
+  const [inductionVotedLocal, setInductionVotedLocal] = useState(false);
+  const { data: myInductionVoteIds } = useQuery<string[]>({
+    queryKey: ["/api/me/induction-votes"],
+    enabled: isInduction && !!user,
+  });
+  const hasVotedToInduct =
+    inductionVotedLocal ||
+    (!!inductionCandidateId && (myInductionVoteIds ?? []).includes(inductionCandidateId));
+
+  const inductionVoteMutation = useMutation({
+    mutationFn: async (candidateId: string) => {
+      const res = await apiRequest("POST", `/api/vote/induction/${candidateId}/vote`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      applyBudgetFromVoteResponse(queryClient, data);
+      queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/trending/${params?.id}`] });
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+    },
+    onError: (err: any, candidateId: string) => {
+      setInductionVotedLocal(false);
+      if (isUnauthorizedApiError(err)) {
+        toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
+      } else if (isBudgetExhaustedVoteError(err)) {
+        navigateToLogin(setLocation, {
+          mode: "signup",
+          reason: "vote_limit_reached",
+          resumeAction: {
+            surfaceType: "induction",
+            targetId: candidateId,
+            cardRoute: window.location.pathname,
+            pendingVote: { intent: "induct" },
+          },
+        });
+      } else {
+        toast.error("Vote failed", { description: err.message || "Something went wrong" });
+      }
+    },
+  });
+
+  const handleInductionVote = () => {
+    if (!inductionCandidateId || hasVotedToInduct) return;
+    const decision = checkVoteGate(budget, "induction", inductionCandidateId, false);
+    if (!decision.proceed) {
+      navigateToLogin(setLocation, {
+        mode: "signup",
+        reason: "vote_limit_reached",
+        resumeAction: {
+          ...decision.resumeAction,
+          cardRoute: window.location.pathname,
+          pendingVote: { intent: "induct" },
+        },
+      });
+      return;
+    }
+    setInductionVotedLocal(true);
+    showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
+    inductionVoteMutation.mutate(inductionCandidateId);
+  };
 
   const matchupVoteMutation = useMutation({
     mutationFn: async ({ matchupId, option }: { matchupId: string; option: "option_a" | "option_b" | "neutral"; previousVote?: string | null }) => {
@@ -1368,7 +1523,7 @@ export default function PersonDetailPage() {
                   {person.category && (
                     <p className="text-lg text-muted-foreground">{person.category}</p>
                   )}
-                  {person.category && person.categoryRank != null && person.categoryRank > 0 && (
+                  {!isInduction && person.category && person.categoryRank != null && person.categoryRank > 0 && (
                     <CategoryRankPill
                       category={person.category}
                       rank={person.categoryRank}
@@ -1379,6 +1534,30 @@ export default function PersonDetailPage() {
               </div>
               <div className="flex flex-row flex-wrap items-center gap-2">
                 <div className="flex flex-row gap-2">
+                  {isInduction ? (
+                    <TouchTooltip
+                      content={
+                        <div className="space-y-1.5 normal-case tracking-normal">
+                          <p className="font-semibold text-sm">Induction Candidate</p>
+                          <p className="text-xs text-muted-foreground">
+                            {person.name} is in the Induction Queue. Vote to help them join the main VoxDex leaderboard.
+                          </p>
+                        </div>
+                      }
+                      side="bottom"
+                      align="start"
+                      contentClassName="max-w-[240px]"
+                      showCloseButton
+                    >
+                      <div
+                        className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-purple-500/15 dark:bg-purple-500/10 border border-purple-500/30 dark:border-purple-500/20 text-purple-600 dark:text-purple-400 font-mono text-xs sm:text-sm font-semibold cursor-help"
+                        data-testid="text-header-induction-badge"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        <span><span className="hidden sm:inline">Induction </span>Candidate</span>
+                      </div>
+                    </TouchTooltip>
+                  ) : (
                   <TouchTooltip
                     content={
                       <div className="space-y-1.5 normal-case tracking-normal">
@@ -1401,6 +1580,7 @@ export default function PersonDetailPage() {
                       <span><span className="hidden sm:inline">Overall </span>{person.rank ? `#${person.rank}` : 'New'}</span>
                     </div>
                   </TouchTooltip>
+                  )}
                 </div>
                 <div className="flex flex-row gap-2">
                   <Button
@@ -1437,8 +1617,20 @@ export default function PersonDetailPage() {
           </div>
         </div>
 
-        {/* 2. Stats Cards */}
+        {/* 2. Stats Cards (trend tiles are replaced by the induction CTA for queue candidates) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {isInduction ? (
+            <InductionVoteCta
+              personName={person.name}
+              seedVotes={person.seedVotes ?? 0}
+              hasVoted={hasVotedToInduct}
+              canVote={!!inductionCandidateId}
+              onVote={handleInductionVote}
+              testId="induction-cta-stats"
+              className="col-span-2 md:col-span-3"
+            />
+          ) : (
+            <>
           <Card className="text-center p-4">
             <div className="flex items-center justify-center gap-1 mb-1">
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
@@ -1466,6 +1658,8 @@ export default function PersonDetailPage() {
               <TrendBadge value={person.change7d} />
             </div>
           </Card>
+            </>
+          )}
           <Card className="text-center p-4">
             <div className="flex items-center justify-center gap-1 mb-1">
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
@@ -1497,7 +1691,12 @@ export default function PersonDetailPage() {
         className="sticky top-14 z-10 w-full bg-background border-b border-border/50 shadow-sm py-2"
       >
         <div className="container mx-auto max-w-6xl px-2 sm:px-4">
-          <ProfileTabs activeTab={activeTab} onTabChange={handleTabChange} noBottomMargin />
+          <ProfileTabs
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            noBottomMargin
+            tabs={isInduction ? DEFAULT_TABS.filter((t) => t.id !== "predict") : undefined}
+          />
         </div>
       </div>
 
@@ -1508,6 +1707,22 @@ export default function PersonDetailPage() {
           <>
             <InlineCelebrityBio personId={person.id} personName={person.name} />
 
+            {isInduction ? (
+              /* Dormant profile: trend chart / why-trending / attention signals
+                 are score-driven, so the induction CTA stands in for them. */
+              <div className="mb-8">
+                <InductionVoteCta
+                  personName={person.name}
+                  seedVotes={person.seedVotes ?? 0}
+                  hasVoted={hasVotedToInduct}
+                  canVote={!!inductionCandidateId}
+                  onVote={handleInductionVote}
+                  testId="induction-cta-overview"
+                  className="py-8"
+                />
+              </div>
+            ) : (
+              <>
             <div className="flex justify-end mb-2">
               <a
                 href="#momentum-signals"
@@ -1534,6 +1749,8 @@ export default function PersonDetailPage() {
             <Suspense fallback={<ProfileLazyFallback />}>
               <LazyMomentumSignals personId={person.id} wikiSlug={person.wikiSlug} />
             </Suspense>
+              </>
+            )}
           </>
         )}
 
@@ -1704,7 +1921,8 @@ export default function PersonDetailPage() {
               </section>
             )}
 
-            {/* Underrated / Overrated Section */}
+            {/* Underrated / Overrated Section — trend-rank framed, hidden for induction candidates */}
+            {!isInduction && (
             <section className="mb-10">
               <UnifiedSectionHeader
                 title="Underrated / Overrated"
@@ -1720,6 +1938,7 @@ export default function PersonDetailPage() {
                 </div>
               )}
             </section>
+            )}
 
             {/* Curate the Profile Section */}
             <section className="mb-10">
@@ -1793,8 +2012,8 @@ export default function PersonDetailPage() {
           </>
         )}
 
-        {/* PREDICT TAB */}
-        {activeTab === "predict" && (
+        {/* PREDICT TAB — native predictions are trend-score linked, so no Predict tab for induction candidates */}
+        {activeTab === "predict" && !isInduction && (
           <Suspense fallback={<ProfileLazyFallback minHeight="320px" />}>
             <LazyPredictTab
               personId={person.id}
@@ -1808,8 +2027,9 @@ export default function PersonDetailPage() {
 
         {/* Tab-agnostic: rendered once below both tab bodies so the
             "previous / next on the leaderboard" jump is reachable
-            regardless of which tab the user lands on. */}
-        <PersonNeighbourNav personId={person.id} />
+            regardless of which tab the user lands on. Induction candidates
+            aren't on the leaderboard, so there's nothing to jump to. */}
+        {!isInduction && <PersonNeighbourNav personId={person.id} />}
         </div>
         </div>
 

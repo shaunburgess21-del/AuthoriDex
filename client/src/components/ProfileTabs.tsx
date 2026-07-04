@@ -20,7 +20,7 @@ interface ProfileTabsProps {
   tabs?: ProfileTab[];
 }
 
-const DEFAULT_TABS: ProfileTab[] = [
+export const DEFAULT_TABS: ProfileTab[] = [
   { id: "overview", label: "Overview", icon: Eye, accent: "#3C83F6" },
   { id: "vote", label: "Vote", icon: Vote, accent: "#22D3EE" },
   { id: "predict", label: "Predict", icon: TrendingUp, accent: "#8B5CF6" },

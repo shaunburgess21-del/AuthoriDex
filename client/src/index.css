@@ -1289,6 +1289,12 @@ textarea:-webkit-autofill:active {
  * Selector shape — verified against Sonner's bundled `dist/styles.css`:
  * the leading `html` bumps specificity above Sonner's per-state rules
  * (including richColors backgrounds) regardless of CSS import order. */
+html [data-sonner-toaster] {
+  /* Sonner ships a hardcoded ui-sans-serif stack that omits VoxGlyph; on
+   * iOS that makes Ꝟ (U+A75E) render as Apple's Last Resort lines. */
+  font-family: var(--font-sans);
+}
+
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
   background: hsl(var(--background) / 0.72);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
@@ -1370,10 +1376,20 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
 
 /* Vote-type icon chip (see client/src/lib/vote-toast.tsx) — let the chip
  * define the icon slot size instead of Sonner's fixed 16px box. */
+[data-sonner-toast].vd-toast {
+  --toast-icon-margin-start: 0;
+  --toast-icon-margin-end: 10px;
+  gap: 12px;
+  align-items: flex-start;
+}
+
 [data-sonner-toast].vd-toast [data-icon] {
   height: auto;
   width: auto;
-  margin: 0 2px 0 0;
+  min-width: 2.25rem;
+  margin: 0;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 /* Custom toasts (StreakToast, BadgeToast) set their own width; without

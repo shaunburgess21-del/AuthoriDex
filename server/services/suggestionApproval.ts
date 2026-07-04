@@ -18,6 +18,7 @@ import {
 } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { applyInductionMatchupSideLinksFromDb } from "./matchup-person-link";
+import { syncInductionCandidateToShadowTrackedPerson } from "./induction-sync";
 
 // ---------------------------------------------------------------------------
 // Canonical content-type labels written to suggestions.approved_as_type.
@@ -587,6 +588,17 @@ export async function dispatchApproval(
           isActive: p.isActive,
         })
         .returning();
+
+      // Keep the tracked_people induction shadow in sync (matches the admin
+      // create route) so the candidate gets a dormant /person/:id profile page.
+      try {
+        await syncInductionCandidateToShadowTrackedPerson(created);
+      } catch (err: any) {
+        console.error(
+          `[SuggestionApproval] Shadow sync failed for induction candidate ${created.displayName}:`,
+          err?.message ?? err,
+        );
+      }
 
       await db.insert(adminAuditLog).values({
         adminId,

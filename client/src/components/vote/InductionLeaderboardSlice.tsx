@@ -7,7 +7,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Vote, Crown, Check, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
@@ -27,6 +27,8 @@ export interface InductionCandidate {
   avatar?: string | null;
   category: string;
   votes: number;
+  /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
+  personId?: string | null;
 }
 
 function getRankBadgeStyle(rank: number) {
@@ -101,9 +103,19 @@ function InductionCandidateRow({
       </div>
       
       <div className="relative shrink-0">
-        <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
+        {candidate.personId ? (
+          <Link
+            href={`/person/${candidate.personId}`}
+            aria-label={`View ${candidate.name}'s profile`}
+            className="block"
+          >
+            <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
+          </Link>
+        ) : (
+          <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" size="sm" />
+        )}
         {isVoted && (
-          <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
+          <div className={`absolute -top-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center pointer-events-none ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS}`}>
             <Check className="h-2.5 w-2.5 text-white" />
           </div>
         )}
@@ -111,7 +123,16 @@ function InductionCandidateRow({
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <p className="font-semibold text-sm truncate">{candidate.name}</p>
+          {candidate.personId ? (
+            <Link
+              href={`/person/${candidate.personId}`}
+              className="font-semibold text-sm truncate hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+            >
+              {candidate.name}
+            </Link>
+          ) : (
+            <p className="font-semibold text-sm truncate">{candidate.name}</p>
+          )}
           <CategoryPill category={candidate.category} />
         </div>
         <div className="flex items-center gap-2">
@@ -216,6 +237,7 @@ export function InductionLeaderboardSlice({
     avatar: c.avatar ?? null,
     category: c.category as InductionCandidate['category'],
     votes: c.seedVotes,
+    personId: c.personId ?? null,
   }));
 
   const resolvedCandidates = candidates || dbCandidates;
