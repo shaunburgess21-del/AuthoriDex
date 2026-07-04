@@ -43,7 +43,7 @@ async function seedXpActions() {
 
     // Content Creation Actions
     { actionKey: 'post_insight', displayName: 'Post Insight', xpValue: 50, dailyCap: 5, description: 'Post a community insight' },
-    { actionKey: 'post_comment', displayName: 'Post Comment', xpValue: 15, dailyCap: 10, description: 'Comment on an insight (min 20 chars, not on own insight, cap 10/day)' },
+    { actionKey: 'post_comment', displayName: 'Post Comment', xpValue: 15, dailyCap: 10, description: 'Comment on any discussion thread (min 20 chars, cap 10/day)' },
     { actionKey: 'submit_suggestion', displayName: 'Submit Suggestion', xpValue: 5, dailyCap: 3, description: 'Earn XP for submitting content suggestions for admin review' },
     { actionKey: 'suggestion_approved', displayName: 'Suggestion Approved', xpValue: 50, dailyCap: null, description: 'Bonus XP when your suggested content is approved and goes live' },
     // Market suggestions (type === "open_market") carry more
@@ -56,8 +56,8 @@ async function seedXpActions() {
     // path. insight_upvoted is the new author-side reward: when
     // your insight or comment receives an upvote, you (the
     // author) earn a small bounty, capped per author per day.
-    { actionKey: 'upvote_insight', displayName: 'Upvote Insight', xpValue: 5, dailyCap: 10, description: 'Upvote a community insight or comment' },
-    { actionKey: 'insight_upvoted', displayName: 'Insight Upvoted', xpValue: 20, dailyCap: 10, description: 'Earned when your insight or comment receives an upvote from another VoxMaxxer' },
+    { actionKey: 'upvote_insight', displayName: 'Upvote a Post', xpValue: 5, dailyCap: 10, description: 'Upvote an insight or comment' },
+    { actionKey: 'insight_upvoted', displayName: 'Your Post Gets Upvoted', xpValue: 20, dailyCap: 10, description: 'Earned when your insight or comment receives an upvote from another VoxMaxxer' },
 
     // Prediction Actions
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },

@@ -77,7 +77,7 @@ interface AdjustCreditsResult {
   message: string;
 }
 
-interface XpAction {
+export interface XpAction {
   id: number;
   actionKey: string;
   displayName: string;
@@ -85,6 +85,16 @@ interface XpAction {
   dailyCap: number | null;
   description: string | null;
   isActive: boolean;
+}
+
+/** Shape of GET /api/gamification/credit-actions (active rows only). */
+export interface LiveCreditAction {
+  key: string;
+  label: string;
+  proposedCredits: number;
+  dailyCap: number | null;
+  category: string;
+  notes: string | null;
 }
 
 interface DailySummary {
@@ -156,6 +166,17 @@ export function useDailySummary(enabled: boolean = true) {
 export function useXpActions() {
   return useQuery<XpAction[]>({
     queryKey: ['/api/gamification/xp-actions'],
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Live credit (Vox) action rates. Powers the live earn tables on
+ * /how-it-works so admin edits reflect without a redeploy.
+ */
+export function useCreditActions() {
+  return useQuery<LiveCreditAction[]>({
+    queryKey: ['/api/gamification/credit-actions'],
     staleTime: 5 * 60 * 1000,
   });
 }

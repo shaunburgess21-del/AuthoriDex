@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { profiles, xpActions } from "@shared/schema";
+import { creditActions, profiles, xpActions } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import { gamificationService } from "../services/gamification";
 import { awardStreakMilestoneBadge } from "../services/badges";
@@ -120,6 +120,30 @@ export function registerGamificationRoutes(app: Express): void {
     } catch (error: any) {
       console.error("Error fetching XP actions:", error?.message);
       res.status(500).json({ error: "Failed to fetch XP actions" });
+    }
+  });
+
+  // Public list of active credit (Vox) actions — powers the live earn
+  // tables on /how-it-works so admin rate edits reflect without a
+  // redeploy. Display-only fields; the admin CRUD endpoint stays gated.
+  app.get("/api/gamification/credit-actions", async (_req, res) => {
+    try {
+      const actions = await db
+        .select({
+          key: creditActions.key,
+          label: creditActions.label,
+          proposedCredits: creditActions.proposedCredits,
+          dailyCap: creditActions.dailyCap,
+          category: creditActions.category,
+          notes: creditActions.notes,
+        })
+        .from(creditActions)
+        .where(eq(creditActions.isActive, true));
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(actions);
+    } catch (error: any) {
+      console.error("Error fetching credit actions:", error?.message);
+      res.status(500).json({ error: "Failed to fetch credit actions" });
     }
   });
 

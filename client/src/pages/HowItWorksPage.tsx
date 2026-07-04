@@ -30,7 +30,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { useUserStats } from "@/hooks/useGamification";
+import {
+  useUserStats,
+  useXpActions,
+  useCreditActions,
+} from "@/hooks/useGamification";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -143,6 +147,59 @@ function KnowledgeTabsBar({
 
 function accentFor(id: KnowledgeTabId): string {
   return KNOWLEDGE_TABS.find((tab) => tab.id === id)!.accent;
+}
+
+/**
+ * XP action rows with live DB values overlaid on the static catalogue.
+ * Static config renders instantly and provides labels/categories; once
+ * /api/gamification/xp-actions loads, xpValue/dailyCap reflect admin
+ * edits from the Gamification CMS. Rows the admin has deactivated are
+ * dropped (the endpoint returns active rows only), matching what users
+ * can actually earn at runtime.
+ */
+function useLiveXpActionRows(): XpActionRow[] {
+  const { data } = useXpActions();
+  return useMemo(() => {
+    if (!data || data.length === 0) return XP_ACTIONS;
+    const live = new Map(data.map((a) => [a.actionKey, a]));
+    return XP_ACTIONS.filter(
+      // Special rows (admin bookkeeping, 0 XP) aren't in the earn
+      // tables — keep them regardless so audit views don't break.
+      (row) => live.has(row.actionKey) || row.category === "Special",
+    ).map((row) => {
+      const l = live.get(row.actionKey);
+      return l ? { ...row, xpValue: l.xpValue, dailyCap: l.dailyCap } : row;
+    });
+  }, [data]);
+}
+
+/**
+ * Credit (Vox) actions with live DB values overlaid on the static seed
+ * config. Same pattern as useLiveXpActionRows: static fallback for
+ * instant render, live proposedCredits/dailyCap/label once
+ * /api/gamification/credit-actions loads. Actions missing from the
+ * live list (admin-deactivated) are flagged inactive so the earn
+ * tables drop them.
+ */
+function useLiveCreditActionList(): CreditActionConfig[] {
+  const { data } = useCreditActions();
+  return useMemo(() => {
+    if (!data || data.length === 0) return [...CREDIT_ACTIONS];
+    const live = new Map(data.map((a) => [a.key, a]));
+    return CREDIT_ACTIONS.map((a) => {
+      const l = live.get(a.key);
+      return l
+        ? {
+            ...a,
+            label: l.label,
+            proposedCredits: l.proposedCredits,
+            dailyCap: l.dailyCap,
+            notes: l.notes ?? a.notes,
+            isActive: true,
+          }
+        : { ...a, isActive: false };
+    });
+  }, [data]);
 }
 
 /**
@@ -478,21 +535,22 @@ interface XpSectionProps {
 }
 
 function XpSection({ onJumpToTab }: XpSectionProps) {
+  const xpActions = useLiveXpActionRows();
   const grouped = useMemo(() => {
     return USER_FACING_XP_CATEGORIES.map((category) => ({
       category,
-      rows: XP_ACTIONS.filter((row) => row.category === category),
+      rows: xpActions.filter((row) => row.category === category),
     }));
-  }, []);
+  }, [xpActions]);
 
   // "Ways to earn" reflects what the user can actually see on this
   // page — admin-only actions are hidden, so they don't count.
   const userFacingActions = useMemo(
     () =>
-      XP_ACTIONS.filter((row) =>
+      xpActions.filter((row) =>
         USER_FACING_XP_CATEGORIES.includes(row.category),
       ),
-    [],
+    [xpActions],
   );
 
   // Theoretical daily maximum: sum of (xpValue × dailyCap) for every
@@ -930,11 +988,12 @@ function RanksSection() {
 function EarnVoxReferralSlot() {
   const { isLoggedIn } = useAuth();
   const [, navigate] = useLocation();
+  const creditActions = useLiveCreditActionList();
 
   if (isLoggedIn) return <ReferAFriendCard />;
 
   const referralBonus =
-    CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
+    creditActions.find((a) => a.key === "referral_signup_bonus")
       ?.proposedCredits ?? 0;
   const headStart = SIGNUP_CREDIT_GRANT + referralBonus;
 
@@ -1178,7 +1237,8 @@ function engagementRowTestId(action: string, section: string): string {
  * mobile.
  */
 function EngagementEarnBands({ accent }: { accent: string }) {
-  const byKey = new Map(CREDIT_ACTIONS.map((a) => [a.key, a]));
+  const creditActions = useLiveCreditActionList();
+  const byKey = new Map(creditActions.map((a) => [a.key, a]));
 
   return (
     <>
@@ -1272,9 +1332,10 @@ function EngagementEarnBands({ accent }: { accent: string }) {
  * label is "Vox".)
  */
 function CreditEarnTable({ accent }: { accent: string }) {
+  const creditActions = useLiveCreditActionList();
   const grouped = (() => {
     const map = new Map<CreditCategory, CreditActionConfig[]>();
-    for (const action of CREDIT_ACTIONS) {
+    for (const action of creditActions) {
       if (!action.isActive) continue;
       if (action.category === CREDIT_CATEGORIES.SPECIAL) continue;
       const list = map.get(action.category) ?? [];
@@ -1383,10 +1444,10 @@ function CreditEarnTable({ accent }: { accent: string }) {
         // award amounts (no more "500/2,000" magic numbers drifting from
         // the live values).
         const referralReward =
-          CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
+          creditActions.find((a) => a.key === "referral_completed")
             ?.proposedCredits ?? 0;
         const referralBonus =
-          CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
+          creditActions.find((a) => a.key === "referral_signup_bonus")
             ?.proposedCredits ?? 0;
         const headStart = SIGNUP_CREDIT_GRANT + referralBonus;
         return (
@@ -1627,16 +1688,18 @@ function VoteSection({
   onJumpToTab: (tab: KnowledgeTabId) => void;
 }) {
   const accent = accentFor("vote");
-  // Live values from the canonical configs so a future seed change
-  // (XP rebalance, vote_any credit bump) flows through automatically.
-  const voteCreditAction = CREDIT_ACTIONS.find((a) => a.key === "vote_any");
-  const submitSuggestionXp = XP_ACTIONS.find(
+  // Live values (DB overlay on the canonical configs) so admin edits
+  // in the Gamification CMS flow through automatically.
+  const xpActions = useLiveXpActionRows();
+  const creditActions = useLiveCreditActionList();
+  const voteCreditAction = creditActions.find((a) => a.key === "vote_any");
+  const submitSuggestionXp = xpActions.find(
     (a) => a.actionKey === "submit_suggestion",
   );
-  const suggestionApprovedXp = XP_ACTIONS.find(
+  const suggestionApprovedXp = xpActions.find(
     (a) => a.actionKey === "suggestion_approved",
   );
-  const suggestionApprovedCredits = CREDIT_ACTIONS.find(
+  const suggestionApprovedCredits = creditActions.find(
     (a) => a.key === "suggestion_approved",
   );
   return (
@@ -1682,7 +1745,7 @@ function VoteSection({
             </thead>
             <tbody>
               {VOTE_SURFACES.map((row) => {
-                const xp = XP_ACTIONS.find(
+                const xp = xpActions.find(
                   (action) => action.actionKey === row.xpActionKey,
                 );
                 return (
@@ -1773,16 +1836,18 @@ function PredictSection({
   onJumpToTab: (tab: KnowledgeTabId) => void;
 }) {
   const accent = accentFor("predict");
-  // Live values from the catalogue. predictionWinXp drives the "+100 XP"
-  // bullet copy below so a future rebalance flows through automatically.
-  const predictionWinXp = XP_ACTIONS.find(
+  // Live values (DB overlay). predictionWinXp drives the "+100 XP"
+  // bullet copy below so admin rebalances flow through automatically.
+  const xpActions = useLiveXpActionRows();
+  const creditActions = useLiveCreditActionList();
+  const predictionWinXp = xpActions.find(
     (a) => a.actionKey === "prediction_win",
   );
   // Vox reads for the surface-level Vox column. We hardcode the
   // row→action mapping (not data-driven from PREDICT_SURFACES) because
   // place_prediction has no credit row by design — it costs Vox,
   // doesn't earn it.
-  const marketSuggestionCredits = CREDIT_ACTIONS.find(
+  const marketSuggestionCredits = creditActions.find(
     (a) => a.key === "market_suggestion_approved",
   );
 
@@ -1877,7 +1942,7 @@ function PredictSection({
             </thead>
             <tbody>
               {PREDICT_SURFACES.map((row) => {
-                const xp = XP_ACTIONS.find(
+                const xp = xpActions.find(
                   (action) => action.actionKey === row.xpActionKey,
                 );
                 return (

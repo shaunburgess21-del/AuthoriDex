@@ -98,13 +98,13 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "vote_opinion", displayName: "Opinion Poll Vote", xpValue: 20, dailyCap: 20, description: "Vote on an opinion poll", category: "Voting" },
 
   { actionKey: "post_insight", displayName: "Post Insight", xpValue: 50, dailyCap: 5, description: "Post a community insight", category: "Content" },
-  { actionKey: "post_comment", displayName: "Post Comment", xpValue: 15, dailyCap: 10, description: "Comment on an insight (min 20 chars, not on own insight)", category: "Content" },
+  { actionKey: "post_comment", displayName: "Post Comment", xpValue: 15, dailyCap: 10, description: "Comment on any discussion thread (min 20 chars)", category: "Content" },
   { actionKey: "submit_suggestion", displayName: "Submit Suggestion", xpValue: 5, dailyCap: 3, description: "Submit content suggestions for admin review", category: "Content" },
   { actionKey: "suggestion_approved", displayName: "Suggestion Approved", xpValue: 50, dailyCap: null, description: "Bonus when a suggestion is approved and goes live", category: "Content" },
   { actionKey: "market_suggestion_approved", displayName: "Market Suggestion Approved", xpValue: 100, dailyCap: null, description: "Bonus when a suggested world/open market is approved and published", category: "Content" },
 
-  { actionKey: "upvote_insight", displayName: "Upvote Insight", xpValue: 5, dailyCap: 10, description: "Upvote a community insight or comment", category: "Engagement" },
-  { actionKey: "insight_upvoted", displayName: "Insight Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxxer", category: "Engagement" },
+  { actionKey: "upvote_insight", displayName: "Upvote a Post", xpValue: 5, dailyCap: 10, description: "Upvote an insight or comment", category: "Engagement" },
+  { actionKey: "insight_upvoted", displayName: "Your Post Gets Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxxer", category: "Engagement" },
 
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
   { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour", category: "Prediction" },
