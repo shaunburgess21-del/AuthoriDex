@@ -17,7 +17,7 @@ import {
   syncInductionGalleryForPerson,
 } from "./lib/inductionGalleryStorage";
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
-import { handleMulterUploadErrors } from "./lib/multerUploadErrors";
+import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
@@ -26915,7 +26915,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     "/api/suggestions/upload-image",
     requireAuth,
     suggestionImageUpload.single("file"),
-    handleMulterUploadErrors,
+    multerUploadErrorHandler("2 MB"),
     async (req: AuthRequest, res: Response) => {
       try {
         const file = req.file;

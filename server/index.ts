@@ -103,6 +103,12 @@ function gracefulShutdown(signal: string) {
     // Destroy idle keep-alive sockets so close() isn't held open by them;
     // sockets with in-flight requests are left alone until they finish.
     httpServer.closeIdleConnections?.();
+    if (process.env.NODE_ENV !== "production") {
+      // Dev only: Vite's HMR WebSocket counts as an active connection and
+      // would hold close() open for the whole grace window on every Ctrl+C.
+      // There's no real traffic to drain locally, so drop everything.
+      httpServer.closeAllConnections?.();
+    }
   } else {
     finish();
   }

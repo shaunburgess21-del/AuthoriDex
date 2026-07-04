@@ -253,6 +253,30 @@ class GamificationService {
         };
       }
 
+      // Same lost-update guard as adjustCredits: the absolute
+      // `xpPoints = newTotalXp` write below needs the row locked from
+      // read to commit, or concurrent awards clobber each other. Locked
+      // BEFORE the daily-cap count so concurrent awards serialize and
+      // the count stays accurate (mirrors adjustCredits' ordering).
+      const [profile] = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1)
+        .for("update");
+
+      if (!profile) {
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: 0,
+          newRank: null,
+          dailyCount: 0,
+          dailyCap: action.dailyCap,
+          message: "User profile not found",
+        };
+      }
+
       const dailyCountResult = await tx.select({
         count: sql<number>`count(*)`
       })
@@ -264,19 +288,6 @@ class GamificationService {
       ));
 
       const dailyCount = Number(dailyCountResult[0]?.count || 0);
-      const [profile] = await tx.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
-
-      if (!profile) {
-        return {
-          success: false,
-          xpAwarded: 0,
-          newTotalXp: 0,
-          newRank: null,
-          dailyCount,
-          dailyCap: action.dailyCap,
-          message: "User profile not found",
-        };
-      }
 
       if (action.dailyCap !== null && dailyCount >= action.dailyCap) {
         return {
