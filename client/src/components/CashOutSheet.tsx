@@ -152,6 +152,16 @@ export function CashOutSheet({
   const pnlClass = (v: number) =>
     v >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500";
 
+  // "I'm winning, why don't I profit?" education. When the live price
+  // sits within ~2pp of the user's avg entry, cashing out nets roughly
+  // breakeven minus the spread — which surprises anyone who bought a
+  // favorite that stayed a favorite. Only shown for the flat case;
+  // clearly-up or clearly-down positions don't need the lesson.
+  const isFlatVsEntry =
+    entryPrice != null &&
+    selection.avgEntryPrice > 0 &&
+    Math.abs(entryPrice - selection.avgEntryPrice) < 0.02;
+
   const handleConfirm = async () => {
     if (submitting || sharesToSell <= 0) return;
     const minPricePerShare =
@@ -374,6 +384,16 @@ export function CashOutSheet({
                   </PopoverContent>
                 </Popover>
               </div>
+            )}
+
+            {quote && isFlatVsEntry && (
+              <p
+                className="text-[10px] text-muted-foreground leading-snug border-t border-violet-500/15 pt-1.5"
+                data-testid="text-cashout-flat-entry-hint"
+              >
+                Your entry price matches the market — profit from cashing out
+                comes when the odds move further in your favor after you buy.
+              </p>
             )}
 
             {quote && (
