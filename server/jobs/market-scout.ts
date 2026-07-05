@@ -480,7 +480,13 @@ async function insertScoutedDraft(
         category,
         secondaryCategories,
         coverImageUrl: candidate.image || null,
-        sourceUrl: candidate.url,
+        // Public source link deliberately left empty — the market page
+        // renders `sourceUrl` to users, and VoxDex markets shouldn't ship
+        // with a Polymarket link by default. The URL lives on in
+        // metadata.source.url (admin provenance chip, resolution watcher),
+        // and the edit modal offers a one-click fill for admins who DO
+        // want it public.
+        sourceUrl: null,
         featured: false,
         timezone: "UTC",
         startAt: new Date(),

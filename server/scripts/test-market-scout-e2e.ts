@@ -145,6 +145,9 @@ async function main() {
     // gameStartTime is always recorded now (value may be null when the source
     // has no kickoff), proving the provider -> scout plumbing is wired.
     ["metadata.source.gameStartTime key present", meta?.source != null && "gameStartTime" in meta.source],
+    // Public source link ships empty; provenance lives in metadata.source.url.
+    ["sourceUrl empty by default", market.sourceUrl == null],
+    ["metadata.source.url set", typeof meta?.source?.url === "string" && meta.source.url.length > 0],
   ];
 
   // closeAt must sit before endAt and match EITHER the default AMM cutoff

@@ -763,13 +763,38 @@ export function CreateMarketModal({
           </div>
 
           <div className="space-y-2">
-            <Label>Source URL (optional)</Label>
+            <div className="flex items-center justify-between">
+              <Label>Source URL (optional)</Label>
+              {(() => {
+                // Scouted markets keep the origin URL in metadata.source.url
+                // (provenance only). The public sourceUrl field ships empty by
+                // default; this one-click fill is for admins who DO want the
+                // source shown on the market page.
+                const scoutUrl = editMarket?.metadata?.source?.url;
+                if (typeof scoutUrl !== "string" || !scoutUrl || sourceUrl === scoutUrl) return null;
+                return (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-sky-600 dark:text-sky-400"
+                    onClick={() => setSourceUrl(scoutUrl)}
+                    data-testid="button-use-scout-source-url"
+                  >
+                    Use Polymarket link
+                  </Button>
+                );
+              })()}
+            </div>
             <Input 
               value={sourceUrl} 
               onChange={(e) => setSourceUrl(e.target.value)} 
               placeholder="https://..."
               data-testid="input-market-source-url"
             />
+            <p className="text-xs text-muted-foreground">
+              Shown to users as a source link on the market page. Leave empty to hide.
+            </p>
           </div>
 
           <div className="space-y-2">
