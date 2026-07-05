@@ -52,6 +52,7 @@ export function AdminUnderratedOverrated() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/underrated'] });
     },
+    onError: () => toast.error("Visibility Update Failed", { description: "The card's visibility was not changed — try again." }),
   });
 
   const cards = data?.data || [];

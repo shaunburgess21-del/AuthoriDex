@@ -164,7 +164,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
 import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
-import { formatDate } from "@/lib/formatDate";
+import { formatDate, formatTimeAgo } from "@/lib/formatDate";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { AdminCategoryMultiSelect } from "@/components/admin/AdminCategoryMultiSelect";
@@ -301,7 +301,14 @@ export default function AdminDashboard() {
   // header "Credit Drift" tile click; also toggleable via a chip in
   // the Users tab header.
   const [userFilter, setUserFilter] = useState<"all" | "drift">("all");
-  const [userCreatedSort, setUserCreatedSort] = useState<"newest" | "oldest">("newest");
+  const [userSort, setUserSort] = useState<
+    "created_desc" | "created_asc" | "last_active" | "credits" | "xp"
+  >("created_desc");
+  // Server-side list filters: humans (default — hides the ~56 sim
+  // agents + house), banned-only, recently-active windows.
+  const [userKindFilter, setUserKindFilter] = useState<"humans" | "agents" | "all">("humans");
+  const [userStatusFilter, setUserStatusFilter] = useState<"all" | "banned">("all");
+  const [userActiveFilter, setUserActiveFilter] = useState<"any" | "7d" | "30d">("any");
   const [userPage, setUserPage] = useState(1);
   const [debouncedUserSearch, setDebouncedUserSearch] = useState("");
   const [reconcileDriftTarget, setReconcileDriftTarget] = useState<UserProfile | null>(null);
@@ -323,6 +330,16 @@ export default function AdminDashboard() {
   const [banUserTarget, setBanUserTarget] = useState<UserProfile | null>(null);
   const [banUserReason, setBanUserReason] = useState("");
   const [banUserConfirmText, setBanUserConfirmText] = useState("");
+  // Confirm guard for the native-market Settle / Delete icon buttons —
+  // they used to fire instantly, and both are irreversible (settle pays
+  // out users; delete removes the market).
+  const [confirmNativeAction, setConfirmNativeAction] = useState<
+    { kind: "settle" | "delete"; id: string; title?: string | null } | null
+  >(null);
+  const [showUnbanUserModal, setShowUnbanUserModal] = useState(false);
+  const [unbanUserTarget, setUnbanUserTarget] = useState<UserProfile | null>(null);
+  const [unbanUserReason, setUnbanUserReason] = useState("");
+  const [unbanUserConfirmText, setUnbanUserConfirmText] = useState("");
   
   const [showZeroNewsPeople, setShowZeroNewsPeople] = useState(false);
   const [showSkippedRuns, setShowSkippedRuns] = useState(false);
@@ -521,8 +538,6 @@ export default function AdminDashboard() {
   // When `userFilter === "drift"` we swap in /api/admin/credit-drift-users
   // which returns the same UserProfile shape plus `drift` + `ledgerSum`
   // for inline display and the Reconcile action.
-  const userListSortParam = userCreatedSort === "newest" ? "created_desc" : "created_asc";
-
   useEffect(() => {
     const t = setTimeout(() => setDebouncedUserSearch(searchQuery.trim()), 300);
     return () => clearTimeout(t);
@@ -530,7 +545,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     setUserPage(1);
-  }, [debouncedUserSearch, userFilter, userCreatedSort]);
+  }, [debouncedUserSearch, userFilter, userSort, userKindFilter, userStatusFilter, userActiveFilter]);
 
   const { data: usersList, isLoading: usersLoading } = useQuery<AdminUsersListResponse>({
     queryKey: [
@@ -538,7 +553,10 @@ export default function AdminDashboard() {
       userFilter,
       debouncedUserSearch,
       userPage,
-      userListSortParam,
+      userSort,
+      userKindFilter,
+      userStatusFilter,
+      userActiveFilter,
     ],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -547,7 +565,10 @@ export default function AdminDashboard() {
       });
       if (debouncedUserSearch) params.set("search", debouncedUserSearch);
       if (userFilter !== "drift") {
-        params.set("sort", userListSortParam);
+        params.set("sort", userSort);
+        params.set("kind", userKindFilter);
+        if (userStatusFilter !== "all") params.set("status", userStatusFilter);
+        if (userActiveFilter !== "any") params.set("active", userActiveFilter);
       }
       const base =
         userFilter === "drift"
@@ -1152,6 +1173,32 @@ export default function AdminDashboard() {
     },
     onError: (error: any) => {
       toast.error("Ban Failed", { description: error.message });
+    },
+  });
+
+  // Unban user mutation — mirror of ban, restores role to plain 'user'.
+  const unbanUserMutation = useMutation({
+    mutationFn: async (params: { userId: string; reason: string }) => {
+      const res = await fetchWithAuth("/api/admin/unban-user", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to unban user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast("User Unbanned", { description: "User access has been restored" });
+      setShowUnbanUserModal(false);
+      setUnbanUserTarget(null);
+      setUnbanUserReason("");
+      setUnbanUserConfirmText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+    onError: (error: any) => {
+      toast.error("Unban Failed", { description: error.message });
     },
   });
 
@@ -2138,6 +2185,21 @@ export default function AdminDashboard() {
     banUserMutation.mutate({
       userId: banUserTarget.id,
       reason: banUserReason.trim(),
+    });
+  };
+
+  const openUnbanUserModal = (user: UserProfile) => {
+    setUnbanUserTarget(user);
+    setUnbanUserReason("");
+    setUnbanUserConfirmText("");
+    setShowUnbanUserModal(true);
+  };
+
+  const handleUnbanUser = () => {
+    if (!unbanUserTarget || unbanUserConfirmText !== "UNBAN" || !unbanUserReason.trim()) return;
+    unbanUserMutation.mutate({
+      userId: unbanUserTarget.id,
+      reason: unbanUserReason.trim(),
     });
   };
 
@@ -3747,7 +3809,7 @@ export default function AdminDashboard() {
                                   </SelectContent>
                                 </Select>
                                 <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
                               </div>
                             </div>
                           ))}
@@ -3854,7 +3916,7 @@ export default function AdminDashboard() {
                                   </SelectContent>
                                 </Select>
                                 <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -3922,8 +3984,8 @@ export default function AdminDashboard() {
                                   </SelectContent>
                                 </Select>
                                 <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -3997,8 +4059,8 @@ export default function AdminDashboard() {
                                   </SelectContent>
                                 </Select>
                                 <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => settleNativeMarketMutation.mutate({ id: market.id })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => deleteNativeMarketMutation.mutate(market.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
+                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                               </div>
                             </div>
                           ))}
@@ -5524,7 +5586,7 @@ export default function AdminDashboard() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by username..."
+                  placeholder="Search username, email, or user ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -5544,19 +5606,76 @@ export default function AdminDashboard() {
               </Button>
               {userFilter !== "drift" && (
                 <Select
-                  value={userCreatedSort}
-                  onValueChange={(v) => setUserCreatedSort(v as "newest" | "oldest")}
+                  value={userSort}
+                  onValueChange={(v) => setUserSort(v as typeof userSort)}
                 >
                   <SelectTrigger className="w-[200px]" data-testid="select-user-created-sort">
-                    <SelectValue placeholder="Sort by joined" />
+                    <SelectValue placeholder="Sort" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="newest">Newest accounts first</SelectItem>
-                    <SelectItem value="oldest">Oldest accounts first</SelectItem>
+                    <SelectItem value="created_desc">Newest accounts first</SelectItem>
+                    <SelectItem value="created_asc">Oldest accounts first</SelectItem>
+                    <SelectItem value="last_active">Recently active first</SelectItem>
+                    <SelectItem value="credits">Most Vox first</SelectItem>
+                    <SelectItem value="xp">Most XP first</SelectItem>
                   </SelectContent>
                 </Select>
               )}
             </div>
+
+            {/* Filter chips — server-side kind / banned / active-window
+                filters. Hidden while the drift list is showing (that
+                endpoint has its own fixed filter). */}
+            {userFilter !== "drift" && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {([
+                  { value: "humans" as const, label: "Humans" },
+                  { value: "agents" as const, label: "Agents" },
+                  { value: "all" as const, label: "All accounts" },
+                ]).map((opt) => (
+                  <Button
+                    key={opt.value}
+                    variant={userKindFilter === opt.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setUserKindFilter(opt.value)}
+                    data-testid={`chip-user-kind-${opt.value}`}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+                <div className="w-px h-5 bg-border mx-1" />
+                <Button
+                  variant={userStatusFilter === "banned" ? "default" : "outline"}
+                  size="sm"
+                  className="h-8"
+                  onClick={() =>
+                    setUserStatusFilter(userStatusFilter === "banned" ? "all" : "banned")
+                  }
+                  data-testid="chip-user-status-banned"
+                >
+                  <Ban className="h-3.5 w-3.5 mr-1.5" />
+                  Banned only
+                </Button>
+                <div className="w-px h-5 bg-border mx-1" />
+                {([
+                  { value: "any" as const, label: "Any activity" },
+                  { value: "7d" as const, label: "Active 7d" },
+                  { value: "30d" as const, label: "Active 30d" },
+                ]).map((opt) => (
+                  <Button
+                    key={opt.value}
+                    variant={userActiveFilter === opt.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setUserActiveFilter(opt.value)}
+                    data-testid={`chip-user-active-${opt.value}`}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            )}
 
             <Card>
               <CardHeader>
@@ -5609,6 +5728,16 @@ export default function AdminDashboard() {
                                 <span className="whitespace-nowrap" data-testid={`user-joined-${user.id}`}>
                                   Joined {formatDate(user.createdAt)}
                                 </span>
+                              )}
+                              {user.lastActiveAt && (
+                                <span className="whitespace-nowrap" data-testid={`user-last-active-${user.id}`}>
+                                  Active {formatTimeAgo(user.lastActiveAt)}
+                                </span>
+                              )}
+                              {user.isAgent && (
+                                <Badge variant="outline" className="text-xs border-cyan-500/50 text-cyan-600 dark:text-cyan-400">
+                                  Agent
+                                </Badge>
                               )}
                               {typeof user.drift === "number" && user.drift !== 0 && (
                                 <Badge
@@ -5670,17 +5799,31 @@ export default function AdminDashboard() {
                             <Bell className="h-4 w-4 mr-1" />
                             Notifs
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive"
-                            onClick={() => openBanUserModal(user)}
-                            disabled={user.isBanned || user.role === "admin" || banUserMutation.isPending}
-                            data-testid={`button-ban-${user.id}`}
-                          >
-                            <Ban className="h-4 w-4 mr-1" />
-                            {user.isBanned ? "Banned" : "Ban"}
-                          </Button>
+                          {user.isBanned ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-11 sm:min-h-8 text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:text-emerald-700"
+                              onClick={() => openUnbanUserModal(user)}
+                              disabled={unbanUserMutation.isPending}
+                              data-testid={`button-unban-${user.id}`}
+                            >
+                              <Ban className="h-4 w-4 mr-1" />
+                              Unban
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive"
+                              onClick={() => openBanUserModal(user)}
+                              disabled={user.role === "admin" || banUserMutation.isPending}
+                              data-testid={`button-ban-${user.id}`}
+                            >
+                              <Ban className="h-4 w-4 mr-1" />
+                              Ban
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -7678,6 +7821,122 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 "Confirm Ban"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Native market Settle / Delete confirm */}
+      <Dialog
+        open={confirmNativeAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmNativeAction(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className={confirmNativeAction?.kind === "delete" ? "text-destructive" : undefined}>
+              {confirmNativeAction?.kind === "settle" ? "Settle market now?" : "Delete market?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmNativeAction?.kind === "settle"
+                ? "This resolves the market against current scores and pays out users immediately. It cannot be undone."
+                : "This permanently removes the market and its entries. It cannot be undone."}
+              {confirmNativeAction?.title ? (
+                <>
+                  <br />
+                  Target: {confirmNativeAction.title}
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmNativeAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant={confirmNativeAction?.kind === "delete" ? "destructive" : "default"}
+              disabled={settleNativeMarketMutation.isPending || deleteNativeMarketMutation.isPending}
+              onClick={() => {
+                if (!confirmNativeAction) return;
+                if (confirmNativeAction.kind === "settle") {
+                  settleNativeMarketMutation.mutate({ id: confirmNativeAction.id });
+                } else {
+                  deleteNativeMarketMutation.mutate(confirmNativeAction.id);
+                }
+                setConfirmNativeAction(null);
+              }}
+              data-testid="button-confirm-native-action"
+            >
+              {confirmNativeAction?.kind === "settle" ? "Settle market" : "Delete market"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unban User Modal */}
+      <Dialog open={showUnbanUserModal} onOpenChange={setShowUnbanUserModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unban User</DialogTitle>
+            <DialogDescription>
+              Restores platform access. The user's role returns to "user".
+              <br />
+              Target: {unbanUserTarget?.username || "user"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="unban-user-reason">Reason (required)</Label>
+              <Textarea
+                id="unban-user-reason"
+                value={unbanUserReason}
+                onChange={(e) => setUnbanUserReason(e.target.value)}
+                placeholder="Explain why this user is being unbanned..."
+                data-testid="input-unban-user-reason"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-unban-user">Type "UNBAN" to confirm</Label>
+              <Input
+                id="confirm-unban-user"
+                value={unbanUserConfirmText}
+                onChange={(e) => setUnbanUserConfirmText(e.target.value)}
+                placeholder="UNBAN"
+                data-testid="input-confirm-unban-user"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnbanUserModal(false);
+                setUnbanUserTarget(null);
+                setUnbanUserReason("");
+                setUnbanUserConfirmText("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUnbanUser}
+              disabled={
+                unbanUserMutation.isPending ||
+                !unbanUserTarget ||
+                !unbanUserReason.trim() ||
+                unbanUserConfirmText !== "UNBAN"
+              }
+              data-testid="button-confirm-unban-user"
+            >
+              {unbanUserMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Unbanning...
+                </>
+              ) : (
+                "Confirm Unban"
               )}
             </Button>
           </DialogFooter>

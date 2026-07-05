@@ -65,6 +65,10 @@ export interface UserProfile {
   totalVotes: number;
   totalPredictions: number;
   createdAt: string;
+  /** Last request timestamp from profiles.last_active_at (nullable for dormant accounts). */
+  lastActiveAt?: string | null;
+  /** True for simulation agents and the AMM house profile. */
+  isAgent?: boolean;
   isBanned?: boolean;
   /** Wallet vs ledger drift. Present only on rows returned by
    *  /api/admin/credit-drift-users; absent when the regular

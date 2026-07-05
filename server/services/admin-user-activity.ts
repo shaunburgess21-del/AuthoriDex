@@ -58,6 +58,12 @@ export type AdminUserActivityResult = {
     emailMarketingUnsubscribed: boolean;
     emailMarketingUnsubscribedAt: Date | null;
     emailMarketingUnsubscribeSource: string | null;
+    /** User's own share code ("VX" + 6 chars); null if never generated. */
+    referralCode: string | null;
+    /** Who referred this user (null when organic). */
+    referredBy: { id: string; username: string | null } | null;
+    /** How many users signed up via this user's referral link. */
+    referredCount: number;
   };
   ledgerSum: number;
   drift: number;
@@ -183,6 +189,23 @@ export async function getAdminUserActivityHistory(
     .where(eq(emailUnsubscribeState.userId, userId))
     .limit(1);
 
+  // Referral attribution: who referred this user + how many users they
+  // referred themselves.
+  const [referrerRow, [referredCountRow]] = await Promise.all([
+    profile.referredBy
+      ? db
+          .select({ id: profiles.id, username: profiles.username })
+          .from(profiles)
+          .where(eq(profiles.id, profile.referredBy))
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
+      : Promise.resolve(null),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(profiles)
+      .where(eq(profiles.referredBy, userId)),
+  ]);
+
   return {
     profile: {
       id: profile.id,
@@ -199,6 +222,11 @@ export async function getAdminUserActivityHistory(
       emailMarketingUnsubscribed: Boolean(unsubscribeState),
       emailMarketingUnsubscribedAt: unsubscribeState?.unsubscribedAt ?? null,
       emailMarketingUnsubscribeSource: unsubscribeState?.source ?? null,
+      referralCode: profile.referralCode ?? null,
+      referredBy: referrerRow
+        ? { id: referrerRow.id, username: referrerRow.username }
+        : null,
+      referredCount: Number(referredCountRow?.count ?? 0),
     },
     ledgerSum,
     drift,

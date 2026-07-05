@@ -178,6 +178,9 @@ export function AdminSettlementCenter() {
   const [resolveMarket, setResolveMarket] = useState<PendingMarket | null>(null);
   const [payoutDetailId, setPayoutDetailId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  // Confirm guard: cleanup voids + refunds every stale pending market
+  // in one shot, so it shouldn't fire on a single click.
+  const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(
     typeof document === "undefined" ? true : document.visibilityState !== "hidden",
@@ -293,13 +296,40 @@ export function AdminSettlementCenter() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => cleanupMutation.mutate()}
+              onClick={() => setShowCleanupConfirm(true)}
               disabled={cleanupMutation.isPending}
               data-testid="button-clean-stale-pending"
             >
               {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
               Clean Stale
             </Button>
+            <Dialog open={showCleanupConfirm} onOpenChange={setShowCleanupConfirm}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Clean stale pending markets?</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  This voids every market that has been pending resolution for more than
+                  24 hours and refunds all stakes. It cannot be undone.
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowCleanupConfirm(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setShowCleanupConfirm(false);
+                      cleanupMutation.mutate();
+                    }}
+                    data-testid="button-confirm-clean-stale"
+                  >
+                    Void &amp; refund stale markets
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardHeader>
         <CardContent>

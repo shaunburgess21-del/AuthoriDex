@@ -1171,7 +1171,26 @@ export default function PredictPage() {
     pendingSelection?.marketId,
     pendingSelection?.entryId,
   ]);
-  const [townSquareCollapsed, setTownSquareCollapsed] = useState(true);
+  // Town Square defaults open so new visitors see live activity; the
+  // user's last toggle wins on return visits (persisted per-browser).
+  const [townSquareCollapsed, setTownSquareCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("voxdex-town-square-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleTownSquare = () => {
+    setTownSquareCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("voxdex-town-square-collapsed", next ? "1" : "0");
+      } catch {
+        // localStorage unavailable (private mode) — session-only toggle
+      }
+      return next;
+    });
+  };
   
   const { data: trendingResponse, isLoading: isLoadingPeople, error: trendingError, refetch: refetchTrending } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
@@ -3011,7 +3030,7 @@ export default function PredictPage() {
             <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
               <div
                 className="flex items-center gap-3 cursor-pointer select-none group"
-                onClick={() => setTownSquareCollapsed(!townSquareCollapsed)}
+                onClick={toggleTownSquare}
                 data-testid="town-square-header"
               >
                 <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">

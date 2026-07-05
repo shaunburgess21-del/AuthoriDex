@@ -12,6 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -189,6 +197,16 @@ function bandTone(band: string | undefined): string {
 export function AdminAgentsSection() {
   const queryClient = useQueryClient();
   const [confirmSeed, setConfirmSeed] = useState(false);
+  // Confirm guard for the other destructive cohort controls (archive,
+  // clear-abstained, reset-gate, per-agent clear-pending). Pause
+  // toggles stay instant — they're reversible.
+  const [confirmAgentAction, setConfirmAgentAction] = useState<{
+    kind: "archive" | "clear-abstained" | "reset-gate" | "clear-pending";
+    agentId?: string;
+    title: string;
+    description: string;
+    confirmLabel: string;
+  } | null>(null);
   const [pendingToggleAgentId, setPendingToggleAgentId] = useState<string | null>(null);
   const [pendingClearAgentId, setPendingClearAgentId] = useState<string | null>(null);
   const [dryRunPreview, setDryRunPreview] = useState<DryRunPreview | null>(null);
@@ -926,7 +944,15 @@ export function AdminAgentsSection() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => resetWorldGateMutation.mutate()}
+                  onClick={() =>
+                    setConfirmAgentAction({
+                      kind: "reset-gate",
+                      title: "Reset the world-market re-eval gate?",
+                      description:
+                        "Clears the abstain-cooldown and conviction-window scheduling rows for community markets so every agent re-evaluates them on the next sweep. Bet ledger and P&L are untouched. If LLM mode is ON this can trigger paid OpenAI calls on the next sweep.",
+                      confirmLabel: "Reset gate",
+                    })
+                  }
                   disabled={resetWorldGateMutation.isPending}
                   data-testid="button-reset-world-gate"
                   className="shrink-0"
@@ -1042,7 +1068,15 @@ export function AdminAgentsSection() {
             )}
             <Button
               variant="secondary"
-              onClick={() => archiveMutation.mutate()}
+              onClick={() =>
+                setConfirmAgentAction({
+                  kind: "archive",
+                  title: "Archive all legacy agents?",
+                  description:
+                    "Hides every legacy (pre-V2) agent profile and skips their pending actions. This does not touch V2 agents, but the legacy cohort stops simulating immediately.",
+                  confirmLabel: "Archive legacy agents",
+                })
+              }
               disabled={archiveMutation.isPending}
               data-testid="button-archive-legacy"
             >
@@ -1051,7 +1085,15 @@ export function AdminAgentsSection() {
             </Button>
             <Button
               variant="ghost"
-              onClick={() => clearWorldAbstainedMutation.mutate()}
+              onClick={() =>
+                setConfirmAgentAction({
+                  kind: "clear-abstained",
+                  title: "Clear world-abstained rows?",
+                  description:
+                    "Deletes the abstained scheduling rows for world markets so agents re-evaluate them on the next sweep. If LLM mode is ON this can trigger paid OpenAI calls.",
+                  confirmLabel: "Clear abstained",
+                })
+              }
               disabled={clearWorldAbstainedMutation.isPending}
               data-testid="button-clear-world-abstained"
             >
@@ -1061,6 +1103,52 @@ export function AdminAgentsSection() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Shared confirm for destructive cohort/agent controls */}
+      <Dialog
+        open={confirmAgentAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAgentAction(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmAgentAction?.title}</DialogTitle>
+            <DialogDescription>{confirmAgentAction?.description}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAgentAction(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!confirmAgentAction) return;
+                switch (confirmAgentAction.kind) {
+                  case "archive":
+                    archiveMutation.mutate();
+                    break;
+                  case "clear-abstained":
+                    clearWorldAbstainedMutation.mutate();
+                    break;
+                  case "reset-gate":
+                    resetWorldGateMutation.mutate();
+                    break;
+                  case "clear-pending":
+                    if (confirmAgentAction.agentId) {
+                      clearPendingMutation.mutate(confirmAgentAction.agentId);
+                    }
+                    break;
+                }
+                setConfirmAgentAction(null);
+              }}
+              data-testid="button-confirm-agent-action"
+            >
+              {confirmAgentAction?.confirmLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dry run preview */}
       {dryRunPreview && (
@@ -1297,7 +1385,15 @@ export function AdminAgentsSection() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => clearPendingMutation.mutate(agent.id)}
+                            onClick={() =>
+                              setConfirmAgentAction({
+                                kind: "clear-pending",
+                                agentId: agent.id,
+                                title: `Clear ${agent.username}'s pending actions?`,
+                                description: `Deletes ${pendingCount} queued action${pendingCount === 1 ? "" : "s"} (scheduled bets/comments) for this agent. They will not be executed.`,
+                                confirmLabel: "Clear pending",
+                              })
+                            }
                             disabled={pendingClearAgentId === agent.id || pendingCount === 0}
                             data-testid={`button-clear-pending-${agent.username}`}
                           >

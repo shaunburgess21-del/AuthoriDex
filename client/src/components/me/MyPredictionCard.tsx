@@ -44,6 +44,10 @@ export interface MyPredictionCardData {
   payout: number;
   baselineScore: number;
   currentScore: number;
+  /** Frozen settlement-time score from resolution_notes (settled rows only). */
+  finalScore?: number | null;
+  /** When the bet settled (settled rows only). */
+  settledAt?: string | null;
   betCreatedAt: string;
   personName: string | null;
   personAvatar: string | null;
@@ -165,12 +169,20 @@ export function MyPredictionCard({
   const hidden = prediction.hidden === true;
 
   const direction = inferPredictionDirection(prediction.entryLabel);
-  const delta = (prediction.currentScore || 0) - (prediction.baselineScore || 0);
+  const isResolved = prediction.result === "won" || prediction.result === "lost";
+  // Settled rows show the frozen settlement-time score — the live
+  // currentScore keeps drifting after resolution and can contradict
+  // the recorded result. Falls back to live score for legacy rows
+  // without parsed resolution notes.
+  const displayScore =
+    isResolved && prediction.finalScore != null
+      ? prediction.finalScore
+      : prediction.currentScore;
+  const delta = (displayScore || 0) - (prediction.baselineScore || 0);
   const pctDelta =
     prediction.baselineScore > 0
       ? ((delta / prediction.baselineScore) * 100).toFixed(1)
       : "0";
-  const isResolved = prediction.result === "won" || prediction.result === "lost";
   const isAmm = prediction.engine === "amm";
   const payoutDisplay = isResolved
     ? prediction.payout
@@ -295,7 +307,7 @@ export function MyPredictionCard({
             </span>
             <span>
               {isResolved ? "Close" : "Current"}:{" "}
-              <span className="font-mono text-foreground">{formatScore(prediction.currentScore)}</span>
+              <span className="font-mono text-foreground">{formatScore(displayScore)}</span>
             </span>
             <span
               className={cn(
@@ -329,7 +341,11 @@ export function MyPredictionCard({
             </span>
           )}
           <span className="text-muted-foreground ml-auto">
-            {openMode && prediction.endAt ? formatCountdown(prediction.endAt) : formatDate(prediction.betCreatedAt)}
+            {openMode && prediction.endAt
+              ? formatCountdown(prediction.endAt)
+              : prediction.settledAt
+                ? `Settled ${formatDate(prediction.settledAt)}`
+                : formatDate(prediction.betCreatedAt)}
           </span>
         </div>
 

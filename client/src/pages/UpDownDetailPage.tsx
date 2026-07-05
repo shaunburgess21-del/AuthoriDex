@@ -19,6 +19,8 @@ import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart"
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { SettlementReceipt, type NativeResolution } from "@/components/predict/SettlementReceipt";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -611,6 +613,24 @@ export default function UpDownDetailPage() {
       : "0";
   const firstName = hydrated.personName.split(" ")[0];
 
+  // Settlement receipt data — only present on the /api/markets/:id
+  // nativeDetail fallback path (resolved / past-week markets). Open
+  // markets from the list feed carry status "OPEN" and no resolution.
+  const marketStatus: string | undefined = (market as { status?: string }).status;
+  const isSettled = marketStatus === "RESOLVED" || marketStatus === "VOID";
+  const resolution = ((market as { resolution?: NativeResolution | null }).resolution ?? null);
+  // Settled outcome for the sticky bar: live Winning/Behind state can
+  // contradict the actual result once the market has resolved.
+  const settledPickResult: "won" | "lost" | "refunded" | null = !isSettled
+    ? null
+    : marketStatus === "VOID"
+      ? "refunded"
+      : userPick && resolution?.outcomeLabel
+        ? resolution.outcomeLabel.toLowerCase() === userPick
+          ? "won"
+          : "lost"
+        : null;
+
   return (
     <div className="min-h-screen bg-background pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-24">
       {/* Sticky Header */}
@@ -648,6 +668,20 @@ export default function UpDownDetailPage() {
           engine="amm"
           marketKind="updown"
         />
+
+        {/* Settlement receipt + settled position — resolved/void only */}
+        {isSettled && (
+          <>
+            <SettlementReceipt resolution={resolution} marketStatus={marketStatus} />
+            <MyPositionCard
+              marketId={marketId}
+              marketType="updown"
+              marketStatus={marketStatus}
+              hideCta
+              className="mb-0"
+            />
+          </>
+        )}
 
         {/* Hero */}
         <Card className="relative overflow-hidden border-green-500/30 dark:border-green-500/20">
@@ -1028,6 +1062,26 @@ export default function UpDownDetailPage() {
                 </p>
               </div>
               {(() => {
+                // Post-resolution the live "Winning/Behind" state can
+                // contradict the settled result (the score keeps
+                // moving) — show the receipt outcome instead.
+                if (isSettled) {
+                  const label =
+                    settledPickResult === "won"
+                      ? "Won"
+                      : settledPickResult === "lost"
+                        ? "Lost"
+                        : settledPickResult === "refunded"
+                          ? "Refunded"
+                          : "Settled";
+                  const className =
+                    settledPickResult === "won"
+                      ? "bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30"
+                      : settledPickResult === "lost"
+                        ? "bg-red-600/20 text-red-700 dark:text-red-500 border-red-500/40 dark:border-red-500/30"
+                        : "bg-amber-600/20 text-amber-700 dark:text-amber-500 border-amber-500/40 dark:border-amber-500/30";
+                  return <Badge className={className}>{label}</Badge>;
+                }
                 const state = getUpDownWinningState({
                   pick: userPick,
                   currentScore: hydrated.currentScore,

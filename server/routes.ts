@@ -19,7 +19,7 @@ import {
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -1239,6 +1239,168 @@ function buildMarketResolutionSummary(resolutionNotes: string | null | undefined
       notesText: resolutionNotes,
     };
   }
+}
+
+/**
+ * Projected "settlement receipt" block for native market detail pages
+ * (updown / h2h / gainer). Parses `prediction_markets.resolution_notes`
+ * (written by server/jobs/market-resolver.ts) into a client-safe shape.
+ *
+ * SECURITY: never pass raw notes through — they carry house P&L fields
+ * (`creditedToHouse`, `payoutLiability`, `settledUserCount`) that must
+ * stay internal. This projection whitelists score evidence only.
+ *
+ * Returns null when there is nothing presentable (unresolved market,
+ * legacy plain-text notes on a RESOLVED market with no void reason).
+ */
+function buildNativeResolutionBlock(market: {
+  status: string;
+  marketType: string | null;
+  resolutionNotes: string | null;
+  voidReason: string | null;
+  resolvedAt: Date | null;
+}): Record<string, unknown> | null {
+  if (market.status !== "RESOLVED" && market.status !== "VOID") return null;
+
+  let parsed: Record<string, unknown> | null = null;
+  if (market.resolutionNotes && market.resolutionNotes.trim()) {
+    try {
+      const p = JSON.parse(market.resolutionNotes);
+      if (p && typeof p === "object") parsed = p as Record<string, unknown>;
+    } catch {
+      parsed = null; // legacy plain-text notes — fall through
+    }
+  }
+
+  const isVoid = market.status === "VOID";
+  const base: Record<string, unknown> = {
+    status: market.status,
+    outcomeLabel:
+      parsed && typeof parsed.outcome === "string" && !parsed.outcome.startsWith("void")
+        ? parsed.outcome
+        : null,
+    voidReason: isVoid ? market.voidReason ?? null : null,
+    resolvedAt: market.resolvedAt ? market.resolvedAt.toISOString() : null,
+  };
+
+  if (!parsed) {
+    // Nothing to show for a resolved market without structured evidence;
+    // voided markets still get the void reason banner.
+    return isVoid ? base : null;
+  }
+
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+  if (market.marketType === "updown") {
+    return {
+      ...base,
+      type: "updown",
+      openScore: num(parsed.openScore),
+      closeScore: num(parsed.closeScore),
+      openSnapshotAt: str(parsed.openSnapshotAt),
+      closeSnapshotAt: str(parsed.closeSnapshotAt),
+      change: num(parsed.change),
+      percentChange: str(parsed.percentChange),
+    };
+  }
+
+  if (market.marketType === "h2h") {
+    const projectEntry = (v: unknown) => {
+      if (!v || typeof v !== "object") return null;
+      const e = v as Record<string, unknown>;
+      return {
+        personId: str(e.personId),
+        label: str(e.label),
+        score: num(e.score),
+        snapshotAt: str(e.snapshotAt),
+      };
+    };
+    const entryA = projectEntry(parsed.entryA);
+    const entryB = projectEntry(parsed.entryB);
+    const margin =
+      entryA?.score != null && entryB?.score != null
+        ? Math.abs(entryA.score - entryB.score)
+        : null;
+    return { ...base, type: "h2h", entryA, entryB, margin };
+  }
+
+  if (market.marketType === "gainer") {
+    const rankings = Array.isArray(parsed.rankings)
+      ? parsed.rankings
+          .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === "object")
+          .map((r) => ({
+            personId: str(r.personId),
+            label: str(r.label),
+            openScore: num(r.openScore),
+            closeScore: num(r.closeScore),
+            pctChange: str(r.pctChange),
+          }))
+      : [];
+    return { ...base, type: "gainer", rankings };
+  }
+
+  return isVoid ? base : null;
+}
+
+/**
+ * Pull the settlement-time "final score" relevant to one bet out of
+ * `resolution_notes`, for the /api/me/predictions settled rows. The
+ * live `trendingPeople.trendScore` keeps drifting after settlement, so
+ * cards need the frozen score the market actually resolved against.
+ *
+ *  - updown:  market-level `closeScore`
+ *  - gainer:  the bet entry's `closeScore` from `rankings` (matched by
+ *             personId, falling back to label)
+ *  - h2h:     the bet entry's score from `entryA`/`entryB`
+ *  - jackpot: `actualScore`
+ *
+ * Returns null for community markets, unsettled markets, or legacy
+ * plain-text notes.
+ */
+function extractFinalScoreForBet(
+  resolutionNotes: string | null,
+  marketType: string | null,
+  entryPersonId: string | null,
+  entryLabel: string | null,
+): number | null {
+  if (!resolutionNotes || !resolutionNotes.trim()) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    const p = JSON.parse(resolutionNotes);
+    if (!p || typeof p !== "object") return null;
+    parsed = p as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+  if (marketType === "updown") return num(parsed.closeScore);
+  if (marketType === "jackpot") return num(parsed.actualScore);
+
+  if (marketType === "gainer" && Array.isArray(parsed.rankings)) {
+    const match = parsed.rankings.find((r) => {
+      if (!r || typeof r !== "object") return false;
+      const row = r as Record<string, unknown>;
+      if (entryPersonId && row.personId === entryPersonId) return true;
+      return Boolean(entryLabel) && row.label === entryLabel;
+    }) as Record<string, unknown> | undefined;
+    return match ? num(match.closeScore) : null;
+  }
+
+  if (marketType === "h2h") {
+    for (const key of ["entryA", "entryB"] as const) {
+      const e = parsed[key];
+      if (!e || typeof e !== "object") continue;
+      const row = e as Record<string, unknown>;
+      const matches =
+        (entryPersonId && row.personId === entryPersonId) ||
+        (entryLabel && row.label === entryLabel);
+      if (matches) return num(row.score);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -9860,6 +10022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             betStatus: marketBets.status,
             direction: marketBets.direction,
             betCreatedAt: marketBets.createdAt,
+            betSettledAt: marketBets.settledAt,
             marketSlug: predictionMarkets.slug,
             marketTitle: predictionMarkets.title,
             marketStatus: predictionMarkets.status,
@@ -9872,8 +10035,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             endAt: predictionMarkets.endAt,
             personId: predictionMarkets.personId,
             resolutionSummary: predictionMarkets.resolutionSummary,
+            resolutionNotes: predictionMarkets.resolutionNotes,
             entryResolutionStatus: marketEntries.resolutionStatus,
             entryLabel: marketEntries.label,
+            entryPersonId: marketEntries.personId,
             personName: trendingPeople.name,
             personAvatar: trendingPeople.avatar,
             currentScore: trendingPeople.trendScore,
@@ -9917,6 +10082,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? Number((b.potentialPayout / b.stakeAmount).toFixed(2))
             : null;
 
+        const isSettledMarket = b.marketStatus === 'RESOLVED' || b.marketStatus === 'VOID';
+        const finalScore = isSettledMarket
+          ? extractFinalScoreForBet(b.resolutionNotes, b.marketType, b.entryPersonId, b.entryLabel)
+          : null;
+
         return {
           betId: b.betId,
           marketId: b.marketId,
@@ -9940,6 +10110,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           payout,
           baselineScore: b.baselineScore,
           currentScore: isNative ? b.currentScore : null,
+          // Frozen settlement-time score + when the bet settled — live
+          // currentScore keeps drifting after resolution, so settled
+          // cards render these instead.
+          finalScore,
+          settledAt: isSettledMarket ? b.betSettledAt : null,
           betCreatedAt: b.betCreatedAt,
           personName: isNative ? b.personName : null,
           personAvatar: isNative ? b.personAvatar : null,
@@ -10083,7 +10258,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           and(
             eq(marketBets.marketId, id),
             eq(marketBets.userId, userId),
-            inArray(marketBets.status, ["active", "won", "lost", "refunded"]),
+            // "void" included so AMM-voided bets surface and the
+            // position card can render its refund branch.
+            inArray(marketBets.status, ["active", "won", "lost", "refunded", "void"]),
           ),
         )
         .orderBy(desc(marketBets.createdAt));
@@ -10287,6 +10464,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           personId: market.personId,
           baselineScore: market.baselineScore,
           metadata: metadataSubset,
+          // Settlement receipt: projected from resolution_notes, house
+          // P&L fields excluded (see buildNativeResolutionBlock).
+          resolution: buildNativeResolutionBlock(market),
           ...lifecycleFields,
           ammState,
           volume,
@@ -12798,13 +12978,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Paginated user list for admin moderation (search + created_at sort).
   app.get("/api/admin/users", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { search, requestedPage, pageSize } = parseAdminUsersListQuery(req.query);
+      const { requestedPage, pageSize } = parseAdminUsersListQuery(req.query);
+      const rawSearch = ((req.query.search as string) || "").trim();
+      // kind defaults to humans: the ~56 sim agents + house profile
+      // interleaving with real users made the list useless for support.
+      const kind = ["humans", "agents", "all"].includes(req.query.kind as string)
+        ? (req.query.kind as "humans" | "agents" | "all")
+        : "humans";
+      const statusFilter = req.query.status === "banned" ? "banned" : "all";
+      const activeFilter = ["7d", "30d"].includes(req.query.active as string)
+        ? (req.query.active as "7d" | "30d")
+        : "any";
       const sortRaw = (req.query.sort as string) || "created_desc";
-      const sortAsc = sortRaw === "created_asc";
 
-      const whereClause = search
-        ? ilike(profiles.username, `%${search}%`)
-        : undefined;
+      const conditions: (SQL | undefined)[] = [];
+
+      if (kind === "humans") {
+        conditions.push(eq(profiles.isAgent, false), eq(profiles.isHouse, false));
+      } else if (kind === "agents") {
+        conditions.push(sql`(${profiles.isAgent} = true OR ${profiles.isHouse} = true)`);
+      }
+
+      if (statusFilter === "banned") {
+        conditions.push(eq(profiles.role, "banned"));
+      }
+
+      if (activeFilter !== "any") {
+        const days = activeFilter === "7d" ? 7 : 30;
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        conditions.push(gte(profiles.lastActiveAt, cutoff));
+      }
+
+      // Smart search: UUID → direct id lookup; contains "@" → Supabase
+      // auth email lookup (auth.users); otherwise username ILIKE.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (rawSearch) {
+        if (UUID_RE.test(rawSearch)) {
+          conditions.push(eq(profiles.id, rawSearch.toLowerCase()));
+        } else if (rawSearch.includes("@")) {
+          const { getSupabaseUserIdsByEmail } = await import("./services/supabase-auth-email");
+          const matchedIds = await getSupabaseUserIdsByEmail(rawSearch);
+          if (matchedIds.length === 0) {
+            return res.json({ users: [], total: 0, page: 1, pageSize, totalPages: 0 });
+          }
+          conditions.push(inArray(profiles.id, matchedIds));
+        } else {
+          const sanitized = sanitizeAdminUserSearch(rawSearch);
+          if (sanitized) conditions.push(ilike(profiles.username, `%${sanitized}%`));
+        }
+      }
+
+      const activeConditions = conditions.filter((c): c is SQL => Boolean(c));
+      const whereClause = activeConditions.length > 0 ? and(...activeConditions) : undefined;
 
       const countRows = await db
         .select({ count: sql<number>`count(*)::int` })
@@ -12817,9 +13042,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total,
         pageSize,
       );
-      const order = sortAsc
-        ? [asc(profiles.createdAt), asc(profiles.id)]
-        : [desc(profiles.createdAt), desc(profiles.id)];
+
+      const order = (() => {
+        switch (sortRaw) {
+          case "created_asc":
+            return [asc(profiles.createdAt), asc(profiles.id)];
+          case "last_active":
+            return [sql`${profiles.lastActiveAt} DESC NULLS LAST`, desc(profiles.id)];
+          case "credits":
+            return [desc(profiles.predictCredits), desc(profiles.id)];
+          case "xp":
+            return [desc(profiles.xpPoints), desc(profiles.id)];
+          default:
+            return [desc(profiles.createdAt), desc(profiles.id)];
+        }
+      })();
 
       let query = db.select().from(profiles).$dynamic();
       if (whereClause) query = query.where(whereClause);
@@ -12838,6 +13075,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalPredictions: u.totalPredictions,
           createdAt:
             u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
+          lastActiveAt:
+            u.lastActiveAt instanceof Date ? u.lastActiveAt.toISOString() : u.lastActiveAt,
+          isAgent: u.isAgent || u.isHouse,
           isBanned: u.role === "banned",
         })),
         total,
@@ -12994,6 +13234,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error banning user:", error.message);
       res.status(500).json({ error: "Failed to ban user" });
+    }
+  });
+
+  // Mirror of ban-user: only valid on profiles currently banned, and
+  // always restores plain 'user' (never a prior elevated role — if a
+  // moderator was ever banned, re-elevation is a separate deliberate
+  // action).
+  app.post("/api/admin/unban-user", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const adminId = req.userId!;
+      const { userId, reason } = req.body;
+
+      if (!userId || !reason) {
+        return res.status(400).json({ error: "userId and reason are required" });
+      }
+
+      const [user] = await db.select().from(profiles).where(eq(profiles.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (user.role !== "banned") {
+        return res.status(400).json({ error: "User is not banned" });
+      }
+
+      await db.update(profiles).set({ role: "user" }).where(eq(profiles.id, userId));
+
+      await db.insert(adminAuditLog).values({
+        adminId,
+        actionType: "unban_user",
+        targetTable: "profiles",
+        targetId: userId,
+        previousData: { role: "banned" },
+        newData: { role: "user" },
+        metadata: { reason },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error unbanning user:", error.message);
+      res.status(500).json({ error: "Failed to unban user" });
     }
   });
 
@@ -19084,14 +19365,25 @@ Target length: about 90-150 words.`;
         return res.status(status).json({ error: ammResult.error, message: ammResult.message });
       }
 
-      if (resolutionNotes) {
-        // The AMM resolver fills `resolution_notes` with its own evidence
-        // JSON; layering admin notes is a follow-up nicety, kept out of
-        // the core resolver to avoid coupling its idempotency to free-form
-        // text. Just stamp `resolveMethod`/`settledBy` markers here.
+      // Write outcome evidence for the settlement receipt. The AMM
+      // resolver only moves credits — it never writes resolution_notes —
+      // so without this stamp community results have no persisted
+      // "why" and the client result card synthesizes a null outcome.
+      // House P&L stays out of this JSON (it feeds user-facing surfaces).
+      // Skipped on idempotent replays so the original evidence (and its
+      // resolvedAt timestamp) is preserved.
+      const wasIdempotentSkip = "idempotentSkip" in ammResult && ammResult.idempotentSkip;
+      if (!wasIdempotentSkip) {
         await db.update(predictionMarkets).set({
           resolveMethod: "admin_manual",
           settledBy: authReq.userId ?? null,
+          resolutionNotes: JSON.stringify({
+            type: "community",
+            outcome: winnerEntry.label,
+            winnerEntryId,
+            resolvedAt: new Date().toISOString(),
+            ...(resolutionNotes ? { adminNotes: String(resolutionNotes) } : {}),
+          }),
           updatedAt: new Date(),
         }).where(eq(predictionMarkets.id, id));
       }
@@ -23479,6 +23771,40 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (error: any) {
       console.error("Error fetching activity history:", error.message);
       res.status(500).json({ error: "Failed to fetch activity history" });
+    }
+  });
+
+  // Recent transactional emails for one user (email_send_log is the
+  // idempotency ledger every sendEmail() call writes through). Powers
+  // the "Emails" section of the admin user Details dialog.
+  app.get("/api/admin/users/:id/email-log", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const limit = parseBoundedInt(req.query.limit, 50, 1, 200);
+
+      const rows = await db
+        .select({
+          idempotencyKey: emailSendLog.idempotencyKey,
+          category: emailSendLog.category,
+          template: emailSendLog.template,
+          sentAt: emailSendLog.sentAt,
+        })
+        .from(emailSendLog)
+        .where(eq(emailSendLog.userId, id))
+        .orderBy(desc(emailSendLog.sentAt))
+        .limit(limit);
+
+      res.json({
+        emails: rows.map((r) => ({
+          idempotencyKey: r.idempotencyKey,
+          category: r.category,
+          template: r.template,
+          sentAt: r.sentAt instanceof Date ? r.sentAt.toISOString() : r.sentAt,
+        })),
+      });
+    } catch (error: any) {
+      console.error("Error fetching email log:", error.message);
+      res.status(500).json({ error: "Failed to fetch email log" });
     }
   });
 

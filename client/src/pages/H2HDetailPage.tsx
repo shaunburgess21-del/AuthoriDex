@@ -15,6 +15,8 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { SettlementReceipt, type NativeResolution } from "@/components/predict/SettlementReceipt";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
@@ -644,6 +646,28 @@ export default function H2HDetailPage() {
           engine="amm"
           marketKind="h2h"
         />
+
+        {/* Settlement receipt + settled position — resolved/void only.
+            `resolution` only exists on the /api/markets/:id nativeDetail
+            fallback (resolved markets drop out of the OPEN list feed). */}
+        {(() => {
+          const marketStatus = (market as { status?: string }).status;
+          if (marketStatus !== "RESOLVED" && marketStatus !== "VOID") return null;
+          const resolution =
+            (market as { resolution?: NativeResolution | null }).resolution ?? null;
+          return (
+            <>
+              <SettlementReceipt resolution={resolution} marketStatus={marketStatus} />
+              <MyPositionCard
+                marketId={marketId}
+                marketType="h2h"
+                marketStatus={marketStatus}
+                hideCta
+                className="mb-0"
+              />
+            </>
+          );
+        })()}
 
         {/* Hero – Side-by-side portraits */}
         <Card className="relative overflow-hidden border-slate-500/30 dark:border-slate-500/20">

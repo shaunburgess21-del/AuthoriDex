@@ -102,6 +102,7 @@ export function AdminCurateProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/vote/curate-profile'] });
     },
+    onError: () => toast.error("Visibility Update Failed", { description: "The card's visibility was not changed — try again." }),
   });
 
   const seedVoteMutation = useMutation({

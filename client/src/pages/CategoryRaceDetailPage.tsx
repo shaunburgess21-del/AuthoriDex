@@ -12,6 +12,8 @@ import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
+import { SettlementReceipt, type NativeResolution } from "@/components/predict/SettlementReceipt";
+import { MyPositionCard } from "@/components/predict/MyPositionCard";
 import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
@@ -592,6 +594,28 @@ export default function CategoryRaceDetailPage() {
           variant="full"
           engine="amm"
         />
+
+        {/* Settlement receipt + settled position — resolved/void only.
+            `resolution` only exists on the /api/markets/:id nativeDetail
+            fallback (resolved markets drop out of the OPEN list feed). */}
+        {(() => {
+          const marketStatus = (market as { status?: string } | null)?.status;
+          if (marketStatus !== "RESOLVED" && marketStatus !== "VOID") return null;
+          const resolution =
+            (market as { resolution?: NativeResolution | null }).resolution ?? null;
+          return (
+            <>
+              <SettlementReceipt resolution={resolution} marketStatus={marketStatus} />
+              <MyPositionCard
+                marketId={marketId}
+                marketType="gainer"
+                marketStatus={marketStatus}
+                hideCta
+                className="mb-0"
+              />
+            </>
+          );
+        })()}
 
         {/* Hero — category context + current leader snapshot */}
         <Card className="relative overflow-hidden border-violet-500/30 dark:border-violet-500/20 shadow-none">

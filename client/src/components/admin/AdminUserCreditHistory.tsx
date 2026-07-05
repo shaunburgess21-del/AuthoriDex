@@ -18,6 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Vote,
+  Mail,
+  UserPlus,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { labelForTxnType } from "@shared/credit-config";
@@ -78,6 +80,9 @@ interface ActivityHistoryResponse {
     emailMarketingUnsubscribed: boolean;
     emailMarketingUnsubscribedAt: string | null;
     emailMarketingUnsubscribeSource: string | null;
+    referralCode: string | null;
+    referredBy: { id: string; username: string | null } | null;
+    referredCount: number;
   };
   ledgerSum: number;
   drift: number;
@@ -86,6 +91,15 @@ interface ActivityHistoryResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+interface EmailLogResponse {
+  emails: Array<{
+    idempotencyKey: string;
+    category: string;
+    template: string;
+    sentAt: string;
+  }>;
 }
 
 const FILTERS: { id: ActivityFilter; label: string }[] = [
@@ -180,6 +194,16 @@ export function AdminUserCreditHistory({
         `/api/admin/users/${userId}/activity-history?page=${page}&filter=${filter}`,
       );
       if (!res.ok) throw new Error("Failed to load activity history");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const { data: emailLog } = useQuery<EmailLogResponse>({
+    queryKey: ["/api/admin/users", userId, "email-log"],
+    queryFn: async () => {
+      const res = await fetchWithAuth(`/api/admin/users/${userId}/email-log`);
+      if (!res.ok) throw new Error("Failed to load email log");
       return res.json();
     },
     enabled: open,
@@ -285,6 +309,67 @@ export function AdminUserCreditHistory({
                 </div>
               </div>
             )}
+
+            {/* Referral attribution */}
+            <div data-testid="section-user-referrals">
+              <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
+                Referrals
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <div className="p-2.5 rounded-md bg-muted/50">
+                  <p className="text-muted-foreground text-xs">Referral code</p>
+                  <p className="font-mono text-sm" data-testid="text-user-referral-code">
+                    {data.profile.referralCode ?? "—"}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-md bg-muted/50">
+                  <p className="text-muted-foreground text-xs">Referred by</p>
+                  <p className="text-sm truncate" data-testid="text-user-referred-by">
+                    {data.profile.referredBy
+                      ? data.profile.referredBy.username ?? data.profile.referredBy.id.slice(0, 8)
+                      : "Organic signup"}
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-md bg-muted/50">
+                  <p className="text-muted-foreground text-xs">Users referred</p>
+                  <p className="text-sm font-bold" data-testid="text-user-referred-count">
+                    {data.profile.referredCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Transactional email history */}
+            <div data-testid="section-user-emails">
+              <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                Emails sent
+                {emailLog && (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({emailLog.emails.length})
+                  </span>
+                )}
+              </p>
+              {emailLog && emailLog.emails.length > 0 ? (
+                <div className="space-y-1 max-h-[180px] overflow-y-auto">
+                  {emailLog.emails.map((e) => (
+                    <div
+                      key={e.idempotencyKey}
+                      className="flex items-center justify-between gap-2 p-2 rounded-md border text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{e.template}</p>
+                        <p className="text-muted-foreground">{e.category}</p>
+                      </div>
+                      <span className="text-muted-foreground shrink-0">{formatDate(e.sentAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No emails logged for this user.</p>
+              )}
+            </div>
 
             <div>
               <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
