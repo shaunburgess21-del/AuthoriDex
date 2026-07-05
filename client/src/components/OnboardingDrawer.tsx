@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } fro
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, ArrowRight, type LucideIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 
 const RE_SHOW_DAYS = 21;
 const MS_PER_DAY = 86_400_000;
@@ -212,6 +213,13 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
       }
     }
 
+    function prevStep() {
+      if (step > 0) {
+        setDirection(-1);
+        setStep((s) => s - 1);
+      }
+    }
+
     function handleComplete() {
       setDrawerOpen(false);
       markSeen(storageKey);
@@ -242,23 +250,33 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
             </DrawerDescription>
 
             <div className="flex flex-col items-center px-4 pt-4 pb-6">
-              <div className="flex items-center gap-2 mb-8">
-                {steps.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      i === step
-                        ? "w-6 bg-primary"
-                        : "w-1.5 bg-muted-foreground/30"
-                    }`}
-                  />
-                ))}
-              </div>
+              <div data-vaul-no-drag className="w-full">
+                <SwipeNavigator
+                  onSwipeLeft={nextStep}
+                  onSwipeRight={prevStep}
+                  disableLeft={isLastStep}
+                  disableRight={step === 0}
+                  className="flex w-full flex-col items-center"
+                >
+                  <div className="flex items-center gap-2 mb-8">
+                    {steps.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          i === step
+                            ? "w-6 bg-primary"
+                            : "w-1.5 bg-muted-foreground/30"
+                        }`}
+                      />
+                    ))}
+                  </div>
 
-              <div className="relative w-full overflow-hidden min-h-[200px] flex items-center justify-center">
-                <AnimatePresence mode="wait" initial={false} custom={direction}>
-                  <StepContent steps={steps} step={step} direction={direction} />
-                </AnimatePresence>
+                  <div className="relative w-full overflow-hidden min-h-[200px] flex items-center justify-center">
+                    <AnimatePresence mode="wait" initial={false} custom={direction}>
+                      <StepContent steps={steps} step={step} direction={direction} />
+                    </AnimatePresence>
+                  </div>
+                </SwipeNavigator>
               </div>
 
               <button

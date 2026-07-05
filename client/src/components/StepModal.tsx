@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { cn } from "@/lib/utils";
 
 export type StepModalStep = {
@@ -53,8 +54,6 @@ export type StepModalProps = {
   accent?: StepModalAccent;
 };
 
-const SWIPE_THRESHOLD = 40;
-
 const STEP_VARIANTS = {
   initial: (direction: 1 | -1) => ({
     x: direction * 40,
@@ -78,7 +77,6 @@ export function StepModal({
 }: StepModalProps) {
   const [stepIdx, setStepIdx] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const dragStartX = useRef<number | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -108,16 +106,8 @@ export function StepModal({
     }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    dragStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (dragStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - dragStartX.current;
-    dragStartX.current = null;
-    if (delta < -SWIPE_THRESHOLD) goNext();
-    else if (delta > SWIPE_THRESHOLD) goPrev();
+  const swipeNext = () => {
+    if (!isLast) goNext();
   };
 
   if (!step) return null;
@@ -134,11 +124,7 @@ export function StepModal({
             {title ?? step.headline}
           </DialogPrimitive.Title>
 
-          <div
-            className="relative flex flex-col"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
+          <div className="relative flex flex-col">
             <button
               type="button"
               onClick={onClose}
@@ -148,56 +134,64 @@ export function StepModal({
               Skip
             </button>
 
-            <div className="flex items-center justify-center gap-1.5 pt-6 pb-2">
-              {steps.map((_, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "h-2 rounded-full transition-all duration-200",
-                    i === stepIdx
-                      ? cn("w-6", accentClasses.activeDot)
-                      : "w-2 bg-muted-foreground/30",
-                  )}
-                />
-              ))}
-            </div>
-
-            <div className="relative min-h-[300px] overflow-hidden">
-              <AnimatePresence initial={false} custom={direction}>
-                <motion.div
-                  key={stepIdx}
-                  custom={direction}
-                  variants={STEP_VARIANTS}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center justify-center px-6"
-                >
+            <SwipeNavigator
+              onSwipeLeft={swipeNext}
+              onSwipeRight={goPrev}
+              disableLeft={isLast}
+              disableRight={stepIdx === 0}
+              className="flex flex-col"
+            >
+              <div className="flex items-center justify-center gap-1.5 pt-6 pb-2">
+                {steps.map((_, i) => (
                   <div
+                    key={i}
                     className={cn(
-                      "mb-6 flex h-20 w-20 items-center justify-center rounded-full",
-                      accentClasses.iconBg,
+                      "h-2 rounded-full transition-all duration-200",
+                      i === stepIdx
+                        ? cn("w-6", accentClasses.activeDot)
+                        : "w-2 bg-muted-foreground/30",
                     )}
+                  />
+                ))}
+              </div>
+
+              <div className="relative min-h-[300px] overflow-hidden">
+                <AnimatePresence initial={false} custom={direction}>
+                  <motion.div
+                    key={stepIdx}
+                    custom={direction}
+                    variants={STEP_VARIANTS}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center justify-center px-6"
                   >
                     <div
                       className={cn(
-                        "[&_svg]:h-10 [&_svg]:w-10",
-                        accentClasses.iconText,
+                        "mb-6 flex h-20 w-20 items-center justify-center rounded-full",
+                        accentClasses.iconBg,
                       )}
                     >
-                      {step.icon}
+                      <div
+                        className={cn(
+                          "[&_svg]:h-10 [&_svg]:w-10",
+                          accentClasses.iconText,
+                        )}
+                      >
+                        {step.icon}
+                      </div>
                     </div>
-                  </div>
-                  <h2 className="mb-3 text-center text-xl font-bold leading-tight text-foreground">
-                    {step.headline}
-                  </h2>
-                  <div className="mx-auto max-w-xs text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
-                    {step.body}
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
+                    <h2 className="mb-3 text-center text-xl font-bold leading-tight text-foreground">
+                      {step.headline}
+                    </h2>
+                    <div className="mx-auto max-w-xs text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
+                      {step.body}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </SwipeNavigator>
 
             <div className="px-6 pb-6 pt-2">
               <Button
