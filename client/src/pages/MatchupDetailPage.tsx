@@ -476,7 +476,7 @@ export default function MatchupDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+              <div className="px-3 py-3 bg-[#090B11] border-t border-slate-700/30 text-center">
                 <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-600 dark:text-blue-400' : ''}`}>{matchup.optionAText}</span>
               </div>
             </button>
@@ -543,7 +543,7 @@ export default function MatchupDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-slate-900/80 backdrop-blur-sm border-t border-slate-700/30 text-center">
+              <div className="px-3 py-3 bg-[#090B11] border-t border-slate-700/30 text-center">
                 <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-600 dark:text-amber-400' : ''}`}>{matchup.optionBText}</span>
               </div>
             </button>

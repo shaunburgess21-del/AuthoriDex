@@ -96,8 +96,8 @@ export function VersusCard({
     shimmer: enableVsShimmer,
   });
   const footerBarClass = enableNeutralNudge
-    ? "bg-muted/60 dark:bg-[#0B0F1A] backdrop-blur-sm"
-    : "bg-muted/60 dark:bg-[#0B0F1A]";
+    ? "bg-muted/60 dark:bg-[#090B11] backdrop-blur-sm"
+    : "bg-muted/60 dark:bg-[#090B11]";
   const vsButtonClassName = `relative h-14 w-14 overflow-hidden rounded-full border-2 flex items-center justify-center shadow-lg transition-all duration-300 ${
     votedNeutral
       ? "bg-gradient-to-br from-slate-500 to-slate-600 dark:from-slate-500 dark:to-slate-600 border-slate-400 dark:border-slate-400 ring-2 ring-slate-400/40 dark:ring-slate-400/40"
