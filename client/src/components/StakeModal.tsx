@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
 import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { navigateToLogin } from "@/lib/authReturn";
+import { markOverlayDismissSuppress } from "@/lib/overlayDismissSuppress";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
@@ -347,6 +348,7 @@ export function StakeModal({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) {
+        markOverlayDismissSuppress();
         setStakeAmount("");
         setConfidence(0);
         setThesis("");

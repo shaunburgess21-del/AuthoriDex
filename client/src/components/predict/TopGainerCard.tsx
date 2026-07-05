@@ -1,20 +1,15 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
-import { PersonAvatar } from "@/components/PersonAvatar";
-import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
+import { CategoryRaceCandidateRow } from "@/components/predict/CategoryRaceCandidateRow";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { PredictCard } from "@/components/predict/PredictCard";
 import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
-import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } from "@shared/constants";
-import { Crown, ChevronRight, Check } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
-import { cn } from "@/lib/utils";
-import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
+import { formatVoxCompact } from "@/lib/currency";
 
 type CategoryFilter = FilterCategory;
 
@@ -69,17 +64,15 @@ export function categoryRacePredictionSummaryFromBet(
   };
 }
 
-const PREDICTED_CTA_BASE =
-  "w-full flex min-h-10 items-center gap-2 px-4 py-3 md:py-2 rounded-md bg-muted/40 border border-border text-sm font-medium text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white transition-all duration-300 hover:border-foreground/40 hover:bg-muted/60 dark:hover:border-white/80 dark:hover:bg-white/15";
-
 export function TopGainerCard({
   market,
   isMarketClosed = false,
   closedMessage,
-  onShowAllCandidates,
+  onSelectCandidate,
+  highlightedEntryId = null,
   isPredicted = false,
-  predictionSummary = null,
-  unrealisedPnl = null,
+  predictionSummary: _predictionSummary = null,
+  unrealisedPnl: _unrealisedPnl = null,
   isShimmering = false,
   onFilterCategory,
   categoryRaceMap,
@@ -88,7 +81,8 @@ export function TopGainerCard({
   market: TopGainerMarket;
   isMarketClosed?: boolean;
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
-  onShowAllCandidates?: (market: TopGainerMarket, initialCandidate?: GainerCandidate) => void;
+  onSelectCandidate?: (market: TopGainerMarket, candidate: GainerCandidate) => void;
+  highlightedEntryId?: string | null;
   isPredicted?: boolean;
   predictionSummary?: CategoryRacePredictionSummary | null;
   /**
@@ -105,34 +99,16 @@ export function TopGainerCard({
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
 }) {
-  const visibleCandidateCount = market.candidateCount ?? market.allCandidates?.length ?? market.totalEntries ?? market.leaders.length;
+  const candidates = market.allCandidates ?? market.leaders;
   const canPick = !isPredicted;
   const volumeLabel = formatVoxCompact(market.volume ?? 0);
 
-  /**
-   * AMM P&L delta. Suppressed entirely for "Multiple picks" pending
-   * state where a single P&L number would be misleading (it
-   * represents only the top position, not the aggregate). The
-   * sub-cent zero clamp is folded into `formatVoxDelta`; we still
-   * compute the raw value here to drive the colour class.
-   */
-  const isMultiplePicks = predictionSummary?.pickLabel === "Multiple picks";
-  const hasPnl = !isMultiplePicks && unrealisedPnl != null && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
-  const pnlClass = !hasPnl || pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-400"
-      : "text-red-700 dark:text-red-400";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
-
-  const handlePlacePrediction = () => {
-    onShowAllCandidates?.(market);
-  };
-
   return (
-    <PredictCard testId={`card-gainer-${market.id}`} className={`${isMarketClosed ? 'opacity-75' : ''} ${isShimmering ? 'shimmer-once' : ''}`}>
+    <PredictCard
+      autoSize
+      testId={`card-gainer-${market.id}`}
+      className={`${isMarketClosed ? "opacity-75" : ""} ${isShimmering ? "shimmer-once" : ""}`}
+    >
       <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-violet-600 dark:text-violet-400 border-violet-500/40 dark:border-violet-500/30 text-[10px]">
@@ -170,22 +146,11 @@ export function TopGainerCard({
         engine="amm"
       />
 
-      <Link
-        href={`/predict/race/${market.id}`}
-        onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
-        className="group text-[16px] font-semibold mb-2 leading-[1.4] inline-flex items-center gap-1 text-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
-      >
-        Category Race: {getMarketCategoryLabel(market.category)}
-        <span className="font-normal text-inherit opacity-80" aria-hidden>
-          ›
-        </span>
-      </Link>
-
       {market.teaser?.trim() ? (
         <Link
           href={`/predict/race/${market.id}`}
           onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
-          className="block mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
+          className="block mb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
         >
           <p className="text-sm text-muted-foreground line-clamp-2 leading-[1.4] hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
             {market.teaser.trim()}
@@ -193,108 +158,30 @@ export function TopGainerCard({
         </Link>
       ) : null}
 
-      <div className="space-y-1.5 mb-3">
-        {(() => {
-          const maxGain = Math.max(...market.leaders.map(l => Math.abs(l.percentGain)), 1);
-          return market.leaders.map((leader, i) => (
-            <div
-              key={leader.name}
-              className={`flex items-center gap-2.5 p-2 rounded-lg transition-colors relative overflow-hidden ${canPick ? 'cursor-pointer' : ''} ${i === 0 ? 'bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30' : canPick ? 'hover:bg-muted/50' : ''}`}
-              onClick={() => {
-                if (!canPick) return;
-                onShowAllCandidates?.(market, leader);
-              }}
-            >
-              <div className="absolute inset-y-0 left-0 bg-green-500/8 transition-all" style={{ width: `${Math.max((Math.abs(leader.percentGain) / maxGain) * 100, 5)}%` }} />
-              <div className="relative flex items-center gap-2.5 flex-1 min-w-0">
-                {i === 0 ? (
-                  <div className="h-6 w-6 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
-                    <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                ) : (
-                  <div className="h-6 w-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">{leader.rank ? `#${leader.rank}` : 'New'}</span>
-                  </div>
-                )}
-                <PersonAvatar name={leader.name} avatar={leader.avatar} className="h-12 w-12" />
-                <span className="text-sm font-medium flex-1 truncate">{leader.name}</span>
-              </div>
-              <div className="relative text-right shrink-0">
-                <p className={`text-sm font-mono font-bold ${leader.percentGain >= 0 ? 'text-green-500' : 'text-red-500'}`}>{formatSignedPercent(leader.percentGain)}</p>
-                <p className={`text-[10px] font-mono ${leader.currentGain >= 0 ? 'text-muted-foreground' : 'text-red-600/80 dark:text-red-400/80'}`}>
-                  {formatSignedPoints(leader.currentGain)} pts added
-                </p>
-              </div>
-            </div>
-          ));
-        })()}
-        {visibleCandidateCount > 3 && (
-          <button
-            className="text-xs text-violet-600 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-400 text-center mt-1 w-full cursor-pointer transition-colors"
-            onClick={(e) => { e.stopPropagation(); onShowAllCandidates?.(market); }}
-          >
-            View all {visibleCandidateCount} candidates
-          </button>
-        )}
-      </div>
+      <div className="space-y-1.5 mb-1">
+        {candidates.map((candidate, i) => {
+          const candidateKey = candidate.entryId || candidate.personId || candidate.name;
+          const isSelected = !!highlightedEntryId && candidate.entryId === highlightedEntryId;
 
-      <div className="mt-auto space-y-2">
-        {isPredicted ? (
-          <Link
-            href={`/predict/race/${market.id}`}
-            onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
-            className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            data-testid={`link-predicted-gainer-${market.id}`}
-            aria-label={
-              predictionSummary
-                ? `View Category Race ${getMarketCategoryLabel(market.category)}: your pick ${predictionSummary.pickLabel}, stake ${predictionSummary.stakeAmount}`
-                : `View Category Race ${getMarketCategoryLabel(market.category)} prediction`
-            }
-          >
-            {predictionSummary ? (
-              <div className={PREDICTED_CTA_BASE}>
-                <Check className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                  <p className="truncate text-sm font-semibold leading-tight text-foreground">
-                    {predictionSummary.pickLabel}
-                  </p>
-                </div>
-                {pnlText ? (
-                  <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                    {pnlText}
-                  </span>
-                ) : null}
-                <div className="flex shrink-0 flex-col items-end tabular-nums">
-                  <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                  <span className="text-xs font-semibold leading-tight text-foreground">
-                    {formatVox(predictionSummary.stakeAmount)}
-                  </span>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              </div>
-            ) : (
-              <div className={PREDICTED_CTA_BASE}>
-                <Check className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              </div>
-            )}
-          </Link>
-        ) : (
-          <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-            <Button
-              className="w-full min-h-10 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 md:py-2 h-auto"
-              data-testid={`button-place-prediction-${market.id}`}
-              onClick={handlePlacePrediction}
-            >
-              Choose Candidate
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </ClosedMarketActionTrigger>
-        )}
+          return (
+            <CategoryRaceCandidateRow
+              key={candidateKey}
+              candidate={candidate}
+              rankIndex={i}
+              isSelected={isSelected}
+              nonInteractive={!canPick}
+              isMarketClosed={isMarketClosed}
+              closedMessage={closedMessage}
+              onSelect={
+                canPick
+                  ? () => onSelectCandidate?.(market, candidate)
+                  : undefined
+              }
+              size="card"
+              testId={`gainer-candidate-${market.id}-${candidateKey}`}
+            />
+          );
+        })}
       </div>
     </PredictCard>
   );

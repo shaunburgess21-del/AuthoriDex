@@ -168,16 +168,15 @@ function CompactStrip({
     return (
       <div
         className={cn(
-          "flex flex-col sm:flex-row sm:items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground",
+          "flex flex-row items-center justify-between w-full gap-2 text-[11px] text-muted-foreground",
           className,
         )}
       >
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 min-w-0">
           <Lock className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
           <span>{isAmm ? "Trading closed" : "Entries closed"}</span>
         </span>
-        <span className="hidden sm:inline text-muted-foreground/70">·</span>
-        <span className="pl-[18px] sm:pl-0">
+        <span className="shrink-0">
           Results <span className="font-medium text-foreground">{resolveLabel}</span>
         </span>
       </div>
@@ -187,19 +186,18 @@ function CompactStrip({
   return (
     <div
       className={cn(
-        "flex flex-col sm:flex-row sm:items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground",
+        "flex flex-row items-center justify-between w-full gap-2 text-[11px] text-muted-foreground",
         className,
       )}
     >
-      <span className="flex items-center gap-1.5">
+      <span className="flex items-center gap-1.5 min-w-0">
         <LockOpen className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-500" />
         <span>
           {isAmm ? "Trading closes" : "Entries close"}{" "}
           <span className="font-medium text-foreground">{cutoffLabel}</span>
         </span>
       </span>
-      <span className="hidden sm:inline text-muted-foreground/70">·</span>
-      <span className="pl-[18px] sm:pl-0">
+      <span className="shrink-0">
         Results <span className="font-medium text-foreground">{resolveLabel}</span>
       </span>
     </div>

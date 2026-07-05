@@ -9,15 +9,7 @@ import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ChangeVoteConfirmModal } from "@/components/vote/ChangeVoteConfirmModal";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
@@ -610,35 +602,17 @@ export default function OpinionPollDetailPage() {
           onRequireLogin={() => setLocation("/login")}
         />
 
-        <AlertDialog
+        <ChangeVoteConfirmModal
           open={changeDialogOpen}
           onOpenChange={(open) => {
             setChangeDialogOpen(open);
             if (!open) setPendingOption(null);
           }}
-        >
-          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Change your vote?</AlertDialogTitle>
-              <AlertDialogDescription>
-                You&apos;re switching to{" "}
-                <span className="font-medium text-foreground">{pendingOption?.name ?? "this option"}</span>. You can
-                change your vote once per day on this poll.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-              <Button
-                type="button"
-                className="bg-cyan-600 hover:bg-cyan-700"
-                onClick={() => void confirmChangeVote()}
-                disabled={voteMutation.isPending}
-              >
-                Change vote
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          toOptionName={pendingOption?.name ?? "this option"}
+          fromOptionName={votedOption?.name}
+          onConfirm={confirmChangeVote}
+          confirmPending={voteMutation.isPending}
+        />
 
         <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-results">
           <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">

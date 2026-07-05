@@ -9,7 +9,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
-import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
@@ -17,6 +16,7 @@ import { ShareIconButton } from "@/components/predict/ShareIconButton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { RaceWhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
+import { CategoryRaceCandidateRow } from "@/components/predict/CategoryRaceCandidateRow";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { CategoryPill } from "@/components/CategoryPill";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
@@ -24,8 +24,7 @@ import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
+import { formatSignedPercent } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
@@ -45,12 +44,10 @@ import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import {
   ArrowLeft,
   Crown,
-  Search,
   Users,
   Trophy,
   Clock,
   ChevronRight,
-  ChevronDown,
   Lock,
   BarChart3,
   Zap,
@@ -85,8 +82,6 @@ export default function CategoryRaceDetailPage() {
   const { trigger: triggerXpBurst } = useXpBurst();
   const { openShareCard } = useShareCard();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [leaderboardExpanded, setLeaderboardExpanded] = useState(false);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   // Idempotency key per modal intent. See `useIdempotencyKey.ts`.
@@ -106,7 +101,6 @@ export default function CategoryRaceDetailPage() {
   // card hero. Captured at click-time alongside the pending selection;
   // read once in the buy onSuccess, then dropped on close.
   const pendingShareCandidateRef = useRef<GainerCandidate | null>(null);
-  const candidateSearchRef = useRef<HTMLInputElement | null>(null);
 
   const { market, isLoading, notFound } = useNativeMarketDetail(
     marketId,
@@ -284,27 +278,7 @@ export default function CategoryRaceDetailPage() {
     ? getMarketCategoryLabel(normalizeMarketCategory(market.category || "misc"))
     : "";
 
-  const filteredCandidates = useMemo(() => {
-    if (!searchQuery) return candidates;
-    const q = searchQuery.toLowerCase();
-    return candidates.filter((c) => c.name.toLowerCase().includes(q));
-  }, [candidates, searchQuery]);
-
-  const LEADERBOARD_PREVIEW = 8;
-  const displayedCandidates = useMemo(() => {
-    if (searchQuery || leaderboardExpanded) return filteredCandidates;
-    return filteredCandidates.slice(0, LEADERBOARD_PREVIEW);
-  }, [filteredCandidates, searchQuery, leaderboardExpanded]);
-
-  const showLeaderboardExpand =
-    !searchQuery && candidates.length > LEADERBOARD_PREVIEW && !leaderboardExpanded;
-
   const raceLeader = candidates[0] ?? null;
-
-  const maxGain = useMemo(
-    () => Math.max(...candidates.map((c) => Math.abs(c.percentGain)), 1),
-    [candidates]
-  );
 
   const handleCandidateSelect = useCallback(
     (candidate: GainerCandidate) => {
@@ -690,147 +664,33 @@ export default function CategoryRaceDetailPage() {
               className="mb-4"
             />
 
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                ref={candidateSearchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search ${categoryLabel} candidates...`}
-                className="pl-9"
-                data-testid="input-race-candidate-search"
-              />
-            </div>
-
             <div className="space-y-1.5">
-              {displayedCandidates.map((candidate) => {
-                const globalIdx = candidates.indexOf(candidate);
-                const isLeader = globalIdx === 0;
-                const isUserPick = userPick?.entryId === candidate.entryId;
-                const canSelect = !isMarketClosed;
+              {candidates.map((candidate, globalIdx) => {
+                const hasPosition = existingStakeFor(candidate.entryId) > 0;
+                const isSelected =
+                  (stakeModalOpen && pendingSelection?.entryId === candidate.entryId) ||
+                  hasPosition;
                 const marketPct =
                   ammPriceMap && candidate.entryId
                     ? Math.max(0, Math.min(100, Math.round(Number(ammPriceMap[candidate.entryId] ?? 0) * 100)))
                     : null;
 
                 return (
-                  <ClosedMarketActionTrigger
+                  <CategoryRaceCandidateRow
                     key={candidate.entryId || candidate.name}
-                    isClosed={isMarketClosed && canSelect}
-                    message={closedMarketMessage}
-                    side="top"
-                    align="center"
-                  >
-                    <div
-                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg transition-colors relative overflow-hidden ${
-                        canSelect ? "cursor-pointer" : ""
-                      } ${
-                        isLeader
-                          ? "bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/40 dark:border-amber-500/30"
-                          : isUserPick
-                          ? "border border-green-500/50 dark:border-green-500/40 bg-green-500/8 dark:bg-green-500/5"
-                          : canSelect
-                          ? "hover:bg-muted/50"
-                          : ""
-                      }`}
-                      onClick={() => canSelect && handleCandidateSelect(candidate)}
-                    >
-                      <div
-                        className="absolute inset-y-0 left-0 bg-green-500/8 transition-all"
-                        style={{
-                          width: `${Math.max((Math.abs(candidate.percentGain) / maxGain) * 100, 3)}%`,
-                        }}
-                      />
-
-                      <div className="relative flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
-                        {isLeader ? (
-                          <div className="h-7 w-7 rounded-full bg-amber-500/25 dark:bg-amber-500/20 border border-amber-500/60 dark:border-amber-500/50 flex items-center justify-center shrink-0">
-                            <Crown className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          </div>
-                        ) : (
-                          <div className="h-7 w-7 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                            <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400">
-                              {globalIdx + 1}
-                            </span>
-                          </div>
-                        )}
-
-                        <PersonAvatar
-                          name={candidate.name}
-                          avatar={candidate.avatar}
-                          className={isLeader ? "h-14 w-14" : "h-10 w-10"}
-                        />
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-sm font-medium truncate">{candidate.name}</span>
-                            {isUserPick && (
-                              <Badge className="bg-green-600/20 text-green-700 dark:text-green-500 border-green-500/40 dark:border-green-500/30 text-[9px] px-1.5 py-0">
-                                Your Pick
-                              </Badge>
-                            )}
-                            {marketPct != null && (
-                              <Badge variant="outline" className="text-[9px] text-muted-foreground border-border/40 px-1.5 py-0">
-                                Market · {marketPct}%
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            {candidate.rank ? (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                #{candidate.rank} on board
-                              </span>
-                            ) : null}
-                            {candidate.rank ? (
-                              <span className="text-[10px] text-muted-foreground/40">&middot;</span>
-                            ) : null}
-                            <span
-                              className={`text-[10px] font-mono ${
-                                candidate.currentGain >= 0
-                                  ? "text-muted-foreground"
-                                  : "text-red-600/80 dark:text-red-400/80"
-                              }`}
-                            >
-                              {formatSignedPoints(candidate.currentGain)} pts added
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="relative text-right shrink-0">
-                        <p
-                          className={`text-base font-mono font-bold ${
-                            candidate.percentGain >= 0
-                              ? "text-green-700 dark:text-green-500"
-                              : "text-red-700 dark:text-red-500"
-                          }`}
-                        >
-                          {formatSignedPercent(candidate.percentGain)}
-                        </p>
-                      </div>
-                    </div>
-                  </ClosedMarketActionTrigger>
+                    candidate={candidate}
+                    rankIndex={globalIdx}
+                    isSelected={isSelected}
+                    isMarketClosed={isMarketClosed}
+                    closedMessage={closedMarketMessage}
+                    onSelect={() => handleCandidateSelect(candidate)}
+                    size="detail"
+                    showUserPickBadge={hasPosition}
+                    marketPct={marketPct}
+                    testId={`race-candidate-${candidate.entryId || candidate.name}`}
+                  />
                 );
               })}
-
-              {filteredCandidates.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  No candidates match &quot;{searchQuery}&quot;
-                </div>
-              )}
-
-              {showLeaderboardExpand && (
-                <Button
-                  variant="ghost"
-                  className="w-full mt-2 text-sm text-violet-600 dark:text-violet-400"
-                  onClick={() => setLeaderboardExpanded(true)}
-                  data-testid="button-show-all-candidates"
-                >
-                  Show all {candidates.length} candidates
-                  <ChevronDown className="h-4 w-4 ml-1" />
-                </Button>
-              )}
             </div>
           </div>
         </Card>
@@ -1113,9 +973,10 @@ export default function CategoryRaceDetailPage() {
       {/* Sticky Bottom CTA — lifted above the global mobile BottomNav
           (h-16, z-50) on phones; back to bottom-0 on md+ where the nav
           isn't rendered. */}
+      {userPick ? (
       <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          {userPick ? (() => {
+          {(() => {
             // Race resolves on biggest mover, so the most useful "am I
             // winning?" signal is leader-relative (mirrors H2H's
             // Winning / Tied / Behind sticky badge). We derive the
@@ -1168,25 +1029,10 @@ export default function CategoryRaceDetailPage() {
                 )}
               </div>
             );
-          })() : (
-            <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMarketMessage} side="top" align="center">
-              <Button
-                className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 h-auto text-base font-semibold"
-                onClick={() => {
-                  const input = candidateSearchRef.current;
-                  if (input) {
-                    input.scrollIntoView({ block: "center", behavior: "smooth" });
-                    input.focus({ preventScroll: true });
-                  }
-                }}
-              >
-                <Trophy className="h-5 w-5 mr-2" />
-                Choose Candidate
-              </Button>
-            </ClosedMarketActionTrigger>
-          )}
+          })()}
         </div>
       </div>
+      ) : null}
 
       {/* Stake Modal — buy only; cash-out lives in CashOutSheet below. */}
       <StakeModal

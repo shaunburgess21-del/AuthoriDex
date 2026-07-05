@@ -1,18 +1,14 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PersonAvatar } from "@/components/PersonAvatar";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { JackpotEntryModal } from "@/components/JackpotEntryModal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
@@ -45,17 +41,13 @@ import { PREDICT_RULES_STEPS } from "@/components/rulesStepData";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import {
-  Crown,
-  Lock,
   TrendingUp,
   ChevronRight,
   Scale,
   Swords,
-  Search,
   HelpCircle,
   Loader2,
   Trophy,
-  Check,
 } from "lucide-react";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { normalizeMarketCategory, getMarketCategoryLabel, type FilterCategory } from "@shared/constants";
@@ -96,165 +88,6 @@ function predictSectionGridClass(n: number): { container: string; item: string }
 }
 
 type CategoryFilter = FilterCategory;
-
-function GainerCandidatesDialog({
-  market,
-  open,
-  initialCandidate,
-  onClose,
-  onContinue,
-  isMarketClosed,
-}: {
-  market: TopGainerMarket | null;
-  open: boolean;
-  initialCandidate?: GainerCandidate | null;
-  onClose: () => void;
-  onContinue: (candidate: GainerCandidate) => void;
-  isMarketClosed?: boolean;
-}) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCandidateKey, setSelectedCandidateKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !market) return;
-    setSearchQuery("");
-    setSelectedCandidateKey(
-      initialCandidate?.entryId || initialCandidate?.personId || initialCandidate?.name || null
-    );
-  }, [open, market, initialCandidate]);
-
-  if (!market) return null;
-  const candidates = market.allCandidates || market.leaders;
-  const categoryLabel = getMarketCategoryLabel(market.category);
-  const filteredCandidates = candidates.filter((c) =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const selectedCandidate = candidates.find(
-    (c) => (c.entryId || c.personId || c.name) === selectedCandidateKey
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="shrink-0 px-4 pt-4 pb-2">
-          <DialogTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-700 dark:text-amber-500" />
-            Category Race: {categoryLabel}
-          </DialogTitle>
-          <DialogDescription>
-            Who will be the biggest mover this week?
-          </DialogDescription>
-        </DialogHeader>
-
-        {isMarketClosed && (
-          <div className="shrink-0 mx-4 mb-2 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 px-3 py-2 flex items-center gap-2">
-            <Lock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-600 dark:text-amber-400">Trading closed — awaiting Sunday close</p>
-          </div>
-        )}
-
-        <div className="shrink-0 px-4 pb-3 space-y-2">
-          <div className="rounded-md bg-violet-500/8 dark:bg-violet-500/5 border border-violet-500/15 px-3 py-2">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">How it works:</strong> The winner is whoever has the highest <strong className="text-green-700 dark:text-green-500">% gain</strong> in their Trend Score by Sunday close &mdash; not the highest ranked person.
-            </p>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search ${categoryLabel} candidates...`}
-              className="pl-9"
-            />
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            {candidates.length} candidates {isMarketClosed ? "" : "\u00b7 Tap to pick, then continue"}
-          </p>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
-          <div className="space-y-1.5">
-            {filteredCandidates.map((candidate, idx) => {
-              const candidateKey = candidate.entryId || candidate.personId || candidate.name;
-              const isSelected = candidateKey === selectedCandidateKey;
-              const isLeader = idx === 0 && !searchQuery;
-              // Per-candidate multipliers were too noisy here: candidates with
-              // ~0% backing all displayed huge but near-identical defaults
-              // (e.g. four candidates at "432.0x") which read as random
-              // rather than informative. The estimated payout in the stake
-              // modal — where the user has actually committed to a pick —
-              // is a clearer place for this number.
-
-              return (
-                <button
-                  type="button"
-                  key={candidateKey}
-                  className={`w-full flex items-center gap-2 p-2 rounded-lg border text-left transition-colors cursor-pointer ${
-                    isSelected
-                      ? "border-violet-500/60 bg-violet-500/15 dark:bg-violet-500/10"
-                      : isLeader
-                        ? "border-amber-500/40 dark:border-amber-500/30 hover:bg-amber-500/8 dark:hover:bg-amber-500/8 dark:bg-amber-500/5"
-                        : "border-transparent hover:bg-muted/50"
-                  }`}
-                  onClick={() => setSelectedCandidateKey(candidateKey)}
-                >
-                  <div className="w-6 shrink-0 text-center">
-                    {isLeader ? (
-                      <div className="inline-flex h-5 w-5 rounded-full bg-background/80 border border-amber-500/60 dark:border-amber-500/50 items-center justify-center">
-                        <Crown className="h-3 w-3 text-amber-700 dark:text-amber-500" />
-                      </div>
-                    ) : (
-                      <span className="text-xs font-bold text-violet-700 dark:text-violet-500">#{candidate.rank || (idx + 1)}</span>
-                    )}
-                  </div>
-                  <PersonAvatar name={candidate.name} avatar={candidate.avatar} size="sm" />
-                  <span className="text-sm flex-1 truncate">{candidate.name}</span>
-                  <div className="text-right shrink-0">
-                    <p className={`text-xs font-mono font-bold ${candidate.percentGain >= 0 ? "text-green-700 dark:text-green-500" : "text-red-700 dark:text-red-500"}`}>
-                      {formatSignedPercent(candidate.percentGain)}
-                    </p>
-                    <p className={`text-[10px] font-mono ${candidate.currentGain >= 0 ? "text-muted-foreground" : "text-red-600/80 dark:text-red-400/80"}`}>
-                      {formatSignedPoints(candidate.currentGain)} pts
-                    </p>
-                  </div>
-                  {isSelected && (
-                    <div className="shrink-0 h-4 w-4 rounded-full bg-violet-500 flex items-center justify-center">
-                      <Check className="h-2.5 w-2.5 text-white" />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-            {filteredCandidates.length === 0 && (
-              <div className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-sm text-muted-foreground">
-                No candidates match &ldquo;{searchQuery}&rdquo;
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="shrink-0 border-t px-4 py-3 flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            className="flex-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-            disabled={!selectedCandidate}
-            onClick={() => {
-              if (!selectedCandidate) return;
-              onContinue(selectedCandidate);
-              onClose();
-            }}
-          >
-            {selectedCandidate ? `Pick ${selectedCandidate.name.split(" ")[0]}` : "Select a candidate"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function SectionHeader({ 
   icon, 
@@ -323,7 +156,6 @@ function SectionHeader({
 export function PredictTab({ personId, personName, personAvatar, currentScore, personRank }: PredictTabProps) {
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
-  const [gainerPickerState, setGainerPickerState] = useState<{ market: TopGainerMarket; initialCandidate?: GainerCandidate | null } | null>(null);
   const [visibleWorldCount, setVisibleWorldCount] = useState(3);
 
   const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
@@ -916,12 +748,19 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     setStakeModalOpen(true);
   };
 
-  const openGainerPicker = (market: TopGainerMarket, initialCandidate?: GainerCandidate | null) => {
-    if (isMarketClosed) {
-      return;
-    }
-    setGainerPickerState({ market, initialCandidate });
-  };
+  const gainerHighlightedEntryId = useCallback(
+    (marketId: string) => {
+      if (
+        stakeModalOpen &&
+        pendingSelection?.type === "gainer" &&
+        pendingSelection.marketId === marketId
+      ) {
+        return pendingSelection.entryId ?? null;
+      }
+      return openMarketBets.get(marketId)?.entryId ?? null;
+    },
+    [stakeModalOpen, pendingSelection, openMarketBets],
+  );
 
   const handleConfirmStake = async (amount: number) => {
     if (!pendingSelection || !pendingSelection.marketId) {
@@ -1225,7 +1064,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   market={gainer}
                   isMarketClosed={isMarketClosed}
                   closedMessage={closedMarketMessage}
-                  onShowAllCandidates={openGainerPicker}
+                  onSelectCandidate={handleGainerSelect}
+                  highlightedEntryId={gainerHighlightedEntryId(String(gainer.id))}
                   isPredicted={openMarketBets.has(String(gainer.id))}
                   predictionSummary={categoryRacePredictionSummaryFromBet(gainerBet)}
                   onFilterCategory={handleCategoryFilter}
@@ -1259,19 +1099,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         </Card>
       )}
 
-      <GainerCandidatesDialog
-        market={gainerPickerState?.market || null}
-        initialCandidate={gainerPickerState?.initialCandidate || null}
-        open={!!gainerPickerState}
-        onClose={() => setGainerPickerState(null)}
-        onContinue={(candidate) => {
-          if (gainerPickerState?.market) {
-            handleGainerSelect(gainerPickerState.market, candidate);
-          }
-        }}
-        isMarketClosed={isMarketClosed}
-      />
-
       <StakeModal
         open={stakeModalOpen}
         onClose={() => { setStakeModalOpen(false); setPendingSelection(null); }}
@@ -1279,6 +1106,10 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         onConfirm={handleConfirmStake}
         liveAmmState={liveAmmStateForPending}
         walletBalance={walletCredits}
+        onChangePick={pendingSelection?.type === "gainer" ? () => {
+          setStakeModalOpen(false);
+          setPendingSelection(null);
+        } : undefined}
         onDirectionChange={(dir) => {
           /* Sprint 4 (Polymarket pass): adding the in-modal Up/Down
              toggle here too so the experience is consistent with

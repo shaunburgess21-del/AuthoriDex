@@ -8,15 +8,7 @@ import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+import { ChangeVoteConfirmModal } from "@/components/vote/ChangeVoteConfirmModal";
 import { opinionPollShare } from "@/lib/share";
 import { toast } from "sonner";
 import { CountdownDescription } from "@/components/CountdownDescription";
@@ -450,7 +442,7 @@ export function OpinionPollCard({
         )}
       </Card>
 
-      <AlertDialog
+      <ChangeVoteConfirmModal
         open={changeDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
@@ -465,24 +457,11 @@ export function OpinionPollCard({
             setPendingChangeOption(null);
           }
         }}
-      >
-        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change your vote?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You&apos;re switching to{" "}
-              <span className="font-medium text-foreground">{pendingOption?.name ?? "this option"}</span>. You can change your vote once per day on
-              this poll.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-            <Button type="button" className="bg-cyan-600 hover:bg-cyan-700" onClick={() => void confirmChangeVote()}>
-              Change vote
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        toOptionName={pendingOption?.name ?? "this option"}
+        fromOptionName={votedOption?.name}
+        onConfirm={confirmChangeVote}
+        stopPropagation
+      />
 
       <ImageLightbox
         open={!!expandedImage}

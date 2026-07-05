@@ -16,6 +16,7 @@ import {
   InteractiveCategoryPill,
   isCategoryPillDrawerDismissSuppressed,
 } from "@/components/InteractiveCategoryPill";
+import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -2351,6 +2352,7 @@ export default function VotePage() {
 
   const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
     if (!isMobile) return;
+    if (isOverlayDismissSuppressed()) return;
     if (source === "browse-button") {
       if (!consumeCategoryPillBrowseIntent()) return;
     } else if (source !== "header-icon" && isCategoryPillDrawerDismissSuppressed()) {
