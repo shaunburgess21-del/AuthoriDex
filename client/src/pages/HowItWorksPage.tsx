@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 import {
   BadgeCheck,
   Check,
