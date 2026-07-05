@@ -100,6 +100,7 @@ export function showVoteToast(
   options?: ExternalToast,
 ): string | number {
   return toast(title, {
+    duration: 5000,
     ...options,
     icon: <VoteToastChip kind={kind} />,
     className: ["vd-toast", options?.className].filter(Boolean).join(" "),
