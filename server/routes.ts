@@ -173,6 +173,13 @@ import {
   isColdStartUser,
 } from "./lib/coldStartOrder";
 import { upsertEngagement } from "./lib/engagementWriter";
+import {
+  getWorldMarketsSortMode,
+  getPredictCmsSettings,
+  setWorldMarketsSortMode,
+  WORLD_MARKETS_SORT_MODES,
+  type WorldMarketsSortMode,
+} from "./services/predict-cms-settings";
 import { captureBackgroundError } from "./sentry";
 import { computeBlendStateForUser, resolveBlendState } from "./lib/blendedRank";
 import {
@@ -18217,13 +18224,36 @@ Target length: about 90-150 words.`;
         conditions.push(eq(predictionMarkets.featured, true));
       }
 
-      const orderTerms = await orderFeaturedRecencyForUser(
-        req,
-        predictionMarkets.featured,
-        predictionMarkets.createdAt,
-        predictionMarkets.category,
-        predictionMarkets.cmsDisplayOrder,
-      );
+      // Admin-controlled front-end sort (Predict CMS → World Markets).
+      // 'volume' (default) keeps the personalised + AMM-volume behaviour
+      // below; any other mode is an explicit editorial override applied to
+      // ALL users, replacing both the personalised SQL order and the
+      // post-query volume re-sort.
+      const sortMode = await getWorldMarketsSortMode();
+
+      let orderTerms: SQL[];
+      if (sortMode === "newest") {
+        orderTerms = [desc(predictionMarkets.createdAt)];
+      } else if (sortMode === "endAt") {
+        orderTerms = [asc(predictionMarkets.endAt)];
+      } else if (sortMode === "manual") {
+        // Same shape as the cold-start manual branch: explicitly placed
+        // markets (cms_display_order > 0) lead in drag order, the rest
+        // fall back to newest-first.
+        orderTerms = [
+          sql`CASE WHEN COALESCE(${predictionMarkets.cmsDisplayOrder}, 0) > 0 THEN 0 ELSE 1 END`,
+          asc(predictionMarkets.cmsDisplayOrder),
+          desc(predictionMarkets.createdAt),
+        ];
+      } else {
+        orderTerms = await orderFeaturedRecencyForUser(
+          req,
+          predictionMarkets.featured,
+          predictionMarkets.createdAt,
+          predictionMarkets.category,
+          predictionMarkets.cmsDisplayOrder,
+        );
+      }
 
       const markets = await db
         .select()
@@ -18341,9 +18371,11 @@ Target length: about 90-150 words.`;
       // sink. Stable __idx tiebreaker preserves the original
       // featured/recency/category ordering inside each volume bucket.
       // Skipped for cold-start users (anonymous / no interests) so the
-      // admin-curated cms_display_order from the SQL query is preserved.
-      const coldStart = await isColdStartUser(req);
-      if (!coldStart) {
+      // admin-curated cms_display_order from the SQL query is preserved,
+      // and skipped entirely when an admin sort override is active — the
+      // override's SQL order is the final order for everyone.
+      const applyVolumeSort = sortMode === "volume" && !(await isColdStartUser(req));
+      if (applyVolumeSort) {
         result.sort((a, b) => {
           if (b.volume !== a.volume) return b.volume - a.volume;
           return a.__idx - b.__idx;
@@ -19322,6 +19354,44 @@ Target length: about 90-150 words.`;
     } catch (error: any) {
       console.error("[Open Markets] Reorder error:", error);
       res.status(500).json({ error: "Failed to reorder world markets" });
+    }
+  });
+
+  // ── Predict CMS settings (front-end sort override) ────────────────
+  app.get("/api/admin/predict-cms-settings", requireAuth, requireAdmin, async (_req, res) => {
+    try {
+      const settings = await getPredictCmsSettings();
+      res.json(settings);
+    } catch (error: any) {
+      console.error("[Predict CMS Settings] Get error:", error);
+      res.status(500).json({ error: "Failed to load Predict CMS settings" });
+    }
+  });
+
+  app.put("/api/admin/predict-cms-settings", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const mode = req.body?.worldMarketsSortMode;
+      if (!WORLD_MARKETS_SORT_MODES.includes(mode)) {
+        return res.status(400).json({
+          error: `worldMarketsSortMode must be one of: ${WORLD_MARKETS_SORT_MODES.join(", ")}`,
+        });
+      }
+      const settings = await setWorldMarketsSortMode({
+        mode: mode as WorldMarketsSortMode,
+        actorId: req.userId ?? null,
+      });
+      await db.insert(adminAuditLog).values({
+        adminId: req.userId!,
+        adminEmail: null,
+        actionType: "set_world_markets_sort",
+        targetTable: "predict_cms_settings",
+        targetId: "global",
+        metadata: { worldMarketsSortMode: settings.worldMarketsSortMode },
+      });
+      res.json(settings);
+    } catch (error: any) {
+      console.error("[Predict CMS Settings] Update error:", error);
+      res.status(500).json({ error: "Failed to update Predict CMS settings" });
     }
   });
 

@@ -2088,6 +2088,30 @@ export const ammRuntimeSettings = pgTable("amm_runtime_settings", {
 export type AmmRuntimeSettings = typeof ammRuntimeSettings.$inferSelect;
 
 /**
+ * Singleton row of admin-tunable Predict CMS presentation knobs.
+ *
+ * `world_markets_sort_mode` controls how the PUBLIC /api/open-markets feed
+ * is ordered for everyone:
+ *   - 'volume'  (default) — existing behaviour: personalised/cold-start SQL
+ *     order, then AMM volume re-sort for warm users.
+ *   - 'newest'  — newest created first (e.g. to showcase a fresh scout batch).
+ *   - 'manual'  — admin drag order (cms_display_order) for all users.
+ *   - 'endAt'   — resolving soonest first.
+ *
+ * Cache pattern matches `amm_runtime_settings`: server reads via a short-TTL
+ * in-process cache so flipping the knob in the CMS propagates within seconds
+ * without a deploy or per-request DB hit.
+ */
+export const predictCmsSettings = pgTable("predict_cms_settings", {
+  id: text("id").primaryKey().default("global"),
+  worldMarketsSortMode: text("world_markets_sort_mode").notNull().default("volume"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: varchar("updated_by"),
+});
+
+export type PredictCmsSettings = typeof predictCmsSettings.$inferSelect;
+
+/**
  * Persisted daily LLM spend counters, keyed by (feature, UTC day).
  *
  * Backs the budget gates in server/agents/worldMarketBudget.ts

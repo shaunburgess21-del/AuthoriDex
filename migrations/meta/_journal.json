@@ -638,6 +638,13 @@
       "when": 1783380000000,
       "tag": "0090_jackpot_score_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1783385000000,
+      "tag": "0091_predict_cms_settings",
+      "breakpoints": true
     }
   ]
 }

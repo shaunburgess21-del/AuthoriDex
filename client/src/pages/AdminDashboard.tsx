@@ -594,6 +594,42 @@ export default function AdminDashboard() {
     enabled: isAdmin && (activeSection === "predictions" || activeSection === "settlement"),
   });
 
+  // Front-end sort override for the PUBLIC World Markets feed (Predict CMS
+  // knob, persisted server-side). Distinct from rwSortBy, which only sorts
+  // this admin list.
+  const { data: predictCmsSettings } = useQuery<{ worldMarketsSortMode: string }>({
+    queryKey: ["/api/admin/predict-cms-settings"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/predict-cms-settings");
+      if (!res.ok) throw new Error("Failed to fetch Predict CMS settings");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "predictions",
+  });
+  const frontendSortMutation = useMutation({
+    mutationFn: async (mode: string) => {
+      const res = await fetchWithAuth("/api/admin/predict-cms-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worldMarketsSortMode: mode }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to update front-end sort");
+      }
+      return res.json();
+    },
+    onSuccess: (data: { worldMarketsSortMode: string }) => {
+      queryClient.setQueryData(["/api/admin/predict-cms-settings"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
+      toast.success("Front-end sort updated", {
+        description: "The public World Markets feed now uses this order for everyone.",
+      });
+    },
+    onError: (e: Error) =>
+      toast.error("Could not update front-end sort", { description: e.message }),
+  });
+
   // Fetch traffic stats - only when admin and on overview section
   const { data: trafficStats, isLoading: trafficLoading, refetch: refetchTraffic } = useQuery<TrafficStats>({
     queryKey: ["/api/admin/traffic"],
@@ -3408,6 +3444,24 @@ export default function AdminDashboard() {
                           <SelectItem value="endAt">Resolution date</SelectItem>
                           <SelectItem value="created">Newest first</SelectItem>
                           <SelectItem value="fit">Fit score</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={predictCmsSettings?.worldMarketsSortMode ?? "volume"}
+                        onValueChange={(v) => frontendSortMutation.mutate(v)}
+                        disabled={frontendSortMutation.isPending}
+                      >
+                        <SelectTrigger
+                          className="w-[210px]"
+                          data-testid="select-frontend-sort"
+                        >
+                          <SelectValue placeholder="Front-end sort" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="volume">Front-end: Volume (default)</SelectItem>
+                          <SelectItem value="newest">Front-end: Newest first</SelectItem>
+                          <SelectItem value="manual">Front-end: Manual order</SelectItem>
+                          <SelectItem value="endAt">Front-end: Resolution date</SelectItem>
                         </SelectContent>
                       </Select>
                       <span className="text-xs text-muted-foreground ml-auto">
