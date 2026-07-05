@@ -292,7 +292,7 @@ export default function MePage() {
                   card never reach this surface anyway. */}
               <Button
                 className="w-full mt-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                onClick={() => setLocation("/how-it-works?tab=credits")}
+                onClick={() => setLocation("/how-it-works?tab=credits#earn-vox")}
                 data-testid="button-earn-credits-me"
               >
                 <Wallet className="h-4 w-4 mr-2" />

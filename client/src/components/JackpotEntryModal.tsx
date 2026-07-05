@@ -527,7 +527,7 @@ export function JackpotEntryModal({
                     className="gap-1 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       handleClose();
-                      setLocation("/how-it-works?tab=credits");
+                      setLocation("/how-it-works?tab=credits#earn-vox");
                     }}
                     data-testid="button-earn-more-vox-jackpot"
                   >
