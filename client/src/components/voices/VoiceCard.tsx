@@ -18,6 +18,7 @@ import { formatTimeAgo } from "@/lib/formatDate";
 import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import type { VoicesEntity, VoicesFeedItem } from "./types";
+import { VOICES_FEED_SURFACE_CLASS } from "./voicesSurface";
 
 const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
   matchup: VoteIcon,
@@ -38,14 +39,13 @@ interface VoiceCardProps {
 
 export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
   const isDeleted = Boolean(item.body) === false;
-  const net = item.upvotes - item.downvotes;
   const hasUpvoted = item.userVote === "up";
   const SurfaceIcon = SURFACE_ICON[item.entity.refType] ?? MessagesSquare;
   const isTimeline = item.entity.refType === "timeline";
 
   return (
     <Card
-      className="p-4 transition-colors hover:bg-muted/30 cursor-pointer"
+      className={cn("cursor-pointer p-4 transition-colors", VOICES_FEED_SURFACE_CLASS)}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(item)}
@@ -95,7 +95,7 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
           </div>
 
           {/* Body */}
-          <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words line-clamp-6">
+          <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap break-words text-foreground line-clamp-6">
             {isDeleted ? (
               <span className="italic text-muted-foreground">[deleted]</span>
             ) : (
@@ -108,7 +108,7 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
             <Link
               href={item.entity.href}
               onClick={(e) => e.stopPropagation()}
-              className="mt-2.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-amber-500/40 hover:text-foreground"
+              className="mt-2.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.06] px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-white/[0.08] hover:text-foreground dark:bg-white/[0.06]"
               data-testid={`voice-card-entity-${item.id}`}
             >
               {item.entity.imageUrl ? (
@@ -146,17 +146,6 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
               <ThumbsUp className={cn("h-4 w-4", hasUpvoted && "fill-current")} />
               {item.upvotes > 0 && <span>{item.upvotes}</span>}
             </button>
-
-            {net !== 0 && (
-              <span
-                className={cn(
-                  "text-[11px] font-mono",
-                  net > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-                )}
-              >
-                {net > 0 ? `+${net}` : net}
-              </span>
-            )}
 
             <button
               type="button"

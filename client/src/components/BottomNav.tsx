@@ -56,6 +56,21 @@ export function BottomNav() {
       aria-label="Navigation"
       data-testid="nav-bottom"
     >
+      {/* Opaque bleed below the nav. Mobile browsers briefly report
+          inconsistent viewport sizes while their toolbar animates, which can
+          strand this fixed nav a toolbar-height above the true screen bottom
+          (Android dynamic toolbars, iOS stale transforms, rubber-band
+          overscroll). Rather than chasing perfect positioning during that
+          window — the source of every past regression here — this extension
+          hangs off the nav's bottom edge and covers any transient gap so page
+          content can never show through. Fully opaque bg-background (not the
+          nav's translucent blur) so it hides content regardless of
+          backdrop-filter compositing; off-screen whenever the nav is anchored
+          correctly. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 right-0 top-full h-[120px] bg-background"
+      />
       <div className="flex items-center justify-around h-16">
         {navItems.map((item) => {
           const isActive = location === item.path || 

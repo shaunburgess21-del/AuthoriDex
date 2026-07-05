@@ -209,7 +209,6 @@ function PostOverlayModalContent({
   });
   const thread = useCommentThread(adapter);
 
-  const netVotes = insight.upvotes - insight.downvotes;
   const hasUpvoted = userVote === "up";
   const isInsightDeleted = Boolean(insight.deletedAt);
 
@@ -303,15 +302,6 @@ function PostOverlayModalContent({
                       {(insight.upvotes || 0) > 0 && <span>{insight.upvotes}</span>}
                     </button>
                   </>
-                )}
-
-                {netVotes !== 0 && (
-                  <span className={isInsightDeleted
-                    ? "text-xs text-muted-foreground"
-                    : `text-xs font-mono ${netVotes > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-rose-600 dark:text-rose-400"}`}
-                  >
-                    {netVotes > 0 ? `+${netVotes}` : netVotes}
-                  </span>
                 )}
 
                 <div className="flex items-center gap-1 ml-4 text-muted-foreground">

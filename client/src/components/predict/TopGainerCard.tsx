@@ -9,7 +9,11 @@ import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } 
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
-import { formatVoxCompact } from "@/lib/currency";
+import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
+import { cn } from "@/lib/utils";
+import { Check, ChevronRight } from "lucide-react";
+
+export type CategoryRaceEntryStakes = Map<string, { yesStake: number; noStake: number }>;
 
 type CategoryFilter = FilterCategory;
 
@@ -64,15 +68,19 @@ export function categoryRacePredictionSummaryFromBet(
   };
 }
 
+const FOOTER_SHELL_CLASS =
+  "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors w-full";
+
 export function TopGainerCard({
   market,
   isMarketClosed = false,
   closedMessage,
   onSelectCandidate,
   highlightedEntryId = null,
+  entryStakes,
   isPredicted = false,
-  predictionSummary: _predictionSummary = null,
-  unrealisedPnl: _unrealisedPnl = null,
+  predictionSummary = null,
+  unrealisedPnl = null,
   isShimmering = false,
   onFilterCategory,
   categoryRaceMap,
@@ -83,6 +91,8 @@ export function TopGainerCard({
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelectCandidate?: (market: TopGainerMarket, candidate: GainerCandidate) => void;
   highlightedEntryId?: string | null;
+  /** Per-entry stake totals for this market — drives backed-row highlight. */
+  entryStakes?: CategoryRaceEntryStakes;
   isPredicted?: boolean;
   predictionSummary?: CategoryRacePredictionSummary | null;
   /**
@@ -100,8 +110,22 @@ export function TopGainerCard({
   leaderboardCategories?: Set<string>;
 }) {
   const candidates = market.allCandidates ?? market.leaders;
-  const canPick = !isPredicted;
   const volumeLabel = formatVoxCompact(market.volume ?? 0);
+  const raceDetailHref = `/predict/race/${market.id}`;
+
+  const navigateToRaceDetail = () => {
+    setPredictReturnAnchor(`card-gainer-${market.id}`);
+  };
+
+  const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
+  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
+  const pnlClass = !hasPnl || pnlIsZero
+    ? "text-muted-foreground"
+    : pnlValue >= 0
+      ? "text-green-700 dark:text-green-400"
+      : "text-red-700 dark:text-red-400";
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   return (
     <PredictCard
@@ -130,6 +154,8 @@ export function TopGainerCard({
             onFilter={() => onFilterCategory?.(market.category)}
             raceMarketId={categoryRaceMap?.get(normalizeMarketCategory(market.category))}
             leaderboardCategories={leaderboardCategories}
+            detailHref={raceDetailHref}
+            detailLabel="View Race Details"
             share={
               market.id
                 ? categoryRaceShare(market.id, getMarketCategoryLabel(market.category))
@@ -148,8 +174,8 @@ export function TopGainerCard({
 
       {market.teaser?.trim() ? (
         <Link
-          href={`/predict/race/${market.id}`}
-          onClick={() => setPredictReturnAnchor(`card-gainer-${market.id}`)}
+          href={raceDetailHref}
+          onClick={navigateToRaceDetail}
           className="block mb-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm"
         >
           <p className="text-sm text-muted-foreground line-clamp-2 leading-[1.4] hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
@@ -161,7 +187,11 @@ export function TopGainerCard({
       <div className="space-y-1.5 mb-1">
         {candidates.map((candidate, i) => {
           const candidateKey = candidate.entryId || candidate.personId || candidate.name;
-          const isSelected = !!highlightedEntryId && candidate.entryId === highlightedEntryId;
+          const hasPosition =
+            !!candidate.entryId && (entryStakes?.get(candidate.entryId)?.yesStake ?? 0) > 0;
+          const isSelected =
+            (!!highlightedEntryId && candidate.entryId === highlightedEntryId) || hasPosition;
+          const rowNonInteractive = isMarketClosed || (isPredicted && hasPosition);
 
           return (
             <CategoryRaceCandidateRow
@@ -169,19 +199,82 @@ export function TopGainerCard({
               candidate={candidate}
               rankIndex={i}
               isSelected={isSelected}
-              nonInteractive={!canPick}
+              nonInteractive={rowNonInteractive}
               isMarketClosed={isMarketClosed}
               closedMessage={closedMessage}
               onSelect={
-                canPick
-                  ? () => onSelectCandidate?.(market, candidate)
-                  : undefined
+                rowNonInteractive
+                  ? undefined
+                  : () => onSelectCandidate?.(market, candidate)
               }
               size="card"
               testId={`gainer-candidate-${market.id}-${candidateKey}`}
             />
           );
         })}
+      </div>
+
+      <div className="mt-auto pt-1">
+        {isPredicted ? (
+          <Link
+            href={raceDetailHref}
+            onClick={navigateToRaceDetail}
+            className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            data-testid={`button-gainer-your-pick-${market.id}`}
+            aria-label={
+              predictionSummary?.pickLabel
+                ? `View your pick: ${predictionSummary.pickLabel}`
+                : "View your race pick"
+            }
+          >
+            <div
+              className={cn(
+                FOOTER_SHELL_CLASS,
+                "border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 hover:bg-violet-500/12 dark:hover:bg-violet-500/10",
+              )}
+            >
+              <Check className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+              <div className="min-w-0 flex-1 text-left">
+                <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                <p className="truncate text-sm font-semibold leading-tight text-foreground">
+                  {predictionSummary?.pickLabel ?? "View position"}
+                </p>
+              </div>
+              {pnlText && (
+                <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                  {pnlText}
+                </span>
+              )}
+              {predictionSummary != null && (
+                <div className="flex shrink-0 flex-col items-end tabular-nums">
+                  <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                  <span className="text-xs font-semibold leading-tight text-foreground">
+                    {formatVox(predictionSummary.stakeAmount)}
+                  </span>
+                </div>
+              )}
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            </div>
+          </Link>
+        ) : (
+          <Link
+            href={raceDetailHref}
+            onClick={navigateToRaceDetail}
+            className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            data-testid={`button-gainer-view-details-${market.id}`}
+            aria-label="View race details"
+          >
+            <div
+              className={cn(
+                FOOTER_SHELL_CLASS,
+                "justify-center border-border/50 bg-muted/30 hover:bg-muted/45 dark:hover:bg-muted/40",
+              )}
+            >
+              <span className="text-sm font-medium text-foreground">View race details</span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            </div>
+          </Link>
+        )}
       </div>
     </PredictCard>
   );

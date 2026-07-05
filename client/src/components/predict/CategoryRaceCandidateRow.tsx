@@ -5,7 +5,7 @@ import type { GainerCandidate } from "@/components/predict/TopGainerCard";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { formatSignedPercent, formatSignedPoints } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Crown } from "lucide-react";
+import { CheckCircle2, ChevronRight, Crown } from "lucide-react";
 
 const INTERACTIVE_ROW_CLASS =
   "[@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20";
@@ -25,6 +25,7 @@ export function CategoryRaceCandidateRow({
   onSelect,
   size = "card",
   showUserPickBadge = false,
+  showDetailAffordance = false,
   marketPct,
   testId,
 }: {
@@ -37,6 +38,8 @@ export function CategoryRaceCandidateRow({
   onSelect?: () => void;
   size?: "card" | "detail";
   showUserPickBadge?: boolean;
+  /** Trailing chevron when row navigates to the race detail page. */
+  showDetailAffordance?: boolean;
   marketPct?: number | null;
   testId?: string;
 }) {
@@ -130,7 +133,7 @@ export function CategoryRaceCandidateRow({
         )}
       </div>
 
-      <div className="text-right shrink-0">
+      <div className="text-right shrink-0 flex items-center gap-1">
         <p
           className={cn(
             "font-mono font-bold",
@@ -140,6 +143,9 @@ export function CategoryRaceCandidateRow({
         >
           {formatSignedPercent(candidate.percentGain)}
         </p>
+        {showDetailAffordance && (
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+        )}
       </div>
     </button>
   );

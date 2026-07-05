@@ -499,8 +499,6 @@ function InsightCard({
   disabled,
 }: InsightCardProps) {
   const upvotes = comment.upvotes || 0;
-  const downvotes = comment.downvotes || 0;
-  const netVotes = upvotes - downvotes;
   const hasUpvoted = comment.userVote === "up";
   const isDeleted = Boolean(comment.deletedAt);
 
@@ -642,20 +640,6 @@ function InsightCard({
                 Reply
               </button>
             </>
-          )}
-          {netVotes !== 0 && (isDeleted || downvotes > 0) && (
-            <span
-              className={isDeleted
-                ? "text-xs text-muted-foreground"
-                : `text-xs font-mono ${
-                  netVotes > 0
-                    ? "text-cyan-600 dark:text-cyan-400"
-                    : "text-rose-600 dark:text-rose-400"
-                }`}
-              data-testid={`text-netvotes-${comment.id}`}
-            >
-              {netVotes > 0 ? `+${netVotes}` : netVotes}
-            </span>
           )}
         </div>
       </div>

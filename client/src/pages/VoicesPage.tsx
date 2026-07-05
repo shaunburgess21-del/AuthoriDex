@@ -23,12 +23,7 @@ import {
   type VoicesFeedResponse,
   type VoicesFilters,
 } from "@/components/voices/types";
-
-const MODES: Array<{ id: VoicesFeedMode; label: string }> = [
-  { id: "for-you", label: "For You" },
-  { id: "latest", label: "Latest" },
-  { id: "top", label: "Top" },
-];
+import { VOICES_FEED_SURFACE_CLASS, VOICES_PAGE_CANVAS_CLASS, VOICES_PAGE_HEADER_CLASS } from "@/components/voices/voicesSurface";
 
 export default function VoicesPage() {
   const { user, isLoggedIn } = useAuth();
@@ -157,38 +152,28 @@ export default function VoicesPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0">
+    <div className={cn("min-h-screen bg-background pb-20 md:pb-0", VOICES_PAGE_CANVAS_CLASS)}>
       <SiteHeader active="voices" />
 
       <div
         ref={headerRef}
-        className="sticky top-16 z-40 border-b bg-background/80 backdrop-blur-xl will-change-transform transition-transform duration-100 ease-out"
+        className={cn(
+          "sticky top-16 z-40 border-b bg-background/80 backdrop-blur-xl will-change-transform transition-transform duration-100 ease-out",
+          VOICES_PAGE_HEADER_CLASS,
+        )}
         style={{ transform: `translateY(-${headerOffset}px)` }}
       >
-        <div className="container mx-auto max-w-2xl space-y-3 px-4 py-3">
-          <div className="flex items-center gap-1">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setMode(m.id)}
-                className={cn(
-                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-                  mode === m.id
-                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                data-testid={`voices-mode-${m.id}`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <VoicesFilterBar filters={filters} onChange={setFilters} />
+        <div className="container mx-auto max-w-2xl px-4 py-2.5">
+          <VoicesFilterBar
+            filters={filters}
+            onChange={setFilters}
+            mode={mode}
+            onModeChange={setMode}
+          />
         </div>
       </div>
 
-      <main className="container mx-auto max-w-2xl space-y-3 px-4 py-4">
+      <main className="container mx-auto max-w-2xl space-y-2 px-4 py-4">
         <VoicesComposer />
 
         {isLoading ? (
@@ -235,9 +220,9 @@ export default function VoicesPage() {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-border p-4">
+        <div key={i} className={cn("p-4", VOICES_FEED_SURFACE_CLASS)}>
           <div className="flex items-start gap-3">
             <Skeleton className="h-8 w-8 rounded-full" />
             <div className="flex-1 space-y-2">

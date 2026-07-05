@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useSearch } from "wouter";
 import {
-  ArrowLeft,
   BadgeCheck,
-  BookOpen,
   Check,
   ChevronRight,
   Coins,
@@ -70,6 +68,7 @@ import { REFERRAL_PANEL_GLOW_CLASS } from "@/components/referral/ReferralFriendP
 import { navigateToLogin } from "@/lib/authReturn";
 import { HowItWorksWelcomeModal } from "@/components/HowItWorksWelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
+import { SiteHeader } from "@/components/SiteHeader";
 
 /**
  * Tier at which a member's rank qualifier starts appearing inline on their
@@ -205,16 +204,16 @@ function useLiveCreditActionList(): CreditActionConfig[] {
 /**
  * Scroll offset for hash anchors on this page (#earn-vox, #streak).
  *
- * How It Works stacks TWO sticky bars — the h-14 page header (56px) and
+ * How It Works stacks TWO sticky bars — the h-16 SiteHeader (64px) and
  * the sticky knowledge tab bar (~66px incl. padding) — so anchored
- * sections need ~122px of clearance before the heading is visible,
+ * sections need ~130px of clearance before the heading is visible,
  * plus breathing room so the heading doesn't sit flush against the bar.
  * Applied as an inline style because the global
  * `[data-hash-anchor] { scroll-margin-top: 72px }` rule in index.css
  * out-cascades Tailwind `scroll-mt-*` utilities (same specificity,
  * later in the sheet).
  */
-const HIW_HASH_ANCHOR_OFFSET = 144;
+const HIW_HASH_ANCHOR_OFFSET = 152;
 
 /**
  * Shared knowledge-base table cell classes. Header cells are vertically
@@ -2160,7 +2159,6 @@ function ProgressHeader() {
 }
 
 export default function HowItWorksPage() {
-  const [, setLocation] = useLocation();
   const search = useSearch();
   const welcomeModalRef = useRef<OnboardingDrawerHandle>(null);
 
@@ -2187,7 +2185,7 @@ export default function HowItWorksPage() {
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
         const tabsSection = document.getElementById("profile-tabs-section");
-        const headerOffset = 56; // sticky header height (h-14)
+        const headerOffset = 64; // sticky header height (h-16)
         const top = tabsSection
           ? Math.max(0, tabsSection.getBoundingClientRect().top + window.scrollY - headerOffset)
           : 0;
@@ -2219,36 +2217,11 @@ export default function HowItWorksPage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center gap-4 px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (window.history.length > 1) window.history.back();
-              else setLocation("/me");
-            }}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-voxdex shrink-0">
-              <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h1 className="font-semibold">How It Works</h1>
-              <p className="text-xs text-muted-foreground">
-                The VoxDex gamification knowledge base
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <div
         id="profile-tabs-section"
-        className="sticky top-14 z-40 border-b bg-background/80 backdrop-blur-xl"
+        className="sticky top-16 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md"
       >
         <div className="container mx-auto max-w-4xl px-2 py-2 sm:px-4">
           <KnowledgeTabsBar

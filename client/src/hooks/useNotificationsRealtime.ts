@@ -9,8 +9,8 @@ import { ToastBurstCoalescer } from "@/lib/notifications/toast-burst-coalesce";
 import { useInvalidateNotifications } from "@/hooks/useNotifications";
 import { dispatchRankUp } from "@/lib/rank-up-events";
 import { STREAK_BADGE_KEYS } from "@shared/badge-config";
-import { BadgeToast } from "@/components/BadgeToast";
-import { createElement } from "react";
+import { BadgeToast, BADGE_TOAST_WIDTH_CSS } from "@/components/BadgeToast";
+import { createElement, type CSSProperties } from "react";
 import {
   ONBOARDING_SUPPRESSED_TOAST_KINDS,
   shouldShowCelebrationToasts,
@@ -216,6 +216,11 @@ export function useNotificationsRealtime(): void {
                       }),
                     {
                       duration: 6000,
+                      className:
+                        "badge-toast-host box-border p-0 bg-transparent border-0 shadow-none overflow-visible",
+                      style: {
+                        "--width": BADGE_TOAST_WIDTH_CSS,
+                      } as CSSProperties,
                     },
                   );
                   // Invalidate the badges query so the trophy cabinet

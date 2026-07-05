@@ -16,9 +16,15 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { MentionText } from "@/components/comments/MentionText";
+import { cn } from "@/lib/utils";
 import { VOICES_TIMELINE_ID } from "@shared/constants";
 import { toast } from "sonner";
 import type { VoicesFeedItem, VoicesReply } from "./types";
+import {
+  VOICES_COMPOSER_INPUT_CLASS,
+  VOICES_PANEL_HEADER_CLASS,
+  VOICES_PANEL_SURFACE_CLASS,
+} from "./voicesSurface";
 
 interface VoicesPostOverlayProps {
   item: VoicesFeedItem;
@@ -164,10 +170,18 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       data-testid="voices-post-overlay"
     >
       <div
-        className="relative my-8 mx-4 w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+        className={cn(
+          "relative my-8 mx-4 w-full max-w-2xl bg-background",
+          VOICES_PANEL_SURFACE_CLASS,
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 p-4 backdrop-blur-sm">
+        <div
+          className={cn(
+            "sticky top-0 z-10 flex items-center justify-between p-4 backdrop-blur-sm",
+            VOICES_PANEL_HEADER_CLASS,
+          )}
+        >
           <h2 className="text-lg font-semibold">Post</h2>
           <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8" aria-label="Close">
             <X className="h-5 w-5" />
@@ -210,7 +224,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                 {postDeleted ? "[deleted]" : <MentionText text={item.body} />}
               </p>
 
-              <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
+              <div className="mt-4 flex items-center gap-3 border-t border-border/40 pt-4">
                 {!postDeleted && (
                   <button
                     onClick={handleVotePost}
@@ -234,7 +248,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
           </div>
         </div>
 
-        <div className="border-t border-border">
+        <div className="border-t border-border/40">
           <div className="p-4">
             <CommentSortHeader
               count={thread.visibleCount}
@@ -258,6 +272,8 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                   onCancelReply={thread.cancelReply}
                   supportsFullscreen
                   parentExpanded
+                  hideTopBorder
+                  inputClassName={VOICES_COMPOSER_INPUT_CLASS}
                   variant="card"
                 />
               </div>

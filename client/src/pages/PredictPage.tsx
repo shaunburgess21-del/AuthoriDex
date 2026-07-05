@@ -117,7 +117,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CardSection } from "@/components/CardSection";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
@@ -3474,22 +3473,6 @@ export default function PredictPage() {
               icon={<Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
               accent="violet"
               testId="section-header-gainer"
-              subtitleMeta={
-                <TouchTooltip
-                  content={
-                    <p className="text-xs">
-                      The winner is whoever has the highest % gain in their Trend Score by Sunday close, not the highest ranked person.
-                    </p>
-                  }
-                  side="bottom"
-                  align="start"
-                  contentClassName="max-w-[260px]"
-                >
-                  <span className="-mt-0.5 inline-block text-xs leading-tight text-muted-foreground underline underline-offset-2 cursor-help">
-                    Biggest Mover Wins
-                  </span>
-                </TouchTooltip>
-              }
               actions={
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -3538,6 +3521,7 @@ export default function PredictPage() {
                     closedMessage={closedMarketMessage}
                     onSelectCandidate={handleGainerSelect}
                     highlightedEntryId={gainerHighlightedEntryId(String(market.id))}
+                    entryStakes={userBetsPerEntry.get(String(market.id))}
                     isPredicted={predictedMarkets.has(market.id)}
                     predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
                     isShimmering={false}
@@ -3860,6 +3844,7 @@ export default function PredictPage() {
               closedMessage={closedMarketMessage}
               onSelectCandidate={handleGainerSelect}
               highlightedEntryId={gainerHighlightedEntryId(String(market.id))}
+              entryStakes={userBetsPerEntry.get(String(market.id))}
               isPredicted={predictedMarkets.has(market.id)}
               predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
               isShimmering={false}

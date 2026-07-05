@@ -23,12 +23,12 @@ export const VOICES_TIMELINE_ID = "global";
  * underlying comment parent types. `timeline` = standalone voices posts.
  */
 export const VOICES_SURFACES = [
+  "timeline",
   "matchup",
   "sentiment_poll",
   "opinion_poll",
   "world_market",
   "profile",
-  "timeline",
 ] as const;
 
 export type VoicesSurface = (typeof VOICES_SURFACES)[number];

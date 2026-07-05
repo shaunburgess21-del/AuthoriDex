@@ -2,6 +2,9 @@ import { Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBadgeIcon, getRarityStyle } from "@/lib/badge-icons";
 
+/** Sonner `--width` + host CSS — match glass vote toast slot (356px cap, 1rem mobile gutter). */
+export const BADGE_TOAST_WIDTH_CSS = "min(356px, calc(100vw - 1rem))";
+
 interface BadgeToastProps {
   badgeName: string;
   description?: string | null;
@@ -14,8 +17,8 @@ interface BadgeToastProps {
 
 /**
  * Toast variant of the badge tile. Mirrors the StreakToast layout
- * (340px wide, rarity-tinted left border, icon on the left, headline
- * + description on the right) so the celebration moments feel
+ * (vote-toast-width slot, rarity-tinted left border, icon on the left,
+ * headline + description on the right) so the celebration moments feel
  * like one family. Styled vs. the default Sonner so badge unlocks
  * read as a moment rather than a routine info ping.
  */
@@ -35,11 +38,9 @@ export function BadgeToast({
       data-testid="badge-toast"
       data-rarity={rarity}
       className={cn(
-        // Cap at the StreakToast width on roomy screens but never
-        // overflow narrow viewports — small phones (<360px) would
-        // previously bleed past the toast container with the fixed
-        // 340px width. The min() expression keeps a 1rem gutter.
-        "w-[min(340px,calc(100vw-2rem))] sm:w-[360px] rounded-2xl border-2 p-4 relative bg-card shadow-lg",
+        // Fill the Sonner host slot (see BADGE_TOAST_WIDTH_CSS) so the
+        // card matches glass vote toast width on mobile.
+        "w-full max-w-[min(356px,calc(100vw-1rem))] rounded-2xl border-2 p-4 relative bg-card shadow-lg",
         rarityStyle.border,
       )}
     >

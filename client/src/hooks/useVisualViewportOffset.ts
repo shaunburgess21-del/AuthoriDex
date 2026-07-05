@@ -57,6 +57,14 @@ import { useEffect, useState } from "react";
  *   - `window.resize` fires when `innerHeight` changes without a
  *     useful `vv.scroll` tick on some Chrome/WebKit builds.
  *   - `orientationchange` clears stale offsets after rotation.
+ *
+ * Settle pass: event-driven samples can land mid-toolbar-animation
+ * while `vv.height` and `window.innerHeight` are desynced. If no
+ * further event fires after the viewports converge, that stale delta
+ * would stick and the nav would stay detached until the next scroll.
+ * So every scheduled measurement also (re)starts a trailing timer
+ * that re-measures ~250ms after events go quiet, once the browser
+ * has settled on final viewport numbers.
  */
 export function useVisualViewportOffset(): number {
   const [offset, setOffset] = useState(0);
@@ -72,6 +80,7 @@ export function useVisualViewportOffset(): number {
     if (!isIOSWebKit) return;
 
     let frame = 0;
+    let settleTimer = 0;
     const update = () => {
       frame = 0;
       const delta = vv.offsetTop + vv.height - window.innerHeight;
@@ -79,7 +88,11 @@ export function useVisualViewportOffset(): number {
       setOffset((prev) => (prev === next ? prev : next));
     };
 
+    const SETTLE_MS = 250;
     const schedule = () => {
+      // Trailing settle pass — see the "Settle pass" note above.
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(update, SETTLE_MS);
       if (frame !== 0) return;
       frame = window.requestAnimationFrame(update);
     };
@@ -98,6 +111,7 @@ export function useVisualViewportOffset(): number {
       window.removeEventListener("resize", schedule);
       window.removeEventListener("orientationchange", schedule);
       if (frame !== 0) window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
     };
   }, []);
 

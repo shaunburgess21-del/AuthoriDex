@@ -1497,6 +1497,24 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
   }
 }
 
+/* BadgeToast — slot width must match BADGE_TOAST_WIDTH_CSS in BadgeToast.tsx */
+[data-sonner-toast].badge-toast-host {
+  width: min(356px, calc(100vw - 1rem)) !important;
+  max-width: calc(100vw - 1rem) !important;
+  margin-inline: auto !important;
+  left: 50% !important;
+  right: auto !important;
+}
+
+@media (max-width: 600px) {
+  [data-sonner-toast].badge-toast-host {
+    left: 50% !important;
+    right: auto !important;
+    width: min(356px, calc(100vw - 1rem)) !important;
+    max-width: calc(100vw - 1rem) !important;
+  }
+}
+
 /* ===== HASH DEEP-LINK SCROLL OFFSET =====
  * Pages with a sticky top bar (PredictPage, detail pages) need their
  * fragment targets to settle BELOW the bar — otherwise the section

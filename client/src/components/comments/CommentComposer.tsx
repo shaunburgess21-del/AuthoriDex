@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { mentionAwareLength, serializeBodyWithMentions } from "@shared/lib/mentions";
 import { MentionSuggestions } from "./MentionSuggestions";
 import { useMentionAutocomplete } from "./useMentionAutocomplete";
+import { cn } from "@/lib/utils";
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
 const DEFAULT_COMMENT_MAX_LENGTH = 5000;
@@ -40,6 +41,12 @@ export interface CommentComposerProps {
   variant?: "card" | "inline";
   /** Hard character cap; mirrors the server limit. */
   maxLength?: number;
+  /** Optional slot below the textarea (e.g. Voices timeline picker). */
+  accessory?: ReactNode;
+  /** Omit the top divider above the composer (e.g. Voices inline card). */
+  hideTopBorder?: boolean;
+  /** Extra classes merged onto the inline textarea. */
+  inputClassName?: string;
   testIds?: {
     input?: string;
     inputFullscreen?: string;
@@ -66,6 +73,9 @@ export function CommentComposer({
   scrollIntoViewOnExpand = true,
   variant = "card",
   maxLength = DEFAULT_COMMENT_MAX_LENGTH,
+  accessory,
+  hideTopBorder = false,
+  inputClassName,
   testIds,
 }: CommentComposerProps) {
   const [composerMode, setComposerMode] = useState<ComposerMode>("auto");
@@ -380,6 +390,7 @@ export function CommentComposer({
           onHoverIndex={setActiveIndex}
         />
       )}
+      {accessory ? <div className="mt-2 shrink-0">{accessory}</div> : null}
       {renderActionRow("-fullscreen")}
     </div>
   ) : null;
@@ -388,7 +399,9 @@ export function CommentComposer({
     <>
       <div
         ref={composerContainerRef}
-        className="pt-3 border-t border-border/20"
+        className={cn(
+          hideTopBorder ? "pt-0" : "border-t border-border/20 pt-3",
+        )}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}
       >
         {replyTo && (
@@ -432,7 +445,13 @@ export function CommentComposer({
                 onKeyUp={syncCursorFromTextarea}
                 onSelect={syncCursorFromTextarea}
                 onKeyDown={handleKeyDown}
-                className={`block w-full bg-muted/30 border border-border/30 rounded-xl px-3 py-2 ${supportsFullscreen ? "pr-12" : "pr-3"} text-base resize-none ${TEXTAREA_BASE_CLASS}${isManualComposer ? " h-40 overflow-y-auto" : ""}`}
+                className={cn(
+                  "block w-full resize-none rounded-xl border border-border/30 bg-muted/30 px-3 py-2 text-base",
+                  supportsFullscreen ? "pr-12" : "pr-3",
+                  TEXTAREA_BASE_CLASS,
+                  isManualComposer ? "h-40 overflow-y-auto" : "",
+                  inputClassName,
+                )}
                 rows={1}
                 data-testid={testIds?.input ?? "input-comment"}
               />
@@ -462,6 +481,7 @@ export function CommentComposer({
                 </div>
               )}
             </div>
+            {accessory ? <div className="mt-2">{accessory}</div> : null}
             {renderActionRow("")}
           </div>
         </div>

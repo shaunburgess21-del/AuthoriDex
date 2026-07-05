@@ -8,7 +8,6 @@ import { JackpotEntryModal } from "@/components/JackpotEntryModal";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation, Link } from "wouter";
@@ -729,6 +728,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     const crowdSentiment = prices && candidate.entryId
       ? Math.round((prices[candidate.entryId] ?? 0) * 100)
       : 0;
+    const priorStake = userBetsPerEntry.get(String(market.id))?.get(String(candidate.entryId))?.yesStake ?? 0;
+    const isTopUp = priorStake > 0;
     setPendingSelection({
       type: "gainer",
       choice: candidate.name,
@@ -742,6 +743,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       crowdSentiment,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? priorStake : undefined,
       engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
@@ -1037,22 +1040,6 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           title="Category Races"
           subtitle="Pick the biggest mover in each category"
           count={gainerMarkets.length || undefined}
-          subtitleMeta={
-            <TouchTooltip
-              content={
-                <p className="text-xs">
-                  The winner is whoever has the highest % gain in their Trend Score by Sunday close, not the highest ranked person.
-                </p>
-              }
-              side="bottom"
-              align="start"
-              contentClassName="max-w-[260px]"
-            >
-              <span className="-mt-0.5 inline-block text-xs leading-tight text-muted-foreground underline underline-offset-2 cursor-help">
-                Biggest Mover Wins
-              </span>
-            </TouchTooltip>
-          }
         />
         {gainerMarkets.length > 0 ? (
           <div className={gainerGrid.container}>
@@ -1066,6 +1053,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   closedMessage={closedMarketMessage}
                   onSelectCandidate={handleGainerSelect}
                   highlightedEntryId={gainerHighlightedEntryId(String(gainer.id))}
+                  entryStakes={userBetsPerEntry.get(String(gainer.id))}
                   isPredicted={openMarketBets.has(String(gainer.id))}
                   predictionSummary={categoryRacePredictionSummaryFromBet(gainerBet)}
                   onFilterCategory={handleCategoryFilter}

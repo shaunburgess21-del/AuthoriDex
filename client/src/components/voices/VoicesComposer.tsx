@@ -1,17 +1,22 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AtSign, X } from "lucide-react";
+import { ChevronRight, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { CommentComposer } from "@/components/comments/CommentComposer";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { PersonSearchPopover, type PersonResult } from "./PersonSearchPopover";
 import type { VoicesFeedItem } from "./types";
+import {
+  VOICES_COMPOSER_INPUT_CLASS,
+  VOICES_COMPOSER_SURFACE_CLASS,
+  VOICES_FEED_SURFACE_CLASS,
+} from "./voicesSurface";
 
 interface VoicesComposerProps {
   onPosted?: (item: VoicesFeedItem | null) => void;
@@ -51,9 +56,45 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
     },
   });
 
+  const timelineAccessory = attachPerson ? (
+    <div className="flex h-9 w-full items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm">
+      <span className="truncate text-amber-800 dark:text-amber-200">
+        {attachPerson.name}&apos;s timeline
+      </span>
+      <button
+        type="button"
+        onClick={() => setAttachPerson(null)}
+        className="ml-2 shrink-0 rounded-full text-amber-800 hover:text-destructive dark:text-amber-200"
+        aria-label="Remove celebrity timeline"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  ) : (
+    <PersonSearchPopover
+      closeOnSelect
+      onSelect={(p) => setAttachPerson(p)}
+      placeholder="Search celebrities…"
+      trigger={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 w-full justify-between gap-2 border-dashed font-normal text-muted-foreground hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-foreground"
+          data-testid="voices-composer-attach"
+        >
+          <span className="flex items-center gap-2">
+            <UserRound className="h-4 w-4 shrink-0" />
+            Post to celebrity timeline
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      }
+    />
+  );
+
   if (!isAuthenticated) {
     return (
-      <Card className="p-4 text-center">
+      <Card className={cn("p-4 text-center", VOICES_FEED_SURFACE_CLASS)}>
         <p className="text-sm text-muted-foreground">
           <button
             className="text-amber-600 underline hover:text-amber-500 dark:text-amber-400"
@@ -69,7 +110,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
   }
 
   return (
-    <Card className="p-3" data-testid="voices-composer">
+    <Card className={cn("p-3", VOICES_COMPOSER_SURFACE_CLASS)} data-testid="voices-composer">
       <CommentComposer
         value={body}
         onChange={setBody}
@@ -83,46 +124,12 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
         supportsFullscreen
         parentExpanded={false}
         scrollIntoViewOnExpand={false}
+        hideTopBorder
+        inputClassName={VOICES_COMPOSER_INPUT_CLASS}
         variant="card"
+        accessory={timelineAccessory}
         testIds={{ input: "voices-composer-input", submit: "voices-composer-submit" }}
       />
-      <div className="mt-2 flex items-center gap-2 pl-11">
-        {attachPerson ? (
-          <Badge variant="secondary" className="gap-1">
-            <AtSign className="h-3 w-3" />
-            {attachPerson.name}
-            <button
-              type="button"
-              onClick={() => setAttachPerson(null)}
-              className="ml-0.5 rounded-full hover:text-destructive"
-              aria-label="Remove attachment"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        ) : (
-          <PersonSearchPopover
-            closeOnSelect
-            onSelect={(p) => setAttachPerson(p)}
-            placeholder="Mirror onto a profile…"
-            trigger={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-                data-testid="voices-composer-attach"
-              >
-                <AtSign className="h-3.5 w-3.5" />
-                Mention a celebrity
-              </Button>
-            }
-          />
-        )}
-        <span className="text-[11px] text-muted-foreground">
-          {attachPerson ? "Mirrors onto their profile" : "Posts to the timeline"}
-        </span>
-      </div>
     </Card>
   );
 }

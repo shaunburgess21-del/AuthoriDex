@@ -56,7 +56,6 @@ export function CommentRow({
   testIds,
 }: CommentRowProps) {
   const isDeleted = Boolean(comment.deletedAt);
-  const netVotes = (comment.upvotes || 0) - (comment.downvotes || 0);
   const hasUpvoted = comment.userVote === "up";
   const authorTier = comment.authorRank
     ? getRankByName(comment.authorRank)?.tier ?? 0
@@ -155,16 +154,6 @@ export function CommentRow({
                 </button>
               )}
             </>
-          )}
-          {isDeleted && netVotes !== 0 && (
-            <span className="text-xs text-muted-foreground">
-              {netVotes > 0 ? `+${netVotes}` : netVotes}
-            </span>
-          )}
-          {!isDeleted && (comment.downvotes || 0) > 0 && netVotes !== 0 && (
-            <span className={`text-xs font-mono ${netVotes > 0 ? "text-cyan-600 dark:text-cyan-400" : "text-rose-600 dark:text-rose-400"}`}>
-              {netVotes > 0 ? `+${netVotes}` : netVotes}
-            </span>
           )}
         </div>
       </div>

@@ -55,6 +55,18 @@ export type StepModalProps = {
 
 const SWIPE_THRESHOLD = 40;
 
+const STEP_VARIANTS = {
+  initial: (direction: 1 | -1) => ({
+    x: direction * 40,
+    opacity: 0,
+  }),
+  animate: { x: 0, opacity: 1 },
+  exit: (direction: 1 | -1) => ({
+    x: direction * -40,
+    opacity: 0,
+  }),
+};
+
 export function StepModal({
   open,
   onClose,
@@ -150,15 +162,17 @@ export function StepModal({
               ))}
             </div>
 
-            <div className="relative flex min-h-[300px] items-center justify-center overflow-hidden px-6 py-6">
-              <AnimatePresence mode="wait" initial={false}>
+            <div className="relative min-h-[300px] overflow-hidden">
+              <AnimatePresence initial={false} custom={direction}>
                 <motion.div
                   key={stepIdx}
-                  initial={{ opacity: 0, x: direction * 40 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -direction * 40 }}
+                  custom={direction}
+                  variants={STEP_VARIANTS}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
                   transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="flex w-full flex-col items-center"
+                  className="absolute inset-x-0 top-0 bottom-0 flex flex-col items-center justify-center px-6"
                 >
                   <div
                     className={cn(
