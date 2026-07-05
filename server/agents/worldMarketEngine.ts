@@ -43,6 +43,33 @@ function getOpenAIClient(): OpenAI {
   return _openaiClient;
 }
 
+// ---------------------------------------------------------------------------
+// Budget-cap log throttle. Once the daily cap is hit, EVERY subsequent
+// agent×market evaluation lands here — with ~56 agents × 16 markets per
+// 30-min sweep that used to print hundreds of identical lines per sweep
+// (Jul 2026 production logs). One summary line per window carries the
+// same information.
+// ---------------------------------------------------------------------------
+const CAP_LOG_THROTTLE_MS = 10 * 60 * 1000;
+let capLogLastAtMs = 0;
+let capLogSuppressed = 0;
+
+function logBudgetCapThrottled(spendUsd: number, capUsd: number): void {
+  const now = Date.now();
+  if (now - capLogLastAtMs < CAP_LOG_THROTTLE_MS) {
+    capLogSuppressed += 1;
+    return;
+  }
+  const suppressedNote =
+    capLogSuppressed > 0 ? ` (${capLogSuppressed} more abstains since last log)` : "";
+  log(
+    `[WorldEngine] Budget cap reached — agents abstaining on world markets ` +
+      `(spend=$${spendUsd.toFixed(2)} of $${capUsd.toFixed(2)})${suppressedNote}.`,
+  );
+  capLogLastAtMs = now;
+  capLogSuppressed = 0;
+}
+
 const API_TIMEOUT_MS = 45_000;
 /**
  * Generous on purpose: on reasoning models `max_output_tokens` also covers
@@ -279,9 +306,9 @@ async function callWorldMarketLlm(
   // budget.
   const reservation = tryReserveLlmCall();
   if (!reservation.allowed) {
-    log(
-      `[WorldEngine] Budget cap reached for market=${market.id.slice(0, 8)}; ` +
-        `agent=${agent.displayName} abstaining (spend=$${reservation.snapshot.spendUsd.toFixed(2)} of $${reservation.snapshot.capUsd.toFixed(2)}).`,
+    logBudgetCapThrottled(
+      reservation.snapshot.spendUsd,
+      reservation.snapshot.capUsd,
     );
     return null;
   }
