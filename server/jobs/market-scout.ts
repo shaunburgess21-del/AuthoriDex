@@ -346,6 +346,24 @@ async function insertScoutedDraft(
     return null;
   }
 
+  // Betting cutoff: default to endAt − AMM pre-resolve cooldown, but for
+  // scheduled events (sports) the source exposes a kickoff time (gameStartTime)
+  // well before the padded endDate — the result is public knowledge by then.
+  // Close betting at the earlier of the two. Ignore a kickoff that is invalid
+  // or already in the past at import time.
+  const defaultCutoff = getMarketBettingCutoff(endAt, "amm", "community");
+  let closeAt = defaultCutoff;
+  if (candidate.gameStartTime) {
+    const kickoff = new Date(candidate.gameStartTime);
+    if (
+      !isNaN(kickoff.getTime()) &&
+      kickoff.getTime() > Date.now() &&
+      kickoff.getTime() < defaultCutoff.getTime()
+    ) {
+      closeAt = kickoff;
+    }
+  }
+
   // Outcome labels must stay aligned with the source so the outcome
   // mapping (and the Phase 3 resolution watcher) stays trustworthy. GPT
   // may polish labels but any count mismatch OR positional drift (a label
@@ -425,6 +443,7 @@ async function insertScoutedDraft(
       externalSlug: candidate.eventSlug,
       url: candidate.url,
       structure: candidate.structure,
+      gameStartTime: candidate.gameStartTime,
       // Aligned with entry displayOrder — Phase 3 uses this to map the
       // source winner back to a VoxDex entry.
       outcomeMapping: sourceOutcomes.map((o, i) => ({
@@ -466,9 +485,9 @@ async function insertScoutedDraft(
         timezone: "UTC",
         startAt: new Date(),
         endAt,
-        // AMM trading cutoff (endAt − cooldown) so the trade path and the
-        // slug bet route agree on when trading closes.
-        closeAt: getMarketBettingCutoff(endAt, "amm", "community"),
+        // AMM trading cutoff — earlier of (endAt − cooldown) and kickoff, so
+        // the trade path and the slug bet route agree on when trading closes.
+        closeAt,
         resolutionCriteria: resolutionCriteria.length > 0 ? resolutionCriteria : null,
         resolveMethod: "admin_manual",
         status: "OPEN",

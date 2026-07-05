@@ -666,6 +666,35 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Source resolution watch (LLM-free): polls Polymarket for upstream
+  // resolutions of scouted World Markets, pre-fills settlement winners, and
+  // refreshes the livePrices convergence anchor. Separate from /market-scout
+  // so external cron can run it at a high cadence (e.g. every 30 min) without
+  // triggering the GPT curation / draft-creation pass. Advisory-locked, so it
+  // composes safely with the daily scout and manual scans.
+  app.post("/api/cron/source-watch", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runSourceResolutionWatch } = await import("../jobs/market-scout");
+      const sourceWatch = await runSourceResolutionWatch();
+      res.json({
+        success: true,
+        message: "Source resolution watch completed",
+        sourceWatch,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Source watch error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // Standalone AI resolution scout. Writes scout assessments to market
   // metadata and returns actionable findings WITHOUT sending the digest
   // email — useful for manual testing / inspection. The daily digest runs

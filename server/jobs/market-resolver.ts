@@ -1,5 +1,5 @@
 import { db, withDbAdvisoryLock } from "../db";
-import { predictionMarkets, marketEntries, marketBets, trendSnapshots, profiles, creditLedger, trendingPeople } from "@shared/schema";
+import { predictionMarkets, marketEntries, marketBets, marketAmmState, trendSnapshots, profiles, creditLedger, trendingPeople } from "@shared/schema";
 import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
 import { log } from "../log";
 import { computeEarlyBirdMultiplier } from "./settlement-utils";
@@ -1072,7 +1072,42 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
           case "gainer":
             outcome = await resolveGainer(market);
             break;
-          case "community":
+          case "community": {
+            // Expired UNPUBLISHED draft with zero financial state (never
+            // seeded an AMM, no bets): archive silently instead of queuing
+            // it for manual resolution. This keeps the settlement queue
+            // clean when a founder reviews the daily scout drafts and only
+            // publishes a couple. The row is retained (VOID + archived), so
+            // its metadata.source.externalId still blocks the scout from
+            // re-importing the same source event later.
+            if (market.visibility === "draft" || market.visibility === "archived") {
+              const [ammRow] = await db
+                .select({ marketId: marketAmmState.marketId })
+                .from(marketAmmState)
+                .where(eq(marketAmmState.marketId, market.id))
+                .limit(1);
+              const [betRow] = await db
+                .select({ id: marketBets.id })
+                .from(marketBets)
+                .where(eq(marketBets.marketId, market.id))
+                .limit(1);
+              if (!ammRow && !betRow) {
+                await db.update(predictionMarkets).set({
+                  status: "VOID",
+                  visibility: "archived",
+                  resolveMethod: "auto",
+                  voidReason: "Draft expired unpublished",
+                  resolutionNotes: JSON.stringify({
+                    type: "community",
+                    pendingReason: "draft_expired_unpublished_auto_archived",
+                  }),
+                  updatedAt: new Date(),
+                }).where(eq(predictionMarkets.id, market.id));
+                voided++;
+                log(`[MarketResolver] Auto-archived expired unpublished draft ${market.id} (${market.slug})`);
+                break;
+              }
+            }
             await db.update(predictionMarkets).set({
               status: "CLOSED_PENDING",
               resolutionNotes: JSON.stringify({
@@ -1099,6 +1134,7 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
               }
             })();
             break;
+          }
           case "jackpot":
             outcome = await resolveJackpot(market);
             break;

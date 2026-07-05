@@ -43,6 +43,13 @@ export interface PolymarketCandidate {
   image: string | null;
   /** ISO datetime the event resolves by. */
   endDate: string;
+  /**
+   * ISO datetime the event/game actually starts (kickoff), when the source
+   * exposes it. For scheduled sports the result is known well before the
+   * padded `endDate`, so the scout uses this to close betting at kickoff.
+   * Null when the source provides no start time.
+   */
+  gameStartTime: string | null;
   volume24hr: number;
   tags: string[];
   /** binary = single Yes/No market; multi = negRisk event, one entry per market. */
@@ -64,6 +71,8 @@ interface GammaMarket {
   archived?: boolean;
   negRisk?: boolean;
   volume24hr?: string | number;
+  /** Kickoff/start time for sports markets, e.g. "2026-07-07 00:00:00+00". */
+  gameStartTime?: string;
 }
 
 interface GammaEvent {
@@ -74,6 +83,8 @@ interface GammaEvent {
   image?: string;
   icon?: string;
   endDate?: string;
+  /** Event-level start time (ISO), fallback when markets omit gameStartTime. */
+  startTime?: string;
   volume24hr?: string | number;
   active?: boolean;
   closed?: boolean;
@@ -85,6 +96,23 @@ interface GammaEvent {
 function toNumber(v: unknown): number {
   const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Normalize a Gamma timestamp to an ISO string, or null when unparseable.
+ * Gamma mixes formats: event `startTime` is ISO ("2026-07-07T00:00:00Z"),
+ * while market `gameStartTime` is space-separated with a short offset
+ * ("2026-07-07 00:00:00+00"). Expands a trailing "+HH"/"-HH" offset to
+ * "+HH:00" so Date.parse accepts it, and treats a designator-less value as
+ * UTC (Gamma times are UTC) so we never fall back to the server's local zone.
+ * Exported for unit testing.
+ */
+export function parseGammaTimestamp(v: unknown): string | null {
+  if (typeof v !== "string" || !v.trim()) return null;
+  let s = v.trim().replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  if (!/[zZ]$/.test(s) && !/[+-]\d{2}:\d{2}$/.test(s)) s += "Z";
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
 /** Gamma serializes `outcomes` / `outcomePrices` as JSON strings. */
@@ -175,6 +203,18 @@ function normalizeEvent(
     return null;
   }
 
+  // Kickoff/start time: earliest valid market-level gameStartTime, falling
+  // back to the event-level startTime. Null when neither is provided.
+  const marketStartTimes = markets
+    .map((m) => parseGammaTimestamp(m.gameStartTime))
+    .filter((s): s is string => !!s);
+  const gameStartTime =
+    marketStartTimes.length > 0
+      ? marketStartTimes.reduce((earliest, s) =>
+          Date.parse(s) < Date.parse(earliest) ? s : earliest,
+        )
+      : parseGammaTimestamp(ev.startTime);
+
   return {
     eventId,
     eventSlug: ev.slug ?? "",
@@ -183,6 +223,7 @@ function normalizeEvent(
     url: ev.slug ? `https://polymarket.com/event/${ev.slug}` : "https://polymarket.com",
     image: ev.image || ev.icon || null,
     endDate,
+    gameStartTime,
     volume24hr: toNumber(ev.volume24hr),
     tags: (ev.tags ?? [])
       .map((t) => t.label?.trim())

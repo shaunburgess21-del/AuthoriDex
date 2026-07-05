@@ -769,7 +769,7 @@ async function startServer() {
           "CelebrityProfileRefresh→/refresh-celebrity-profiles, NetWorthRefresh→/refresh-net-worth, " +
           "WhyTrendingRefresh→/refresh-why-trending, InsightsStoryRefresh→/refresh-insights-story, " +
           "InsightsCacheRefresh→/refresh-insights-cache, MarketOpsDigest→/market-ops-digest, " +
-          "MarketScout→/market-scout, InductionCycle→/resolve-induction.",
+          "MarketScout→/market-scout, SourceWatch→/source-watch, InductionCycle→/resolve-induction.",
       );
       log(
         "[Schedulers] WARNING — jobs with NO cron fallback that will NOT run at all in this mode: " +
@@ -952,6 +952,14 @@ async function startServer() {
       startScheduler("MarketScout", startMarketScoutScheduler);
     } else {
       log("[MarketScout] Skipped - serverless mode. Use POST /api/cron/market-scout.");
+    }
+
+    // Source resolution watch (frequent, LLM-free) — pre-fills settlement
+    // winners + refreshes convergence anchors for scouted World Markets.
+    if (!SERVERLESS_MODE) {
+      startScheduler("SourceWatch", startSourceWatchScheduler);
+    } else {
+      log("[SourceWatch] Skipped - serverless mode. Use POST /api/cron/source-watch.");
     }
   });
 }
@@ -1381,6 +1389,49 @@ function startMarketScoutScheduler() {
     void runScheduledMarketScout();
     setInterval(() => void runScheduledMarketScout(), MARKET_SCOUT_INTERVAL_MS);
   }, initialDelay);
+}
+
+// ─── Source resolution watch scheduler ───────────────────────────────────────
+// Polls Polymarket for upstream resolutions of scouted World Markets far more
+// often than the daily scout so the instant "resolved upstream" ops email
+// (fired from inside the watch) and the livePrices convergence anchor refresh
+// stay near-real-time. LLM-free (one Gamma call per unresolved scouted market)
+// and advisory-locked, so it composes safely with the daily scout + manual
+// scans. Runs regardless of MARKET_SCOUT_ENABLED. Tunable via
+// SOURCE_WATCH_INTERVAL_MINUTES (default 30).
+function sourceWatchIntervalMs(): number {
+  const raw = Number(process.env.SOURCE_WATCH_INTERVAL_MINUTES);
+  const minutes = Number.isFinite(raw) && raw > 0 ? raw : 30;
+  return minutes * 60 * 1000;
+}
+const SOURCE_WATCH_STARTUP_DELAY_MS = 5 * 60 * 1000;
+
+async function runScheduledSourceWatch(): Promise<void> {
+  try {
+    const { runSourceResolutionWatch } = await import("./jobs/market-scout");
+    const watch = await runSourceResolutionWatch();
+    if (watch.checked > 0) {
+      log(
+        `[SourceWatch] OK — checked=${watch.checked} resolvedUpstream=${watch.resolvedUpstream} ` +
+          `unmappable=${watch.unmappable} livePricesRefreshed=${watch.livePricesRefreshed} errors=${watch.errors}`,
+      );
+    }
+  } catch (err: any) {
+    log(`[SourceWatch] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startSourceWatchScheduler() {
+  if (SERVERLESS_MODE) return;
+  const intervalMs = sourceWatchIntervalMs();
+  log(
+    `[SourceWatch] Starting (every ${Math.round(intervalMs / 60000)}m, ` +
+      `first run in ${Math.round(SOURCE_WATCH_STARTUP_DELAY_MS / 60000)}m)`,
+  );
+  setTimeout(() => {
+    void runScheduledSourceWatch();
+    setInterval(() => void runScheduledSourceWatch(), intervalMs);
+  }, SOURCE_WATCH_STARTUP_DELAY_MS);
 }
 
 startServer().catch((error) => {

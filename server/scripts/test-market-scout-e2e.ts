@@ -142,14 +142,26 @@ async function main() {
     ["fitScore=77", meta?.fitScore === 77],
     ["scoutWatch set", typeof meta?.scoutWatch === "string"],
     ["entries >= 2", entries.length >= 2],
-    [
-      "closeAt is the AMM cutoff (before endAt, within an hour)",
-      market.closeAt != null &&
-        market.endAt != null &&
-        market.closeAt.getTime() < market.endAt.getTime() &&
-        market.endAt.getTime() - market.closeAt.getTime() <= 60 * 60 * 1000,
-    ],
+    // gameStartTime is always recorded now (value may be null when the source
+    // has no kickoff), proving the provider -> scout plumbing is wired.
+    ["metadata.source.gameStartTime key present", meta?.source != null && "gameStartTime" in meta.source],
   ];
+
+  // closeAt must sit before endAt and match EITHER the default AMM cutoff
+  // (endAt - cooldown, <=1h) OR a recorded kickoff time. A live candidate
+  // with a real gameStartTime legitimately closes hours before endAt.
+  {
+    const closeMs = market.closeAt?.getTime() ?? NaN;
+    const endMs = market.endAt?.getTime() ?? NaN;
+    const kickoffIso = typeof meta?.source?.gameStartTime === "string" ? meta.source.gameStartTime : null;
+    const kickoffMs = kickoffIso ? Date.parse(kickoffIso) : NaN;
+    const matchesDefault = Number.isFinite(endMs) && Number.isFinite(closeMs) && endMs - closeMs <= 60 * 60 * 1000;
+    const matchesKickoff = Number.isFinite(kickoffMs) && Number.isFinite(closeMs) && Math.abs(closeMs - kickoffMs) < 1000;
+    assertions.push([
+      "closeAt is a valid cutoff (default cooldown or kickoff, before endAt)",
+      Number.isFinite(closeMs) && Number.isFinite(endMs) && closeMs < endMs && (matchesDefault || matchesKickoff),
+    ]);
+  }
   let failed = 0;
   for (const [name, ok] of assertions) {
     console.log(ok ? `  PASS ${name}` : `  FAIL ${name}`);
