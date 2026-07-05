@@ -13011,9 +13011,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Smart search: UUID → direct id lookup; contains "@" → Supabase
       // auth email lookup (auth.users); otherwise username ILIKE.
+      // Exact-identifier lookups (UUID / email) bypass the kind/status/
+      // active list filters — the admin named a specific account, so
+      // hiding it behind the default "Humans" chip would look like the
+      // user doesn't exist.
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (rawSearch) {
         if (UUID_RE.test(rawSearch)) {
+          conditions.length = 0;
           conditions.push(eq(profiles.id, rawSearch.toLowerCase()));
         } else if (rawSearch.includes("@")) {
           const { getSupabaseUserIdsByEmail } = await import("./services/supabase-auth-email");
@@ -13021,6 +13026,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (matchedIds.length === 0) {
             return res.json({ users: [], total: 0, page: 1, pageSize, totalPages: 0 });
           }
+          conditions.length = 0;
           conditions.push(inArray(profiles.id, matchedIds));
         } else {
           const sanitized = sanitizeAdminUserSearch(rawSearch);

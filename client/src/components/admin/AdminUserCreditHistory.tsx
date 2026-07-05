@@ -199,7 +199,7 @@ export function AdminUserCreditHistory({
     enabled: open,
   });
 
-  const { data: emailLog } = useQuery<EmailLogResponse>({
+  const { data: emailLog, isError: emailLogError } = useQuery<EmailLogResponse>({
     queryKey: ["/api/admin/users", userId, "email-log"],
     queryFn: async () => {
       const res = await fetchWithAuth(`/api/admin/users/${userId}/email-log`);
@@ -366,6 +366,8 @@ export function AdminUserCreditHistory({
                     </div>
                   ))}
                 </div>
+              ) : emailLogError ? (
+                <p className="text-xs text-destructive">Couldn't load the email log.</p>
               ) : (
                 <p className="text-xs text-muted-foreground">No emails logged for this user.</p>
               )}
