@@ -10,6 +10,12 @@ import {
   cardRelatedPeople,
 } from "@shared/schema";
 import type { VoicesSurface } from "@shared/constants";
+import { resolveMatchupOptionDisplay } from "../matchup-option-images";
+import {
+  resolveSentimentPollImageUrl,
+  slugifySentimentPollHeadline,
+} from "../sentiment-poll-images";
+import { resolveOpinionPollImageUrl } from "../opinion-poll-images";
 
 /**
  * The card / profile / timeline an aggregated Voices item is attached to.
@@ -31,6 +37,13 @@ export interface VoicesEntity {
   category: string | null;
   /** Linked tracked_people ids (for the celebrity filter). */
   personIds: string[];
+  /** Present for matchups only — drives the A/B split preview banner. */
+  media?: {
+    optionAImage: string | null;
+    optionAText: string;
+    optionBImage: string | null;
+    optionBText: string;
+  } | null;
 }
 
 /** Parent type stored on a unified comment row. */
@@ -164,15 +177,51 @@ export async function resolveCommentEntities(
         slug: matchups.slug,
         title: matchups.title,
         category: matchups.category,
+        optionAText: matchups.optionAText,
         optionAImage: matchups.optionAImage,
+        optionBText: matchups.optionBText,
         optionBImage: matchups.optionBImage,
         personAId: matchups.personAId,
         personBId: matchups.personBId,
       })
       .from(matchups)
       .where(inArray(matchups.id, Array.from(matchupIds)));
+
+    // Resolve option images the same way the public matchups API does
+    // (DB URL > linked celebrity avatar > name avatar > bucket convention)
+    // so the feed preview banner matches VersusCard imagery.
+    const linkedPeople = await loadPeople(
+      uniq(rows.flatMap((r) => [r.personAId, r.personBId])),
+    );
+    const avatarById: Record<string, string | null> = {};
+    const avatarByName: Record<string, string | null> = {};
+    for (const [id, p] of linkedPeople) {
+      avatarById[id] = p.avatar;
+      avatarByName[p.name.toLowerCase()] = p.avatar;
+    }
+
     for (const r of rows) {
       const key = entityKey("matchup", r.id);
+      const optA = resolveMatchupOptionDisplay(
+        r.optionAImage,
+        r.personAId,
+        r.optionAText,
+        r.optionAText,
+        r.optionBText,
+        avatarById,
+        avatarByName,
+        r.slug,
+      );
+      const optB = resolveMatchupOptionDisplay(
+        r.optionBImage,
+        r.personBId,
+        r.optionBText,
+        r.optionAText,
+        r.optionBText,
+        avatarById,
+        avatarByName,
+        r.slug,
+      );
       result.set(key, {
         surface: SURFACE_BY_REF.matchup,
         refType: "matchup",
@@ -184,6 +233,12 @@ export async function resolveCommentEntities(
         imageUrl: r.optionAImage ?? r.optionBImage ?? null,
         category: r.category ?? null,
         personIds: uniq([r.personAId, r.personBId, ...(relatedPeople.get(`matchup:${r.id}`) ?? [])]),
+        media: {
+          optionAImage: optA.resolved,
+          optionAText: r.optionAText,
+          optionBImage: optB.resolved,
+          optionBText: r.optionBText,
+        },
       });
     }
   }
@@ -203,6 +258,9 @@ export async function resolveCommentEntities(
       .where(inArray(trendingPolls.id, Array.from(trendingPollIds)));
     for (const r of rows) {
       const key = entityKey("trending_poll", r.id);
+      // Same convention-based resolution as GET /api/polls/:slug so polls
+      // without a stored image still get their bucket hero image.
+      const effectiveSlug = r.slug || slugifySentimentPollHeadline(r.headline || r.subjectText || "");
       result.set(key, {
         surface: SURFACE_BY_REF.trending_poll,
         refType: "trending_poll",
@@ -211,7 +269,9 @@ export async function resolveCommentEntities(
         subtitle: SUBTITLE.trending_poll,
         href: r.slug ? `/polls/${r.slug}` : "/vote",
         slug: r.slug ?? null,
-        imageUrl: r.imageUrl ?? null,
+        imageUrl: effectiveSlug
+          ? resolveSentimentPollImageUrl(r.imageUrl ?? null, effectiveSlug)
+          : r.imageUrl ?? null,
         category: r.category ?? null,
         personIds: uniq([r.personId, ...(relatedPeople.get(`sentiment_poll:${r.id}`) ?? [])]),
       });
@@ -239,7 +299,7 @@ export async function resolveCommentEntities(
         subtitle: SUBTITLE.opinion_poll,
         href: r.slug ? `/vote/opinion-polls/${r.slug}` : "/vote",
         slug: r.slug ?? null,
-        imageUrl: r.imageUrl ?? null,
+        imageUrl: resolveOpinionPollImageUrl(r.imageUrl ?? null, r.slug),
         category: r.category ?? null,
         personIds: uniq(relatedPeople.get(`opinion_poll:${r.id}`) ?? []),
       });

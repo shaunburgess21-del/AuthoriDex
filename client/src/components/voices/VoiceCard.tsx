@@ -1,15 +1,4 @@
-import { Link } from "wouter";
-import {
-  Crown,
-  Flame,
-  MessageCircle,
-  ThumbsUp,
-  Vote as VoteIcon,
-  BarChart3,
-  Globe,
-  User as UserIcon,
-  MessagesSquare,
-} from "lucide-react";
+import { Crown, Flame, MessageCircle, ThumbsUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
@@ -17,17 +6,9 @@ import { UserRankBadge } from "@/components/UserRankBadge";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
-import type { VoicesEntity, VoicesFeedItem } from "./types";
+import type { VoicesFeedItem } from "./types";
+import { VoiceEntityPreview } from "./VoiceEntityPreview";
 import { VOICES_FEED_SURFACE_CLASS } from "./voicesSurface";
-
-const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
-  matchup: VoteIcon,
-  trending_poll: BarChart3,
-  opinion_poll: BarChart3,
-  open_market: Globe,
-  person: UserIcon,
-  timeline: MessagesSquare,
-};
 
 const DELETED_USER = "[deleted user]";
 
@@ -40,7 +21,6 @@ interface VoiceCardProps {
 export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
   const isDeleted = Boolean(item.body) === false;
   const hasUpvoted = item.userVote === "up";
-  const SurfaceIcon = SURFACE_ICON[item.entity.refType] ?? MessagesSquare;
   const isTimeline = item.entity.refType === "timeline";
 
   return (
@@ -103,30 +83,8 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
             )}
           </p>
 
-          {/* Context chip (deep link to source) */}
-          {!isTimeline && (
-            <Link
-              href={item.entity.href}
-              onClick={(e) => e.stopPropagation()}
-              className="mt-2.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.06] px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-white/[0.08] hover:text-foreground dark:bg-white/[0.06]"
-              data-testid={`voice-card-entity-${item.id}`}
-            >
-              {item.entity.imageUrl ? (
-                <img
-                  src={item.entity.imageUrl}
-                  alt=""
-                  className="h-4 w-4 rounded-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <SurfaceIcon className="h-3.5 w-3.5 shrink-0" />
-              )}
-              {item.entity.subtitle && (
-                <span className="shrink-0 font-medium text-foreground/70">{item.entity.subtitle}</span>
-              )}
-              <span className="truncate">{item.entity.title}</span>
-            </Link>
-          )}
+          {/* Context preview (deep link to source) */}
+          {!isTimeline && <VoiceEntityPreview entity={item.entity} itemId={item.id} />}
 
           {/* Actions */}
           <div className="mt-3 flex items-center gap-4 text-muted-foreground">

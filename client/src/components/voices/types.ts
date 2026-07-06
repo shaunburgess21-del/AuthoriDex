@@ -30,6 +30,13 @@ export interface VoicesEntity {
   imageUrl: string | null;
   category: string | null;
   personIds: string[];
+  /** Present for matchups only — drives the A/B split preview banner. */
+  media?: {
+    optionAImage: string | null;
+    optionAText: string;
+    optionBImage: string | null;
+    optionBText: string;
+  } | null;
 }
 
 export interface VoicesAuthor {
