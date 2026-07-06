@@ -1086,7 +1086,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       // this the pre-filled winner sits unseen until the daily digest.
       void (async () => {
         try {
-          const { sendOpsAlert, adminDashboardUrl, getAdminBaseUrl } = await import(
+          const { sendOpsAlert, adminResolveMarketUrl } = await import(
             "../services/ops-alerts"
           );
           await sendOpsAlert({
@@ -1101,13 +1101,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
                   {
                     text: row.title,
                     detail: `Proposed winner: ${winner.label}`,
-                    url: `${getAdminBaseUrl()}/markets/${row.slug}`,
+                    url: adminResolveMarketUrl(row.id),
                   },
                 ],
               },
             ],
-            ctaUrl: adminDashboardUrl(),
-            ctaLabel: "Open Settlement Center",
+            // One tap from the email straight to the resolve dialog with the
+            // proposed winner pre-selected.
+            ctaUrl: adminResolveMarketUrl(row.id),
+            ctaLabel: "Confirm & resolve",
             idempotencyKeyBase: `market_source_resolved:${row.id}`,
           });
         } catch (err) {

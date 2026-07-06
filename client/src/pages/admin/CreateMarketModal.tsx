@@ -500,13 +500,15 @@ export function CreateMarketModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      {/* Full-screen sheet on phones (sticky header/footer, scrollable body);
+          centered 2xl dialog on md+. */}
+      <DialogContent className="flex flex-col gap-0 p-0 max-w-2xl max-h-[90vh] max-md:left-0 max-md:top-0 max-md:translate-x-0 max-md:translate-y-0 max-md:h-[100dvh] max-md:max-h-none max-md:w-screen max-md:max-w-none max-md:rounded-none max-md:border-0">
+        <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
           <DialogTitle>{editMarket ? "Edit World Market" : "Create World Market"}</DialogTitle>
           <DialogDescription>{editMarket ? "Update an existing prediction market" : "Create a new prediction market for real-world events"}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 px-6 flex-1 overflow-y-auto">
           <div className="space-y-2">
             <Label>Market Type</Label>
             <Select value={openMarketType} onValueChange={(v) => setOpenMarketType(v as any)}>
@@ -1044,11 +1046,12 @@ export function CreateMarketModal({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button 
-            onClick={handleSubmit} 
+        <DialogFooter className="shrink-0 border-t border-border px-6 py-4 gap-2 max-md:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+          <Button variant="outline" onClick={onClose} className="h-11 md:h-9">Cancel</Button>
+          <Button
+            onClick={handleSubmit}
             disabled={!canSubmit() || isPending}
+            className="h-11 md:h-9"
             data-testid="button-submit-market"
           >
             {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : editMarket ? <CheckCircle className="h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}

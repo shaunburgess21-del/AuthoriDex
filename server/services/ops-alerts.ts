@@ -88,6 +88,19 @@ export function adminDashboardUrl(): string {
   return `${getAdminBaseUrl()}/admin`;
 }
 
+/** Deep link to the World Markets tab of the Prediction CMS. */
+export function adminWorldMarketsUrl(): string {
+  return `${getAdminBaseUrl()}/admin?section=predictions&tab=real-world`;
+}
+
+/**
+ * Deep link that opens the admin panel with the resolve dialog already open
+ * for the given market — one tap from the ops email to settling on a phone.
+ */
+export function adminResolveMarketUrl(marketId: string): string {
+  return `${adminWorldMarketsUrl()}&resolve=${encodeURIComponent(marketId)}`;
+}
+
 /** Plain-text rendering — used as the email text fallback and by future
  *  chat channels (Discord/Slack). */
 export function renderOpsAlertText(alert: OpsAlert): string {

@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { CURRENCY } from "@/lib/currency";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import {
   Gavel,
   Loader2,
@@ -123,7 +132,17 @@ const SCOUT_STAGE_LABEL: Record<string, string> = {
   watch: "Watch",
 };
 
-function ScoutPanel({ scout }: { scout: ScoutAssessmentView }) {
+function ScoutPanel({
+  scout,
+  proposedEntryLabel,
+  onUseProposed,
+}: {
+  scout: ScoutAssessmentView;
+  /** Label of the proposed winner entry when it maps to a real outcome. */
+  proposedEntryLabel?: string | null;
+  /** One-tap select of the scout's proposed winner (mobile-friendly). */
+  onUseProposed?: () => void;
+}) {
   const conf =
     typeof scout.confidence === "number"
       ? `${Math.round(scout.confidence * 100)}%`
@@ -197,6 +216,20 @@ function ScoutPanel({ scout }: { scout: ScoutAssessmentView }) {
         Advisory only — verify against the sources before resolving.
         {assessedAt ? ` Assessed ${assessedAt}.` : ""}
       </p>
+
+      {proposedEntryLabel && onUseProposed ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full h-10 border-sky-500/40 text-sky-700 dark:text-sky-300"
+          onClick={onUseProposed}
+          data-testid="button-use-proposed-winner"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Use proposed winner: {proposedEntryLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -334,17 +367,13 @@ export function AmmResolutionDialog({
 
   const selectedPreview = preview?.entries.find((e) => e.entryId === selectedEntry);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            <Gavel className="h-5 w-5" />
-            Resolve Market
-          </DialogTitle>
-          <DialogDescription>{market.title}</DialogDescription>
-        </DialogHeader>
+  const isMobile = useIsMobile();
 
+  const scoutProposedLabel = scoutProposedEntry
+    ? market.entries.find((e) => e.id === scoutProposedEntry)?.label ?? null
+    : null;
+
+  const body = (
         <div className="space-y-4">
           <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
             <MarketTypeBadge type={market.marketType} />
@@ -367,7 +396,15 @@ export function AmmResolutionDialog({
             </div>
           )}
 
-          {scout && !showVoid && <ScoutPanel scout={scout} />}
+          {scout && !showVoid && (
+            <ScoutPanel
+              scout={scout}
+              proposedEntryLabel={scoutProposedLabel}
+              onUseProposed={
+                scoutProposedEntry ? () => setSelectedEntry(scoutProposedEntry) : undefined
+              }
+            />
+          )}
 
           {!showVoid && isAmm ? (
             <div className="space-y-3">
@@ -510,51 +547,92 @@ export function AmmResolutionDialog({
             </div>
           ) : null}
         </div>
+  );
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          {!showVoid ? (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => setShowVoid(true)}
-                className="text-destructive"
-                data-testid="button-show-void"
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Void Instead
-              </Button>
-              <Button
-                onClick={() => settleMutation.mutate()}
-                disabled={!selectedEntry || settleMutation.isPending}
-                data-testid="button-confirm-resolve"
-              >
-                {settleMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                {settleMutation.isPending
-                  ? "Resolving..."
-                  : selectedPreview
-                    ? `Resolve — ${CURRENCY.symbol}${selectedPreview.totalPayouts} to ${selectedPreview.winnersCount} winner${selectedPreview.winnersCount !== 1 ? "s" : ""}`
-                    : isAmm && selectedEntry
-                      ? "Resolve — pay Ꝟ1 per winning share"
-                      : "Select an outcome"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setShowVoid(false)} data-testid="button-cancel-void">
-                Back
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => voidMutation.mutate()}
-                disabled={!voidReason.trim() || voidMutation.isPending}
-                data-testid="button-confirm-void"
-              >
-                {voidMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
-                {voidMutation.isPending ? "Voiding..." : "Void & Refund All Stakes"}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
+  // Shared footer buttons. Rendered inside a flex-col-reverse container on
+  // mobile (primary action on top) and the standard DialogFooter on desktop.
+  const footerButtons = !showVoid ? (
+    <>
+      <Button
+        variant="outline"
+        onClick={() => setShowVoid(true)}
+        className="text-destructive h-11 md:h-9"
+        data-testid="button-show-void"
+      >
+        <XCircle className="h-4 w-4 mr-2" />
+        Void Instead
+      </Button>
+      <Button
+        onClick={() => settleMutation.mutate()}
+        disabled={!selectedEntry || settleMutation.isPending}
+        className="h-11 md:h-9"
+        data-testid="button-confirm-resolve"
+      >
+        {settleMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+        {settleMutation.isPending
+          ? "Resolving..."
+          : selectedPreview
+            ? `Resolve — ${CURRENCY.symbol}${selectedPreview.totalPayouts} to ${selectedPreview.winnersCount} winner${selectedPreview.winnersCount !== 1 ? "s" : ""}`
+            : isAmm && selectedEntry
+              ? "Resolve — pay Ꝟ1 per winning share"
+              : "Select an outcome"}
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button variant="outline" onClick={() => setShowVoid(false)} className="h-11 md:h-9" data-testid="button-cancel-void">
+        Back
+      </Button>
+      <Button
+        variant="destructive"
+        onClick={() => voidMutation.mutate()}
+        disabled={!voidReason.trim() || voidMutation.isPending}
+        className="h-11 md:h-9"
+        data-testid="button-confirm-void"
+      >
+        {voidMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
+        {voidMutation.isPending ? "Voiding..." : "Void & Refund All Stakes"}
+      </Button>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="max-h-[92dvh]">
+          <DrawerHeader className="text-left pb-2">
+            <DrawerTitle className="flex items-center gap-2">
+              <Gavel className="h-5 w-5" />
+              Resolve Market
+            </DrawerTitle>
+            <DrawerDescription>{market.title}</DrawerDescription>
+          </DrawerHeader>
+          <div className="overflow-y-auto px-4 pb-2">{body}</div>
+          <DrawerFooter
+            className="flex-col-reverse gap-2 border-t border-border"
+            style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }}
+          >
+            {footerButtons}
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <Gavel className="h-5 w-5" />
+            Resolve Market
+          </DialogTitle>
+          <DialogDescription>{market.title}</DialogDescription>
+        </DialogHeader>
+
+        {body}
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">{footerButtons}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

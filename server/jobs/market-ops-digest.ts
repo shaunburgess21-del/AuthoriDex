@@ -25,7 +25,8 @@ import { db, withDbAdvisoryLock } from "../db";
 import { marketBets, predictionMarkets } from "@shared/schema";
 import { log } from "../log";
 import {
-  adminDashboardUrl,
+  adminResolveMarketUrl,
+  adminWorldMarketsUrl,
   getAdminBaseUrl,
   sendOpsAlert,
   type OpsAlert,
@@ -84,7 +85,8 @@ function scoutFindingToItem(finding: ScoutFinding): OpsAlertItem {
   return {
     text: finding.title,
     detail,
-    url: marketUrl(finding.slug),
+    // One-tap: opens the admin resolve dialog for this market.
+    url: adminResolveMarketUrl(finding.marketId),
   };
 }
 
@@ -196,13 +198,16 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
   const toItem = (
     r: DigestMarketRow,
     detailPrefix: string,
+    /** Actionable rows deep-link to the admin resolve dialog; informational
+     *  rows keep the public market page. */
+    linkToResolve = false,
   ): OpsAlertItem => {
     const bets = betCounts.get(r.id) ?? 0;
     const betLabel = `${bets} active bet${bets === 1 ? "" : "s"}`;
     return {
       text: r.title,
       detail: `${detailPrefix} · ${betLabel}`,
-      url: marketUrl(r.slug),
+      url: linkToResolve ? adminResolveMarketUrl(r.id) : marketUrl(r.slug),
     };
   };
 
@@ -215,7 +220,7 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     const stuck = overdueMs > STUCK_AFTER_MS;
     const overdueLabel =
       overdueMs > 0 ? `overdue ${formatDuration(overdueMs)}` : "just closed";
-    return toItem(r, `${stuck ? "STUCK · " : ""}${overdueLabel}`);
+    return toItem(r, `${stuck ? "STUCK · " : ""}${overdueLabel}`, true);
   });
 
   const scoutItems = scout.findings.map(scoutFindingToItem);
@@ -272,8 +277,8 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     title: "World Markets daily digest",
     summary,
     sections,
-    ctaUrl: adminDashboardUrl(),
-    ctaLabel: "Open Settlement Center",
+    ctaUrl: adminWorldMarketsUrl(),
+    ctaLabel: "Open World Markets CMS",
     idempotencyKeyBase: `market_ops_digest:${dateKey}`,
   };
 
@@ -354,13 +359,14 @@ export async function sendMarketNeedsResolutionAlert(market: {
             {
               text: market.title,
               detail,
-              url: market.slug ? marketUrl(market.slug) : undefined,
+              url: adminResolveMarketUrl(market.id),
             },
           ],
         },
       ],
-      ctaUrl: adminDashboardUrl(),
-      ctaLabel: "Open Settlement Center",
+      // One tap from the email straight to the resolve dialog on the phone.
+      ctaUrl: adminResolveMarketUrl(market.id),
+      ctaLabel: "Resolve this market",
       idempotencyKeyBase: `market_needs_resolution:${market.id}`,
     });
   } catch (err) {

@@ -202,6 +202,32 @@ import { CopyDebugSummaryButton } from "@/pages/admin/CopyDebugSummaryButton";
 import { AmmResolutionDialog } from "@/components/admin/AmmResolutionDialog";
 import { CreateMarketModal } from "@/pages/admin/CreateMarketModal";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
+import { WorldMarketsSection } from "@/pages/admin/WorldMarketsSection";
+
+/**
+ * One-shot deep-link params so ops emails can land the founder directly on
+ * the right admin surface from a phone:
+ *   /admin?section=predictions&tab=real-world&resolve=<marketId>
+ * `vis` presets the World Markets visibility filter (e.g. vis=draft),
+ * `resolve` opens the settle dialog, `edit` opens the edit modal.
+ * Params are consumed on mount and stripped from the URL immediately after.
+ */
+function readAdminDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    section: params.get("section"),
+    tab: params.get("tab"),
+    vis: params.get("vis"),
+    resolve: params.get("resolve"),
+    edit: params.get("edit"),
+  };
+}
+
+const ADMIN_DEEP_LINK_SECTIONS: AdminSection[] = [
+  "overview", "celebrities", "predictions", "voting", "moderation",
+  "settlement", "amm", "users", "gamification", "agents", "categories",
+  "branding", "tools",
+];
 
 // Human-readable labels for the source keys written by the ingest job
 // (see server/jobs/ingest.ts). Keep in sync if a new source is added —
@@ -258,7 +284,13 @@ export default function AdminDashboard() {
   // hook returns a signed delta — applied verbatim via translateY,
   // so positive values push the nav down and negative push it up.
   const adminNavViewportOffset = useVisualViewportOffset();
+  // Parsed once on mount; state so the values survive the URL cleanup below.
+  const [deepLink] = useState(readAdminDeepLink);
   const [activeSection, setActiveSectionRaw] = useState<AdminSection>(() => {
+    if (deepLink.section && ADMIN_DEEP_LINK_SECTIONS.includes(deepLink.section as AdminSection)) {
+      sessionStorage.setItem("admin_active_section", deepLink.section);
+      return deepLink.section as AdminSection;
+    }
     const saved = sessionStorage.getItem("admin_active_section");
     // Backwards compat for the deprecated `credits` / `badges`
     // sidebar entries: a stale sessionStorage value lands the user
@@ -290,8 +322,22 @@ export default function AdminDashboard() {
   const [opinionSeedEdits, setOpinionSeedEdits] = useState<Record<string, { options: { name: string; imageUrl: string; personId: string; seedCount: number }[] }>>({});
   const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
 
-  const [predictionSubTab, setPredictionSubTabRaw] = useState(() => sessionStorage.getItem("admin_prediction_tab") || "real-world");
+  const [predictionSubTab, setPredictionSubTabRaw] = useState(() => {
+    if (deepLink.tab) {
+      sessionStorage.setItem("admin_prediction_tab", deepLink.tab);
+      return deepLink.tab;
+    }
+    return sessionStorage.getItem("admin_prediction_tab") || "real-world";
+  });
   const setPredictionSubTab = (tab: string) => { sessionStorage.setItem("admin_prediction_tab", tab); setPredictionSubTabRaw(tab); };
+
+  // Strip consumed deep-link params so refresh / back don't re-trigger them.
+  useEffect(() => {
+    if (deepLink.section || deepLink.tab || deepLink.vis || deepLink.resolve || deepLink.edit) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [moderationSubTab, setModerationSubTabRaw] = useState(() => sessionStorage.getItem("admin_moderation_tab") || "insights");
   const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
@@ -457,23 +503,16 @@ export default function AdminDashboard() {
   const [entityDiagFilter, setEntityDiagFilter] = useState<string>("all");
 
   const [createMarketOpen, setCreateMarketOpen] = useState(false);
-  const [editMarketId, setEditMarketId] = useState<string | null>(null);
-  const [settleMarketId, setSettleMarketId] = useState<string | null>(null);
+  // `edit` / `resolve` deep-link params open the corresponding modal as soon
+  // as the markets query returns the row.
+  const [editMarketId, setEditMarketId] = useState<string | null>(deepLink.edit);
+  const [settleMarketId, setSettleMarketId] = useState<string | null>(deepLink.resolve);
   const [voidMarketId, setVoidMarketId] = useState<string | null>(null);
   const [deleteWorldMarket, setDeleteWorldMarket] = useState<{ id: string; title: string } | null>(null);
 
   const [nativeVisFilter, setNativeVisFilter] = useState("all");
   const [nativeCatFilter, setNativeCatFilter] = useState("all");
   const [nativeSearchQuery, setNativeSearchQuery] = useState("");
-  const [rwMarketSearch, setRwMarketSearch] = useState("");
-  const [rwVisFilter, setRwVisFilter] = useState("all");
-  const [rwCatFilter, setRwCatFilter] = useState("all");
-  const [rwStatusFilter, setRwStatusFilter] = useState("all");
-  const [rwTypeFilter, setRwTypeFilter] = useState("all");
-  const [rwSortBy, setRwSortBy] = useState<"manual" | "created" | "endAt" | "fit">("manual");
-  const [rwSelectedIds, setRwSelectedIds] = useState<Set<string>>(new Set());
-  const [rwBatchPublishing, setRwBatchPublishing] = useState(false);
-  const [rwScoutRunning, setRwScoutRunning] = useState(false);
   const [h2hMarketSearch, setH2hMarketSearch] = useState("");
   const [gainerMarketSearch, setGainerMarketSearch] = useState("");
   const [pollSearchQuery, setPollSearchQuery] = useState("");
@@ -876,6 +915,14 @@ export default function AdminDashboard() {
     },
   });
 
+  // Drop a deep-linked ?edit=<id> that doesn't match any market (bogus or
+  // deleted id) so it can't leak edit mode into a later "Create" click.
+  useEffect(() => {
+    if (editMarketId && markets && !markets.some((mk) => mk.id === editMarketId)) {
+      setEditMarketId(null);
+    }
+  }, [markets, editMarketId]);
+
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
   const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[]; totalParticipants?: number }>({
     queryKey: ["/api/open-markets", settleMarket?.slug],
@@ -970,15 +1017,10 @@ export default function AdminDashboard() {
       }
       return res.json();
     },
-    onSuccess: (_data, id) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
       setDeleteWorldMarket(null);
-      setRwSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
       toast("Market deleted", { description: "This world market has been permanently removed." });
     },
     onError: (err: Error) => {
@@ -2016,13 +2058,6 @@ export default function AdminDashboard() {
   const canReorderOpinionPolls =
     opinionPollFilter === "all" && opinionPollCategoryFilter === "all" && !opinionPollSearchQuery.trim();
   const canReorderMatchups = matchupVisFilter === "all" && !matchupSearchQuery.trim();
-  const canReorderWorldMarkets =
-    rwVisFilter === "all" &&
-    rwCatFilter === "all" &&
-    rwStatusFilter === "all" &&
-    rwTypeFilter === "all" &&
-    !rwMarketSearch.trim() &&
-    rwSortBy === "manual";
 
   const activeInductionNameKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -2060,44 +2095,6 @@ export default function AdminDashboard() {
     }
     return counts;
   }, [celebrities, activeInductionNameKeys]);
-
-  const rwMarkets = useMemo(() => {
-    let list = (markets || []).filter(m => m.marketType === "community");
-    if (rwVisFilter !== "all") list = list.filter(m => (m as any).visibility === rwVisFilter);
-    if (rwCatFilter !== "all") {
-      list = list.filter((m) => normalizeMarketCategory(m.category) === rwCatFilter);
-    }
-    if (rwStatusFilter !== "all") list = list.filter(m => m.status === rwStatusFilter);
-    if (rwTypeFilter !== "all") list = list.filter(m => m.openMarketType === rwTypeFilter);
-    if (rwMarketSearch) list = list.filter(m => m.title?.toLowerCase().includes(rwMarketSearch.toLowerCase()));
-    list.sort((a, b) => {
-      if (rwSortBy === "manual") {
-        const ao = (a as PredictionMarket).cmsDisplayOrder ?? 0;
-        const bo = (b as PredictionMarket).cmsDisplayOrder ?? 0;
-        if (ao !== bo) return ao - bo;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (rwSortBy === "endAt") return new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
-      if (rwSortBy === "fit") {
-        const readFit = (m: typeof a) => {
-          const fit = ((m as PredictionMarket).metadata as { fitScore?: number } | null)?.fitScore;
-          return typeof fit === "number" ? fit : -1;
-        };
-        const delta = readFit(b) - readFit(a);
-        if (delta !== 0) return delta;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-    return list;
-  }, [markets, rwMarketSearch, rwVisFilter, rwCatFilter, rwStatusFilter, rwTypeFilter, rwSortBy]);
-
-  const rwMarketStatusSummary = useMemo(() => {
-    const open = rwMarkets.filter((m) => m.status === "OPEN").length;
-    const resolved = rwMarkets.filter((m) => m.status === "RESOLVED").length;
-    const other = rwMarkets.length - open - resolved;
-    return { open, resolved, other };
-  }, [rwMarkets]);
 
   const jMarkets = useMemo(() => (markets || []).filter(m => m.marketType === "jackpot").filter(m => {
     if (nativeVisFilter !== "all" && m.visibility !== nativeVisFilter) return false;
@@ -3337,425 +3334,20 @@ export default function AdminDashboard() {
               </div>
 
               <TabsContent value="real-world" className="mt-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
-                    <div>
-                      <CardTitle>World Markets</CardTitle>
-                      <CardDescription>Prediction markets for real-world events</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {rwSelectedIds.size > 0 && (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          disabled={rwBatchPublishing}
-                          onClick={async () => {
-                            setRwBatchPublishing(true);
-                            try {
-                              const resp = await apiRequest("POST", "/api/admin/open-markets/batch-visibility", {
-                                marketIds: Array.from(rwSelectedIds),
-                                visibility: "live",
-                              });
-                              const data = await resp.json();
-                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-                              setRwSelectedIds(new Set());
-                              toast("Markets Published", { description: `${data.updated} markets set to live.` });
-                            } catch {
-                              toast.error("Error", { description: "Failed to publish markets." });
-                            } finally {
-                              setRwBatchPublishing(false);
-                            }
-                          }}
-                          data-testid="button-batch-publish"
-                        >
-                          {rwBatchPublishing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Eye className="h-4 w-4 mr-1" />}
-                          Publish {rwSelectedIds.size}
-                        </Button>
-                      )}
-                      {rwSelectedIds.size > 0 && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={rwBatchPublishing}
-                          onClick={async () => {
-                            setRwBatchPublishing(true);
-                            try {
-                              const resp = await apiRequest("POST", "/api/admin/open-markets/batch-visibility", {
-                                marketIds: Array.from(rwSelectedIds),
-                                visibility: "archived",
-                              });
-                              const data = await resp.json();
-                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-                              setRwSelectedIds(new Set());
-                              toast("Markets Archived", { description: `${data.updated} markets archived.` });
-                            } catch {
-                              toast.error("Error", { description: "Failed to archive markets." });
-                            } finally {
-                              setRwBatchPublishing(false);
-                            }
-                          }}
-                          data-testid="button-batch-archive"
-                        >
-                          Archive {rwSelectedIds.size}
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={rwScoutRunning}
-                        onClick={async () => {
-                          setRwScoutRunning(true);
-                          try {
-                            const resp = await apiRequest("POST", "/api/admin/market-scout/run");
-                            const data = await resp.json();
-                            if (data.sourceWatch?.resolvedUpstream > 0) {
-                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-                              toast("Source markets resolved", {
-                                description: `${data.sourceWatch.resolvedUpstream} scouted market(s) resolved upstream — winner pre-filled in Settlement.`,
-                              });
-                            }
-                            if (!data.enabled) {
-                              toast("Market Scout is disabled", {
-                                description: "Set MARKET_SCOUT_ENABLED=true on the server to enable scanning.",
-                              });
-                            } else if (data.budgetBlocked) {
-                              toast("Scout budget exhausted", {
-                                description: "Daily LLM budget reached — try again tomorrow or raise MARKET_SCOUT_DAILY_BUDGET_USD.",
-                              });
-                            } else if (data.created > 0) {
-                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-                              setRwVisFilter("draft");
-                              toast("Scout complete", {
-                                description: `${data.created} new draft${data.created === 1 ? "" : "s"} created (${data.deduped} already imported). Review under Visibility: Draft.`,
-                              });
-                            } else {
-                              toast("Scout complete", {
-                                description: `No new drafts — ${data.fetched} trending candidates, ${data.deduped} already imported.`,
-                              });
-                            }
-                          } catch {
-                            toast.error("Error", { description: "Market scout run failed." });
-                          } finally {
-                            setRwScoutRunning(false);
-                          }
-                        }}
-                        data-testid="button-market-scout-run"
-                      >
-                        {rwScoutRunning ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
-                        {rwScoutRunning ? "Scanning..." : "Scan now"}
-                      </Button>
-                      <Button onClick={() => setCreateMarketOpen(true)} size="sm" data-testid="button-create-rw-market">
-                        <Plus className="h-4 w-4 mr-1" />
-                        Create
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2 mb-4 flex-wrap">
-                      <Input
-                        placeholder="Search..."
-                        value={rwMarketSearch}
-                        onChange={(e) => setRwMarketSearch(e.target.value)}
-                        className="w-[160px]"
-                        data-testid="input-rw-market-search"
-                      />
-                      <Select value={rwVisFilter} onValueChange={setRwVisFilter}>
-                        <SelectTrigger className="w-[150px]"><SelectValue placeholder="Visibility" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All visibility</SelectItem>
-                          <SelectItem value="draft">Visibility: Draft</SelectItem>
-                          <SelectItem value="live">Visibility: Published</SelectItem>
-                          <SelectItem value="inactive">Visibility: Inactive</SelectItem>
-                          <SelectItem value="archived">Visibility: Archived</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={rwStatusFilter} onValueChange={setRwStatusFilter}>
-                        <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All status</SelectItem>
-                          <SelectItem value="OPEN">Status: Open</SelectItem>
-                          <SelectItem value="CLOSED_PENDING">Status: Pending</SelectItem>
-                          <SelectItem value="RESOLVED">Status: Resolved</SelectItem>
-                          <SelectItem value="VOID">Status: Void</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={rwCatFilter} onValueChange={setRwCatFilter}>
-                        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Category" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Categories</SelectItem>
-                          {adminCategorySelectOptions.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select value={rwTypeFilter} onValueChange={setRwTypeFilter}>
-                        <SelectTrigger className="w-[110px]"><SelectValue placeholder="Type" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="binary">Yes/No</SelectItem>
-                          <SelectItem value="multi">Multi</SelectItem>
-                          <SelectItem value="updown">Up/Down</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={rwSortBy} onValueChange={(v) => setRwSortBy(v as "manual" | "created" | "endAt" | "fit")}>
-                        <SelectTrigger className="w-[140px]"><SelectValue placeholder="Sort" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="manual">Manual order</SelectItem>
-                          <SelectItem value="endAt">Resolution date</SelectItem>
-                          <SelectItem value="created">Newest first</SelectItem>
-                          <SelectItem value="fit">Fit score</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={predictCmsSettings?.worldMarketsSortMode ?? "volume"}
-                        onValueChange={(v) => frontendSortMutation.mutate(v)}
-                        disabled={frontendSortMutation.isPending}
-                      >
-                        <SelectTrigger
-                          className="w-[210px]"
-                          data-testid="select-frontend-sort"
-                        >
-                          <SelectValue placeholder="Front-end sort" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="volume">Front-end: Volume (default)</SelectItem>
-                          <SelectItem value="newest">Front-end: Newest first</SelectItem>
-                          <SelectItem value="manual">Front-end: Manual order</SelectItem>
-                          <SelectItem value="endAt">Front-end: Resolution date</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {rwMarkets.length} shown
-                        {rwMarkets.length > 0 && (
-                          <>
-                            {" "}
-                            · {rwMarketStatusSummary.open} open
-                            {rwMarketStatusSummary.resolved > 0
-                              ? `, ${rwMarketStatusSummary.resolved} resolved`
-                              : ""}
-                            {rwMarketStatusSummary.other > 0
-                              ? `, ${rwMarketStatusSummary.other} other`
-                              : ""}
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    {marketsLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : rwMarkets.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 px-3 pb-1">
-                            <input
-                              type="checkbox"
-                              checked={rwSelectedIds.size === rwMarkets.length && rwMarkets.length > 0}
-                              onChange={(e) => {
-                                if (e.target.checked) setRwSelectedIds(new Set(rwMarkets.map(m => m.id)));
-                                else setRwSelectedIds(new Set());
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-xs text-muted-foreground">Select all</span>
-                          </div>
-                          <AdminSortableCardList
-                            items={rwMarkets}
-                            disabled={!canReorderWorldMarkets}
-                            disabledReason={
-                              !canReorderWorldMarkets
-                                ? "Choose \"Manual order\" in Sort and clear all filters and search to drag rows into your preferred order."
-                                : undefined
-                            }
-                            listClassName="space-y-2"
-                            onReorder={async (orderedIds) => {
-                              const res = await fetchWithAuth("/api/admin/open-markets/reorder", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ orderedIds }),
-                              });
-                              if (!res.ok) {
-                                const err = await res.json().catch(() => ({}));
-                                const msg = (err as { error?: string }).error || res.statusText;
-                                toast.error("Could not save order", { description: msg });
-                                throw new Error(msg || "Reorder failed");
-                              }
-                              toast.success("World market order saved");
-                              queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
-                              queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
-                            }}
-                            renderItem={(market, { dragHandle }) => {
-                              const daysUntilEnd = Math.ceil((new Date(market.endAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                              const resolvesSoon = daysUntilEnd >= 0 && daysUntilEnd <= 7 && market.status === "OPEN";
-                              const overdue = daysUntilEnd < 0 && (market.status === "OPEN" || market.status === "CLOSED_PENDING");
-                              const vis = (market as PredictionMarket).visibility;
-                              return (
-                                <div
-                                  className="flex items-center justify-between p-3 rounded-lg border gap-3"
-                                  data-testid={`market-row-${market.id}`}
-                                >
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {dragHandle}
-                                    <input
-                                      type="checkbox"
-                                      checked={rwSelectedIds.has(market.id)}
-                                      onChange={(e) => {
-                                        const next = new Set(rwSelectedIds);
-                                        e.target.checked ? next.add(market.id) : next.delete(market.id);
-                                        setRwSelectedIds(next);
-                                      }}
-                                      className="rounded shrink-0"
-                                    />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-medium truncate">{market.title}</p>
-                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                      {market.openMarketType && (
-                                        <Badge variant="outline" className="text-xs">
-                                          {market.openMarketType === "binary" ? "Yes/No" :
-                                           market.openMarketType === "multi" ? "Multi" : "Up/Down"}
-                                        </Badge>
-                                      )}
-                                      <Badge
-                                        variant={
-                                          market.status === "OPEN" ? "default" :
-                                          market.status === "RESOLVED" ? "secondary" : "destructive"
-                                        }
-                                      >
-                                        {market.status}
-                                      </Badge>
-                                      {market.category && (
-                                        <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
-                                      )}
-                                      {vis === "draft" && (
-                                        <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">Draft</Badge>
-                                      )}
-                                      {vis === "live" && (
-                                        <Badge variant="outline" className="text-xs border-green-500/40 dark:border-green-500/30 text-green-500">Live</Badge>
-                                      )}
-                                      {vis === "inactive" && (
-                                        <Badge variant="outline" className="text-xs border-orange-500/40 dark:border-orange-500/30 text-orange-500">Inactive</Badge>
-                                      )}
-                                      {vis === "archived" && (
-                                        <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-500">Archived</Badge>
-                                      )}
-                                      {market.featured && (
-                                        <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500">
-                                          <Star className="h-3 w-3 mr-1" />Featured
-                                        </Badge>
-                                      )}
-                                      {resolvesSoon && (
-                                        <Badge variant="outline" className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-500">
-                                          <Clock className="h-3 w-3 mr-1" />Resolves soon
-                                        </Badge>
-                                      )}
-                                      {overdue && (
-                                        <Badge variant="outline" className="text-xs border-red-500/40 dark:border-red-500/30 text-red-600 dark:text-red-400">
-                                          <AlertTriangle className="h-3 w-3 mr-1" />Overdue
-                                        </Badge>
-                                      )}
-                                      {market.personId && (
-                                        <Badge variant="outline" className="text-xs border-purple-500/40 dark:border-purple-500/30 text-purple-600 dark:text-purple-400">
-                                          Linked
-                                        </Badge>
-                                      )}
-                                      {(() => {
-                                        // Market Scout provenance chip: provider + fit score,
-                                        // linking to the source market for review side-by-side.
-                                        const meta = (market as PredictionMarket).metadata as
-                                          | { source?: { provider?: string; url?: string }; fitScore?: number }
-                                          | null
-                                          | undefined;
-                                        if (!meta?.source?.provider) return null;
-                                        const label = meta.source.provider === "polymarket" ? "Polymarket" : meta.source.provider;
-                                        const chip = (
-                                          <Badge variant="outline" className="text-xs border-sky-500/40 dark:border-sky-500/30 text-sky-600 dark:text-sky-400">
-                                            <Sparkles className="h-3 w-3 mr-1" />
-                                            {label}
-                                            {typeof meta.fitScore === "number" ? ` · Fit ${meta.fitScore}` : ""}
-                                          </Badge>
-                                        );
-                                        return meta.source.url ? (
-                                          <a
-                                            href={meta.source.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex"
-                                            title="Open source market"
-                                            data-testid={`link-scout-source-${market.id}`}
-                                          >
-                                            {chip}
-                                          </a>
-                                        ) : chip;
-                                      })()}
-                                      <span className="text-xs text-muted-foreground">
-                                        {daysUntilEnd >= 0
-                                          ? `Resolves in ${daysUntilEnd}d`
-                                          : `Ended ${Math.abs(daysUntilEnd)}d ago`}
-                                        {" · "}{new Date(market.endAt).toLocaleDateString()}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => setEditMarketId(market.id)}
-                                      aria-label="Edit"
-                                      data-testid={`button-edit-market-${market.id}`}
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    {market.status === "OPEN" && (
-                                      <>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => setSettleMarketId(market.id)}
-                                          aria-label="Settle"
-                                          data-testid={`button-settle-${market.id}`}
-                                        >
-                                          <Gavel className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => setVoidMarketId(market.id)}
-                                          aria-label="Void"
-                                          data-testid={`button-void-${market.id}`}
-                                        >
-                                          <XCircle className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                      </>
-                                    )}
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => setDeleteWorldMarket({ id: market.id, title: market.title })}
-                                      aria-label="Delete permanently"
-                                      data-testid={`button-delete-world-market-${market.id}`}
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <Gamepad2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                          <p>No World Markets match your filters</p>
-                          <Button className="mt-4" onClick={() => setCreateMarketOpen(true)} data-testid="button-create-first-market">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Create First Market
-                          </Button>
-                        </div>
-                      )}
-                  </CardContent>
-                </Card>
+                <WorldMarketsSection
+                  markets={markets}
+                  marketsLoading={marketsLoading}
+                  categoryOptions={adminCategorySelectOptions}
+                  frontendSortMode={predictCmsSettings?.worldMarketsSortMode ?? "volume"}
+                  frontendSortPending={frontendSortMutation.isPending}
+                  onFrontendSortChange={(mode) => frontendSortMutation.mutate(mode)}
+                  onCreate={() => setCreateMarketOpen(true)}
+                  onEdit={(id) => setEditMarketId(id)}
+                  onSettle={(id) => setSettleMarketId(id)}
+                  onVoid={(id) => setVoidMarketId(id)}
+                  onDelete={(m) => setDeleteWorldMarket(m)}
+                  initialVisFilter={deepLink.vis}
+                />
               </TabsContent>
 
               <TabsContent value="weekly-jackpot" className="mt-4">
@@ -9706,7 +9298,9 @@ export default function AdminDashboard() {
       </Dialog>
 
       <CreateMarketModal
-        open={createMarketOpen || !!editMarketId}
+        // Deep-linked edits (?edit=<id>) wait for the markets query so the
+        // modal opens in edit mode directly instead of flashing "Create".
+        open={createMarketOpen || (!!editMarketId && (markets || []).some((mk) => mk.id === editMarketId))}
         onClose={() => { setCreateMarketOpen(false); setEditMarketId(null); }}
         onSubmit={(data) => {
           if (editMarketId) {
