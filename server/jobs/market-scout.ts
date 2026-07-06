@@ -715,9 +715,13 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   result.llmCalls = 1;
 
   const allowedCategoryIds = await getAllowedCategoryIds();
+  // Main-leaderboard people only: tracked_people also retains induction-queue
+  // rows (including demoted ex-leaderboard people), and linking those to a
+  // market would point at someone with no live leaderboard presence.
   const people = await db
     .select({ id: trackedPeople.id, name: trackedPeople.name })
-    .from(trackedPeople);
+    .from(trackedPeople)
+    .where(eq(trackedPeople.status, "main_leaderboard"));
   const peopleByKey = new Map(people.map((p) => [normalizeNameKey(p.name), p]));
 
   const maxDrafts = maxDraftsPerRun();

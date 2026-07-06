@@ -88,10 +88,12 @@ async function main() {
     await import("@shared/schema");
   const { eq, asc, and } = await import("drizzle-orm");
 
-  // Two real tracked people for the mocked linkedPerson/relatedPeople.
+  // Two real MAIN-LEADERBOARD people for the mocked linkedPerson/relatedPeople
+  // (the scout only links status='main_leaderboard'; induction rows are ignored).
   mockPeople = await db
     .select({ id: trackedPeople.id, name: trackedPeople.name })
     .from(trackedPeople)
+    .where(eq(trackedPeople.status, "main_leaderboard"))
     .orderBy(asc(trackedPeople.name))
     .limit(2);
   console.log("CHECK mock link people:", mockPeople.map((p) => p.name).join(", ") || "(none)");
