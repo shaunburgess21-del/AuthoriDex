@@ -586,6 +586,7 @@ function MarketRowExpanded({ marketId }: { marketId: string }) {
 
       <div>
         <p className="text-xs font-medium text-muted-foreground mb-1">Per-entry breakdown</p>
+        <div className="-mx-2 overflow-x-auto px-2">
         <Table>
           <TableHeader>
             <TableRow>
@@ -616,6 +617,7 @@ function MarketRowExpanded({ marketId }: { marketId: string }) {
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       <details className="rounded-md border bg-muted/30 p-2">
@@ -735,7 +737,7 @@ function MarketsTab() {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -932,7 +934,7 @@ function TradesTab() {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1197,14 +1199,16 @@ export function AdminAmmSection() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          {tabs.map((t) => (
-            <TabsTrigger key={t.id} value={t.id} data-testid={`tab-amm-${t.id}`}>
-              <t.icon className="h-4 w-4 mr-1.5" />
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <TabsList className="inline-flex w-max">
+            {tabs.map((t) => (
+              <TabsTrigger key={t.id} value={t.id} data-testid={`tab-amm-${t.id}`}>
+                <t.icon className="h-4 w-4 mr-1.5" />
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         <TabsContent value="overview"><OverviewTab /></TabsContent>
         <TabsContent value="markets"><MarketsTab /></TabsContent>

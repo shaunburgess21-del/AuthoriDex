@@ -149,8 +149,8 @@ export function AdminOptionSuggestionsSection() {
               No {statusFilter === "all" ? "" : statusFilter} suggestions.
             </div>
           ) : (
-            <div className="border rounded-md overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border rounded-md overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-3 font-medium">Option</th>

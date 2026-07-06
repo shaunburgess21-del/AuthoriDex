@@ -203,6 +203,7 @@ import { AmmResolutionDialog } from "@/components/admin/AmmResolutionDialog";
 import { CreateMarketModal } from "@/pages/admin/CreateMarketModal";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
 import { WorldMarketsSection } from "@/pages/admin/WorldMarketsSection";
+import { NativeMarketRow } from "@/pages/admin/NativeMarketRow";
 
 /**
  * One-shot deep-link params so ops emails can land the founder directly on
@@ -3352,12 +3353,12 @@ export default function AdminDashboard() {
 
               <TabsContent value="weekly-jackpot" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardHeader className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle>Weekly Jackpot</CardTitle>
                       <CardDescription>Jackpot eligibility tied to all leaderboard celebrities</CardDescription>
                     </div>
-                    <Button onClick={() => generateJackpotMutation.mutate()} disabled={generateJackpotMutation.isPending} size="sm" data-testid="button-generate-jackpot">
+                    <Button onClick={() => generateJackpotMutation.mutate()} disabled={generateJackpotMutation.isPending} size="sm" className="w-full sm:w-auto" data-testid="button-generate-jackpot">
                       {generateJackpotMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
                       Generate All
                     </Button>
@@ -3365,7 +3366,7 @@ export default function AdminDashboard() {
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
                       <Select value={nativeVisFilter} onValueChange={setNativeVisFilter}>
-                        <SelectTrigger className="w-[140px]" data-testid="select-jackpot-vis-filter">
+                        <SelectTrigger className="w-full sm:w-[140px] h-11 sm:h-9" data-testid="select-jackpot-vis-filter">
                           <SelectValue placeholder="Visibility" />
                         </SelectTrigger>
                         <SelectContent>
@@ -3375,35 +3376,23 @@ export default function AdminDashboard() {
                           <SelectItem value="archived">Archived</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Input placeholder="Search..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-[200px]" data-testid="input-jackpot-search" />
+                      <Input placeholder="Search..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-full sm:w-[200px] h-11 sm:h-9" data-testid="input-jackpot-search" />
                     </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                     ) : jMarkets.length > 0 ? (
                         <div className="space-y-2">
                           {jMarkets.map((market) => (
-                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`jackpot-row-${market.id}`}>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate text-sm">{market.title}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
-                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
-                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="live">Live</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                    <SelectItem value="archived">Archived</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
-                              </div>
-                            </div>
+                            <NativeMarketRow
+                              key={market.id}
+                              market={market}
+                              testIdPrefix="jackpot"
+                              showCategory={false}
+                              showWeek={false}
+                              onVisibilityChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}
+                              onToggleFeatured={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}
+                              onSettle={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}
+                            />
                           ))}
                         </div>
                       ) : (
@@ -3422,15 +3411,15 @@ export default function AdminDashboard() {
 
               <TabsContent value="weekly-updown" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardHeader className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle>Weekly Up/Down</CardTitle>
                       <CardDescription>Auto-generated cards for all leaderboard celebrities</CardDescription>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 w-full sm:w-auto sm:shrink-0">
                       {selectedNativeIds.size > 0 && (
                         <Select onValueChange={(v) => bulkVisibilityMutation.mutate({ marketIds: Array.from(selectedNativeIds), visibility: v })}>
-                          <SelectTrigger className="w-[130px]" data-testid="select-bulk-vis"><SelectValue placeholder={`Bulk (${selectedNativeIds.size})`} /></SelectTrigger>
+                          <SelectTrigger className="flex-1 sm:flex-none sm:w-[130px] h-11 sm:h-9" data-testid="select-bulk-vis"><SelectValue placeholder={`Bulk (${selectedNativeIds.size})`} /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="live">Set Live</SelectItem>
                             <SelectItem value="inactive">Set Inactive</SelectItem>
@@ -3438,7 +3427,7 @@ export default function AdminDashboard() {
                           </SelectContent>
                         </Select>
                       )}
-                      <Button onClick={() => generateUpdownMutation.mutate()} disabled={generateUpdownMutation.isPending} size="sm" data-testid="button-generate-updown">
+                      <Button onClick={() => generateUpdownMutation.mutate()} disabled={generateUpdownMutation.isPending} size="sm" className="flex-1 sm:flex-none" data-testid="button-generate-updown">
                         {generateUpdownMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
                         Generate All
                       </Button>
@@ -3447,7 +3436,7 @@ export default function AdminDashboard() {
                   <CardContent>
                     <div className="flex items-center gap-2 mb-4 flex-wrap">
                       <Select value={nativeVisFilter} onValueChange={setNativeVisFilter}>
-                        <SelectTrigger className="w-[140px]" data-testid="select-updown-vis-filter"><SelectValue placeholder="Visibility" /></SelectTrigger>
+                        <SelectTrigger className="w-full sm:w-[140px] h-11 sm:h-9" data-testid="select-updown-vis-filter"><SelectValue placeholder="Visibility" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Status</SelectItem>
                           <SelectItem value="live">Live</SelectItem>
@@ -3456,7 +3445,7 @@ export default function AdminDashboard() {
                         </SelectContent>
                       </Select>
                       <Select value={nativeCatFilter} onValueChange={setNativeCatFilter}>
-                        <SelectTrigger className="w-[140px]" data-testid="select-updown-cat-filter"><SelectValue placeholder="Category" /></SelectTrigger>
+                        <SelectTrigger className="w-full sm:w-[140px] h-11 sm:h-9" data-testid="select-updown-cat-filter"><SelectValue placeholder="Category" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
                           {adminCategorySelectOptions.map((c) => (
@@ -3466,8 +3455,8 @@ export default function AdminDashboard() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input placeholder="Search celebrities..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-[200px]" data-testid="input-updown-search" />
-                      <span className="text-xs text-muted-foreground ml-auto">{(markets || []).filter(m => m.marketType === "updown").length} total</span>
+                      <Input placeholder="Search celebrities..." value={nativeSearchQuery} onChange={(e) => setNativeSearchQuery(e.target.value)} className="w-full sm:w-[200px] h-11 sm:h-9" data-testid="input-updown-search" />
+                      <span className="text-xs text-muted-foreground sm:ml-auto">{(markets || []).filter(m => m.marketType === "updown").length} total</span>
                     </div>
                     {marketsLoading ? (
                       <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
@@ -3483,34 +3472,25 @@ export default function AdminDashboard() {
                         return true;
                       });
                       return filtered.length > 0 ? (
-                        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                        <div className="space-y-2 md:max-h-[500px] md:overflow-y-auto">
                           {filtered.map((market) => (
-                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`updown-row-${market.id}`}>
-                              <div className="flex items-center gap-2">
-                                <input type="checkbox" checked={selectedNativeIds.has(market.id)} onChange={(e) => { const next = new Set(selectedNativeIds); e.target.checked ? next.add(market.id) : next.delete(market.id); setSelectedNativeIds(next); }} className="rounded" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate text-sm">{market.title}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
-                                  {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
-                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="live">Live</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                    <SelectItem value="archived">Archived</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                              </div>
-                            </div>
+                            <NativeMarketRow
+                              key={market.id}
+                              market={market}
+                              testIdPrefix="updown"
+                              showStatus={false}
+                              selectable
+                              selected={selectedNativeIds.has(market.id)}
+                              onSelectedChange={(checked) => {
+                                const next = new Set(selectedNativeIds);
+                                if (checked) next.add(market.id);
+                                else next.delete(market.id);
+                                setSelectedNativeIds(next);
+                              }}
+                              onVisibilityChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}
+                              onToggleFeatured={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}
+                              onDelete={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}
+                            />
                           ))}
                         </div>
                       ) : (
@@ -3529,12 +3509,12 @@ export default function AdminDashboard() {
 
               <TabsContent value="head-to-head" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardHeader className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle>Head-to-Head Battles</CardTitle>
                       <CardDescription>Curated matchups between two celebrities</CardDescription>
                     </div>
-                    <Button onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hPersonASearch(""); setH2hPersonBSearch(""); setH2hCategory("misc"); setH2hSecondaryCategories([]); setH2hModalOpen(true); }} size="sm" data-testid="button-create-h2h">
+                    <Button onClick={() => { setH2hPersonAId(""); setH2hPersonBId(""); setH2hPersonASearch(""); setH2hPersonBSearch(""); setH2hCategory("misc"); setH2hSecondaryCategories([]); setH2hModalOpen(true); }} size="sm" className="w-full sm:w-auto" data-testid="button-create-h2h">
                       <Plus className="h-4 w-4 mr-1" />New Battle
                     </Button>
                   </CardHeader>
@@ -3544,7 +3524,7 @@ export default function AdminDashboard() {
                         placeholder="Search..."
                         value={h2hMarketSearch}
                         onChange={(e) => setH2hMarketSearch(e.target.value)}
-                        className="w-[200px]"
+                        className="w-full sm:w-[200px] h-11 sm:h-9"
                         data-testid="input-h2h-search"
                       />
                     </div>
@@ -3555,31 +3535,15 @@ export default function AdminDashboard() {
                       return h2hList.length > 0 ? (
                         <div className="space-y-2">
                           {h2hList.map((market) => (
-                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`h2h-row-${market.id}`}>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate">{market.title}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
-                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
-                                  {market.category && <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>}
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
-                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="live">Live</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                    <SelectItem value="archived">Archived</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                              </div>
-                            </div>
+                            <NativeMarketRow
+                              key={market.id}
+                              market={market}
+                              testIdPrefix="h2h"
+                              onVisibilityChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}
+                              onToggleFeatured={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}
+                              onSettle={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}
+                              onDelete={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}
+                            />
                           ))}
                         </div>
                       ) : (
@@ -3598,17 +3562,17 @@ export default function AdminDashboard() {
 
               <TabsContent value="top-gainer" className="mt-4">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2">
+                  <CardHeader className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <CardTitle>Category Races</CardTitle>
                       <CardDescription>One per category: Tech, Politics, Business, Sports, Creator, Music</CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button onClick={() => generateGainerMutation.mutate()} size="sm" variant="outline" disabled={generateGainerMutation.isPending} data-testid="button-generate-gainer">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Button onClick={() => generateGainerMutation.mutate()} size="sm" variant="outline" disabled={generateGainerMutation.isPending} className="flex-1 sm:flex-none" data-testid="button-generate-gainer">
                         <RefreshCw className={`h-4 w-4 mr-1 ${generateGainerMutation.isPending ? "animate-spin" : ""}`} />
                         {generateGainerMutation.isPending ? "Generating..." : "Generate All"}
                       </Button>
-                      <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" data-testid="button-create-gainer">
+                      <Button onClick={() => { setGainerPersonIds([]); setGainerPersonSearch(""); setGainerCategory("tech"); setGainerModalOpen(true); }} size="sm" className="flex-1 sm:flex-none" data-testid="button-create-gainer">
                         <Plus className="h-4 w-4 mr-1" />New Gainer
                       </Button>
                     </div>
@@ -3619,7 +3583,7 @@ export default function AdminDashboard() {
                         placeholder="Search..."
                         value={gainerMarketSearch}
                         onChange={(e) => setGainerMarketSearch(e.target.value)}
-                        className="w-[200px]"
+                        className="w-full sm:w-[200px] h-11 sm:h-9"
                         data-testid="input-gainer-search"
                       />
                     </div>
@@ -3630,31 +3594,15 @@ export default function AdminDashboard() {
                       return gainerList.length > 0 ? (
                         <div className="space-y-2">
                           {gainerList.map((market) => (
-                            <div key={market.id} className="flex items-center justify-between p-3 rounded-lg border gap-3" data-testid={`gainer-row-${market.id}`}>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate">{market.title}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <Badge variant={market.visibility === "live" ? "default" : market.visibility === "inactive" ? "secondary" : "outline"} className="text-xs">{market.visibility}</Badge>
-                                  <Badge variant="outline" className="text-xs">{market.status}</Badge>
-                                  <Badge variant="outline" className="text-xs capitalize">{market.category}</Badge>
-                                  {market.featured && <Badge variant="outline" className="text-xs border-yellow-500/40 dark:border-yellow-500/30 text-yellow-500"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
-                                  <span className="text-xs text-muted-foreground">Wk {market.weekNumber || "-"}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Select value={market.visibility || "live"} onValueChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}>
-                                  <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="live">Live</SelectItem>
-                                    <SelectItem value="inactive">Inactive</SelectItem>
-                                    <SelectItem value="archived">Archived</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button variant="ghost" size="icon" aria-label="Toggle featured" onClick={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}><Star className={cn("h-4 w-4", market.featured && "fill-yellow-500 text-yellow-500")} /></Button>
-                                {market.status === "OPEN" && <Button variant="ghost" size="icon" aria-label="Settle" onClick={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}><Gavel className="h-4 w-4" /></Button>}
-                                <Button variant="ghost" size="icon" aria-label="Delete" onClick={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                              </div>
-                            </div>
+                            <NativeMarketRow
+                              key={market.id}
+                              market={market}
+                              testIdPrefix="gainer"
+                              onVisibilityChange={(v) => updateNativeMarketMutation.mutate({ id: market.id, visibility: v })}
+                              onToggleFeatured={() => updateNativeMarketMutation.mutate({ id: market.id, featured: !market.featured })}
+                              onSettle={() => setConfirmNativeAction({ kind: "settle", id: market.id, title: market.title })}
+                              onDelete={() => setConfirmNativeAction({ kind: "delete", id: market.id, title: market.title })}
+                            />
                           ))}
                         </div>
                       ) : (
@@ -6071,8 +6019,8 @@ export default function AdminDashboard() {
                     </div>
 
                     {wikiAuditExpanded && wikiAuditResults?.results && (
-                      <div className="mt-3 max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
-                        <table className="w-full">
+                      <div className="mt-3 max-h-80 overflow-auto rounded border bg-background/50 text-xs">
+                        <table className="w-full min-w-[600px]">
                           <thead>
                             <tr className="border-b text-muted-foreground sticky top-0 bg-background">
                               <th className="px-2 py-1.5 text-left font-medium">Name</th>
@@ -6233,8 +6181,8 @@ export default function AdminDashboard() {
                           })}
                         </div>
 
-                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
-                          <table className="w-full">
+                        <div className="max-h-80 overflow-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b text-muted-foreground sticky top-0 bg-background">
                                 <th className="px-2 py-1.5 text-left font-medium">Name</th>
@@ -6465,8 +6413,8 @@ export default function AdminDashboard() {
                           })}
                         </div>
 
-                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
-                          <table className="w-full">
+                        <div className="max-h-80 overflow-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b text-muted-foreground sticky top-0 bg-background">
                                 <th className="px-2 py-1.5 text-left font-medium">Name</th>
@@ -6672,8 +6620,8 @@ export default function AdminDashboard() {
                           })}
                         </div>
 
-                        <div className="max-h-80 overflow-y-auto rounded border bg-background/50 text-xs">
-                          <table className="w-full">
+                        <div className="max-h-80 overflow-auto rounded border bg-background/50 text-xs">
+                          <table className="w-full min-w-[600px]">
                             <thead>
                               <tr className="border-b text-muted-foreground sticky top-0 bg-background">
                                 <th className="px-2 py-1.5 text-left font-medium">Name</th>
