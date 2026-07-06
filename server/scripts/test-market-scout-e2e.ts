@@ -16,6 +16,11 @@ process.env.MARKET_SCOUT_MAX_DRAFTS_PER_RUN = "1";
 process.env.OPENAI_API_KEY = "sk-mock-market-scout-test";
 
 async function main() {
+  // Filled from the real tracked-people table before the job runs, so the
+  // mocked curation can exercise the celebrity-linking path with names that
+  // actually validate. [0] = primary linkedPerson, [1] = related person.
+  let mockPeople: Array<{ id: string; name: string }> = [];
+
   // ── Mock OpenAI Responses API ──────────────────────────────────────────
   const server = http.createServer((req, res) => {
     let body = "";
@@ -42,7 +47,8 @@ async function main() {
             secondaryCategories: ["misc"],
             resolutionCriteria: ["Resolves per the official announcement."],
             scoutWatch: "Watch for the official announcement.",
-            linkedPerson: null,
+            linkedPerson: mockPeople[0]?.name ?? null,
+            relatedPeople: mockPeople.map((p) => p.name),
             fitScore: 77,
             // Wrong count on purpose -> job must fall back to source labels.
             entryLabels: [],
@@ -78,8 +84,18 @@ async function main() {
   // Import AFTER env is set (lazy OpenAI client picks up base URL).
   const { runMarketScout, SCOUT_PROFILE_ID } = await import("../jobs/market-scout");
   const { db } = await import("../db");
-  const { predictionMarkets, marketEntries, profiles } = await import("@shared/schema");
-  const { eq, asc } = await import("drizzle-orm");
+  const { predictionMarkets, marketEntries, profiles, trackedPeople, cardRelatedPeople } =
+    await import("@shared/schema");
+  const { eq, asc, and } = await import("drizzle-orm");
+
+  // Two real tracked people for the mocked linkedPerson/relatedPeople.
+  mockPeople = await db
+    .select({ id: trackedPeople.id, name: trackedPeople.name })
+    .from(trackedPeople)
+    .orderBy(asc(trackedPeople.name))
+    .limit(2);
+  console.log("CHECK mock link people:", mockPeople.map((p) => p.name).join(", ") || "(none)");
+  if (mockPeople.length < 2) throw new Error("Need at least 2 tracked people for the linking test");
 
   // ── Preflight: scout profile exists ────────────────────────────────────
   const [scout] = await db
@@ -128,6 +144,13 @@ async function main() {
   console.log("METADATA:", JSON.stringify(market.metadata, null, 2));
   console.log("ENTRIES:", entries.map((e) => `${e.displayOrder}: ${e.label} (${e.entryType})`));
 
+  const relatedRows = await db
+    .select({ personId: cardRelatedPeople.personId })
+    .from(cardRelatedPeople)
+    .where(and(eq(cardRelatedPeople.cardType, "world_market"), eq(cardRelatedPeople.cardId, draftId)));
+  const relatedIds = relatedRows.map((r) => r.personId);
+  console.log("LINKED:", { personId: market.personId, relatedIds });
+
   const meta = market.metadata as any;
   const assertions: Array<[string, boolean]> = [
     ["visibility=draft", market.visibility === "draft"],
@@ -148,6 +171,18 @@ async function main() {
     // Public source link ships empty; provenance lives in metadata.source.url.
     ["sourceUrl empty by default", market.sourceUrl == null],
     ["metadata.source.url set", typeof meta?.source?.url === "string" && meta.source.url.length > 0],
+    // Celebrity linking: mock's linkedPerson becomes the primary personId,
+    // the other suggested name lands in card_related_people (the scan may
+    // legitimately add more people named in the live candidate's text).
+    ["personId = mock linkedPerson", market.personId === mockPeople[0].id],
+    ["related includes mock relatedPerson", relatedIds.includes(mockPeople[1].id)],
+    ["primary not duplicated in related", !relatedIds.includes(mockPeople[0].id)],
+    [
+      "metadata.scoutLinkedPeople recorded",
+      Array.isArray(meta?.scoutLinkedPeople) &&
+        meta.scoutLinkedPeople[0] === mockPeople[0].name &&
+        meta.scoutLinkedPeople.includes(mockPeople[1].name),
+    ],
   ];
 
   // closeAt must sit before endAt and match EITHER the default AMM cutoff
@@ -183,6 +218,9 @@ async function main() {
   // ── Cleanup: delete all test drafts we created ─────────────────────────
   const toDelete = [draftId, ...rerun.drafts.map((d) => d.marketId)];
   for (const id of toDelete) {
+    await db
+      .delete(cardRelatedPeople)
+      .where(and(eq(cardRelatedPeople.cardType, "world_market"), eq(cardRelatedPeople.cardId, id)));
     await db.delete(marketEntries).where(eq(marketEntries.marketId, id));
     await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
   }

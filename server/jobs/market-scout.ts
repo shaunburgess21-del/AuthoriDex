@@ -31,7 +31,7 @@ import OpenAI from "openai";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
-import { contentCategories, marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
+import { cardRelatedPeople, contentCategories, marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
 import {
   CANONICAL_MARKET_CATEGORIES,
   OPINION_POLL_MAX_OPTIONS,
@@ -166,6 +166,7 @@ interface ScoutSelection {
   resolutionCriteria: string[];
   scoutWatch: string;
   linkedPerson: string | null;
+  relatedPeople: string[];
   fitScore: number;
   entryLabels: string[];
 }
@@ -181,6 +182,50 @@ function slugifyTitle(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
+}
+
+/** Max tracked people auto-linked per draft (primary + Display on Profiles). */
+const MAX_LINKED_PEOPLE = 6;
+
+/** Lowercase, strip diacritics, collapse whitespace — canonical key for name matching. */
+function normalizeNameKey(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Deterministic safety net for celebrity linking: tracked people whose FULL
+ * name appears verbatim (case/diacritic-insensitive, word-bounded) in the
+ * candidate's title, description, or outcome labels. No fuzzy or partial
+ * matching — "Jordan" alone never matches "Michael Jordan" — so this can
+ * only add people the source text explicitly names (e.g. tracked players
+ * listed as outcomes of a "top scorer" market the LLM under-linked).
+ */
+function scanCandidateForTrackedPeople(
+  candidate: PolymarketCandidate,
+  tracked: Iterable<{ id: string; name: string }>,
+): string[] {
+  // " | " separators survive normalization, so a name can never
+  // false-positive by spanning two adjacent fields.
+  const haystack = normalizeNameKey(
+    [candidate.title, candidate.description ?? "", ...candidate.outcomes.map((o) => o.label)].join(" | "),
+  );
+  const hits: string[] = [];
+  for (const person of tracked) {
+    const needle = normalizeNameKey(person.name);
+    if (!needle) continue;
+    const re = new RegExp(`(?<![a-z0-9])${escapeRegExp(needle)}(?![a-z0-9])`);
+    if (re.test(haystack)) hits.push(person.name);
+  }
+  return hits;
 }
 
 /** Allowed category ids from the live registry, canonical set as fallback. */
@@ -241,14 +286,15 @@ For each selected market, produce:
 - "secondaryCategories": 0-2 additional ids from the same list.
 - "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text.
 - "scoutWatch": one sentence listing the leading indicators a human should watch to know the outcome early.
-- "linkedPerson": if the market is chiefly about one person from the TRACKED PEOPLE list, that exact name; otherwise null.
+- "relatedPeople": ALL names from the TRACKED PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). Exact names from the list only. Max 6. [] when none apply.
+- "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
 - "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability).
 - "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes.
 
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
 
 Respond with ONE JSON object and nothing else — no markdown, no code fences:
-{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "fitScore": 0, "entryLabels": ["..."] } ] }`;
+{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."] } ] }`;
 }
 
 function buildUserPrompt(
@@ -272,7 +318,7 @@ ${JSON.stringify(candidateBlocks, null, 1)}
 EXISTING VOXDEX MARKET TITLES (do not duplicate):
 ${existingTitles.length > 0 ? existingTitles.map((t) => `- ${t}`).join("\n") : "(none)"}
 
-TRACKED PEOPLE (for linkedPerson matching only — exact names):
+TRACKED PEOPLE (for relatedPeople / linkedPerson matching only — exact names):
 ${trackedNames.join(", ")}
 
 Today's date: ${new Date().toISOString().split("T")[0]}. Curate now.`;
@@ -336,7 +382,8 @@ async function insertScoutedDraft(
   ctx: {
     allowedCategoryIds: Set<string>;
     existingSlugs: Set<string>;
-    peopleByName: Map<string, string>;
+    /** normalizeNameKey(name) -> canonical tracked person. */
+    peopleByKey: Map<string, { id: string; name: string }>;
     nextCmsOrder: number;
   },
 ): Promise<{ marketId: string; slug: string } | null> {
@@ -420,9 +467,37 @@ async function insertScoutedDraft(
     ctx.allowedCategoryIds,
   );
 
-  const linkedPersonId = selection.linkedPerson
-    ? ctx.peopleByName.get(selection.linkedPerson.trim().toLowerCase()) ?? null
-    : null;
+  // Celebrity linking: union the LLM's suggestions (linkedPerson first, so
+  // it stays the primary when valid) with the deterministic name scan over
+  // the source text, validate every name against the tracked-people list,
+  // and dedupe by person id. Unknown names are silently dropped — the scout
+  // must never invent a link.
+  const suggestedNames: string[] = [];
+  if (typeof selection.linkedPerson === "string" && selection.linkedPerson.trim()) {
+    suggestedNames.push(selection.linkedPerson);
+  }
+  if (Array.isArray(selection.relatedPeople)) {
+    for (const n of selection.relatedPeople) {
+      if (typeof n === "string" && n.trim()) suggestedNames.push(n);
+    }
+  }
+  suggestedNames.push(...scanCandidateForTrackedPeople(candidate, ctx.peopleByKey.values()));
+
+  const seenPersonIds = new Set<string>();
+  const linkedPeople: Array<{ id: string; name: string }> = [];
+  for (const name of suggestedNames) {
+    if (linkedPeople.length >= MAX_LINKED_PEOPLE) break;
+    const person = ctx.peopleByKey.get(normalizeNameKey(name));
+    if (person && !seenPersonIds.has(person.id)) {
+      seenPersonIds.add(person.id);
+      linkedPeople.push(person);
+    }
+  }
+
+  // Primary linked celebrity (market.personId) = first validated name;
+  // everyone else goes to "Display on Profiles" (card_related_people).
+  const linkedPersonId = linkedPeople[0]?.id ?? null;
+  const relatedPersonIds = linkedPeople.slice(1).map((p) => p.id);
 
   const fitScore =
     typeof selection.fitScore === "number" && Number.isFinite(selection.fitScore)
@@ -462,6 +537,11 @@ async function insertScoutedDraft(
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
     metadata.scoutWatch = selection.scoutWatch.trim();
+  }
+  // Traceability: canonical names of everyone the scout auto-linked
+  // (index 0 = primary). Founders can prune/extend in the edit modal.
+  if (linkedPeople.length > 0) {
+    metadata.scoutLinkedPeople = linkedPeople.map((p) => p.name);
   }
 
   const title = selection.title.trim().slice(0, 200);
@@ -516,6 +596,18 @@ async function insertScoutedDraft(
         displayOrder: i,
       })),
     );
+
+    // "Display on Profiles" suggestions — secondary linked celebrities.
+    // Plain insert (no sync/delete) is safe: the market row is brand new.
+    if (relatedPersonIds.length > 0) {
+      await tx.insert(cardRelatedPeople).values(
+        relatedPersonIds.map((pid) => ({
+          cardType: "world_market",
+          cardId: row.id,
+          personId: pid,
+        })),
+      );
+    }
 
     return row;
   });
@@ -626,7 +718,7 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   const people = await db
     .select({ id: trackedPeople.id, name: trackedPeople.name })
     .from(trackedPeople);
-  const peopleByName = new Map(people.map((p) => [p.name.toLowerCase(), p.id]));
+  const peopleByKey = new Map(people.map((p) => [normalizeNameKey(p.name), p]));
 
   const maxDrafts = maxDraftsPerRun();
   const forLlm = fresh.slice(0, MAX_CANDIDATES_FOR_LLM);
@@ -661,7 +753,7 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
       const inserted = await insertScoutedDraft(selection, candidate, {
         allowedCategoryIds,
         existingSlugs,
-        peopleByName,
+        peopleByKey,
         nextCmsOrder,
       });
       if (!inserted) {
