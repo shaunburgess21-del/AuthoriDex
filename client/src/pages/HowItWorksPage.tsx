@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import type { BadgeCardData } from "@/components/BadgeCard";
+import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
+import { getRarityGlowColor, getRarityStyle } from "@/lib/badge-icons";
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -1534,20 +1535,6 @@ function BadgesSection() {
       .filter((g) => g.rows.length > 0);
   }, [filtered]);
 
-  const rarityAccent: Record<string, string> = {
-    COMMON: "#94A3B8",
-    RARE: "#3C83F6",
-    EPIC: "#8B5CF6",
-    LEGENDARY: "#F59E0B",
-  };
-
-  const rarityLabel: Record<string, string> = {
-    COMMON: "Common",
-    RARE: "Rare",
-    EPIC: "Epic",
-    LEGENDARY: "Legendary",
-  };
-
   return (
     <section className="space-y-6">
       <SectionHeading
@@ -1577,6 +1564,7 @@ function BadgesSection() {
         </Badge>
         {(["COMMON", "RARE", "EPIC", "LEGENDARY"] as const).map((rarity) => {
           const count = visibleBadges.filter((b) => b.rarity === rarity).length;
+          const glow = getRarityGlowColor(rarity);
           return (
             <Badge
               key={rarity}
@@ -1587,11 +1575,11 @@ function BadgesSection() {
                 rarityFilter === rarity && "ring-2 ring-primary",
               )}
               style={{
-                borderColor: `${rarityAccent[rarity]}66`,
-                color: rarityAccent[rarity],
+                borderColor: `${glow}66`,
+                color: glow,
               }}
             >
-              {rarityLabel[rarity]} ({count})
+              {getRarityStyle(rarity).label} ({count})
             </Badge>
           );
         })}
@@ -1619,44 +1607,21 @@ function BadgesSection() {
             {rows.map((row) => {
               const isEarned = earnedMap.has(row.key);
               return (
-                <Card
+                <BadgeCard
                   key={row.key}
-                  className={cn("space-y-1.5 p-3", isEarned && "earned-glow")}
-                  style={
-                    isEarned
-                      ? ({ "--glow-color": rarityAccent[row.rarity] } as CSSProperties)
-                      : undefined
-                  }
-                  data-testid={`badge-card-${row.key}`}
-                  data-earned={isEarned ? "true" : "false"}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-medium">{row.name}</div>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] shrink-0"
-                      style={{
-                        borderColor: `${rarityAccent[row.rarity]}66`,
-                        color: rarityAccent[row.rarity],
-                      }}
-                    >
-                      {rarityLabel[row.rarity]}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {row.description}
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                      {BADGE_CATEGORY_LABELS[category]}
-                    </p>
-                    {isEarned && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-                        <Check className="h-3 w-3" /> Earned
-                      </span>
-                    )}
-                  </div>
-                </Card>
+                  badge={{
+                    key: row.key,
+                    name: row.name,
+                    description: row.description,
+                    category: row.category,
+                    rarity: row.rarity,
+                    icon: row.icon,
+                    sortOrder: row.sortOrder,
+                    earned: isEarned,
+                    earnedAt: earnedMap.get(row.key) ?? null,
+                  }}
+                  size="catalog"
+                />
               );
             })}
           </div>

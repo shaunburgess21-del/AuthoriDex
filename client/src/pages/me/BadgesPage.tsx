@@ -12,6 +12,11 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
 import { CATEGORY_LABELS, getRarityStyle } from "@/lib/badge-icons";
+import {
+  CATEGORY_CHIP_RADIUS,
+  FILTER_ACTIVE_PILL_BADGES,
+  FILTER_INACTIVE_PILL_BADGES,
+} from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_ORDER = [
@@ -134,7 +139,7 @@ export default function BadgesPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-3 sm:px-4 py-8 max-w-4xl">
+      <div className="container mx-auto max-w-4xl px-2 py-6 sm:px-4">
         <div className="mb-6">
           <h1 className="text-3xl font-serif font-bold flex items-center gap-2" data-testid="text-badges-title">
             <Trophy className="h-7 w-7 text-amber-500" />
@@ -204,16 +209,16 @@ export default function BadgesPage() {
             ) : (
               <div className="space-y-6">
                 {grouped.map(([category, rows]) => (
-                  <section key={category}>
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-2">
+                  <section key={category} className="space-y-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
                       {CATEGORY_LABELS[category] ?? category}
                       <span className="text-xs">
                         {rows.filter((r) => r.earned).length} / {rows.length}
                       </span>
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid gap-2 md:grid-cols-2">
                       {rows.map((b) => (
-                        <BadgeCard key={b.key} badge={b} size="md" />
+                        <BadgeCard key={b.key} badge={b} size="catalog" />
                       ))}
                     </div>
                   </section>
@@ -239,16 +244,17 @@ function StatsBar({
   latest: BadgeCardData | null;
 }) {
   const rarestStyle = rarest ? getRarityStyle(rarest.rarity) : null;
+  const statCardClass = "p-4 shadow-none pulse-card-green pulse-card-flush";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <Card className="p-4">
+      <Card className={statCardClass}>
         <p className="text-xs text-muted-foreground">Earned</p>
         <p className="text-2xl font-bold mt-1">
           {earnedCount}
           <span className="text-base text-muted-foreground"> / {total}</span>
         </p>
       </Card>
-      <Card className="p-4">
+      <Card className={statCardClass}>
         <p className="text-xs text-muted-foreground">Rarest earned</p>
         {rarest && rarestStyle ? (
           <p className={cn("text-base font-semibold mt-1", rarestStyle.accent)}>
@@ -258,7 +264,7 @@ function StatsBar({
           <p className="text-base font-semibold mt-1 text-muted-foreground">—</p>
         )}
       </Card>
-      <Card className="p-4">
+      <Card className={statCardClass}>
         <p className="text-xs text-muted-foreground">Latest</p>
         <p className="text-base font-semibold mt-1 truncate">
           {latest?.name ?? <span className="text-muted-foreground">—</span>}
@@ -290,10 +296,11 @@ function FilterChips<T extends string>({
           type="button"
           onClick={() => onChange(opt.id)}
           className={cn(
-            "rounded-full border px-3 py-1 text-xs transition-colors",
+            CATEGORY_CHIP_RADIUS,
+            "px-3 py-1.5 text-xs font-medium border transition-colors",
             value === opt.id
-              ? "border-primary bg-primary/15 text-primary"
-              : "border-white/10 text-muted-foreground hover:bg-muted/40",
+              ? FILTER_ACTIVE_PILL_BADGES
+              : FILTER_INACTIVE_PILL_BADGES,
           )}
           data-testid={`badge-filter-${opt.id}`}
         >

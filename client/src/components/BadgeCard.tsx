@@ -1,8 +1,10 @@
+import type { CSSProperties } from "react";
 import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_LABELS,
   getBadgeIcon,
+  getRarityGlowColor,
   getRarityStyle,
 } from "@/lib/badge-icons";
 
@@ -22,7 +24,7 @@ export interface BadgeCardData {
 
 interface BadgeCardProps {
   badge: BadgeCardData;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "catalog";
   showCategory?: boolean;
   className?: string;
 }
@@ -36,6 +38,15 @@ const SIZE_CLASSES = {
     description: "text-[11px]",
     chip: "text-[9px] px-1.5 py-0",
     earnedChip: "text-[9px] px-1.5 py-0.5",
+  },
+  catalog: {
+    container: "p-3",
+    iconWrap: "h-10 w-10",
+    icon: "h-5 w-5",
+    name: "font-medium",
+    description: "text-xs",
+    chip: "text-[10px] px-2 py-0.5",
+    earnedChip: "text-[10px] px-2 py-0.5",
   },
   md: {
     container: "p-4",
@@ -58,16 +69,13 @@ const SIZE_CLASSES = {
 };
 
 /**
- * Universal badge card — used on /me/badges, /me/votes Impact tab,
- * and the public profile badges strip. Rendering rules:
+ * Universal badge card — used on /me/badges, /how-it-works badges tab,
+ * /me/votes Impact tab, and the public profile badges strip.
  *
- *   - Earned: full-colour rarity-tinted border, icon prominent,
- *     "Earned" chip with the awarded date.
+ *   - Earned: rarity-tinted earned-glow, icon prominent,
+ *     "Earned" chip with the awarded date when available.
  *   - Locked: greyed out, lock icon overlay, name + description
  *     visible (so users know what to chase) but no earned date.
- *
- * Rarity colours come from `lib/badge-icons.ts:RARITY_STYLES` so
- * BadgeToast can reuse the same palette.
  */
 export function BadgeCard({
   badge,
@@ -90,13 +98,18 @@ export function BadgeCard({
   return (
     <div
       className={cn(
-        "relative rounded-xl border bg-card transition-colors",
+        "relative rounded-xl transition-colors",
         sz.container,
         badge.earned
-          ? cn(rarity.border, "shadow-sm")
-          : "border-white/5 opacity-60 grayscale",
+          ? "earned-glow"
+          : "border bg-card border-white/5 opacity-60 grayscale",
         className,
       )}
+      style={
+        badge.earned
+          ? ({ "--glow-color": getRarityGlowColor(badge.rarity) } as CSSProperties)
+          : undefined
+      }
       data-testid={`badge-card-${badge.key}`}
       data-earned={badge.earned ? "true" : "false"}
     >
@@ -147,7 +160,7 @@ export function BadgeCard({
           <p className={cn(sz.description, "text-muted-foreground leading-snug")}>
             {badge.description}
           </p>
-          {badge.earned && earnedAtLabel && (
+          {badge.earned && (
             <div className="pt-1">
               <span
                 className={cn(
@@ -155,7 +168,8 @@ export function BadgeCard({
                   sz.earnedChip,
                 )}
               >
-                <Check className="h-3 w-3" /> Earned · {earnedAtLabel}
+                <Check className="h-3 w-3" />
+                {earnedAtLabel ? `Earned · ${earnedAtLabel}` : "Earned"}
               </span>
             </div>
           )}

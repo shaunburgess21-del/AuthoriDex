@@ -144,6 +144,18 @@ export function getRarityStyle(rarity: string) {
   return RARITY_STYLES[rarity] ?? RARITY_STYLES.COMMON;
 }
 
+/** Hex accent colours for earned-glow CSS (--glow-color). */
+export const RARITY_GLOW_COLORS: Record<string, string> = {
+  COMMON: "#94A3B8",
+  RARE: "#3C83F6",
+  EPIC: "#8B5CF6",
+  LEGENDARY: "#F59E0B",
+};
+
+export function getRarityGlowColor(rarity: string): string {
+  return RARITY_GLOW_COLORS[rarity] ?? RARITY_GLOW_COLORS.COMMON;
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   VOTING: "Voting",
   PREDICTION: "Prediction",
