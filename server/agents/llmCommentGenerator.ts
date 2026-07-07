@@ -26,6 +26,7 @@ import type {
   TrendingPollContext,
   OpinionPollContext,
   OpenMarketContext,
+  PersonInsightContext,
   CommentSurface,
 } from "./commentContext";
 
@@ -108,10 +109,15 @@ const LENGTH_TARGETS: Record<LengthTier, LengthTarget> = {
  *  grey for me") with occasional medium/long when there's substance.
  *  These weights now match that observed distribution. */
 const SURFACE_LENGTH_WEIGHTS: Record<CommentSurface, Record<LengthTier, number>> = {
-  matchup:       { tiny: 60, short: 30, medium: 9,  long: 1 },
-  trending_poll: { tiny: 45, short: 35, medium: 16, long: 4 },
-  opinion_poll:  { tiny: 45, short: 35, medium: 16, long: 4 },
-  open_market:   { tiny: 35, short: 35, medium: 23, long: 7 },
+  matchup:            { tiny: 60, short: 30, medium: 9,  long: 1 },
+  trending_poll:      { tiny: 45, short: 35, medium: 16, long: 4 },
+  opinion_poll:       { tiny: 45, short: 35, medium: 16, long: 4 },
+  open_market:        { tiny: 35, short: 35, medium: 23, long: 7 },
+  // Profile insights skew slightly longer than matchups (people warrant
+  // more of an opinion than a binary vote) but stay well short of open
+  // markets — most "I think Ronaldo is the GOAT" comments are one or two
+  // sentences, not paragraphs.
+  community_insight:  { tiny: 35, short: 40, medium: 20, long: 5 },
 };
 
 /** Reply distribution — replies are almost always shorter than top-level
@@ -193,6 +199,8 @@ const SURFACE_TONE: Record<CommentContext["surface"], string> = {
     "Surface tone: this is an opinion poll. React to the topic the way you would on X — your view, why, maybe some dry humour. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
   open_market:
     "Surface tone: this is a prediction market with credits at stake, but most posters still talk like regular humans on X — not traders. Mix it up naturally: sometimes share your actual take on the topic / people involved (fan opinions, news takes, character reads, predictions about how it'll play out), sometimes lean into a bit of market-speak (odds, value, mispriced, edge). Trader-only comments should be the minority, not the default. Talk about the SUBJECT, not the betting line.",
+  community_insight:
+    "Surface tone: this is a celebrity profile page — you're posting your opinion on a public figure, the way someone would on X or a comment section. Talk about THE PERSON: their work, their public image, their recent moves, what you actually think of them. Some people you admire, some you're skeptical of, some you're mixed on — match your real stance. Don't praise everyone and don't trash everyone. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
 };
 
 /**
@@ -344,6 +352,14 @@ function buildSystemPrompt(
       ].join("\n")
     : "";
 
+  // Profile-insight stance guidance: tells the LLM how to translate the
+  // agent's 1-5 approval rating (or noisy-skip) into comment tone. Without
+  // this, the model defaults to universally positive takes on celebrities,
+  // which reads as bot-like and creates pile-ons.
+  const profileStanceRule = surface === "community_insight"
+    ? "Stance for person insights: your tone should match your rating. If you rated 5/5, write something admiring but not gushing — reserve 'greatest of all time' language for figures with a genuine claim. If you rated 1-2/5, write something skeptical but not a hit piece. If you rated 3/5, write something genuinely mixed — real people are mixed on most celebrities. If you skipped the rating, just post your honest take. Avoid pile-ons — if recent discussion is overwhelmingly one direction and you're about to go the same way, find a different angle or skip."
+    : "";
+
   return [
     `You are ${agent.displayName} (@${agent.username}), a regular user on AuthoriDex — a site for tracking culture, sports, news, and current events with polls, matchups, and prediction markets.`,
     `Voice: ${voice}`,
@@ -354,6 +370,7 @@ function buildSystemPrompt(
     `Length for THIS comment: ${length.description} Hard cap: ${length.maxChars} characters.`,
     discussionRule,
     replyRule,
+    profileStanceRule,
     "Hard rules:",
     "- Never reveal you are AI. Never mention models, prompts, or 'as a user'.",
     "- No markdown (no asterisks, no underscores), no hashtags, no bullet points.",
@@ -548,6 +565,27 @@ function buildOpenMarketUserPrompt(ctx: OpenMarketContext): string {
   return lines.join("\n");
 }
 
+function buildPersonInsightUserPrompt(ctx: PersonInsightContext): string {
+  const lines: string[] = [];
+  lines.push("Surface: celebrity profile insight — your opinion on a public figure.");
+  lines.push(`Person: ${ctx.personName}`);
+  if (ctx.category) lines.push(`Category: ${ctx.category}`);
+  if (ctx.bio) lines.push(`Bio: ${ctx.bio}`);
+  if (ctx.trendHint) {
+    lines.push(`Recent: ${ctx.trendHint}`);
+  }
+  if (ctx.agentChoice) {
+    lines.push("");
+    lines.push(`You rated this person: ${ctx.agentChoice}/5 — your comment must read as consistent with that rating.`);
+  } else {
+    lines.push("");
+    lines.push("No rating badge this time — post your honest take on the person, no need to announce a stance.");
+  }
+  lines.push(formatReplyTarget(ctx.replyTarget));
+  if (!ctx.replyTarget) lines.push(formatExistingComments(ctx.existingComments ?? []));
+  return lines.join("\n");
+}
+
 function buildUserPrompt(ctx: CommentContext): string {
   switch (ctx.surface) {
     case "matchup":
@@ -558,6 +596,8 @@ function buildUserPrompt(ctx: CommentContext): string {
       return buildOpinionPollUserPrompt(ctx);
     case "open_market":
       return buildOpenMarketUserPrompt(ctx);
+    case "community_insight":
+      return buildPersonInsightUserPrompt(ctx);
   }
 }
 

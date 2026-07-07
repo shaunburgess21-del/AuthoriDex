@@ -9,10 +9,11 @@
  * Each fetcher returns a typed bundle that the generator turns into a prompt.
  */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   matchups,
   trackedPeople,
+  trendingPeople,
   trendingPolls,
   trendingPollVotes,
   opinionPolls,
@@ -23,11 +24,13 @@ import {
   marketBets,
   votes,
   comments as unifiedComments,
+  communityInsights,
+  userVotes,
   profiles,
 } from "@shared/schema";
 import { db } from "../db";
 
-export type CommentSurface = "matchup" | "trending_poll" | "opinion_poll" | "open_market";
+export type CommentSurface = "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight";
 
 /** Up to N most-recent comments shown to the LLM so it doesn't paraphrase
  *  what a previous user / agent already said. */
@@ -69,7 +72,10 @@ interface BaseContext {
 }
 
 export interface ReplyTarget {
-  commentId: string;
+  /** ID of the comment being replied to. Null when the reply target is a
+   *  top-level community_insight (in which case `insightId` is set instead
+   *  and the worker writes a top-level reply with parentCommentId=null). */
+  commentId: string | null;
   authorUsername: string | null;
   body: string;
   /** Used to derive whether the original commenter agreed or disagreed
@@ -80,6 +86,11 @@ export interface ReplyTarget {
    *  started the sub-thread. Passed to the LLM for context only — the agent
    *  is still told to engage with the immediate parent, not the root. */
   threadRoot?: { authorUsername: string | null; body: string } | null;
+  /** Set when the reply target is a top-level community_insight row (not a
+   *  comment). The worker uses this as `parentId` on the new comments row
+   *  and writes `parentCommentId = null` (the reply lands at depth 0 in the
+   *  comments table, anchored to the insight). */
+  insightId?: string | null;
 }
 
 /** Outcome category for one reply-target probe. Counters in the sweep
@@ -140,11 +151,27 @@ export interface OpenMarketContext extends BaseContext {
   replyTarget?: ReplyTarget | null;
 }
 
+export interface PersonInsightContext extends BaseContext {
+  surface: "community_insight";
+  personName: string;
+  bio: string | null;
+  /** Optional recent-news / trend hook for the prompt (e.g. "rising in the
+   *  news this week"). Null when trend data is flat or unavailable. */
+  trendHint: string | null;
+  /** "1" | "2" | "3" | "4" | "5" — the agent's approval rating on this
+   *  person, or null when the agent skipped the rating (noisy band,
+   *  ~30% of the time per the hybrid sentiment model). */
+  agentChoice?: string | null;
+  existingComments?: Array<{ body: string }>;
+  replyTarget?: ReplyTarget | null;
+}
+
 export type CommentContext =
   | MatchupContext
   | TrendingPollContext
   | OpinionPollContext
-  | OpenMarketContext;
+  | OpenMarketContext
+  | PersonInsightContext;
 
 /**
  * Truncate long context strings so we don't blow the prompt budget on a single
@@ -432,6 +459,190 @@ export async function fetchOpenMarketContext(
   };
 }
 
+// ── Person insights (celebrity profile comments) ───────────────────────
+
+/**
+ * Recent top-level community insights on a person. Used as the "existing
+ * discussion" context for the LLM so the agent doesn't echo what other
+ * users (or earlier agents) have already posted. Distinct from
+ * `fetchExistingComments` because top-level posts live in
+ * `community_insights`, not the unified `comments` table.
+ */
+async function fetchExistingInsights(personId: string): Promise<Array<{ body: string }>> {
+  const rows = await db
+    .select({ body: communityInsights.content })
+    .from(communityInsights)
+    .where(
+      and(
+        eq(communityInsights.personId, personId),
+        isNull(communityInsights.deletedAt),
+      ),
+    )
+    .orderBy(desc(communityInsights.createdAt))
+    .limit(EXISTING_COMMENT_LIMIT);
+  return rows.map((row) => ({ body: row.body }));
+}
+
+/**
+ * Build a short, plain-language trend hook for the prompt (e.g. "rising in
+ * the news this week"). Kept non-numeric so the LLM doesn't drift into
+ * trader-speak. Returns null when trend data is flat or unavailable.
+ */
+function buildTrendHint(change24h: number | null, change7d: number | null): string | null {
+  const c24 = change24h ?? 0;
+  const c7 = change7d ?? 0;
+  // Thresholds deliberately loose — we only want a directional nudge, not a
+  // precise reading. Anything within ±5% reads as "steady".
+  if (c7 > 5) return "rising in the news this week";
+  if (c7 < -5) return "fading from the news this week";
+  if (c24 > 10) return "spiking in the news today";
+  if (c24 < -10) return "dropping out of the news today";
+  return null;
+}
+
+export async function fetchPersonInsightContext(
+  personId: string,
+  agentUserId: string,
+): Promise<PersonInsightContext | null> {
+  // Pull bio from tracked_people (richer than the trending_people mirror)
+  // and trend signals from trending_people (24h/7d change). Run in parallel.
+  const [trackedRow, trendingRow, agentVoteResult, existingInsights] = await Promise.all([
+    db
+      .select({
+        name: trackedPeople.name,
+        category: trackedPeople.category,
+        bio: trackedPeople.bio,
+      })
+      .from(trackedPeople)
+      .where(eq(trackedPeople.id, personId))
+      .limit(1),
+    db
+      .select({
+        change24h: trendingPeople.change24h,
+        change7d: trendingPeople.change7d,
+      })
+      .from(trendingPeople)
+      .where(eq(trendingPeople.id, personId))
+      .limit(1),
+    db
+      .select({ rating: userVotes.rating })
+      .from(userVotes)
+      .where(
+        and(
+          eq(userVotes.userId, agentUserId),
+          eq(userVotes.personId, personId),
+        ),
+      )
+      .limit(1),
+    fetchExistingInsights(personId),
+  ]);
+
+  const person = trackedRow[0];
+  if (!person) return null;
+
+  const trend = trendingRow[0];
+  const trendHint = buildTrendHint(
+    trend?.change24h != null ? Number(trend.change24h) : null,
+    trend?.change7d != null ? Number(trend.change7d) : null,
+  );
+
+  const agentVote = agentVoteResult[0];
+
+  return {
+    surface: "community_insight",
+    title: person.name,
+    category: person.category ?? null,
+    personName: person.name,
+    bio: clip(person.bio, 280),
+    trendHint,
+    agentChoice: agentVote ? String(agentVote.rating) : null,
+    existingComments: existingInsights,
+  };
+}
+
+/**
+ * Find a human-authored top-level community_insight on this person that the
+ * agent can reply to. Constraints (initial phase, conservative):
+ *   - not the agent's own insight
+ *   - not deleted
+ *   - posted in the last 7 days
+ *   - authored by a non-agent profile (no agent→agent reply chains)
+ *   - the agent has not already replied to it
+ *
+ * Returns the chosen insight as a ReplyTarget with `insightId` set and
+ * `commentId = null` (top-level reply to the insight, no comment parent).
+ */
+export async function findInsightReplyTarget(
+  personId: string,
+  agentUserId: string,
+): Promise<ReplyTarget | null> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const candidates = await db
+    .select({
+      id: communityInsights.id,
+      userId: communityInsights.userId,
+      body: communityInsights.content,
+      createdAt: communityInsights.createdAt,
+      authorUsername: profiles.username,
+      authorIsAgent: profiles.isAgent,
+    })
+    .from(communityInsights)
+    .leftJoin(profiles, eq(communityInsights.userId, profiles.id))
+    .where(
+      and(
+        eq(communityInsights.personId, personId),
+        isNull(communityInsights.deletedAt),
+        sql`${communityInsights.createdAt} >= ${sevenDaysAgo}`,
+      ),
+    )
+    .orderBy(desc(communityInsights.createdAt))
+    .limit(20);
+
+  const humanCandidates = candidates.filter(
+    (c) => c.userId !== agentUserId && c.authorIsAgent !== true,
+  );
+  if (!humanCandidates.length) return null;
+
+  // Filter out insights this agent has already replied to.
+  const candidateIds = humanCandidates.map((c) => c.id);
+  const alreadyReplied = await db
+    .select({ parentId: unifiedComments.parentId })
+    .from(unifiedComments)
+    .where(
+      and(
+        eq(unifiedComments.userId, agentUserId),
+        eq(unifiedComments.parentType, "community_insight"),
+        inArray(unifiedComments.parentId, candidateIds),
+        isNull(unifiedComments.deletedAt),
+      ),
+    );
+  const blocked = new Set(alreadyReplied.map((r) => r.parentId));
+  const eligible = humanCandidates.filter((c) => !blocked.has(c.id));
+  if (!eligible.length) return null;
+
+  // Recent-biased pick — mirrors findReplyTarget's weighting so fresher
+  // insights are more likely to be the reply target.
+  const r = Math.random();
+  let pickIndex: number;
+  if (r < 0.5 && eligible.length >= 1) {
+    pickIndex = Math.floor(Math.random() * Math.min(3, eligible.length));
+  } else if (r < 0.85 && eligible.length > 3) {
+    pickIndex = 3 + Math.floor(Math.random() * Math.min(7, eligible.length - 3));
+  } else {
+    pickIndex = Math.floor(Math.random() * eligible.length);
+  }
+  const chosen = eligible[Math.min(pickIndex, eligible.length - 1)];
+
+  return {
+    commentId: null,
+    insightId: chosen.id,
+    authorUsername: chosen.authorUsername ?? null,
+    body: chosen.body,
+    threadRoot: null,
+  };
+}
+
 /**
  * Pick an eligible comment for the given agent to reply to. With
  * AGENT_MAX_REPLY_DEPTH = 1, eligibility extends to first-level replies in
@@ -595,5 +806,7 @@ export async function fetchCommentContext(
       return fetchOpinionPollContext(parentId, agentUserId);
     case "open_market":
       return fetchOpenMarketContext(parentId, agentUserId);
+    case "community_insight":
+      return fetchPersonInsightContext(parentId, agentUserId);
   }
 }

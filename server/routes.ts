@@ -811,6 +811,30 @@ async function getInsightParentVoteLabelMap(input: {
   return labelByInsightId;
 }
 
+/**
+ * Batch-load reply counts for community insights. Replies live in the unified
+ * comments table with parentType='community_insight' and parentId=<insightId>.
+ * Returns a Map keyed by insight id. Used by the profile discussion list so
+ * the main view can show a "N replies" indicator without fetching full threads.
+ */
+async function getInsightReplyCounts(insightIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (insightIds.length === 0) return out;
+  const rows = await db
+    .select({ parentId: unifiedComments.parentId, n: count() })
+    .from(unifiedComments)
+    .where(
+      and(
+        eq(unifiedComments.parentType, "community_insight"),
+        isNull(unifiedComments.deletedAt),
+        inArray(unifiedComments.parentId, insightIds),
+      ),
+    )
+    .groupBy(unifiedComments.parentId);
+  for (const r of rows) out.set(r.parentId, Number(r.n));
+  return out;
+}
+
 function toUnifiedCommentItem(row: {
   id: string;
   userId: string;
@@ -4008,11 +4032,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         insights,
       });
 
+      const replyCountMap = await getInsightReplyCounts(insights.map((i) => i.id));
+
       res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, authorRank, ...insight }) => {
         const isDeleted = Boolean(insight.deletedAt);
         return {
           ...insight,
           content: isDeleted ? "" : insight.content,
+          replyCount: replyCountMap.get(insight.id) ?? 0,
           ...(isDeleted
             ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null }
             : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl, authorRank })),
@@ -27040,10 +27067,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // every non-bet event because bets fire much more often than any
       // other action — every merged slot was eaten by the freshest bet
       // and the UI showed Comments=0/Votes=0/Likes=0 even when those
-      // events clearly existed. Per-kind fairness fixes that. We also
-      // raise the outer cap to limit*4 so all four kinds can survive.
+      // events clearly existed. Per-kind fairness fixes that. We raise
+      // the outer cap to limit*7 so all legs (comments, 4 vote tables,
+      // 2 like tables, community_insights, bets) can survive the merge.
       const perLegLimit = limit;
-      const overallLimit = limit * 4;
+      const overallLimit = limit * 7;
 
       // Single SQL union pulls comments + votes (3 tables) + likes + bets
       // for is_agent profiles, then orders by event_at across all sources.
@@ -27151,6 +27179,67 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND cv.voted_at >= ${cutoff}
             ORDER BY cv.voted_at DESC
+            LIMIT ${perLegLimit}
+          )
+
+          UNION ALL
+
+          (
+            SELECT
+              'comment'::text AS kind,
+              ci.id::text AS event_id,
+              ci.user_id AS user_id,
+              ci.created_at AS event_at,
+              'community_insight'::text AS surface,
+              ci.person_id::text AS target_id,
+              ci.content AS detail,
+              'insight'::text AS sub_kind
+            FROM community_insights ci
+            INNER JOIN profiles p ON p.id = ci.user_id
+            WHERE p.is_agent = true
+              AND ci.deleted_at IS NULL
+              AND ci.created_at >= ${cutoff}
+            ORDER BY ci.created_at DESC
+            LIMIT ${perLegLimit}
+          )
+
+          UNION ALL
+
+          (
+            SELECT
+              'like'::text AS kind,
+              iv.id::text AS event_id,
+              iv.user_id AS user_id,
+              iv.voted_at AS event_at,
+              'insight_vote'::text AS surface,
+              iv.insight_id::text AS target_id,
+              iv.vote_type::text AS detail,
+              NULL::text AS sub_kind
+            FROM insight_votes iv
+            INNER JOIN profiles p ON p.id = iv.user_id
+            WHERE p.is_agent = true
+              AND iv.voted_at >= ${cutoff}
+            ORDER BY iv.voted_at DESC
+            LIMIT ${perLegLimit}
+          )
+
+          UNION ALL
+
+          (
+            SELECT
+              'vote'::text AS kind,
+              uv.id::text AS event_id,
+              uv.user_id AS user_id,
+              uv.voted_at AS event_at,
+              'approval_rating'::text AS surface,
+              uv.person_id::text AS target_id,
+              CONCAT(uv.rating::text, '/5') AS detail,
+              NULL::text AS sub_kind
+            FROM user_votes uv
+            INNER JOIN profiles p ON p.id = uv.user_id
+            WHERE p.is_agent = true
+              AND uv.voted_at >= ${cutoff}
+            ORDER BY uv.voted_at DESC
             LIMIT ${perLegLimit}
           )
 

@@ -9,6 +9,7 @@ import {
   matchups,
   opinionPolls,
   predictionMarkets,
+  trendingPeople,
   trendingPolls,
 } from "@shared/schema";
 import { db } from "../db";
@@ -212,4 +213,33 @@ export async function fetchOpenMarketParentPool(now: Date): Promise<CommentParen
         .orderBy(sql`random()`)
         .limit(limit),
   });
+}
+
+// ── Person insights (celebrity profile comments) ───────────────────────
+//
+// Profile "Discussion" is the only comment surface where the parent is a
+// PERSON rather than a card. Agents post top-level insights (writes to
+// community_insights, not comments) or reply to existing human insights
+// (writes to comments with parentType='community_insight'). The pool returns
+// trending people ordered by trendScore so agents naturally bias toward
+// famous people — the same way human engagement skews. chooseParent still
+// applies its favourite-categories bias within this pool.
+
+const PERSON_INSIGHT_POOL_LIMIT = 200;
+
+export async function fetchPersonInsightParentPool(): Promise<CommentParentPoolResult> {
+  const rows = await db
+    .select({
+      parentId: trendingPeople.id,
+      title: trendingPeople.name,
+      category: trendingPeople.category,
+    })
+    .from(trendingPeople)
+    .orderBy(desc(trendingPeople.trendScore))
+    .limit(PERSON_INSIGHT_POOL_LIMIT);
+
+  return {
+    rows,
+    stats: { recent: rows.length, explore: 0, merged: rows.length },
+  };
 }

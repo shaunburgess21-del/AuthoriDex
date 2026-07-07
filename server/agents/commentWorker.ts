@@ -9,10 +9,12 @@
  * generic. Quality over quantity.
  */
 
-import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql, desc, isNull } from "drizzle-orm";
 import {
   agentConfigs,
   comments as unifiedComments,
+  communityInsights,
+  userVotes,
   opinionPollVotes,
   profiles,
   trendingPollVotes,
@@ -21,17 +23,19 @@ import {
 import { db } from "../db";
 import { log } from "../log";
 import { gamificationService } from "../services/gamification";
-import { awardCommentCredits, maybeFireReferralCredit } from "../services/credits-earn";
+import { awardCommentCredits, awardInsightCredits, maybeFireReferralCredit } from "../services/credits-earn";
+import { checkAndAwardInsightBadges } from "../services/badges";
 import {
   getSimulationProfile,
   isV2SimulationProfile,
   type AgentSimulationProfile,
 } from "./simulationProfile";
-import { fetchCommentContext, findReplyTarget, type CommentSurface, type ReplyTarget } from "./commentContext";
+import { fetchCommentContext, findReplyTarget, findInsightReplyTarget, type CommentSurface, type ReplyTarget } from "./commentContext";
 import { generateAgentComment, type AgentForComment } from "./llmCommentGenerator";
 import {
   castMatchupVoteForUser,
   castOpinionPollVoteForUser,
+  castPersonApprovalVoteForUser,
   castSentimentPollVoteForUser,
   countAgentVotesThisWeek,
 } from "./voteWorker";
@@ -40,6 +44,7 @@ import {
   fetchMatchupParentPool,
   fetchOpenMarketParentPool,
   fetchOpinionPollParentPool,
+  fetchPersonInsightParentPool,
   fetchTrendingPollParentPool,
   type CommentParentPoolStats,
 } from "./commentParentPool";
@@ -106,11 +111,12 @@ async function countAgentCommentsThisWeek(userId: string): Promise<number> {
  *  within the merged pool so explore rows get equal odds alongside recent. */
 async function getOpenParents(): Promise<EligibleCommentParent[]> {
   const now = new Date();
-  const [matchupPool, trendingPool, opinionPool, marketPool] = await Promise.all([
+  const [matchupPool, trendingPool, opinionPool, marketPool, personPool] = await Promise.all([
     fetchMatchupParentPool(),
     fetchTrendingPollParentPool(),
     fetchOpinionPollParentPool(),
     fetchOpenMarketParentPool(now),
+    fetchPersonInsightParentPool(),
   ]);
 
   const poolLog = (label: string, stats: CommentParentPoolStats) =>
@@ -120,7 +126,8 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
     `[CommentWorker] Parent pools: ${poolLog("matchup", matchupPool.stats)}, ` +
       `${poolLog("sentiment", trendingPool.stats)}, ` +
       `${poolLog("opinion", opinionPool.stats)}, ` +
-      `${poolLog("world", marketPool.stats)}`,
+      `${poolLog("world", marketPool.stats)}, ` +
+      `${poolLog("insight", personPool.stats)}`,
   );
 
   return [
@@ -128,6 +135,7 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
     ...trendingPool.rows.map((row) => ({ ...row, parentType: "trending_poll" as const })),
     ...opinionPool.rows.map((row) => ({ ...row, parentType: "opinion_poll" as const })),
     ...marketPool.rows.map((row) => ({ ...row, parentType: "open_market" as const })),
+    ...personPool.rows.map((row) => ({ ...row, parentType: "community_insight" as const })),
   ];
 }
 
@@ -229,23 +237,164 @@ async function getEligibleParents(userId: string, allParents?: EligibleCommentPa
   // before posting the comment whenever the parent requires one. The
   // vote-first principle is preserved (vote always lands first), but the
   // bottleneck is gone.
-  const parentIds = parents.map((parent) => parent.parentId);
-  const existing = await db
-    .select({
-      parentType: unifiedComments.parentType,
-      parentId: unifiedComments.parentId,
-    })
-    .from(unifiedComments)
+
+  // Split by surface: community_insight parents are PEOPLE, and the agent
+  // creates top-level insights (in communityInsights), not comments. So the
+  // "already commented" filter for those needs to query communityInsights,
+  // not unifiedComments. We also enforce per-person caps here.
+  const communityInsightParents = parents.filter((p) => p.parentType === "community_insight");
+  const otherParents = parents.filter((p) => p.parentType !== "community_insight");
+
+  const parentIds = otherParents.map((parent) => parent.parentId);
+  const existing = parentIds.length > 0
+    ? await db
+        .select({
+          parentType: unifiedComments.parentType,
+          parentId: unifiedComments.parentId,
+        })
+        .from(unifiedComments)
+        .where(
+          and(
+            eq(unifiedComments.userId, userId),
+            inArray(unifiedComments.parentId, parentIds),
+            sql`${unifiedComments.deletedAt} IS NULL`,
+          ),
+        )
+    : [];
+  const alreadyCommented = new Set(existing.map((row) => `${row.parentType}:${row.parentId}`));
+  const eligibleOther = otherParents.filter(
+    (parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`),
+  );
+
+  const eligibleCommunityInsight = communityInsightParents.length > 0
+    ? await filterEligiblePersonInsightParents(userId, communityInsightParents)
+    : [];
+
+  return [...eligibleOther, ...eligibleCommunityInsight];
+}
+
+/**
+ * Per-person + per-agent caps for profile insights (community_insight surface).
+ *
+ *   - Per-agent per-person: 1 insight / 14 days. Prevents the same agent
+ *     camping one celebrity. Longer than the 7-day default for cards because
+ *     profiles are stickier — re-commenting on the same person every week
+ *     reads as bot-like.
+ *   - Platform-wide per-person: 2 agent insights / 7 days. Prevents the
+ *     profile feeling astroturfed when multiple agents land on the same
+ *     celebrity in the same week.
+ *
+ * Reply targets are handled separately by findInsightReplyTarget (no caps —
+ * replies are conversational, not new posts).
+ */
+async function filterEligiblePersonInsightParents(
+  userId: string,
+  parents: EligibleCommentParent[],
+): Promise<EligibleCommentParent[]> {
+  const personIds = parents.map((p) => p.parentId);
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  // Per-agent per-person cap: skip persons this agent has already posted an
+  // insight on in the last 14 days.
+  const agentInsights = await db
+    .select({ personId: communityInsights.personId })
+    .from(communityInsights)
     .where(
       and(
-        eq(unifiedComments.userId, userId),
-        inArray(unifiedComments.parentId, parentIds),
-        sql`${unifiedComments.deletedAt} IS NULL`,
+        eq(communityInsights.userId, userId),
+        inArray(communityInsights.personId, personIds),
+        isNull(communityInsights.deletedAt),
+        sql`${communityInsights.createdAt} >= ${fourteenDaysAgo}`,
       ),
     );
-  const alreadyCommented = new Set(existing.map((row) => `${row.parentType}:${row.parentId}`));
+  const agentPersonSet = new Set(agentInsights.map((r) => r.personId));
 
-  return parents.filter((parent) => !alreadyCommented.has(`${parent.parentType}:${parent.parentId}`));
+  // Platform cap: count agent-authored insights per person in the last 7
+  // days, skip persons already at 2+. Join with profiles to filter isAgent.
+  const platformInsights = await db
+    .select({ personId: communityInsights.personId, n: count() })
+    .from(communityInsights)
+    .leftJoin(profiles, eq(communityInsights.userId, profiles.id))
+    .where(
+      and(
+        inArray(communityInsights.personId, personIds),
+        isNull(communityInsights.deletedAt),
+        sql`${communityInsights.createdAt} >= ${sevenDaysAgo}`,
+        eq(profiles.isAgent, true),
+      ),
+    )
+    .groupBy(communityInsights.personId);
+  const platformCappedSet = new Set(
+    platformInsights.filter((r) => Number(r.n) >= 2).map((r) => r.personId),
+  );
+
+  return parents.filter(
+    (p) => !agentPersonSet.has(p.parentId) && !platformCappedSet.has(p.parentId),
+  );
+}
+
+/**
+ * Pile-on safeguard for profile insights. Before an agent posts, look at the
+ * last 10 insights on this person. If 8+ lean the same direction (by the
+ * author's approval rating: positive = 4-5, negative = 1-2, neutral = 3) AND
+ * the agent was about to lean the same way, roll a 50% skip chance. Prevents
+ * the "everyone loves Ronaldo" effect that would otherwise make agent
+ * commenting read as coordinated.
+ *
+ * Returns true when the agent should skip this person this sweep.
+ */
+async function shouldSkipForPileOn(
+  personId: string,
+  intendedLean: "positive" | "negative" | "neutral" | "none",
+): Promise<boolean> {
+  if (intendedLean === "none") return false;
+
+  const recentInsights = await db
+    .select({ userId: communityInsights.userId })
+    .from(communityInsights)
+    .where(
+      and(
+        eq(communityInsights.personId, personId),
+        isNull(communityInsights.deletedAt),
+      ),
+    )
+    .orderBy(desc(communityInsights.createdAt))
+    .limit(10);
+
+  // Need at least 8 insights to meaningfully detect a pile-on.
+  if (recentInsights.length < 8) return false;
+
+  const userIds = recentInsights.map((i) => i.userId);
+  const ratings = await db
+    .select({ userId: userVotes.userId, rating: userVotes.rating })
+    .from(userVotes)
+    .where(
+      and(
+        eq(userVotes.personId, personId),
+        inArray(userVotes.userId, userIds),
+      ),
+    );
+  const ratingByUser = new Map(ratings.map((r) => [r.userId, Number(r.rating)]));
+
+  let positive = 0;
+  let negative = 0;
+  let neutral = 0;
+  for (const insight of recentInsights) {
+    const rating = ratingByUser.get(insight.userId);
+    if (rating == null) continue;
+    if (rating >= 4) positive++;
+    else if (rating <= 2) negative++;
+    else neutral++;
+  }
+
+  const sameDirection =
+    intendedLean === "positive" ? positive : intendedLean === "negative" ? negative : neutral;
+  if (sameDirection >= 8) {
+    // 50% skip chance to break the pile-on.
+    return Math.random() < 0.5;
+  }
+  return false;
 }
 
 /**
@@ -257,10 +406,15 @@ async function getEligibleParents(userId: string, allParents?: EligibleCommentPa
  * toward polls/matchups (the more talkative surfaces on similar sites).
  */
 const SURFACE_PICK_WEIGHTS: Record<CommentSurface, number> = {
-  matchup: 0.30,
-  trending_poll: 0.30,
-  opinion_poll: 0.25,
-  open_market: 0.15,
+  matchup: 0.25,
+  trending_poll: 0.25,
+  opinion_poll: 0.20,
+  open_market: 0.10,
+  // Profile insights debut at 20% (moderate cadence per the user's decision)
+  // so agents post a meaningful number of celebrity opinions without
+  // flooding profiles. Per-person + per-agent caps in filterEligiblePersonInsightParents
+  // keep volume bounded even if this weight is later raised.
+  community_insight: 0.20,
 };
 
 function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulationProfile): EligibleCommentParent {
@@ -315,10 +469,34 @@ function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulation
  * on markets they haven't bet on).
  */
 async function ensureVoteBeforeComment(
-  agent: { userId: string; displayName: string; contrarianism: unknown; specialties: string[] | null },
+  agent: { userId: string; displayName: string; contrarianism: unknown; prestigeBias: unknown; specialties: string[] | null },
   parent: EligibleCommentParent,
   simulation: AgentSimulationProfile,
 ): Promise<boolean> {
+  // Community_insight: cast a person approval vote (or noisy-skip per the
+  // hybrid sentiment model). The agent always proceeds to comment — the
+  // vote is a stance marker that the LLM aligns with, not a gate that
+  // blocks commenting. Returns true regardless of vote outcome.
+  if (parent.parentType === "community_insight") {
+    const contrarianism = Number(agent.contrarianism ?? 0.3);
+    const prestigeBias = Number(agent.prestigeBias ?? 0.5);
+    const rating = await castPersonApprovalVoteForUser(
+      agent.userId,
+      parent.parentId,
+      parent.title, // person name from the parent pool
+      contrarianism,
+      prestigeBias,
+      simulation,
+      null, // currentAvg — null for now; decideApprovalRating defaults to 3
+    );
+    if (rating != null) {
+      log(`[CommentWorker] ${agent.displayName} rated ${parent.title} ${rating}/5 before commenting`);
+    } else {
+      log(`[CommentWorker] ${agent.displayName} posting on ${parent.title} without a rating (noisy-skip or vote cap)`);
+    }
+    return true;
+  }
+
   if (!VOTE_REQUIRED_SURFACES.has(parent.parentType)) return true;
 
   const voted = await getVotedParentKeys(agent.userId, [parent]);
@@ -431,7 +609,13 @@ async function findReplyOpportunity(
     if (probed.has(key)) continue;
     probed.add(key);
 
-    const target = await findReplyTarget(parent.parentType, parent.parentId, agent.userId);
+    // For community_insight, the parent is a PERSON — findReplyTarget
+    // (which queries unifiedComments for a specific parentId) doesn't
+    // apply. Instead, find a human-authored top-level insight on this
+    // person that the agent can reply to.
+    const target = parent.parentType === "community_insight"
+      ? await findInsightReplyTarget(parent.parentId, agent.userId)
+      : await findReplyTarget(parent.parentType, parent.parentId, agent.userId);
     if (target) return { parent, target };
   }
   return null;
@@ -522,6 +706,7 @@ export async function runCommentSweep(): Promise<{
     trending_poll: 0,
     opinion_poll: 0,
     open_market: 0,
+    community_insight: 0,
   };
 
   const allParents = await getOpenParents();
@@ -616,7 +801,7 @@ export async function runCommentSweep(): Promise<{
     // bumped their vote count between the cap check and the cast)
     // before giving up on the agent.
     let voteReady = await ensureVoteBeforeComment(
-      { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, specialties: agent.specialties },
+      { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, prestigeBias: agent.prestigeBias, specialties: agent.specialties },
       parent,
       simulation,
     );
@@ -638,7 +823,7 @@ export async function runCommentSweep(): Promise<{
       parent = chooseParent(safeEligible, simulation);
       replyTarget = null; // reply target was tied to original parent
       voteReady = await ensureVoteBeforeComment(
-        { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, specialties: agent.specialties },
+        { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, prestigeBias: agent.prestigeBias, specialties: agent.specialties },
         parent,
         simulation,
       );
@@ -670,6 +855,26 @@ export async function runCommentSweep(): Promise<{
       context.replyTarget = replyTarget;
     }
 
+    // Pile-on safeguard for profile insights: if the last 10 insights on
+    // this person skew 8+ in the same direction as the agent's intended
+    // lean, 50% chance to skip. Prevents "everyone loves Ronaldo" effects.
+    // Only applies to top-level insight creation (not replies — replies
+    // are conversational and the parent insight already breaks any pile-on).
+    if (parent.parentType === "community_insight" && !replyTarget) {
+      const ratingStr = (context as { agentChoice?: string | null }).agentChoice;
+      const rating = ratingStr ? Number(ratingStr) : NaN;
+      const intendedLean: "positive" | "negative" | "neutral" | "none" =
+        Number.isFinite(rating) && rating >= 4 ? "positive"
+        : Number.isFinite(rating) && rating <= 2 ? "negative"
+        : Number.isFinite(rating) && rating === 3 ? "neutral"
+        : "none";
+      if (await shouldSkipForPileOn(parent.parentId, intendedLean)) {
+        skipped++;
+        log(`[CommentWorker] ${agent.displayName} skipped ${parent.title} to break pile-on (lean=${intendedLean})`);
+        continue;
+      }
+    }
+
     const agentForComment: AgentForComment = {
       displayName: agent.displayName,
       username: agent.username,
@@ -687,10 +892,54 @@ export async function runCommentSweep(): Promise<{
 
     try {
       const trimmedContent = body.trim();
-      const shouldAwardXp =
-        String(parent.parentType) === "community_insight" && trimmedContent.length >= 20;
+      const isCommunityInsight = parent.parentType === "community_insight";
+      const isInsightReply = isCommunityInsight && !!replyTarget?.insightId;
+      const isTopLevelInsight = isCommunityInsight && !isInsightReply;
+      const shouldAwardXp = isCommunityInsight && trimmedContent.length >= 20;
 
       const newCommentId = await db.transaction(async (tx) => {
+        // Top-level profile insight → write to community_insights (not the
+        // unified comments table). This is the one structural difference
+        // from every other comment surface: the parent is a PERSON, and
+        // the post is a fresh insight on that person.
+        if (isTopLevelInsight) {
+          const [newInsight] = await tx
+            .insert(communityInsights)
+            .values({
+              personId: parent.parentId,
+              userId: agent.userId,
+              content: body,
+            })
+            .returning({ id: communityInsights.id });
+          await tx
+            .update(profiles)
+            .set({ lastActiveAt: new Date() })
+            .where(eq(profiles.id, agent.userId));
+          return newInsight.id;
+        }
+
+        // Reply to an existing insight → write to unified comments with
+        // parentType='community_insight', parentId=<insightId>, parentCommentId=null
+        // (top-level reply to the insight, no comment parent).
+        if (isInsightReply && replyTarget?.insightId) {
+          const [newComment] = await tx
+            .insert(unifiedComments)
+            .values({
+              parentType: "community_insight",
+              parentId: replyTarget.insightId,
+              parentCommentId: null,
+              userId: agent.userId,
+              body,
+            })
+            .returning({ id: unifiedComments.id });
+          await tx
+            .update(profiles)
+            .set({ lastActiveAt: new Date() })
+            .where(eq(profiles.id, agent.userId));
+          return newComment.id;
+        }
+
+        // Existing path for matchup / poll / market comments (and their replies).
         const [newComment] = await tx
           .insert(unifiedComments)
           .values({
@@ -709,20 +958,51 @@ export async function runCommentSweep(): Promise<{
       });
 
       if (shouldAwardXp) {
-        try {
-          await gamificationService.awardXp(
-            agent.userId,
-            "post_comment",
-            `comment_${newCommentId}_${agent.userId}`,
-            { commentId: newCommentId, insightId: parent.parentId },
-          );
-        } catch (e) {
-          log(`[CommentWorker] XP award failed for ${agent.displayName}: ${e}`);
+        if (isTopLevelInsight) {
+          // Top-level insight: mirror the human insight creation path —
+          // post_insight XP + insight credits + insight badges + referral.
+          // Makes agent accounts accrue the same rewards humans do.
+          try {
+            await gamificationService.awardXp(
+              agent.userId,
+              "post_insight",
+              `insight_${newCommentId}_${agent.userId}`,
+              { insightId: newCommentId, personId: parent.parentId },
+            );
+          } catch (e) {
+            log(`[CommentWorker] XP award failed for ${agent.displayName}: ${e}`);
+          }
+          try {
+            await awardInsightCredits(agent.userId, newCommentId, { personId: parent.parentId });
+          } catch (e) {
+            log(`[CommentWorker] insight credits failed for ${agent.displayName}: ${e}`);
+          }
+          try {
+            await checkAndAwardInsightBadges(agent.userId);
+          } catch (e) {
+            log(`[CommentWorker] insight badges failed for ${agent.displayName}: ${e}`);
+          }
+          await maybeFireReferralCredit(agent.userId);
+        } else {
+          // Reply to an insight: post_comment XP + comment credits + referral.
+          // The insightId in metadata is the insight being replied to (for
+          // audit trail), not the new comment id.
+          const insightIdForMetadata = replyTarget?.insightId ?? parent.parentId;
+          try {
+            await gamificationService.awardXp(
+              agent.userId,
+              "post_comment",
+              `comment_${newCommentId}_${agent.userId}`,
+              { commentId: newCommentId, insightId: insightIdForMetadata },
+            );
+          } catch (e) {
+            log(`[CommentWorker] XP award failed for ${agent.displayName}: ${e}`);
+          }
+          await awardCommentCredits(agent.userId, newCommentId, {
+            insightId: insightIdForMetadata,
+          });
+          await maybeFireReferralCredit(agent.userId);
         }
-        await awardCommentCredits(agent.userId, newCommentId, {
-          insightId: parent.parentId,
-        });
-        await maybeFireReferralCredit(agent.userId);
       }
 
       posted++;
@@ -784,7 +1064,7 @@ function scheduleNextSweep(): void {
       const result = await runCommentSweep();
       log(
         `[CommentWorker] Sweep complete: ${result.posted} posted ` +
-          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
+          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}, insight:${result.bySurface.community_insight}] ` +
           `(${result.replies} replies, ${result.nestedReplies} nested, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
       );
     } catch (err) {
@@ -801,7 +1081,7 @@ export function startCommentWorkerScheduler(): void {
       const result = await runCommentSweep();
       log(
         `[CommentWorker] Initial sweep: ${result.posted} posted ` +
-          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}] ` +
+          `[matchup:${result.bySurface.matchup}, sentiment:${result.bySurface.trending_poll}, opinion:${result.bySurface.opinion_poll}, world:${result.bySurface.open_market}, insight:${result.bySurface.community_insight}] ` +
           `(${result.replies} replies, ${result.nestedReplies} nested, ${result.voteCapDeflections} vote-cap deflections, ${result.voteCapBlocked} vote-cap blocked), ${result.skipped} skipped`,
       );
     } catch (err) {

@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { CommentsFocusShell } from "@/components/comments/CommentsFocusShell";
 import {
   Loader2,
+  MessageCircle,
   MessageSquare,
   MoreVertical,
   Reply,
@@ -20,6 +21,10 @@ import {
   communityInsightsQueryKey,
   fetchCommunityInsightThread,
   fetchCommunityInsightUserVotes,
+  fetchInsightReplies,
+  insightRepliesQueryKey,
+  toInsightReplyCommentItem,
+  type InsightCommentResponse,
 } from "@/lib/communityInsightsQuery";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
@@ -30,6 +35,7 @@ import { useXpBurst } from "./XpBurstProvider";
 import { PostOverlayModal } from "./PostOverlayModal";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
 import { CommentComposer } from "./comments/CommentComposer";
+import { CommentList } from "./comments/CommentList";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
 import { CommentSkeleton } from "./comments/CommentSkeleton";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
@@ -295,28 +301,38 @@ export function CommunityInsights({
             const netVotes = (root.upvotes || 0) - (root.downvotes || 0);
             const isTopComment =
               thread.sort === "top" && idx === 0 && netVotes > 0;
+            const insightMeta = insightsCacheRef.current[root.id];
+            const replyCount = insightMeta?.replyCount ?? 0;
             return (
-              <InsightCard
-                key={root.id}
-                comment={root}
-                insight={insightsCacheRef.current[root.id]}
-                isTopComment={isTopComment}
-                isExpanded={expandedPosts.has(root.id)}
-                isHighlighted={highlightedId === root.id}
-                onToggleExpanded={() => toggleExpanded(root.id)}
-                onOpenOverlay={() => setSelectedInsightId(root.id)}
-                onVote={(voteType) => {
-                  if (!user) {
-                    toast.error("Login Required", {
-                      description: "Please log in to vote on insights",
-                    });
-                    return;
-                  }
-                  thread.vote({ commentId: root.id, voteType });
-                }}
-                onOpenActions={() => setDrawerComment(root)}
-                disabled={!user}
-              />
+              <div key={root.id}>
+                <InsightCard
+                  comment={root}
+                  insight={insightMeta}
+                  isTopComment={isTopComment}
+                  isExpanded={expandedPosts.has(root.id)}
+                  isHighlighted={highlightedId === root.id}
+                  onToggleExpanded={() => toggleExpanded(root.id)}
+                  onOpenOverlay={() => setSelectedInsightId(root.id)}
+                  onVote={(voteType) => {
+                    if (!user) {
+                      toast.error("Login Required", {
+                        description: "Please log in to vote on insights",
+                      });
+                      return;
+                    }
+                    thread.vote({ commentId: root.id, voteType });
+                  }}
+                  onOpenActions={() => setDrawerComment(root)}
+                  disabled={!user}
+                />
+                {replyCount > 0 && insightMeta && (
+                  <InsightReplies
+                    insight={insightMeta}
+                    onOpenOverlay={() => setSelectedInsightId(root.id)}
+                    onOpenActions={(replyComment) => setDrawerComment(replyComment)}
+                  />
+                )}
+              </div>
             );
           })}
         </div>
@@ -503,6 +519,7 @@ function InsightCard({
   const isDeleted = Boolean(comment.deletedAt);
 
   const sentimentVote = isDeleted ? null : insight?.sentimentVote ?? null;
+  const replyCount = isDeleted ? 0 : insight?.replyCount ?? 0;
   const { preview, isTruncated } = isDeleted
     ? { preview: "[deleted]", isTruncated: false }
     : truncateText(mentionsToPlainText(comment.body), 280);
@@ -634,10 +651,14 @@ function InsightCard({
                 disabled={disabled}
                 className={`flex items-center gap-1 text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 data-testid={`button-reply-${comment.id}`}
-                aria-label="Reply in thread"
+                aria-label={replyCount > 0 ? `View ${replyCount} ${replyCount === 1 ? "reply" : "replies"}` : "Reply in thread"}
               >
-                <Reply className="h-3.5 w-3.5" />
-                Reply
+                {replyCount > 0 ? (
+                  <MessageCircle className="h-3.5 w-3.5" />
+                ) : (
+                  <Reply className="h-3.5 w-3.5" />
+                )}
+                {replyCount > 0 ? `${replyCount} ${replyCount === 1 ? "reply" : "replies"}` : "Reply"}
               </button>
             </>
           )}
@@ -660,6 +681,112 @@ function SignInToDiscuss({ onLogin }: { onLogin: () => void }) {
         </button>{" "}
         to join the discussion
       </p>
+    </div>
+  );
+}
+
+// ── Inline replies (Phase 3: nested replies visible on the main view) ────
+//
+// Renders the reply thread for a single insight below its InsightCard, so
+// users can see nested replies without opening PostOverlayModal. Uses the
+// SAME query key as PostOverlayModal (["/api/comments", "community_insight",
+// insightId]) so a reply posted in the modal invalidates this view too —
+// the main view refreshes automatically after the modal posts.
+
+interface InsightRepliesProps {
+  insight: CommunityInsight;
+  onOpenOverlay: () => void;
+  onOpenActions: (comment: CommentItem) => void;
+}
+
+function InsightReplies({ insight, onOpenOverlay, onOpenActions }: InsightRepliesProps) {
+  const { user, profile } = useAuth();
+  const { trigger: triggerXpBurst } = useXpBurst();
+
+  const adapter = useMemo<CommentAdapter>(() => ({
+    queryKey: insightRepliesQueryKey(insight.id),
+    fetchList: async () => fetchInsightReplies(insight.id),
+    postComment: async ({ body, parentId }) => {
+      const res = await apiRequest("POST", "/api/comments", {
+        parentType: "community_insight",
+        parentId: insight.id,
+        parentCommentId: parentId,
+        body,
+      });
+      const raw = (await res.json()) as InsightCommentResponse;
+      return { ...toInsightReplyCommentItem(raw), xp: raw.xp };
+    },
+    voteComment: async ({ commentId, voteType }) => {
+      const res = await apiRequest("POST", `/api/comments/${commentId}/vote`, { voteType });
+      return res.json();
+    },
+    deleteComment: async ({ commentId }) => {
+      const res = await apiRequest("DELETE", `/api/comments/${commentId}`);
+      return res.json();
+    },
+    onPostSuccess: (data) => {
+      toast("Reply Posted");
+      const xp = (data as { xp?: { xpAwarded?: number; reason?: string } } | null)?.xp;
+      if (xp?.xpAwarded) triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
+    },
+    onVoteSuccess: (data) => {
+      const xp = (data as { xp?: { xpAwarded?: number; reason?: string } } | null)?.xp;
+      if (xp?.xpAwarded) triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
+    },
+    supportsReplies: true,
+    invalidateOnMutate: [[`/api/community-insights/${insight.personId}`]],
+  }), [insight.id, insight.personId, triggerXpBurst]);
+
+  const thread = useCommentThread(adapter);
+  const isAuthenticated = !!user;
+
+  // Don't render until we have replies to show. The composer + actions
+  // live in PostOverlayModal (opened via the Reply button on InsightCard)
+  // — this component is read-only on the main view, keeping the profile
+  // page scannable instead of cluttered with N inline composers.
+  if (thread.isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-2 pl-8 ml-4 border-l-2 border-border/20 text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <span className="text-xs">Loading replies...</span>
+      </div>
+    );
+  }
+
+  if (thread.threaded.length === 0) return null;
+
+  return (
+    <div className="pl-8 ml-4 border-l-2 border-border/20">
+      <CommentList
+        threaded={thread.threaded}
+        sort={thread.sort}
+        variant="inline"
+        maxHeight="none"
+        onVote={thread.vote}
+        onOpenActions={onOpenActions}
+      />
+      <div className="flex items-center justify-between py-1.5">
+        <button
+          type="button"
+          onClick={onOpenOverlay}
+          className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+          data-testid={`button-view-thread-${insight.id}`}
+        >
+          View full thread
+        </button>
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={onOpenOverlay}
+            className="text-xs text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors inline-flex items-center gap-1"
+            data-testid={`button-reply-inline-${insight.id}`}
+            aria-label="Reply in thread"
+          >
+            <Reply className="h-3.5 w-3.5" />
+            Reply
+          </button>
+        )}
+      </div>
     </div>
   );
 }

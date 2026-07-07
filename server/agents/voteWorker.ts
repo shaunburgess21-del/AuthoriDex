@@ -677,6 +677,123 @@ export async function castOpinionPollVoteForUser(
 // caps without duplicating the union query.
 export { countAgentVotesThisWeek };
 
+// ── Person approval vote (used inline by commentWorker for profile insights) ─
+
+/**
+ * Cast a 1–5 approval vote on a person, used by the comment worker before
+ * posting a profile insight. Implements the HYBRID sentiment model:
+ *   - If the agent already has a rating on this person, return it (the
+ *     comment must align with the existing stance badge).
+ *   - If the agent is at their weekly vote cap, return null — the agent
+ *     still comments, just without a rating badge (treated like a noisy-skip).
+ *   - Noisy band: 30% chance to skip the vote entirely and post a raw take
+ *     without a rating badge (matches what noisy humans do).
+ *   - Otherwise: decide a rating via `decideApprovalRating`, insert, recompute
+ *     celebrity metrics, return the rating.
+ *
+ * The returned rating is fed into the LLM prompt as the agent's stance so the
+ * comment reads consistently with the badge shown next to the agent's name.
+ */
+export async function castPersonApprovalVoteForUser(
+  userId: string,
+  personId: string,
+  personName: string,
+  contrarianism: number,
+  prestigeBias: number,
+  profile: AgentSimulationProfile,
+  currentAvg: number | null,
+): Promise<number | null> {
+  try {
+    // If the agent already has a rating, use it — the comment must align
+    // with the existing stance badge shown on the insight.
+    const [existing] = await db
+      .select({ rating: userVotes.rating })
+      .from(userVotes)
+      .where(
+        and(
+          eq(userVotes.userId, userId),
+          eq(userVotes.personId, personId),
+        ),
+      )
+      .limit(1);
+    if (existing) return Number(existing.rating);
+
+    // Respect the weekly vote cap — but don't block the comment. The agent
+    // just posts without a rating badge this time.
+    const weeklyVotes = await countAgentVotesThisWeek(userId);
+    if (weeklyVotes >= profile.weeklyVoteCap) {
+      return null;
+    }
+
+    // Hybrid sentiment: noisy band occasionally skips the vote entirely.
+    if (profile.personaBand === "noisy" && Math.random() < 0.30) {
+      return null;
+    }
+
+    const rating = decideApprovalRating(
+      { contrarianism, prestigeBias },
+      profile,
+      {
+        id: personId,
+        name: personName,
+        category: null,
+        trendScore: 0,
+        currentAvg,
+      },
+    );
+
+    const inserted = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(userVotes)
+        .values({
+          userId,
+          personId,
+          personName,
+          rating,
+        })
+        .onConflictDoNothing({
+          target: [userVotes.userId, userVotes.personId],
+        })
+        .returning({ id: userVotes.id });
+      if (!row) return false;
+      await tx
+        .update(profiles)
+        .set({ totalVotes: sql`${profiles.totalVotes} + 1` })
+        .where(eq(profiles.id, userId));
+      return true;
+    });
+
+    if (!inserted) {
+      // Race condition: another sweep inserted between our check and our
+      // insert. Re-fetch the existing rating so the comment aligns with it.
+      const [raced] = await db
+        .select({ rating: userVotes.rating })
+        .from(userVotes)
+        .where(
+          and(
+            eq(userVotes.userId, userId),
+            eq(userVotes.personId, personId),
+          ),
+        )
+        .limit(1);
+      return raced ? Number(raced.rating) : null;
+    }
+
+    // Refresh leaderboard aggregates so the rating shows up immediately.
+    // Failure doesn't roll back the rating — the next nightly recompute fixes it.
+    try {
+      await recomputeCelebrityMetrics(personId);
+    } catch (e) {
+      log(`[VoteWorker:inline] castPersonApprovalVoteForUser recompute failed for ${personId}: ${e}`);
+    }
+
+    return rating;
+  } catch (err) {
+    log(`[VoteWorker:inline] castPersonApprovalVoteForUser failed (user=${userId}, person=${personId}): ${err}`);
+    return null;
+  }
+}
+
 // ── Main sweep ─────────────────────────────────────────────────────────
 
 export async function runVoteSweep(): Promise<AgentVoteResult[]> {

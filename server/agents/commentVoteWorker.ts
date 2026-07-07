@@ -17,11 +17,13 @@
  *     consistent. Unique (userId, commentId) constraint prevents dupes.
  */
 
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import {
   agentConfigs,
   comments as unifiedComments,
   commentVotes,
+  communityInsights,
+  insightVotes,
   profiles,
 } from "@shared/schema";
 import { db } from "../db";
@@ -302,6 +304,191 @@ export async function runCommentVoteSweep(): Promise<{
   return { cast, upvotes, downvotes, agentsParticipated, skipped, capReached };
 }
 
+// ── Insight upvotes (likes on top-level community insights) ────────────
+//
+// Mirror of runCommentVoteSweep but for top-level profile insights (which
+// live in community_insights, not the unified comments table). Agents only
+// upvote HUMAN-authored insights in the initial phase — no self-upvotes,
+// no agent→agent upvotes (same rule as the insight reply path). This drives
+// engagement on human posts and makes the upvote counts on profile
+// discussion feel organic.
+
+async function countInsightLikesLast24h(userId: string): Promise<number> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ c: count() })
+    .from(insightVotes)
+    .where(
+      and(
+        eq(insightVotes.userId, userId),
+        gte(insightVotes.votedAt, cutoff),
+      ),
+    );
+  return Number(row?.c ?? 0);
+}
+
+async function getCandidateInsights(userId: string): Promise<Array<{
+  id: string;
+  authorUserId: string;
+}>> {
+  const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  // Pull the most recent ~150 candidate insights, joined to profiles so we
+  // can filter out agent-authored ones (no agent→agent upvotes in the
+  // initial phase).
+  const candidates = await db
+    .select({
+      id: communityInsights.id,
+      authorUserId: communityInsights.userId,
+      authorIsAgent: profiles.isAgent,
+    })
+    .from(communityInsights)
+    .leftJoin(profiles, eq(communityInsights.userId, profiles.id))
+    .where(
+      and(
+        isNull(communityInsights.deletedAt),
+        sql`${communityInsights.userId} != ${userId}`,
+        sql`${communityInsights.createdAt} >= ${cutoff}`,
+        // Human-authored only — no agent→agent upvotes in the initial phase.
+        sql`${profiles.isAgent} IS NOT TRUE`,
+      ),
+    )
+    .orderBy(desc(communityInsights.createdAt))
+    .limit(150);
+
+  if (!candidates.length) return [];
+
+  const candidateIds = candidates.map((c) => c.id);
+  const alreadyVoted = await db
+    .select({ insightId: insightVotes.insightId })
+    .from(insightVotes)
+    .where(
+      and(
+        eq(insightVotes.userId, userId),
+        inArray(insightVotes.insightId, candidateIds),
+      ),
+    );
+  const blocked = new Set(alreadyVoted.map((r) => r.insightId));
+
+  return candidates
+    .filter((c) => !blocked.has(c.id))
+    .map((c) => ({ id: c.id, authorUserId: c.authorUserId }));
+}
+
+export async function runInsightVoteSweep(): Promise<{
+  cast: number;
+  agentsParticipated: number;
+  skipped: number;
+  capReached: boolean;
+}> {
+  if (await isAgentsPaused()) {
+    log("[CommentVoteWorker] Skipping insight sweep; agents are globally paused");
+    return { cast: 0, agentsParticipated: 0, skipped: 0, capReached: false };
+  }
+  if (await isAgentCommentsPaused()) {
+    log("[CommentVoteWorker] Skipping insight sweep; agent commenting is paused");
+    return { cast: 0, agentsParticipated: 0, skipped: 0, capReached: false };
+  }
+
+  const agents = await db
+    .select()
+    .from(agentConfigs)
+    .where(eq(agentConfigs.isActive, true));
+  for (let i = agents.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [agents[i], agents[j]] = [agents[j], agents[i]];
+  }
+
+  let cast = 0;
+  let agentsParticipated = 0;
+  let skipped = 0;
+  let capReached = false;
+
+  for (const agent of agents) {
+    if (cast >= MAX_LIKES_PER_SWEEP) {
+      capReached = true;
+      skipped++;
+      continue;
+    }
+    if (!isV2SimulationProfile(agent.simulationProfile)) {
+      skipped++;
+      continue;
+    }
+    const simulation = getSimulationProfile(agent.simulationProfile);
+    const behaviour = PERSONA_LIKE_BEHAVIOUR[simulation.personaBand];
+    if (Math.random() > behaviour.chance) {
+      skipped++;
+      continue;
+    }
+
+    const last24h = await countInsightLikesLast24h(agent.userId);
+    if (last24h >= behaviour.max) {
+      skipped++;
+      continue;
+    }
+
+    const pool = await getCandidateInsights(agent.userId);
+    if (!pool.length) {
+      skipped++;
+      continue;
+    }
+
+    const remainingDailyQuota = behaviour.max - last24h;
+    const desiredLikes = behaviour.min + Math.floor(Math.random() * (behaviour.max - behaviour.min + 1));
+    const targetLikes = Math.min(desiredLikes, remainingDailyQuota);
+    const used = new Set<string>();
+    let agentDidVote = false;
+
+    for (let i = 0; i < targetLikes; i++) {
+      if (cast >= MAX_LIKES_PER_SWEEP) {
+        capReached = true;
+        break;
+      }
+      const remaining = pool.filter((c) => !used.has(c.id));
+      if (!remaining.length) break;
+
+      const target = pickWeighted(remaining);
+      used.add(target.id);
+
+      try {
+        // Insert without onConflictDoNothing — the candidate filter already
+        // excludes already-voted insights, so a conflict is a tiny race we
+        // treat as an error and skip.
+        await db
+          .insert(insightVotes)
+          .values({
+            insightId: target.id,
+            userId: agent.userId,
+            voteType: "up",
+          });
+        cast++;
+        agentDidVote = true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/unique|duplicate/i.test(msg)) {
+          log(`[CommentVoteWorker] Insight like failed for ${agent.displayName} on insight ${target.id}: ${msg}`);
+        }
+      }
+    }
+
+    if (agentDidVote) {
+      agentsParticipated++;
+      try {
+        await db
+          .update(profiles)
+          .set({ lastActiveAt: new Date() })
+          .where(eq(profiles.id, agent.userId));
+      } catch {
+        // best-effort
+      }
+    } else {
+      skipped++;
+    }
+  }
+
+  return { cast, agentsParticipated, skipped, capReached };
+}
+
 function msUntilNextSweep(): number {
   const now = new Date();
   const tomorrow = new Date(now);
@@ -322,6 +509,12 @@ function scheduleNextSweep(): void {
     } catch (err) {
       console.error("[CommentVoteWorker] Sweep failed:", err);
     }
+    try {
+      const insightResult = await runInsightVoteSweep();
+      log(`[CommentVoteWorker] Insight sweep complete: ${insightResult.cast} likes, ${insightResult.agentsParticipated} agents`);
+    } catch (err) {
+      console.error("[CommentVoteWorker] Insight sweep failed:", err);
+    }
     scheduleNextSweep();
   }, delay);
 }
@@ -334,6 +527,12 @@ export function startCommentVoteWorkerScheduler(): void {
       log(`[CommentVoteWorker] Initial sweep: ${result.cast} cast (${result.upvotes}↑ / ${result.downvotes}↓), ${result.agentsParticipated} agents`);
     } catch (err) {
       console.error("[CommentVoteWorker] Initial sweep failed:", err);
+    }
+    try {
+      const insightResult = await runInsightVoteSweep();
+      log(`[CommentVoteWorker] Initial insight sweep: ${insightResult.cast} likes, ${insightResult.agentsParticipated} agents`);
+    } catch (err) {
+      console.error("[CommentVoteWorker] Initial insight sweep failed:", err);
     }
     scheduleNextSweep();
   }, COMMENT_VOTE_WORKER_BOOT_DELAY_MS);
