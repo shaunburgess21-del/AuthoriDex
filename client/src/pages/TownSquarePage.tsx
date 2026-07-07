@@ -221,7 +221,6 @@ export default function TownSquarePage() {
                         {isAmmSell && proceeds != null
                           ? `${voxWord(proceeds)} in`
                           : voxWord(item.stakeAmount)}
-                        {item.confidence != null ? ` • ${(item.confidence * 100).toFixed(0)}% confidence` : ""}
                       </p>
                       {item.rationale && (
                         <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
