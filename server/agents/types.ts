@@ -138,7 +138,12 @@ export interface PredictionDecision {
     | "random"
     | "no_signal"
     | "world_abstain"
-    | "api_error";
+    | "api_error"
+    // Daily LLM budget cap refused the call before it fired. Unlike
+    // api_error this is NOT persisted as world_abstained — agents retry
+    // on a later sweep once the budget resets (UTC midnight) instead of
+    // being locked out of the market for WORLD_REEVAL_INTERVAL_DAYS.
+    | "budget_exhausted";
   entryId?: string;
   // Yes = agent thinks the outcome WILL happen (back the entry).
   // No  = agent thinks the outcome WILL NOT happen (short the entry).

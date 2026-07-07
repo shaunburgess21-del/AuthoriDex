@@ -79,11 +79,25 @@ const API_TIMEOUT_MS = 45_000;
  */
 const MAX_OUTPUT_TOKENS = 2_000;
 
+/**
+ * Sentinel returned instead of an assessment when the daily budget cap
+ * refused the LLM call before it fired. Distinct from `null` (real API
+ * failure: network error, empty/unparseable response) so the caller can
+ * abstain with `budget_exhausted` — which the agent runner does NOT
+ * persist as a 7-day `world_abstained` lockout. Before this distinction
+ * existed, a temporarily exhausted budget permanently starved any market
+ * that resolved within the re-eval window (Jul 2026: every agent got
+ * locked out of short-dated scouted sports markets and they closed with
+ * zero bets).
+ */
+export const BUDGET_EXHAUSTED = "budget_exhausted" as const;
+type AssessmentResult = PredictionAssessment | typeof BUDGET_EXHAUSTED | null;
+
 // In-process dedupe: when 56 agents simultaneously evaluate the same market in
 // a single sweep, only one of them should fire the LLM call. The rest await
 // the same promise. Survives only the lifetime of the Node process; the DB
 // cache below covers cross-process / restart scenarios.
-const inFlightAssessments = new Map<string, Promise<PredictionAssessment | null>>();
+const inFlightAssessments = new Map<string, Promise<AssessmentResult>>();
 
 interface CachedAssessment {
   assessment: PredictionAssessment;
@@ -296,21 +310,21 @@ async function callWorldMarketLlm(
   agent: AgentConfigData,
   market: MarketWithEntries,
   entries: MarketEntryData[],
-): Promise<PredictionAssessment | null> {
+): Promise<AssessmentResult> {
   // Daily LLM budget gate — see server/agents/worldMarketBudget.ts.
   // Pessimistically reserves the call's estimated cost BEFORE we touch
-  // OpenAI. If the cap would be breached, we abstain via the same null
-  // return path the existing error branches use (caller treats it as
-  // `api_error` and the agent abstains). Successful responses commit
-  // the reservation; failures release it so failed calls don't burn
-  // budget.
+  // OpenAI. If the cap would be breached, return the BUDGET_EXHAUSTED
+  // sentinel — the agent abstains WITHOUT the 7-day world_abstained
+  // lockout, so it retries once the budget resets at UTC midnight.
+  // Successful responses commit the reservation; failures release it
+  // so failed calls don't burn budget.
   const reservation = tryReserveLlmCall();
   if (!reservation.allowed) {
     logBudgetCapThrottled(
       reservation.snapshot.spendUsd,
       reservation.snapshot.capUsd,
     );
-    return null;
+    return BUDGET_EXHAUSTED;
   }
 
   const systemPrompt = buildSystemPrompt(agent);
@@ -414,7 +428,7 @@ async function getOrCreateAssessment(
   agent: AgentConfigData,
   market: MarketWithEntries,
   entries: MarketEntryData[],
-): Promise<PredictionAssessment | null> {
+): Promise<AssessmentResult> {
   const cached = readCachedAssessment(market);
   if (cached) return cached;
 
@@ -423,7 +437,9 @@ async function getOrCreateAssessment(
 
   const promise = (async () => {
     const fresh = await callWorldMarketLlm(agent, market, entries);
-    if (fresh) {
+    // Only real assessments are cached — BUDGET_EXHAUSTED must not
+    // poison the cache for the rest of the TTL window.
+    if (fresh && fresh !== BUDGET_EXHAUSTED) {
       await writeCachedAssessment(market.id, fresh);
     }
     return fresh;
@@ -484,6 +500,11 @@ export async function computeWorldMarketPrediction(
   // each, 56 agents per market = ~$14/market). Post-cache: ONE call per
   // market per 24h, shared by all 56 agents (~$0.25/market). 56x savings.
   const assessment = await getOrCreateAssessment(agent, market, entries);
+  if (assessment === BUDGET_EXHAUSTED) {
+    // Not persisted by the runner — the agent silently retries on a
+    // later sweep once the daily budget resets.
+    return abstain("budget_exhausted");
+  }
   if (!assessment) {
     return abstain("api_error");
   }

@@ -911,8 +911,11 @@ async function runAgentBatchOnce(): Promise<{
         log(`[AgentRunner] ${agent.displayName} abstained on ${market.id.slice(0, 8)}: ${decision.abstainReason}`);
 
         // Only record world_abstained when GPT-5.4 actually ran and abstained.
-        // Pre-filter rejections (domain, activity_gate) are silently skipped so
-        // agents retry on the next 30-minute sweep instead of being locked out for 7 days.
+        // Pre-filter rejections (domain, activity_gate) AND daily-budget refusals
+        // (budget_exhausted) are silently skipped so agents retry on a later sweep
+        // instead of being locked out for 7 days — a budget refusal costs nothing
+        // and the budget resets at UTC midnight, so short-dated markets shouldn't
+        // be permanently starved by one exhausted day.
         if (isCommunity && (decision.abstainReason === "world_abstain" || decision.abstainReason === "api_error")) {
           await db.insert(scheduledAgentActions).values({
             agentId: agent.id,
