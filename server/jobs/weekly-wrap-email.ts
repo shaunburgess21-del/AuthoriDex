@@ -44,7 +44,9 @@ export async function runWeeklyWrapEmail(): Promise<number> {
     attempted += 1;
     try {
       const stats = statsByUser.get(userId);
-      if (!stats || (stats.wins === 0 && stats.losses === 0)) {
+      const hasResolved = stats && (stats.wins > 0 || stats.losses > 0);
+      const hasOpen = stats && (stats.openPositions?.count ?? 0) > 0;
+      if (!stats || (!hasResolved && !hasOpen)) {
         skippedNoStats += 1;
         continue;
       }

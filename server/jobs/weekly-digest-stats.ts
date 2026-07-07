@@ -16,9 +16,13 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { selectWeeklyGainers } from "../services/trending/weekly-gainers";
 import { getBaselineDiagnostics } from "../utils/baseline";
-import { resolvePickContextLabel } from "./notification-market-labels";
+import {
+  formatMarketLead,
+  resolvePickContextLabel,
+} from "./notification-market-labels";
 import {
   type FullWeeklyDigestStats,
+  groupSettledBuyResults,
   isoYearWeek,
   previousIsoYearWeek,
   rollUpSettledBuys,
@@ -59,6 +63,7 @@ async function loadTopWeeklyGainers(): Promise<
   if (baselineMeta.baseline7dStatus !== "normal") return [];
 
   return selectWeeklyGainers(people).map((p) => ({
+    id: p.id,
     name: p.name,
     change7d: p.change7d as number,
   }));
@@ -126,16 +131,19 @@ export async function getWeeklyDigestStatsBatch(
   const windowStart = new Date(asOf.getTime() - 7 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = sql`NOW() - INTERVAL '7 days'`;
 
-  const [settledBuys, sellRows, jackpotRows, rankDeltas, topWeeklyGainers] =
+  const [settledBuys, sellRows, jackpotRows, openPositionRows, rankDeltas, topWeeklyGainers] =
     await Promise.all([
       db
         .select({
           userId: marketBets.userId,
           marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
           stakeAmount: marketBets.stakeAmount,
           payoutAmount: marketBets.payoutAmount,
           status: marketBets.status,
+          settledAt: marketBets.settledAt,
           marketTitle: predictionMarkets.title,
+          marketSlug: predictionMarkets.slug,
           marketType: predictionMarkets.marketType,
           entryLabel: marketEntries.label,
           candidateName: entryPerson.name,
@@ -180,6 +188,26 @@ export async function getWeeklyDigestStatsBatch(
             gte(marketBets.settledAt, sevenDaysAgo),
           ),
         ),
+      // Active positions for the "Still in play" section. Includes AMM
+      // buys and parimutuel jackpot tickets — both have
+      // status='active' until the market resolves. Sell rows are always
+      // 'settled' so they're naturally excluded.
+      db
+        .select({
+          userId: marketBets.userId,
+          marketId: marketBets.marketId,
+          entryId: marketBets.entryId,
+          stakeAmount: marketBets.stakeAmount,
+          marketEndAt: predictionMarkets.endAt,
+        })
+        .from(marketBets)
+        .innerJoin(predictionMarkets, eq(marketBets.marketId, predictionMarkets.id))
+        .where(
+          and(
+            inArray(marketBets.userId, userIds),
+            eq(marketBets.status, "active"),
+          ),
+        ),
       loadRankDeltaBatch(userIds, isoWeek),
       loadTopWeeklyGainers(),
     ]);
@@ -202,22 +230,49 @@ export async function getWeeklyDigestStatsBatch(
     list.push(row);
     jackpotByUser.set(row.userId, list);
   }
+  const openPositionsByUser = summariseOpenPositionsBatch(openPositionRows, asOf);
 
   for (const userId of userIds) {
+    const userBuys = buysByUser.get(userId) ?? [];
+    // Composed label (pick + market title) for the in-app digest body
+    // and the email's best/worst callouts — matches the format used by
+    // other notification copy via formatMarketLead.
+    const composedLabel = (bet: (typeof userBuys)[number]): string | null => {
+      const pickLabel = resolvePickContextLabel({
+        marketType: bet.marketType,
+        candidateName: bet.candidateName,
+        entryLabel: bet.entryLabel,
+        personName: bet.personName,
+      });
+      return formatMarketLead(bet.marketTitle ?? "", pickLabel);
+    };
+
     const rollUp = rollUpSettledBuys(
-      (buysByUser.get(userId) ?? []).map((bet) => ({
+      userBuys.map((bet) => ({
         status: bet.status,
         stakeAmount: bet.stakeAmount,
         payoutAmount: bet.payoutAmount,
         marketTitle: bet.marketTitle,
-        pickLabel: resolvePickContextLabel({
-          marketType: bet.marketType,
-          candidateName: bet.candidateName,
-          entryLabel: bet.entryLabel,
-          personName: bet.personName,
-        }),
+        pickLabel: composedLabel(bet),
       })),
     );
+    // Per-prediction rows: keep market title and raw entry label
+    // separate so the template can render "Your call: Down" under the
+    // linked market title.
+    const results = groupSettledBuyResults(
+      userBuys.map((bet) => ({
+        status: bet.status,
+        stakeAmount: bet.stakeAmount,
+        payoutAmount: bet.payoutAmount,
+        marketTitle: bet.marketTitle,
+        marketId: bet.marketId,
+        marketSlug: bet.marketSlug,
+        entryId: bet.entryId,
+        entryLabel: bet.entryLabel,
+        settledAt: bet.settledAt,
+      })),
+    );
+
     let { wins, losses, netCredits, bestPick, worstPick } = rollUp;
 
     for (const sell of sellsByUser.get(userId) ?? []) {
@@ -233,6 +288,8 @@ export async function getWeeklyDigestStatsBatch(
       rankDelta: rankDeltas.get(userId) ?? null,
       jackpot: summariseJackpotRows(jackpotByUser.get(userId) ?? []),
       topWeeklyGainers,
+      results,
+      openPositions: openPositionsByUser.get(userId) ?? null,
       windowStart,
       windowEnd,
     });
@@ -253,4 +310,64 @@ export async function getWeeklyDigestStats(
   const batch = await getWeeklyDigestStatsBatch([userId], options);
   // Batch always yields an entry for each requested id.
   return batch.get(userId)!;
+}
+
+/**
+ * Group active buy rows into one OpenPositionsSummary per user. Counts
+ * distinct (marketId, entryId) pairs as positions, sums stakeAmount
+ * across all active buys (credits paid in), and counts positions whose
+ * market endAt falls within the next 7 days as "settling soon".
+ */
+function summariseOpenPositionsBatch(
+  rows: Array<{
+    userId: string;
+    marketId: string;
+    entryId: string;
+    stakeAmount: number | null;
+    marketEndAt: Date | null;
+  }>,
+  asOf: Date,
+): Map<string, NonNullable<FullWeeklyDigestStats["openPositions"]>> {
+  const horizon = new Date(asOf.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const byUser = new Map<
+    string,
+    {
+      count: number;
+      totalStake: number;
+      settlingNext7d: number;
+      seenKeys: Set<string>;
+    }
+  >();
+
+  for (const row of rows) {
+    const key = `${row.marketId}|${row.entryId}`;
+    const entry = byUser.get(row.userId) ?? {
+      count: 0,
+      totalStake: 0,
+      settlingNext7d: 0,
+      seenKeys: new Set<string>(),
+    };
+    // Always accumulate stake (a user can buy the same position more
+    // than once), but only count a distinct (market, entry) pair once.
+    entry.totalStake += row.stakeAmount ?? 0;
+    if (!entry.seenKeys.has(key)) {
+      entry.seenKeys.add(key);
+      entry.count += 1;
+      if (row.marketEndAt && row.marketEndAt > asOf && row.marketEndAt <= horizon) {
+        entry.settlingNext7d += 1;
+      }
+    }
+    byUser.set(row.userId, entry);
+  }
+
+  const out = new Map<string, NonNullable<FullWeeklyDigestStats["openPositions"]>>();
+  for (const [userId, entry] of byUser) {
+    if (entry.count === 0) continue;
+    out.set(userId, {
+      count: entry.count,
+      totalStake: entry.totalStake,
+      settlingNext7d: entry.settlingNext7d,
+    });
+  }
+  return out;
 }

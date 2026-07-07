@@ -4,11 +4,13 @@ import test from "node:test";
 import {
   formatHeroPnl,
   formatMoverLine,
+  formatOpenPositionsLine,
   formatRankDeltaCopy,
   formatWinRatePercent,
   weeklyWrapSubject,
 } from "../server/emails/templates/engagement/WeeklyWrapEmail";
 import {
+  groupSettledBuyResults,
   previousIsoYearWeek,
   rollUpSettledBuys,
   summariseJackpotRows,
@@ -169,4 +171,145 @@ test("summariseJackpotRows: all losses", () => {
     { status: "lost", stakeAmount: 100, payoutAmount: 0 },
   ]);
   assert.deepEqual(out, { won: false, profit: -200 });
+});
+
+test("groupSettledBuyResults: empty input", () => {
+  assert.deepEqual(groupSettledBuyResults([]), []);
+});
+
+test("groupSettledBuyResults: groups same-position buys into one row", () => {
+  const settledAt = new Date("2026-07-05T12:00:00Z");
+  const out = groupSettledBuyResults([
+    {
+      status: "won",
+      stakeAmount: 100,
+      payoutAmount: 200,
+      marketTitle: "Cardi B: up or down?",
+      marketId: "m1",
+      marketSlug: "cardi-b-updown",
+      entryId: "e1",
+      entryLabel: "Down",
+      settledAt,
+    },
+    {
+      status: "won",
+      stakeAmount: 50,
+      payoutAmount: 90,
+      marketTitle: "Cardi B: up or down?",
+      marketId: "m1",
+      marketSlug: "cardi-b-updown",
+      entryId: "e1",
+      entryLabel: "Down",
+      settledAt,
+    },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].marketTitle, "Cardi B: up or down?");
+  assert.equal(out[0].pickLabel, "Down");
+  assert.equal(out[0].outcome, "won");
+  assert.equal(out[0].stake, 150);
+  assert.equal(out[0].payout, 290);
+  assert.equal(out[0].net, 140);
+  assert.equal(out[0].marketSlug, "cardi-b-updown");
+});
+
+test("groupSettledBuyResults: separates opposing picks on the same market", () => {
+  // User bought "Up" and "Down" on the same market — two distinct
+  // positions, should not be merged.
+  const out = groupSettledBuyResults([
+    {
+      status: "won",
+      stakeAmount: 100,
+      payoutAmount: 200,
+      marketTitle: "Cardi B: up or down?",
+      marketId: "m1",
+      marketSlug: "cardi-b-updown",
+      entryId: "e1",
+      entryLabel: "Up",
+      settledAt: new Date("2026-07-05T12:00:00Z"),
+    },
+    {
+      status: "lost",
+      stakeAmount: 80,
+      payoutAmount: 0,
+      marketTitle: "Cardi B: up or down?",
+      marketId: "m1",
+      marketSlug: "cardi-b-updown",
+      entryId: "e2",
+      entryLabel: "Down",
+      settledAt: new Date("2026-07-05T12:00:00Z"),
+    },
+  ]);
+  assert.equal(out.length, 2);
+  // Biggest |net| first: +100 win, then -80 loss.
+  assert.equal(out[0].outcome, "won");
+  assert.equal(out[0].net, 100);
+  assert.equal(out[1].outcome, "lost");
+  assert.equal(out[1].net, -80);
+});
+
+test("groupSettledBuyResults: sorts by |net| desc so biggest movers come first", () => {
+  const out = groupSettledBuyResults([
+    { status: "won", stakeAmount: 50, payoutAmount: 90, marketTitle: "Small win", marketId: "m1", marketSlug: "s1", entryId: "e1", entryLabel: "Up", settledAt: new Date() },
+    { status: "lost", stakeAmount: 300, payoutAmount: 0, marketTitle: "Big loss", marketId: "m2", marketSlug: "s2", entryId: "e2", entryLabel: "Above", settledAt: new Date() },
+    { status: "won", stakeAmount: 100, payoutAmount: 480, marketTitle: "Biggest win", marketId: "m3", marketSlug: "s3", entryId: "e3", entryLabel: "Drake", settledAt: new Date() },
+  ]);
+  assert.equal(out[0].marketTitle, "Biggest win");
+  assert.equal(out[1].marketTitle, "Big loss");
+  assert.equal(out[2].marketTitle, "Small win");
+});
+
+test("groupSettledBuyResults: falls back to pickLabel when entryLabel missing", () => {
+  const out = groupSettledBuyResults([
+    { status: "won", stakeAmount: 100, payoutAmount: 200, marketTitle: "Title", pickLabel: "Fallback", marketId: "m1", marketSlug: "s1", entryId: "e1", settledAt: new Date() },
+  ]);
+  assert.equal(out[0].pickLabel, "Fallback");
+});
+
+test("groupSettledBuyResults: skips rows missing marketId/entryId", () => {
+  const out = groupSettledBuyResults([
+    { status: "won", stakeAmount: 100, payoutAmount: 200, marketTitle: "No keys", marketId: "", entryId: "", entryLabel: "Up", settledAt: new Date() },
+  ]);
+  assert.equal(out.length, 0);
+});
+
+test("groupSettledBuyResults: skips won+zero-payout rows (sold pre-resolution)", () => {
+  // Mirrors rollUpSettledBuys: a "won" row with zero payout is a buy
+  // the user sold before resolution — proceeds already credited via
+  // the sell row. Including it here would show a "WON" badge on a
+  // negative-net row and double-count the stake.
+  const out = groupSettledBuyResults([
+    { status: "won", stakeAmount: 100, payoutAmount: 0, marketTitle: "Sold early", marketId: "m1", marketSlug: "s1", entryId: "e1", entryLabel: "Up", settledAt: new Date() },
+    { status: "lost", stakeAmount: 80, payoutAmount: 0, marketTitle: "Real loss", marketId: "m2", marketSlug: "s2", entryId: "e2", entryLabel: "Down", settledAt: new Date() },
+  ]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].marketTitle, "Real loss");
+});
+
+test("groupSettledBuyResults: empty-string entryLabel falls back to pickLabel", () => {
+  const out = groupSettledBuyResults([
+    { status: "won", stakeAmount: 100, payoutAmount: 200, marketTitle: "Title", entryLabel: "", pickLabel: "Fallback", marketId: "m1", marketSlug: "s1", entryId: "e1", settledAt: new Date() },
+  ]);
+  assert.equal(out[0].pickLabel, "Fallback");
+});
+
+test("formatOpenPositionsLine: plural with settling-soon count", () => {
+  const line = formatOpenPositionsLine({ count: 3, totalStake: 240, settlingNext7d: 2 });
+  assert.equal(
+    line,
+    "You have 3 open positions (240 Vox at stake) — 2 settle this week.",
+  );
+});
+
+test("formatOpenPositionsLine: singular position", () => {
+  const line = formatOpenPositionsLine({ count: 1, totalStake: 80, settlingNext7d: 1 });
+  assert.equal(
+    line,
+    "You have 1 open position (80 Vox at stake) — 1 settles this week.",
+  );
+});
+
+test("formatOpenPositionsLine: no settling-soon drops the clause", () => {
+  const line = formatOpenPositionsLine({ count: 5, totalStake: 1000, settlingNext7d: 0 });
+  assert.equal(line, "You have 5 open positions — 1,000 Vox at stake.");
 });

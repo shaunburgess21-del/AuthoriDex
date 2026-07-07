@@ -107,9 +107,54 @@ export interface FullWeeklyDigestStats {
   worstPick: { label: string; profit: number } | null;
   rankDelta: { previous: number; current: number } | null;
   jackpot: { won: boolean; profit: number } | null;
-  topWeeklyGainers: Array<{ name: string; change7d: number }>;
+  topWeeklyGainers: Array<{ id: string; name: string; change7d: number }>;
+  /**
+   * Per-prediction results, grouped by (marketId, entryId). One row per
+   * position the user held to settlement this week. Drives the new
+   * "Your results this week" list in the Weekly Wrap email; sorted by
+   * |net| desc so the biggest movers surface first regardless of date.
+   */
+  results: WeeklyResultRow[];
+  /**
+   * Open positions the user is still holding. Gives users with no
+   * settled bets this week something to come back to.
+   */
+  openPositions: OpenPositionsSummary | null;
   windowStart: Date;
   windowEnd: Date;
+}
+
+/** One row in the "Your results this week" list. */
+export interface WeeklyResultRow {
+  marketId: string;
+  /** Entry id from market_entries — stable key for React lists. */
+  entryId: string;
+  marketSlug: string | null;
+  marketTitle: string;
+  /**
+   * Short label for what the user picked — e.g. "Down", "Above", or
+   * "Drake". Shown as a "Your call:" subtext under the market title.
+   * Distinct from `bestPick.label` (which composes pick + market title
+   * for one-line callouts) — this is the raw entry label so the
+   * template can lay it out under the title.
+   */
+  pickLabel: string;
+  outcome: "won" | "lost";
+  stake: number;
+  payout: number;
+  /** Signed P&L: payout - stake for wins, -stake for losses. */
+  net: number;
+  settledAt: Date | null;
+}
+
+/** Open-positions summary for the "Still in play" section. */
+export interface OpenPositionsSummary {
+  /** Distinct (marketId, entryId) groups the user is still holding. */
+  count: number;
+  /** Sum of stakeAmount across active buy rows (credits paid in). */
+  totalStake: number;
+  /** Positions whose market endAt falls within the next 7 days. */
+  settlingNext7d: number;
 }
 
 /** Pure roll-up over settled buy rows — extracted so it can be unit tested. */
@@ -118,8 +163,23 @@ export interface SettledBuyRow {
   stakeAmount: number | null;
   payoutAmount: number | null;
   marketTitle: string | null;
-  /** Pre-resolved display label (caller runs resolvePickContextLabel). */
-  pickLabel: string | null;
+  /**
+   * Pre-resolved display label (caller runs resolvePickContextLabel).
+   * Optional for the grouping path, which falls back to entryLabel.
+   */
+  pickLabel?: string | null;
+  /**
+   * Optional grouping keys for the per-prediction results list. The
+   * pure `rollUpSettledBuys` helper doesn't need them — they're
+   * consumed by `groupSettledBuyResults`. Older callers and tests
+   * omit them.
+   */
+  marketId?: string | null;
+  marketSlug?: string | null;
+  entryId?: string | null;
+  /** Raw entry label (e.g. "Down") before composition with market title. */
+  entryLabel?: string | null;
+  settledAt?: Date | null;
 }
 
 export interface BuyRollUp {
@@ -171,6 +231,63 @@ export function rollUpSettledBuys(rows: SettledBuyRow[]): BuyRollUp {
   }
 
   return { wins, losses, netCredits, bestPick, worstPick };
+}
+
+/**
+ * Group settled buy rows into per-position result rows for the email's
+ * "Your results this week" list. One row per (marketId, entryId) — so
+ * if a user bought the same position three times and won, they see a
+ * single aggregated win, not three lines.
+ *
+ * Sorting: by |net| desc so the biggest movers (largest win, then
+ * largest loss) surface first. Ties break by market title for
+ * deterministic output in tests.
+ */
+export function groupSettledBuyResults(rows: SettledBuyRow[]): WeeklyResultRow[] {
+  const groups = new Map<string, WeeklyResultRow>();
+  for (const bet of rows) {
+    // Mirror rollUpSettledBuys: a "won" row with zero payout is a
+    // sold-before-resolution buy whose proceeds were already credited
+    // via the sell row. Including it here would show a "WON" badge on a
+    // negative-net row and double-count the stake. Skip.
+    if (bet.status === "won" && (bet.payoutAmount ?? 0) <= 0) continue;
+    const marketId = bet.marketId ?? "";
+    const entryId = bet.entryId ?? "";
+    if (!marketId || !entryId) continue;
+    const key = `${marketId}|${entryId}`;
+    const stake = bet.stakeAmount ?? 0;
+    const payout = bet.payoutAmount ?? 0;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.stake += stake;
+      existing.payout += payout;
+      existing.net += bet.status === "won" ? payout - stake : -stake;
+      if (bet.settledAt && (!existing.settledAt || bet.settledAt > existing.settledAt)) {
+        existing.settledAt = bet.settledAt;
+      }
+      continue;
+    }
+    const outcome: "won" | "lost" = bet.status === "won" ? "won" : "lost";
+    const net = outcome === "won" ? payout - stake : -stake;
+    groups.set(key, {
+      marketId,
+      entryId,
+      marketSlug: bet.marketSlug ?? null,
+      marketTitle: bet.marketTitle?.trim() || "Your market",
+      // `||` (not `??`) so an empty-string entryLabel falls through.
+      pickLabel: (bet.entryLabel || bet.pickLabel || "Your call").trim(),
+      outcome,
+      stake,
+      payout,
+      net,
+      settledAt: bet.settledAt ?? null,
+    });
+  }
+  return Array.from(groups.values()).sort((a, b) => {
+    const absDelta = Math.abs(b.net) - Math.abs(a.net);
+    if (absDelta !== 0) return absDelta;
+    return a.marketTitle.localeCompare(b.marketTitle);
+  });
 }
 
 export interface JackpotRow {
