@@ -231,13 +231,14 @@ export function computeArbPredictionCommunity(
 }
 
 /**
- * Gainer arb — buy favored entry when live price is below lock-in fair by ARB_MIN_EDGE_PP.
+ * Gainer arb — buy favored entry when live price is below lock-in fair by minEdgePp.
  */
 export function computeArbPredictionGainer(
   entries: MarketEntryData[],
   pctByEntryId: Record<string, number | null | undefined>,
   hoursRemaining: number,
   currentPrices: Record<string, number>,
+  options?: { minEdgePp?: number; allowUnfavoredSide?: boolean },
 ): PredictionDecision {
   const abstain = (
     reason: PredictionDecision["abstainReason"],
@@ -246,17 +247,47 @@ export function computeArbPredictionGainer(
   if (!isLockInFairGainerEnabled()) return abstain("low_edge");
   if (entries.length < 2) return abstain("low_edge");
 
+  const minEdgePp = options?.minEdgePp ?? ARB_MIN_EDGE_PP;
+
   const fairMap = fairGainerByEntryId(
     pctByEntryId,
     hoursRemaining,
     LOCKIN_GAINER_SIGMA_1D,
     LOCKIN_GAINER_BETA,
   );
+
+  if (options?.allowUnfavoredSide) {
+    let chosen: MarketEntryData | null = null;
+    let chosenFair = 0;
+    let bestEdge = -Infinity;
+    for (const entry of entries) {
+      const f = fairMap[entry.id];
+      if (f == null || !Number.isFinite(f)) continue;
+      const cur = currentPrices[entry.id] ?? 1 / entries.length;
+      const edge = f - cur;
+      if (edge > bestEdge) {
+        bestEdge = edge;
+        chosen = entry;
+        chosenFair = f;
+      }
+    }
+    if (!chosen || bestEdge < minEdgePp) {
+      return abstain("low_edge");
+    }
+    return {
+      abstain: false,
+      entryId: chosen.id,
+      direction: "yes",
+      confidence: Math.min(LOCKIN_FAIR_MAX, chosenFair),
+      source: "deterministic",
+    };
+  }
+
   const favored = favoredH2HFromFairMap(fairMap);
   if (!favored) return abstain("low_edge");
 
   const cur = currentPrices[favored.entryId] ?? 1 / entries.length;
-  if (favored.fair - cur < ARB_MIN_EDGE_PP) {
+  if (favored.fair - cur < minEdgePp) {
     return abstain("low_edge");
   }
 

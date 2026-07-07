@@ -265,6 +265,15 @@ export const ARB_MIDWEEK_DECISIVE_PCT = (() => {
   const raw = Number(process.env.ARB_MIDWEEK_DECISIVE_PCT);
   return Number.isFinite(raw) && raw >= 0 ? raw : 0.02;
 })();
+/**
+ * Edge bar for the MIDWEEK gainer convergence sweep. Higher than the
+ * updown midweek bar (0.12) because multi-outcome races carry more
+ * LMSR slippage per round-trip. Near-close gainer arb keeps ARB_MIN_EDGE_PP.
+ */
+export const ARB_MIDWEEK_GAINER_MIN_EDGE_PP = (() => {
+  const raw = Number(process.env.ARB_MIDWEEK_GAINER_MIN_EDGE_PP);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.15;
+})();
 
 export function isLatchRevertShadow(): boolean {
   return envFlag(process.env.LATCH_REVERT_SHADOW);

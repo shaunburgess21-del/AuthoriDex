@@ -243,3 +243,59 @@ test("computeArbPredictionGainer buys leader when underpriced", () => {
     else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
   }
 });
+
+test("computeArbPredictionGainer minEdgePp override enforces midweek bar", () => {
+  const prev = process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  process.env.LOCKIN_FAIR_GAINER_ENABLED = "true";
+  try {
+    const gainerEntries = [
+      { id: "a", label: "Alice", totalStake: 0, noStake: 0, personId: "p1" },
+      { id: "b", label: "Bob", totalStake: 0, noStake: 0, personId: "p2" },
+      { id: "c", label: "Carol", totalStake: 0, noStake: 0, personId: "p3" },
+    ];
+    // Same inputs as the "buys leader" test (gap clears the 4pp default bar).
+    // Raising the bar to 0.95 makes the gap fail — verifies minEdgePp is honored.
+    const d = computeArbPredictionGainer(
+      gainerEntries,
+      { a: 0.05, b: 0.25, c: 0.02 },
+      12,
+      { a: 0.08, b: 0.12, c: 0.08 },
+      { minEdgePp: 0.95 },
+    );
+    assert.equal(d.abstain, true);
+  } finally {
+    if (prev === undefined) delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+    else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
+  }
+});
+
+test("computeArbPredictionGainer allowUnfavoredSide buys the most underpriced entry", () => {
+  const prev = process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  process.env.LOCKIN_FAIR_GAINER_ENABLED = "true";
+  try {
+    // 5-entry race. Adin Ross is the overpriced early pick (price 0.88,
+    // fair ~0.05). Kai is +30% (fair ~0.50) but priced 0.03 — huge edge.
+    // Favored-side-only path would still pick Kai here (highest fair),
+    // but the test confirms allowUnfavoredSide scans all entries and
+    // picks the max-edge one.
+    const entries = [
+      { id: "adin", label: "Adin Ross", totalStake: 0, noStake: 0, personId: "p1" },
+      { id: "kai", label: "Kai Cenat", totalStake: 0, noStake: 0, personId: "p2" },
+      { id: "x", label: "X", totalStake: 0, noStake: 0, personId: "p3" },
+      { id: "y", label: "Y", totalStake: 0, noStake: 0, personId: "p4" },
+      { id: "z", label: "Z", totalStake: 0, noStake: 0, personId: "p5" },
+    ];
+    const d = computeArbPredictionGainer(
+      entries,
+      { adin: -0.26, kai: 0.30, x: 0.0, y: 0.0, z: 0.0 },
+      96,
+      { adin: 0.88, kai: 0.03, x: 0.03, y: 0.03, z: 0.03 },
+      { minEdgePp: 0.15, allowUnfavoredSide: true },
+    );
+    assert.equal(d.abstain, false);
+    assert.equal(d.entryId, "kai");
+  } finally {
+    if (prev === undefined) delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+    else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
+  }
+});

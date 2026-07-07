@@ -87,6 +87,7 @@ import {
   isLatchRevertShadow,
   ARB_MIDWEEK_MIN_EDGE_PP,
   ARB_MIDWEEK_DECISIVE_PCT,
+  ARB_MIDWEEK_GAINER_MIN_EDGE_PP,
   isMidweekConvergenceShadow,
   isMidweekConvergenceEnabled,
   isCommunityConvergenceShadow,
@@ -1127,6 +1128,7 @@ async function runAgentBatchOnce(): Promise<{
       now,
       updownSweepCtx,
     );
+    convergenceScheduled += await runMidweekGainerConvergenceSweep(agents, markets, now);
     convergenceScheduled += await runConvergenceSweepCommunity(agents, markets, now);
   } catch (convSweepErr) {
     log(
@@ -2815,6 +2817,7 @@ async function pickMispricedGainerMarketIds(
   candidates: UpdownMarketRow[],
   limit: number,
   now: Date,
+  minEdgePp: number = ARB_MIN_EDGE_PP,
 ): Promise<string[]> {
   if (!candidates.length || limit <= 0) return [];
 
@@ -2883,7 +2886,7 @@ async function pickMispricedGainerMarketIds(
 
     const price = lmsrH2HEntryPrice(b, sq, favored.entryId, entryIds);
     const gap = favored.fair - price;
-    if (gap >= ARB_MIN_EDGE_PP) scored.push({ id: market.id, gap });
+    if (gap >= minEdgePp) scored.push({ id: market.id, gap });
   }
 
   scored.sort((a, b) => b.gap - a.gap);
@@ -3052,6 +3055,213 @@ async function runConvergenceSweepGainer(
 
   if (scheduled > 0) {
     log(`[AgentRunner] Gainer convergence sweep scheduled ${scheduled} actions`);
+  }
+  return scheduled;
+}
+
+/**
+ * Mid-week gainer convergence — same idea as `runMidweekConvergenceSweep`
+ * but for category-race markets. Agents pick gainer entries once, early in
+ * the week, and the near-close sweep (above) only fires in the final 6h,
+ * so mid-week drift (e.g. actual leader priced 3% while an early pick sits
+ * at 88%) goes uncorrected for days. This sweep arbs that gap outside the
+ * near-close window using a higher edge bar (ARB_MIDWEEK_GAINER_MIN_EDGE_PP)
+ * and `allowUnfavoredSide` so the most underpriced entry is bought even when
+ * it's not the highest-fair favorite. Gated by MIDWEEK_CONVERGENCE_SHADOW /
+ * _ENABLED (same flags as updown midweek) plus ARB_COHORT_ENABLED and
+ * LOCKIN_FAIR_GAINER_ENABLED.
+ */
+async function runMidweekGainerConvergenceSweep(
+  agents: (typeof agentConfigs.$inferSelect)[],
+  allMarkets: UpdownMarketRow[],
+  now: Date,
+): Promise<number> {
+  const shadow = isMidweekConvergenceShadow();
+  const enabled = isMidweekConvergenceEnabled();
+  if (!shadow && !enabled) return 0;
+  if (!ARB_COHORT_ENABLED || !isLockInFairGainerEnabled()) return 0;
+
+  const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
+  if (!arbAgents.length) return 0;
+
+  const ammGainer = allMarkets.filter(
+    (m) => m.marketType === "gainer" && m.engine === "amm",
+  );
+  if (!ammGainer.length) return 0;
+
+  const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
+  const outsideNearClose = ammGainer.filter((m) => {
+    if (!m.endAt) return false;
+    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "gainer");
+    return now.getTime() < cutoff.getTime() - bufferMs;
+  });
+  if (!outsideNearClose.length) return 0;
+
+  const targetIds = new Set(
+    await pickMispricedGainerMarketIds(
+      outsideNearClose,
+      ARB_CONVERGENCE_MARKETS_PER_SWEEP,
+      now,
+      ARB_MIDWEEK_GAINER_MIN_EDGE_PP,
+    ),
+  );
+  if (!targetIds.size) return 0;
+
+  const stateRows = await db
+    .select({
+      marketId: marketAmmState.marketId,
+      liquidityB: marketAmmState.liquidityB,
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(inArray(marketAmmState.marketId, Array.from(targetIds)));
+
+  const ammStateByMarket = new Map<string, AmmStateSnapshot>();
+  for (const row of stateRows) {
+    const b = Number(row.liquidityB);
+    if (!Number.isFinite(b) || b <= 0) continue;
+    ammStateByMarket.set(row.marketId, {
+      liquidityB: b,
+      outcomeOrder: row.outcomeOrder as string[],
+      shareQuantities: row.shareQuantities as Record<string, number>,
+    });
+  }
+
+  const entryRows = await db
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      label: marketEntries.label,
+      personId: marketEntries.personId,
+    })
+    .from(marketEntries)
+    .where(inArray(marketEntries.marketId, Array.from(targetIds)));
+
+  const entriesByMarket = new Map<
+    string,
+    { id: string; label: string | null; personId: string | null }[]
+  >();
+  for (const row of entryRows) {
+    const list = entriesByMarket.get(row.marketId) ?? [];
+    list.push({ id: row.id, label: row.label, personId: row.personId });
+    entriesByMarket.set(row.marketId, list);
+  }
+
+  const dayStart = startOfUtcDay(now);
+  let scheduled = 0;
+  let agentIdx = 0;
+
+  for (const market of outsideNearClose) {
+    if (!targetIds.has(market.id)) continue;
+    const entries = entriesByMarket.get(market.id) ?? [];
+    if (entries.length < 2) continue;
+    if (!entries.every((e) => e.personId)) continue;
+
+    const pctByEntryId: Record<string, number | null | undefined> = {};
+    for (const entry of entries) {
+      const entryOpeningScore = market.createdAt
+        ? await getEntryOpeningScore(entry.personId!, market.id, market.createdAt)
+        : null;
+      const sig = await getTrendSignals(entry.personId!, {
+        openingScore: entryOpeningScore,
+      });
+      pctByEntryId[entry.id] = sig.pctChangeVsOpen;
+    }
+
+    const hoursRemaining =
+      market.endAt != null
+        ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
+        : 0;
+
+    const snap = ammStateByMarket.get(market.id);
+    if (!snap) continue;
+    const prices = ammCurrentPrices(snap);
+
+    const agent = arbAgents[agentIdx % arbAgents.length];
+    agentIdx++;
+    const agentData = toAgentData(agent);
+
+    const marketEntriesData = entries.map((e) => ({
+      id: e.id,
+      label: e.label ?? "",
+      totalStake: 0,
+      noStake: 0,
+      personId: e.personId,
+    }));
+
+    const decision = computeArbPredictionGainer(
+      marketEntriesData,
+      pctByEntryId,
+      hoursRemaining,
+      prices,
+      {
+        minEdgePp: ARB_MIDWEEK_GAINER_MIN_EDGE_PP,
+        allowUnfavoredSide: true,
+      },
+    );
+
+    if (shadow) {
+      const chosenLabel = decision.entryId
+        ? entries.find((e) => e.id === decision.entryId)?.label ?? "?"
+        : "-";
+      log(
+        `[MidweekGainerConvergence][shadow] market=${market.id.slice(0, 8)} ` +
+          `wouldSchedule=${!decision.abstain && decision.entryId != null} ` +
+          `side=${chosenLabel}`,
+      );
+    }
+
+    if (!enabled) continue;
+    if (decision.abstain || !decision.entryId) continue;
+
+    const [recentMidweek] = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.decisionPayload}->>'midweekGainerConvergenceSweep' = 'true'`,
+          gte(scheduledAgentActions.createdAt, dayStart),
+        ),
+      )
+      .limit(1);
+    if (recentMidweek) continue;
+
+    const existing = await db
+      .select({ id: scheduledAgentActions.id })
+      .from(scheduledAgentActions)
+      .where(
+        and(
+          eq(scheduledAgentActions.agentId, agent.id),
+          eq(scheduledAgentActions.marketId, market.id),
+          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+        ),
+      )
+      .limit(1);
+    if (existing.length > 0) continue;
+
+    const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
+    const executeAfter = new Date(now.getTime() + 60_000);
+
+    await db.insert(scheduledAgentActions).values({
+      agentId: agent.id,
+      marketId: market.id,
+      entryId: decision.entryId,
+      actionType: "buy",
+      decisionPayload: { ...decision, midweekGainerConvergenceSweep: true },
+      stakeAmount,
+      executeAfter,
+      status: "pending",
+    });
+    scheduled++;
+    log(
+      `[AgentRunner] Midweek gainer convergence ${agent.displayName} → ${market.title?.slice(0, 28)} conf=${decision.confidence?.toFixed(2)} stake=${stakeAmount}`,
+    );
+  }
+
+  if (scheduled > 0) {
+    log(`[AgentRunner] Midweek gainer convergence sweep scheduled ${scheduled} actions`);
   }
   return scheduled;
 }

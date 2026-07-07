@@ -105,6 +105,19 @@ Requires `ARB_COHORT_ENABLED=true` (same as near-close convergence).
 
 Optional tuning: `ARB_MIDWEEK_MIN_EDGE_PP` (default `0.12`), `ARB_MIDWEEK_DECISIVE_PCT` (default `0.02`).
 
+### Phase 2b — Mid-week gainer convergence (Jul 2026)
+
+Same structural gap as Phase 2, but for category-race markets: agents pick gainer entries once, early in the week, and the near-close gainer arb (`runConvergenceSweepGainer`) only fires in the final 6h, so mid-week drift (e.g. actual leader priced 3% while an early pick sits at 88%) went uncorrected for days. `runMidweekGainerConvergenceSweep` runs the same `computeArbPredictionGainer` logic outside the final-6h window with `allowUnfavoredSide: true` and a higher edge bar. Same flags as updown midweek — no new env vars required to enable.
+
+| Stage | Variables | Notes |
+|-------|-----------|--------|
+| 1 | `MIDWEEK_CONVERGENCE_SHADOW=true` (already on) | Logs `[MidweekGainerConvergence][shadow] market=… wouldSchedule=… side=…` |
+| 2 | `MIDWEEK_CONVERGENCE_ENABLED=true` (already on) | Arb cohort buys the most underpriced entry when `fair − price ≥ ARB_MIDWEEK_GAINER_MIN_EDGE_PP` (default 0.15); max `ARB_CONVERGENCE_MARKETS_PER_SWEEP` per sweep; one mid-week action per market per UTC day |
+
+Requires `ARB_COHORT_ENABLED=true` and `LOCKIN_FAIR_GAINER_ENABLED=true` (both already on).
+
+Optional tuning: `ARB_MIDWEEK_GAINER_MIN_EDGE_PP` (default `0.15` — higher than updown's 0.12 because multi-outcome races carry more LMSR slippage per round-trip).
+
 ### Validation
 
 1. Shadow logs — Curry/Messi-type markets should show `wouldDisarm=true` when `|pct| &lt; 0.05`.
