@@ -153,7 +153,7 @@ export interface PredictionDecision {
   confidence?: number;
   impliedProbability?: number;
   edge?: number;
-  source?: "deterministic" | "gpt-5.4-world";
+  source?: "deterministic" | "gpt-5.4-world" | "source_anchor";
   reasoning?: string;
   predictedScore?: number;
   /**

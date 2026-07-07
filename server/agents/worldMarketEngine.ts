@@ -27,6 +27,7 @@ import {
 } from "./constants";
 import { getAiModel } from "../config/ai-models";
 import { tryReserveLlmCall } from "./worldMarketBudget";
+import { readSourceFairByEntryId } from "./sourceFair";
 
 // Lazy-init the OpenAI client so importing this module from a context
 // without `OPENAI_API_KEY` set (CI test workers, scripts that exercise
@@ -162,6 +163,15 @@ async function writeCachedAssessment(
     );
   }
 }
+
+/**
+ * Max age of the source anchor before the anchor-based path refuses to
+ * trust it and falls back to the LLM. The source watcher refreshes
+ * livePrices daily, so a healthy scouted market is never near this;
+ * 72h means a watcher outage degrades gracefully to LLM assessments
+ * rather than agents betting on week-old odds.
+ */
+const ANCHOR_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
 interface PredictionAssessment {
   decision: "bet" | "abstain";
@@ -419,6 +429,83 @@ async function callWorldMarketLlm(
 }
 
 /**
+ * Zero-cost assessment for SCOUTED markets: the source market's consensus
+ * prices (Polymarket, refreshed daily by the source watcher) already ARE a
+ * crowd's probability estimate, so agents can bet off them directly without
+ * a web search. This is what generates baseline activity on freshly
+ * published scouted markets — the LLM budget is reserved for markets with
+ * no anchor (manually created World Markets).
+ *
+ * Unlike the LLM path there is no shared cache: each agent samples its own
+ * pick from the anchor distribution (favourites proportionally more often),
+ * so a 60/40 market naturally splits the cohort ~60/40 instead of everyone
+ * piling on the favourite. Persona layers downstream (contrarian flip,
+ * no-side shorts, confidence calibration, per-band edge gates) add the
+ * rest of the variety, exactly as they do for LLM assessments.
+ *
+ * Returns null when the market has no usable anchor (not scouted, labels
+ * edited beyond recognition, upstream already resolved, anchor stale) —
+ * the caller then falls back to the LLM path.
+ */
+function buildAnchorAssessment(
+  market: MarketWithEntries,
+  entries: MarketEntryData[],
+  rng: RNG,
+): PredictionAssessment | null {
+  const fair = readSourceFairByEntryId(market.metadata, entries);
+  if (!fair) return null;
+
+  // Staleness guard — see ANCHOR_MAX_AGE_MS doc.
+  if (!fair.anchorAt) return null;
+  const anchorAge = Date.now() - new Date(fair.anchorAt).getTime();
+  if (!Number.isFinite(anchorAge) || anchorAge < 0 || anchorAge > ANCHOR_MAX_AGE_MS) {
+    return null;
+  }
+
+  const probabilities = entries.map((entry, index) => ({
+    outcomeIndex: index + 1,
+    probability: fair.fairByEntryId[entry.id] ?? 0,
+  }));
+
+  // Sample the pick proportionally to the anchor distribution.
+  let roll = rng.nextFloat();
+  let selectedIdx = entries.length - 1;
+  for (let i = 0; i < probabilities.length; i++) {
+    roll -= probabilities[i].probability;
+    if (roll <= 0) {
+      selectedIdx = i;
+      break;
+    }
+  }
+  const selectedProbability = probabilities[selectedIdx].probability;
+
+  // Flag a clear long-shot for the downstream No-side logic, mirroring
+  // what the LLM prompt asks for (outcome below ~10% in a 3+ way market).
+  let unlikelyOutcomeIndex: number | undefined;
+  let unlikelyConfidence: number | undefined;
+  if (entries.length >= 3) {
+    const longShot = probabilities.reduce((min, p) =>
+      p.probability < min.probability ? p : min,
+    );
+    if (longShot.probability < 0.10 && longShot.outcomeIndex !== selectedIdx + 1) {
+      unlikelyOutcomeIndex = longShot.outcomeIndex;
+      unlikelyConfidence = Math.max(0.6, Math.min(0.95, 1 - longShot.probability));
+    }
+  }
+
+  const selectedLabel = getOutcomeLabel(entries[selectedIdx], selectedIdx);
+  return {
+    decision: "bet",
+    selectedOutcomeIndex: selectedIdx + 1,
+    confidence: Math.max(0.4, Math.min(0.95, selectedProbability)),
+    probabilities,
+    unlikelyOutcomeIndex,
+    unlikelyConfidence,
+    briefReasoning: `Consensus odds put ${selectedLabel} at ${(selectedProbability * 100).toFixed(0)}% — following the market.`,
+  };
+}
+
+/**
  * Get an assessment for the market — preferring cache (DB) and in-flight
  * dedupe (in-process) over a fresh LLM call. Writes through to the DB cache
  * on success so subsequent agents (this batch and future batches within the
@@ -495,11 +582,19 @@ export async function computeWorldMarketPrediction(
     : agent.activityRate;
   if (rng.nextFloat() > effectiveActivityRate) return abstain("activity_gate");
 
-  // Step 3: Get a market assessment — preferring cache. This is the cost
-  // hot-spot. Pre-cache: every agent fires its own web_search call (~$0.25
-  // each, 56 agents per market = ~$14/market). Post-cache: ONE call per
-  // market per 24h, shared by all 56 agents (~$0.25/market). 56x savings.
-  const assessment = await getOrCreateAssessment(agent, market, entries);
+  // Step 3a: Source-anchored assessment for scouted markets — zero LLM
+  // cost, per-agent sampled. When present, the LLM is never consulted for
+  // this market; budget is reserved for markets with no anchor.
+  const anchorAssessment = buildAnchorAssessment(market, entries, rng);
+  const viaAnchor = anchorAssessment !== null;
+
+  // Step 3b: LLM assessment (unanchored markets only) — preferring cache.
+  // This is the cost hot-spot. Pre-cache: every agent fires its own
+  // web_search call (~$0.25 each, 56 agents per market = ~$14/market).
+  // Post-cache: ONE call per market per 24h, shared by all 56 agents
+  // (~$0.25/market). 56x savings.
+  const assessment =
+    anchorAssessment ?? (await getOrCreateAssessment(agent, market, entries));
   if (assessment === BUDGET_EXHAUSTED) {
     // Not persisted by the runner — the agent silently retries on a
     // later sweep once the daily budget resets.
@@ -617,7 +712,7 @@ export async function computeWorldMarketPrediction(
     direction,
     rawProbability: parseFloat(rawConfidence.toFixed(4)),
     confidence: parseFloat(clampedConfidence.toFixed(3)),
-    source: "gpt-5.4-world",
+    source: viaAnchor ? "source_anchor" : "gpt-5.4-world",
     reasoning: assessment.briefReasoning,
   };
 }

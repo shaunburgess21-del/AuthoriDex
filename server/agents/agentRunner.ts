@@ -350,7 +350,14 @@ async function runAgentBatchOnce(): Promise<{
     });
   }
 
-  const worldSlice = worldMarkets.slice(0, WORLD_MARKET_RESERVE_PER_SWEEP);
+  // Selection stays random (rotation across sweeps), but PROCESSING order
+  // within the slice is soonest-closing first: LLM assessments consume the
+  // shared daily budget in sequence, so when the budget runs dry mid-sweep
+  // it's the "resolves in December" market that misses out, not the match
+  // that closes tomorrow. Anchored scouted markets cost nothing either way.
+  const worldSlice = worldMarkets
+    .slice(0, WORLD_MARKET_RESERVE_PER_SWEEP)
+    .sort((a, b) => (a.endAt?.getTime() ?? Infinity) - (b.endAt?.getTime() ?? Infinity));
   const nativePool = nativeMarkets.slice(0, MARKETS_PER_SWEEP - worldSlice.length);
 
   // Build the shared up/down sweep context ONCE per batch — every
