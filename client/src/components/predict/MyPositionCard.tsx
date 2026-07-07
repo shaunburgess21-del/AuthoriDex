@@ -60,7 +60,6 @@ interface MyPositionBet {
   payoutAmount: number | null;
   status: string;
   direction: string;
-  confidence: number | null;
   predictedScore: number | null;
   thesis: string | null;
   placedAt: string;

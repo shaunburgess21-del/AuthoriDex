@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Target, LogIn, Star, MessageSquarePlus, HelpCircle, Lock, Gift, Loader2, ChevronDown, ArrowRight } from "lucide-react";
+import { Target, LogIn, HelpCircle, Lock, Gift, Loader2, ChevronDown, ArrowRight } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
@@ -74,8 +74,6 @@ export interface StakeSelection {
    *  "refund" wherever read. */
   tieRule?: string;
   endAt?: string;
-  confidence?: number;
-  thesis?: string;
   candidateRank?: number;
   candidatePercentGain?: number;
   candidatePointsAdded?: number;
@@ -138,10 +136,6 @@ interface StakeModalProps {
     amount: number,
     meta?: { maxPricePerShare?: number },
   ) => void | Promise<void>;
-  onConfirmWithMeta?: (
-    amount: number,
-    meta: { confidence?: number; thesis?: string; maxPricePerShare?: number },
-  ) => void | Promise<void>;
   walletBalance: number;
   /** Up/Down for `updown` markets, Yes/No for `community` markets.
    *  When provided, the modal renders an in-place toggle so a misclick on
@@ -172,7 +166,6 @@ export function StakeModal({
   onClose,
   selection,
   onConfirm,
-  onConfirmWithMeta,
   walletBalance,
   onDirectionChange,
   onChangePick,
@@ -189,9 +182,6 @@ export function StakeModal({
   const { isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
   const { open: openReferralModal } = useReferralModal();
-  const [confidence, setConfidence] = useState(0);
-  const [thesis, setThesis] = useState("");
-  const [showThesisSection, setShowThesisSection] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isMobile = useIsMobile();
   // Default chart closed on mobile to keep Confirm above the fold; default
@@ -310,16 +300,7 @@ export function StakeModal({
 
     setSubmitting(true);
     try {
-      let result: void | Promise<void>;
-      if (onConfirmWithMeta) {
-        result = onConfirmWithMeta(parsedAmount, {
-          confidence: confidence || undefined,
-          thesis: thesis.trim() || undefined,
-          maxPricePerShare,
-        });
-      } else {
-        result = onConfirm(parsedAmount, { maxPricePerShare });
-      }
+      const result = onConfirm(parsedAmount, { maxPricePerShare });
 
       if (result && typeof (result as Promise<void>).then === "function") {
         await result;
@@ -334,9 +315,6 @@ export function StakeModal({
       }
 
       setStakeAmount("");
-      setConfidence(0);
-      setThesis("");
-      setShowThesisSection(false);
     } catch {
       // Parent surfaces its own error toast; keep the modal open with
       // the user's stake intact so they can retry.
@@ -350,9 +328,6 @@ export function StakeModal({
       if (!isOpen) {
         markOverlayDismissSuppress();
         setStakeAmount("");
-        setConfidence(0);
-        setThesis("");
-        setShowThesisSection(false);
         onClose();
       }
     }}>
@@ -1090,61 +1065,6 @@ export function StakeModal({
             compact
           />
         )}
-
-        {/* Optional thesis / confidence section */}
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => setShowThesisSection(!showThesisSection)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto"
-          >
-            <MessageSquarePlus className="h-3 w-3" />
-            {showThesisSection ? "Hide your thesis" : "Add your thesis"}
-          </button>
-
-          {showThesisSection && (
-            <div className="space-y-3 border border-border/40 rounded-lg p-3 bg-muted/10">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Confidence (optional)
-                </label>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setConfidence(confidence === level ? 0 : level)}
-                      className="p-0.5 transition-transform hover:scale-110"
-                    >
-                      <Star
-                        className={`h-5 w-5 ${
-                          level <= confidence
-                            ? "text-yellow-700 dark:text-yellow-500 fill-yellow-500"
-                            : "text-muted-foreground/40"
-                        }`}
-                      />
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground/60">How confident are you in this pick?</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
-                  Your thesis (optional)
-                </label>
-                <textarea
-                  value={thesis}
-                  onChange={(e) => setThesis(e.target.value.slice(0, 100))}
-                  placeholder="Why are you making this pick? (optional)"
-                  rows={2}
-                  className="w-full rounded-md border border-border/40 bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-violet-500/50 resize-none"
-                />
-                <p className="text-[10px] text-muted-foreground/60 text-right">{thesis.length}/100</p>
-              </div>
-            </div>
-          )}
-        </div>
 
         <div className="flex gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1">

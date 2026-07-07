@@ -100,7 +100,6 @@ interface PublicBet {
   actionType?: "parimutuel" | "buy" | "sell";
   shareCount?: number | null;
   pricePerShare?: number | null;
-  confidence: number | null;
   thesis: string | null;
   predictedScore: number | null;
   placedAt: string;

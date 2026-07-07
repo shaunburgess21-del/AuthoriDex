@@ -2353,8 +2353,6 @@ export default function PredictPage() {
       marketId: market.id,
       entryId: candidate.entryId,
       currentScore: candidate.currentGain,
-      confidence: undefined,
-      thesis: undefined,
       candidateRank: candidate.rank,
       candidatePercentGain: candidate.percentGain,
       candidatePointsAdded: candidate.currentGain,
