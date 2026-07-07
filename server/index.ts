@@ -478,9 +478,21 @@ function startIngestionScheduler() {
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
-    return error.stack || error.message;
+    const cause = (error as { cause?: unknown }).cause;
+    const causeMsg = cause instanceof Error
+      ? `\n  caused by: ${cause.stack || cause.message}${formatCauseChain(cause)}`
+      : cause != null
+        ? `\n  caused by: ${String(cause)}`
+        : "";
+    return `${error.stack || error.message}${causeMsg}`;
   }
   return String(error);
+}
+
+function formatCauseChain(error: Error, depth = 0): string {
+  const next = (error as { cause?: unknown }).cause;
+  if (depth >= 5 || !(next instanceof Error)) return "";
+  return `\n  caused by: ${next.stack || next.message}${formatCauseChain(next, depth + 1)}`;
 }
 
 function runStartupTask(name: string, task: () => Promise<unknown>) {
