@@ -307,11 +307,11 @@ export async function runCommentVoteSweep(): Promise<{
 // ── Insight upvotes (likes on top-level community insights) ────────────
 //
 // Mirror of runCommentVoteSweep but for top-level profile insights (which
-// live in community_insights, not the unified comments table). Agents only
-// upvote HUMAN-authored insights in the initial phase — no self-upvotes,
-// no agent→agent upvotes (same rule as the insight reply path). This drives
-// engagement on human posts and makes the upvote counts on profile
-// discussion feel organic.
+// live in community_insights, not the unified comments table). Agents
+// upvote BOTH human-authored and agent-authored insights — this drives
+// engagement on all profile posts equally, matching how comment_votes
+// already works across human + agent comments on other surfaces. Self-
+// upvotes are blocked by the `userId != ` filter in getCandidateInsights.
 
 async function countInsightLikesLast24h(userId: string): Promise<number> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -333,24 +333,22 @@ async function getCandidateInsights(userId: string): Promise<Array<{
 }>> {
   const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  // Pull the most recent ~150 candidate insights, joined to profiles so we
-  // can filter out agent-authored ones (no agent→agent upvotes in the
-  // initial phase).
+  // Pull the most recent ~150 candidate insights. Agents upvote BOTH
+  // human-authored and agent-authored insights — this drives engagement
+  // on all profile posts equally, matching how comment_votes already
+  // works across human + agent comments on other surfaces. Self-upvotes
+  // are still blocked by the `userId != ` filter below.
   const candidates = await db
     .select({
       id: communityInsights.id,
       authorUserId: communityInsights.userId,
-      authorIsAgent: profiles.isAgent,
     })
     .from(communityInsights)
-    .leftJoin(profiles, eq(communityInsights.userId, profiles.id))
     .where(
       and(
         isNull(communityInsights.deletedAt),
         sql`${communityInsights.userId} != ${userId}`,
         sql`${communityInsights.createdAt} >= ${cutoff}`,
-        // Human-authored only — no agent→agent upvotes in the initial phase.
-        sql`${profiles.isAgent} IS NOT TRUE`,
       ),
     )
     .orderBy(desc(communityInsights.createdAt))
