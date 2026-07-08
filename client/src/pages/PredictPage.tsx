@@ -41,7 +41,7 @@ import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getSupabase } from "@/lib/supabase";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
-import { formatVox, voxWord } from "@/lib/currency";
+import { formatVox, voxWord, formatVoxPrice } from "@/lib/currency";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -3076,9 +3076,9 @@ export default function PredictPage() {
                           const actionType = item.actionType ?? "parimutuel";
                           const isAmmBuy = actionType === "buy";
                           const isAmmSell = actionType === "sell";
-                          const pricePct =
+                          const pricePerShareLabel =
                             item.pricePerShare != null
-                              ? `${Math.round(item.pricePerShare * 100)}%`
+                              ? formatVoxPrice(item.pricePerShare, 2)
                               : null;
                           const shareCountLabel =
                             item.shareCount != null
@@ -3138,13 +3138,13 @@ export default function PredictPage() {
                                     <>
                                       bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
                                       <span className="font-semibold">{item.choiceLabel}</span>
-                                      {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null} on {item.marketTitle}
                                     </>
                                   ) : isAmmSell && shareCountLabel ? (
                                     <>
                                       sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
                                       <span className="font-semibold">{item.choiceLabel}</span>
-                                      {pricePct ? <> @ {pricePct}</> : null} on {item.marketTitle}
+                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null} on {item.marketTitle}
                                     </>
                                   ) : (
                                     <>
