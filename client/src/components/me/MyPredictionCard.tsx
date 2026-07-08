@@ -57,6 +57,13 @@ export interface MyPredictionCardData {
   hidden?: boolean;
   /** Phase 4: AMM markets render different copy (shares-based, no per-bet projection). */
   engine?: "parimutuel" | "amm" | string | null;
+  /** AMM trade action type — "buy" / "sell" / "parimutuel". Used to pick
+   *  the sell P&L override (`realisedPnl`) instead of the won/lost formula. */
+  actionType?: "parimutuel" | "buy" | "sell" | string | null;
+  /** Sell-only: realised P&L stamped at trade time (proceeds − cost basis).
+   *  Overrides the local won/lost P&L math for AMM sells, which would
+   *  otherwise read as Ꝟ0 because sells settle as `result: "refunded"`. */
+  realisedPnl?: number | null;
 }
 
 interface MyPredictionCardProps {
@@ -187,11 +194,17 @@ export function MyPredictionCard({
   const payoutDisplay = isResolved
     ? prediction.payout
     : prediction.potentialPayout || prediction.payout;
-  const pnl = prediction.result === "won"
-    ? prediction.payout - prediction.stakeAmount
-    : prediction.result === "lost"
-      ? -prediction.stakeAmount
-      : 0;
+  // AMM sells settle as `result: "refunded"` (status="settled") so the
+  // won/lost formula below would read Ꝟ0. When the backend stamps a
+  // `realisedPnl` at trade time (proceeds − cost basis), use that instead.
+  const isAmmSell = prediction.actionType === "sell";
+  const pnl = isAmmSell && prediction.realisedPnl != null
+    ? prediction.realisedPnl
+    : prediction.result === "won"
+      ? prediction.payout - prediction.stakeAmount
+      : prediction.result === "lost"
+        ? -prediction.stakeAmount
+        : 0;
   const projectedPnl = prediction.result === "pending"
     ? (prediction.potentialPayout || 0) - prediction.stakeAmount
     : pnl;

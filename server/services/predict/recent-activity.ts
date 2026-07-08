@@ -102,12 +102,20 @@ export async function loadRecentPredictionActivity(limit: number): Promise<unkno
         if (market.status !== "OPEN") return null;
         if (!["live", "inactive"].includes(market.visibility || "")) return null;
 
-        const rationale =
-          bet.betMetadata &&
-          typeof bet.betMetadata === "object" &&
-          "rationale" in (bet.betMetadata as Record<string, unknown>)
-            ? String((bet.betMetadata as Record<string, unknown>).rationale || "").trim()
+        const meta =
+          bet.betMetadata && typeof bet.betMetadata === "object"
+            ? (bet.betMetadata as Record<string, unknown>)
             : null;
+        const rationale =
+          meta && "rationale" in meta
+            ? String(meta.rationale || "").trim()
+            : null;
+        const costBasis =
+          meta && typeof meta.costBasis === "number" ? meta.costBasis : null;
+        const realisedPnl =
+          meta && typeof meta.realisedPnl === "number" ? meta.realisedPnl : null;
+        const postTradePrice =
+          meta && typeof meta.postTradePrice === "number" ? meta.postTradePrice : null;
 
         const rawConfidence = bet.confidence ? Number(bet.confidence) : null;
         let displayConfidence: number | null = rawConfidence;
@@ -134,6 +142,9 @@ export async function loadRecentPredictionActivity(limit: number): Promise<unkno
           pricePerShare: bet.pricePerShare != null ? Number(bet.pricePerShare) : null,
           payoutAmount: bet.payoutAmount ?? null,
           confidence: displayConfidence,
+          costBasis: reveal ? costBasis : null,
+          realisedPnl: reveal ? realisedPnl : null,
+          postTradePrice: reveal ? postTradePrice : null,
           choiceLabel: entry.label,
           marketId: market.id,
           marketTitle: market.title,

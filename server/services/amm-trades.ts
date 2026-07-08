@@ -291,6 +291,22 @@ export async function executeBuy(
       })
       .where(eq(marketAmmState.marketId, marketId));
 
+    // Compute post-trade LMSR prices BEFORE the insert so we can stamp
+    // `postTradePrice` into betMetadata. Same math as the result return
+    // below — just hoisted earlier in the transaction.
+    const newQObj = { ...newShareQuantities };
+    const newQArr = state.outcomeOrder.map((id) => newQObj[id] ?? 0);
+    const newPricesArr = pricesAll(newQArr, b);
+    const newPrices: Record<string, number> = {};
+    for (let i = 0; i < state.outcomeOrder.length; i++) {
+      newPrices[state.outcomeOrder[i]] = newPricesArr[i];
+    }
+
+    const buyBetMetadata = {
+      ...(betMetadata ?? {}),
+      postTradePrice: Number((newPrices[entryId] ?? 0).toFixed(4)),
+    };
+
     const [insertedBet] = await tx
       .insert(marketBets)
       .values({
@@ -311,7 +327,7 @@ export async function executeBuy(
         // to match the integer column type — fractional shares lose at most
         // 0.999 cr of headline payout, well within rounding tolerance.
         potentialPayout: Math.floor(shares),
-        betMetadata: betMetadata ?? null,
+        betMetadata: buyBetMetadata,
       })
       .returning({ id: marketBets.id });
 
@@ -334,14 +350,6 @@ export async function executeBuy(
         ...(agentId ? { agentId } : {}),
       },
     });
-
-    const newQObj = { ...newShareQuantities };
-    const newQArr = state.outcomeOrder.map((id) => newQObj[id] ?? 0);
-    const newPricesArr = pricesAll(newQArr, b);
-    const newPrices: Record<string, number> = {};
-    for (let i = 0; i < state.outcomeOrder.length; i++) {
-      newPrices[state.outcomeOrder[i]] = newPricesArr[i];
-    }
 
     await writePriceSnapshots(tx, marketId, newPrices, "trade");
 
@@ -563,6 +571,7 @@ export async function executeSell(
       .select({
         actionType: marketBets.actionType,
         shareCount: marketBets.shareCount,
+        stakeAmount: marketBets.stakeAmount,
       })
       .from(marketBets)
       .where(
@@ -574,11 +583,22 @@ export async function executeSell(
       );
 
     let netShares = 0;
+    let totalBuyStake = 0;
+    let totalBuyShares = 0;
     for (const row of positionRows) {
       if (row.actionType !== "buy" && row.actionType !== "sell") continue;
       const sc = Number(row.shareCount ?? 0);
       if (!Number.isFinite(sc)) continue;
       netShares += row.actionType === "buy" ? sc : -sc;
+      // Accumulate buy-side stake/shares for weighted-average cost basis.
+      // Used below to stamp realised P&L onto this sell's betMetadata.
+      if (row.actionType === "buy") {
+        const st = Number(row.stakeAmount ?? 0);
+        if (Number.isFinite(st)) {
+          totalBuyStake += st;
+          totalBuyShares += sc;
+        }
+      }
     }
 
     // Allow a hair of floating-point slop so users can "sell all" with
@@ -656,6 +676,35 @@ export async function executeSell(
       })
       .where(eq(marketAmmState.marketId, marketId));
 
+    // Compute post-trade LMSR prices BEFORE the insert so we can stamp
+    // `postTradePrice` into betMetadata. Same math as the result return
+    // below — just hoisted earlier in the transaction.
+    const newQObj = { ...newShareQuantities };
+    const newQArr = state.outcomeOrder.map((id) => newQObj[id] ?? 0);
+    const newPricesArr = pricesAll(newQArr, b);
+    const newPrices: Record<string, number> = {};
+    for (let i = 0; i < state.outcomeOrder.length; i++) {
+      newPrices[state.outcomeOrder[i]] = newPricesArr[i];
+    }
+
+    // Weighted-average-cost P&L for this sell. Matches the accounting
+    // model documented in server/services/amm-positions.ts:
+    //   avgBuyCost = sum(buy.stake) / sum(buy.shares)
+    //   costBasis  = sharesToSell * avgBuyCost
+    //   realisedPnl = proceeds - costBasis
+    // Stamped into betMetadata so the activity feed / profile / position
+    // card can render P&L without a separate cost-basis join at read time.
+    const avgBuyCost = totalBuyShares > 0 ? totalBuyStake / totalBuyShares : 0;
+    const costBasisThisSell = sharesToSell * avgBuyCost;
+    const realisedPnl = proceeds - costBasisThisSell;
+    const sellBetMetadata = {
+      ...(betMetadata ?? {}),
+      costBasis: Number(costBasisThisSell.toFixed(2)),
+      realisedPnl: Number(realisedPnl.toFixed(2)),
+      avgBuyCost: Number(avgBuyCost.toFixed(4)),
+      postTradePrice: Number((newPrices[entryId] ?? 0).toFixed(4)),
+    };
+
     // Sell rows are realized at creation: status='settled', payoutAmount
     // already records the credits returned. Keeps the settlement pass
     // simple — it only walks 'active' buy rows.
@@ -674,7 +723,7 @@ export async function executeSell(
         status: "settled",
         payoutAmount: proceeds,
         settledAt: new Date(),
-        ...(betMetadata ? { betMetadata } : {}),
+        betMetadata: sellBetMetadata,
       })
       .returning({ id: marketBets.id });
 
@@ -696,14 +745,6 @@ export async function executeSell(
         ...(agentId ? { agentId } : {}),
       },
     });
-
-    const newQObj = { ...newShareQuantities };
-    const newQArr = state.outcomeOrder.map((id) => newQObj[id] ?? 0);
-    const newPricesArr = pricesAll(newQArr, b);
-    const newPrices: Record<string, number> = {};
-    for (let i = 0; i < state.outcomeOrder.length; i++) {
-      newPrices[state.outcomeOrder[i]] = newPricesArr[i];
-    }
 
     await writePriceSnapshots(tx, marketId, newPrices, "trade");
 

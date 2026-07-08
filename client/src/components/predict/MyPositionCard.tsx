@@ -60,6 +60,13 @@ interface MyPositionBet {
   payoutAmount: number | null;
   status: string;
   direction: string;
+  actionType?: "parimutuel" | "buy" | "sell" | null;
+  shareCount?: number | null;
+  pricePerShare?: number | null;
+  /** Sell-only: realised P&L stamped at trade time (proceeds − cost basis). */
+  realisedPnl?: number | null;
+  /** Post-trade LMSR price for the traded entry (0..1). Stamped at trade time. */
+  postTradePrice?: number | null;
   predictedScore: number | null;
   thesis: string | null;
   placedAt: string;
@@ -431,10 +438,19 @@ function ResultBody({
         const stake = bet.stakeAmount ?? 0;
         const payout = bet.payoutAmount ?? 0;
         const status = bet.status;
+        const isSell = bet.actionType === "sell";
         const isWon = status === "won";
         const isLost = status === "lost";
         const isRefund = status === "refunded";
-        const profit = isWon ? payout - stake : isLost ? -stake : 0;
+        // AMM sells settle as status="settled" (mapped to isRefund above)
+        // so the won/lost formula would read Ꝟ0. When the backend stamps
+        // realisedPnl at trade time, use that instead. Falls back to the
+        // gross proceeds for legacy sell rows that predate the stamping.
+        const profit = isSell
+          ? (bet.realisedPnl ?? payout)
+          : isWon ? payout - stake
+          : isLost ? -stake
+          : 0;
         const signedProfit = profit > 0
           ? `+${CURRENCY.symbol}${profit.toLocaleString("en-US")}`
           : profit < 0
@@ -592,7 +608,9 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
               )}
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-              {formatVox(bet.stakeAmount)} · {formatTimeAgo(bet.placedAt)}
+              {isSell
+                ? `Received ${formatVox(bet.payoutAmount ?? 0)}`
+                : `${formatVox(bet.stakeAmount)}`} · {formatTimeAgo(bet.placedAt)}
             </span>
           </div>
         );

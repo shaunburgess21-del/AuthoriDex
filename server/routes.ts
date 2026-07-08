@@ -8514,12 +8514,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         //   AMM buy lost    -> −stake (whole row was a loss; partial-
         //                       sell cost-basis correction lands on
         //                       the matching sell row)
-        //   AMM sell settled-> proceeds in (shown as "Sold for X")
+        const meta = b.betMetadata as Record<string, any> | null;
+
+        // Per-row P&L. NB: avg-cost accounting across (market, entry)
+        // happens in the headline-stats aggregation; this per-row math
+        // is the simpler "cash flow on this ticket" view, which is
+        // exact for users who never partially exited and reasonable
+        // (though not strictly cost-basis-accurate) for users who did.
+        //   parimutuel won  -> payout − stake
+        //   parimutuel lost -> −stake
+        //   AMM buy won     -> payoutAmount − stake (resolver wrote
+        //                       payoutAmount based on remaining shares,
+        //                       so this stays accurate even after a
+        //                       partial sell)
+        //   AMM buy lost    -> −stake (whole row was a loss; partial-
+        //                       sell cost-basis correction lands on
+        //                       the matching sell row)
+        //   AMM sell settled-> realisedPnl stamped at trade time
+        //                       (proceeds − sold_shares × avg_buy_cost);
+        //                       falls back to gross proceeds for legacy
+        //                       sell rows that predate the stamping.
         let payout = 0;
         let pnl = 0;
         if (actionType === "sell" && b.betStatus === "settled") {
           payout = Number(b.payoutAmount ?? 0);
-          pnl = payout;
+          const stampedPnl = typeof meta?.realisedPnl === "number" ? meta.realisedPnl : null;
+          pnl = stampedPnl ?? payout;
         } else if (b.betStatus === "won") {
           payout = Number(b.payoutAmount ?? b.potentialPayout ?? 0);
           pnl = payout - b.stakeAmount;
@@ -8527,7 +8547,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           pnl = -b.stakeAmount;
         }
 
-        const meta = b.betMetadata as Record<string, any> | null;
         const displayEntryLabel =
           b.marketType === "community" && b.direction === "no"
             ? `No on ${b.entryLabel}`
@@ -8546,6 +8565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           actionType,
           shareCount,
           pricePerShare,
+          postTradePrice: typeof meta?.postTradePrice === "number" ? meta.postTradePrice : null,
           confidence: (() => {
             const rawConfidence = b.confidence ? Number(b.confidence) : meta?.confidence ?? null;
             if (!user.isAgent) return rawConfidence;
@@ -9819,6 +9839,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           potentialPayout: marketBets.potentialPayout,
           status: marketBets.status,
           direction: marketBets.direction,
+          actionType: marketBets.actionType,
+          shareCount: marketBets.shareCount,
+          pricePerShare: marketBets.pricePerShare,
           createdAt: marketBets.createdAt,
           settledAt: marketBets.settledAt,
           payoutAmount: marketBets.payoutAmount,
@@ -9856,7 +9879,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           payoutAmount: b.payoutAmount,
           status: b.status,
           direction: b.direction,
+          actionType: (b.actionType ?? "parimutuel") as "parimutuel" | "buy" | "sell",
+          shareCount: b.shareCount != null ? Number(b.shareCount) : null,
+          pricePerShare: b.pricePerShare != null ? Number(b.pricePerShare) : null,
           confidence: b.confidence != null ? Number(b.confidence) : null,
+          // P&L stamped at trade time for sells (proceeds − sold_shares ×
+          // avg_buy_cost); null on buys and legacy sell rows.
+          costBasis: typeof meta?.costBasis === "number" ? meta.costBasis : null,
+          realisedPnl: typeof meta?.realisedPnl === "number" ? meta.realisedPnl : null,
+          postTradePrice: typeof meta?.postTradePrice === "number" ? meta.postTradePrice : null,
           // Surface predictedScore for jackpot tickets — the prior
           // /api/me/predictions contract dropped this so the UI couldn't
           // show "you predicted 352000, current is 348100, off by 3,900".

@@ -100,6 +100,8 @@ interface PublicBet {
   actionType?: "parimutuel" | "buy" | "sell";
   shareCount?: number | null;
   pricePerShare?: number | null;
+  /** Post-trade LMSR price for the traded entry (0..1). Stamped at trade time. */
+  postTradePrice?: number | null;
   thesis: string | null;
   predictedScore: number | null;
   placedAt: string;
@@ -179,6 +181,11 @@ function adaptPublicBet(b: PublicBet): MyPredictionCardData {
     startAt: "",
     endAt: b.settledAt ?? "",
     engine: b.actionType === "parimutuel" ? "parimutuel" : "amm",
+    actionType: b.actionType ?? null,
+    // Backend stamps realisedPnl on sell rows at trade time; null on
+    // buys and legacy sells. MyPredictionCard uses this to override the
+    // won/lost P&L formula for AMM sells (which settle as "refunded").
+    realisedPnl: b.pnl,
   };
 }
 

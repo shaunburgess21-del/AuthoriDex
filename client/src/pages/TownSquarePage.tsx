@@ -9,7 +9,7 @@ import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { ArrowLeft, Users } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
-import { voxWord, formatVoxPrice } from "@/lib/currency";
+import { voxWord, formatVoxPrice, formatVox } from "@/lib/currency";
 
 interface ActivityItem {
   id: string;
@@ -21,6 +21,12 @@ interface ActivityItem {
   pricePerShare?: number | null;
   payoutAmount?: number | null;
   confidence: number | null;
+  /** Sell-only: cost basis of the sold shares (sharesToSell × avgBuyCost). */
+  costBasis: number | null;
+  /** Sell-only: realised P&L = proceeds − costBasis. Stamped at trade time. */
+  realisedPnl: number | null;
+  /** Post-trade LMSR price for the traded entry (0..1). Stamped at trade time. */
+  postTradePrice: number | null;
   choiceLabel: string;
   marketId: string;
   marketTitle: string;
@@ -32,6 +38,14 @@ interface ActivityItem {
   isPublic: boolean;
   rationale: string | null;
 }
+
+const MARKET_BADGE: Record<string, { label: string; className: string }> = {
+  updown:          { label: "Up/Down", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  versus:          { label: "H2H",     className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
+  gainer:          { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  community:       { label: "World",   className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  jackpot_exactly: { label: "Jackpot", className: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400" },
+};
 
 export default function TownSquarePage() {
   const [, setLocation] = useLocation();
@@ -142,6 +156,7 @@ export default function TownSquarePage() {
                 const actionType = item.actionType ?? "parimutuel";
                 const isAmmBuy = actionType === "buy";
                 const isAmmSell = actionType === "sell";
+                const isJackpot = actionType === "parimutuel";
                 const pricePerShareLabel =
                   item.pricePerShare != null
                     ? formatVoxPrice(item.pricePerShare, 2)
@@ -150,6 +165,13 @@ export default function TownSquarePage() {
                   item.shareCount != null
                     ? Math.round(item.shareCount).toLocaleString()
                     : null;
+                const badge = MARKET_BADGE[item.marketType];
+                // Post-trade price arrow: only show when it differs from
+                // the trade price by ≥1pp so tiny trades don't add noise.
+                const showPostTradeArrow =
+                  item.postTradePrice != null &&
+                  item.pricePerShare != null &&
+                  Math.abs(item.postTradePrice - item.pricePerShare) >= 0.01;
                 // Buys are green, sells amber, jackpot tickets neutral —
                 // keeps the visual feel of an order book without shouting.
                 const dotColor = isAmmBuy
@@ -199,31 +221,56 @@ export default function TownSquarePage() {
                         <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
                       </div>
                       <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                        {isJackpot && (
+                          <span className="text-yellow-600 dark:text-yellow-400 font-medium">Jackpot ticket · </span>
+                        )}
                         {isAmmBuy && shareCountLabel ? (
                           <>
                             bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
                             <span className="font-semibold">{item.choiceLabel}</span>
-                            {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null} on {item.marketTitle}
+                            {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
+                            {showPostTradeArrow && item.postTradePrice != null && (
+                              <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
+                            )} on {item.marketTitle}
                           </>
                         ) : isAmmSell && shareCountLabel ? (
                           <>
                             sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
                             <span className="font-semibold">{item.choiceLabel}</span>
-                            {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null} on {item.marketTitle}
+                            {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
+                            {showPostTradeArrow && item.postTradePrice != null && (
+                              <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
+                            )} on {item.marketTitle}
                           </>
                         ) : (
                           <>
                             backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
                           </>
                         )}
+                        {badge && (
+                          <span className={`ml-1 text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        )}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {isAmmSell && proceeds != null
-                          ? `${voxWord(proceeds)} in`
-                          : voxWord(item.stakeAmount)}
+                        {isAmmSell && proceeds != null ? (
+                          <>
+                            Received <span className="font-medium">{voxWord(proceeds)}</span>
+                            {item.realisedPnl != null && (
+                              <span className={item.realisedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                                {" · "}{item.realisedPnl >= 0 ? "+" : "−"}{formatVox(Math.abs(item.realisedPnl))} P&L
+                              </span>
+                            )}
+                          </>
+                        ) : isAmmBuy ? (
+                          <>Spent <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
+                        ) : (
+                          <>Staked <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
+                        )}
                       </p>
                       {item.rationale && (
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground border-l-2 border-border/40 pl-2 italic">
                           "{item.rationale}"
                         </p>
                       )}
