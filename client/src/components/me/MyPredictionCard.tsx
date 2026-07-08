@@ -336,22 +336,46 @@ export function MyPredictionCard({
         )}
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span className="text-muted-foreground">
-            Stake:{" "}
-            <span className="text-foreground font-medium">{formatVox(prediction.stakeAmount)}</span>
-          </span>
-          {payoutDisplay > 0 && (
-            <span
-              className={
-                prediction.result === "lost"
-                  ? "text-red-600 dark:text-red-400"
-                  : "text-green-600 dark:text-green-400"
-              }
-            >
-              {isResolved ? "" : "Est. "}
-              {prediction.result === "lost" ? "−" : "+"}
-              {formatVox(payoutDisplay)}
-            </span>
+          {isAmmSell ? (
+            <>
+              <span className="text-muted-foreground">
+                Received:{" "}
+                <span className="text-foreground font-medium">{formatVox(prediction.payout)}</span>
+              </span>
+              {pnl !== 0 && (
+                <span
+                  className={cn(
+                    "font-mono font-medium",
+                    pnl > 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  {pnl > 0 ? "+" : "−"}
+                  {formatVox(Math.abs(pnl))} P&L
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-muted-foreground">
+                Stake:{" "}
+                <span className="text-foreground font-medium">{formatVox(prediction.stakeAmount)}</span>
+              </span>
+              {payoutDisplay > 0 && (
+                <span
+                  className={
+                    prediction.result === "lost"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-green-600 dark:text-green-400"
+                  }
+                >
+                  {isResolved ? "" : "Est. "}
+                  {prediction.result === "lost" ? "−" : "+"}
+                  {formatVox(payoutDisplay)}
+                </span>
+              )}
+            </>
           )}
           <span className="text-muted-foreground ml-auto">
             {openMode && prediction.endAt
@@ -415,7 +439,7 @@ export function MyPredictionCard({
               <Eye className="h-3 w-3" /> Public
             </Badge>
           )}
-          {openMode && projectedPnl !== 0 && (
+          {openMode && projectedPnl !== 0 && !isAmmSell && (
             <Badge
               variant="outline"
               className={cn(

@@ -61,6 +61,9 @@ interface RecentBet {
   createdAt: string;
   stakeAmount: number;
   actionType: "parimutuel" | "buy" | "sell";
+  shareCount: string | null;
+  pricePerShare: string | null;
+  realisedPnl: number | null;
   choiceLabel: string;
   marketId: string;
   marketTitle: string;
@@ -549,7 +552,11 @@ function LiveBetFeedTile() {
                     {bet.displayName}
                   </span>{" "}
                   <span className="text-muted-foreground">
-                    backed <span className="text-foreground">{bet.choiceLabel}</span>
+                    {bet.actionType === "buy"
+                      ? <>bought <span className="text-foreground">{bet.choiceLabel}</span></>
+                      : bet.actionType === "sell"
+                        ? <>sold <span className="text-foreground">{bet.choiceLabel}</span></>
+                        : <>backed <span className="text-foreground">{bet.choiceLabel}</span></>}
                   </span>
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate">
@@ -557,7 +564,11 @@ function LiveBetFeedTile() {
                 </p>
               </div>
               <span className="text-[10px] font-mono text-muted-foreground tabular-nums shrink-0">
-                {formatVox(Number(bet.stakeAmount))}
+                {bet.actionType === "sell"
+                  ? `Received ${formatVox(Math.abs(Number(bet.stakeAmount)))}`
+                  : bet.actionType === "buy"
+                    ? `Spent ${formatVox(Number(bet.stakeAmount))}`
+                    : formatVox(Number(bet.stakeAmount))}
               </span>
             </Link>
           </li>

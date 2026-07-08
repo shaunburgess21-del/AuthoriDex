@@ -40,11 +40,12 @@ interface ActivityItem {
 }
 
 const MARKET_BADGE: Record<string, { label: string; className: string }> = {
-  updown:          { label: "Up/Down", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
-  versus:          { label: "H2H",     className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
-  gainer:          { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  community:       { label: "World",   className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  jackpot_exactly: { label: "Jackpot", className: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400" },
+  updown:    { label: "Up/Down", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  h2h:       { label: "H2H",     className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
+  gainer:    { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  race:      { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  community: { label: "World",   className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  jackpot:   { label: "Jackpot", className: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400" },
 };
 
 export default function TownSquarePage() {
@@ -156,7 +157,6 @@ export default function TownSquarePage() {
                 const actionType = item.actionType ?? "parimutuel";
                 const isAmmBuy = actionType === "buy";
                 const isAmmSell = actionType === "sell";
-                const isJackpot = actionType === "parimutuel";
                 const pricePerShareLabel =
                   item.pricePerShare != null
                     ? formatVoxPrice(item.pricePerShare, 2)
@@ -221,9 +221,6 @@ export default function TownSquarePage() {
                         <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
                       </div>
                       <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                        {isJackpot && (
-                          <span className="text-yellow-600 dark:text-yellow-400 font-medium">Jackpot ticket · </span>
-                        )}
                         {isAmmBuy && shareCountLabel ? (
                           <>
                             bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
