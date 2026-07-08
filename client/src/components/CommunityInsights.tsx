@@ -92,7 +92,7 @@ export function CommunityInsights({
   personId,
   personName,
   compact = false,
-  placeholder = "Share your thoughts on this topic...",
+  placeholder,
   parentExpanded = false,
   onDetail,
   onShare,
@@ -105,6 +105,10 @@ export function CommunityInsights({
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
   const snapDismiss = useContext(SnapDismissContext);
+
+  // Default composer placeholder is person-aware ("Share your thoughts on
+  // Erling Haaland..."); callers like the snap view can still override it.
+  const composerPlaceholder = placeholder ?? `Share your thoughts on ${personName}...`;
 
   // Insight-only metadata cache. Populated synchronously inside `fetchList`
   // every time the query refetches (initial, post-mutation invalidations).
@@ -373,7 +377,7 @@ export function CommunityInsights({
       value={thread.composerBody}
       onChange={thread.setComposerBody}
       onSubmit={thread.submit}
-      placeholder={placeholder}
+      placeholder={composerPlaceholder}
       isPending={thread.isPostPending}
       authorAvatarUrl={profile?.avatarUrl ?? null}
       authorDisplayName={profile?.username || user?.email || ""}
