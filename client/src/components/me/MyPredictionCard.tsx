@@ -105,7 +105,17 @@ function formatCountdown(iso: string): string {
   return `${days}d left`;
 }
 
-function getStatusBadge(status: MyPredictionCardData["result"]) {
+function getStatusBadge(
+  status: MyPredictionCardData["result"],
+  actionType?: MyPredictionCardData["actionType"],
+) {
+  if (actionType === "sell") {
+    return (
+      <Badge className="bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30 gap-1">
+        Sold
+      </Badge>
+    );
+  }
   switch (status) {
     case "pending":
       return (
@@ -235,7 +245,9 @@ export function MyPredictionCard({
 
   // Outcome-coded left border for instant scanability. Semantic, not decorative.
   const outcomeBorderClass =
-    prediction.result === "won"
+    isAmmSell
+      ? "border-l-2 border-l-amber-500/60"
+      : prediction.result === "won"
       ? "border-l-2 border-l-emerald-500/60"
       : prediction.result === "lost"
         ? "border-l-2 border-l-rose-500/60"
@@ -296,7 +308,7 @@ export function MyPredictionCard({
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5 shrink-0 pr-8">
-            {getStatusBadge(prediction.result)}
+            {getStatusBadge(prediction.result, prediction.actionType)}
             {!openMode && (
               <button
                 className="text-muted-foreground hover:text-foreground transition-colors"

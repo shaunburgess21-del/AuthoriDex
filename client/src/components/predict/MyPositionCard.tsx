@@ -564,7 +564,6 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
         const offBy = score != null && current != null ? Math.abs(score - current) : null;
         const direction = score != null && current != null ? Math.sign(score - current) : 0;
         const isClosest = idx === 0 && current != null;
-        const isSell = bet.actionType === "sell";
 
         return (
           <div
@@ -609,9 +608,7 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
               )}
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-              {isSell
-                ? `Received ${formatVox(bet.payoutAmount ?? 0)}`
-                : `${formatVox(bet.stakeAmount)}`} · {formatTimeAgo(bet.placedAt)}
+              {formatVox(bet.stakeAmount)} · {formatTimeAgo(bet.placedAt)}
             </span>
           </div>
         );
