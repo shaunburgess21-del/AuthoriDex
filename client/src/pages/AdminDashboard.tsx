@@ -193,7 +193,6 @@ import {
   type SeedRatingKey,
   type SeedApprovalCounts,
   type Matchup,
-  type CommunityInsight,
   type InsightComment,
   type ScoreBreakdownData,
 } from "@/pages/admin/adminTypes";
@@ -340,7 +339,13 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [moderationSubTab, setModerationSubTabRaw] = useState(() => sessionStorage.getItem("admin_moderation_tab") || "insights");
+  const [moderationSubTab, setModerationSubTabRaw] = useState(() => {
+    const stored = sessionStorage.getItem("admin_moderation_tab");
+    // The "insights" sub-tab was merged into "comments" (community_insights →
+    // comments merge); a stale stored value would select a tab that no longer
+    // exists and render an empty panel.
+    return stored && stored !== "insights" ? stored : "comments";
+  });
   const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
   const [searchQuery, setSearchQuery] = useState("");
   // Toggle the Users tab between the full user list and a filtered
@@ -835,18 +840,11 @@ export default function AdminDashboard() {
     enabled: isAdmin && activeSection === "voting",
   });
 
-  // Fetch insights for moderation
-  const { data: moderationInsights, isLoading: insightsLoading } = useQuery<CommunityInsight[]>({
-    queryKey: ["/api/admin/moderation/insights"],
-    queryFn: async () => {
-      const res = await fetchWithAuth("/api/admin/moderation/insights");
-      if (!res.ok) throw new Error("Failed to fetch insights");
-      return res.json();
-    },
-    enabled: isAdmin && activeSection === "moderation",
-  });
-
   // Fetch comments for moderation
+  // (The legacy /api/admin/moderation/insights endpoint was removed when
+  // community_insights merged into comments. Profile posts now appear in the
+  // comments list with parentType=community_insight, filterable via the
+  // parentType dropdown.)
   // Comment moderation filters — kept in component state, applied to the
   // query key so a change refetches with new server-side filters.
   const [commentParentFilter, setCommentParentFilter] = useState<
@@ -1917,23 +1915,6 @@ export default function AdminDashboard() {
   };
 
   // Moderation mutations
-  const deleteInsightMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetchWithAuth(`/api/admin/moderation/insights/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete insight");
-      return res.json();
-    },
-    onSuccess: () => {
-      toast("Insight Deleted", { description: "Insight removed successfully" });
-      setShowDeleteConfirm(false);
-      setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/insights"] });
-    },
-    onError: (error: any) => {
-      toast.error("Delete Failed", { description: error.message });
-    },
-  });
-
   const deleteCommentMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetchWithAuth(`/api/admin/moderation/comments/${id}`, { method: "DELETE" });
@@ -2652,8 +2633,6 @@ export default function AdminDashboard() {
       deleteCelebrityMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "matchup") {
       deleteMatchupMutation.mutate(deleteTarget.id);
-    } else if (deleteTarget.type === "insight") {
-      deleteInsightMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "comment") {
       deleteCommentMutation.mutate(deleteTarget.id);
     } else if (deleteTarget.type === "poll") {
@@ -4770,69 +4749,10 @@ export default function AdminDashboard() {
 
             <Tabs value={moderationSubTab} onValueChange={setModerationSubTab} className="w-full">
               <TabsList>
-                <TabsTrigger value="insights" data-testid="tab-insights">
-                  Insights
-                </TabsTrigger>
                 <TabsTrigger value="comments" data-testid="tab-comments">
                   Comments
                 </TabsTrigger>
               </TabsList>
-
-              <TabsContent value="insights" className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Community Insights</CardTitle>
-                    <CardDescription>User-generated insights and posts</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {insightsLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : moderationInsights && moderationInsights.length > 0 ? (
-                      <div className="space-y-3" data-testid="insights-list">
-                        {moderationInsights.map((insight) => (
-                          <div
-                            key={insight.id}
-                            className="flex items-start justify-between p-3 rounded-lg border"
-                            data-testid={`insight-row-${insight.id}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm line-clamp-2">{insight.content}</p>
-                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                                <span>User: {insight.userId}</span>
-                                <span>•</span>
-                                <span>{new Date(insight.createdAt).toLocaleString()}</span>
-                                <span>•</span>
-                                <span className="text-emerald-500">+{insight.upvotes}</span>
-                                <span className="text-red-500">-{insight.downvotes}</span>
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive ml-2"
-                              onClick={() => {
-                                setDeleteTarget({ type: "insight", id: insight.id, name: "this insight" });
-                                setShowDeleteConfirm(true);
-                              }}
-                              aria-label="Delete"
-                              data-testid={`button-delete-insight-${insight.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No insights to moderate</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
 
               <TabsContent value="comments" className="mt-4">
                 <Card>
@@ -9438,12 +9358,11 @@ export default function AdminDashboard() {
                 deleteCelebrityMutation.isPending || 
                 deleteMatchupMutation.isPending || 
                 deletePollMutation.isPending ||
-                deleteInsightMutation.isPending || 
                 deleteCommentMutation.isPending
               }
               data-testid="button-confirm-delete"
             >
-              {(deleteCelebrityMutation.isPending || deleteMatchupMutation.isPending || deletePollMutation.isPending || deleteInsightMutation.isPending || deleteCommentMutation.isPending) ? (
+              {(deleteCelebrityMutation.isPending || deleteMatchupMutation.isPending || deletePollMutation.isPending || deleteCommentMutation.isPending) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Deleting...

@@ -6,8 +6,6 @@ import { db } from "../db";
 import {
   comments as unifiedComments,
   commentVotes,
-  communityInsights,
-  insightVotes,
   profiles,
   trackedPeople,
   matchups,
@@ -30,7 +28,6 @@ import {
 } from "../services/voices/ranking";
 import {
   resolveCommentEntities,
-  resolveInsightEntities,
   entityKey,
 } from "../services/voices/entities";
 import { sanitizeMentions, notifyMentionedUsers } from "../services/mentions";
@@ -139,11 +136,13 @@ function parseSurfaces(value: unknown): VoicesSurface[] | null {
   return out.length > 0 ? out : null;
 }
 
-/** Annotate a page of feed items with the current user's upvote state. */
+/** Annotate a page of feed items with the current user's upvote state.
+ *  After the community_insights → comments merge, all feed items (including
+ *  top-level profile posts with source="insight") are comments rows, so all
+ *  upvote state lives in comment_votes. */
 async function enrichUserVotes(items: VoicesFeedItem[], userId: string | null): Promise<void> {
   if (!userId || items.length === 0) return;
-  const commentIds = items.filter((i) => i.source === "comment").map((i) => i.id);
-  const insightIds = items.filter((i) => i.source === "insight").map((i) => i.id);
+  const commentIds = items.map((i) => i.id);
 
   const voted = new Set<string>();
   if (commentIds.length > 0) {
@@ -151,25 +150,11 @@ async function enrichUserVotes(items: VoicesFeedItem[], userId: string | null): 
       .select({ commentId: commentVotes.commentId })
       .from(commentVotes)
       .where(and(eq(commentVotes.userId, userId), inArray(commentVotes.commentId, commentIds)));
-    for (const r of rows) voted.add(`c:${r.commentId}`);
-  }
-  if (insightIds.length > 0) {
-    const rows = await db
-      .select({ insightId: insightVotes.insightId })
-      .from(insightVotes)
-      .where(
-        and(
-          eq(insightVotes.userId, userId),
-          eq(insightVotes.voteType, "up"),
-          inArray(insightVotes.insightId, insightIds),
-        ),
-      );
-    for (const r of rows) voted.add(`i:${r.insightId}`);
+    for (const r of rows) voted.add(r.commentId);
   }
 
   for (const item of items) {
-    const key = item.source === "comment" ? `c:${item.id}` : `i:${item.id}`;
-    item.userVote = voted.has(key) ? "up" : null;
+    item.userVote = voted.has(item.id) ? "up" : null;
   }
 }
 
@@ -315,30 +300,6 @@ async function loadThreadReplies(rootId: string, userId: string | null): Promise
   return collected.map((r) => mapReplyRow(r, userVoted));
 }
 
-/** Direct replies to a community insight (stored as community_insight comments). */
-async function loadInsightReplies(insightId: string, userId: string | null): Promise<ReplyDTO[]> {
-  const rows = await db
-    .select({
-      id: unifiedComments.id,
-      userId: unifiedComments.userId,
-      body: unifiedComments.body,
-      parentCommentId: unifiedComments.parentCommentId,
-      upvotes: unifiedComments.upvotes,
-      downvotes: unifiedComments.downvotes,
-      deletedAt: unifiedComments.deletedAt,
-      createdAt: unifiedComments.createdAt,
-      authorUsername: profiles.username,
-      authorAvatarUrl: profiles.avatarUrl,
-      authorRank: profiles.rank,
-    })
-    .from(unifiedComments)
-    .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
-    .where(and(eq(unifiedComments.parentType, "community_insight"), eq(unifiedComments.parentId, insightId)))
-    .orderBy(asc(unifiedComments.createdAt));
-  const userVoted = await loadCommentUpvotes(rows.map((r) => r.id), userId);
-  return rows.map((r) => mapReplyRow(r, userVoted));
-}
-
 async function loadCommentUpvotes(commentIds: string[], userId: string | null): Promise<Set<string>> {
   const out = new Set<string>();
   if (!userId || commentIds.length === 0) return out;
@@ -350,7 +311,10 @@ async function loadCommentUpvotes(commentIds: string[], userId: string | null): 
   return out;
 }
 
-/** Build a single feed item for a freshly created / fetched comment row. */
+/** Build a single feed item for a freshly created / fetched comment row.
+ *  Source derivation after the community_insights → comments merge:
+ *  top-level profile posts (parentType='community_insight', parentCommentId=null)
+ *  keep source="insight" for backwards compat with the Voices feed client. */
 async function buildCommentFeedItem(
   row: {
     id: string;
@@ -361,6 +325,7 @@ async function buildCommentFeedItem(
     upvotes: number;
     downvotes: number;
     createdAt: Date;
+    parentCommentId?: string | null;
   },
   userId: string | null,
 ): Promise<VoicesFeedItem | null> {
@@ -373,9 +338,11 @@ async function buildCommentFeedItem(
     .where(eq(profiles.id, row.userId))
     .limit(1);
   const replies = await loadThreadReplies(row.id, null);
+  const isTopLevelProfilePost =
+    row.parentType === "community_insight" && (row.parentCommentId ?? null) === null;
   return {
     id: row.id,
-    source: "comment",
+    source: isTopLevelProfilePost ? "insight" : "comment",
     parentType: row.parentType as VoicesFeedItem["parentType"],
     body: row.body,
     author: {
@@ -472,7 +439,11 @@ export function registerVoicesRoutes(app: Express): void {
       const body = mentionResult.body;
       const attachment = parsed.attachment ?? null;
 
-      // ── Person attachment → community insight ───────────────────────────────
+      // ── Person attachment → top-level profile post (community_insight comment)
+      // After the community_insights → comments merge, profile posts are stored
+      // as comments rows with parentType='community_insight', parentId=personId,
+      // parent_comment_id=null. XP / credits / badges / referral fanout stay
+      // identical to the pre-merge insight path (txn types are immutable history).
       if (attachment && attachment.type === "person") {
         const [person] = await db
           .select({ id: trackedPeople.id })
@@ -481,27 +452,29 @@ export function registerVoicesRoutes(app: Express): void {
           .limit(1);
         if (!person) return res.status(404).json({ error: "Person not found" });
 
-        const [newInsight] = await db
-          .insert(communityInsights)
-          .values({ personId: person.id, userId, content: body })
+        const [newComment] = await db
+          .insert(unifiedComments)
+          .values({ parentType: "community_insight", parentId: person.id, parentCommentId: null, userId, body })
           .returning();
 
         try {
           await gamificationService.awardXp(
             userId,
             "post_insight",
-            `insight_${newInsight.id}_${userId}`,
-            { insightId: newInsight.id, personId: person.id },
+            `insight_${newComment.id}_${userId}`,
+            { insightId: newComment.id, personId: person.id },
           );
         } catch (e) {
           console.error("[voices] insight XP failed:", e);
         }
-        await awardInsightCredits(userId, newInsight.id, { personId: person.id });
+        await awardInsightCredits(userId, newComment.id, { personId: person.id });
         await maybeFireReferralCredit(userId);
         await checkAndAwardInsightBadges(userId);
 
-        const entities = await resolveInsightEntities([newInsight.id]);
-        const entity = entities.get(newInsight.id);
+        const entities = await resolveCommentEntities([
+          { parentType: "community_insight", parentId: person.id },
+        ]);
+        const entity = entities.get(entityKey("community_insight", person.id));
         const [author] = await db
           .select({ username: profiles.username, avatarUrl: profiles.avatarUrl, rank: profiles.rank })
           .from(profiles)
@@ -512,16 +485,16 @@ export function registerVoicesRoutes(app: Express): void {
           userMentions: mentionResult.userMentions,
           authorId: userId,
           authorUsername: author?.username ?? null,
-          contentId: newInsight.id,
+          contentId: newComment.id,
           entityType: "community_insight",
-          href: `/person/${person.id}#insight-${newInsight.id}`,
+          href: `/person/${person.id}#insight-${newComment.id}`,
           storedBody: body,
         });
 
         return res.status(201).json({
           item: entity
             ? ({
-                id: newInsight.id,
+                id: newComment.id,
                 source: "insight",
                 parentType: "community_insight",
                 body,
@@ -534,7 +507,7 @@ export function registerVoicesRoutes(app: Express): void {
                 upvotes: 0,
                 downvotes: 0,
                 replyCount: 0,
-                createdAt: newInsight.createdAt.toISOString(),
+                createdAt: newComment.createdAt.toISOString(),
                 entity,
                 badges: { topTake: false, rising: false },
                 score: 0,
@@ -604,8 +577,11 @@ export function registerVoicesRoutes(app: Express): void {
     }
   });
 
-  // Single post + replies for the detail overlay (standalone posts & any
-  // comment/insight referenced by a deep link).
+  // Single post + replies for the detail overlay. After the community_insights
+  // → comments merge, every deep-link target is a comments row — the old
+  // insight fallback branch is gone. Top-level profile posts are comments
+  // with parentType='community_insight', parentCommentId=null; buildCommentFeedItem
+  // derives source="insight" for them so the client renders identically.
   app.get("/api/voices/post/:id", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -616,6 +592,7 @@ export function registerVoicesRoutes(app: Express): void {
           id: unifiedComments.id,
           parentType: unifiedComments.parentType,
           parentId: unifiedComments.parentId,
+          parentCommentId: unifiedComments.parentCommentId,
           body: unifiedComments.body,
           userId: unifiedComments.userId,
           upvotes: unifiedComments.upvotes,
@@ -627,66 +604,15 @@ export function registerVoicesRoutes(app: Express): void {
         .where(eq(unifiedComments.id, id))
         .limit(1);
 
-      if (comment) {
-        const post = await buildCommentFeedItem(comment, userId);
-        if (post) {
-          const upvoted = await loadCommentUpvotes([comment.id], userId);
-          post.userVote = upvoted.has(comment.id) ? "up" : null;
-        }
-        const replies = await loadThreadReplies(comment.id, userId);
-        return res.json({ post, replies });
+      if (!comment) return res.status(404).json({ error: "Post not found" });
+
+      const post = await buildCommentFeedItem(comment, userId);
+      if (post) {
+        const upvoted = await loadCommentUpvotes([comment.id], userId);
+        post.userVote = upvoted.has(comment.id) ? "up" : null;
       }
-
-      const [insight] = await db
-        .select({
-          id: communityInsights.id,
-          personId: communityInsights.personId,
-          userId: communityInsights.userId,
-          content: communityInsights.content,
-          sentimentVote: communityInsights.sentimentVote,
-          deletedAt: communityInsights.deletedAt,
-          createdAt: communityInsights.createdAt,
-        })
-        .from(communityInsights)
-        .where(eq(communityInsights.id, id))
-        .limit(1);
-
-      if (!insight) return res.status(404).json({ error: "Post not found" });
-
-      const entities = await resolveInsightEntities([insight.id]);
-      const entity = entities.get(insight.id) ?? null;
-      const [author] = await db
-        .select({ username: profiles.username, avatarUrl: profiles.avatarUrl, rank: profiles.rank })
-        .from(profiles)
-        .where(eq(profiles.id, insight.userId))
-        .limit(1);
-      const replies = await loadInsightReplies(insight.id, userId);
-
-      return res.json({
-        post: entity
-          ? ({
-              id: insight.id,
-              source: "insight",
-              parentType: "community_insight",
-              body: insight.content,
-              author: {
-                userId: insight.userId,
-                username: author?.username ?? null,
-                avatarUrl: author?.avatarUrl ?? null,
-                rank: author?.rank ?? null,
-              },
-              upvotes: 0,
-              downvotes: 0,
-              replyCount: replies.length,
-              createdAt: insight.createdAt.toISOString(),
-              entity,
-              badges: { topTake: false, rising: false },
-              score: 0,
-              userVote: null,
-            } satisfies VoicesFeedItem)
-          : null,
-        replies,
-      });
+      const replies = await loadThreadReplies(comment.id, userId);
+      return res.json({ post, replies });
     } catch (error) {
       console.error("[voices] post detail error:", error);
       res.status(500).json({ error: "Failed to load post" });

@@ -659,6 +659,20 @@
       "when": 1779031427000,
       "tag": "0063_amm_health_check_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1783460000000,
+      "tag": "0092_insights_merge_phase1_prep",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1783460100000,
+      "tag": "0093_insights_merge_phase2_backfill",
+      "breakpoints": true
     }
   ]
 }

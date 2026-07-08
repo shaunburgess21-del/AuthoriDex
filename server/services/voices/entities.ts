@@ -6,7 +6,6 @@ import {
   opinionPolls,
   predictionMarkets,
   trackedPeople,
-  communityInsights,
   cardRelatedPeople,
 } from "@shared/schema";
 import type { VoicesSurface } from "@shared/constants";
@@ -140,12 +139,17 @@ export async function resolveCommentEntities(
   const trendingPollIds = new Set<string>();
   const opinionPollIds = new Set<string>();
   const openMarketIds = new Set<string>();
+  // After the community_insights → comments merge, parent_id on a
+  // community_insight comment IS the personId — collect them for a batched
+  // tracked_people lookup.
+  const personIds = new Set<string>();
 
   for (const p of parents) {
     if (p.parentType === "matchup") matchupIds.add(p.parentId);
     else if (p.parentType === "trending_poll") trendingPollIds.add(p.parentId);
     else if (p.parentType === "opinion_poll") opinionPollIds.add(p.parentId);
     else if (p.parentType === "open_market") openMarketIds.add(p.parentId);
+    else if (p.parentType === "community_insight") personIds.add(p.parentId);
     else if (p.parentType === "voices_post") {
       result.set(entityKey(p.parentType, p.parentId), {
         surface: "timeline",
@@ -335,47 +339,41 @@ export async function resolveCommentEntities(
     }
   }
 
+  // community_insight comments: parent_id is the personId. Build person entities
+  // directly (mirrors the old resolveInsightEntities shape, but keyed by
+  // (parentType, parentId) so it merges seamlessly with the card entities above).
+  if (personIds.size > 0) {
+    const people = await loadPeople(Array.from(personIds));
+    for (const personId of personIds) {
+      const key = entityKey("community_insight", personId);
+      const person = people.get(personId);
+      result.set(key, {
+        surface: SURFACE_BY_REF.person,
+        refType: "person",
+        refId: personId,
+        title: person?.name ?? "Profile",
+        subtitle: SUBTITLE.person,
+        href: `/person/${personId}`,
+        slug: null,
+        imageUrl: person?.avatar ?? null,
+        category: person?.category ?? null,
+        personIds: [personId],
+      });
+    }
+  }
+
   // Backfill card avatars from the primary person when the card has no image.
   await hydratePersonImages(result);
 
   return result;
 }
 
-/**
- * Resolve person (profile) entities for a batch of community insights.
- * Returns a map keyed by insightId → VoicesEntity.
- */
-export async function resolveInsightEntities(
-  insightIds: string[],
-): Promise<Map<string, VoicesEntity>> {
-  const out = new Map<string, VoicesEntity>();
-  if (insightIds.length === 0) return out;
-
-  const insightRows = await db
-    .select({ id: communityInsights.id, personId: communityInsights.personId })
-    .from(communityInsights)
-    .where(inArray(communityInsights.id, insightIds));
-
-  const personIds = uniq(insightRows.map((r) => r.personId));
-  const people = await loadPeople(personIds);
-
-  for (const r of insightRows) {
-    const person = people.get(r.personId);
-    out.set(r.id, {
-      surface: "profile",
-      refType: "person",
-      refId: r.personId,
-      title: person?.name ?? "Profile",
-      subtitle: SUBTITLE.person,
-      href: `/person/${r.personId}`,
-      slug: null,
-      imageUrl: person?.avatar ?? null,
-      category: person?.category ?? null,
-      personIds: [r.personId],
-    });
-  }
-  return out;
-}
+// ── resolveInsightEntities REMOVED ──────────────────────────────────────
+// After the community_insights → comments merge, person entities for
+// community_insight comments are built inline by resolveCommentEntities
+// above (using parent_id as the personId). The old resolveInsightEntities
+// helper that took insightIds is no longer called anywhere; the merge made
+// it redundant since the personId is now directly on the comment row.
 
 async function loadPeople(
   personIds: string[],

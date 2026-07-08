@@ -305,45 +305,14 @@ export const insertUserFavouriteSchema = createInsertSchema(userFavourites).omit
 export type UserFavourite = typeof userFavourites.$inferSelect;
 export type InsertUserFavourite = z.infer<typeof insertUserFavouriteSchema>;
 
-// Community Insights - user-generated insights/posts about tracked people
-export const communityInsights = pgTable("community_insights", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  // FK added in migration 0013 (NOT VALID → needs VALIDATE after orphan cleanup)
-  personId: varchar("person_id").notNull().references(() => trackedPeople.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(), // Supabase auth user ID — author info resolved live via LEFT JOIN profiles
-  content: text("content").notNull(),
-  sentimentVote: integer("sentiment_vote"), // Optional 1-10 rating from Cast Your Vote widget
-  deletedAt: timestamp("deleted_at"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export const insertCommunityInsightSchema = createInsertSchema(communityInsights).omit({
-  id: true,
-  deletedAt: true,
-  createdAt: true,
-});
-
-export type CommunityInsight = typeof communityInsights.$inferSelect;
-export type InsertCommunityInsight = z.infer<typeof insertCommunityInsightSchema>;
-
-// Insight Votes - tracks upvotes/downvotes on community insights
-export const insightVotes = pgTable("insight_votes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  insightId: varchar("insight_id").notNull().references(() => communityInsights.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull(), // Supabase auth user ID
-  voteType: text("vote_type").notNull(), // 'up' or 'down'
-  votedAt: timestamp("voted_at").notNull().defaultNow(),
-}, (table) => ({
-  uniqueUserInsight: unique().on(table.userId, table.insightId),
-}));
-
-export const insertInsightVoteSchema = createInsertSchema(insightVotes).omit({
-  id: true,
-  votedAt: true,
-});
-
-export type InsightVote = typeof insightVotes.$inferSelect;
-export type InsertInsightVote = z.infer<typeof insertInsightVoteSchema>;
+// ── community_insights + insight_votes REMOVED (Phase 4 of merge) ─────────
+// The community_insights and insight_votes tables were dropped in migration
+// 0094_insights_merge_phase4_cleanup.sql. Top-level profile posts now live in
+// the unified comments table (parentType='community_insight', parentId=
+// <personId>, parentCommentId=null) and likes live in comment_votes. All
+// exports below were removed; any code still referencing them must be updated
+// to query comments / comment_votes with the parentType='community_insight'
+// filter. See migrations 0092-0094 for the full merge sequence.
 
 // Unified Comments - discussion threads across content surfaces
 export const comments = pgTable("comments", {

@@ -1,16 +1,13 @@
-import { and, eq, isNull, isNotNull, inArray, gte, desc, sql, count } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, inArray, gte, desc, count } from "drizzle-orm";
 import { db } from "../../db";
 import {
   comments as unifiedComments,
-  communityInsights,
-  insightVotes,
   profiles,
   userFavourites,
 } from "@shared/schema";
 import { normalizeMarketCategory, type VoicesSurface } from "@shared/constants";
 import {
   resolveCommentEntities,
-  resolveInsightEntities,
   entityKey,
   type VoicesEntity,
 } from "./entities";
@@ -143,9 +140,14 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
     const key = entityKey(r.parentType, r.parentId);
     const entity = entities.get(key);
     if (!entity) continue; // parent deleted / unresolvable — skip silently
+    // Source derivation after the community_insights → comments merge:
+    // top-level profile posts (parentType='community_insight', parentCommentId
+    // =null) keep source="insight" for backwards compat with the Voices feed
+    // client (icon styling, filter tabs). Everything else is source="comment".
+    const isTopLevelProfilePost = r.parentType === "community_insight";
     candidates.push({
       id: r.id,
-      source: "comment",
+      source: isTopLevelProfilePost ? "insight" : "comment",
       parentType: r.parentType as VoicesFeedItem["parentType"],
       entityRefKey: `${entity.refType}:${entity.refId}`,
       body: r.body,
@@ -165,67 +167,13 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
   return candidates;
 }
 
-async function loadInsightCandidates(): Promise<Candidate[]> {
-  const since = new Date(Date.now() - RECENCY_DAYS * 86_400_000);
-
-  const rows = await db
-    .select({
-      id: communityInsights.id,
-      body: communityInsights.content,
-      userId: communityInsights.userId,
-      createdAt: communityInsights.createdAt,
-      authorUsername: profiles.username,
-      authorAvatarUrl: profiles.avatarUrl,
-      authorRank: profiles.rank,
-      upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
-      downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
-    })
-    .from(communityInsights)
-    .leftJoin(insightVotes, eq(insightVotes.insightId, communityInsights.id))
-    .leftJoin(profiles, eq(profiles.id, communityInsights.userId))
-    .where(and(isNull(communityInsights.deletedAt), gte(communityInsights.createdAt, since)))
-    .groupBy(
-      communityInsights.id,
-      communityInsights.content,
-      communityInsights.userId,
-      communityInsights.createdAt,
-      profiles.username,
-      profiles.avatarUrl,
-      profiles.rank,
-    )
-    .orderBy(desc(communityInsights.createdAt))
-    .limit(MAX_CANDIDATES);
-
-  if (rows.length === 0) return [];
-
-  const replyCounts = await loadInsightReplyCounts(rows.map((r) => r.id));
-  const entities = await resolveInsightEntities(rows.map((r) => r.id));
-
-  const candidates: Candidate[] = [];
-  for (const r of rows) {
-    const entity = entities.get(r.id);
-    if (!entity) continue;
-    candidates.push({
-      id: r.id,
-      source: "insight",
-      parentType: "community_insight",
-      entityRefKey: `${entity.refType}:${entity.refId}`,
-      body: r.body,
-      author: {
-        userId: r.userId,
-        username: r.authorUsername,
-        avatarUrl: r.authorAvatarUrl,
-        rank: r.authorRank,
-      },
-      upvotes: r.upvotes ?? 0,
-      downvotes: r.downvotes ?? 0,
-      replyCount: replyCounts.get(r.id) ?? 0,
-      createdAt: r.createdAt,
-      entity,
-    });
-  }
-  return candidates;
-}
+// ── loadInsightCandidates + loadInsightReplyCounts REMOVED ──────────────
+// After the community_insights → comments merge, top-level profile posts are
+// comments rows (parentType='community_insight', parentCommentId=null) and
+// are picked up by loadCommentCandidates above. Reply counts for them flow
+// through loadReplyCounts (replies have parent_comment_id = <topLevelCommentId>).
+// The old separate insight-candidate loader + insight-reply-count loader
+// were deleted along with the community_insights/insight_votes dependencies.
 
 /** Direct-reply counts for a set of top-level comment ids. */
 async function loadReplyCounts(commentIds: string[]): Promise<Map<string, number>> {
@@ -245,25 +193,6 @@ async function loadReplyCounts(commentIds: string[]): Promise<Map<string, number
   for (const r of rows) {
     if (r.parentCommentId) out.set(r.parentCommentId, Number(r.n));
   }
-  return out;
-}
-
-/** Reply counts for community insights (replies live in the comments table). */
-async function loadInsightReplyCounts(insightIds: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (insightIds.length === 0) return out;
-  const rows = await db
-    .select({ parentId: unifiedComments.parentId, n: count() })
-    .from(unifiedComments)
-    .where(
-      and(
-        eq(unifiedComments.parentType, "community_insight"),
-        isNull(unifiedComments.deletedAt),
-        inArray(unifiedComments.parentId, insightIds),
-      ),
-    )
-    .groupBy(unifiedComments.parentId);
-  for (const r of rows) out.set(r.parentId, Number(r.n));
   return out;
 }
 
@@ -344,14 +273,13 @@ function toFeedItem(c: Candidate, score: number, topTake: boolean, rising: boole
  * Returns the full ranked + filtered list; the route layer paginates it.
  */
 export async function rankCandidates(opts: RankOptions): Promise<VoicesFeedItem[]> {
-  const [commentCandidates, insightCandidates, personalization] = await Promise.all([
+  const [commentCandidates, personalization] = await Promise.all([
     loadCommentCandidates(),
-    loadInsightCandidates(),
     loadPersonalization(opts.userId),
   ]);
 
   const now = Date.now();
-  const candidates = [...commentCandidates, ...insightCandidates].filter((c) =>
+  const candidates = commentCandidates.filter((c) =>
     passesFilters(c, opts),
   );
 

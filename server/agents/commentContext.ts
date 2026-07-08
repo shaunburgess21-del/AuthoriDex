@@ -24,7 +24,6 @@ import {
   marketBets,
   votes,
   comments as unifiedComments,
-  communityInsights,
   userVotes,
   profiles,
 } from "@shared/schema";
@@ -72,9 +71,9 @@ interface BaseContext {
 }
 
 export interface ReplyTarget {
-  /** ID of the comment being replied to. Null when the reply target is a
-   *  top-level community_insight (in which case `insightId` is set instead
-   *  and the worker writes a top-level reply with parentCommentId=null). */
+  /** ID of the comment being replied to. The worker writes the reply with
+   *  parentCommentId = this id (for profile posts, the top-level post is
+   *  itself a comments row after the community_insights → comments merge). */
   commentId: string | null;
   authorUsername: string | null;
   body: string;
@@ -86,11 +85,6 @@ export interface ReplyTarget {
    *  started the sub-thread. Passed to the LLM for context only — the agent
    *  is still told to engage with the immediate parent, not the root. */
   threadRoot?: { authorUsername: string | null; body: string } | null;
-  /** Set when the reply target is a top-level community_insight row (not a
-   *  comment). The worker uses this as `parentId` on the new comments row
-   *  and writes `parentCommentId = null` (the reply lands at depth 0 in the
-   *  comments table, anchored to the insight). */
-  insightId?: string | null;
 }
 
 /** Outcome category for one reply-target probe. Counters in the sweep
@@ -462,23 +456,25 @@ export async function fetchOpenMarketContext(
 // ── Person insights (celebrity profile comments) ───────────────────────
 
 /**
- * Recent top-level community insights on a person. Used as the "existing
- * discussion" context for the LLM so the agent doesn't echo what other
- * users (or earlier agents) have already posted. Distinct from
- * `fetchExistingComments` because top-level posts live in
- * `community_insights`, not the unified `comments` table.
+ * Recent top-level profile posts on a person. After the community_insights →
+ * comments merge, these live in unified comments with parentType=
+ * 'community_insight', parentId=<personId>, parentCommentId=null. Used as
+ * the "existing discussion" context for the LLM so the agent doesn't echo
+ * what other users (or earlier agents) have already posted.
  */
 async function fetchExistingInsights(personId: string): Promise<Array<{ body: string }>> {
   const rows = await db
-    .select({ body: communityInsights.content })
-    .from(communityInsights)
+    .select({ body: unifiedComments.body })
+    .from(unifiedComments)
     .where(
       and(
-        eq(communityInsights.personId, personId),
-        isNull(communityInsights.deletedAt),
+        eq(unifiedComments.parentType, "community_insight"),
+        eq(unifiedComments.parentId, personId),
+        isNull(unifiedComments.parentCommentId),
+        isNull(unifiedComments.deletedAt),
       ),
     )
-    .orderBy(desc(communityInsights.createdAt))
+    .orderBy(desc(unifiedComments.createdAt))
     .limit(EXISTING_COMMENT_LIMIT);
   return rows.map((row) => ({ body: row.body }));
 }
@@ -561,16 +557,19 @@ export async function fetchPersonInsightContext(
 }
 
 /**
- * Find a human-authored top-level community_insight on this person that the
- * agent can reply to. Constraints (initial phase, conservative):
- *   - not the agent's own insight
+ * Find a human-authored top-level profile post on this person that the agent
+ * can reply to. After the community_insights → comments merge, top-level
+ * posts are comments rows with parentType='community_insight', parentId=
+ * <personId>, parentCommentId=null. Constraints (initial phase, conservative):
+ *   - not the agent's own post
  *   - not deleted
  *   - posted in the last 7 days
  *   - authored by a non-agent profile (no agent→agent reply chains)
  *   - the agent has not already replied to it
  *
- * Returns the chosen insight as a ReplyTarget with `insightId` set and
- * `commentId = null` (top-level reply to the insight, no comment parent).
+ * Returns the chosen post as a ReplyTarget with `commentId` set to the
+ * top-level comment's id (the worker writes the reply with parentCommentId
+ * = commentId, same as the standard reply path for other surfaces).
  */
 export async function findInsightReplyTarget(
   personId: string,
@@ -580,23 +579,25 @@ export async function findInsightReplyTarget(
 
   const candidates = await db
     .select({
-      id: communityInsights.id,
-      userId: communityInsights.userId,
-      body: communityInsights.content,
-      createdAt: communityInsights.createdAt,
+      id: unifiedComments.id,
+      userId: unifiedComments.userId,
+      body: unifiedComments.body,
+      createdAt: unifiedComments.createdAt,
       authorUsername: profiles.username,
       authorIsAgent: profiles.isAgent,
     })
-    .from(communityInsights)
-    .leftJoin(profiles, eq(communityInsights.userId, profiles.id))
+    .from(unifiedComments)
+    .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
     .where(
       and(
-        eq(communityInsights.personId, personId),
-        isNull(communityInsights.deletedAt),
-        sql`${communityInsights.createdAt} >= ${sevenDaysAgo}`,
+        eq(unifiedComments.parentType, "community_insight"),
+        eq(unifiedComments.parentId, personId),
+        isNull(unifiedComments.parentCommentId),
+        isNull(unifiedComments.deletedAt),
+        sql`${unifiedComments.createdAt} >= ${sevenDaysAgo}`,
       ),
     )
-    .orderBy(desc(communityInsights.createdAt))
+    .orderBy(desc(unifiedComments.createdAt))
     .limit(20);
 
   const humanCandidates = candidates.filter(
@@ -604,25 +605,29 @@ export async function findInsightReplyTarget(
   );
   if (!humanCandidates.length) return null;
 
-  // Filter out insights this agent has already replied to.
+  // Filter out posts this agent has already replied to. After the merge,
+  // replies have parent_comment_id = <topLevelCommentId>, so we check that
+  // instead of parent_id (which is now the personId for all posts/replies).
   const candidateIds = humanCandidates.map((c) => c.id);
   const alreadyReplied = await db
-    .select({ parentId: unifiedComments.parentId })
+    .select({ parentCommentId: unifiedComments.parentCommentId })
     .from(unifiedComments)
     .where(
       and(
         eq(unifiedComments.userId, agentUserId),
         eq(unifiedComments.parentType, "community_insight"),
-        inArray(unifiedComments.parentId, candidateIds),
+        inArray(unifiedComments.parentCommentId, candidateIds),
         isNull(unifiedComments.deletedAt),
       ),
     );
-  const blocked = new Set(alreadyReplied.map((r) => r.parentId));
+  const blocked = new Set(
+    alreadyReplied.map((r) => r.parentCommentId).filter(Boolean) as string[],
+  );
   const eligible = humanCandidates.filter((c) => !blocked.has(c.id));
   if (!eligible.length) return null;
 
   // Recent-biased pick — mirrors findReplyTarget's weighting so fresher
-  // insights are more likely to be the reply target.
+  // posts are more likely to be the reply target.
   const r = Math.random();
   let pickIndex: number;
   if (r < 0.5 && eligible.length >= 1) {
@@ -635,8 +640,7 @@ export async function findInsightReplyTarget(
   const chosen = eligible[Math.min(pickIndex, eligible.length - 1)];
 
   return {
-    commentId: null,
-    insightId: chosen.id,
+    commentId: chosen.id,
     authorUsername: chosen.authorUsername ?? null,
     body: chosen.body,
     threadRoot: null,

@@ -24,14 +24,12 @@
  * etc.).
  */
 
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   badges,
   comments,
   commentVotes,
-  communityInsights,
-  insightVotes,
   marketBets,
   predictionMarkets,
   profiles,
@@ -421,7 +419,10 @@ export async function checkAndAwardPredictionWinBadges(
   }
 }
 
-/** Insight-posted surface: first_insight, thought_leader. */
+/** Insight-posted surface: first_insight, thought_leader.
+ *  After the community_insights → comments merge, "posting an insight" =
+ *  writing a top-level comment with parentType='community_insight',
+ *  parentCommentId=null. Count those. */
 export async function checkAndAwardInsightBadges(
   userId: string,
 ): Promise<void> {
@@ -429,8 +430,14 @@ export async function checkAndAwardInsightBadges(
   try {
     const [{ count: total }] = await db
       .select({ count: sql<number>`count(*)::int` })
-      .from(communityInsights)
-      .where(eq(communityInsights.userId, userId));
+      .from(comments)
+      .where(
+        and(
+          eq(comments.userId, userId),
+          eq(comments.parentType, "community_insight"),
+          isNull(comments.parentCommentId),
+        ),
+      );
 
     const totalNum = Number(total) || 0;
     for (const t of INSIGHT_COUNT_BADGES) {
@@ -449,41 +456,23 @@ export async function checkAndAwardInsightBadges(
 }
 
 /**
- * Upvote-received surface — the AUTHOR of the upvoted insight or
- * comment is checked. Aggregates insight upvotes (from
- * `insight_votes` where vote_type='up') + comment upvotes (from the
- * `comments.upvotes` materialized counter).
+ * Upvote-received surface — the AUTHOR of the upvoted comment is checked.
+ * After the community_insights → comments merge, all upvotes live in the
+ * `comments.upvotes` materialized counter (for both top-level profile posts
+ * and replies, across every surface). Safer than scanning comment_votes
+ * because the column is the source of truth for the UI.
  */
 export async function checkAndAwardUpvoteReceivedBadges(
   authorUserId: string,
 ): Promise<void> {
   if (!authorUserId) return;
   try {
-    // Insight upvotes: count rows where vote_type='up' on insights
-    // that this user authored.
-    const [{ count: insightUpRaw }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(insightVotes)
-      .innerJoin(
-        communityInsights,
-        eq(communityInsights.id, insightVotes.insightId),
-      )
-      .where(
-        and(
-          eq(communityInsights.userId, authorUserId),
-          eq(insightVotes.voteType, "up"),
-        ),
-      );
-
-    // Comment upvotes: sum the materialized `upvotes` column on every
-    // comment authored by this user. Safer than scanning comment_votes
-    // because the column is the source of truth for the UI.
     const [{ total: commentUpRaw }] = await db
       .select({ total: sql<number>`coalesce(sum(${comments.upvotes}), 0)::int` })
       .from(comments)
       .where(eq(comments.userId, authorUserId));
 
-    const total = (Number(insightUpRaw) || 0) + (Number(commentUpRaw) || 0);
+    const total = Number(commentUpRaw) || 0;
     for (const t of UPVOTE_RECEIVED_BADGES) {
       if (total >= t.threshold) {
         await badgeService.awardBadge(authorUserId, t.key, undefined, {

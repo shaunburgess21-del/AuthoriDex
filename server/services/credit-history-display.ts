@@ -8,7 +8,6 @@
 import { db } from "../db";
 import {
   comments,
-  communityInsights,
   inductionCandidates,
   marketEntries,
   matchups,
@@ -18,7 +17,7 @@ import {
   trendingPolls,
   type CreditLedger,
 } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { labelForTxnType } from "@shared/credit-config";
 import { getRecentActivityMarketPath } from "@shared/lib/market-paths";
 import {
@@ -190,14 +189,17 @@ export async function enrichCreditHistoryRows(
     communityInsightIds.size > 0
       ? db
           .select({
-            id: communityInsights.id,
-            personId: communityInsights.personId,
-            content: communityInsights.content,
+            id: comments.id,
+            personId: comments.parentId,
+            content: comments.body,
             personName: trackedPeople.name,
           })
-          .from(communityInsights)
-          .innerJoin(trackedPeople, eq(communityInsights.personId, trackedPeople.id))
-          .where(inArray(communityInsights.id, [...communityInsightIds]))
+          .from(comments)
+          .innerJoin(trackedPeople, eq(comments.parentId, trackedPeople.id))
+          .where(and(
+            inArray(comments.id, [...communityInsightIds]),
+            eq(comments.parentType, "community_insight"),
+          ))
       : Promise.resolve([]),
     commentIds.size > 0
       ? db

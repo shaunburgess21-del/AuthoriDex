@@ -91,17 +91,22 @@ function useInsightCommentsAdapter({
   return useMemo<CommentAdapter>(() => ({
     queryKey: ["/api/comments", "community_insight", insightId] as const,
     fetchList: async () => {
+      // After the community_insights → comments merge, replies to a top-level
+      // profile post have parent_comment_id = <topLevelCommentId> and
+      // parent_id = <personId>. Query by parentCommentId to fetch the thread.
       // Server defaults to top sort; useCommentThread re-sorts this 100-row
       // page in-memory when the UI switches sort modes.
-      const res = await apiRequest("GET", `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(insightId)}&limit=100`);
+      const res = await apiRequest("GET", `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(personId)}&parentCommentId=${encodeURIComponent(insightId)}&limit=100`);
       const raw = (await res.json()) as InsightCommentResponse[];
       return raw.map(toCommentItem);
     },
     postComment: async ({ body, parentId }) => {
+      // parentId here is the parent COMMENT id (the post being replied to, or
+      // a reply being nested-replied to). The route's parentId is the personId.
       const res = await apiRequest("POST", "/api/comments", {
         parentType: "community_insight",
-        parentId: insightId,
-        parentCommentId: parentId,
+        parentId: personId,
+        parentCommentId: parentId ?? insightId,
         body,
       });
       const raw = (await res.json()) as InsightCommentResponse;
@@ -130,6 +135,9 @@ function useInsightCommentsAdapter({
       onDeleteSuccess();
     },
     supportsReplies: true,
+    // Invalidate the main profile view's insights query so it refreshes reply
+    // counts. The key shape is kept as /api/community-insights/${personId} for
+    // cache continuity with the CommunityInsights component.
     invalidateOnMutate: [[`/api/community-insights/${personId}`]],
   }), [insightId, personId, onXp, onDeleteSuccess]);
 }

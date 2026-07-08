@@ -90,9 +90,11 @@ function InsightOverlay({ item, onClose }: { item: VoicesFeedItem; onClose: () =
     parentVoteLabel: null,
   };
 
+  // After the community_insights → comments merge, profile posts are comments
+  // rows — vote and delete go through the standard /api/comments endpoints.
   const voteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/community-insights/${item.id}/vote`, { voteType: "up" });
+      const res = await apiRequest("POST", `/api/comments/${item.id}/vote`, { voteType: "up" });
       return res.json();
     },
     onSuccess: () => {
@@ -103,7 +105,7 @@ function InsightOverlay({ item, onClose }: { item: VoicesFeedItem; onClose: () =
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/community-insights/${item.id}`);
+      const res = await apiRequest("DELETE", `/api/comments/${item.id}`);
       return res.json();
     },
     onSuccess: () => {

@@ -11,19 +11,24 @@ export interface MostDiscussedRow {
 }
 
 export async function loadMostDiscussed(): Promise<{ rows: MostDiscussedRow[] }> {
+  // After the community_insights → comments merge, "most discussed" counts
+  // top-level profile posts (comments with parent_type='community_insight',
+  // parent_comment_id=null) per person in the last 7 days.
   const result = await db.execute(sql`
     SELECT
-      ci.person_id AS id,
+      c.parent_id AS id,
       COUNT(*)::int AS insight_count,
       tp.name,
       tp.avatar,
       tp.category,
       tp.rank
-    FROM community_insights ci
-    INNER JOIN trending_people tp ON tp.id = ci.person_id
-    WHERE ci.deleted_at IS NULL
-      AND ci.created_at > NOW() - INTERVAL '7 days'
-    GROUP BY ci.person_id, tp.name, tp.avatar, tp.category, tp.rank
+    FROM comments c
+    INNER JOIN trending_people tp ON tp.id = c.parent_id
+    WHERE c.parent_type = 'community_insight'
+      AND c.parent_comment_id IS NULL
+      AND c.deleted_at IS NULL
+      AND c.created_at > NOW() - INTERVAL '7 days'
+    GROUP BY c.parent_id, tp.name, tp.avatar, tp.category, tp.rank
     ORDER BY insight_count DESC
     LIMIT 10
   `);

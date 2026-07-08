@@ -128,10 +128,10 @@ export default function VoicesPage() {
         };
       });
 
-      const endpoint =
-        item.source === "insight"
-          ? `/api/community-insights/${item.id}/vote`
-          : `/api/comments/${item.id}/vote`;
+      // After the community_insights → comments merge, all feed items (including
+      // top-level profile posts with source="insight") are comments rows — vote
+      // goes through the standard /api/comments endpoint.
+      const endpoint = `/api/comments/${item.id}/vote`;
       apiRequest("POST", endpoint, { voteType: "up" }).catch(() => {
         // Revert on failure.
         queryClient.setQueryData<InfiniteData<VoicesFeedResponse>>(key, (prev) => {

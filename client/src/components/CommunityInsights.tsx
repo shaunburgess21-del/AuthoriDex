@@ -150,22 +150,27 @@ export function CommunityInsights({
     },
     fetchUserVotes: async () => fetchCommunityInsightUserVotes(personId),
     postComment: async ({ body }) => {
-      const res = await apiRequest("POST", "/api/community-insights", {
-        personId,
-        content: body,
+      // After the community_insights → comments merge, top-level profile posts
+      // are written to /api/comments with parentType='community_insight',
+      // parentId=<personId>, parentCommentId=null.
+      const res = await apiRequest("POST", "/api/comments", {
+        parentType: "community_insight",
+        parentId: personId,
+        parentCommentId: null,
+        body,
       });
       return res.json();
     },
     voteComment: async ({ commentId, voteType }) => {
       const res = await apiRequest(
         "POST",
-        `/api/community-insights/${commentId}/vote`,
+        `/api/comments/${commentId}/vote`,
         { voteType },
       );
       return res.json();
     },
     deleteComment: async ({ commentId }) => {
-      const res = await apiRequest("DELETE", `/api/community-insights/${commentId}`);
+      const res = await apiRequest("DELETE", `/api/comments/${commentId}`);
       return res.json();
     },
     onPostSuccess: (data: unknown) => {
@@ -327,6 +332,7 @@ export function CommunityInsights({
                 />
                 {replyCount > 0 && insightMeta && (
                   <InsightReplies
+                    personId={personId}
                     insight={insightMeta}
                     onOpenOverlay={() => setSelectedInsightId(root.id)}
                     onOpenActions={(replyComment) => setDrawerComment(replyComment)}
@@ -694,23 +700,27 @@ function SignInToDiscuss({ onLogin }: { onLogin: () => void }) {
 // the main view refreshes automatically after the modal posts.
 
 interface InsightRepliesProps {
+  personId: string;
   insight: CommunityInsight;
   onOpenOverlay: () => void;
   onOpenActions: (comment: CommentItem) => void;
 }
 
-function InsightReplies({ insight, onOpenOverlay, onOpenActions }: InsightRepliesProps) {
+function InsightReplies({ personId, insight, onOpenOverlay, onOpenActions }: InsightRepliesProps) {
   const { user, profile } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
 
   const adapter = useMemo<CommentAdapter>(() => ({
     queryKey: insightRepliesQueryKey(insight.id),
-    fetchList: async () => fetchInsightReplies(insight.id),
+    fetchList: async () => fetchInsightReplies(personId, insight.id),
     postComment: async ({ body, parentId }) => {
+      // After the merge, replies to a top-level profile post use
+      // parentId=<personId> (the person) and parentCommentId=<topLevelCommentId>
+      // (the post being replied to).
       const res = await apiRequest("POST", "/api/comments", {
         parentType: "community_insight",
-        parentId: insight.id,
-        parentCommentId: parentId,
+        parentId: personId,
+        parentCommentId: parentId ?? insight.id,
         body,
       });
       const raw = (await res.json()) as InsightCommentResponse;

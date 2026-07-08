@@ -19,7 +19,7 @@ import {
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, communityInsights, insightVotes, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, insertCommunityInsightSchema, insertInsightVoteSchema, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -434,13 +434,16 @@ async function resolveUnifiedCommentParent(input: {
   }
 
   if (input.parentType === "community_insight") {
+    // After the community_insights → comments merge, parentId is the personId
+    // directly (top-level posts and replies both anchor to the person, with
+    // parent_comment_id distinguishing them). Validate the person exists.
     if (!parentId) return null;
-    const [insight] = await db
-      .select({ id: communityInsights.id, deletedAt: communityInsights.deletedAt })
-      .from(communityInsights)
-      .where(eq(communityInsights.id, parentId))
+    const [person] = await db
+      .select({ id: trackedPeople.id })
+      .from(trackedPeople)
+      .where(eq(trackedPeople.id, parentId))
       .limit(1);
-    return insight?.id ?? null;
+    return person?.id ?? null;
   }
 
   if (!parentSlug) return null;
@@ -512,13 +515,8 @@ async function resolveUnifiedCommentHref(parentType: CommentParentType, parentId
       return "/voices";
     }
     if (parentType === "community_insight") {
-      // Insights live on the person detail page; we need the personId.
-      const [row] = await db
-        .select({ personId: communityInsights.personId })
-        .from(communityInsights)
-        .where(eq(communityInsights.id, parentId))
-        .limit(1);
-      return row?.personId ? `/person/${row.personId}` : "/me";
+      // After the merge, parentId IS the personId — no DB lookup needed.
+      return `/person/${parentId}`;
     }
     if (parentType === "matchup") {
       const [row] = await db
@@ -643,13 +641,7 @@ async function getCommentParentVoteLabelMap(input: {
   }
 
   if (input.parentType === "community_insight") {
-    const [insight] = await db
-      .select({ personId: communityInsights.personId })
-      .from(communityInsights)
-      .where(eq(communityInsights.id, input.parentId))
-      .limit(1);
-    if (!insight) return labelByCommentId;
-
+    // After the merge, parentId IS the personId — no insight lookup needed.
     const parentVotes = await db
       .select({
         userId: userVotes.userId,
@@ -657,7 +649,7 @@ async function getCommentParentVoteLabelMap(input: {
       })
       .from(userVotes)
       .where(and(
-        eq(userVotes.personId, insight.personId),
+        eq(userVotes.personId, input.parentId),
         inArray(userVotes.userId, userIds),
       ));
     applyLabelsByUserId(new Map(parentVotes.map(vote => [
@@ -780,60 +772,10 @@ async function getCommentParentVoteLabelMap(input: {
   return labelByCommentId;
 }
 
-async function getInsightParentVoteLabelMap(input: {
-  personId: string;
-  insights: Array<{ id: string; userId: string; deletedAt: Date | null }>;
-}): Promise<Map<string, ParentVoteLabel>> {
-  const liveInsights = input.insights.filter(insight => !insight.deletedAt);
-  const userIds = uniqueStrings(liveInsights.map(insight => insight.userId));
-  const labelByInsightId = new Map<string, ParentVoteLabel>();
-  if (liveInsights.length === 0 || userIds.length === 0) return labelByInsightId;
-
-  const parentVotes = await db
-    .select({
-      userId: userVotes.userId,
-      rating: userVotes.rating,
-    })
-    .from(userVotes)
-    .where(and(
-      eq(userVotes.personId, input.personId),
-      inArray(userVotes.userId, userIds),
-    ));
-  const labelByUserId = new Map(parentVotes.map(vote => [
-    vote.userId,
-    { type: "approval_rating", rating: vote.rating } satisfies ParentVoteLabel,
-  ]));
-
-  for (const insight of liveInsights) {
-    labelByInsightId.set(insight.id, labelByUserId.get(insight.userId) ?? null);
-  }
-
-  return labelByInsightId;
-}
-
-/**
- * Batch-load reply counts for community insights. Replies live in the unified
- * comments table with parentType='community_insight' and parentId=<insightId>.
- * Returns a Map keyed by insight id. Used by the profile discussion list so
- * the main view can show a "N replies" indicator without fetching full threads.
- */
-async function getInsightReplyCounts(insightIds: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (insightIds.length === 0) return out;
-  const rows = await db
-    .select({ parentId: unifiedComments.parentId, n: count() })
-    .from(unifiedComments)
-    .where(
-      and(
-        eq(unifiedComments.parentType, "community_insight"),
-        isNull(unifiedComments.deletedAt),
-        inArray(unifiedComments.parentId, insightIds),
-      ),
-    )
-    .groupBy(unifiedComments.parentId);
-  for (const r of rows) out.set(r.parentId, Number(r.n));
-  return out;
-}
+// ── getInsightParentVoteLabelMap + getInsightReplyCounts REMOVED ────────
+// These helpers were dead code after the community_insights → comments merge
+// (their single caller, GET /api/community-insights/:personId, was deleted in
+// Phase 3). Removed in Phase 4 along with the community_insights table drop.
 
 function toUnifiedCommentItem(row: {
   id: string;
@@ -845,6 +787,8 @@ function toUnifiedCommentItem(row: {
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Optional reply count (returned by GET /api/comments for top-level posts). */
+  replyCount?: number;
 } & CommentAuthorJoin, userVote: CommentVoteState = null, parentVoteLabel: ParentVoteLabel = null) {
   const { authorId, authorUsername, authorAvatarUrl, authorRank, ...comment } = row;
   const isDeleted = Boolean(comment.deletedAt);
@@ -3985,445 +3929,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get community insights for a person with vote counts
-  app.get("/api/community-insights/:personId", async (req, res) => {
-    try {
-      const { personId } = req.params;
-
-      // Author info is resolved live via LEFT JOIN profiles. Missing/deleted
-      // profiles fall through formatCommentAuthor() to "[deleted user]".
-      const insights = await db
-        .select({
-          id: communityInsights.id,
-          personId: communityInsights.personId,
-          userId: communityInsights.userId,
-          content: communityInsights.content,
-          sentimentVote: communityInsights.sentimentVote,
-          deletedAt: communityInsights.deletedAt,
-          createdAt: communityInsights.createdAt,
-          upvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER)`,
-          downvotes: sql<number>`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`,
-          ...commentAuthorSelect,
-        })
-        .from(communityInsights)
-        .leftJoin(insightVotes, eq(insightVotes.insightId, communityInsights.id))
-        .leftJoin(profiles, eq(profiles.id, communityInsights.userId))
-        .where(and(
-          eq(communityInsights.personId, personId),
-          isNull(communityInsights.deletedAt),
-        ))
-        .groupBy(
-          communityInsights.id,
-          communityInsights.personId,
-          communityInsights.userId,
-          communityInsights.content,
-          communityInsights.sentimentVote,
-          communityInsights.deletedAt,
-          communityInsights.createdAt,
-          profiles.id,
-          profiles.username,
-          profiles.avatarUrl,
-          profiles.rank,
-        )
-        .orderBy(desc(sql`CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'up' THEN 1 END) AS INTEGER) - CAST(COUNT(CASE WHEN ${insightVotes.voteType} = 'down' THEN 1 END) AS INTEGER)`));
-
-      const parentVoteLabelMap = await getInsightParentVoteLabelMap({
-        personId,
-        insights,
-      });
-
-      const replyCountMap = await getInsightReplyCounts(insights.map((i) => i.id));
-
-      res.json(insights.map(({ authorId, authorUsername, authorAvatarUrl, authorRank, ...insight }) => {
-        const isDeleted = Boolean(insight.deletedAt);
-        return {
-          ...insight,
-          content: isDeleted ? "" : insight.content,
-          replyCount: replyCountMap.get(insight.id) ?? 0,
-          ...(isDeleted
-            ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null }
-            : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl, authorRank })),
-          parentVoteLabel: isDeleted ? null : parentVoteLabelMap.get(insight.id) ?? null,
-        };
-      }));
-    } catch (error) {
-      console.error("Error fetching community insights:", error);
-      res.status(500).json({ error: "Failed to fetch community insights" });
-    }
-  });
-
-  // Create a new community insight (protected route)
-  app.post("/api/community-insights", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      // Defense in depth: client must not supply author identity. We resolve it
-      // server-side from the authenticated profile and attach it to the response.
-      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "username")) {
-        return res.status(400).json({ error: "Username is resolved from the authenticated profile" });
-      }
-
-      // Shared insert schema (userId comes from auth, not the body) with
-      // route-level tightening: UUID personId, bounded non-empty content,
-      // integer 1-10 sentiment.
-      const insightBodySchema = insertCommunityInsightSchema
-        .omit({ userId: true })
-        .extend({
-          personId: z.string().uuid(),
-          content: z.string().min(1, "Missing required fields: personId, content").max(2500, "Content exceeds maximum length of 2500 characters"),
-          sentimentVote: z.number().int().min(1, "Sentiment vote must be between 1 and 10").max(10, "Sentiment vote must be between 1 and 10").nullish(),
-        });
-      const insightParsed = insightBodySchema.safeParse(req.body ?? {});
-      if (!insightParsed.success) {
-        const first = insightParsed.error.issues[0];
-        return res.status(400).json({ error: first?.message || "Invalid insight body" });
-      }
-      const { personId, content, sentimentVote } = insightParsed.data;
-
-      const mentionResult = await sanitizeMentions(content);
-      if (mentionResult.error) {
-        return res.status(400).json({ error: mentionResult.error });
-      }
-      const storedContent = mentionResult.body;
-
-      const [newInsight] = await db
-        .insert(communityInsights)
-        .values({
-          personId,
-          userId: req.userId!,
-          content: storedContent,
-          sentimentVote: sentimentVote || null,
-        })
-        .returning();
-
-      let xpResult;
-      try {
-        xpResult = await gamificationService.awardXp(
-          req.userId!, 'post_insight',
-          `insight_${newInsight.id}_${req.userId}`,
-          { insightId: newInsight.id, personId }
-        );
-      } catch (e) { console.error("XP award failed:", e); }
-      await awardInsightCredits(req.userId!, newInsight.id, { personId });
-      await maybeFireReferralCredit(req.userId!);
-      await checkAndAwardInsightBadges(req.userId!);
-
-      const [profile] = await db
-        .select(commentAuthorSelect)
-        .from(profiles)
-        .where(eq(profiles.id, req.userId!))
-        .limit(1);
-
-      if (mentionResult.userMentions.length > 0) {
-        try {
-          await notifyMentionedUsers({
-            userMentions: mentionResult.userMentions,
-            authorId: req.userId!,
-            authorUsername: profile?.authorUsername ?? null,
-            contentId: newInsight.id,
-            entityType: "community_insight",
-            href: `/person/${personId}#insight-${newInsight.id}`,
-            snippet: mentionsToPlainText(storedContent).trim().slice(0, 140),
-          });
-        } catch (err) {
-          console.error("[mentions] insight fanout failed:", err);
-        }
-      }
-
-      res.json({
-        ...newInsight,
-        deletedAt: newInsight.deletedAt,
-        ...formatCommentAuthor(profile ?? {
-          authorId: null,
-          authorUsername: null,
-          authorAvatarUrl: null,
-          authorRank: null,
-        }),
-        upvotes: 0,
-        downvotes: 0,
-        xp: xpResult ?? null,
-      });
-    } catch (error: any) {
-      console.error("Error creating community insight:", error);
-      res.status(400).json({ error: "Failed to create insight" });
-    }
-  });
-
-  // Soft-delete a community insight owned by the authenticated user.
-  app.delete("/api/community-insights/:id", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const { id } = req.params;
-      const userId = req.userId!;
-
-      const [insight] = await db
-        .select({
-          id: communityInsights.id,
-          userId: communityInsights.userId,
-          deletedAt: communityInsights.deletedAt,
-        })
-        .from(communityInsights)
-        .where(eq(communityInsights.id, id))
-        .limit(1);
-      if (!insight) return res.status(404).json({ error: "Insight not found" });
-      if (insight.userId !== userId) return res.status(403).json({ error: "Forbidden" });
-      if (insight.deletedAt) return res.json({ success: true, deletedAt: insight.deletedAt });
-
-      const deletedAt = new Date();
-      const [updated] = await db
-        .update(communityInsights)
-        .set({ deletedAt })
-        .where(and(
-          eq(communityInsights.id, id),
-          eq(communityInsights.userId, userId),
-        ))
-        .returning({ deletedAt: communityInsights.deletedAt });
-
-      res.json({ success: true, deletedAt: updated?.deletedAt ?? deletedAt });
-    } catch (error: any) {
-      console.error("Error deleting community insight:", error);
-      res.status(500).json({ error: "Failed to delete insight" });
-    }
-  });
-
-  // Vote on a community insight (protected route)
-  app.post("/api/community-insights/:id/vote", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      if (!checkVoteRateLimit(req.userId!)) {
-        return res.status(429).json({ error: "Too many votes. Please slow down." });
-      }
-      const { id } = req.params;
-      const { voteType } = req.body;
-
-      if (voteType === "down") {
-        return res.status(400).json({ error: "Downvotes are disabled" });
-      }
-      if (!voteType || voteType !== "up") {
-        return res.status(400).json({ error: "Invalid vote type. Must be 'up'" });
-      }
-
-      const userId = req.userId!; // Verified user ID from auth middleware
-
-      const [insight] = await db
-        .select({
-          id: communityInsights.id,
-          deletedAt: communityInsights.deletedAt,
-          authorId: communityInsights.userId,
-          content: communityInsights.content,
-        })
-        .from(communityInsights)
-        .where(eq(communityInsights.id, id))
-        .limit(1);
-      if (!insight) return res.status(404).json({ error: "Insight not found" });
-      if (insight.deletedAt) return res.status(410).json({ error: "Insight has been deleted" });
-
-      // Check if user already voted on this insight
-      const existingVote = await db
-        .select()
-        .from(insightVotes)
-        .where(and(
-          eq(insightVotes.insightId, id),
-          eq(insightVotes.userId, userId)
-        ))
-        .limit(1);
-
-      let isNewVote = false;
-      if (existingVote.length > 0) {
-        const previousVoteType = existingVote[0]?.voteType ?? null;
-        if (previousVoteType === voteType) {
-          // Toggle off: repeat tap on the same vote removes it. Mirrors the
-          // unified comment vote endpoint so the UI's optimistic toggle and the
-          // server agree (no highlight flicker on second tap). Counts are
-          // derived via COUNT over insight_votes, so no counter to maintain.
-          await db
-            .delete(insightVotes)
-            .where(and(
-              eq(insightVotes.insightId, id),
-              eq(insightVotes.userId, userId)
-            ));
-          await appendVoteAction(db, {
-            userId,
-            voteType: "insight_vote",
-            targetType: "community_insight",
-            targetId: id,
-            actionKind: "remove",
-            prevValue: previousVoteType,
-            source: "community-insight-vote",
-          });
-          return res.json({ success: true, vote: null, userVote: null, xp: null });
-        }
-        await db
-          .update(insightVotes)
-          .set({ voteType })
-          .where(and(
-            eq(insightVotes.insightId, id),
-            eq(insightVotes.userId, userId)
-          ));
-        await appendVoteAction(db, {
-          userId,
-          voteType: "insight_vote",
-          targetType: "community_insight",
-          targetId: id,
-          actionKind: "update",
-          prevValue: previousVoteType,
-          nextValue: voteType,
-          source: "community-insight-vote",
-        });
-      } else {
-        isNewVote = true;
-        await db
-          .insert(insightVotes)
-          .values({
-            insightId: id,
-            userId,
-            voteType,
-          });
-        await appendVoteAction(db, {
-          userId,
-          voteType: "insight_vote",
-          targetType: "community_insight",
-          targetId: id,
-          actionKind: "create",
-          nextValue: voteType,
-          source: "community-insight-vote",
-        });
-      }
-
-      let xpResult;
-      if (isNewVote) {
-        try {
-          xpResult = await gamificationService.awardXp(
-            userId, "upvote_insight",
-            `insight_vote_${id}_${userId}`,
-            { insightId: id, voteType }
-          );
-        } catch (e) { console.error("XP award failed:", e); }
-
-        // Author bounty: pay the insight author for receiving a fresh
-        // upvote, capped per author per day. Self-upvotes are
-        // disallowed by design (cannot earn from upvoting your own
-        // content) and we also no-op when the author row is missing
-        // (e.g. legacy orphaned insights with no profile).
-        if (insight.authorId && insight.authorId !== userId) {
-          try {
-            await gamificationService.awardXp(
-              insight.authorId, "insight_upvoted",
-              `insight_upvoted_${id}_${insight.authorId}_${userId}`,
-              { insightId: id, voterId: userId, source: "community_insight" },
-            );
-          } catch (e) { console.error("Author upvote XP award failed:", e); }
-          await checkAndAwardUpvoteReceivedBadges(insight.authorId);
-
-          // Engagement fanout for insight likes. Counts are derived via
-          // COUNT (no denormalized counter), so we read the post-insert
-          // upvote total and treat (total - 1) as the previous value to
-          // detect threshold crossings [1, 5, 10, 25, 100]. The first
-          // like is an actor-attributed "X liked your post" hit; 5+ are
-          // milestones. All rows share one groupKey per insight so the
-          // bell collapses them. Self-likes are already excluded above.
-          try {
-            const [upvoteRow] = await db
-              .select({ count: sql<number>`CAST(COUNT(*) AS INTEGER)` })
-              .from(insightVotes)
-              .where(and(eq(insightVotes.insightId, id), eq(insightVotes.voteType, "up")));
-            const newUpvotes = upvoteRow?.count ?? 1;
-            const previousUpvotes = newUpvotes - 1;
-            const INSIGHT_UPVOTE_MILESTONES = [1, 5, 10, 25, 100] as const;
-            const crossed = INSIGHT_UPVOTE_MILESTONES.find(
-              (m) => previousUpvotes < m && newUpvotes >= m,
-            );
-            if (crossed) {
-              const baseHref = await resolveUnifiedCommentHref("community_insight", id);
-              const href = `${baseHref}#insight-${id}`;
-              const engagementGroupKey = `insight-engagement:${id}`;
-              const snippet = insight.content?.trim().slice(0, 140);
-              if (crossed === 1) {
-                const [voter] = await db
-                  .select(commentAuthorSelect)
-                  .from(profiles)
-                  .where(eq(profiles.id, userId))
-                  .limit(1);
-                const voterName = voter?.authorUsername ?? "Someone";
-                await createNotification({
-                  userId: insight.authorId,
-                  kind: "comment_like",
-                  actorUserId: userId,
-                  title: `${voterName} liked your post`,
-                  body: snippet || undefined,
-                  href,
-                  entityType: "community_insight",
-                  entityId: id,
-                  metadata: { upvotes: newUpvotes },
-                  groupKey: engagementGroupKey,
-                  idempotencyKey: `insight_like:${id}`,
-                });
-              } else {
-                await createNotification({
-                  userId: insight.authorId,
-                  kind: "comment_upvote_milestone",
-                  title: `Your post hit ${crossed} likes`,
-                  body: snippet || undefined,
-                  href,
-                  entityType: "community_insight",
-                  entityId: id,
-                  metadata: { milestone: crossed, upvotes: newUpvotes },
-                  groupKey: engagementGroupKey,
-                  idempotencyKey: `insight_upvote_milestone:${id}:${crossed}`,
-                });
-              }
-            }
-          } catch (err) {
-            console.error("[notifications] insight engagement fanout failed:", err);
-          }
-        }
-      }
-
-      res.json({ success: true, xp: xpResult ?? null });
-    } catch (error: any) {
-      console.error("Error voting on insight:", error);
-      res.status(500).json({ error: "Failed to vote" });
-    }
-  });
-
-  // Get user's vote status for insights (protected route)
-  app.get("/api/community-insights/:personId/votes", requireAuth, async (req: AuthRequest, res) => {
-    try {
-      const { personId } = req.params;
-      const userId = req.userId!; // Verified user ID from auth middleware
-      
-      // Get all insights for this person
-      const personInsights = await db
-        .select({ id: communityInsights.id, deletedAt: communityInsights.deletedAt })
-        .from(communityInsights)
-        .where(and(
-          eq(communityInsights.personId, personId),
-          isNull(communityInsights.deletedAt),
-        ));
-
-      const insightIds = personInsights.map(i => i.id);
-
-      if (insightIds.length === 0) {
-        return res.json({});
-      }
-
-      // Get user's votes for these insights
-      const votes = await db
-        .select()
-        .from(insightVotes)
-        .where(and(
-          eq(insightVotes.userId, userId),
-          inArray(insightVotes.insightId, insightIds)
-        ));
-
-      // Convert to map: insightId -> voteType
-      const voteMap = votes.reduce((acc, vote) => {
-        acc[vote.insightId] = vote.voteType;
-        return acc;
-      }, {} as Record<string, string>);
-
-      res.json(voteMap);
-    } catch (error) {
-      console.error("Error fetching user votes:", error);
-      res.status(500).json({ error: "Failed to fetch user votes" });
-    }
-  });
+  // ===== COMMUNITY INSIGHTS ROUTES REMOVED (Phase 3 of insights → comments merge) =====
+  // The 5 dedicated /api/community-insights* routes were deleted when top-level
+  // profile posts merged into the unified comments table. Clients now use:
+  //   GET    /api/comments?parentType=community_insight&parentId=<personId>&topLevelOnly=true
+  //   POST   /api/comments                                 (parentType=community_insight, parentId=personId)
+  //   DELETE /api/comments/:id
+  //   POST   /api/comments/:id/vote
+  //   GET    /api/comments?parentType=community_insight&parentId=<personId>  (user votes via comment_votes)
+  // The /api/admin/moderation/insights routes were also removed — profile posts
+  // now appear in /api/admin/moderation/comments with parentType=community_insight.
 
   // ===== OVERRATED/UNDERRATED SENTIMENT VOTES API =====
   
@@ -5949,6 +5464,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
       const paginated = isCommentsPaginatedQueryFlag(req.query.paginated);
       const cursorDate = cursor && !paginated ? new Date(cursor) : null;
+      // topLevelOnly: filter to top-level posts only (parent_comment_id IS NULL).
+      // Used by the profile discussion surface to list a person's top-level posts.
+      const topLevelOnly = isCommentsPaginatedQueryFlag(req.query.topLevelOnly);
+      // parentCommentId: fetch the full descendant thread (all nesting levels)
+      // of a specific comment. Used by PostOverlayModal / InsightReplies to
+      // fetch a top-level profile post's reply thread.
+      const parentCommentIdParam = typeof req.query.parentCommentId === "string" ? req.query.parentCommentId : null;
 
       const encodePagedCursor = (payload: Record<string, unknown>): string =>
         Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -5964,6 +5486,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         eq(unifiedComments.parentType, parsedParentType.data),
         eq(unifiedComments.parentId, resolvedParentId),
       ];
+
+      if (topLevelOnly && !parentCommentIdParam) {
+        // Top-level posts only — exclude replies.
+        filters.push(isNull(unifiedComments.parentCommentId));
+      }
 
       if (paginated && cursor) {
         const decoded = decodePagedCursor(cursor);
@@ -6005,30 +5532,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filters.push(lt(unifiedComments.createdAt, cursorDate));
       }
 
-      const rows = await db
-        .select({
-          id: unifiedComments.id,
-          userId: unifiedComments.userId,
-          body: unifiedComments.body,
-          parentCommentId: unifiedComments.parentCommentId,
-          upvotes: unifiedComments.upvotes,
-          downvotes: unifiedComments.downvotes,
-          deletedAt: unifiedComments.deletedAt,
-          createdAt: unifiedComments.createdAt,
-          updatedAt: unifiedComments.updatedAt,
-          ...commentAuthorSelect,
-        })
-        .from(unifiedComments)
-        .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
-        .where(and(...filters))
-        .orderBy(
+      const commentRowSelect = {
+        id: unifiedComments.id,
+        userId: unifiedComments.userId,
+        body: unifiedComments.body,
+        parentCommentId: unifiedComments.parentCommentId,
+        upvotes: unifiedComments.upvotes,
+        downvotes: unifiedComments.downvotes,
+        deletedAt: unifiedComments.deletedAt,
+        createdAt: unifiedComments.createdAt,
+        updatedAt: unifiedComments.updatedAt,
+        // Reply count subquery — cheap via comments_parent_comment_idx.
+        // Used by the profile discussion surface to show "N replies" on each
+        // top-level post. Always computed (other surfaces just ignore it).
+        replyCount: sql<number>`(
+          SELECT COUNT(*)::int FROM comments r
+          WHERE r.parent_comment_id = ${unifiedComments.id}
+            AND r.deleted_at IS NULL
+        )`,
+        ...commentAuthorSelect,
+      };
+
+      const selectCommentRows = (extraFilters: SQL[], take: number) =>
+        db
+          .select(commentRowSelect)
+          .from(unifiedComments)
+          .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+          .where(and(...filters, ...extraFilters))
+          .limit(take);
+      type CommentListRow = Awaited<ReturnType<typeof selectCommentRows>>[number];
+
+      let rows: CommentListRow[];
+      if (parentCommentIdParam) {
+        // Full descendant thread of one comment (all nesting levels), used by
+        // PostOverlayModal / InsightReplies for a top-level profile post's
+        // replies. A flat parent_comment_id filter would miss nested replies
+        // (reply-to-a-reply), so walk the tree breadth-first. Cursor
+        // pagination isn't supported in this mode (callers fetch the whole
+        // thread with a high limit).
+        rows = [];
+        let frontier = [parentCommentIdParam];
+        // Depth cap is a safety net; the UI caps visual nesting well below it.
+        for (let depth = 0; depth < 8 && frontier.length > 0 && rows.length < limit; depth++) {
+          const batch = await selectCommentRows(
+            [inArray(unifiedComments.parentCommentId, frontier)],
+            limit - rows.length,
+          ).orderBy(desc(unifiedComments.createdAt), desc(unifiedComments.id));
+          rows.push(...batch);
+          frontier = batch.map(row => row.id);
+        }
+        rows.sort((a, b) => {
+          if (sort === "top") {
+            const net = (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes);
+            if (net !== 0) return net;
+          }
+          const byDate = b.createdAt.getTime() - a.createdAt.getTime();
+          if (byDate !== 0) return byDate;
+          return b.id.localeCompare(a.id);
+        });
+      } else {
+        rows = await selectCommentRows([], limit).orderBy(
           sort === "newest"
             ? desc(unifiedComments.createdAt)
             : desc(sql`${unifiedComments.upvotes} - ${unifiedComments.downvotes}`),
           desc(unifiedComments.createdAt),
           desc(unifiedComments.id),
-        )
-        .limit(limit);
+        );
+      }
 
       const userVoteMap = new Map<string, CommentVoteState>();
       if (req.userId && rows.length > 0) {
@@ -6059,7 +5629,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (paginated) {
         let nextCursor: string | null = null;
-        if (rows.length === limit) {
+        // Thread mode (parentCommentId) returns the whole thread in one page —
+        // BFS ordering isn't cursor-stable, so never hand out a cursor there.
+        if (rows.length === limit && !parentCommentIdParam) {
           const last = rows[rows.length - 1]!;
           if (sort === "newest") {
             nextCursor = encodePagedCursor({
@@ -6151,8 +5723,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // surface (insight threads plus matchup / sentiment poll / opinion
       // poll / world market cards) — the shared post_comment daily cap
       // is the anti-spam control. voices_post timeline replies stay
-      // excluded for now. The "not on own insight" gate only applies to
-      // community_insight threads (cards have no author to self-farm).
+      // excluded for now. The "not on own parent" gate only applies to
+      // community_insight replies (cards have no author to self-farm);
+      // after the merge, the parent is a top-level comment in the comments
+      // table, looked up by parentCommentId.
       const REWARDABLE_COMMENT_PARENT_TYPES: ReadonlySet<string> = new Set([
         "community_insight",
         "matchup",
@@ -6164,22 +5738,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let shouldAwardXp =
         REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
         trimmedContent.length >= 20;
-      if (shouldAwardXp && parsed.parentType === "community_insight") {
-        const [insight] = await db
-          .select({ userId: communityInsights.userId, deletedAt: communityInsights.deletedAt })
-          .from(communityInsights)
-          .where(eq(communityInsights.id, resolvedParentId))
+      if (shouldAwardXp && parsed.parentType === "community_insight" && parsed.parentCommentId) {
+        // Reply to a top-level profile post: skip XP if the user is replying
+        // to their own post (self-farm guard). The parent top-level comment
+        // lives in unifiedComments now (post-merge).
+        const [parentComment] = await db
+          .select({ userId: unifiedComments.userId })
+          .from(unifiedComments)
+          .where(eq(unifiedComments.id, parsed.parentCommentId))
           .limit(1);
-        if (insight && insight.userId === userId) {
+        if (parentComment && parentComment.userId === userId) {
           shouldAwardXp = false;
         }
       }
 
       let xpResult;
       if (shouldAwardXp) {
+        // For community_insight, insightId in the metadata is the top-level
+        // post's comment id (preserved UUID from the merge). For a top-level
+        // post, that's the new comment itself; for a reply, it's the parent.
+        const insightIdForMetadata = parsed.parentType === "community_insight"
+          ? (parsed.parentCommentId ?? newComment.id)
+          : null;
         const awardMetadata =
           parsed.parentType === "community_insight"
-            ? { commentId: newComment.id, insightId: resolvedParentId }
+            ? { commentId: newComment.id, insightId: insightIdForMetadata }
             : { commentId: newComment.id, parentType: parsed.parentType, parentId: resolvedParentId };
         try {
           xpResult = await gamificationService.awardXp(
@@ -6189,12 +5772,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         } catch (e) { console.error("XP award failed:", e); }
         // shouldAwardXp already enforces "min 20 chars" (+ "not on own
-        // insight" for insight threads), so credits piggy-back the check.
+        // parent" for insight replies), so credits piggy-back the check.
         await awardCommentCredits(
           userId,
           newComment.id,
           parsed.parentType === "community_insight"
-            ? { insightId: resolvedParentId }
+            ? { insightId: insightIdForMetadata }
             : { parentType: parsed.parentType, parentId: resolvedParentId },
         );
         await maybeFireReferralCredit(userId);
@@ -6219,6 +5802,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               userId: unifiedComments.userId,
               parentType: unifiedComments.parentType,
               parentId: unifiedComments.parentId,
+              parentCommentId: unifiedComments.parentCommentId,
               body: unifiedComments.body,
               deletedAt: unifiedComments.deletedAt,
             })
@@ -6227,21 +5811,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .limit(1);
 
           if (parentRow && !parentRow.deletedAt && parentRow.userId !== userId) {
+            // A reply to a TOP-LEVEL profile post gets the insight-style
+            // notification (entity = the post, anchor #insight-<postId> which
+            // matches the InsightCard element id). A nested reply (reply to a
+            // reply, on any surface) keeps the pre-merge comment-style shape:
+            // entity = the new reply, anchor #comment-<replyId>.
+            const parentIsTopLevelProfilePost =
+              parentRow.parentType === "community_insight" && !parentRow.parentCommentId;
             const replyAuthorName = profile?.authorUsername ?? "Someone";
             const href = await resolveUnifiedCommentHref(
               parentRow.parentType as CommentParentType,
               parentRow.parentId,
             );
             const snippet = mentionsToPlainText(storedBody).trim().slice(0, 140);
+            const anchor = parentIsTopLevelProfilePost
+              ? `#insight-${newComment.parentCommentId}`
+              : `#comment-${newComment.id}`;
             await createNotification({
               userId: parentRow.userId,
               kind: "comment_reply",
               actorUserId: userId,
-              title: `${replyAuthorName} replied to your comment`,
+              title: `${replyAuthorName} replied to your ${parentIsTopLevelProfilePost ? "post" : "comment"}`,
               body: snippet || undefined,
-              href: `${href}#comment-${newComment.id}`,
-              entityType: "comment",
-              entityId: newComment.id,
+              href: `${href}${anchor}`,
+              entityType: parentIsTopLevelProfilePost ? "community_insight" : "comment",
+              entityId: parentIsTopLevelProfilePost ? newComment.parentCommentId : newComment.id,
               metadata: {
                 parentCommentId: newComment.parentCommentId,
                 parentType: parentRow.parentType,
@@ -6255,50 +5849,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (err) {
           console.error("[notifications] comment_reply fanout failed:", err);
-        }
-      } else if (newComment.parentType === "community_insight") {
-        // Reply directly to a person-profile post (an "insight"). The
-        // post lives in community_insights, not the comments table, so
-        // the parentCommentId fanout above never fires for it — we look
-        // up the insight author explicitly here. Skips self-replies and
-        // deleted insights. Replies share one groupKey per insight so a
-        // burst collapses into a single bell row.
-        try {
-          const [insightRow] = await db
-            .select({
-              userId: communityInsights.userId,
-              personId: communityInsights.personId,
-              deletedAt: communityInsights.deletedAt,
-            })
-            .from(communityInsights)
-            .where(eq(communityInsights.id, newComment.parentId))
-            .limit(1);
-
-          if (insightRow && !insightRow.deletedAt && insightRow.userId !== userId) {
-            const replyAuthorName = profile?.authorUsername ?? "Someone";
-            const snippet = mentionsToPlainText(storedBody).trim().slice(0, 140);
-            const href = insightRow.personId
-              ? `/person/${insightRow.personId}#insight-${newComment.parentId}`
-              : "/me";
-            await createNotification({
-              userId: insightRow.userId,
-              kind: "comment_reply",
-              actorUserId: userId,
-              title: `${replyAuthorName} replied to your post`,
-              body: snippet || undefined,
-              href,
-              entityType: "community_insight",
-              entityId: newComment.parentId,
-              metadata: {
-                parentType: "community_insight",
-                parentId: newComment.parentId,
-              },
-              groupKey: `insight-replies:${newComment.parentId}`,
-              idempotencyKey: `comment_reply:${newComment.id}`,
-            });
-          }
-        } catch (err) {
-          console.error("[notifications] insight reply fanout failed:", err);
         }
       }
 
@@ -13440,8 +12990,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await tx.delete(unifiedComments).where(eq(unifiedComments.userId, userId));
         await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, userId));
         await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, userId));
-        await tx.delete(insightVotes).where(eq(insightVotes.userId, userId));
-        await tx.delete(communityInsights).where(eq(communityInsights.userId, userId));
         await tx.delete(marketBets).where(eq(marketBets.userId, userId));
         await tx.delete(imageVotes).where(eq(imageVotes.userId, userId));
         await tx.delete(inductionVotes).where(eq(inductionVotes.userId, userId));
@@ -15375,65 +14923,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get community insights for moderation
-  app.get("/api/admin/moderation/insights", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { status } = req.query;
-      
-      let insights = await db.select({
-        id: communityInsights.id,
-        personId: communityInsights.personId,
-        userId: communityInsights.userId,
-        content: communityInsights.content,
-        createdAt: communityInsights.createdAt,
-        upvotes: sql<number>`(SELECT COUNT(*) FROM insight_votes WHERE insight_id = ${communityInsights.id} AND vote_type = 'up')`,
-        downvotes: sql<number>`(SELECT COUNT(*) FROM insight_votes WHERE insight_id = ${communityInsights.id} AND vote_type = 'down')`,
-      }).from(communityInsights).orderBy(desc(communityInsights.createdAt)).limit(100);
-      
-      res.json(insights);
-    } catch (error: any) {
-      console.error("Error fetching insights for moderation:", error.message);
-      res.status(500).json({ error: "Failed to fetch insights" });
-    }
-  });
-
-  // Delete community insight (moderation)
-  app.delete("/api/admin/moderation/insights/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { id } = req.params;
-      const { reason } = req.body;
-      const adminId = req.userId!;
-      
-      const [existing] = await db.select().from(communityInsights).where(eq(communityInsights.id, id));
-      if (!existing) {
-        return res.status(404).json({ error: "Insight not found" });
-      }
-      
-      // Delete associated votes and unified replies first
-      await db.delete(insightVotes).where(eq(insightVotes.insightId, id));
-      await db.delete(unifiedComments).where(and(
-        eq(unifiedComments.parentType, "community_insight"),
-        eq(unifiedComments.parentId, id),
-      ));
-      await db.delete(communityInsights).where(eq(communityInsights.id, id));
-      
-      // Audit log
-      await db.insert(adminAuditLog).values({
-        adminId,
-        adminEmail: null,
-        actionType: 'delete_insight',
-        targetTable: 'community_insights',
-        targetId: id,
-        previousData: existing,
-        metadata: { reason },
-      });
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("Error deleting insight:", error.message);
-      res.status(500).json({ error: "Failed to delete insight" });
-    }
-  });
-
   // Get comments for moderation. Enriched with author info (incl. is_agent
   // flag) and parent info (title, slug, category, personId) so the admin
   // page can show "@username (agent) on Tesla market: 'comment text…'"
@@ -15442,6 +14931,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //   ?author=agents|humans|all   (default: all)
   //   ?q=substring                 (case-insensitive comment body search)
   //   ?limit=200                   (default 100, capped at 500)
+  //
+  // Note: the legacy /api/admin/moderation/insights routes were removed when
+  // community_insights merged into comments. Profile posts now appear in this
+  // endpoint with parentType=community_insight (filterable via the parentType
+  // query param) and are enriched with person metadata via the comments →
+  // tracked_people join below.
   app.get("/api/admin/moderation/comments", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const parentTypeFilter = typeof req.query.parentType === "string" ? req.query.parentType : null;
@@ -15496,7 +14991,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendingPollMeta = new Map<string, { title: string; slug: string | null; category: string | null }>();
       const opinionPollMeta = new Map<string, { title: string; slug: string | null; category: string | null }>();
       const marketMeta = new Map<string, { title: string; slug: string; category: string | null }>();
-      const insightMeta = new Map<string, { personId: string; personName: string | null }>();
+      // After the community_insights → comments merge, parent_id on a
+      // community_insight comment IS the personId — no extra join through
+      // community_insights needed, just look up tracked_people directly.
+      const personMeta = new Map<string, { personName: string | null }>();
 
       const toArray = (s: Set<string> | undefined) => (s ? Array.from(s) : []);
 
@@ -15504,7 +15002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const trendingIds = toArray(idsByType.get("trending_poll"));
       const opinionIds = toArray(idsByType.get("opinion_poll"));
       const marketIds = toArray(idsByType.get("open_market"));
-      const insightIds = toArray(idsByType.get("community_insight"));
+      const personIds = toArray(idsByType.get("community_insight"));
 
       await Promise.all([
         matchupIds.length > 0
@@ -15527,17 +15025,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .from(predictionMarkets).where(inArray(predictionMarkets.id, marketIds))
               .then((res) => res.forEach((r) => marketMeta.set(r.id, { title: r.title, slug: r.slug, category: r.category })))
           : Promise.resolve(),
-        insightIds.length > 0
-          ? db.select({
-              id: communityInsights.id,
-              personId: communityInsights.personId,
-              personName: trackedPeople.name,
-            })
-              .from(communityInsights)
-              .leftJoin(trackedPeople, eq(communityInsights.personId, trackedPeople.id))
-              .where(inArray(communityInsights.id, insightIds))
+        personIds.length > 0
+          ? db.select({ id: trackedPeople.id, personName: trackedPeople.name })
+              .from(trackedPeople)
+              .where(inArray(trackedPeople.id, personIds))
               .then((res) => res.forEach((r) =>
-                insightMeta.set(r.id, { personId: r.personId, personName: r.personName })
+                personMeta.set(r.id, { personName: r.personName })
               ))
           : Promise.resolve(),
       ]);
@@ -15568,9 +15061,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentCategory = m?.category ?? null;
           parentLink = m?.slug ? `/markets/${m.slug}` : null;
         } else if (row.parentType === "community_insight") {
-          const m = insightMeta.get(row.parentId);
+          // After the merge, parentId is the personId. Both top-level posts
+          // and replies share the same parent_id; parentCommentId in the row
+          // conveys depth (null = top-level post, set = reply).
+          const m = personMeta.get(row.parentId);
           parentTitle = m?.personName ? `Insight on ${m.personName}` : null;
-          parentLink = m?.personId ? `/celebrity/${m.personId}` : null;
+          parentLink = `/person/${row.parentId}`;
         }
 
         const isAgent = !!row.authorIsAgent;
@@ -27069,7 +26565,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // and the UI showed Comments=0/Votes=0/Likes=0 even when those
       // events clearly existed. Per-kind fairness fixes that. We raise
       // the outer cap to limit*7 so all legs (comments, 4 vote tables,
-      // 2 like tables, community_insights, bets) can survive the merge.
+      // comment_votes likes, bets) can survive the merge. Profile posts
+      // and their likes flow through the comments / comment_votes legs
+      // since the community_insights → comments merge.
       const perLegLimit = limit;
       const overallLimit = limit * 7;
 
@@ -27091,7 +26589,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               c.parent_type::text AS surface,
               c.parent_id::text AS target_id,
               c.body AS detail,
-              CASE WHEN c.parent_comment_id IS NOT NULL THEN 'reply' ELSE 'top' END AS sub_kind
+              CASE
+                WHEN c.parent_comment_id IS NOT NULL THEN 'reply'
+                WHEN c.parent_type = 'community_insight' THEN 'insight'
+                ELSE 'top'
+              END AS sub_kind
             FROM comments c
             INNER JOIN profiles p ON p.id = c.user_id
             WHERE p.is_agent = true
@@ -27179,47 +26681,6 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             WHERE p.is_agent = true
               AND cv.voted_at >= ${cutoff}
             ORDER BY cv.voted_at DESC
-            LIMIT ${perLegLimit}
-          )
-
-          UNION ALL
-
-          (
-            SELECT
-              'comment'::text AS kind,
-              ci.id::text AS event_id,
-              ci.user_id AS user_id,
-              ci.created_at AS event_at,
-              'community_insight'::text AS surface,
-              ci.person_id::text AS target_id,
-              ci.content AS detail,
-              'insight'::text AS sub_kind
-            FROM community_insights ci
-            INNER JOIN profiles p ON p.id = ci.user_id
-            WHERE p.is_agent = true
-              AND ci.deleted_at IS NULL
-              AND ci.created_at >= ${cutoff}
-            ORDER BY ci.created_at DESC
-            LIMIT ${perLegLimit}
-          )
-
-          UNION ALL
-
-          (
-            SELECT
-              'like'::text AS kind,
-              iv.id::text AS event_id,
-              iv.user_id AS user_id,
-              iv.voted_at AS event_at,
-              'insight_vote'::text AS surface,
-              iv.insight_id::text AS target_id,
-              iv.vote_type::text AS detail,
-              NULL::text AS sub_kind
-            FROM insight_votes iv
-            INNER JOIN profiles p ON p.id = iv.user_id
-            WHERE p.is_agent = true
-              AND iv.voted_at >= ${cutoff}
-            ORDER BY iv.voted_at DESC
             LIMIT ${perLegLimit}
           )
 

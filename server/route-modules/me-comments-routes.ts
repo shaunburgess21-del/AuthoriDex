@@ -2,10 +2,9 @@ import type { Express } from "express";
 import { and, eq, isNull, isNotNull, lt, or, desc, count } from "drizzle-orm";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import { db } from "../db";
-import { comments as unifiedComments, communityInsights } from "@shared/schema";
+import { comments as unifiedComments } from "@shared/schema";
 import {
   resolveCommentEntities,
-  resolveInsightEntities,
   entityKey,
   type VoicesEntity,
 } from "../services/voices/entities";
@@ -18,7 +17,7 @@ import type {
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
 
-/** Keyset cursor over the merged (createdAt, id) ordering shared by both sources. */
+/** Keyset cursor over the (createdAt, id) ordering. */
 interface MeCommentsCursor {
   createdAt: string;
   id: string;
@@ -45,10 +44,9 @@ function parseFilter(value: unknown): MeCommentFilter {
   return "all";
 }
 
-/** A row from either source, normalised onto the shared keyset ordering. */
+/** A row from the unified comments table, normalised onto the shared keyset ordering. */
 interface MergedRow {
   id: string;
-  source: "comment" | "insight";
   body: string;
   parentType: string;
   parentId: string;
@@ -73,9 +71,12 @@ function fallbackEntity(): ReturnType<typeof toEntityDTO> {
 }
 
 export function registerMeCommentsRoutes(app: Express): void {
-  // Authored discussion history for the signed-in user: unified comments
-  // (timeline posts, card comments, replies) merged with community insights,
-  // newest-first, with keyset pagination. Powers /me/comments.
+  // Authored discussion history for the signed-in user. After the
+  // community_insights → comments merge, this is a single query against the
+  // unified comments table — top-level profile posts (parentType=
+  // 'community_insight', parentCommentId=null) sit alongside card comments,
+  // replies, and timeline posts. Newest-first with keyset pagination.
+  // Powers /me/comments.
   app.get("/api/me/comments", requireAuth, async (req: AuthRequest, res) => {
     try {
       const userId = req.userId!;
@@ -90,22 +91,12 @@ export function registerMeCommentsRoutes(app: Express): void {
       const cursor = cursorRaw ? decodeCursor(cursorRaw) : null;
       const cursorDate = cursor ? new Date(cursor.createdAt) : null;
 
-      const includeComments = filter === "all" || filter === "timeline" || filter === "replies";
-      const includeInsights = filter === "all" || filter === "insights";
-
       // Keyset: rows strictly "older" than the cursor in (createdAt DESC, id DESC).
-      const commentKeyset =
+      const keyset =
         cursor && cursorDate
           ? or(
               lt(unifiedComments.createdAt, cursorDate),
               and(eq(unifiedComments.createdAt, cursorDate), lt(unifiedComments.id, cursor.id)),
-            )
-          : undefined;
-      const insightKeyset =
-        cursor && cursorDate
-          ? or(
-              lt(communityInsights.createdAt, cursorDate),
-              and(eq(communityInsights.createdAt, cursorDate), lt(communityInsights.id, cursor.id)),
             )
           : undefined;
 
@@ -120,10 +111,19 @@ export function registerMeCommentsRoutes(app: Express): void {
           .select({ value: count() })
           .from(unifiedComments)
           .where(and(eq(unifiedComments.userId, userId), isNull(unifiedComments.deletedAt))),
+        // totalInsights: top-level profile posts (parentType='community_insight',
+        // parentCommentId=null) authored by this user.
         db
           .select({ value: count() })
-          .from(communityInsights)
-          .where(and(eq(communityInsights.userId, userId), isNull(communityInsights.deletedAt))),
+          .from(unifiedComments)
+          .where(
+            and(
+              eq(unifiedComments.userId, userId),
+              isNull(unifiedComments.deletedAt),
+              eq(unifiedComments.parentType, "community_insight"),
+              isNull(unifiedComments.parentCommentId),
+            ),
+          ),
         db
           .select({ value: count() })
           .from(unifiedComments)
@@ -154,113 +154,59 @@ export function registerMeCommentsRoutes(app: Express): void {
         totalReplies: replyStatsRow[0]?.value ?? 0,
       };
 
-      // ── Page rows: fetch limit+1 from each enabled source, then merge ────────
-      const commentConds = [
+      // ── Page rows: single query against unified comments ─────────────────────
+      const conds = [
         eq(unifiedComments.userId, userId),
         isNull(unifiedComments.deletedAt),
       ];
       if (filter === "timeline") {
-        commentConds.push(eq(unifiedComments.parentType, "voices_post"));
-        commentConds.push(isNull(unifiedComments.parentCommentId));
+        conds.push(eq(unifiedComments.parentType, "voices_post"));
+        conds.push(isNull(unifiedComments.parentCommentId));
       } else if (filter === "replies") {
-        commentConds.push(isNotNull(unifiedComments.parentCommentId));
+        conds.push(isNotNull(unifiedComments.parentCommentId));
+      } else if (filter === "insights") {
+        conds.push(eq(unifiedComments.parentType, "community_insight"));
+        conds.push(isNull(unifiedComments.parentCommentId));
       }
-      if (commentKeyset) commentConds.push(commentKeyset);
+      if (keyset) conds.push(keyset);
 
-      const insightConds = [
-        eq(communityInsights.userId, userId),
-        isNull(communityInsights.deletedAt),
-      ];
-      if (insightKeyset) insightConds.push(insightKeyset);
+      const rows = await db
+        .select({
+          id: unifiedComments.id,
+          body: unifiedComments.body,
+          parentType: unifiedComments.parentType,
+          parentId: unifiedComments.parentId,
+          parentCommentId: unifiedComments.parentCommentId,
+          upvotes: unifiedComments.upvotes,
+          createdAt: unifiedComments.createdAt,
+        })
+        .from(unifiedComments)
+        .where(and(...conds))
+        .orderBy(desc(unifiedComments.createdAt), desc(unifiedComments.id))
+        .limit(limit + 1);
 
-      const [commentRows, insightRows] = await Promise.all([
-        includeComments
-          ? db
-              .select({
-                id: unifiedComments.id,
-                body: unifiedComments.body,
-                parentType: unifiedComments.parentType,
-                parentId: unifiedComments.parentId,
-                parentCommentId: unifiedComments.parentCommentId,
-                upvotes: unifiedComments.upvotes,
-                createdAt: unifiedComments.createdAt,
-              })
-              .from(unifiedComments)
-              .where(and(...commentConds))
-              .orderBy(desc(unifiedComments.createdAt), desc(unifiedComments.id))
-              .limit(limit + 1)
-          : Promise.resolve([]),
-        includeInsights
-          ? db
-              .select({
-                id: communityInsights.id,
-                body: communityInsights.content,
-                parentId: communityInsights.personId,
-                createdAt: communityInsights.createdAt,
-              })
-              .from(communityInsights)
-              .where(and(...insightConds))
-              .orderBy(desc(communityInsights.createdAt), desc(communityInsights.id))
-              .limit(limit + 1)
-          : Promise.resolve([]),
-      ]);
+      const hasMore = rows.length > limit;
+      const page = rows.slice(0, limit);
 
-      const merged: MergedRow[] = [
-        ...commentRows.map((r) => ({
-          id: r.id,
-          source: "comment" as const,
-          body: r.body,
-          parentType: r.parentType,
-          parentId: r.parentId,
-          parentCommentId: r.parentCommentId,
-          upvotes: r.upvotes,
-          createdAt: r.createdAt,
-        })),
-        ...insightRows.map((r) => ({
-          id: r.id,
-          source: "insight" as const,
-          body: r.body,
-          parentType: "community_insight",
-          parentId: r.parentId,
-          parentCommentId: null,
-          // Insight upvotes live in insight_votes; the history card doesn't
-          // surface them, so 0 keeps the query cheap.
-          upvotes: 0,
-          createdAt: r.createdAt,
-        })),
-      ];
-
-      // Newest-first by (createdAt, id) — same total order as the keyset.
-      merged.sort((a, b) => {
-        const diff = b.createdAt.getTime() - a.createdAt.getTime();
-        if (diff !== 0) return diff;
-        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
-      });
-
-      const hasMore = merged.length > limit;
-      const page = merged.slice(0, limit);
-
-      // ── Resolve entity context in batches ───────────────────────────────────
-      const commentParents = page
-        .filter((r) => r.source === "comment")
-        .map((r) => ({ parentType: r.parentType, parentId: r.parentId }));
-      const insightIds = page.filter((r) => r.source === "insight").map((r) => r.id);
-
-      const [commentEntities, insightEntities] = await Promise.all([
-        commentParents.length > 0 ? resolveCommentEntities(commentParents) : Promise.resolve(new Map<string, VoicesEntity>()),
-        insightIds.length > 0 ? resolveInsightEntities(insightIds) : Promise.resolve(new Map<string, VoicesEntity>()),
-      ]);
+      // ── Resolve entity context in batch ───────────────────────────────────
+      const commentParents = page.map((r) => ({ parentType: r.parentType, parentId: r.parentId }));
+      const commentEntities = commentParents.length > 0
+        ? await resolveCommentEntities(commentParents)
+        : new Map<string, VoicesEntity>();
 
       const items: MeCommentItem[] = page.map((row) => {
-        const entity =
-          row.source === "comment"
-            ? commentEntities.get(entityKey(row.parentType, row.parentId))
-            : insightEntities.get(row.id);
+        const entity = commentEntities.get(entityKey(row.parentType, row.parentId));
         const entityDTO = entity ? toEntityDTO(entity) : fallbackEntity();
-        const anchor = row.source === "comment" ? `#comment-${row.id}` : `#insight-${row.id}`;
+        // Source derivation: top-level profile posts keep source="insight" for
+        // backwards compat with the /me/comments UI (insights filter tab, icon
+        // styling). Everything else is source="comment".
+        const isTopLevelProfilePost =
+          row.parentType === "community_insight" && row.parentCommentId === null;
+        const source = isTopLevelProfilePost ? "insight" : "comment";
+        const anchor = isTopLevelProfilePost ? `#insight-${row.id}` : `#comment-${row.id}`;
         return {
           id: row.id,
-          source: row.source,
+          source,
           body: row.body,
           parentType: row.parentType,
           parentCommentId: row.parentCommentId,

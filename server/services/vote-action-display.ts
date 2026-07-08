@@ -5,7 +5,6 @@
 import { db } from "../db";
 import {
   comments,
-  communityInsights,
   inductionCandidates,
   matchups,
   opinionPollOptions,
@@ -14,7 +13,7 @@ import {
   trendingPolls,
   type VoteAction,
 } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   asMetadata,
   truncateLedgerLabel,
@@ -158,14 +157,17 @@ export async function enrichVoteActionRows(
     insightIds.size > 0
       ? db
           .select({
-            id: communityInsights.id,
-            content: communityInsights.content,
-            personId: communityInsights.personId,
+            id: comments.id,
+            content: comments.body,
+            personId: comments.parentId,
             personName: trackedPeople.name,
           })
-          .from(communityInsights)
-          .innerJoin(trackedPeople, eq(communityInsights.personId, trackedPeople.id))
-          .where(inArray(communityInsights.id, [...insightIds]))
+          .from(comments)
+          .innerJoin(trackedPeople, eq(comments.parentId, trackedPeople.id))
+          .where(and(
+            inArray(comments.id, [...insightIds]),
+            eq(comments.parentType, "community_insight"),
+          ))
       : Promise.resolve([]),
   ]);
 

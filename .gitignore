@@ -27,6 +27,9 @@ server/scripts/probe-*
 # Local audit/debug outputs
 tmp/
 
+# Pre-migration data backups (contain user content — never commit)
+backups/
+
 # Temporary commit-msg file (PowerShell has no heredocs)
 .git-commit-msg.tmp
 .commit-msg.tmp
