@@ -1998,17 +1998,6 @@ export default function PersonDetailPage() {
                 </div>
               )}
             </section>
-
-            {/* Community Insights */}
-            <div className="mb-8">
-              <Suspense fallback={<ProfileLazyFallback />}>
-                <LazyCommunityInsights
-                  personId={person.id}
-                  personName={person.name}
-                  focusContextTitle={person.name}
-                />
-              </Suspense>
-            </div>
           </>
         )}
 
@@ -2024,6 +2013,17 @@ export default function PersonDetailPage() {
             />
           </Suspense>
         )}
+
+        {/* Community Insights — tab-agnostic so discussion is visible on Overview, Vote, and Predict */}
+        <div className="mb-8">
+          <Suspense fallback={<ProfileLazyFallback />}>
+            <LazyCommunityInsights
+              personId={person.id}
+              personName={person.name}
+              focusContextTitle={person.name}
+            />
+          </Suspense>
+        </div>
 
         {/* Tab-agnostic: rendered once below both tab bodies so the
             "previous / next on the leaderboard" jump is reachable
