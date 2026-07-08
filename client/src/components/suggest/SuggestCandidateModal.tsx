@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Drawer } from "vaul";
 import { UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +22,8 @@ import { CATEGORIES_LEADERBOARD } from "@shared/constants";
 interface SuggestCandidateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Prefill the candidate name when the drawer opens (e.g. from a search miss). */
+  initialDisplayName?: string;
   /** Optional callback fired after a successful submission (e.g. to invalidate queries). */
   onSubmitted?: () => void;
 }
@@ -31,13 +33,19 @@ interface SuggestCandidateModalProps {
  * Owns its own form + submission state so it can be dropped into any page
  * (Vote page sections, Induction Queue page) without lifting state.
  */
-export function SuggestCandidateModal({ open, onOpenChange, onSubmitted }: SuggestCandidateModalProps) {
+export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, onSubmitted }: SuggestCandidateModalProps) {
   const { trigger: triggerXpBurst } = useXpBurst();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [category, setCategory] = useState("");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(initialDisplayName ?? "");
+    }
+  }, [open, initialDisplayName]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);

@@ -91,17 +91,41 @@ export default function InductionQueuePage() {
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() =>
+    new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
+  );
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
   const [showVoteAnim, setShowVoteAnim] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestPrefillName, setSuggestPrefillName] = useState("");
   const animRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const openSuggest = () => {
+  // Keep the ?search= param in sync with the search box so the view stays
+  // shareable and a stale term never survives a manual clear or refresh.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get("search") ?? "";
+    const next = searchQuery.trim();
+    if (next === current) return;
+    if (next) {
+      url.searchParams.set("search", next);
+    } else {
+      url.searchParams.delete("search");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [searchQuery]);
+
+  const clearSearchAndFilters = () => {
+    setCategoryFilter("all");
+    setSearchQuery("");
+  };
+
+  const openSuggest = (prefillName = "") => {
     if (!isLoggedIn) {
       toast.error("Sign in required", { description: "Please sign in to suggest content." });
       return;
     }
+    setSuggestPrefillName(prefillName);
     setSuggestOpen(true);
   };
 
@@ -319,7 +343,7 @@ export default function InductionQueuePage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={openSuggest}
+              onClick={() => openSuggest()}
               className="hidden sm:flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
               data-testid="button-suggest-induction-header"
             >
@@ -555,7 +579,8 @@ export default function InductionQueuePage() {
             })}
           </AnimatePresence>
 
-          {/* Suggest Someone — dedicated CTA card, always the final cell */}
+          {/* Suggest Someone — dedicated CTA card, final cell unless search has zero matches */}
+          {!(filteredCandidates.length === 0 && searchQuery) && (
           <motion.div
             layout
             initial={{ opacity: 0, y: 12 }}
@@ -563,7 +588,7 @@ export default function InductionQueuePage() {
           >
             <button
               type="button"
-              onClick={openSuggest}
+              onClick={() => openSuggest()}
               data-testid="card-suggest-induction"
               className="pulse-card-cyan group relative flex h-full min-h-[260px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-cyan-500/40 dark:border-cyan-500/30 p-5 text-center transition-colors hover:border-cyan-500/70 dark:hover:border-cyan-500/50"
             >
@@ -582,24 +607,52 @@ export default function InductionQueuePage() {
               </span>
             </button>
           </motion.div>
+          )}
         </div>
 
         {filteredCandidates.length === 0 && !isLoading && (
           <div className="text-center py-16 text-muted-foreground">
             <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">No candidates match your filters.</p>
-            {(categoryFilter !== "all" || searchQuery) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCategoryFilter("all");
-                  setSearchQuery("");
-                }}
-                className="mt-4 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
-                data-testid="button-clear-filters"
-              >
-                Clear filters
-              </button>
+            {searchQuery ? (
+              <>
+                <p className="text-sm font-medium text-foreground">Can&apos;t find who you&apos;re looking for?</p>
+                <p className="text-sm mt-1">
+                  No induction candidates match &ldquo;{searchQuery}&rdquo;
+                </p>
+                <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openSuggest(searchQuery)}
+                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
+                    data-testid="button-suggest-search-miss"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Suggest &ldquo;{searchQuery}&rdquo;
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSearchAndFilters}
+                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    data-testid="button-clear-filters"
+                  >
+                    Clear search and see all
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">No candidates match your filters.</p>
+                {categoryFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={clearSearchAndFilters}
+                    className="mt-4 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
+                    data-testid="button-clear-filters"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -676,6 +729,7 @@ export default function InductionQueuePage() {
       <SuggestCandidateModal
         open={suggestOpen}
         onOpenChange={setSuggestOpen}
+        initialDisplayName={suggestPrefillName}
         onSubmitted={() => queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] })}
       />
     </div>

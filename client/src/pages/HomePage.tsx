@@ -1165,10 +1165,10 @@ export default function HomePage() {
                           {searchQuery ? "No results found" : "No results found for current filters"}
                         </p>
                         {searchQuery && (
-                          <Link href="/vote?section=induction">
+                          <Link href={`/vote/induction?search=${encodeURIComponent(searchQuery.trim())}`}>
                             <Button variant="outline" size="sm" data-testid="button-view-induction-list">
                               <Users className="h-4 w-4 mr-2" />
-                              View Induction List
+                              Search Induction Queue
                             </Button>
                           </Link>
                         )}
