@@ -5718,15 +5718,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // post_comment XP gates: min 20 trimmed chars, idempotency key
-      // comment_${commentId}_${userId}. Awards fire on every discussion
-      // surface (insight threads plus matchup / sentiment poll / opinion
-      // poll / world market cards) — the shared post_comment daily cap
-      // is the anti-spam control. voices_post timeline replies stay
-      // excluded for now. The "not on own parent" gate only applies to
-      // community_insight replies (cards have no author to self-farm);
-      // after the merge, the parent is a top-level comment in the comments
-      // table, looked up by parentCommentId.
+      // Rewards:
+      //   - Top-level profile posts (community_insight, parentCommentId=null)
+      //     get post_insight XP/credits + insight badges — same path as
+      //     Voices person-attachment posts and agent profile insights.
+      //   - Replies / other discussion surfaces get post_comment XP +
+      //     comment_insight credits (min 20 chars; self-reply farm guard
+      //     on community_insight replies). voices_post timeline replies
+      //     stay excluded.
+      const isTopLevelProfilePost =
+        parsed.parentType === "community_insight" && !parsed.parentCommentId;
       const REWARDABLE_COMMENT_PARENT_TYPES: ReadonlySet<string> = new Set([
         "community_insight",
         "matchup",
@@ -5735,52 +5736,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "open_market",
       ]);
       const trimmedContent = storedBody.trim();
-      let shouldAwardXp =
-        REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
-        trimmedContent.length >= 20;
-      if (shouldAwardXp && parsed.parentType === "community_insight" && parsed.parentCommentId) {
-        // Reply to a top-level profile post: skip XP if the user is replying
-        // to their own post (self-farm guard). The parent top-level comment
-        // lives in unifiedComments now (post-merge).
-        const [parentComment] = await db
-          .select({ userId: unifiedComments.userId })
-          .from(unifiedComments)
-          .where(eq(unifiedComments.id, parsed.parentCommentId))
-          .limit(1);
-        if (parentComment && parentComment.userId === userId) {
-          shouldAwardXp = false;
-        }
-      }
 
       let xpResult;
-      if (shouldAwardXp) {
-        // For community_insight, insightId in the metadata is the top-level
-        // post's comment id (preserved UUID from the merge). For a top-level
-        // post, that's the new comment itself; for a reply, it's the parent.
-        const insightIdForMetadata = parsed.parentType === "community_insight"
-          ? (parsed.parentCommentId ?? newComment.id)
-          : null;
-        const awardMetadata =
-          parsed.parentType === "community_insight"
-            ? { commentId: newComment.id, insightId: insightIdForMetadata }
-            : { commentId: newComment.id, parentType: parsed.parentType, parentId: resolvedParentId };
-        try {
-          xpResult = await gamificationService.awardXp(
-            userId, 'post_comment',
-            `comment_${newComment.id}_${userId}`,
-            awardMetadata
+      if (isTopLevelProfilePost) {
+        if (trimmedContent.length >= 20) {
+          try {
+            xpResult = await gamificationService.awardXp(
+              userId,
+              "post_insight",
+              `insight_${newComment.id}_${userId}`,
+              { insightId: newComment.id, personId: resolvedParentId },
+            );
+          } catch (e) {
+            console.error("XP award failed:", e);
+          }
+          await awardInsightCredits(userId, newComment.id, {
+            personId: resolvedParentId,
+          });
+          await maybeFireReferralCredit(userId);
+          await checkAndAwardInsightBadges(userId);
+        }
+      } else {
+        let shouldAwardXp =
+          REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
+          trimmedContent.length >= 20;
+        if (shouldAwardXp && parsed.parentType === "community_insight" && parsed.parentCommentId) {
+          // Reply to a top-level profile post: skip XP if the user is replying
+          // to their own post (self-farm guard). The parent top-level comment
+          // lives in unifiedComments now (post-merge).
+          const [parentComment] = await db
+            .select({ userId: unifiedComments.userId })
+            .from(unifiedComments)
+            .where(eq(unifiedComments.id, parsed.parentCommentId))
+            .limit(1);
+          if (parentComment && parentComment.userId === userId) {
+            shouldAwardXp = false;
+          }
+        }
+
+        if (shouldAwardXp) {
+          // For community_insight replies, insightId in the metadata is the
+          // top-level post's comment id (preserved UUID from the merge).
+          const insightIdForMetadata = parsed.parentType === "community_insight"
+            ? (parsed.parentCommentId ?? newComment.id)
+            : null;
+          const awardMetadata =
+            parsed.parentType === "community_insight"
+              ? { commentId: newComment.id, insightId: insightIdForMetadata }
+              : { commentId: newComment.id, parentType: parsed.parentType, parentId: resolvedParentId };
+          try {
+            xpResult = await gamificationService.awardXp(
+              userId, 'post_comment',
+              `comment_${newComment.id}_${userId}`,
+              awardMetadata
+            );
+          } catch (e) { console.error("XP award failed:", e); }
+          // shouldAwardXp already enforces "min 20 chars" (+ "not on own
+          // parent" for insight replies), so credits piggy-back the check.
+          await awardCommentCredits(
+            userId,
+            newComment.id,
+            parsed.parentType === "community_insight"
+              ? { insightId: insightIdForMetadata }
+              : { parentType: parsed.parentType, parentId: resolvedParentId },
           );
-        } catch (e) { console.error("XP award failed:", e); }
-        // shouldAwardXp already enforces "min 20 chars" (+ "not on own
-        // parent" for insight replies), so credits piggy-back the check.
-        await awardCommentCredits(
-          userId,
-          newComment.id,
-          parsed.parentType === "community_insight"
-            ? { insightId: insightIdForMetadata }
-            : { parentType: parsed.parentType, parentId: resolvedParentId },
-        );
-        await maybeFireReferralCredit(userId);
+          await maybeFireReferralCredit(userId);
+        }
       }
 
       const [profile] = await db
@@ -15097,8 +15118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           parentTitle,
           parentLink,
           parentCategory,
-          // Backwards compatibility with the old shape:
-          insightId: row.parentType === "community_insight" ? row.parentId : null,
+          // Backwards compatibility with the old shape: the profile post's
+          // own comment id (not the personId — that lives in parentId).
+          insightId: row.parentType === "community_insight" ? row.id : null,
           content: row.body,
           body: row.body,
           createdAt: row.createdAt,

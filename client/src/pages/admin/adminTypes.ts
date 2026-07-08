@@ -252,7 +252,11 @@ export interface InsightComment {
   parentLink: string | null;
   /** Parent category (sports, music, etc.) if applicable. */
   parentCategory: string | null;
-  /** Backwards-compat: only set when parentType === 'community_insight'. */
+  /**
+   * Backwards-compat: set when parentType === 'community_insight'.
+   * Equals this row's comment id (the profile post / reply id), not the
+   * personId — personId is parentId after the insights→comments merge.
+   */
   insightId: string | null;
   userId: string;
   /** Author username, or "[deleted user]" if profile is missing. */

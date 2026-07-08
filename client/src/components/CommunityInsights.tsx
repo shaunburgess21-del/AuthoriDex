@@ -748,7 +748,7 @@ function InsightReplies({ personId, insight, onOpenOverlay, onOpenActions }: Ins
       if (xp?.xpAwarded) triggerXpBurst(xp.xpAwarded, undefined, xp.reason);
     },
     supportsReplies: true,
-    invalidateOnMutate: [[`/api/community-insights/${insight.personId}`]],
+    invalidateOnMutate: [communityInsightsQueryKey(insight.personId)],
   }), [insight.id, insight.personId, triggerXpBurst]);
 
   const thread = useCommentThread(adapter);

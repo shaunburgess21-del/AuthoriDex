@@ -17,6 +17,7 @@ import { useCommentThread } from "./comments/useCommentThread";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useXpBurst } from "./XpBurstProvider";
 import type { CommentAdapter, CommentItem, ParentVoteLabel, VoteType } from "./comments/types";
+import { communityInsightsQueryKey } from "@/lib/communityInsightsQuery";
 import { toast } from "sonner";
 
 interface InsightCommentResponse {
@@ -135,10 +136,8 @@ function useInsightCommentsAdapter({
       onDeleteSuccess();
     },
     supportsReplies: true,
-    // Invalidate the main profile view's insights query so it refreshes reply
-    // counts. The key shape is kept as /api/community-insights/${personId} for
-    // cache continuity with the CommunityInsights component.
-    invalidateOnMutate: [[`/api/community-insights/${personId}`]],
+    // Invalidate the main profile view's top-level posts query so reply counts refresh.
+    invalidateOnMutate: [communityInsightsQueryKey(personId)],
   }), [insightId, personId, onXp, onDeleteSuccess]);
 }
 

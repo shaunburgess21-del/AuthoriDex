@@ -88,12 +88,12 @@ export function insightRepliesQueryKey(insightId: string): readonly [string, str
   return ["/api/comments", "community_insight", insightId] as const;
 }
 
-export function communityInsightsQueryKey(personId: string): readonly [`/api/community-insights/${string}`] {
-  // Key kept as /api/community-insights/${personId} for cache continuity —
-  // the underlying fetch now hits /api/comments with topLevelOnly=true, but
-  // existing cache entries (and invalidations) keep working without client
-  // code changes.
-  return [`/api/community-insights/${personId}`] as const;
+/** TanStack Query key for a person's top-level profile discussion posts.
+ *  Matches the unified GET /api/comments?parentType=community_insight&topLevelOnly=true path. */
+export function communityInsightsQueryKey(
+  personId: string,
+): readonly ["/api/comments", "community_insight", string, "topLevel"] {
+  return ["/api/comments", "community_insight", personId, "topLevel"] as const;
 }
 
 function mapCommentRowToInsight(row: InsightCommentResponse, personId: string): CommunityInsight {
