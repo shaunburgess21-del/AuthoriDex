@@ -327,7 +327,10 @@ export async function generateWeeklyUpDown(): Promise<number> {
   // within hours; 14 days is a generous cushion. Without this bound the
   // planner sometimes falls off the (person_id, timestamp DESC) index on a
   // long IN-list and times out on Supabase's statement_timeout.
-  const openingScoreMap = await loadOpeningScoreMap(personIdList, db, { asOf: monday });
+  const openingScoreMap = await loadOpeningScoreMap(personIdList, db, {
+    asOf: monday,
+    cohortGuard: true,
+  });
 
   const engine = nativeEngineFor("updown");
   let created = 0;
@@ -359,6 +362,9 @@ export async function generateWeeklyUpDown(): Promise<number> {
               ...(openScore.sampleCount != null ? { sampleCount: openScore.sampleCount } : {}),
               ...(openScore.windowMethod != null ? { windowMethod: openScore.windowMethod } : {}),
               ...(openScore.windowDays != null ? { windowDays: openScore.windowDays } : {}),
+              ...(openScore.guardTriggered != null
+                ? { guardTriggered: openScore.guardTriggered }
+                : {}),
             },
           }
         : undefined,
@@ -915,7 +921,10 @@ export async function generateWeeklyH2H(): Promise<number> {
     log(`[MarketGenerator:H2H] Week ${weekNumber}: built ${pairings.length} pairings (mode=${useTop4PerCategory ? "top4-per-category" : "legacy-top30"})`);
 
     const allPersonIds = Array.from(new Set(pairings.flatMap(([a, b]) => [a.id, b.id])));
-    const snapMap = await loadOpeningScoreMap(allPersonIds, tx, { asOf: monday });
+    const snapMap = await loadOpeningScoreMap(allPersonIds, tx, {
+      asOf: monday,
+      cohortGuard: true,
+    });
 
     const engine = nativeEngineFor("h2h");
     let createdCount = 0;
@@ -1051,7 +1060,10 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
     : [];
   const scoreMap = new Map(liveScores.map(p => [p.id, p.fameIndex ?? 0]));
 
-  const snapMap = await loadOpeningScoreMap(allIds, db, { asOf: monday });
+  const snapMap = await loadOpeningScoreMap(allIds, db, {
+    asOf: monday,
+    cohortGuard: true,
+  });
   const movementMap = await loadGainerMovementStats(allIds, db, { asOf: monday });
 
   const engine = nativeEngineFor("gainer");
