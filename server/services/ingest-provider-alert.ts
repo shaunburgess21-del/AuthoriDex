@@ -1,8 +1,15 @@
 /**
  * Per-provider news coverage drop detection (pure logic; no DB).
  *
- * Fires when a provider's article coverage collapses for 3 consecutive
- * completed runs after having been healthy (>= 50%) within the prior 24h.
+ * An outage is CONFIRMED when a provider's article coverage collapses for 3
+ * consecutive completed runs after having been healthy (>= 50%) somewhere in
+ * the provided history (onset gate). Once confirmed, the alert RE-FIRES once
+ * per UTC day until coverage recovers to the healthy threshold — so a
+ * multi-day outage (e.g. a Serper credit lapse) stays visible instead of
+ * emitting a single email at onset and then going silent.
+ *
+ * Providers that were not attempted this run (e.g. GDELT while excluded from
+ * the union) are skipped so intentional exclusions never alarm.
  */
 
 export const INGEST_ALERT_PROVIDERS = ["currents", "mediastack", "serper", "gdelt"] as const;
@@ -17,6 +24,10 @@ export interface ProviderCoverageSnapshot {
   peopleWithArticles: number;
   peopleWithData: number;
   coverageRatio: number;
+  /** False only when the provider was deliberately not called this run. */
+  attempted?: boolean;
+  /** Whole-roster size this run (for the email's share detail). */
+  rosterSize?: number;
 }
 
 export interface ProviderCoverageHistoryEntry {
@@ -32,8 +43,15 @@ export interface ProviderCoverageAlert {
   lastHealthyRunAt: string | null;
 }
 
-/** In-process de-dup: don't re-fire until coverage recovers. */
-const outageAlerted = new Set<IngestAlertProvider>();
+/**
+ * In-process de-dup state:
+ *  - `outageConfirmed` — providers whose outage passed the onset gate and are
+ *    still dark (cleared on recovery to the healthy threshold).
+ *  - `lastAlertedUtcDay` — last UTC day (YYYY-MM-DD) we emailed for a provider,
+ *    so a confirmed outage re-alerts at most once per day.
+ */
+const outageConfirmed = new Set<IngestAlertProvider>();
+const lastAlertedUtcDay = new Map<IngestAlertProvider, string>();
 
 export function extractProviderCoverageFromHealthSummary(
   healthSummary: Record<string, unknown> | null | undefined,
@@ -47,6 +65,8 @@ export function extractProviderCoverageFromHealthSummary(
   const providerBlock = providers?.providers as Record<string, unknown> | undefined;
   if (!providerBlock) return [];
 
+  const rosterSize = Number((providers as Record<string, unknown>)?.rosterSize ?? 0);
+
   const out: ProviderCoverageSnapshot[] = [];
   for (const provider of INGEST_ALERT_PROVIDERS) {
     const row = providerBlock[provider] as Record<string, unknown> | undefined;
@@ -55,7 +75,17 @@ export function extractProviderCoverageFromHealthSummary(
     const peopleWithData = Number(row.peopleWithData ?? 0);
     const coverageRatio =
       peopleWithData > 0 ? peopleWithArticles / peopleWithData : 0;
-    out.push({ provider, peopleWithArticles, peopleWithData, coverageRatio });
+    // Default true when absent so historical rows (persisted before `attempted`
+    // was recorded) and test fixtures aren't treated as intentional skips.
+    const attempted = row.attempted !== false;
+    out.push({
+      provider,
+      peopleWithArticles,
+      peopleWithData,
+      coverageRatio,
+      attempted,
+      ...(rosterSize > 0 ? { rosterSize } : {}),
+    });
   }
   return out;
 }
@@ -83,43 +113,71 @@ export function buildProviderHistoryFromRuns(
 }
 
 /**
- * Evaluate alert from completed-run history (newest first, includes current run).
+ * Evaluate alert from completed-run history (newest first; the current,
+ * still-running ingest is NOT included). Returns an alert to emit, or null.
+ *
+ * Behavior:
+ *  - Recovery (coverage >= healthy) or a not-attempted provider clears state.
+ *  - Onset: a not-yet-confirmed provider must have 3 consecutive low runs AND
+ *    a healthy run somewhere in history before it is confirmed.
+ *  - Once confirmed, re-fire at most once per UTC day (keyed on `now`) until
+ *    recovery — so sustained multi-day outages keep alerting.
  */
 export function evaluateProviderCoverageFromRunHistory(
   provider: IngestAlertProvider,
   runsNewestFirst: ProviderCoverageHistoryEntry[],
   currentSnapshot: ProviderCoverageSnapshot,
+  now: Date = new Date(),
 ): ProviderCoverageAlert | null {
+  // Intentionally-skipped providers (e.g. GDELT excluded from the union) never
+  // alarm — their "zero coverage" is by design, not an outage.
+  if (currentSnapshot.attempted === false) {
+    outageConfirmed.delete(provider);
+    lastAlertedUtcDay.delete(provider);
+    return null;
+  }
+
   if (currentSnapshot.coverageRatio >= COVERAGE_HEALTHY_THRESHOLD) {
-    outageAlerted.delete(provider);
+    outageConfirmed.delete(provider);
+    lastAlertedUtcDay.delete(provider);
     return null;
   }
 
-  if (outageAlerted.has(provider)) {
-    return null;
+  // Still dark. Confirm the outage on first detection (onset gate), then allow
+  // one alert per UTC day while it persists.
+  if (!outageConfirmed.has(provider)) {
+    if (currentSnapshot.coverageRatio >= COVERAGE_LOW_THRESHOLD) {
+      // In the ambiguous band (low..healthy): not dark enough to confirm, not
+      // recovered enough to clear. Wait.
+      return null;
+    }
+    if (runsNewestFirst.length < CONSECUTIVE_LOW_RUNS) {
+      return null;
+    }
+    const last3 = runsNewestFirst.slice(0, CONSECUTIVE_LOW_RUNS);
+    if (!last3.every((r) => r.coverageRatio < COVERAGE_LOW_THRESHOLD)) {
+      return null;
+    }
+    const hadHealthy = runsNewestFirst.some(
+      (r) => r.coverageRatio >= COVERAGE_HEALTHY_THRESHOLD,
+    );
+    if (!hadHealthy) {
+      return null;
+    }
+    outageConfirmed.add(provider);
   }
 
-  if (runsNewestFirst.length < CONSECUTIVE_LOW_RUNS) {
+  // Confirmed (or just confirmed) and still below healthy: at most one alert
+  // per UTC day.
+  const utcDay = now.toISOString().slice(0, 10);
+  if (lastAlertedUtcDay.get(provider) === utcDay) {
     return null;
   }
-
-  const last3 = runsNewestFirst.slice(0, CONSECUTIVE_LOW_RUNS);
-  if (!last3.every((r) => r.coverageRatio < COVERAGE_LOW_THRESHOLD)) {
-    return null;
-  }
-
-  const hadHealthyIn24h = runsNewestFirst.some(
-    (r) => r.coverageRatio >= COVERAGE_HEALTHY_THRESHOLD,
-  );
-  if (!hadHealthyIn24h) {
-    return null;
-  }
+  lastAlertedUtcDay.set(provider, utcDay);
 
   const lastHealthy = runsNewestFirst.find(
     (r) => r.coverageRatio >= COVERAGE_HEALTHY_THRESHOLD,
   );
-
-  outageAlerted.add(provider);
 
   return {
     provider,
@@ -189,5 +247,6 @@ export function buildIngestProviderOpsAlertPayload(
 
 /** Reset in-process de-dup state (for tests). */
 export function resetIngestAlertDedupState(): void {
-  outageAlerted.clear();
+  outageConfirmed.clear();
+  lastAlertedUtcDay.clear();
 }

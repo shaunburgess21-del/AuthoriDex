@@ -238,6 +238,7 @@ const SOURCE_LABELS = {
   mediastack: "News (Mediastack)",
   gdelt: "News (GDELT)",
   serper: "Search (Serper)",
+  serper_news: "News (Serper)",
   trends: "Search Momentum",
   searchVolume: "Search Interest",
   webSentiment: "Web Sentiment",
@@ -5645,7 +5646,10 @@ export default function AdminDashboard() {
                                     <span title={sourceStatusTooltip("Wikipedia", run.sourceStatuses.wiki)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.wiki))}>W</span>
                                     <span title={sourceStatusTooltip("Mediastack", run.sourceStatuses.mediastack)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.mediastack))}>M</span>
                                     <span title={sourceStatusTooltip("GDELT", run.sourceStatuses.gdelt)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.gdelt))}>G</span>
-                                    <span title={sourceStatusTooltip("Serper", run.sourceStatuses.serper)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
+                                    <span title={sourceStatusTooltip("Serper (search)", run.sourceStatuses.serper)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper))}>S</span>
+                                    {run.sourceStatuses.serper_news && (
+                                      <span title={sourceStatusTooltip("Serper (news)", run.sourceStatuses.serper_news)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.serper_news))}>SN</span>
+                                    )}
                                     <span title={sourceStatusTooltip("Search Momentum", run.sourceStatuses.trends)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.trends))}>T</span>
                                     <span title={sourceStatusTooltip("Search Interest", run.sourceStatuses.searchVolume)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.searchVolume))}>I</span>
                                     <span title={sourceStatusTooltip("Web Sentiment", run.sourceStatuses.webSentiment)} className={cn("text-[10px]", sourceStatusColor(run.sourceStatuses.webSentiment))}>A</span>

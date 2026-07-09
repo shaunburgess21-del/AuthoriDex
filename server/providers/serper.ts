@@ -576,14 +576,29 @@ export async function fetchSerperNewsCount(
     // Activity pill and its 24h delta, so de-capping matters even on
     // this legacy tiered-mode path.
     const raw24h: SerperNewsRawArticle[] = [];
+    let firstPageErrored = false;
     for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
       if (page > 1) {
         await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
       }
       const pageArticles = await fetchSerperNewsPage(query, page, "qdr:d");
-      if (!pageArticles || pageArticles.length === 0) break;
+      // `null` = HTTP/API error (quota/401/5xx); `[]` = genuine "no news".
+      if (pageArticles === null) {
+        if (page === 1) firstPageErrored = true;
+        break;
+      }
+      if (pageArticles.length === 0) break;
       raw24h.push(...pageArticles);
       if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
+    }
+
+    // Never cache a zero-article result caused by a page-1 API failure — that
+    // would mask a quota lapse/outage as "genuinely no news" for the cache TTL.
+    if (firstPageErrored) {
+      console.warn(
+        `[Serper News] Page-1 fetch failed for ${name} (likely quota/API error) — returning null, not caching a zero result.`,
+      );
+      return null;
     }
 
     const all24h = filterSerperNewsArticles(raw24h, relevanceSpec, name);
@@ -723,14 +738,33 @@ export async function fetchSerperNewsCount24h(
     // low volume) or page 2 (true count in 11-20 range). Only the
     // highest-volume celebs end up paying the full 3-call cost.
     const rawArticles: SerperNewsRawArticle[] = [];
+    let firstPageErrored = false;
     for (let page = 1; page <= SERPER_NEWS_MAX_PAGES; page++) {
       if (page > 1) {
         await new Promise(r => setTimeout(r, SERPER_NEWS_INTER_PAGE_DELAY_MS));
       }
       const pageArticles = await fetchSerperNewsPage(query, page, "qdr:d");
-      if (!pageArticles || pageArticles.length === 0) break;
+      // `null` = HTTP/API error (quota exhausted, 401, 5xx). Distinct from an
+      // empty array (`[]`) which is a genuine "no news" result.
+      if (pageArticles === null) {
+        if (page === 1) firstPageErrored = true;
+        break;
+      }
+      if (pageArticles.length === 0) break;
       rawArticles.push(...pageArticles);
       if (pageArticles.length < SERPER_NEWS_PAGE_SIZE) break;
+    }
+
+    // Do NOT cache a zero-article result that came from a page-1 API failure:
+    // caching it would mask a quota/outage as "genuinely no news" for the full
+    // cache TTL (this is exactly how a Serper credit lapse went invisible for
+    // ~2 weeks). Return null so the aggregator records the provider as missing
+    // for this person, which feeds the Serper-news health tile + dark alert.
+    if (firstPageErrored) {
+      console.warn(
+        `[Serper News 24h] Page-1 fetch failed for ${name} (likely quota/API error) — returning null, not caching a zero result.`,
+      );
+      return null;
     }
 
     const allArticles = filterSerperNewsArticles(rawArticles, relevanceSpec, name);

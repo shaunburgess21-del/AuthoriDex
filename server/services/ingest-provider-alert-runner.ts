@@ -20,7 +20,10 @@ export async function checkAndEmitProviderCoverageAlerts(
   const currentSnapshots = extractProviderCoverageFromHealthSummary(healthSummary);
   if (currentSnapshots.length === 0) return;
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // 7-day window so the onset "was healthy" gate survives multi-day outages
+  // and short ingest gaps — the alert itself re-fires daily via the confirmed
+  // -outage state machine, so the window only needs to cover outage onset.
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const recentRuns = await db
     .select({
       startedAt: ingestionRuns.startedAt,
@@ -34,9 +37,8 @@ export async function checkAndEmitProviderCoverageAlerts(
       ),
     )
     .orderBy(desc(ingestionRuns.startedAt))
-    // 24h window typically has ~24 hourly rows; allow headroom for backfills
-    // so the prior-healthy gate doesn't silently drop the oldest healthy run.
-    .limit(72);
+    // ~7d of hourly rows (~168) with headroom for backfills/denser cadence.
+    .limit(600);
 
   const historyByProvider = buildProviderHistoryFromRuns(
     recentRuns
@@ -47,12 +49,14 @@ export async function checkAndEmitProviderCoverageAlerts(
       })),
   );
 
+  const now = new Date();
   for (const current of currentSnapshots) {
     const history = historyByProvider.get(current.provider) ?? [];
     const alert = evaluateProviderCoverageFromRunHistory(
       current.provider,
       history,
       current,
+      now,
     );
     if (!alert) continue;
 
@@ -87,7 +91,7 @@ export async function checkAndEmitProviderCoverageAlerts(
             {
               text: "Trigger",
               detail:
-                "Below 25% for 3 consecutive hourly ingests after being healthy in the prior 24h",
+                "Below 25% article coverage for 3 consecutive hourly ingests after being healthy (re-alerts daily until it recovers)",
             },
             {
               text: `Last healthy ingest: ${payload.lastHealthyRunAt ?? "unknown"}`,

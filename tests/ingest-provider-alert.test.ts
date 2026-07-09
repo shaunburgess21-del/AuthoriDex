@@ -150,6 +150,62 @@ test("threshold constants match plan", () => {
   assert.equal(COVERAGE_HEALTHY_THRESHOLD, 0.5);
 });
 
+test("not-attempted provider (e.g. GDELT excluded from union) never alarms", () => {
+  resetIngestAlertDedupState();
+  const runs = [
+    { startedAt: new Date("2026-05-24T04:00:00Z"), coverageRatio: 0.0 },
+    { startedAt: new Date("2026-05-24T03:00:00Z"), coverageRatio: 0.0 },
+    { startedAt: new Date("2026-05-24T02:00:00Z"), coverageRatio: 0.0 },
+    { startedAt: new Date("2026-05-24T01:00:00Z"), coverageRatio: 0.72 },
+  ];
+  const current: ProviderCoverageSnapshot = {
+    provider: "gdelt",
+    peopleWithArticles: 0,
+    peopleWithData: 0,
+    coverageRatio: 0,
+    attempted: false,
+  };
+  assert.equal(evaluateProviderCoverageFromRunHistory("gdelt", runs, current), null);
+});
+
+test("extractor defaults attempted=true and reads it when present", () => {
+  const rowsDefault = extractProviderCoverageFromHealthSummary(
+    healthSummaryForProvider("serper", 0, 161),
+  );
+  assert.equal(rowsDefault[0].attempted, true);
+
+  const notAttempted = extractProviderCoverageFromHealthSummary({
+    coverage: {
+      newsAggregator: {
+        providers: {
+          gdelt: { peopleWithArticles: 0, peopleWithData: 0, succeeded: false, attempted: false },
+        },
+      },
+    },
+  });
+  assert.equal(notAttempted[0].attempted, false);
+});
+
+test("confirmed outage re-alerts on a new UTC day but only once per day", () => {
+  resetIngestAlertDedupState();
+  const runs = [
+    { startedAt: new Date("2026-06-17T04:00:00Z"), coverageRatio: 0.02 },
+    { startedAt: new Date("2026-06-17T03:00:00Z"), coverageRatio: 0.02 },
+    { startedAt: new Date("2026-06-17T02:00:00Z"), coverageRatio: 0.03 },
+    { startedAt: new Date("2026-06-16T23:00:00Z"), coverageRatio: 0.72 },
+  ];
+  const current = { provider: "serper" as const, peopleWithArticles: 3, peopleWithData: 161, coverageRatio: 3 / 161 };
+
+  // Day 1: onset → alert.
+  assert.ok(evaluateProviderCoverageFromRunHistory("serper", runs, current, new Date("2026-06-17T10:00:00Z")));
+  // Same day, later ingest: no re-alert.
+  assert.equal(evaluateProviderCoverageFromRunHistory("serper", runs, current, new Date("2026-06-17T11:00:00Z")), null);
+  // Next UTC day, still dark: re-alert (the silence-bug fix).
+  assert.ok(evaluateProviderCoverageFromRunHistory("serper", runs, current, new Date("2026-06-18T10:00:00Z")));
+  // Still day 2: no second alert.
+  assert.equal(evaluateProviderCoverageFromRunHistory("serper", runs, current, new Date("2026-06-18T12:00:00Z")), null);
+});
+
 test("buildIngestProviderOpsAlertPayload shapes ops email fields", () => {
   resetIngestAlertDedupState();
   const serperAlert = evaluateProviderCoverageFromRunHistory(

@@ -53,6 +53,14 @@ import {
   isUnionNewsSmoothingEnabled,
 } from "../scoring/news-smoothing";
 import {
+  NEWS_SOV_ENABLED,
+  cohortMean,
+  computeNewsSupplyFactors,
+  formatNewsSupplyLogLine,
+  queryReferenceNewsSupply,
+  type NewsSupplyFactorResult,
+} from "../scoring/news-supply";
+import {
   fetchDataForSeoTrendsBatch,
   isDataForSeoTrendsConfigured,
   getDataForSeoTrendsRunStats,
@@ -697,6 +705,13 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         sourceStatuses.serper = ps.serper.succeeded
           ? (ps.serper.peopleWithData > 0 ? "OK" : "DEGRADED")
           : "FAILED";
+        // Dedicated Serper NEWS tile keyed on peopleWithArticles (actual
+        // article contribution) rather than peopleWithData — a quota lapse
+        // that returns empty/cached-zero responses keeps peopleWithData
+        // populated, which previously showed a misleading green tile.
+        sourceStatuses.serper_news = ps.serper.succeeded
+          ? (ps.serper.peopleWithArticles > 0 ? "OK" : "DEGRADED")
+          : (ps.serper.attempted ? "FAILED" : "SKIPPED");
 
         sourceTimings.mediastack = ps.mediastack.elapsedMs;
         sourceTimings.gdelt = ps.gdelt.elapsedMs;
@@ -802,6 +817,10 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           : ps.serper.attempted
             ? "FAILED"
             : "SKIPPED";
+        // Dedicated Serper NEWS tile keyed on actual article contribution.
+        sourceStatuses.serper_news = ps.serper.succeeded
+          ? (ps.serper.peopleWithArticles > 0 ? "OK" : "DEGRADED")
+          : (ps.serper.attempted ? "FAILED" : "SKIPPED");
 
         sourceTimings.currents = ps.currents.elapsedMs;
         sourceTimings.dataforseo_news = ps.dataforseo.elapsedMs;
@@ -2294,6 +2313,47 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             ? (mediastackCadence?.shouldRefresh ?? true)
             : true;
 
+    // ════════════════════════════════════════════════════════════════════
+    // NEWS SHARE-OF-VOICE SUPPLY CORRECTION (cohort-level, flag-gated)
+    // ════════════════════════════════════════════════════════════════════
+    // Neutralise cohort-wide news-supply swings (provider quota lapses,
+    // outages, mid-week publishing waves) that otherwise move every person's
+    // score in the same direction at once. We compute a single scalar per
+    // tick from the cohort's supply level vs a stable trailing reference, then
+    // scale the news inputs fed to `computeTrendScore` (persisted news_count
+    // stays raw). See server/scoring/news-supply.ts for the math + rationale.
+    //
+    // Cohort means are taken over the raw incoming values (which best capture
+    // the true supply shock) rather than post-smoothing values; the clamp and
+    // the baseline cohort guard bound any interaction with the per-person
+    // smoothing layers during acute outages.
+    let newsSupplyFactorVolume = 1;
+    let newsSupplyFactorMomentumDenom = 1;
+    let newsSupplyResult: NewsSupplyFactorResult | null = null;
+    if (NEWS_SOV_ENABLED) {
+      const nowSupplyValues: number[] = [];
+      const sevenDaySupplyValues: number[] = [];
+      for (const person of people) {
+        const personNews = newsData.get(person.id);
+        nowSupplyValues.push(currentNewsValues.get(person.id) ?? (personNews?.articleCount24h ?? 0));
+        const raw7d =
+          (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
+            ? (news7dHistoryAvgMap.get(person.id) ?? 0)
+            : (personNews?.averageDaily7d || sourceStats.news.p50);
+        sevenDaySupplyValues.push(raw7d);
+      }
+      const supplyRef = await queryReferenceNewsSupply();
+      newsSupplyResult = computeNewsSupplyFactors({
+        supplyNow: cohortMean(nowSupplyValues),
+        supply7d: cohortMean(sevenDaySupplyValues),
+        supplyRef,
+        cohortSize: people.length,
+      });
+      newsSupplyFactorVolume = newsSupplyResult.factorVolume;
+      newsSupplyFactorMomentumDenom = newsSupplyResult.factorMomentumDenom;
+      console.log(formatNewsSupplyLogLine(newsSupplyResult));
+    }
+
     for (const person of people) {
       try {
         const PER_PERSON_TIMEOUT_MS = 30_000;
@@ -2641,9 +2701,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           mediastackTotal: news?.mediastackPaginationTotal,
           unionCount: news?.unionCount,
         });
-        const newsCountForScoring = newsProviderHealthy && !applyUnionSmoothing
+        const newsCountForScoringBase = newsProviderHealthy && !applyUnionSmoothing
           ? newsCount
           : (smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount);
+        // Share-of-voice: rescale the 24h volume input by the cohort supply
+        // factor (no-op / factor 1 when NEWS_SOV_ENABLED is off).
+        const newsCountForScoring = NEWS_SOV_ENABLED
+          ? Math.round(newsCountForScoringBase * newsSupplyFactorVolume)
+          : newsCountForScoringBase;
 
         const rawNews7dForScoring =
           (news7dHistorySamplesMap.get(person.id) ?? 0) >= PERSONAL_BASELINE_MIN_OBSERVATIONS
@@ -2653,8 +2718,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ...(recentNews7dSeriesMap.get(person.id) ?? []),
           rawNews7dForScoring,
         ];
-        const news7dForScoring =
+        const news7dForScoringBase =
           smoothLastNTicks(news7dSeries, NEWS_SMOOTHING_WINDOW) ?? rawNews7dForScoring;
+        // Share-of-voice: rescale the momentum denominator by the cohort 7d
+        // supply factor so the momentum ratio becomes the supply-corrected
+        // double ratio (person 24h/7d) / (cohort 24h/7d).
+        const news7dForScoring = NEWS_SOV_ENABLED
+          ? news7dForScoringBase * newsSupplyFactorMomentumDenom
+          : news7dForScoringBase;
 
         // DataForSEO search volume: fresh value this cycle, else last carried.
         // Resolved once so the score input and the persisted diagnostics agree.
@@ -3465,26 +3536,35 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           peopleUnionBeatsMediastack: aggregatorStats.peopleUnionBeatsMediastack,
           peopleMediastackBeatsUnion: aggregatorStats.peopleMediastackBeatsUnion,
           biggestGainPerson: aggregatorStats.biggestGainPerson,
+          // rosterSize lets the provider-dark alert compute article share as a
+          // fraction of the whole roster (not just people the provider
+          // returned rows for). `attempted` lets it skip intentionally-excluded
+          // providers (e.g. GDELT in union mode) without false-alarming.
+          rosterSize: people.length,
           providers: {
             mediastack: {
+              attempted: aggregatorStats.providers.mediastack.attempted,
               succeeded: aggregatorStats.providers.mediastack.succeeded,
               peopleWithData: aggregatorStats.providers.mediastack.peopleWithData,
               peopleWithArticles: aggregatorStats.providers.mediastack.peopleWithArticles,
               elapsedMs: aggregatorStats.providers.mediastack.elapsedMs,
             },
             currents: {
+              attempted: aggregatorStats.providers.currents.attempted,
               succeeded: aggregatorStats.providers.currents.succeeded,
               peopleWithData: aggregatorStats.providers.currents.peopleWithData,
               peopleWithArticles: aggregatorStats.providers.currents.peopleWithArticles,
               elapsedMs: aggregatorStats.providers.currents.elapsedMs,
             },
             gdelt: {
+              attempted: aggregatorStats.providers.gdelt.attempted,
               succeeded: aggregatorStats.providers.gdelt.succeeded,
               peopleWithData: aggregatorStats.providers.gdelt.peopleWithData,
               peopleWithArticles: aggregatorStats.providers.gdelt.peopleWithArticles,
               elapsedMs: aggregatorStats.providers.gdelt.elapsedMs,
             },
             serper: {
+              attempted: aggregatorStats.providers.serper.attempted,
               succeeded: aggregatorStats.providers.serper.succeeded,
               peopleWithData: aggregatorStats.providers.serper.peopleWithData,
               peopleWithArticles: aggregatorStats.providers.serper.peopleWithArticles,
@@ -3583,6 +3663,21 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       console.warn("[Ingest] Failed to fetch baseline diagnostics:", e);
     }
     (healthSummary as any).baselineMeta = baselineMeta;
+
+    // News share-of-voice supply correction (per-run observability). Null when
+    // the flag is off so its absence is distinguishable from an applied no-op.
+    if (newsSupplyResult) {
+      (healthSummary as any).newsSupply = {
+        applied: newsSupplyResult.applied,
+        reason: newsSupplyResult.reason,
+        factorVolume: Math.round(newsSupplyResult.factorVolume * 1000) / 1000,
+        factorMomentumDenom: Math.round(newsSupplyResult.factorMomentumDenom * 1000) / 1000,
+        supplyNow: Math.round(newsSupplyResult.supplyNow * 100) / 100,
+        supply7d: Math.round(newsSupplyResult.supply7d * 100) / 100,
+        supplyRef: Math.round(newsSupplyResult.supplyRef * 100) / 100,
+        cohortSize: newsSupplyResult.cohortSize,
+      };
+    }
 
     console.log(`[HEALTH SUMMARY] ${JSON.stringify(healthSummary)}`);
 
