@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import {
   cohortMean,
   computeNewsSupplyFactors,
+  getNewsSovActivation,
+  parseNewsSovEnableFrom,
 } from "../server/scoring/news-supply";
 
 const ENABLED = { enabled: true, minFactor: 0.5, maxFactor: 2.5, minCohort: 20 };
@@ -128,4 +130,60 @@ test("uniform per-tick factor preserves cross-person ordering", () => {
   const rankRaw = [...people.keys()].sort((a, b) => people[b] - people[a]);
   const rankCorr = [...corrected.keys()].sort((a, b) => corrected[b] - corrected[a]);
   assert.deepEqual(rankCorr, rankRaw);
+});
+
+// ── Scheduled activation (NEWS_SOV_ENABLE_FROM) ─────────────────────────────
+
+test("parseNewsSovEnableFrom: empty/missing → no schedule, not invalid", () => {
+  assert.deepEqual(parseNewsSovEnableFrom(undefined), { date: null, invalid: false });
+  assert.deepEqual(parseNewsSovEnableFrom("  "), { date: null, invalid: false });
+});
+
+test("parseNewsSovEnableFrom: garbage → invalid (fail-safe)", () => {
+  const r = parseNewsSovEnableFrom("13-07-2026");
+  assert.equal(r.invalid, true);
+  assert.equal(r.date, null);
+});
+
+test("activation: disabled flag → inactive regardless of schedule", () => {
+  const r = getNewsSovActivation(new Date("2026-07-20T12:00:00Z"), {
+    enabled: false,
+    enableFromRaw: "2026-07-13",
+  });
+  assert.equal(r.active, false);
+  assert.equal(r.reason, "disabled");
+});
+
+test("activation: enabled with no enable-from → active immediately", () => {
+  const r = getNewsSovActivation(new Date("2026-07-09T18:00:00Z"), {
+    enabled: true,
+    enableFromRaw: undefined,
+  });
+  assert.equal(r.active, true);
+  assert.equal(r.reason, "active");
+});
+
+test("activation: date-only enable-from = Monday 00:00 UTC boundary", () => {
+  const opts = { enabled: true, enableFromRaw: "2026-07-13" };
+  // Sunday 23:59 UTC — still scheduled, inert.
+  const before = getNewsSovActivation(new Date("2026-07-12T23:59:59Z"), opts);
+  assert.equal(before.active, false);
+  assert.equal(before.reason, "scheduled");
+  assert.equal(before.enableFrom?.toISOString(), "2026-07-13T00:00:00.000Z");
+  // Monday 00:00:00 UTC exactly — active.
+  const atBoundary = getNewsSovActivation(new Date("2026-07-13T00:00:00Z"), opts);
+  assert.equal(atBoundary.active, true);
+  assert.equal(atBoundary.reason, "active");
+  // Later in the week / weeks later — stays active (variable can be left set).
+  const later = getNewsSovActivation(new Date("2026-08-01T09:00:00Z"), opts);
+  assert.equal(later.active, true);
+});
+
+test("activation: invalid enable-from blocks activation (never a mid-week surprise)", () => {
+  const r = getNewsSovActivation(new Date("2026-07-20T12:00:00Z"), {
+    enabled: true,
+    enableFromRaw: "next monday",
+  });
+  assert.equal(r.active, false);
+  assert.equal(r.reason, "invalid_enable_from");
 });

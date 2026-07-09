@@ -53,10 +53,10 @@ import {
   isUnionNewsSmoothingEnabled,
 } from "../scoring/news-smoothing";
 import {
-  NEWS_SOV_ENABLED,
   cohortMean,
   computeNewsSupplyFactors,
   formatNewsSupplyLogLine,
+  getNewsSovActivation,
   queryReferenceNewsSupply,
   type NewsSupplyFactorResult,
 } from "../scoring/news-supply";
@@ -2330,7 +2330,17 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     let newsSupplyFactorVolume = 1;
     let newsSupplyFactorMomentumDenom = 1;
     let newsSupplyResult: NewsSupplyFactorResult | null = null;
-    if (NEWS_SOV_ENABLED) {
+    // Scheduled activation: with NEWS_SOV_ENABLE_FROM set, the flag can be
+    // flipped in Railway at any convenient time and the correction turns
+    // itself on at exactly that moment (e.g. Monday 00:00 UTC week boundary).
+    const newsSovActivation = getNewsSovActivation(now);
+    if (newsSovActivation.enabled && !newsSovActivation.active) {
+      console.log(
+        `[NewsSupplySoV] enabled but not active (reason=${newsSovActivation.reason}` +
+          `${newsSovActivation.enableFrom ? `, enableFrom=${newsSovActivation.enableFrom.toISOString()}` : ""}) — correction inert this run`,
+      );
+    }
+    if (newsSovActivation.active) {
       const nowSupplyValues: number[] = [];
       const sevenDaySupplyValues: number[] = [];
       for (const person of people) {
@@ -2705,8 +2715,8 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
           ? newsCount
           : (smoothLastNTicks(newsCountSeries, NEWS_SMOOTHING_WINDOW) ?? newsCount);
         // Share-of-voice: rescale the 24h volume input by the cohort supply
-        // factor (no-op / factor 1 when NEWS_SOV_ENABLED is off).
-        const newsCountForScoring = NEWS_SOV_ENABLED
+        // factor (no-op when the correction is off or scheduled-but-pending).
+        const newsCountForScoring = newsSovActivation.active
           ? Math.round(newsCountForScoringBase * newsSupplyFactorVolume)
           : newsCountForScoringBase;
 
@@ -2723,7 +2733,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         // Share-of-voice: rescale the momentum denominator by the cohort 7d
         // supply factor so the momentum ratio becomes the supply-corrected
         // double ratio (person 24h/7d) / (cohort 24h/7d).
-        const news7dForScoring = NEWS_SOV_ENABLED
+        const news7dForScoring = newsSovActivation.active
           ? news7dForScoringBase * newsSupplyFactorMomentumDenom
           : news7dForScoringBase;
 
@@ -3664,8 +3674,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     }
     (healthSummary as any).baselineMeta = baselineMeta;
 
-    // News share-of-voice supply correction (per-run observability). Null when
-    // the flag is off so its absence is distinguishable from an applied no-op.
+    // News share-of-voice supply correction (per-run observability). Absent
+    // when the flag is off; "scheduled"/"invalid_enable_from" when the flag is
+    // set but activation is pending (or blocked by a typo'd enable-from date).
     if (newsSupplyResult) {
       (healthSummary as any).newsSupply = {
         applied: newsSupplyResult.applied,
@@ -3676,6 +3687,14 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
         supply7d: Math.round(newsSupplyResult.supply7d * 100) / 100,
         supplyRef: Math.round(newsSupplyResult.supplyRef * 100) / 100,
         cohortSize: newsSupplyResult.cohortSize,
+      };
+    } else if (newsSovActivation.enabled) {
+      (healthSummary as any).newsSupply = {
+        applied: false,
+        reason: newsSovActivation.reason,
+        ...(newsSovActivation.enableFrom
+          ? { enableFrom: newsSovActivation.enableFrom.toISOString() }
+          : {}),
       };
     }
 

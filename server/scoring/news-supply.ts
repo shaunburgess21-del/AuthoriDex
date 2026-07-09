@@ -65,6 +65,64 @@ export const NEWS_SOV_MIN_FACTOR = envNumber(process.env.NEWS_SOV_MIN_FACTOR, 0.
 export const NEWS_SOV_MAX_FACTOR = envNumber(process.env.NEWS_SOV_MAX_FACTOR, 2.5);
 
 /**
+ * Optional scheduled activation (`NEWS_SOV_ENABLE_FROM`, ISO date or datetime,
+ * UTC). When set, the correction stays inert until that moment even with
+ * `NEWS_SOV_ENABLED=true`. This lets the operator set both Railway variables at
+ * any convenient time and have the correction switch itself on exactly at a
+ * week boundary — e.g. `NEWS_SOV_ENABLE_FROM=2026-07-13` activates at Monday
+ * 00:00 UTC (date-only ISO strings parse as UTC midnight).
+ *
+ * Fail-safe: an unparseable value keeps the correction INACTIVE (and is logged
+ * every ingest run) rather than risking a surprise mid-week activation from a
+ * typo.
+ */
+export function parseNewsSovEnableFrom(
+  raw: string | undefined,
+): { date: Date | null; invalid: boolean } {
+  if (typeof raw !== "string" || raw.trim() === "") return { date: null, invalid: false };
+  const d = new Date(raw.trim());
+  if (Number.isNaN(d.getTime())) return { date: null, invalid: true };
+  return { date: d, invalid: false };
+}
+
+export type NewsSovActivationReason =
+  | "disabled"
+  | "active"
+  | "scheduled"
+  | "invalid_enable_from";
+
+export type NewsSovActivation = {
+  enabled: boolean;
+  /** True only when the correction should actually apply this run. */
+  active: boolean;
+  reason: NewsSovActivationReason;
+  enableFrom: Date | null;
+};
+
+export function getNewsSovActivation(
+  now: Date = new Date(),
+  overrides: { enabled?: boolean; enableFromRaw?: string } = {},
+): NewsSovActivation {
+  const enabled = overrides.enabled ?? NEWS_SOV_ENABLED;
+  const raw =
+    "enableFromRaw" in overrides
+      ? overrides.enableFromRaw
+      : process.env.NEWS_SOV_ENABLE_FROM;
+  const { date: enableFrom, invalid } = parseNewsSovEnableFrom(raw);
+
+  if (!enabled) {
+    return { enabled, active: false, reason: "disabled", enableFrom };
+  }
+  if (invalid) {
+    return { enabled, active: false, reason: "invalid_enable_from", enableFrom: null };
+  }
+  if (enableFrom && now.getTime() < enableFrom.getTime()) {
+    return { enabled, active: false, reason: "scheduled", enableFrom };
+  }
+  return { enabled, active: true, reason: "active", enableFrom };
+}
+
+/**
  * Minimum cohort size for the correction to run. Below this the cohort mean is
  * too noisy to trust as a supply estimate, so we no-op (factors = 1).
  */
