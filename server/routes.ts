@@ -24701,7 +24701,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.post("/api/admin/induction/:id/reject", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const [updated] = await db.update(inductionCandidates).set({ isActive: false }).where(eq(inductionCandidates.id, id)).returning();
+      const [updated] = await db
+        .update(inductionCandidates)
+        .set({ isActive: false, inductionStatus: "Rejected" })
+        .where(eq(inductionCandidates.id, id))
+        .returning();
       if (!updated) return res.status(404).json({ error: "Candidate not found" });
       res.json({ success: true });
     } catch (error: any) {

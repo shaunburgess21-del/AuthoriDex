@@ -155,7 +155,7 @@ type AdminCategoryRow = { id: string; label: string; sortOrder: number };
 
 export function AdminInductionQueue() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editCandidate, setEditCandidate] = useState<InductionCandidate | null>(null);
   const [formData, setFormData] = useState<InductionFormData>({ ...EMPTY_FORM });
@@ -324,12 +324,23 @@ export function AdminInductionQueue() {
   };
 
   const candidates = data?.data || [];
+  const inQueueCount = useMemo(() => candidates.filter((c) => c.isActive).length, [candidates]);
+  const historyCount = candidates.length - inQueueCount;
   const filteredCandidates = candidates.filter((c) => {
     if (searchQuery && !c.displayName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (statusFilter === "active" && !c.isActive) return false;
     if (statusFilter === "inactive" && c.isActive) return false;
     return true;
   });
+  const listSummary = useMemo(() => {
+    if (statusFilter === "active") {
+      return `${filteredCandidates.length} in queue`;
+    }
+    if (statusFilter === "inactive") {
+      return `${filteredCandidates.length} promoted or removed (history)`;
+    }
+    return `${inQueueCount} in queue · ${historyCount} in history · ${candidates.length} total records`;
+  }, [statusFilter, filteredCandidates.length, inQueueCount, historyCount, candidates.length]);
 
   const handleSubmit = () => {
     if (!formData.displayName || !formData.category) return;
@@ -399,19 +410,19 @@ export function AdminInductionQueue() {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]" data-testid="select-induction-status-filter">
+              <SelectTrigger className="w-[220px]" data-testid="select-induction-status-filter">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="active">In Queue</SelectItem>
+                <SelectItem value="inactive">Promoted &amp; Removed</SelectItem>
+                <SelectItem value="all">All Records</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="text-sm text-muted-foreground mb-3">
-            Showing {filteredCandidates.length} of {candidates.length} candidates
+            {listSummary}
           </div>
 
           {isLoading ? (
@@ -448,11 +459,13 @@ export function AdminInductionQueue() {
                       <td className="p-3 text-center">
                         {candidate.isActive ? (
                           <Badge className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">
-                            Active
+                            In Queue
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-muted-foreground">
-                            Inactive
+                            {candidate.inductionStatus && candidate.inductionStatus !== "Queue"
+                              ? candidate.inductionStatus
+                              : "Removed"}
                           </Badge>
                         )}
                       </td>

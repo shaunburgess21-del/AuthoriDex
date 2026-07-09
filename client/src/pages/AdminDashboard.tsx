@@ -2051,6 +2051,11 @@ export default function AdminDashboard() {
     return keys;
   }, [inductionData]);
 
+  const activeInductionQueueCount = useMemo(
+    () => inductionData?.data?.filter((c) => c.isActive !== false).length ?? 0,
+    [inductionData],
+  );
+
   const matchesActiveInductionQueue = (c: Celebrity) =>
     c.status === "induction" &&
     activeInductionNameKeys.has(c.name.trim().toLowerCase());
@@ -3142,8 +3147,8 @@ export default function AdminDashboard() {
               </Select>
             </div>
             <p className="text-xs text-muted-foreground -mt-2">
-              Induction Queue here lists Curate Profile shadow rows tied to active vote-queue candidates.
-              Edit full vote metadata (wiki, social handles, seed votes) in Voting CMS → Induction Queue.
+              Induction Queue lists everyone currently in the vote queue (same count as Voting CMS → Induction Queue).
+              Edit full vote metadata (wiki, social handles, seed votes) there; use this tab for shadow profile fields.
             </p>
 
             <Card>
@@ -3805,7 +3810,7 @@ export default function AdminDashboard() {
                     Underrated / Overrated {underratedData?.data ? <span className="ml-1 text-xs opacity-60">({underratedData.data.length})</span> : null}
                   </TabsTrigger>
                   <TabsTrigger value="induction" data-testid="tab-induction">
-                    Induction Queue {inductionData?.data ? <span className="ml-1 text-xs opacity-60">({inductionData.data.length})</span> : null}
+                    Induction Queue {activeInductionQueueCount > 0 ? <span className="ml-1 text-xs opacity-60">({activeInductionQueueCount})</span> : null}
                   </TabsTrigger>
                   <TabsTrigger value="curate-profile" data-testid="tab-curate-profile">
                     Curate Profile {curateData?.data ? <span className="ml-1 text-xs opacity-60">({curateData.data.length})</span> : null}

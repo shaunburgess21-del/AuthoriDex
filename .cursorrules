@@ -102,6 +102,19 @@ Never modify or remove cross-env, --env-file=.env, or NODE_ENV from the dev or s
 
 ---
 
+## Roster: Main Leaderboard vs Induction Queue
+
+Two celebrity lists; **`tracked_people.status`** is the sole source of truth for which list someone is on:
+
+- **`main_leaderboard`** — actively tracked (API ingest, `trending_people`, trend scores, native prediction markets, Weekly Jackpot eligibility).
+- **`induction`** — shadow profile only (`tracked_people.status = 'induction'`). Not ingested or scored. Profile pages exist for comments/Voices; users vote via **`induction_candidates`** (`is_active = true`).
+
+**Admin induction queue** (Celebrities filter and Voting CMS → Induction Queue): both surfaces show the same active candidates (`induction_candidates.is_active = true`), matched 1:1 by name to `tracked_people` shadow rows. Inactive/historical rows (promoted, rejected, archived) are admin history only — not a second queue.
+
+**Historical trend snapshots:** induction people may have rows in `trend_snapshots` from a past accidental-tracking incident or from deliberate demotions from the main leaderboard. This is expected; all scoring/leaderboard/market queries gate on `status = 'main_leaderboard'` only.
+
+---
+
 ## Prediction Markets
 
 VoxDex offers five market types, all settled in virtual credits:
