@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Plus, Check, X, Search, Trash2, Edit2, ImagePlus, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AdminCategoryMultiSelect } from "@/components/admin/AdminCategoryMultiSelect";
 
 const HOVER_TOOLTIP_MEDIA = "(hover: hover) and (pointer: fine)";
 const MAX_INDUCTION_GALLERY = 5;
@@ -32,6 +33,7 @@ const INDUCTION_STATUS_OPTIONS = ["Queue", "Inactive", "Archived", "Rejected", "
 type InductionFormData = {
   displayName: string;
   category: string;
+  secondaryCategories: string[];
   imageSlug: string;
   wikiSlug: string;
   seedVotes: number;
@@ -48,6 +50,7 @@ type InductionFormData = {
 const EMPTY_FORM: InductionFormData = {
   displayName: "",
   category: "tech",
+  secondaryCategories: [],
   imageSlug: "",
   wikiSlug: "",
   seedVotes: 0,
@@ -65,6 +68,7 @@ function formDataToApiBody(form: InductionFormData): Record<string, unknown> {
   return {
     displayName: form.displayName,
     category: form.category,
+    secondaryCategories: form.secondaryCategories,
     imageSlug: form.imageSlug.trim() || undefined,
     wikiSlug: form.wikiSlug.trim() || null,
     seedVotes: form.seedVotes,
@@ -134,6 +138,7 @@ interface InductionCandidate {
   id: string;
   displayName: string;
   category: string;
+  secondaryCategories?: string[] | null;
   imageSlug: string | null;
   avatar: string | null;
   seedVotes: number;
@@ -309,6 +314,7 @@ export function AdminInductionQueue() {
     setFormData({
       displayName: c.displayName,
       category: normalizeMarketCategory(c.category),
+      secondaryCategories: (c.secondaryCategories as string[] | null) ?? [],
       imageSlug: c.imageSlug || "",
       wikiSlug: c.wikiSlug || "",
       seedVotes: c.seedVotes,
@@ -593,6 +599,13 @@ export function AdminInductionQueue() {
                   <p className="text-xs text-muted-foreground mt-1">Not the same as Main leaderboard vs Induction in Celebrities—this is the vote card lifecycle.</p>
                 </div>
               </div>
+              <AdminCategoryMultiSelect
+                options={categorySelectOptions}
+                value={formData.secondaryCategories}
+                onChange={(next) => setFormData((prev) => ({ ...prev, secondaryCategories: next }))}
+                primaryValue={formData.category}
+                testId="candidate-secondary-categories"
+              />
               <div>
                 <Label>Image Slug</Label>
                 <Input
