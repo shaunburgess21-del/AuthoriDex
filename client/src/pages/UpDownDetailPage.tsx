@@ -807,9 +807,9 @@ export default function UpDownDetailPage() {
                   <div className="space-y-2 pt-2 border-t border-border/40">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your position</p>
                     {[
-                      { label: "UP", pos: upPos, side: "up" as const },
-                      { label: "DOWN", pos: downPos, side: "down" as const },
-                    ].map(({ label, pos, side }) => {
+                      { label: "UP", pos: upPos, side: "up" as const, sidePrice: upPrice },
+                      { label: "DOWN", pos: downPos, side: "down" as const, sidePrice: downPrice },
+                    ].map(({ label, pos, side, sidePrice }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
                       // Unrealised PnL = current mark-to-market value minus
                       // net Vox paid in. Buy = positive netCreditsIn.
@@ -860,6 +860,9 @@ export default function UpDownDetailPage() {
                             <p className="text-sm font-semibold">{label} on {firstName}</p>
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(sidePrice, 0)}
                             </p>
                             {/* Round-3 rewrite: previous copy ("≈ Ꝟ64.64
                                 now · −Ꝟ35.36" + "Pays Ꝟ173.82 if win

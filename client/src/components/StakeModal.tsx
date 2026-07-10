@@ -127,8 +127,8 @@ interface StakeModalProps {
    * "you won" confetti on top of the parent's error toast.
    *
    * The optional `meta.maxPricePerShare` is a 5% cap above the modal's
-   * live quote, applied automatically (not user-configurable). Parents
-   * should forward it into the trade route so `executeBuy` can abort
+   * quoted average fill price, applied automatically (not user-configurable).
+   * Parents should forward it into the trade route so `executeBuy` can abort
    * with `slippage_exceeded` when the market moves before execution.
    * Callers that don't forward it opt out of protection.
    */
@@ -290,12 +290,16 @@ export function StakeModal({
       };
     }
 
-    // Derive the quote-staleness cap from the live AMM price and
-    // DEFAULT_SLIPPAGE_TOLERANCE. Clamp into the LMSR domain (0, 1] so
-    // price * (1 + tolerance) > 1 doesn't no-op on the server.
+    // Derive the quote-staleness cap from the quoted average fill price
+    // (what the receipt shows), not the marginal spot price. The server
+    // validates avg fill vs this cap; marginal × tolerance is too tight
+    // on LMSR buys (especially add-to-position on lower-priced sides).
+    // Fall back to marginal spot if no quote yet (e.g. below min stake).
+    const slippageBasis =
+      ammBuyQuote?.pricePerShareAvg ?? ammEntryPrice ?? null;
     const maxPricePerShare =
-      ammEntryPrice != null
-        ? Math.min(1, ammEntryPrice * (1 + DEFAULT_SLIPPAGE_TOLERANCE))
+      slippageBasis != null
+        ? Math.min(1, slippageBasis * (1 + DEFAULT_SLIPPAGE_TOLERANCE))
         : undefined;
 
     setSubmitting(true);

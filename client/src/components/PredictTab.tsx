@@ -489,11 +489,21 @@ export function PredictTab({
   const handleCategoryFilter = (_category: string) => setLocation("/predict");
 
   const updownBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
+    mutationFn: async ({
+      marketId,
+      entryId,
+      stakeAmount,
+      maxPricePerShare,
+    }: {
+      marketId: string;
+      entryId: string;
+      stakeAmount: number;
+      maxPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/updown/${marketId}/bet`,
-        { entryId, stakeAmount },
+        { entryId, stakeAmount, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -608,17 +618,25 @@ export function PredictTab({
   };
 
   const nativeMarketBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount, marketType: _marketType, toastMeta: _toastMeta }: {
+    mutationFn: async ({
+      marketId,
+      entryId,
+      stakeAmount,
+      marketType: _marketType,
+      toastMeta: _toastMeta,
+      maxPricePerShare,
+    }: {
       marketId: string;
       entryId: string;
       stakeAmount: number;
       marketType: string;
       toastMeta?: NativeBetToastMeta;
+      maxPricePerShare?: number;
     }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/${marketId}/bet`,
-        { entryId, stakeAmount },
+        { entryId, stakeAmount, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -676,16 +694,18 @@ export function PredictTab({
       entryId,
       stakeAmount,
       direction,
+      maxPricePerShare,
     }: {
       slug: string;
       entryId: string;
       stakeAmount: number;
       direction: "yes" | "no";
+      maxPricePerShare?: number;
     }) => {
       const res = await apiRequest(
         "POST",
         `/api/open-markets/${slug}/bet`,
-        { entryId, stakeAmount, direction },
+        { entryId, stakeAmount, direction, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -929,7 +949,10 @@ export function PredictTab({
     [stakeModalOpen, pendingSelection, openMarketBets],
   );
 
-  const handleConfirmStake = async (amount: number) => {
+  const handleConfirmStake = async (
+    amount: number,
+    meta?: { maxPricePerShare?: number },
+  ) => {
     if (!pendingSelection || !pendingSelection.marketId) {
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -967,6 +990,7 @@ export function PredictTab({
         stakeAmount: amount,
         marketType: "gainer",
         toastMeta,
+        maxPricePerShare: meta?.maxPricePerShare,
       });
       return;
     }
@@ -996,6 +1020,7 @@ export function PredictTab({
         stakeAmount: amount,
         marketType: "h2h",
         toastMeta,
+        maxPricePerShare: meta?.maxPricePerShare,
       });
       return;
     }
@@ -1011,6 +1036,7 @@ export function PredictTab({
         marketId: pendingSelection.marketId,
         entryId,
         stakeAmount: amount,
+        maxPricePerShare: meta?.maxPricePerShare,
       });
       return;
     }
@@ -1034,6 +1060,7 @@ export function PredictTab({
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         direction: pendingSelection.direction === "no" ? "no" : "yes",
+        maxPricePerShare: meta?.maxPricePerShare,
       });
     }
   };

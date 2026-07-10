@@ -1839,11 +1839,21 @@ export default function PredictPage() {
   };
 
   const nativeUpdownBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount }: { marketId: string; entryId: string; stakeAmount: number }) => {
+    mutationFn: async ({
+      marketId,
+      entryId,
+      stakeAmount,
+      maxPricePerShare,
+    }: {
+      marketId: string;
+      entryId: string;
+      stakeAmount: number;
+      maxPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/updown/${marketId}/bet`,
-        { entryId, stakeAmount },
+        { entryId, stakeAmount, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -1949,11 +1959,23 @@ export default function PredictPage() {
   });
 
   const nativeMarketBetMutation = useMutation({
-    mutationFn: async ({ marketId, entryId, stakeAmount, marketType }: { marketId: string; entryId: string; stakeAmount: number; marketType: string }) => {
+    mutationFn: async ({
+      marketId,
+      entryId,
+      stakeAmount,
+      marketType,
+      maxPricePerShare,
+    }: {
+      marketId: string;
+      entryId: string;
+      stakeAmount: number;
+      marketType: string;
+      maxPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/native-markets/${marketId}/bet`,
-        { entryId, stakeAmount },
+        { entryId, stakeAmount, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -2070,11 +2092,23 @@ export default function PredictPage() {
   // also handles community markets — single source of truth for the credits
   // affordance, idempotent retry path, and confetti.
   const communityMarketBetMutation = useMutation({
-    mutationFn: async ({ slug, entryId, stakeAmount, direction }: { slug: string; entryId: string; stakeAmount: number; direction: "yes" | "no" }) => {
+    mutationFn: async ({
+      slug,
+      entryId,
+      stakeAmount,
+      direction,
+      maxPricePerShare,
+    }: {
+      slug: string;
+      entryId: string;
+      stakeAmount: number;
+      direction: "yes" | "no";
+      maxPricePerShare?: number;
+    }) => {
       const res = await apiRequest(
         "POST",
         `/api/open-markets/${slug}/bet`,
-        { entryId, stakeAmount, direction },
+        { entryId, stakeAmount, direction, ...(maxPricePerShare != null ? { maxPricePerShare } : {}) },
         { idempotencyKey: tradeIdempotencyKey },
       );
       return res.json();
@@ -2396,7 +2430,10 @@ export default function PredictPage() {
     [stakeModalOpen, pendingSelection, userBetsByMarket],
   );
 
-  const handleConfirmStake = async (amount: number) => {
+  const handleConfirmStake = async (
+    amount: number,
+    meta?: { maxPricePerShare?: number },
+  ) => {
     if (!pendingSelection || !pendingSelection.marketId) {
       setStakeModalOpen(false);
       setPendingSelection(null);
@@ -2413,6 +2450,7 @@ export default function PredictPage() {
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         marketType: pendingSelection.type,
+        maxPricePerShare: meta?.maxPricePerShare,
       });
       return;
     }
@@ -2436,6 +2474,7 @@ export default function PredictPage() {
         entryId: pendingSelection.entryId,
         stakeAmount: amount,
         direction: pendingSelection.direction === "no" ? "no" : "yes",
+        maxPricePerShare: meta?.maxPricePerShare,
       });
       return;
     }
@@ -2461,7 +2500,12 @@ export default function PredictPage() {
       return;
     }
 
-    await nativeUpdownBetMutation.mutateAsync({ marketId: market.id, entryId, stakeAmount: amount });
+    await nativeUpdownBetMutation.mutateAsync({
+      marketId: market.id,
+      entryId,
+      stakeAmount: amount,
+      maxPricePerShare: meta?.maxPricePerShare,
+    });
   };
 
   // Section-specific filtering logic

@@ -53,6 +53,10 @@ import {
 } from "./amm-slippage";
 import { notifyPriceChange } from "./amm-price-broadcaster";
 import {
+  isSelfTradeDenied,
+  SELF_TRADE_GUARD_ENABLED,
+} from "./amm-self-trade";
+import {
   formatMarketLead,
   resolvePickContextLabel,
 } from "../jobs/notification-market-labels";
@@ -1114,8 +1118,9 @@ async function loadAndLockTradeContext(
   // approver should hand the trade to someone else (or, if they want
   // a position for liquidity reasons, do it via a non-admin
   // identity). Keeps the conflict-of-interest surface clean before
-  // monetisation goes live.
-  if (market.createdBy && market.createdBy === userId) {
+  // monetisation goes live. Gated by SELF_TRADE_GUARD_ENABLED (off
+  // pre-launch so founders can trade on markets they created).
+  if (isSelfTradeDenied(SELF_TRADE_GUARD_ENABLED, market.createdBy, userId)) {
     return {
       error: "self_trade_denied",
       status: 403,

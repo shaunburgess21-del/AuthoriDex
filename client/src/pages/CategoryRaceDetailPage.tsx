@@ -36,7 +36,7 @@ import { goBack } from "@/lib/goBack";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
-import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
+import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
 import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { PredictDetailSectionHeader } from "@/components/predict/PredictDetailSectionHeader";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
@@ -801,6 +801,9 @@ export default function CategoryRaceDetailPage() {
                                 <p className="text-sm font-semibold truncate">{candidateName}</p>
                                 <p className="text-[11px] text-muted-foreground">
                                   {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(Number(ammPriceMap?.[pos.entryId] ?? pos.currentPrice), 0)}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
                                   Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}

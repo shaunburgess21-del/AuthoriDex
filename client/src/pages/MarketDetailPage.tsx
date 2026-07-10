@@ -1676,6 +1676,9 @@ export default function MarketDetailPage() {
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
+                              Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(Number(ammPriceMap[pos.entryId] ?? pos.currentPrice), 0)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
                               Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
                               <span className={`font-mono font-medium ${pnlClass}`}>
                                 ({formatVoxDelta(unrealisedPnl)})

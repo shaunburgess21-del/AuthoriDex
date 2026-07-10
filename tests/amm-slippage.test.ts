@@ -54,6 +54,28 @@ test("checkBuySlippage: negative cap is ignored (Zod is authoritative; helper de
   assert.equal(r.ok, true);
 });
 
+test("checkBuySlippage: quoted-avg cap allows fill that marginal cap rejected (add-to-position)", () => {
+  // Matt Rife scenario: marginal 0.195, quoted avg fill 0.208, stake ~100 Vox.
+  const quotedAvg = 0.208;
+  const sharesOut = 100 / quotedAvg;
+  const oldMarginalCap = Math.min(1, 0.195 * 1.05);
+  const newQuotedCap = Math.min(1, quotedAvg * 1.05);
+
+  const oldGuard = checkBuySlippage({
+    creditsSpent: 100,
+    sharesOut,
+    cap: oldMarginalCap,
+  });
+  const newGuard = checkBuySlippage({
+    creditsSpent: 100,
+    sharesOut,
+    cap: newQuotedCap,
+  });
+
+  assert.equal(oldGuard.ok, false, "marginal-spot cap falsely rejects same-state quote");
+  assert.equal(newGuard.ok, true, "quoted-avg cap accepts same-state quote");
+});
+
 test("checkBuySlippage: NaN cap is ignored", () => {
   const r = checkBuySlippage({ creditsSpent: 100, sharesOut: 200, cap: Number.NaN });
   assert.equal(r.ok, true);

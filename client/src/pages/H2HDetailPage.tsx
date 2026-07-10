@@ -835,9 +835,9 @@ export default function H2HDetailPage() {
                   <div className="space-y-2 pt-2 border-t border-border/40">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your position</p>
                     {[
-                      { person: hydrated.person1, pos: p1Pos, side: 1 as const },
-                      { person: hydrated.person2, pos: p2Pos, side: 2 as const },
-                    ].map(({ person, pos, side }) => {
+                      { person: hydrated.person1, pos: p1Pos, side: 1 as const, sidePrice: p1Price },
+                      { person: hydrated.person2, pos: p2Pos, side: 2 as const, sidePrice: p2Price },
+                    ].map(({ person, pos, side, sidePrice }) => {
                       if (!pos || pos.netShares <= 1e-6) return null;
                       // Unrealised PnL = current mark-to-market value minus
                       // net Vox paid in. Buy = positive netCreditsIn.
@@ -855,6 +855,9 @@ export default function H2HDetailPage() {
                             <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
                             <p className="text-[11px] text-muted-foreground">
                               {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(sidePrice, 0)}
                             </p>
                             {/* Sprint 5 / Phase 2.4: conversational position copy.
                                 Replaces the dense "≈ Ꝟ X now · −Ꝟ Y" style
