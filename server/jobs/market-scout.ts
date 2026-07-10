@@ -35,7 +35,14 @@ import OpenAI from "openai";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
-import { cardRelatedPeople, contentCategories, marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
+import {
+  cardRelatedPeople,
+  contentCategories,
+  inductionCandidates,
+  marketEntries,
+  predictionMarkets,
+  trackedPeople,
+} from "@shared/schema";
 import {
   CANONICAL_MARKET_CATEGORIES,
   OPINION_POLL_MAX_OPTIONS,
@@ -212,14 +219,63 @@ function slugifyTitle(title: string): string {
 /** Max tracked people auto-linked per draft (primary + Display on Profiles). */
 const MAX_LINKED_PEOPLE = 6;
 
+export type ScoutLinkablePerson = { id: string; name: string };
+
 /** Lowercase, strip diacritics, collapse whitespace — canonical key for name matching. */
-function normalizeNameKey(s: string): string {
+export function normalizeNameKey(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Merge main-leaderboard + active-induction people into a name-keyed map.
+ * Main leaderboard wins on name collision (defensive; should not occur).
+ * Exported for unit tests.
+ */
+export function mergeLinkablePeople(
+  mainLeaderboard: ScoutLinkablePerson[],
+  activeInduction: ScoutLinkablePerson[],
+): Map<string, ScoutLinkablePerson> {
+  const byKey = new Map<string, ScoutLinkablePerson>();
+  for (const p of activeInduction) {
+    const key = normalizeNameKey(p.name);
+    if (key) byKey.set(key, p);
+  }
+  for (const p of mainLeaderboard) {
+    const key = normalizeNameKey(p.name);
+    if (key) byKey.set(key, p);
+  }
+  return byKey;
+}
+
+/**
+ * People scout may link to World Markets: main leaderboard plus induction
+ * shadow rows that have an active induction_candidates match (same 1:1
+ * name rule as public induction profile pages).
+ */
+export async function loadLinkablePeopleForScout(): Promise<ScoutLinkablePerson[]> {
+  const [mainRows, inductionRows] = await Promise.all([
+    db
+      .select({ id: trackedPeople.id, name: trackedPeople.name })
+      .from(trackedPeople)
+      .where(eq(trackedPeople.status, "main_leaderboard")),
+    db
+      .select({ id: trackedPeople.id, name: trackedPeople.name })
+      .from(trackedPeople)
+      .innerJoin(
+        inductionCandidates,
+        and(
+          eq(inductionCandidates.displayName, trackedPeople.name),
+          eq(inductionCandidates.isActive, true),
+        ),
+      )
+      .where(eq(trackedPeople.status, "induction")),
+  ]);
+  return Array.from(mergeLinkablePeople(mainRows, inductionRows).values());
 }
 
 function escapeRegExp(s: string): string {
@@ -472,8 +528,9 @@ function buildSystemPrompt(maxDrafts: number, allowedCategories: string[]): stri
 Selection principles:
 - Pick broadly interesting, high-engagement questions a general entertainment/news audience would enjoy predicting on.
 - Category variety is required. For a typical ${maxDrafts}-draft run: at most 2 politics and at most 2 sports. Prefer at least 1–2 from film-tv, music, creator, or comedy when those candidates are present in the list (sourceBucket movies/music/celebrities/tv are strong signals).
-- Sports slot mix: when the shortlist includes a UFC or boxing main-card market headlined by a TRACKED PERSON with competitive volume (roughly top ~20 sports candidates by volume24hUsd), include at least one such combat headliner when fitScore ≥ 55 — do not let a single ongoing tournament (e.g. World Cup) consume both sports slots while this kind of market is present.
-- When quality is equal, prefer markets that can link to a TRACKED PERSON from the list provided.
+- Sports slot mix: when the shortlist includes a UFC or boxing main-card market headlined by a LINKABLE PERSON with competitive volume (roughly top ~20 sports candidates by volume24hUsd), include at least one such combat headliner when fitScore ≥ 55 — do not let a single ongoing tournament (e.g. World Cup) consume both sports slots while this kind of market is present.
+- When quality is equal, prefer markets that can link to a LINKABLE PERSON from the list provided (main leaderboard or induction queue).
+- Induction-queue names on the LINKABLE PEOPLE list are valid for relatedPeople / linkedPerson when genuinely relevant. Prefer them as linkedPerson when they are the face of the market (e.g. a company CEO for a company question).
 - Skip anything that duplicates or nearly duplicates an EXISTING VoxDex market (list provided).
 - Skip questions that are incomprehensible without the source platform's context, purely financial microstructure (e.g. hourly crypto candles), or distasteful (deaths, tragedies, graphic violence, invasive pregnancy/relationship gossip).
 - Prefer questions resolving within days-to-months over ones resolving in a year.
@@ -487,7 +544,7 @@ For each selected market, produce:
 - "secondaryCategories": 0-2 additional ids from the same list.
 - "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text.
 - "scoutWatch": one sentence listing the leading indicators a human should watch to know the outcome early.
-- "relatedPeople": ALL names from the TRACKED PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every tracked person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple tracked people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
+- "relatedPeople": ALL names from the LINKABLE PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every linkable person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple linkable people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
 - "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
 - "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability). Prefer 55+; weak fits should be omitted.
 - "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes.
@@ -520,7 +577,7 @@ ${JSON.stringify(candidateBlocks, null, 1)}
 EXISTING VOXDEX MARKET TITLES (do not duplicate):
 ${existingTitles.length > 0 ? existingTitles.map((t) => `- ${t}`).join("\n") : "(none)"}
 
-TRACKED PEOPLE (for relatedPeople / linkedPerson matching only — exact names):
+LINKABLE PEOPLE (main leaderboard + induction queue — for relatedPeople / linkedPerson matching only — exact names):
 ${trackedNames.join(", ")}
 
 Today's date: ${new Date().toISOString().split("T")[0]}. Curate now.`;
@@ -931,13 +988,10 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   result.llmCalls = 1;
 
   const allowedCategoryIds = await getAllowedCategoryIds();
-  // Main-leaderboard people only: tracked_people also retains induction-queue
-  // rows (including demoted ex-leaderboard people), and linking those to a
-  // market would point at someone with no live leaderboard presence.
-  const people = await db
-    .select({ id: trackedPeople.id, name: trackedPeople.name })
-    .from(trackedPeople)
-    .where(eq(trackedPeople.status, "main_leaderboard"));
+  // Main leaderboard + active induction queue (shadow rows with an active
+  // induction_candidates match). World Markets can feature induction people
+  // on their profile Predict tab; inactive/rejected queue history is excluded.
+  const people = await loadLinkablePeopleForScout();
   const peopleByKey = new Map(people.map((p) => [normalizeNameKey(p.name), p]));
 
   const selections = await curateCandidates(

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { useAuth } from "@/contexts/AuthContext";
+import { useXpBurst } from "@/components/XpBurstProvider";
 import { useLocation, Link } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
@@ -57,6 +58,10 @@ interface PredictTabProps {
   personAvatar?: string;
   currentScore: number;
   personRank?: number | null;
+  /** Induction profiles only show World Markets (no native trend-score markets). */
+  variant?: "full" | "induction";
+  /** Inline Vote to Induct card rendered in the induction empty state. */
+  inductionVoteSlot?: ReactNode;
 }
 
 /**
@@ -152,15 +157,36 @@ function SectionHeader({
   );
 }
 
-export function PredictTab({ personId, personName, personAvatar, currentScore, personRank }: PredictTabProps) {
+export function PredictTab({
+  personId,
+  personName,
+  personAvatar,
+  currentScore,
+  personRank,
+  variant = "full",
+  inductionVoteSlot,
+}: PredictTabProps) {
+  const isInduction = variant === "induction";
   const [jackpotModalOpen, setJackpotModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [visibleWorldCount, setVisibleWorldCount] = useState(3);
 
-  const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/updown'] });
-  const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/h2h'] });
-  const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/gainer'] });
-  const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({ queryKey: ['/api/native-markets/jackpot'] });
+  const { data: nativeUpdownData, isLoading: updownLoading } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/updown'],
+    enabled: !isInduction,
+  });
+  const { data: nativeH2hData, isLoading: h2hLoading } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/h2h'],
+    enabled: !isInduction,
+  });
+  const { data: nativeGainerData, isLoading: gainerLoading } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/gainer'],
+    enabled: !isInduction,
+  });
+  const { data: nativeJackpotData, isLoading: jackpotLoading } = useQuery<any[]>({
+    queryKey: ['/api/native-markets/jackpot'],
+    enabled: !isInduction,
+  });
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
     const allNative = [
@@ -183,7 +209,9 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
   }, [serverBettingCutoff, serverResolutionDeadline]);
   const { data: openMarketsData, isLoading: openMarketsLoading } = useQuery<any[]>({ queryKey: ['/api/open-markets'] });
 
-  const isLoading = updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
+  const isLoading = isInduction
+    ? openMarketsLoading
+    : updownLoading || h2hLoading || gainerLoading || jackpotLoading || openMarketsLoading;
 
   const weeklyMarket = useMemo((): PredictionMarket | undefined => {
     const toTimestamp = (value: unknown, fallback: number) => {
@@ -344,9 +372,12 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     ) || null;
   }, [nativeJackpotData, personId]);
 
-  const hasAnyMarkets = weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket;
+  const hasAnyMarkets = isInduction
+    ? openMarketsForPerson.length > 0
+    : !!(weeklyMarket || h2hBattles.length > 0 || gainerMarkets.length > 0 || openMarketsForPerson.length > 0 || jackpotMarket);
 
   const { user, profile, refreshProfile } = useAuth();
+  const { trigger: triggerXpBurst } = useXpBurst();
   // Sprint 3.1: PersonDetail predict tab buys fire AMM trade toasts
   // with a Share action via the global ShareCard modal.
   const { openShareCard } = useShareCard();
@@ -639,6 +670,139 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     },
   });
 
+  const communityMarketBetMutation = useMutation({
+    mutationFn: async ({
+      slug,
+      entryId,
+      stakeAmount,
+      direction,
+    }: {
+      slug: string;
+      entryId: string;
+      stakeAmount: number;
+      direction: "yes" | "no";
+    }) => {
+      const res = await apiRequest(
+        "POST",
+        `/api/open-markets/${slug}/bet`,
+        { entryId, stakeAmount, direction },
+        { idempotencyKey: tradeIdempotencyKey },
+      );
+      return res.json();
+    },
+    onMutate: () => {
+      const toastId = showPendingVoteToast("world", "Prediction submitted!");
+      return { toastId };
+    },
+    onSuccess: async (data: any, variables, context) => {
+      if (data?.xp?.xpAwarded) {
+        triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
+      }
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const market = openMarketsForPerson.find(
+        (m: any) => String(m.slug) === String(variables.slug),
+      );
+      const entry =
+        market?.entries?.find((e: any) => String(e.id) === String(variables.entryId)) ?? null;
+      const person = entry?.person ?? null;
+      const isBinary = market?.openMarketType === "binary";
+      const entryLabel = isBinary
+        ? variables.direction === "no"
+          ? "No"
+          : "Yes"
+        : entry?.label ?? person?.name ?? variables.direction.toUpperCase();
+      const direction: "up" | "down" | "other" = isBinary
+        ? variables.direction === "no"
+          ? "down"
+          : "up"
+        : "other";
+      fireAmmTradeToast({
+        response: data,
+        actionType: "buy",
+        username: profile?.username || "you",
+        personName: person?.name ?? null,
+        personAvatar: person?.avatar ?? null,
+        marketTitle: market?.title ?? "World Market",
+        category: market?.category ?? null,
+        entryLabel: String(entryLabel),
+        direction,
+        marketKind: "world",
+        openShareCard,
+        fallbackShareUrl: market?.slug ? `${origin}/markets/${market.slug}` : origin,
+        toastId: context?.toastId,
+      });
+      setStakeModalOpen(false);
+      setPendingSelection(null);
+      await Promise.all([
+        refreshProfile?.(),
+        queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
+      ]);
+    },
+    onError: (err: Error, _variables, context) => {
+      dismissVoteToast(context?.toastId);
+      const { title, description } = parseApiError(err, "Failed to place prediction");
+      toast.error(title, { description });
+    },
+  });
+
+  const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
+    if (market.status !== "OPEN" || market.visibility !== "live") {
+      return;
+    }
+    if (!user) {
+      navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" });
+      return;
+    }
+
+    const isBinary = market.openMarketType === "binary";
+    const marketBets = userBetsPerEntry.get(String(market.id));
+
+    if (isBinary && marketBets) {
+      for (const [eId, bets] of marketBets) {
+        if (eId !== String(entry.id) && (bets.yesStake > 0 || bets.noStake > 0)) {
+          toast("Stick with your pick", {
+            description: "You've already backed the other side. Top up your existing pick instead.",
+          });
+          return;
+        }
+      }
+    }
+
+    const sameEntryBets = marketBets?.get(String(entry.id));
+    const sameDirStake = direction === "yes" ? sameEntryBets?.yesStake ?? 0 : sameEntryBets?.noStake ?? 0;
+    const oppositeStake = direction === "yes" ? sameEntryBets?.noStake ?? 0 : sameEntryBets?.yesStake ?? 0;
+
+    if (oppositeStake > 0) {
+      toast("Stick with your pick", {
+        description: "You've already taken the other direction on this option. Top up your existing pick instead.",
+      });
+      return;
+    }
+
+    const isTopUp = sameDirStake > 0;
+
+    setPendingSelection({
+      type: "community",
+      choice: entry.label,
+      marketName: market.title,
+      marketId: market.id,
+      entryId: entry.id,
+      endAt: market.endAt,
+      bettingCutoff: null,
+      direction,
+      openMarketType: market.openMarketType ?? null,
+      isTopUp,
+      existingStake: isTopUp ? sameDirStake : undefined,
+      engine: "amm",
+      ammState: market.ammState ?? null,
+    });
+    refreshProfile?.();
+    setStakeModalOpen(true);
+  };
+
   const handleUpDownSelect = (market: PredictionMarket, choice: "up" | "down") => {
     if (isMarketClosed) {
       return;
@@ -848,6 +1012,29 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         entryId,
         stakeAmount: amount,
       });
+      return;
+    }
+
+    if (pendingSelection.type === "community") {
+      if (!pendingSelection.entryId) {
+        toast.error("Selection unavailable", { description: "This market selection is not available right now." });
+        return;
+      }
+      const market = openMarketsForPerson.find(
+        (m: any) => String(m.id) === String(pendingSelection.marketId),
+      );
+      if (!market?.slug) {
+        toast.error("Market unavailable", { description: "Could not find the selected market. Please refresh and try again." });
+        setStakeModalOpen(false);
+        setPendingSelection(null);
+        return;
+      }
+      await communityMarketBetMutation.mutateAsync({
+        slug: market.slug,
+        entryId: pendingSelection.entryId,
+        stakeAmount: amount,
+        direction: pendingSelection.direction === "no" ? "no" : "yes",
+      });
     }
   };
 
@@ -860,6 +1047,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
     if (!pendingSelection || pendingSelection.engine !== "amm") return null;
     const id = pendingSelection.marketId;
     const sources: any[][] = [
+      openMarketsForPerson ?? [],
       weeklyMarket ? [weeklyMarket] : [],
       h2hBattles ?? [],
       gainerMarkets ?? [],
@@ -869,7 +1057,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
       if (m && (m as any).ammState) return (m as any).ammState as StakeSelection["ammState"];
     }
     return null;
-  }, [pendingSelection, weeklyMarket, h2hBattles, gainerMarkets]);
+  }, [pendingSelection, openMarketsForPerson, weeklyMarket, h2hBattles, gainerMarkets]);
 
   if (isLoading) {
     return (
@@ -905,12 +1093,14 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
                   onNavigate={(slug, pick, direction) =>
                     setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)
                   }
+                  onPickEntry={handleCommunityPickEntry}
                   isMarketClosed={market.status !== "OPEN"}
                   userBetResult={openMarketBets.get(String(market.id))}
                   userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
+                  unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                 />
               </div>
             ))}
@@ -925,6 +1115,25 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
         </section>
       )}
 
+      {/* Induction empty state: World Markets only — no native sections */}
+      {isInduction && !hasAnyMarkets && (
+        <div className="space-y-4 max-w-lg mx-auto" data-testid="induction-predict-empty">
+          <Card className="p-5 sm:p-8 text-center border-dashed space-y-2">
+            <p className="text-lg font-semibold">No World Markets yet</p>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              {personName} isn&apos;t featured in any World Markets right now.
+              Check back after the next scout run — new markets are added daily.
+            </p>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Vote below to unlock native prediction markets once they join the main leaderboard.
+            </p>
+          </Card>
+          {inductionVoteSlot}
+        </div>
+      )}
+
+      {!isInduction && (
+        <>
       <MarketCycleHero marketState={marketCycle} constrainedWidth />
 
       {/* Weekly Jackpot — same hero as main Predict page; static person row
@@ -1086,6 +1295,8 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           </div>
         </Card>
       )}
+        </>
+      )}
 
       <StakeModal
         open={stakeModalOpen}
@@ -1099,6 +1310,24 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
           setPendingSelection(null);
         } : undefined}
         onDirectionChange={(dir) => {
+          if (!pendingSelection) return;
+
+          if (pendingSelection.type === "community" && (dir === "yes" || dir === "no")) {
+            const market = openMarketsForPerson.find(
+              (m: any) => String(m.id) === String(pendingSelection.marketId),
+            );
+            const entry = market?.entries?.find(
+              (e: any) => String(e.id) === String(pendingSelection.entryId),
+            );
+            if (!market || !entry) return;
+            setPendingSelection({
+              ...pendingSelection,
+              choice: `${dir === "no" ? "No" : "Yes"} · ${entry.label}`,
+              direction: dir,
+            });
+            return;
+          }
+
           /* Sprint 4 (Polymarket pass): adding the in-modal Up/Down
              toggle here too so the experience is consistent with
              HomePage / PredictPage. The toggle now also carries
@@ -1106,7 +1335,7 @@ export function PredictTab({ personId, personName, personAvatar, currentScore, p
              person's detail page can comparison-shop without closing
              the modal. weeklyMarket is the only updown market in
              scope for this tab (one market per person per week). */
-          if (!pendingSelection || pendingSelection.type !== "updown") return;
+          if (pendingSelection.type !== "updown") return;
           if (dir !== "up" && dir !== "down") return;
           if (!weeklyMarket) return;
           const entryId = dir === "up" ? weeklyMarket.upEntryId : weeklyMarket.downEntryId;

@@ -9,7 +9,7 @@ import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
-import { ProfileTabs, DEFAULT_TABS } from "@/components/ProfileTabs";
+import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
@@ -43,7 +43,6 @@ import {
   ChevronDown,
   BarChart3,
   UserPlus,
-  Vote as VoteIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -73,9 +72,7 @@ import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
   getSentimentPollVotedPillStyle,
-  SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
 } from "@/lib/sentimentPollVoteDisplay";
-import { cn } from "@/lib/utils";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -83,6 +80,7 @@ import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { PersonNeighbourNav } from "@/components/PersonNeighbourNav";
+import { InductionVoteCta } from "@/components/InductionVoteCta";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { personOgImagePath } from "@shared/person-og";
 
@@ -789,75 +787,6 @@ function CategoryRankPill({ category, rank, personName }: { category: string; ra
   );
 }
 
-/**
- * Vote-to-induct CTA shown on dormant induction-candidate profiles wherever
- * trend-score content would normally render. Votes land in the same
- * induction_votes table as the queue card.
- */
-function InductionVoteCta({
-  personName,
-  seedVotes,
-  hasVoted,
-  canVote,
-  onVote,
-  testId,
-  className,
-}: {
-  personName: string;
-  seedVotes: number;
-  hasVoted: boolean;
-  canVote: boolean;
-  onVote: () => void;
-  testId: string;
-  className?: string;
-}) {
-  return (
-    <Card
-      className={cn(
-        "p-5 flex flex-col items-center justify-center text-center gap-3 border-cyan-500/30 dark:border-cyan-500/20 bg-cyan-500/5 dark:bg-cyan-500/[0.04]",
-        className,
-      )}
-      data-testid={testId}
-    >
-      <p className="text-base font-semibold leading-snug">
-        Want to see {personName} join the leaderboard?
-      </p>
-      <p className="text-xs text-muted-foreground max-w-md">
-        {personName} is an Induction Queue candidate. Trend scores, movement and
-        predictions unlock once the community votes them onto the main leaderboard.
-      </p>
-      {hasVoted ? (
-        <button
-          type="button"
-          disabled
-          className={cn(
-            SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
-            "disabled:opacity-100 disabled:cursor-default max-w-xs",
-          )}
-          data-testid={`${testId}-voted`}
-        >
-          <Check className="h-4 w-4 shrink-0" />
-          <span>Voted to Induct</span>
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={onVote}
-          disabled={!canVote}
-          className="group w-full max-w-xs flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
-          data-testid={`${testId}-button`}
-        >
-          <VoteIcon className="h-4 w-4 shrink-0" />
-          <span>Vote to Induct</span>
-        </button>
-      )}
-      <span className="text-xs text-muted-foreground">
-        {seedVotes.toLocaleString("en-US")} induction {seedVotes === 1 ? "vote" : "votes"}
-      </span>
-    </Card>
-  );
-}
-
 export default function PersonDetailPage() {
   const { user, session } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
@@ -981,17 +910,11 @@ export default function PersonDetailPage() {
   });
 
   // Induction candidates get a dormant profile: no trend-score sections or
-  // native predictions, but About / vote cards / curate stay live, and a
-  // "vote to induct" CTA replaces the score tiles.
+  // native predictions, but About / vote cards / curate stay live, a
+  // "vote to induct" CTA replaces the score tiles, and Predict shows
+  // World Markets only (when linked).
   const isInduction = !!person?.isInductionCandidate;
   const inductionCandidateId = person?.inductionCandidateId ?? null;
-
-  // Predict tab doesn't exist for induction candidates; coerce deep links.
-  useEffect(() => {
-    if (isInduction && activeTab === "predict") {
-      setActiveTab("overview");
-    }
-  }, [isInduction, activeTab]);
 
   const { data: celebrityProfile } = useQuery<{
     shortBio: string;
@@ -1540,7 +1463,8 @@ export default function PersonDetailPage() {
                         <div className="space-y-1.5 normal-case tracking-normal">
                           <p className="font-semibold text-sm">Induction Candidate</p>
                           <p className="text-xs text-muted-foreground">
-                            {person.name} is in the Induction Queue. Vote to help them join the main VoxDex leaderboard.
+                            {person.name} is in the Induction Queue. Vote to help them join the main leaderboard.
+                            World Markets they feature in appear on the Predict tab.
                           </p>
                         </div>
                       }
@@ -1695,7 +1619,6 @@ export default function PersonDetailPage() {
             activeTab={activeTab}
             onTabChange={handleTabChange}
             noBottomMargin
-            tabs={isInduction ? DEFAULT_TABS.filter((t) => t.id !== "predict") : undefined}
           />
         </div>
       </div>
@@ -2001,8 +1924,8 @@ export default function PersonDetailPage() {
           </>
         )}
 
-        {/* PREDICT TAB — native predictions are trend-score linked, so no Predict tab for induction candidates */}
-        {activeTab === "predict" && !isInduction && (
+        {/* PREDICT TAB — induction profiles get World Markets only */}
+        {activeTab === "predict" && (
           <Suspense fallback={<ProfileLazyFallback minHeight="320px" />}>
             <LazyPredictTab
               personId={person.id}
@@ -2010,6 +1933,20 @@ export default function PersonDetailPage() {
               personAvatar={person.avatar || ""}
               currentScore={person.fameIndex ?? Math.round(person.trendScore ?? 0)}
               personRank={person.rank ?? null}
+              variant={isInduction ? "induction" : "full"}
+              inductionVoteSlot={
+                isInduction ? (
+                  <InductionVoteCta
+                    personName={person.name}
+                    seedVotes={person.seedVotes ?? 0}
+                    hasVoted={hasVotedToInduct}
+                    canVote={!!inductionCandidateId}
+                    onVote={handleInductionVote}
+                    testId="induction-cta-predict"
+                    compact
+                  />
+                ) : undefined
+              }
             />
           </Suspense>
         )}
