@@ -207,6 +207,7 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
   "film tv": "film-tv",
   "film & tv": "film-tv",
   acting: "film-tv",
+  entertainment: "film-tv",
   gaming: "gaming",
   creator: "creator",
   comedy: "comedy",

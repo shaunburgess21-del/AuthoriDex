@@ -243,6 +243,28 @@ export interface FetchTrendingOptions {
   /** Outcome-count bounds (VoxDex supports 2 for binary, 3–30 for multi). */
   minOutcomes?: number;
   maxOutcomes?: number;
+  /**
+   * Optional Gamma tag id to scope the feed (e.g. Movies=53, Music=100).
+   * When set, appends `tag_id` so the scout can pull category-stratified
+   * candidates instead of only the global volume leaderboard.
+   */
+  tagId?: string;
+}
+
+/**
+ * Build the Gamma `/events` path for a trending fetch. Exported for unit tests.
+ */
+export function buildTrendingEventsPath(options: {
+  limit: number;
+  tagId?: string;
+}): string {
+  const limit = Math.max(1, Math.min(Math.floor(options.limit), 500));
+  let path =
+    `/events?active=true&closed=false&order=volume24hr&ascending=false&limit=${limit}`;
+  if (typeof options.tagId === "string" && options.tagId.trim()) {
+    path += `&tag_id=${encodeURIComponent(options.tagId.trim())}`;
+  }
+  return path;
 }
 
 /**
@@ -259,11 +281,10 @@ export async function fetchTrendingPolymarketEvents(
     maxDaysToEnd = 365,
     minOutcomes = 2,
     maxOutcomes = 12,
+    tagId,
   } = options;
 
-  const raw = await gammaGet(
-    `/events?active=true&closed=false&order=volume24hr&ascending=false&limit=${limit}`,
-  );
+  const raw = await gammaGet(buildTrendingEventsPath({ limit, tagId }));
   if (!Array.isArray(raw)) {
     throw new Error("Gamma /events returned a non-array payload");
   }
@@ -286,7 +307,11 @@ export async function fetchTrendingPolymarketEvents(
     candidates.push(candidate);
   }
 
-  log(`[Polymarket] Fetched ${raw.length} trending events, ${candidates.length} importable candidates`);
+  log(
+    `[Polymarket] Fetched ${raw.length} trending events` +
+      (tagId ? ` (tag_id=${tagId})` : "") +
+      `, ${candidates.length} importable candidates`,
+  );
   return candidates;
 }
 

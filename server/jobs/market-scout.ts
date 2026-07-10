@@ -1,11 +1,13 @@
 /**
  * Market Scout — automated World Market sourcing (draft-only).
  *
- * Once a day (or on an admin "Scan now" trigger), pulls the trending events
- * from Polymarket's public Gamma API, dedupes them against existing VoxDex
- * markets, asks GPT to curate the best fits (rewriting each question in
- * VoxDex voice — never copying source rules text verbatim), and inserts the
- * winners as DRAFT World Markets for a founder to review, edit, and publish.
+ * Once a day (or on an admin "Scan now" trigger), pulls trending events from
+ * Polymarket's public Gamma API across a stratified set of feeds (global
+ * volume plus Movies / Music / Celebrities / TV tags), dedupes them against
+ * existing VoxDex markets, asks GPT to curate the best fits (rewriting each
+ * question in VoxDex voice — never copying source rules text verbatim), and
+ * inserts the winners as DRAFT World Markets for a founder to review, edit,
+ * and publish.
  *
  * It NEVER publishes anything: every scouted market lands with
  * `visibility: 'draft'` (hidden from users, AMM seed deferred) and is
@@ -19,6 +21,8 @@
  *     bound LLM calls per UTC day (one curation call per run, so this mainly
  *     guards against a spammed manual trigger).
  *   - Volume rail: MARKET_SCOUT_MAX_DRAFTS_PER_RUN caps inserted drafts.
+ *   - Diversity: reserved shortlist slots per source bucket + soft
+ *     politics/sports caps and a fitScore floor after GPT returns.
  *   - Dedupe: source event ids are stored in
  *     `prediction_markets.metadata.source.externalId`; existing titles are
  *     also passed to GPT so near-duplicate manual markets are skipped.
@@ -70,12 +74,33 @@ function envFlag(value: string | undefined): boolean {
 
 const API_TIMEOUT_MS = 90_000;
 const MAX_OUTPUT_TOKENS = 4_000;
-/** How many raw trending events to pull from Gamma per run. Generous because
- *  many trending events are filtered out (same-day sports, non-exhaustive
- *  outcome sets, already imported). */
-const FETCH_LIMIT = 150;
-/** How many deduped candidates to show GPT (largest 24h volume first). */
+/** How many deduped candidates to show GPT after stratified shortlisting. */
 const MAX_CANDIDATES_FOR_LLM = 30;
+/** Soft floor — GPT fitScore below this is dropped before insert. */
+const MIN_FIT_SCORE = 55;
+/** Soft per-run caps when other valid selections exist. */
+const MAX_POLITICS_PER_RUN = 2;
+const MAX_SPORTS_PER_RUN = 2;
+
+/**
+ * Stratified Polymarket source buckets. Global keeps high-liquidity
+ * politics/sports/business; tagged feeds surface entertainment that rarely
+ * appears on the global volume leaderboard.
+ */
+export const SCOUT_SOURCE_BUCKETS = [
+  { id: "global" as const, tagId: undefined, fetchLimit: 80, shortlistSlots: 10 },
+  { id: "movies" as const, tagId: "53", fetchLimit: 40, shortlistSlots: 6 },
+  { id: "music" as const, tagId: "100", fetchLimit: 40, shortlistSlots: 5 },
+  { id: "celebrities" as const, tagId: "286", fetchLimit: 40, shortlistSlots: 5 },
+  { id: "tv" as const, tagId: "100338", fetchLimit: 40, shortlistSlots: 4 },
+] as const;
+
+export type ScoutSourceBucketId = (typeof SCOUT_SOURCE_BUCKETS)[number]["id"];
+
+/** Candidate annotated with which stratified feed it came from. */
+export type ScoutCandidate = PolymarketCandidate & {
+  sourceBucket: ScoutSourceBucketId;
+};
 
 function scoutEnabled(): boolean {
   return envFlag(process.env.MARKET_SCOUT_ENABLED);
@@ -155,7 +180,7 @@ export interface MarketScoutResult {
 }
 
 /** Shape GPT must return for each curated market. */
-interface ScoutSelection {
+export interface ScoutSelection {
   eventId: string;
   title: string;
   slug: string;
@@ -266,15 +291,190 @@ function extractOutputText(response: any): string | null {
   return null;
 }
 
+/**
+ * Deterministic reject for invasive celebrity/culture gossip that would
+ * otherwise dominate tagged celebrity feeds. Awards, box office, charts,
+ * casting, sports, politics, business, and tech are unaffected.
+ * Exported for unit tests.
+ */
+export function isInvasiveGossipCandidate(candidate: {
+  title: string;
+  description?: string | null;
+}): boolean {
+  const text = `${candidate.title} ${candidate.description ?? ""}`.toLowerCase();
+  const patterns = [
+    /\bpregnan(?:t|cy)\b/,
+    /\bcustody\b/,
+    /\bwho will die\b/,
+    /\bwill .+ die\b/,
+    /\bdeath of\b/,
+    /\b(?:break\s*up|breakup|divorced?|engaged|engagement|married|marries|wedding|separat(?:e|es|ed|ion))\b/,
+    /\bsexiest (?:man|woman)\b/,
+  ];
+  return patterns.some((re) => re.test(text));
+}
+
+function byVolumeDesc(a: PolymarketCandidate, b: PolymarketCandidate): number {
+  return b.volume24hr - a.volume24hr;
+}
+
+/**
+ * Build a diversified GPT shortlist with reserved slots per source bucket,
+ * then backfill remaining slots by 24h volume. Exported for unit tests.
+ */
+export function buildDiversifiedShortlist(
+  candidates: ScoutCandidate[],
+  maxSlots: number = MAX_CANDIDATES_FOR_LLM,
+): ScoutCandidate[] {
+  const safe = candidates.filter((c) => !isInvasiveGossipCandidate(c));
+  const picked = new Set<string>();
+  const out: ScoutCandidate[] = [];
+
+  const takeFrom = (pool: ScoutCandidate[], n: number) => {
+    const sorted = [...pool].sort(byVolumeDesc);
+    for (const c of sorted) {
+      if (out.length >= maxSlots) break;
+      if (n <= 0) break;
+      if (picked.has(c.eventId)) continue;
+      picked.add(c.eventId);
+      out.push(c);
+      n -= 1;
+    }
+  };
+
+  for (const bucket of SCOUT_SOURCE_BUCKETS) {
+    if (out.length >= maxSlots) break;
+    const pool = safe.filter((c) => c.sourceBucket === bucket.id);
+    takeFrom(pool, bucket.shortlistSlots);
+  }
+
+  // Backfill empty reserved slots from leftovers (any bucket), volume-first.
+  if (out.length < maxSlots) {
+    takeFrom(safe, maxSlots - out.length);
+  }
+
+  return out;
+}
+
+/**
+ * Soft post-GPT guardrails: fit floor + politics/sports caps, preferring
+ * higher fit, then celebrity-linkable titles, then source volume.
+ * Exported for unit tests.
+ */
+export function applySelectionDiversityGuards(
+  selections: ScoutSelection[],
+  candidateById: Map<string, ScoutCandidate>,
+  maxDrafts: number,
+): ScoutSelection[] {
+  const scored = selections
+    .map((s) => {
+      const fit =
+        typeof s.fitScore === "number" && Number.isFinite(s.fitScore)
+          ? Math.round(s.fitScore)
+          : null;
+      const candidate = candidateById.get(s.eventId);
+      const hasLinkHint =
+        (typeof s.linkedPerson === "string" && s.linkedPerson.trim().length > 0) ||
+        (Array.isArray(s.relatedPeople) &&
+          s.relatedPeople.some((n) => typeof n === "string" && n.trim()));
+      return { selection: s, fit, candidate, hasLinkHint };
+    })
+    .filter((row) => row.fit !== null && row.fit >= MIN_FIT_SCORE)
+    .sort((a, b) => {
+      const fitDelta = (b.fit ?? 0) - (a.fit ?? 0);
+      if (fitDelta !== 0) return fitDelta;
+      if (a.hasLinkHint !== b.hasLinkHint) return a.hasLinkHint ? -1 : 1;
+      return (b.candidate?.volume24hr ?? 0) - (a.candidate?.volume24hr ?? 0);
+    });
+
+  const picked: ScoutSelection[] = [];
+  let politics = 0;
+  let sports = 0;
+
+  const categoryOf = (s: ScoutSelection) =>
+    normalizeMarketCategory(typeof s.category === "string" ? s.category : "misc");
+
+  // First pass: respect soft caps.
+  for (const row of scored) {
+    if (picked.length >= maxDrafts) break;
+    const cat = categoryOf(row.selection);
+    if (cat === "politics" && politics >= MAX_POLITICS_PER_RUN) continue;
+    if (cat === "sports" && sports >= MAX_SPORTS_PER_RUN) continue;
+    picked.push(row.selection);
+    if (cat === "politics") politics += 1;
+    if (cat === "sports") sports += 1;
+  }
+
+  // Overflow politics/sports past the soft cap only when every remaining
+  // fit-qualified selection is politics or sports (no film-tv/music/etc. left).
+  if (picked.length < maxDrafts) {
+    const pickedIds = new Set(picked.map((s) => s.eventId));
+    const remaining = scored.filter((row) => !pickedIds.has(row.selection.eventId));
+    const onlyPoliticsSportsLeft =
+      remaining.length > 0 &&
+      remaining.every((row) => {
+        const cat = categoryOf(row.selection);
+        return cat === "politics" || cat === "sports";
+      });
+    if (onlyPoliticsSportsLeft) {
+      for (const row of remaining) {
+        if (picked.length >= maxDrafts) break;
+        picked.push(row.selection);
+      }
+    }
+  }
+
+  return picked;
+}
+
+async function fetchStratifiedCandidates(): Promise<ScoutCandidate[]> {
+  const results = await Promise.all(
+    SCOUT_SOURCE_BUCKETS.map(async (bucket) => {
+      try {
+        const rows = await fetchTrendingPolymarketEvents({
+          limit: bucket.fetchLimit,
+          tagId: bucket.tagId,
+        });
+        return rows.map(
+          (c): ScoutCandidate => ({ ...c, sourceBucket: bucket.id }),
+        );
+      } catch (err) {
+        log(
+          `[MarketScout] Bucket "${bucket.id}" fetch failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return [] as ScoutCandidate[];
+      }
+    }),
+  );
+
+  const byId = new Map<string, ScoutCandidate>();
+  // Tagged buckets first so high-volume entertainment events that also appear
+  // on the global leaderboard keep their category label (movies/music/etc.)
+  // for slot reservation. Global backfills only events not seen in a tag feed.
+  for (const batch of results.slice(1)) {
+    for (const c of batch) {
+      if (!byId.has(c.eventId)) byId.set(c.eventId, c);
+    }
+  }
+  for (const c of results[0] ?? []) {
+    if (!byId.has(c.eventId)) byId.set(c.eventId, c);
+  }
+  return Array.from(byId.values());
+}
+
 // ---- Prompt ---------------------------------------------------------------
 
 function buildSystemPrompt(maxDrafts: number, allowedCategories: string[]): string {
   return `You are the Market Scout for VoxDex, a play-money prediction platform about trending people and real-world events. You are given a list of currently-trending prediction markets from an external source. Curate the BEST candidates to import as VoxDex "World Markets" drafts for a human founder to review.
 
 Selection principles:
-- Pick broadly interesting, high-engagement questions a general entertainment/news audience would enjoy predicting on. Variety across categories beats five markets on one theme.
+- Pick broadly interesting, high-engagement questions a general entertainment/news audience would enjoy predicting on.
+- Category variety is required. For a typical ${maxDrafts}-draft run: at most 2 politics and at most 2 sports. Prefer at least 1–2 from film-tv, music, creator, or comedy when those candidates are present in the list (sourceBucket movies/music/celebrities/tv are strong signals).
+- When quality is equal, prefer markets that can link to a TRACKED PERSON from the list provided.
 - Skip anything that duplicates or nearly duplicates an EXISTING VoxDex market (list provided).
-- Skip questions that are incomprehensible without the source platform's context, purely financial microstructure (e.g. hourly crypto candles), or distasteful (deaths, tragedies, graphic violence).
+- Skip questions that are incomprehensible without the source platform's context, purely financial microstructure (e.g. hourly crypto candles), or distasteful (deaths, tragedies, graphic violence, invasive pregnancy/relationship gossip).
 - Prefer questions resolving within days-to-months over ones resolving in a year.
 
 For each selected market, produce:
@@ -282,13 +482,13 @@ For each selected market, produce:
 - "slug": URL-safe kebab-case, lowercase letters/numbers/dashes only.
 - "teaser": one catchy sentence (max 140 chars) hooking a casual reader.
 - "summary": 2-3 sentences of neutral context explaining what the market is about.
-- "category": exactly one of: ${allowedCategories.join(", ")}.
+- "category": exactly one of: ${allowedCategories.join(", ")}. Use film-tv (not "entertainment") for movies/TV/awards.
 - "secondaryCategories": 0-2 additional ids from the same list.
 - "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text.
 - "scoutWatch": one sentence listing the leading indicators a human should watch to know the outcome early.
 - "relatedPeople": ALL names from the TRACKED PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). Exact names from the list only. Max 6. [] when none apply.
 - "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
-- "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability).
+- "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability). Prefer 55+; weak fits should be omitted.
 - "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes.
 
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
@@ -298,7 +498,7 @@ Respond with ONE JSON object and nothing else — no markdown, no code fences:
 }
 
 function buildUserPrompt(
-  candidates: PolymarketCandidate[],
+  candidates: ScoutCandidate[],
   existingTitles: string[],
   trackedNames: string[],
 ): string {
@@ -308,11 +508,12 @@ function buildUserPrompt(
     description: c.description ? c.description.slice(0, 400) : null,
     endDate: c.endDate,
     volume24hUsd: Math.round(c.volume24hr),
+    sourceBucket: c.sourceBucket,
     tags: c.tags.slice(0, 6),
     outcomes: c.outcomes.map((o) => ({ label: o.label, price: Number(o.price.toFixed(3)) })),
   }));
 
-  return `CANDIDATE MARKETS (trending by 24h volume):
+  return `CANDIDATE MARKETS (diversified shortlist — mix of global volume + category-tagged feeds):
 ${JSON.stringify(candidateBlocks, null, 1)}
 
 EXISTING VOXDEX MARKET TITLES (do not duplicate):
@@ -327,7 +528,7 @@ Today's date: ${new Date().toISOString().split("T")[0]}. Curate now.`;
 // ---- Curation call ---------------------------------------------------------
 
 async function curateCandidates(
-  candidates: PolymarketCandidate[],
+  candidates: ScoutCandidate[],
   existingTitles: string[],
   trackedNames: string[],
   maxDrafts: number,
@@ -661,10 +862,10 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   const result = emptyResult();
   result.enabled = true;
 
-  // 1. Fetch trending candidates from the source.
-  let candidates: PolymarketCandidate[];
+  // 1. Fetch stratified candidates (global volume + category-tagged feeds).
+  let candidates: ScoutCandidate[];
   try {
-    candidates = await fetchTrendingPolymarketEvents({ limit: FETCH_LIMIT });
+    candidates = await fetchStratifiedCandidates();
   } catch (err) {
     log(
       `[MarketScout] Source fetch failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -706,6 +907,20 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     return result;
   }
 
+  const maxDrafts = maxDraftsPerRun();
+  const forLlm = buildDiversifiedShortlist(fresh, MAX_CANDIDATES_FOR_LLM);
+  log(
+    `[MarketScout] Shortlist ${forLlm.length}/${fresh.length} fresh ` +
+      `(buckets: ${SCOUT_SOURCE_BUCKETS.map((b) => {
+        const n = forLlm.filter((c) => c.sourceBucket === b.id).length;
+        return `${b.id}=${n}`;
+      }).join(", ")})`,
+  );
+  if (forLlm.length === 0) {
+    log("[MarketScout] No candidates passed shortlist/gossip filter — skipping curation.");
+    return result;
+  }
+
   // 3. Curate with GPT (single batch call, budget-railed).
   if (!tryReserveLlmCall()) {
     log("[MarketScout] Daily LLM budget exhausted — skipping curation.");
@@ -724,8 +939,6 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     .where(eq(trackedPeople.status, "main_leaderboard"));
   const peopleByKey = new Map(people.map((p) => [normalizeNameKey(p.name), p]));
 
-  const maxDrafts = maxDraftsPerRun();
-  const forLlm = fresh.slice(0, MAX_CANDIDATES_FOR_LLM);
   const selections = await curateCandidates(
     forLlm,
     existingTitles,
@@ -739,15 +952,22 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     return result;
   }
 
-  // 4. Insert drafts.
+  // 4. Soft diversity + fit floor, then insert drafts.
   const candidateById = new Map(forLlm.map((c) => [c.eventId, c]));
+  const guarded = applySelectionDiversityGuards(selections, candidateById, maxDrafts);
+  if (guarded.length < selections.length) {
+    log(
+      `[MarketScout] Diversity/fit guards kept ${guarded.length}/${selections.length} GPT selections`,
+    );
+  }
+
   const [cmsMax] = await db
     .select({ max: sql<number>`COALESCE(MAX(cms_display_order), 0)` })
     .from(predictionMarkets)
     .where(eq(predictionMarkets.marketType, "community"));
   let nextCmsOrder = (cmsMax?.max || 0) + 1;
 
-  for (const selection of selections.slice(0, maxDrafts)) {
+  for (const selection of guarded) {
     const candidate = candidateById.get(selection.eventId);
     if (!candidate) {
       result.skipped += 1;
