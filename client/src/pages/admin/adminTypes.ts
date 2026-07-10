@@ -67,8 +67,14 @@ export interface UserProfile {
   createdAt: string;
   /** Last request timestamp from profiles.last_active_at (nullable for dormant accounts). */
   lastActiveAt?: string | null;
-  /** True for simulation agents and the AMM house profile. */
+  /** True for V2 simulation agents (`is_agent` on the profile row). */
+  isSimAgent?: boolean;
+  /** @deprecated Prefer `isSimAgent` — kept for older clients. */
   isAgent?: boolean;
+  /** True for the singleton AMM house wallet (`__house__`). */
+  isHouse?: boolean;
+  /** True for platform infrastructure profiles (`role = system`). */
+  isSystem?: boolean;
   isBanned?: boolean;
   /** Wallet vs ledger drift. Present only on rows returned by
    *  /api/admin/credit-drift-users; absent when the regular
@@ -81,6 +87,19 @@ export interface UserProfile {
 
 /** Default page size for admin user list endpoints. */
 export const ADMIN_USERS_PAGE_SIZE = 50;
+
+export function isInfrastructureUser(
+  user: Pick<UserProfile, "role" | "isSystem">,
+): boolean {
+  return user.isSystem === true || user.role === "system";
+}
+
+/** Ban / delete / manual credit adjust — blocked for admins + infrastructure. */
+export function canModerateUser(
+  user: Pick<UserProfile, "role" | "isSystem">,
+): boolean {
+  return user.role !== "admin" && !isInfrastructureUser(user);
+}
 
 /** Paginated admin user list (`GET /api/admin/users`, drift list). */
 export interface AdminUsersListResponse {

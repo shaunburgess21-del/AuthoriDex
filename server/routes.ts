@@ -73,6 +73,10 @@ import { mentionsToPlainText } from "@shared/lib/mentions";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
+import {
+  INFRASTRUCTURE_PROFILE_DENY,
+  isInfrastructureProfile,
+} from "./utils/infrastructure-profiles";
 import { applyAdminCreditAdjustment } from "./utils/admin-credits";
 import { IMAGE_FLAG_WINDOW_MS, isImageFlagRateLimited, isValidImageFlagReason } from "./utils/image-flags";
 import { classifyImageVoteAction } from "./utils/image-vote-transition";
@@ -12595,10 +12599,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { requestedPage, pageSize } = parseAdminUsersListQuery(req.query);
       const rawSearch = ((req.query.search as string) || "").trim();
-      // kind defaults to humans: the ~56 sim agents + house profile
-      // interleaving with real users made the list useless for support.
-      const kind = ["humans", "agents", "all"].includes(req.query.kind as string)
-        ? (req.query.kind as "humans" | "agents" | "all")
+      // kind defaults to humans: sim agents, house, and system profiles
+      // have dedicated filters so support sees real signups first.
+      const kind = ["humans", "agents", "system", "all"].includes(req.query.kind as string)
+        ? (req.query.kind as "humans" | "agents" | "system" | "all")
         : "humans";
       const statusFilter = req.query.status === "banned" ? "banned" : "all";
       const activeFilter = ["7d", "30d"].includes(req.query.active as string)
@@ -12609,9 +12613,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const conditions: (SQL | undefined)[] = [];
 
       if (kind === "humans") {
-        conditions.push(eq(profiles.isAgent, false), eq(profiles.isHouse, false));
+        conditions.push(
+          eq(profiles.isAgent, false),
+          eq(profiles.isHouse, false),
+          ne(profiles.role, "system"),
+        );
       } else if (kind === "agents") {
-        conditions.push(sql`(${profiles.isAgent} = true OR ${profiles.isHouse} = true)`);
+        conditions.push(eq(profiles.isAgent, true));
+      } else if (kind === "system") {
+        conditions.push(eq(profiles.role, "system"));
       }
 
       if (statusFilter === "banned") {
@@ -12698,7 +12708,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             u.createdAt instanceof Date ? u.createdAt.toISOString() : u.createdAt,
           lastActiveAt:
             u.lastActiveAt instanceof Date ? u.lastActiveAt.toISOString() : u.lastActiveAt,
-          isAgent: u.isAgent || u.isHouse,
+          isSystem: u.role === "system",
+          isHouse: !!u.isHouse,
+          isSimAgent: !!u.isAgent,
+          isAgent: !!u.isAgent,
           isBanned: u.role === "banned",
         })),
         total,
@@ -12734,6 +12747,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { userId, reason } = adjustParsed;
       const numericAmount = adjustParsed.amount;
+
+      const [targetProfile] = await db
+        .select({ id: profiles.id, role: profiles.role })
+        .from(profiles)
+        .where(eq(profiles.id, userId))
+        .limit(1);
+      if (!targetProfile) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (isInfrastructureProfile(targetProfile)) {
+        return res.status(400).json(INFRASTRUCTURE_PROFILE_DENY);
+      }
       
       const idempotencyKey = `admin_adjust_${adminId}_${userId}_${Date.now()}`;
 
@@ -12832,9 +12857,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Can't ban admins
+      // Can't ban admins or infrastructure singletons
       if (isAdminRole(user.role)) {
         return res.status(403).json({ error: "Cannot ban admin users" });
+      }
+      if (isInfrastructureProfile(user)) {
+        return res.status(400).json(INFRASTRUCTURE_PROFILE_DENY);
       }
       
       // Update role to banned
@@ -13000,6 +13028,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (isAdminRole(user.role)) {
         return res.status(403).json({ error: "Cannot delete admin users" });
+      }
+      if (isInfrastructureProfile(user)) {
+        return res.status(400).json(INFRASTRUCTURE_PROFILE_DENY);
       }
 
       const userEmail = await getSupabaseAuthEmail(userId);
@@ -22859,6 +22890,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           .limit(1);
 
         if (!user) return { status: 404 as const, body: { error: "User not found" } };
+        if (isInfrastructureProfile(user)) {
+          return { status: 400 as const, body: INFRASTRUCTURE_PROFILE_DENY };
+        }
         if (user.isAgent || user.isHouse) {
           return {
             status: 400 as const,

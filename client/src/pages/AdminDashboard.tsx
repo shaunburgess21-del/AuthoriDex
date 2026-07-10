@@ -67,6 +67,7 @@ import {
   Bell,
   CreditCard,
   Award,
+  Server,
 } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { AdminSortableCardList } from "@/components/admin/AdminSortableCardList";
@@ -187,6 +188,8 @@ import {
   type UserProfile,
   type AdminUsersListResponse,
   ADMIN_USERS_PAGE_SIZE,
+  canModerateUser,
+  isInfrastructureUser,
   type PredictionMarket,
   type AuditLogEntry,
   type Celebrity,
@@ -359,7 +362,9 @@ export default function AdminDashboard() {
   >("created_desc");
   // Server-side list filters: humans (default — hides the ~56 sim
   // agents + house), banned-only, recently-active windows.
-  const [userKindFilter, setUserKindFilter] = useState<"humans" | "agents" | "all">("humans");
+  const [userKindFilter, setUserKindFilter] = useState<
+    "humans" | "agents" | "system" | "all"
+  >("humans");
   const [userStatusFilter, setUserStatusFilter] = useState<"all" | "banned">("all");
   const [userActiveFilter, setUserActiveFilter] = useState<"any" | "7d" | "30d">("any");
   const [userPage, setUserPage] = useState(1);
@@ -5097,6 +5102,7 @@ export default function AdminDashboard() {
                 {([
                   { value: "humans" as const, label: "Humans" },
                   { value: "agents" as const, label: "Agents" },
+                  { value: "system" as const, label: "System" },
                   { value: "all" as const, label: "All accounts" },
                 ]).map((opt) => (
                   <Button
@@ -5140,6 +5146,24 @@ export default function AdminDashboard() {
                     {opt.label}
                   </Button>
                 ))}
+              </div>
+            )}
+
+            {userFilter !== "drift" && userKindFilter === "system" && (
+              <div
+                className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-muted-foreground"
+                data-testid="banner-system-accounts"
+              >
+                <p className="font-medium text-foreground flex items-center gap-2">
+                  <Server className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                  Platform infrastructure accounts
+                </p>
+                <p className="mt-1">
+                  <strong className="font-medium text-foreground">__house__</strong> seeds and settles AMM markets (Admin → AMM).
+                  {" "}
+                  <strong className="font-medium text-foreground">__market_scout__</strong> owns auto-imported World Market drafts.
+                  Never ban, delete, or adjust credits on these rows.
+                </p>
               </div>
             )}
 
@@ -5200,9 +5224,23 @@ export default function AdminDashboard() {
                                   Active {formatTimeAgo(user.lastActiveAt)}
                                 </span>
                               )}
-                              {user.isAgent && (
+                              {isInfrastructureUser(user) && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-violet-500/50 text-violet-700 dark:text-violet-300"
+                                  data-testid={`badge-infrastructure-${user.id}`}
+                                >
+                                  Infrastructure
+                                </Badge>
+                              )}
+                              {user.isHouse && (
+                                <Badge variant="outline" className="text-xs border-fuchsia-500/50 text-fuchsia-700 dark:text-fuchsia-300">
+                                  AMM House
+                                </Badge>
+                              )}
+                              {user.isSimAgent && (
                                 <Badge variant="outline" className="text-xs border-cyan-500/50 text-cyan-600 dark:text-cyan-400">
-                                  Agent
+                                  Sim agent
                                 </Badge>
                               )}
                               {typeof user.drift === "number" && user.drift !== 0 && (
@@ -5228,20 +5266,22 @@ export default function AdminDashboard() {
                             <Eye className="h-4 w-4 mr-1" />
                             Details
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-h-11 sm:min-h-8"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowCreditModal(true);
-                            }}
-                            data-testid={`button-adjust-credits-${user.id}`}
-                          >
-                            <Coins className="h-4 w-4 mr-1" />
-                            Vox
-                          </Button>
-                          {typeof user.drift === "number" && user.drift !== 0 && (
+                          {canModerateUser(user) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-11 sm:min-h-8"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowCreditModal(true);
+                              }}
+                              data-testid={`button-adjust-credits-${user.id}`}
+                            >
+                              <Coins className="h-4 w-4 mr-1" />
+                              Vox
+                            </Button>
+                          )}
+                          {canModerateUser(user) && typeof user.drift === "number" && user.drift !== 0 && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -5265,41 +5305,45 @@ export default function AdminDashboard() {
                             <Bell className="h-4 w-4 mr-1" />
                             Notifs
                           </Button>
-                          {user.isBanned ? (
+                          {canModerateUser(user) && (
+                            user.isBanned ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="min-h-11 sm:min-h-8 text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:text-emerald-700"
+                                onClick={() => openUnbanUserModal(user)}
+                                disabled={unbanUserMutation.isPending}
+                                data-testid={`button-unban-${user.id}`}
+                              >
+                                <Ban className="h-4 w-4 mr-1" />
+                                Unban
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive"
+                                onClick={() => openBanUserModal(user)}
+                                disabled={banUserMutation.isPending}
+                                data-testid={`button-ban-${user.id}`}
+                              >
+                                <Ban className="h-4 w-4 mr-1" />
+                                Ban
+                              </Button>
+                            )
+                          )}
+                          {canModerateUser(user) && (
                             <Button
                               variant="outline"
                               size="sm"
-                              className="min-h-11 sm:min-h-8 text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:text-emerald-700"
-                              onClick={() => openUnbanUserModal(user)}
-                              disabled={unbanUserMutation.isPending}
-                              data-testid={`button-unban-${user.id}`}
+                              className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive border-destructive/30"
+                              onClick={() => openDeleteUserModal(user)}
+                              data-testid={`button-delete-user-${user.id}`}
                             >
-                              <Ban className="h-4 w-4 mr-1" />
-                              Unban
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive"
-                              onClick={() => openBanUserModal(user)}
-                              disabled={user.role === "admin" || banUserMutation.isPending}
-                              data-testid={`button-ban-${user.id}`}
-                            >
-                              <Ban className="h-4 w-4 mr-1" />
-                              Ban
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
                             </Button>
                           )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-h-11 sm:min-h-8 text-destructive hover:text-destructive border-destructive/30"
-                            onClick={() => openDeleteUserModal(user)}
-                            data-testid={`button-delete-user-${user.id}`}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </Button>
                         </div>
                       </div>
                     ))}
