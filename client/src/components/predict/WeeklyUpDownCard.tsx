@@ -59,6 +59,7 @@ export function WeeklyUpDownCard({
   isMarketClosed = false,
   closedMessage,
   onSelect,
+  onAdd,
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
@@ -71,6 +72,8 @@ export function WeeklyUpDownCard({
   isMarketClosed?: boolean;
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
+  /** Opens the StakeModal in top-up mode for the user's existing pick. */
+  onAdd?: () => void;
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
@@ -239,6 +242,7 @@ export function WeeklyUpDownCard({
         isMarketClosed={!!isMarketClosed}
         closedMessage={closedMessage}
         onSelect={onSelect}
+        onAdd={onAdd}
         pendingPosition={pendingPosition ?? null}
         upPrice={upPrice}
         downPrice={downPrice}

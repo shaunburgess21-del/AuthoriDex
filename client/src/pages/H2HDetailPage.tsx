@@ -55,6 +55,7 @@ import {
   Crown,
   Activity,
   Banknote,
+  Plus,
 } from "lucide-react";
 
 interface HydratedH2H {
@@ -880,7 +881,7 @@ export default function H2HDetailPage() {
                           {/* Full-width action row below the numbers —
                               same pattern as the other detail pages so
                               nothing squeezes on narrow phones. */}
-                          <div className="mt-2 flex items-center justify-end">
+                          <div className="mt-2 flex items-center justify-end gap-2">
                             <Button
                               size="sm"
                               disabled={isMarketClosed}
@@ -890,6 +891,17 @@ export default function H2HDetailPage() {
                             >
                               <Banknote className="h-3.5 w-3.5" />
                               <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isMarketClosed}
+                              onClick={() => handleSelect(side)}
+                              data-testid={`button-add-p${side}-position`}
+                              className="gap-1 px-2.5"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>Add</span>
                             </Button>
                           </div>
                         </div>
@@ -1104,15 +1116,27 @@ export default function H2HDetailPage() {
                 ammNetSharesFor(
                   userPickSide === 1 ? hydrated.person1EntryId : hydrated.person2EntryId,
                 ) > 1e-6 && (
-                  <Button
-                    size="sm"
-                    onClick={() => openCashOut(userPickSide)}
-                    data-testid="button-sticky-cashout"
-                    className="gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                  >
-                    <Banknote className="h-3.5 w-3.5" />
-                    Cash out
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => openCashOut(userPickSide)}
+                      data-testid="button-sticky-cashout"
+                      className="gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                    >
+                      <Banknote className="h-3.5 w-3.5" />
+                      Cash out
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSelect(userPickSide)}
+                      data-testid="button-sticky-add"
+                      className="gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </>
                 )}
             </div>
           ) : (

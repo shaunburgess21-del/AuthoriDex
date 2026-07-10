@@ -11,7 +11,8 @@ import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
 import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
 import { cn } from "@/lib/utils";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export type CategoryRaceEntryStakes = Map<string, { yesStake: number; noStake: number }>;
 
@@ -127,6 +128,33 @@ export function TopGainerCard({
       : "text-red-700 dark:text-red-400";
   const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
+  const backedCandidate = (() => {
+    if (predictionSummary?.pickLabel === "Multiple picks") return null;
+
+    if (predictionSummary?.pickLabel) {
+      const byLabel = candidates.find((c) => c.name === predictionSummary.pickLabel);
+      if (byLabel?.entryId && (entryStakes?.get(byLabel.entryId)?.yesStake ?? 0) > 0) {
+        return byLabel;
+      }
+    }
+
+    if (highlightedEntryId) {
+      const match = candidates.find((c) => c.entryId === highlightedEntryId);
+      if (match) return match;
+    }
+
+    if (entryStakes) {
+      const staked = candidates.filter(
+        (c) => c.entryId && (entryStakes.get(c.entryId)?.yesStake ?? 0) > 0,
+      );
+      if (staked.length === 1) return staked[0];
+    }
+
+    return null;
+  })();
+
+  const showAddButton = !isMarketClosed && !!onSelectCandidate && !!backedCandidate;
+
   return (
     <PredictCard
       autoSize
@@ -216,46 +244,62 @@ export function TopGainerCard({
 
       <div className="mt-auto pt-1">
         {isPredicted ? (
-          <Link
-            href={raceDetailHref}
-            onClick={navigateToRaceDetail}
-            className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            data-testid={`button-gainer-your-pick-${market.id}`}
-            aria-label={
-              predictionSummary?.pickLabel
-                ? `View your pick: ${predictionSummary.pickLabel}`
-                : "View your race pick"
-            }
-          >
-            <div
-              className={cn(
-                FOOTER_SHELL_CLASS,
-                "border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 hover:bg-violet-500/12 dark:hover:bg-violet-500/10",
-              )}
+          <div className="flex items-stretch gap-2">
+            <Link
+              href={raceDetailHref}
+              onClick={navigateToRaceDetail}
+              className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-testid={`button-gainer-your-pick-${market.id}`}
+              aria-label={
+                predictionSummary?.pickLabel
+                  ? `View your pick: ${predictionSummary.pickLabel}`
+                  : "View your race pick"
+              }
             >
-              <Check className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-              <div className="min-w-0 flex-1 text-left">
-                <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                <p className="truncate text-sm font-semibold leading-tight text-foreground">
-                  {predictionSummary?.pickLabel ?? "View position"}
-                </p>
-              </div>
-              {pnlText && (
-                <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                  {pnlText}
-                </span>
-              )}
-              {predictionSummary != null && (
-                <div className="flex shrink-0 flex-col items-end tabular-nums">
-                  <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                  <span className="text-xs font-semibold leading-tight text-foreground">
-                    {formatVox(predictionSummary.stakeAmount)}
-                  </span>
+              <div
+                className={cn(
+                  FOOTER_SHELL_CLASS,
+                  "border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 hover:bg-violet-500/12 dark:hover:bg-violet-500/10",
+                )}
+              >
+                <Check className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                  <p className="truncate text-sm font-semibold leading-tight text-foreground">
+                    {predictionSummary?.pickLabel ?? "View position"}
+                  </p>
                 </div>
-              )}
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            </div>
-          </Link>
+                {pnlText && (
+                  <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                    {pnlText}
+                  </span>
+                )}
+                {predictionSummary != null && (
+                  <div className="flex shrink-0 flex-col items-end tabular-nums">
+                    <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                    <span className="text-xs font-semibold leading-tight text-foreground">
+                      {formatVox(predictionSummary.stakeAmount)}
+                    </span>
+                  </div>
+                )}
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              </div>
+            </Link>
+            {showAddButton && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onSelectCandidate!(market, backedCandidate!)}
+                data-testid={`button-gainer-add-${market.id}`}
+                className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
+                aria-label={`Add to your ${backedCandidate!.name} stake`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden min-[360px]:inline">Add</span>
+              </Button>
+            )}
+          </div>
         ) : (
           <Link
             href={raceDetailHref}

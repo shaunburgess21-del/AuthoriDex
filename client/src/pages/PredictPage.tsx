@@ -3407,6 +3407,10 @@ export default function PredictPage() {
                       isMarketClosed={isMarketClosed}
                       closedMessage={closedMarketMessage}
                       onSelect={(choice) => handleUpDownSelect(market, choice)}
+                      onAdd={() => {
+                        const pos = buildCardPendingPosition(String(market.id));
+                        if (pos?.pick) handleUpDownSelect(market, pos.pick);
+                      }}
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
@@ -3861,6 +3865,10 @@ export default function PredictPage() {
               isMarketClosed={isMarketClosed}
               closedMessage={closedMarketMessage}
               onSelect={(choice) => handleUpDownSelect(market, choice)}
+              onAdd={() => {
+                const pos = buildCardPendingPosition(String(market.id));
+                if (pos?.pick) handleUpDownSelect(market, pos.pick);
+              }}
               onFilterCategory={(cat) => setWeeklyOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
@@ -4125,6 +4133,10 @@ export default function PredictPage() {
                   isMarketClosed={isMarketClosed}
                   closedMessage={closedMarketMessage}
                   onSelect={(choice) => handleUpDownSelect(market, choice)}
+                  onAdd={() => {
+                    const pos = buildCardPendingPosition(String(market.id));
+                    if (pos?.pick) handleUpDownSelect(market, pos.pick);
+                  }}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}

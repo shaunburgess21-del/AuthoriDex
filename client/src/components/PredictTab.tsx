@@ -298,10 +298,14 @@ export function PredictTab({
         startAt: m.startAt || null,
         bettingCutoff: m.bettingCutoff || null,
         person1Percent: (s1 + s2) === 0 ? 50 : Math.round((s1 / total) * 100),
+        totalBets: Number(m.activeParticipantCount || 0) || 0,
+        activeParticipantCount: Number(m.activeParticipantCount || 0),
+        recentParticipants: m.recentParticipants || [],
         modelP1Percent: typeof m.modelP1Percent === "number" ? m.modelP1Percent : undefined,
         modelConfidence: m.modelConfidence ?? undefined,
         engine: "amm",
         ammState: m.ammState ?? null,
+        volume: Number(m.volume ?? m.ammState?.totalUserCreditsIn ?? 0) || 0,
       };
     });
     return all.filter(h => h.person1Id === personId || h.person2Id === personId);
@@ -837,6 +841,11 @@ export function PredictTab({
       toast.error("Market unavailable", { description: "This market is missing required entries. Please try another market." });
       return;
     }
+    const existing = openMarketBets.get(String(market.id));
+    const userPick = existing && existing.result === "pending"
+      ? (existing.entryLabel || "").toLowerCase() as "up" | "down" | string
+      : null;
+    const isTopUp = userPick === choice;
     setPendingSelection({
       type: "updown",
       choice: choice === "up" ? "Trend Score UP" : "Trend Score DOWN",
@@ -850,6 +859,8 @@ export function PredictTab({
       baselineTimestamp: market.startAt,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? existing?.stakeAmount : undefined,
       engine: "amm",
       ammState: market.ammState ?? null,
     });
@@ -873,6 +884,18 @@ export function PredictTab({
     const picked = person === 1 ? market.person1 : market.person2;
     const opponent = person === 1 ? market.person2 : market.person1;
     const sentiment = person === 1 ? market.person1Percent : 100 - market.person1Percent;
+    const existing = openMarketBets.get(String(market.id));
+    const userPickSide = existing && existing.result === "pending"
+      ? h2hUserPickFromBet(market, { entryLabel: existing.entryLabel, entryId: existing.entryId })
+      : null;
+    if (userPickSide && person !== userPickSide) {
+      const myName = userPickSide === 1 ? market.person1.name : market.person2.name;
+      toast("Stick with your pick", {
+        description: `You already backed ${myName}. Top up your existing pick instead.`,
+      });
+      return;
+    }
+    const isTopUp = userPickSide === person;
     setPendingSelection({
       type: "h2h",
       choice: picked.name,
@@ -886,6 +909,8 @@ export function PredictTab({
       crowdSentiment: sentiment,
       endAt: serverResolutionDeadline ?? undefined,
       bettingCutoff: serverBettingCutoff,
+      isTopUp,
+      existingStake: isTopUp ? existing?.stakeAmount : undefined,
       engine: "amm",
       ammState: (market as { ammState?: unknown }).ammState as StakeSelection["ammState"] ?? null,
     });
@@ -1214,6 +1239,10 @@ export function PredictTab({
             isMarketClosed={isMarketClosed}
             closedMessage={closedMarketMessage}
             onSelect={(choice) => handleUpDownSelect(weeklyMarket, choice)}
+            onAdd={() => {
+              const pos = pendingWeeklyUpDownPositionFromBet(openMarketBets.get(String(weeklyMarket.id)));
+              if (pos?.pick) handleUpDownSelect(weeklyMarket, pos.pick);
+            }}
             onFilterCategory={handleCategoryFilter}
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}

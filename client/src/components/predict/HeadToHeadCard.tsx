@@ -4,13 +4,12 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { PredictCard } from "@/components/predict/PredictCard";
-import { AmmPriceSparkline } from "@/components/predict/AmmPriceSparkline";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
-import type { ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
+import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
-import { Activity, Check, ChevronRight } from "lucide-react";
+import { Activity, Check, ChevronRight, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
@@ -193,15 +192,6 @@ export function HeadToHeadCard({
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            {volumeLabel && (
-              <Badge
-                variant="outline"
-                className="text-[10px] tabular-nums text-muted-foreground border-border/50"
-                data-testid={`h2h-card-volume-${market.id}`}
-              >
-                {volumeLabel} vol
-              </Badge>
-            )}
             <InteractiveCategoryPill
               category={market.category}
               onFilter={() => onFilterCategory?.(market.category)}
@@ -343,138 +333,113 @@ export function HeadToHeadCard({
         </div>
 
         {ammP1Price != null && ammP2Price != null && (
-          // Name is already shown above in big text. We show per-share
-          // price here as muted secondary info so the headline %% stays
-          // primary, with a small sparkline of the person-1 series so
-          // users get a 7-day price feel at a glance.
           <div className="flex items-center justify-between px-2 text-[10px] mb-2 text-muted-foreground">
             <span>{formatVoxPrice(ammP1Price, 3)}/share</span>
-            {market.person1EntryId && (
-              <AmmPriceSparkline
-                marketId={market.id}
-                entryId={market.person1EntryId}
-                fallbackPrice={ammP1Price}
-                width={56}
-                height={16}
-                className="stroke-blue-500 dark:stroke-blue-400"
-              />
-            )}
             <span>{formatVoxPrice(ammP2Price, 3)}/share</span>
           </div>
         )}
 
+        <div className="mb-2 flex items-center gap-2 flex-wrap">
+          <ParticipantAvatarStack
+            participants={market.recentParticipants}
+            totalCount={market.totalBets ?? market.activeParticipantCount ?? 0}
+            engine="amm"
+          />
+          {volumeLabel && (
+            <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground/40">·</span>{" "}
+              <span className="font-mono">{volumeLabel}</span> vol
+            </span>
+          )}
+        </div>
+
         <div className="mt-auto">
           {hasPicked ? (
             <div className="flex items-stretch gap-2">
-              {/* Primary tap = same-side top-up via parent's StakeModal.
-                  Falls back to the detail-page link for legacy callers
-                  that didn't wire onSelect. */}
-              {onSelect ? (
-                <button
+              <Link
+                href={`/predict/h2h/${market.id}`}
+                onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
+                className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                data-testid={`link-h2h-your-pick-${market.id}`}
+                aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
+              >
+                <div
+                  className={cn(
+                    "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
+                    pickAccentShell
+                  )}
+                >
+                  <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
+                    <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
+                  </div>
+                  {pnlText && (
+                    <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
+                      {pnlText}
+                    </span>
+                  )}
+                  {userStake != null && (
+                    <div className="flex shrink-0 flex-col items-end tabular-nums">
+                      <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
+                      <span className="text-xs font-semibold leading-tight text-foreground">
+                        {formatVox(userStake)}
+                      </span>
+                    </div>
+                  )}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                </div>
+              </Link>
+              {onSelect && !isMarketClosed && (
+                <Button
                   type="button"
+                  size="sm"
+                  variant="outline"
                   onClick={() => onSelect(userPick as 1 | 2)}
-                  className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  data-testid={`button-h2h-topup-${market.id}`}
+                  data-testid={`button-h2h-add-${market.id}`}
+                  className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
                   aria-label={`Add to your ${smartName(pickedName)} stake`}
                 >
-                  <div
-                    className={cn(
-                      "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
-                      pickAccentShell
-                    )}
-                  >
-                    <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
-                    <div className="min-w-0 flex-1 text-left">
-                      <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                      <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
-                    </div>
-                    {pnlText && (
-                      <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                        {pnlText}
-                      </span>
-                    )}
-                    {userStake != null && (
-                      <div className="flex shrink-0 flex-col items-end tabular-nums">
-                        <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                        <span className="text-xs font-semibold leading-tight text-foreground">
-                          {formatVox(userStake)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ) : (
-                <Link
-                  href={`/predict/h2h/${market.id}`}
-                  onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
-                  className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  data-testid={`link-h2h-your-pick-${market.id}`}
-                  aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
-                >
-                  <div
-                    className={cn(
-                      "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
-                      pickAccentShell
-                    )}
-                  >
-                    <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                      <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
-                    </div>
-                    {pnlText && (
-                      <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                        {pnlText}
-                      </span>
-                    )}
-                    {userStake != null && (
-                      <div className="flex shrink-0 flex-col items-end tabular-nums">
-                        <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                        <span className="text-xs font-semibold leading-tight text-foreground">
-                          {formatVox(userStake)}
-                        </span>
-                      </div>
-                    )}
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  </div>
-                </Link>
-              )}
-              {/* Secondary "View details" affordance — keeps the
-                  detail-page link reachable when the primary tap is
-                  the top-up flow. */}
-              {onSelect && (
-                <Link
-                  href={`/predict/h2h/${market.id}`}
-                  onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
-                  className="shrink-0 flex items-center justify-center px-2 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  data-testid={`link-h2h-details-${market.id}`}
-                  aria-label="View head-to-head details"
-                >
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
-                </Link>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span className="hidden min-[360px]:inline">Add</span>
+                </Button>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-                <Button
-                  className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
-                  onClick={() => onSelect?.(1)}
-                  data-testid={`button-pick1-${market.id}`}
-                >
-                  {smartName(market.person1.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-              <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
-                <Button
-                  className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
-                  onClick={() => onSelect?.(2)}
-                  data-testid={`button-pick2-${market.id}`}
-                >
-                  {smartName(market.person2.name)}
-                </Button>
-              </ClosedMarketActionTrigger>
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
+                  <Button
+                    className="bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20 py-3 md:py-2 h-auto"
+                    onClick={() => onSelect?.(1)}
+                    data-testid={`button-pick1-${market.id}`}
+                  >
+                    {smartName(market.person1.name)}
+                  </Button>
+                </ClosedMarketActionTrigger>
+                <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
+                  <Button
+                    className="bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20 py-3 md:py-2 h-auto"
+                    onClick={() => onSelect?.(2)}
+                    data-testid={`button-pick2-${market.id}`}
+                  >
+                    {smartName(market.person2.name)}
+                  </Button>
+                </ClosedMarketActionTrigger>
+              </div>
+              <Link
+                href={`/predict/h2h/${market.id}`}
+                onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
+                className="mt-2 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                data-testid={`link-h2h-view-details-${market.id}`}
+                aria-label="View battle details"
+              >
+                <div className="flex min-h-10 items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-3 md:py-2 transition-colors hover:bg-muted/45 dark:hover:bg-muted/40 justify-center w-full">
+                  <span className="text-sm font-medium text-foreground">View battle details</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                </div>
+              </Link>
+            </>
           )}
         </div>
       </div>

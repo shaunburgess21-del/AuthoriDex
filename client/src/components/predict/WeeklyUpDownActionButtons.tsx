@@ -14,6 +14,7 @@ export function WeeklyUpDownActionButtons({
   isMarketClosed,
   closedMessage,
   onSelect,
+  onAdd,
   pendingPosition,
   upPrice,
   downPrice,
@@ -26,6 +27,8 @@ export function WeeklyUpDownActionButtons({
   isMarketClosed: boolean;
   closedMessage: Pick<ClosedMarketMessage, "title" | "lines">;
   onSelect?: (choice: "up" | "down") => void;
+  /** Opens the StakeModal in top-up mode for the user's existing pick. */
+  onAdd?: () => void;
   pendingPosition?: { pick: "up" | "down" | null; stakeAmount: number } | null;
   /** AMM markets price via LMSR; each button surfaces live Ꝟ/share. */
   upPrice?: number | null;
@@ -41,6 +44,7 @@ export function WeeklyUpDownActionButtons({
         variant="cardLink"
         href={`/predict/updown/${marketId}`}
         onLinkClick={() => setPredictReturnAnchor(`card-weekly-${marketId}`)}
+        onAdd={onAdd}
         pick={pendingPosition.pick}
         personName={personName}
         baselineScore={baselineScore}

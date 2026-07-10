@@ -1,6 +1,7 @@
 import { Link } from "wouter";
-import { BarChart3, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
+import { BarChart3, ChevronRight, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatVox, formatVoxDelta } from "@/lib/currency";
 
@@ -30,6 +31,7 @@ export function WeeklyUpDownYourPositionPanel({
   variant = "detail",
   href,
   onLinkClick,
+  onAdd,
   className,
   tieRule,
   unrealisedPnl = null,
@@ -42,6 +44,8 @@ export function WeeklyUpDownYourPositionPanel({
   variant?: "detail" | "cardLink";
   href?: string;
   onLinkClick?: () => void;
+  /** Opens the StakeModal in top-up mode for the user's existing pick. */
+  onAdd?: () => void;
   className?: string;
   tieRule?: string | null;
   /**
@@ -173,14 +177,29 @@ export function WeeklyUpDownYourPositionPanel({
     // for an open position.
     if (href) {
       return (
-        <Link
-          href={href}
-          onClick={onLinkClick}
-          className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          aria-label={`View your Weekly Up or Down position for ${personName}`}
-        >
-          {compact}
-        </Link>
+        <div className="flex items-stretch gap-2 w-full">
+          <Link
+            href={href}
+            onClick={onLinkClick}
+            className="flex-1 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={`View your Weekly Up or Down position for ${personName}`}
+          >
+            {compact}
+          </Link>
+          {onAdd && pick && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onAdd}
+              className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
+              aria-label={`Add to your ${pick === "up" ? "UP" : "DOWN"} position`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden min-[360px]:inline">Add</span>
+            </Button>
+          )}
+        </div>
       );
     }
 
