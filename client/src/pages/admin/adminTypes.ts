@@ -138,11 +138,34 @@ export interface PredictionMarket {
 }
 
 export interface MarketEntryForm {
+  /** Stable key for drag-and-drop and per-entry UI state in admin forms. */
+  clientId: string;
   label: string;
   description: string;
   imageUrl: string;
   entryPersonId: string;
   entryPersonName: string;
+}
+
+let marketEntryClientIdCounter = 0;
+
+export function createMarketEntry(
+  overrides: Partial<Omit<MarketEntryForm, "clientId">> & { clientId?: string } = {},
+): MarketEntryForm {
+  const { clientId, ...rest } = overrides;
+  return {
+    clientId:
+      clientId ??
+      (typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `entry-${++marketEntryClientIdCounter}-${Date.now()}`),
+    label: "",
+    description: "",
+    imageUrl: "",
+    entryPersonId: "",
+    entryPersonName: "",
+    ...rest,
+  };
 }
 
 export interface AuditLogEntry {

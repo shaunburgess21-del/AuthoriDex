@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   ArrowUpDown,
   CheckCircle,
@@ -41,9 +41,10 @@ import {
 } from "@/components/geo/GeoCountryTargeting";
 import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
 import { normalizeMarketCategory, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { type MarketEntryForm } from "@/pages/admin/adminTypes";
+import { type MarketEntryForm, createMarketEntry } from "@/pages/admin/adminTypes";
 import { fetchWithAuth } from "@/pages/admin/adminAuth";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
+import { AdminSortableCardList } from "@/components/admin/AdminSortableCardList";
 
 /**
  * World Market create/edit dialog. Extracted verbatim from
@@ -86,8 +87,8 @@ export function CreateMarketModal({
   const [strike, setStrike] = useState("");
   const [unit, setUnit] = useState("$");
   const [entries, setEntries] = useState<MarketEntryForm[]>([
-    { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-    { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+    createMarketEntry({ label: "Yes" }),
+    createMarketEntry({ label: "No" }),
   ]);
   const [visibility, setVisibility] = useState<"draft" | "live" | "inactive" | "archived">("live");
   const [inactiveMessage, setInactiveMessage] = useState("");
@@ -101,10 +102,10 @@ export function CreateMarketModal({
   const [relatedPeople, setRelatedPeople] = useState<{ id: string; name: string }[]>([]);
   const [geoEnabled, setGeoEnabled] = useState(false);
   const [geoCountries, setGeoCountries] = useState<string[]>([]);
-  const [expandedEntryImage, setExpandedEntryImage] = useState<number | null>(null);
-  const [entrySearches, setEntrySearches] = useState<Record<number, string>>({});
-  const [entrySearchResults, setEntrySearchResults] = useState<Record<number, any[]>>({});
-  const [showEntryDropdown, setShowEntryDropdown] = useState<Record<number, boolean>>({});
+  const [expandedEntryImage, setExpandedEntryImage] = useState<string | null>(null);
+  const [entrySearches, setEntrySearches] = useState<Record<string, string>>({});
+  const [entrySearchResults, setEntrySearchResults] = useState<Record<string, any[]>>({});
+  const [showEntryDropdown, setShowEntryDropdown] = useState<Record<string, boolean>>({});
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const handleGenerateSummary = async () => {
     if (!editMarket?.id) return;
@@ -198,19 +199,19 @@ export function CreateMarketModal({
     if (editMarket) return;
     if (openMarketType === "binary") {
       setEntries([
-        { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        createMarketEntry({ label: "Yes" }),
+        createMarketEntry({ label: "No" }),
       ]);
     } else if (openMarketType === "updown") {
       setEntries([
-        { label: "Above", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "Below", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        createMarketEntry({ label: "Above" }),
+        createMarketEntry({ label: "Below" }),
       ]);
     } else {
       setEntries([
-        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        createMarketEntry(),
+        createMarketEntry(),
+        createMarketEntry(),
       ]);
     }
   }, [openMarketType]);
@@ -278,13 +279,16 @@ export function CreateMarketModal({
           .then(data => {
             if (latestEditMarketIdRef.current !== requestedMarketId) return;
             if (data?.entries?.length) {
-              setEntries(data.entries.map((e: any) => ({
-                label: e.label || "",
-                description: e.description || "",
-                imageUrl: e.imageUrl || "",
-                entryPersonId: e.personId || "",
-                entryPersonName: "",
-              })));
+              setEntries(data.entries.map((e: any) =>
+                createMarketEntry({
+                  clientId: e.id,
+                  label: e.label || "",
+                  description: e.description || "",
+                  imageUrl: e.imageUrl || "",
+                  entryPersonId: e.personId || "",
+                  entryPersonName: "",
+                }),
+              ));
             }
             if (data?.relatedPeople?.length) {
               setRelatedPeople(data.relatedPeople);
@@ -295,13 +299,16 @@ export function CreateMarketModal({
           })
           .catch(() => {});
       } else if (editMarket.entries?.length) {
-        setEntries(editMarket.entries.map((e: any) => ({
-          label: e.label || "",
-          description: e.description || "",
-          imageUrl: e.imageUrl || "",
-          entryPersonId: e.personId || "",
-          entryPersonName: "",
-        })));
+        setEntries(editMarket.entries.map((e: any) =>
+          createMarketEntry({
+            clientId: e.id,
+            label: e.label || "",
+            description: e.description || "",
+            imageUrl: e.imageUrl || "",
+            entryPersonId: e.personId || "",
+            entryPersonName: "",
+          }),
+        ));
       }
     } else {
       setTitle("");
@@ -331,28 +338,56 @@ export function CreateMarketModal({
       setMarketCelebResults([]);
       setRelatedPeople([]);
       setEntries([
-        { label: "Yes", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
-        { label: "No", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" },
+        createMarketEntry({ label: "Yes" }),
+        createMarketEntry({ label: "No" }),
       ]);
     }
   }, [editMarket, open]);
 
   const addEntry = () => {
     if (entries.length < OPINION_POLL_MAX_OPTIONS) {
-      setEntries([...entries, { label: "", description: "", imageUrl: "", entryPersonId: "", entryPersonName: "" }]);
+      setEntries([...entries, createMarketEntry()]);
     }
   };
 
-  const removeEntry = (idx: number) => {
+  const removeEntry = (clientId: string) => {
     if (entries.length > 3) {
-      setEntries(entries.filter((_, i) => i !== idx));
+      setEntries(entries.filter((entry) => entry.clientId !== clientId));
+      if (expandedEntryImage === clientId) setExpandedEntryImage(null);
+      setEntrySearches((prev) => {
+        const next = { ...prev };
+        delete next[clientId];
+        return next;
+      });
+      setEntrySearchResults((prev) => {
+        const next = { ...prev };
+        delete next[clientId];
+        return next;
+      });
+      setShowEntryDropdown((prev) => {
+        const next = { ...prev };
+        delete next[clientId];
+        return next;
+      });
     }
   };
 
-  const updateEntry = (idx: number, field: keyof MarketEntryForm, value: string | number) => {
-    const updated = [...entries];
-    (updated[idx] as any)[field] = value;
-    setEntries(updated);
+  const reorderEntries = async (orderedClientIds: string[]) => {
+    setEntries((prev) => {
+      const byId = new Map(prev.map((entry) => [entry.clientId, entry]));
+      return orderedClientIds
+        .map((id) => byId.get(id))
+        .filter((entry): entry is MarketEntryForm => !!entry);
+    });
+  };
+
+  const updateEntry = (clientId: string, field: keyof MarketEntryForm, value: string | number) => {
+    if (field === "clientId") return;
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.clientId === clientId ? { ...entry, [field]: value } : entry,
+      ),
+    );
   };
 
   const searchMarketCelebrities = async (query: string) => {
@@ -399,11 +434,11 @@ export function CreateMarketModal({
   };
 
   const entrySearchTimer = useRef<any>(null);
-  const searchEntryCelebrities = async (idx: number, query: string) => {
-    setEntrySearches(prev => ({ ...prev, [idx]: query }));
+  const searchEntryCelebrities = async (clientId: string, query: string) => {
+    setEntrySearches(prev => ({ ...prev, [clientId]: query }));
     if (!query || query.length < 2) {
-      setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
-      setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+      setEntrySearchResults(prev => ({ ...prev, [clientId]: [] }));
+      setShowEntryDropdown(prev => ({ ...prev, [clientId]: false }));
       return;
     }
     if (entrySearchTimer.current) clearTimeout(entrySearchTimer.current);
@@ -413,29 +448,42 @@ export function CreateMarketModal({
         if (res.ok) {
           const data = await res.json();
           const list = Array.isArray(data) ? data : data.data || [];
-          setEntrySearchResults(prev => ({ ...prev, [idx]: list.slice(0, 6) }));
-          setShowEntryDropdown(prev => ({ ...prev, [idx]: true }));
+          setEntrySearchResults(prev => ({ ...prev, [clientId]: list.slice(0, 6) }));
+          setShowEntryDropdown(prev => ({ ...prev, [clientId]: true }));
         }
       } catch {}
     }, 300);
   };
 
-  const selectEntryCeleb = (idx: number, celeb: any) => {
-    const updated = [...entries];
-    updated[idx] = { ...updated[idx], entryPersonId: celeb.id, entryPersonName: celeb.name, imageUrl: celeb.avatar || "" };
-    setEntries(updated);
-    setEntrySearches(prev => ({ ...prev, [idx]: celeb.name }));
-    setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
-    setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+  const selectEntryCeleb = (clientId: string, celeb: any) => {
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.clientId === clientId
+          ? {
+              ...entry,
+              entryPersonId: celeb.id,
+              entryPersonName: celeb.name,
+              imageUrl: celeb.avatar || "",
+            }
+          : entry,
+      ),
+    );
+    setEntrySearches(prev => ({ ...prev, [clientId]: celeb.name }));
+    setEntrySearchResults(prev => ({ ...prev, [clientId]: [] }));
+    setShowEntryDropdown(prev => ({ ...prev, [clientId]: false }));
   };
 
-  const clearEntryCeleb = (idx: number) => {
-    const updated = [...entries];
-    updated[idx] = { ...updated[idx], entryPersonId: "", entryPersonName: "" };
-    setEntries(updated);
-    setEntrySearches(prev => ({ ...prev, [idx]: "" }));
-    setEntrySearchResults(prev => ({ ...prev, [idx]: [] }));
-    setShowEntryDropdown(prev => ({ ...prev, [idx]: false }));
+  const clearEntryCeleb = (clientId: string) => {
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.clientId === clientId
+          ? { ...entry, entryPersonId: "", entryPersonName: "" }
+          : entry,
+      ),
+    );
+    setEntrySearches(prev => ({ ...prev, [clientId]: "" }));
+    setEntrySearchResults(prev => ({ ...prev, [clientId]: [] }));
+    setShowEntryDropdown(prev => ({ ...prev, [clientId]: false }));
   };
 
   const canSubmit = () => {
@@ -497,6 +545,116 @@ export function CreateMarketModal({
     multi: "Pick from multiple outcomes (3–20).",
     updown: "Predict above/below a strike level by the deadline.",
   };
+
+  const renderOutcomeEntry = (
+    entry: MarketEntryForm,
+    idx: number,
+    dragHandle: ReactNode | null = null,
+  ) => (
+    <div className="space-y-0">
+      <div className="flex items-center gap-2 p-3 rounded-lg border">
+        {openMarketType === "multi" && dragHandle}
+        {openMarketType === "multi" && (
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedEntryImage(expandedEntryImage === entry.clientId ? null : entry.clientId)
+            }
+            className="shrink-0 cursor-pointer"
+            data-testid={`button-entry-image-${entry.clientId}`}
+          >
+            {entry.imageUrl ? (
+              <Avatar className="h-8 w-8 rounded-md">
+                <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
+                <AvatarFallback className="text-[10px]">{(entry.label || "?")[0]}</AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="h-8 w-8 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center">
+                <ImagePlus className="h-3.5 w-3.5 text-muted-foreground/60" />
+              </div>
+            )}
+          </button>
+        )}
+        <div className="flex-1 space-y-2">
+          <Input
+            value={entry.label}
+            onChange={(e) => updateEntry(entry.clientId, "label", e.target.value)}
+            placeholder={`Option ${idx + 1}`}
+            disabled={openMarketType === "binary" || openMarketType === "updown"}
+            data-testid={`input-entry-label-${entry.clientId}`}
+          />
+        </div>
+        {openMarketType === "multi" && entries.length > 3 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => removeEntry(entry.clientId)}
+            aria-label="Remove entry"
+            data-testid={`button-remove-entry-${entry.clientId}`}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        )}
+      </div>
+      {openMarketType === "multi" && expandedEntryImage === entry.clientId && (
+        <div className="ml-4 mr-4 p-3 border border-t-0 rounded-b-lg bg-muted/30 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Image for "{entry.label || `Option ${idx + 1}`}"
+          </p>
+          <div className="relative">
+            <Input
+              value={entrySearches[entry.clientId] || entry.entryPersonName || ""}
+              onChange={(e) => searchEntryCelebrities(entry.clientId, e.target.value)}
+              placeholder="Search celebrity on leaderboard..."
+              className="text-xs"
+              data-testid={`input-entry-celeb-search-${entry.clientId}`}
+            />
+            {entry.entryPersonId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                onClick={() => clearEntryCeleb(entry.clientId)}
+                aria-label="Clear celebrity"
+                data-testid={`button-clear-entry-celeb-${entry.clientId}`}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+            {showEntryDropdown[entry.clientId] &&
+              (entrySearchResults[entry.clientId] || []).length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                  {entrySearchResults[entry.clientId].map((celeb: any) => (
+                    <button
+                      key={celeb.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs hover-elevate flex items-center gap-2"
+                      onClick={() => selectEntryCeleb(entry.clientId, celeb)}
+                      data-testid={`entry-celeb-option-${entry.clientId}-${celeb.id}`}
+                    >
+                      {celeb.avatar && (
+                        <Avatar className="h-5 w-5">
+                          <AvatarImage src={celeb.avatar} alt={celeb.name} />
+                          <AvatarFallback className="text-[8px]">{celeb.name?.[0]}</AvatarFallback>
+                        </Avatar>
+                      )}
+                      <span>{celeb.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+          </div>
+          <UploadImageInput
+            value={entry.imageUrl}
+            onChange={(url) => updateEntry(entry.clientId, "imageUrl", url)}
+            moduleName="market-entries"
+            slugOrId={`${slug || "new"}-entry-${entry.clientId}`}
+            placeholder="Upload or paste entry image URL..."
+          />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -948,101 +1106,23 @@ export function CreateMarketModal({
             <p className="text-xs text-muted-foreground">
               {openMarketType === "binary" ? "Binary markets always have exactly 2 outcomes (Yes/No)." :
                openMarketType === "updown" ? "Up/Down markets always have exactly 2 outcomes (Above/Below)." :
-               `Multi-option: ${entries.length} of 3-${OPINION_POLL_MAX_OPTIONS} outcomes.`}
+               `Multi-option: ${entries.length} of 3-${OPINION_POLL_MAX_OPTIONS} outcomes. Drag the grip to reorder.`}
             </p>
-            {entries.map((entry, idx) => (
-              <div key={idx} className="space-y-0">
-                <div className="flex items-center gap-2 p-3 rounded-lg border">
-                  {openMarketType === "multi" && (
-                    <button
-                      type="button"
-                      onClick={() => setExpandedEntryImage(expandedEntryImage === idx ? null : idx)}
-                      className="shrink-0 cursor-pointer"
-                      data-testid={`button-entry-image-${idx}`}
-                    >
-                      {entry.imageUrl ? (
-                        <Avatar className="h-8 w-8 rounded-md">
-                          <AvatarImage src={entry.imageUrl} alt={entry.label} className="object-cover" />
-                          <AvatarFallback className="text-[10px]">{(entry.label || "?")[0]}</AvatarFallback>
-                        </Avatar>
-                      ) : (
-                        <div className="h-8 w-8 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center">
-                          <ImagePlus className="h-3.5 w-3.5 text-muted-foreground/60" />
-                        </div>
-                      )}
-                    </button>
-                  )}
-                  <div className="flex-1 space-y-2">
-                    <Input
-                      value={entry.label}
-                      onChange={(e) => updateEntry(idx, "label", e.target.value)}
-                      placeholder={`Option ${idx + 1}`}
-                      disabled={openMarketType === "binary" || openMarketType === "updown"}
-                      data-testid={`input-entry-label-${idx}`}
-                    />
-                  </div>
-                  {openMarketType === "multi" && entries.length > 3 && (
-                    <Button variant="ghost" size="icon" onClick={() => removeEntry(idx)} aria-label="Remove entry" data-testid={`button-remove-entry-${idx}`}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-                {openMarketType === "multi" && expandedEntryImage === idx && (
-                  <div className="ml-4 mr-4 p-3 border border-t-0 rounded-b-lg bg-muted/30 space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Image for "{entry.label || `Option ${idx + 1}`}"</p>
-                    <div className="relative">
-                      <Input
-                        value={entrySearches[idx] || entry.entryPersonName || ""}
-                        onChange={(e) => searchEntryCelebrities(idx, e.target.value)}
-                        placeholder="Search celebrity on leaderboard..."
-                        className="text-xs"
-                        data-testid={`input-entry-celeb-search-${idx}`}
-                      />
-                      {entry.entryPersonId && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-                          onClick={() => clearEntryCeleb(idx)}
-                          aria-label="Clear celebrity"
-                          data-testid={`button-clear-entry-celeb-${idx}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                      {showEntryDropdown[idx] && (entrySearchResults[idx] || []).length > 0 && (
-                        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                          {entrySearchResults[idx].map((celeb: any) => (
-                            <button
-                              key={celeb.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-xs hover-elevate flex items-center gap-2"
-                              onClick={() => selectEntryCeleb(idx, celeb)}
-                              data-testid={`entry-celeb-option-${idx}-${celeb.id}`}
-                            >
-                              {celeb.avatar && (
-                                <Avatar className="h-5 w-5">
-                                  <AvatarImage src={celeb.avatar} alt={celeb.name} />
-                                  <AvatarFallback className="text-[8px]">{celeb.name?.[0]}</AvatarFallback>
-                                </Avatar>
-                              )}
-                              <span>{celeb.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <UploadImageInput
-                      value={entry.imageUrl}
-                      onChange={(url) => updateEntry(idx, "imageUrl", url)}
-                      moduleName="market-entries"
-                      slugOrId={`${slug || "new"}-entry-${idx}`}
-                      placeholder="Upload or paste entry image URL..."
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
+            {openMarketType === "multi" ? (
+              <AdminSortableCardList
+                items={entries.map((entry) => ({ ...entry, id: entry.clientId }))}
+                onReorder={reorderEntries}
+                listClassName="space-y-3"
+                renderItem={(entry, { dragHandle }) => {
+                  const idx = entries.findIndex((e) => e.clientId === entry.clientId);
+                  return renderOutcomeEntry(entry, idx, dragHandle);
+                }}
+              />
+            ) : (
+              entries.map((entry, idx) => (
+                <div key={entry.clientId}>{renderOutcomeEntry(entry, idx)}</div>
+              ))
+            )}
           </div>
         </div>
 
