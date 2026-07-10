@@ -266,11 +266,6 @@ export default function TownSquarePage() {
                           <>Staked <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
                         )}
                       </p>
-                      {item.rationale && (
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground border-l-2 border-border/40 pl-2 italic">
-                          "{item.rationale}"
-                        </p>
-                      )}
                     </div>
                   </div>
                 );

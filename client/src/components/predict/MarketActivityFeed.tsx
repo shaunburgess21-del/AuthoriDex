@@ -220,14 +220,6 @@ export function MarketActivityFeed({
                       ? `${voxWord(proceeds)} in`
                       : voxWord(t.stakeAmount)}
                   </p>
-                  {t.rationale && (
-                    <p
-                      className="text-[11px] italic text-muted-foreground/90 mt-1 line-clamp-2"
-                      data-testid={`text-trade-rationale-${t.id}`}
-                    >
-                      &ldquo;{t.rationale}&rdquo;
-                    </p>
-                  )}
                 </div>
               </div>
             );
