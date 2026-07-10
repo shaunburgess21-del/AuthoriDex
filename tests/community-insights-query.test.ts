@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   toPersonThreadCommentItem,
   type InsightCommentResponse,
-} from "../client/src/lib/communityInsightsQuery";
+} from "../client/src/lib/communityInsightsMappers";
 
 test("top-level profile post maps parentCommentId null to parentId null", () => {
   const row: InsightCommentResponse = {
