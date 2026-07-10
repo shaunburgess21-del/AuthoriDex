@@ -122,6 +122,7 @@ import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import {
   buildVoteListState,
+  navigateToPersonFromVoteHub,
   navigateWithVoteList,
   readVoteHubReturnState,
   scrollToVoteHubAnchor,
@@ -421,6 +422,7 @@ function InductionCandidateCard({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  onVisitProfile,
   categoryMenuDisabled = false,
 }: { 
   candidate: InductionCandidate;
@@ -433,6 +435,8 @@ function InductionCandidateCard({
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
+  /** When set, profile links stash Vote hub scroll before navigating. */
+  onVisitProfile?: () => void;
   categoryMenuDisabled?: boolean;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
@@ -508,6 +512,12 @@ function InductionCandidateCard({
           className="relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
           aria-label={candidate.personId ? `View ${candidate.name}'s profile` : `View ${candidate.name} in the Induction Queue`}
           data-testid={`link-induction-avatar-${candidate.id}`}
+          onClick={(e) => {
+            if (candidate.personId && onVisitProfile) {
+              e.preventDefault();
+              onVisitProfile();
+            }
+          }}
         >
           <PersonAvatar name={candidate.name} avatar={candidate.avatar} imageSlug={candidate.imageSlug} imageContext="induction" className="h-40 w-40 md:h-32 md:w-32" />
           {isVoted && (
@@ -520,6 +530,12 @@ function InductionCandidateCard({
           href={candidate.personId ? `/person/${candidate.personId}` : `/vote/induction#induction-card-${candidate.id}`}
           className="mt-2 md:mt-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
           data-testid={`link-induction-name-${candidate.id}`}
+          onClick={(e) => {
+            if (candidate.personId && onVisitProfile) {
+              e.preventDefault();
+              onVisitProfile();
+            }
+          }}
         >
           <h3 className="font-semibold text-[16px] leading-[1.4]">{candidate.name}</h3>
         </Link>
@@ -1565,10 +1581,12 @@ export default function VotePage() {
     if (!returnState) return;
     setActiveSection(returnState.activeSection as SectionToggle);
     const runScroll = () => {
-      if (returnState.activeSection === "All") {
-        scrollToVoteHubAnchor(returnState.anchorHashId);
-      } else if (returnState.scrollY != null && returnState.scrollY > 0) {
+      // Prefer exact scrollY when available (person-profile Back, filtered sections).
+      // Fall back to section anchor when scrollY is missing (legacy poll returns on "All").
+      if (returnState.scrollY != null && returnState.scrollY > 0) {
         window.scrollTo(0, returnState.scrollY);
+      } else {
+        scrollToVoteHubAnchor(returnState.anchorHashId);
       }
     };
     requestAnimationFrame(() => requestAnimationFrame(runScroll));
@@ -2462,6 +2480,38 @@ export default function VotePage() {
     setSnapScrollOpen(isSnap);
     if (isSnap && name) setSnapScrollSection(name.replace("snap-", "") as SnapSectionType);
   }, []);
+
+  /** Profile exit from Vote: stash scroll, flatten snap/overlay history so Back restores the list. */
+  const goPersonFromVote = useCallback(
+    (personId: string, anchorHashId: string) => {
+      const fromSnap = snapScrollOpen;
+      const scrollY =
+        fromSnap && savedSnapWindowScrollRef.current != null
+          ? savedSnapWindowScrollRef.current
+          : window.scrollY;
+
+      if (fromSnap || inductionOverlayOpen || valuePerceptionOverlayOpen) {
+        // Avoid the snap-close effect fighting our explicit restore on return.
+        if (fromSnap) savedSnapWindowScrollRef.current = null;
+        applyOverlayState(undefined);
+        window.history.replaceState({}, "");
+      }
+
+      navigateToPersonFromVoteHub(setLocation, personId, {
+        anchorHashId,
+        activeSection,
+        scrollY,
+      });
+    },
+    [
+      snapScrollOpen,
+      inductionOverlayOpen,
+      valuePerceptionOverlayOpen,
+      activeSection,
+      applyOverlayState,
+      setLocation,
+    ],
+  );
 
   const openOverlay = useCallback((name: string) => {
     window.history.pushState({ overlay: name }, "");
@@ -3505,7 +3555,7 @@ export default function VotePage() {
                 <div key={person.id} onClick={(e) => handleCardEmptyTap(e, "value", person.id)}>
                   <UnderratedOverratedCard 
                     person={person}
-                    onVisitProfile={() => setLocation(`/person/${person.id}`)}
+                    onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3619,6 +3669,11 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
+                    onVisitProfile={
+                      candidate.personId
+                        ? () => goPersonFromVote(candidate.personId!, "vote-induction")
+                        : undefined
+                    }
                   />
                 </div>
               ))}
@@ -4241,6 +4296,11 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
+                    onVisitProfile={
+                      candidate.personId
+                        ? () => goPersonFromVote(candidate.personId!, "vote-induction")
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -4479,11 +4539,7 @@ export default function VotePage() {
                   <UnderratedOverratedCard 
                     key={person.id} 
                     person={person}
-                    onVisitProfile={() => {
-                      applyOverlayState(undefined);
-                      window.history.replaceState({}, "");
-                      setLocation(`/person/${person.id}`);
-                    }}
+                    onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -4591,6 +4647,8 @@ export default function VotePage() {
             items={valueSnapItems}
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
+            voteHubActiveSection={activeSection}
+            onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-value")}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item, _ctx) => {
               const person = filteredValueCelebrities.find((p: any) => p.id === item.id);
@@ -4598,7 +4656,7 @@ export default function VotePage() {
               return (
                 <UnderratedOverratedCard
                   person={person}
-                  onVisitProfile={() => setLocation(`/person/${person.id}`)}
+                  onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
@@ -4615,6 +4673,8 @@ export default function VotePage() {
             items={inductionSnapItems}
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
+            voteHubActiveSection={activeSection}
+            onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-induction")}
             onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
             renderCard={(item, _ctx) => {
               const idx = filteredCandidates.findIndex((c: any) => c.id === item.id);
@@ -4632,6 +4692,11 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   categoryMenuDisabled
+                  onVisitProfile={
+                    candidate.personId
+                      ? () => goPersonFromVote(candidate.personId!, "vote-induction")
+                      : undefined
+                  }
                 />
               );
             }}

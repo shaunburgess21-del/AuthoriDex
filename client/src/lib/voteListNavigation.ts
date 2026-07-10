@@ -36,7 +36,12 @@ export interface VoteHubReturnState {
   activeSection: string;
   anchorHashId: string;
   scrollY?: number;
+  /** Written by writeVoteHubReturnState; used to ignore stale restores. */
+  ts?: number;
 }
+
+/** Expire return state so Vote → profile → elsewhere → Vote doesn't jump scroll. */
+const VOTE_HUB_RETURN_TTL_MS = 5 * 60 * 1000;
 
 export function voteHubReturnHashForType(type: VoteListNavType): string {
   return RETURN_HASH_BY_TYPE[type];
@@ -80,10 +85,28 @@ export function navigateWithVoteList(
 
 export function writeVoteHubReturnState(state: VoteHubReturnState): void {
   try {
-    sessionStorage.setItem(VOTE_HUB_RETURN_KEY, JSON.stringify(state));
+    sessionStorage.setItem(
+      VOTE_HUB_RETURN_KEY,
+      JSON.stringify({ ...state, ts: Date.now() }),
+    );
   } catch {
     /* ignore */
   }
+}
+
+/** Leave Vote hub for a person profile, stashing scroll/section for Back restore. */
+export function navigateToPersonFromVoteHub(
+  setLocation: (path: string) => void,
+  personId: string,
+  opts: { anchorHashId: string; activeSection: string; scrollY?: number },
+): void {
+  writeVoteHubReturnState({
+    activeSection: opts.activeSection,
+    anchorHashId: opts.anchorHashId,
+    scrollY:
+      opts.scrollY ?? (typeof window !== "undefined" ? window.scrollY : 0),
+  });
+  setLocation(`/person/${personId}`);
 }
 
 export function readVoteHubReturnState(): VoteHubReturnState | null {
@@ -91,7 +114,14 @@ export function readVoteHubReturnState(): VoteHubReturnState | null {
     const raw = sessionStorage.getItem(VOTE_HUB_RETURN_KEY);
     if (!raw) return null;
     sessionStorage.removeItem(VOTE_HUB_RETURN_KEY);
-    return JSON.parse(raw) as VoteHubReturnState;
+    const parsed = JSON.parse(raw) as VoteHubReturnState;
+    if (
+      typeof parsed.ts === "number" &&
+      Date.now() - parsed.ts > VOTE_HUB_RETURN_TTL_MS
+    ) {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -116,15 +146,10 @@ export function navigateBackToVoteHub(
   setLocation: (path: string) => void,
   voteList: VoteListHistoryState,
 ): void {
-  const returnState: VoteHubReturnState = {
+  writeVoteHubReturnState({
     activeSection: voteList.activeSection ?? "All",
     anchorHashId: voteList.returnHashId || voteHubReturnHashForType(voteList.type),
     scrollY: voteList.scrollY ?? 0,
-  };
-  try {
-    sessionStorage.setItem(VOTE_HUB_RETURN_KEY, JSON.stringify(returnState));
-  } catch {
-    /* ignore */
-  }
+  });
   setLocation("/vote");
 }

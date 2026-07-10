@@ -13,6 +13,7 @@ import {
 } from "@/lib/communityInsightsQuery";
 import {
   buildVoteListState,
+  navigateToPersonFromVoteHub,
   navigateWithVoteList,
   type VoteListNavType,
 } from "@/lib/voteListNavigation";
@@ -62,6 +63,8 @@ interface VoteSnapScrollViewProps {
   voteHubActiveSection?: string;
   /** When true, category tab starts on All (e.g. section-header expand). */
   initialCategoryAll?: boolean;
+  /** Prefer parent handler so Vote can flatten snap history before /person. */
+  onNavigateToPerson?: (personId: string) => void;
 }
 
 const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
@@ -94,6 +97,12 @@ const SNAP_TO_VOTE_LIST_TYPE: Partial<Record<SnapSectionType, VoteListNavType>> 
   matchups: "matchup",
   sentiment: "sentiment",
   opinion: "opinion",
+};
+
+const SNAP_TO_VOTE_HUB_ANCHOR: Partial<Record<SnapSectionType, string>> = {
+  value: "vote-value",
+  induction: "vote-induction",
+  curate: "vote-curate",
 };
 
 const SECTION_SUGGEST_LABEL: Record<SnapSectionType, string> = {
@@ -275,6 +284,7 @@ export function VoteSnapScrollView({
   commentMode = "card",
   voteHubActiveSection = "All",
   initialCategoryAll = false,
+  onNavigateToPerson,
 }: VoteSnapScrollViewProps) {
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -729,7 +739,17 @@ export function VoteSnapScrollView({
     if (!item) return;
     const detailPrefix = SECTION_DETAIL_PREFIX[sectionType];
     if (!detailPrefix || !item.slug) {
-      if (item.personId) setLocation(`/person/${item.personId}`);
+      if (item.personId) {
+        if (onNavigateToPerson) {
+          onNavigateToPerson(item.personId);
+          return;
+        }
+        const anchorHashId = SNAP_TO_VOTE_HUB_ANCHOR[sectionType] ?? "vote-value";
+        navigateToPersonFromVoteHub(setLocation, item.personId, {
+          anchorHashId,
+          activeSection: voteHubActiveSection,
+        });
+      }
       return;
     }
     const listType = SNAP_TO_VOTE_LIST_TYPE[sectionType];
@@ -748,7 +768,7 @@ export function VoteSnapScrollView({
       }
     }
     setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
-  }, [activeCategory, categoryItems, getVisibleItem, sectionType, setLocation, voteHubActiveSection]);
+  }, [activeCategory, categoryItems, getVisibleItem, onNavigateToPerson, sectionType, setLocation, voteHubActiveSection]);
 
   const { user } = useAuth();
   const handleShare = useCallback(() => {
