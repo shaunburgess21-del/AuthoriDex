@@ -472,6 +472,7 @@ function buildSystemPrompt(maxDrafts: number, allowedCategories: string[]): stri
 Selection principles:
 - Pick broadly interesting, high-engagement questions a general entertainment/news audience would enjoy predicting on.
 - Category variety is required. For a typical ${maxDrafts}-draft run: at most 2 politics and at most 2 sports. Prefer at least 1–2 from film-tv, music, creator, or comedy when those candidates are present in the list (sourceBucket movies/music/celebrities/tv are strong signals).
+- Sports slot mix: when the shortlist includes a UFC or boxing main-card market headlined by a TRACKED PERSON with competitive volume (roughly top ~20 sports candidates by volume24hUsd), include at least one such combat headliner when fitScore ≥ 55 — do not let a single ongoing tournament (e.g. World Cup) consume both sports slots while this kind of market is present.
 - When quality is equal, prefer markets that can link to a TRACKED PERSON from the list provided.
 - Skip anything that duplicates or nearly duplicates an EXISTING VoxDex market (list provided).
 - Skip questions that are incomprehensible without the source platform's context, purely financial microstructure (e.g. hourly crypto candles), or distasteful (deaths, tragedies, graphic violence, invasive pregnancy/relationship gossip).
