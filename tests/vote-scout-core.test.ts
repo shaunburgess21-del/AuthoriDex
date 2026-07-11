@@ -6,6 +6,7 @@ import {
   buildDenyKeySet,
   buildSystemPrompt,
   buildUserPrompt,
+  contentTypeToSuggestionType,
   filterAgainstDenyList,
   formatReviewLearningsBlock,
   ideaDedupeKey,
@@ -32,6 +33,8 @@ function sampleCatalog(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapsho
       opinions: ["Greatest boxer of all time | Classic GOAT debate"],
     },
     reviewLearnings: { kept: [], dismissed: [] },
+    leaderboardNames: ["Taylor Swift", "Elon Musk", "Lionel Messi"],
+    inductionNames: ["Some Newcomer"],
     ...overrides,
   };
 }
@@ -60,37 +63,44 @@ describe("vote-scout-core deny list", () => {
     assert.equal(deny.has(ideaDedupeKey("opinion_poll", "Brand new topic")), false);
   });
 
-  it("includes deny titles and next-tier guidance in the user prompt", () => {
+  it("includes deny titles, people context, and next-tier guidance in the user prompt", () => {
     const prompt = buildUserPrompt(sampleCatalog(), "evergreen");
     assert.match(prompt, /Dogs vs Cats/);
     assert.match(prompt, /Window Seat vs Aisle Seat/);
     assert.match(prompt, /CATEGORY COVERAGE/);
     assert.match(prompt, /next tier/i);
+    assert.match(prompt, /Taylor Swift/);
+    assert.match(prompt, /TRACKED PEOPLE/);
+    assert.match(prompt, /Do not include image prompts/);
     assert.match(prompt, new RegExp(`fitScore >= ${MIN_FIT_SCORE}`));
   });
 
-  it("mentions topical web search and anti-slop genre rules in system prompt", () => {
+  it("mentions topical people debates and no image prompts in system prompt", () => {
     assert.match(buildSystemPrompt("topical"), /web search/i);
+    assert.match(buildSystemPrompt("topical"), /TRACKED PEOPLE/);
+    assert.match(buildSystemPrompt("topical"), /reality-TV casting|reality\/entertainment/i);
     assert.match(buildSystemPrompt("evergreen"), /no web search/i);
     const evergreen = buildSystemPrompt("evergreen");
     assert.match(evergreen, /dinner[- ]party/i);
     assert.match(evergreen, /online-debate test/i);
     assert.match(evergreen, /CONCEPT vs CONCEPT/i);
     assert.match(evergreen, /Never pad/i);
-    assert.match(evergreen, /optionAImagePrompt/);
+    assert.match(evergreen, /Do NOT generate image prompts/i);
+    assert.doesNotMatch(evergreen, /optionAImagePrompt/);
+    assert.match(evergreen, /relatedNames/);
     assert.match(evergreen, new RegExp(String(MIN_FIT_SCORE)));
   });
 });
 
 describe("vote-scout-core parsing", () => {
-  it("parses a valid mixed response and drops low fit", () => {
+  it("parses a valid mixed response with relatedNames and drops low fit", () => {
     const raw = JSON.stringify({
       ideas: [
         {
           contentType: "matchup",
           fitScore: 88,
           rationale: "Classic preference split",
-          imagePrompt: "Matching framing for both sides",
+          relatedNames: ["Lionel Messi"],
           suggestedEndAt: null,
           payload: {
             title: "Window Seat vs Aisle Seat",
@@ -99,15 +109,12 @@ describe("vote-scout-core parsing", () => {
             optionBText: "Aisle Seat",
             category: "travel",
             description: "Two ways to fly.",
-            optionAImagePrompt: "Photorealistic window airplane seat view at dusk, square crop",
-            optionBImagePrompt: "Photorealistic aisle airplane seat with cabin lights, square crop",
           },
         },
         {
           contentType: "sentiment_poll",
           fitScore: 40,
           rationale: "Too weak",
-          imagePrompt: "x",
           payload: {
             headline: "Weak idea",
             subjectText: "Nope",
@@ -119,7 +126,7 @@ describe("vote-scout-core parsing", () => {
           contentType: "opinion_poll",
           fitScore: 75,
           rationale: "Generational warfare",
-          imagePrompt: "Vinyl records across decades",
+          relatedNames: [],
           payload: {
             title: "Best decade for music",
             category: "music",
@@ -133,12 +140,8 @@ describe("vote-scout-core parsing", () => {
     const parsed = parseVoteScoutResponse(raw);
     assert.equal(parsed.length, 2);
     assert.equal(parsed[0].contentType, "matchup");
-    const matchupPayload = parsed[0].payload as {
-      optionAImagePrompt?: string;
-      optionBImagePrompt?: string;
-    };
-    assert.ok(matchupPayload.optionAImagePrompt);
-    assert.ok(matchupPayload.optionBImagePrompt);
+    assert.deepEqual(parsed[0].relatedNames, ["Lionel Messi"]);
+    assert.equal((parsed[0] as any).imagePrompt, undefined);
     assert.equal(parsed[1].contentType, "opinion_poll");
   });
 
@@ -149,7 +152,6 @@ describe("vote-scout-core parsing", () => {
           contentType: "sentiment_poll",
           fitScore: MIN_FIT_SCORE - 1,
           rationale: "borderline",
-          imagePrompt: "x",
           payload: {
             headline: "Almost good enough",
             subjectText: "Not quite.",
@@ -174,7 +176,6 @@ describe("vote-scout-core parsing", () => {
           contentType: "opinion_poll",
           fitScore: 90,
           rationale: "thin options",
-          imagePrompt: "x",
           payload: {
             title: "Pick one",
             category: "misc",
@@ -196,7 +197,6 @@ describe("vote-scout-core parsing", () => {
             contentType: "matchup",
             fitScore: 90,
             rationale: "dupe",
-            imagePrompt: "x",
             payload: {
               title: "Cats vs Dogs",
               promptText: "Who wins?",
@@ -210,7 +210,6 @@ describe("vote-scout-core parsing", () => {
             contentType: "sentiment_poll",
             fitScore: 80,
             rationale: "fresh",
-            imagePrompt: "x",
             payload: {
               headline: "Tipping culture has gone too far",
               subjectText: "Debate tipping norms.",
@@ -222,7 +221,6 @@ describe("vote-scout-core parsing", () => {
             contentType: "sentiment_poll",
             fitScore: 79,
             rationale: "same batch dupe",
-            imagePrompt: "x",
             payload: {
               headline: "Tipping culture has gone too far",
               subjectText: "Debate tipping norms again.",
@@ -298,5 +296,13 @@ describe("vote-scout-core review learnings", () => {
   it("extracts title from payload", () => {
     assert.equal(titleFromScoutPayload({ headline: "Spoiler warnings" }), "Spoiler warnings");
     assert.equal(titleFromScoutPayload({ title: "Coffee vs Tea" }), "Coffee vs Tea");
+  });
+});
+
+describe("vote-scout-core type mapping", () => {
+  it("maps content types to suggestion types", () => {
+    assert.equal(contentTypeToSuggestionType("matchup"), "matchup");
+    assert.equal(contentTypeToSuggestionType("sentiment_poll"), "sentiment_poll");
+    assert.equal(contentTypeToSuggestionType("opinion_poll"), "opinion_poll");
   });
 });

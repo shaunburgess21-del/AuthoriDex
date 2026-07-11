@@ -2577,10 +2577,14 @@ export const voteScoutIdeas = pgTable("vote_scout_ideas", {
   rationale: text("rationale"),
   fitScore: integer("fit_score"),
   suggestedEndAt: timestamp("suggested_end_at"),
-  /** 'new' | 'kept' | 'dismissed' */
+  /** 'new' | 'kept' | 'dismissed' | 'approved' */
   status: text("status").notNull().default("new"),
   /** Optional founder note on keep/dismiss — fed into future scan prompts. */
   reviewNote: text("review_note"),
+  /** Created draft id after Approve to Draft (matchup / poll id). */
+  approvedAsId: text("approved_as_id"),
+  /** Canonical type label: matchup | trending_poll | opinion_poll */
+  approvedAsType: text("approved_as_type"),
   reviewedBy: varchar("reviewed_by").references(() => profiles.id, { onDelete: "set null" }),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

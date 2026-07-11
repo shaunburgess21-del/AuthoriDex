@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import {
   Check,
   Copy,
+  FilePlus2,
   Loader2,
   Sparkles,
   ThumbsDown,
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 
 type VoteScoutMode = "evergreen" | "topical";
-type VoteScoutStatus = "new" | "kept" | "dismissed";
+type VoteScoutStatus = "new" | "kept" | "dismissed" | "approved";
 type VoteScoutContentType = "matchup" | "sentiment_poll" | "opinion_poll";
 
 type MatchupPayload = {
@@ -38,8 +39,7 @@ type MatchupPayload = {
   optionBText: string;
   category: string;
   description: string;
-  optionAImagePrompt?: string;
-  optionBImagePrompt?: string;
+  relatedNames?: string[];
 };
 
 type SentimentPayload = {
@@ -47,6 +47,7 @@ type SentimentPayload = {
   subjectText: string;
   category: string;
   description: string;
+  relatedNames?: string[];
 };
 
 type OpinionPayload = {
@@ -54,6 +55,7 @@ type OpinionPayload = {
   category: string;
   summary: string;
   options: string[];
+  relatedNames?: string[];
 };
 
 type VoteScoutIdea = {
@@ -61,12 +63,13 @@ type VoteScoutIdea = {
   contentType: VoteScoutContentType;
   mode: VoteScoutMode;
   payload: MatchupPayload | SentimentPayload | OpinionPayload | Record<string, unknown>;
-  imagePrompt: string | null;
   rationale: string | null;
   fitScore: number | null;
   suggestedEndAt: string | null;
   status: VoteScoutStatus;
   reviewNote: string | null;
+  approvedAsId: string | null;
+  approvedAsType: string | null;
   createdAt: string;
   reviewedAt: string | null;
 };
@@ -79,7 +82,7 @@ type PendingVerdict = {
 
 type IdeasResponse = {
   ideas: VoteScoutIdea[];
-  statusCounts: { new: number; kept: number; dismissed: number };
+  statusCounts: { new: number; kept: number; dismissed: number; approved: number };
   hitRate: number | null;
 };
 
@@ -87,6 +90,12 @@ const TYPE_LABEL: Record<VoteScoutContentType, string> = {
   matchup: "Matchup",
   sentiment_poll: "Sentiment",
   opinion_poll: "Opinion",
+};
+
+const TAB_LABEL: Record<VoteScoutContentType, string> = {
+  matchup: "Matchups",
+  sentiment_poll: "Sentiment Polls",
+  opinion_poll: "Opinion Polls",
 };
 
 const TYPE_BADGE: Record<VoteScoutContentType, string> = {
@@ -100,6 +109,11 @@ function ideaTitle(idea: VoteScoutIdea): string {
   if (typeof p.title === "string" && p.title.trim()) return p.title;
   if (typeof p.headline === "string" && p.headline.trim()) return p.headline;
   return "Untitled idea";
+}
+
+function ideaCategory(idea: VoteScoutIdea): string {
+  const p = idea.payload as Record<string, unknown>;
+  return typeof p.category === "string" ? p.category : "";
 }
 
 function formatIdeaAsText(idea: VoteScoutIdea): string {
@@ -121,8 +135,6 @@ function formatIdeaAsText(idea: VoteScoutIdea): string {
     lines.push(`Option B: ${p.optionBText}`);
     lines.push(`Category: ${p.category}`);
     if (p.description) lines.push(`Description:\n${p.description}`);
-    if (p.optionAImagePrompt) lines.push(`\nImage prompt A:\n${p.optionAImagePrompt}`);
-    if (p.optionBImagePrompt) lines.push(`\nImage prompt B:\n${p.optionBImagePrompt}`);
   } else if (idea.contentType === "sentiment_poll") {
     const p = idea.payload as SentimentPayload;
     lines.push(`Headline: ${p.headline}`);
@@ -139,8 +151,9 @@ function formatIdeaAsText(idea: VoteScoutIdea): string {
     }
   }
 
-  if (idea.imagePrompt) {
-    lines.push(`\nImage prompt:\n${idea.imagePrompt}`);
+  const related = (idea.payload as Record<string, unknown>).relatedNames;
+  if (Array.isArray(related) && related.length > 0) {
+    lines.push(`Related people: ${related.join(", ")}`);
   }
 
   return lines.join("\n");
@@ -160,6 +173,7 @@ export function AdminVoteScoutSection() {
   const [statusFilter, setStatusFilter] = useState<VoteScoutStatus | "all">("new");
   const [pendingVerdict, setPendingVerdict] = useState<PendingVerdict | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
+  const [approveIdea, setApproveIdea] = useState<VoteScoutIdea | null>(null);
 
   const queryKey = useMemo(
     () => ["/api/admin/vote-scout/ideas", statusFilter] as const,
@@ -178,6 +192,23 @@ export function AdminVoteScoutSection() {
       );
       const json = await res.json();
       return json.data as IdeasResponse;
+    },
+  });
+
+  const { data: previewLinks, isFetching: previewLoading } = useQuery({
+    queryKey: ["/api/admin/vote-scout/ideas", approveIdea?.id, "preview-links"],
+    enabled: !!approveIdea,
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/admin/vote-scout/ideas/${approveIdea!.id}/preview-links`,
+      );
+      const json = await res.json();
+      return json.data as {
+        links: Array<{ role: string; name: string; id: string }>;
+        tabLabel: string;
+        contentType: VoteScoutContentType;
+      };
     },
   });
 
@@ -245,6 +276,28 @@ export function AdminVoteScoutSection() {
     onError: () => toast.error("Could not update idea"),
   });
 
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/vote-scout/ideas/${id}/approve`, {
+        overrides: { visibility: "draft" },
+      });
+      return res.json();
+    },
+    onSuccess: (json) => {
+      const result = json.data as {
+        tabLabel: string;
+        approvedAsId: string;
+      };
+      toast.success(`Draft created in ${result.tabLabel}. Finish it there, then make live.`);
+      setApproveIdea(null);
+      setStatusFilter("approved");
+      invalidate();
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Could not approve idea");
+    },
+  });
+
   const openVerdictDialog = (id: string, status: "kept" | "dismissed", title: string) => {
     setPendingVerdict({ id, status, title });
     setFeedbackText("");
@@ -259,7 +312,7 @@ export function AdminVoteScoutSection() {
     });
   };
 
-  const counts = data?.statusCounts ?? { new: 0, kept: 0, dismissed: 0 };
+  const counts = data?.statusCounts ?? { new: 0, kept: 0, dismissed: 0, approved: 0 };
   const hitRate = data?.hitRate;
   const ideas = data?.ideas ?? [];
   const scanning = scanMutation.isPending;
@@ -275,8 +328,8 @@ export function AdminVoteScoutSection() {
             </CardTitle>
             <CardDescription>
               Dinner-party quality Matchup, Sentiment, and Opinion ideas.
-              Quality over quantity — the model may return fewer than 5, or zero.
-              Keep or Dismiss with optional feedback; notes steer future scans.
+              Keep/Dismiss with optional feedback, then Approve to Draft to create
+              a real draft in the matching Vote tab.
             </CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
@@ -312,10 +365,9 @@ export function AdminVoteScoutSection() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Evergreen uses world knowledge only (cents). Topical adds web search
-            (costs more — use occasionally). Optional feedback on Keep/Dismiss
-            is injected into the next scan so the model learns your taste — e.g.
-            &quot;title is muddy&quot; or &quot;too niche&quot;. Hit rate =
+            Evergreen = world knowledge. Topical = web search + debates involving
+            leaderboard/induction people when relevant. Approve creates a DRAFT only —
+            finish summaries/images in the tab, then make live. Hit rate =
             Kept ÷ (Kept + Dismissed).
           </p>
 
@@ -329,6 +381,9 @@ export function AdminVoteScoutSection() {
             <Badge variant="secondary" data-testid="chip-vote-scout-dismissed">
               Dismissed {counts.dismissed}
             </Badge>
+            <Badge variant="secondary" data-testid="chip-vote-scout-approved">
+              Approved {counts.approved}
+            </Badge>
             <Badge variant="outline" data-testid="chip-vote-scout-hit-rate">
               Hit rate{" "}
               {hitRate === null || hitRate === undefined ? "—" : `${hitRate}%`}
@@ -339,7 +394,7 @@ export function AdminVoteScoutSection() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {(["new", "kept", "dismissed", "all"] as const).map((value) => (
+            {(["new", "kept", "dismissed", "approved", "all"] as const).map((value) => (
               <Button
                 key={value}
                 size="sm"
@@ -371,6 +426,10 @@ export function AdminVoteScoutSection() {
           {ideas.map((idea) => {
             const title = ideaTitle(idea);
             const payload = idea.payload as Record<string, unknown>;
+            const relatedNames = Array.isArray(payload.relatedNames)
+              ? (payload.relatedNames as string[])
+              : [];
+            const canApprove = idea.status === "new" || idea.status === "kept";
             return (
               <Card key={idea.id} data-testid={`card-vote-scout-idea-${idea.id}`}>
                 <CardContent className="pt-5 space-y-3">
@@ -404,30 +463,50 @@ export function AdminVoteScoutSection() {
                           Your feedback: {idea.reviewNote}
                         </p>
                       ) : null}
+                      {idea.status === "approved" ? (
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+                          <Check className="h-3.5 w-3.5" />
+                          Draft created in {TAB_LABEL[idea.contentType]} — finish there, then make live
+                        </p>
+                      ) : null}
                     </div>
-                    {idea.status === "new" ? (
-                      <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {idea.status === "new" ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={verdictMutation.isPending}
+                            onClick={() => openVerdictDialog(idea.id, "dismissed", title)}
+                            data-testid={`button-vote-scout-dismiss-${idea.id}`}
+                          >
+                            <ThumbsDown className="h-4 w-4 mr-1" />
+                            Dismiss
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={verdictMutation.isPending}
+                            onClick={() => openVerdictDialog(idea.id, "kept", title)}
+                            data-testid={`button-vote-scout-keep-${idea.id}`}
+                          >
+                            <ThumbsUp className="h-4 w-4 mr-1" />
+                            Keep
+                          </Button>
+                        </>
+                      ) : null}
+                      {canApprove ? (
                         <Button
                           size="sm"
-                          variant="outline"
-                          disabled={verdictMutation.isPending}
-                          onClick={() => openVerdictDialog(idea.id, "dismissed", title)}
-                          data-testid={`button-vote-scout-dismiss-${idea.id}`}
+                          disabled={approveMutation.isPending}
+                          onClick={() => setApproveIdea(idea)}
+                          data-testid={`button-vote-scout-approve-${idea.id}`}
                         >
-                          <ThumbsDown className="h-4 w-4 mr-1" />
-                          Dismiss
+                          <FilePlus2 className="h-4 w-4 mr-1" />
+                          Approve to Draft
                         </Button>
-                        <Button
-                          size="sm"
-                          disabled={verdictMutation.isPending}
-                          onClick={() => openVerdictDialog(idea.id, "kept", title)}
-                          data-testid={`button-vote-scout-keep-${idea.id}`}
-                        >
-                          <ThumbsUp className="h-4 w-4 mr-1" />
-                          Keep
-                        </Button>
-                      </div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
 
                   {idea.contentType === "matchup" ? (
@@ -483,92 +562,21 @@ export function AdminVoteScoutSection() {
                     </div>
                   ) : null}
 
+                  {relatedNames.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {relatedNames.map((name) => (
+                        <Badge key={name} variant="secondary" className="font-normal">
+                          {name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+
                   {idea.suggestedEndAt ? (
                     <p className="text-xs text-amber-600 dark:text-amber-400">
                       Suggested end date:{" "}
                       {new Date(idea.suggestedEndAt).toLocaleDateString()}
                     </p>
-                  ) : null}
-
-                  {idea.contentType === "matchup" &&
-                  (payload.optionAImagePrompt || payload.optionBImagePrompt) ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {payload.optionAImagePrompt ? (
-                        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Image A — {String(payload.optionAText || "Option A")}
-                            </p>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7"
-                              onClick={() =>
-                                copyText(
-                                  "Image prompt A",
-                                  String(payload.optionAImagePrompt || ""),
-                                )
-                              }
-                            >
-                              <Copy className="h-3.5 w-3.5 mr-1" />
-                              Copy
-                            </Button>
-                          </div>
-                          <p className="text-sm whitespace-pre-wrap">
-                            {String(payload.optionAImagePrompt)}
-                          </p>
-                        </div>
-                      ) : null}
-                      {payload.optionBImagePrompt ? (
-                        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              Image B — {String(payload.optionBText || "Option B")}
-                            </p>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7"
-                              onClick={() =>
-                                copyText(
-                                  "Image prompt B",
-                                  String(payload.optionBImagePrompt || ""),
-                                )
-                              }
-                            >
-                              <Copy className="h-3.5 w-3.5 mr-1" />
-                              Copy
-                            </Button>
-                          </div>
-                          <p className="text-sm whitespace-pre-wrap">
-                            {String(payload.optionBImagePrompt)}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {idea.imagePrompt ? (
-                    <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {idea.contentType === "matchup"
-                            ? "Shared art direction"
-                            : "Image prompt"}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7"
-                          onClick={() => copyText("Image prompt", idea.imagePrompt || "")}
-                          data-testid={`button-vote-scout-copy-image-${idea.id}`}
-                        >
-                          <Copy className="h-3.5 w-3.5 mr-1" />
-                          Copy
-                        </Button>
-                      </div>
-                      <p className="text-sm whitespace-pre-wrap">{idea.imagePrompt}</p>
-                    </div>
                   ) : null}
 
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -581,12 +589,6 @@ export function AdminVoteScoutSection() {
                       <Copy className="h-4 w-4 mr-1" />
                       Copy as text
                     </Button>
-                    {idea.status === "kept" ? (
-                      <span className="inline-flex items-center text-xs text-muted-foreground">
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        Paste into the normal create form when ready
-                      </span>
-                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -631,10 +633,6 @@ export function AdminVoteScoutSection() {
               maxLength={500}
               data-testid="input-vote-scout-feedback"
             />
-            <p className="text-xs text-muted-foreground">
-              Notes are included in the next scan prompt so the model learns what you
-              want more or less of.
-            </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
@@ -656,6 +654,73 @@ export function AdminVoteScoutSection() {
                 <ThumbsDown className="h-4 w-4 mr-2" />
               )}
               Confirm {pendingVerdict?.status === "kept" ? "Keep" : "Dismiss"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!approveIdea}
+        onOpenChange={(open) => {
+          if (!open && !approveMutation.isPending) setApproveIdea(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Approve to Draft?</DialogTitle>
+            <DialogDescription>
+              Creates a <strong>draft</strong> in{" "}
+              {approveIdea ? TAB_LABEL[approveIdea.contentType] : "the Vote tab"}.
+              You can edit, draft AI copy, add images, then make it live there.
+            </DialogDescription>
+          </DialogHeader>
+          {approveIdea ? (
+            <div className="space-y-3 text-sm">
+              <p className="font-medium leading-snug">{ideaTitle(approveIdea)}</p>
+              <p className="text-muted-foreground">
+                Category: {ideaCategory(approveIdea) || "—"} · Visibility: draft
+              </p>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Person links
+                </p>
+                {previewLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : previewLinks?.links?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {previewLinks.links.map((link) => (
+                      <Badge key={`${link.role}-${link.id}`} variant="secondary">
+                        {link.role}: {link.name}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">
+                    No tracked people auto-linked (concept debate or names not on roster).
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setApproveIdea(null)}
+              disabled={approveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => approveIdea && approveMutation.mutate(approveIdea.id)}
+              disabled={approveMutation.isPending || !approveIdea}
+              data-testid="button-vote-scout-confirm-approve"
+            >
+              {approveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FilePlus2 className="h-4 w-4 mr-2" />
+              )}
+              Create draft
             </Button>
           </DialogFooter>
         </DialogContent>

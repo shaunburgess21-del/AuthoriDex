@@ -19705,6 +19705,57 @@ Target length: about 90-150 words.`;
     }
   });
 
+  // Preview person links for the Approve-to-Draft confirm dialog.
+  app.get("/api/admin/vote-scout/ideas/:id/preview-links", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { previewVoteScoutPersonLinks } = await import("./jobs/vote-scout");
+      const preview = await previewVoteScoutPersonLinks(req.params.id);
+      if (!preview) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      res.json({
+        data: {
+          links: preview.links,
+          tabLabel: preview.tabLabel,
+          contentType: preview.idea.contentType,
+        },
+      });
+    } catch (error: any) {
+      console.error("[VoteScout] Preview links error:", error);
+      res.status(500).json({ error: "Failed to preview person links" });
+    }
+  });
+
+  // Approve Idea Scout idea → create DRAFT in Matchups / Sentiment / Opinion tab.
+  app.post("/api/admin/vote-scout/ideas/:id/approve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const overrides =
+        req.body?.overrides && typeof req.body.overrides === "object"
+          ? (req.body.overrides as Record<string, unknown>)
+          : undefined;
+      const { approveVoteScoutIdea } = await import("./jobs/vote-scout");
+      const result = await approveVoteScoutIdea({
+        id: req.params.id,
+        adminId: req.userId,
+        overrides,
+      });
+      res.json({ data: result });
+    } catch (error: any) {
+      console.error("[VoteScout] Approve error:", error);
+      const message = error?.message || "Failed to approve vote scout idea";
+      const status =
+        message === "Idea not found"
+          ? 404
+          : message.includes("dismissed") || message.includes("Unsupported")
+            ? 400
+            : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
   // AI-suggest "watch criteria" for the resolution scout. Stateless (works
   // from the create form before a market exists): pass title/category/teaser/
   // outcomes/resolutionCriteria and get back a concise list of the leading

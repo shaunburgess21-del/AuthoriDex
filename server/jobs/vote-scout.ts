@@ -20,14 +20,27 @@ import {
   type CatalogSnapshot,
   type ParsedVoteScoutIdea,
   type VoteScoutMode,
+  type VoteScoutContentType,
   buildDenyKeySet,
   buildSystemPrompt,
   buildUserPrompt,
+  contentTypeTabLabel,
+  contentTypeToSuggestionType,
   filterAgainstDenyList,
   parseVoteScoutResponse,
   titleFromScoutPayload,
   type ReviewLearning,
 } from "./vote-scout-core";
+import {
+  loadVoteScoutPeople,
+  resolvePersonIdByName,
+  resolveRelatedPersonIds,
+} from "./vote-scout-people";
+import {
+  APPROVED_AS_TYPE,
+  dispatchApproval,
+} from "../services/suggestionApproval";
+import type { Suggestion } from "@shared/schema";
 
 const API_TIMEOUT_MS = 90_000;
 const MAX_OUTPUT_TOKENS = 5_000;
@@ -98,7 +111,8 @@ function sampleStyleByCategory(
 }
 
 export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
-  const [matchupRows, sentimentRows, opinionRows, priorRows, reviewedRows] = await Promise.all([
+  const [matchupRows, sentimentRows, opinionRows, priorRows, reviewedRows, people] =
+    await Promise.all([
     db
       .select({
         title: matchups.title,
@@ -142,6 +156,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
       .where(inArray(voteScoutIdeas.status, ["kept", "dismissed"]))
       .orderBy(desc(voteScoutIdeas.reviewedAt))
       .limit(50),
+    loadVoteScoutPeople(),
   ]);
 
   const categoryCounts = {
@@ -221,6 +236,8 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
       opinions: sampleStyleByCategory(opinionStyleRows, STYLE_SAMPLE_LIMIT),
     },
     reviewLearnings,
+    leaderboardNames: people.leaderboardNames,
+    inductionNames: people.inductionNames,
   };
 }
 
@@ -323,8 +340,11 @@ export async function runVoteScout(mode: VoteScoutMode): Promise<VoteScoutRunRes
       kept.map((idea) => ({
         contentType: idea.contentType,
         mode,
-        payload: idea.payload,
-        imagePrompt: idea.imagePrompt,
+        payload: {
+          ...idea.payload,
+          relatedNames: idea.relatedNames,
+        },
+        imagePrompt: null,
         rationale: idea.rationale,
         fitScore: idea.fitScore,
         suggestedEndAt: idea.suggestedEndAt ? new Date(idea.suggestedEndAt) : null,
@@ -349,7 +369,7 @@ export async function runVoteScout(mode: VoteScoutMode): Promise<VoteScoutRunRes
 }
 
 export async function listVoteScoutIdeas(status?: string) {
-  const allowed = new Set(["new", "kept", "dismissed"]);
+  const allowed = new Set(["new", "kept", "dismissed", "approved"]);
   const filterStatus = status && allowed.has(status) ? status : null;
 
   const [ideas, counts] = await Promise.all([
@@ -374,9 +394,14 @@ export async function listVoteScoutIdeas(status?: string) {
       .groupBy(voteScoutIdeas.status),
   ]);
 
-  const statusCounts = { new: 0, kept: 0, dismissed: 0 };
+  const statusCounts = { new: 0, kept: 0, dismissed: 0, approved: 0 };
   for (const row of counts) {
-    if (row.status === "new" || row.status === "kept" || row.status === "dismissed") {
+    if (
+      row.status === "new" ||
+      row.status === "kept" ||
+      row.status === "dismissed" ||
+      row.status === "approved"
+    ) {
       statusCounts[row.status] = Number(row.count) || 0;
     }
   }
@@ -428,3 +453,229 @@ export async function setVoteScoutIdeaStatus(opts: {
 
   return updated ?? null;
 }
+
+function relatedNamesFromPayload(payload: Record<string, unknown>): string[] {
+  if (!Array.isArray(payload.relatedNames)) return [];
+  return payload.relatedNames.filter(
+    (n): n is string => typeof n === "string" && n.trim().length > 0,
+  );
+}
+
+/**
+ * Preview person links that would be applied on approve (for the confirm dialog).
+ */
+export async function previewVoteScoutPersonLinks(ideaId: string) {
+  const [idea] = await db
+    .select()
+    .from(voteScoutIdeas)
+    .where(eq(voteScoutIdeas.id, ideaId))
+    .limit(1);
+  if (!idea) return null;
+
+  const people = await loadVoteScoutPeople();
+  const payload = (idea.payload || {}) as Record<string, unknown>;
+  const related = resolveRelatedPersonIds(
+    relatedNamesFromPayload(payload),
+    people.byName,
+  );
+
+  const contentType = idea.contentType as VoteScoutContentType;
+  const links: Array<{ role: string; name: string; id: string }> = [];
+
+  if (contentType === "matchup") {
+    const optionA = String(payload.optionAText || "");
+    const optionB = String(payload.optionBText || "");
+    const aId = resolvePersonIdByName(optionA, people.byName);
+    const bId = resolvePersonIdByName(optionB, people.byName);
+    if (aId) links.push({ role: "Option A", name: optionA, id: aId });
+    if (bId) links.push({ role: "Option B", name: optionB, id: bId });
+  } else if (contentType === "sentiment_poll") {
+    for (const r of related.slice(0, 1)) {
+      links.push({ role: "Subject", name: r.name, id: r.id });
+    }
+  } else if (contentType === "opinion_poll") {
+    const options = Array.isArray(payload.options) ? payload.options : [];
+    for (const opt of options) {
+      const name = typeof opt === "string" ? opt : String((opt as any)?.name || "");
+      const id = resolvePersonIdByName(name, people.byName);
+      if (id) links.push({ role: "Option", name, id });
+    }
+  }
+
+  // Related names that weren't already captured as option sides.
+  for (const r of related) {
+    if (links.some((l) => l.id === r.id)) continue;
+    links.push({ role: "Related", name: r.name, id: r.id });
+  }
+
+  return {
+    idea,
+    links,
+    tabLabel: contentTypeTabLabel(contentType),
+  };
+}
+
+export type ApproveVoteScoutResult = {
+  approvedAsId: string;
+  approvedAsType: string;
+  contentType: VoteScoutContentType;
+  tabLabel: string;
+};
+
+/**
+ * Approve a scout idea → create a DRAFT matchup/poll via dispatchApproval.
+ */
+export async function approveVoteScoutIdea(opts: {
+  id: string;
+  adminId: string;
+  overrides?: Record<string, unknown>;
+}): Promise<ApproveVoteScoutResult> {
+  const [idea] = await db
+    .select()
+    .from(voteScoutIdeas)
+    .where(eq(voteScoutIdeas.id, opts.id))
+    .limit(1);
+
+  if (!idea) {
+    throw new Error("Idea not found");
+  }
+  if (idea.status === "approved" && idea.approvedAsId) {
+    return {
+      approvedAsId: idea.approvedAsId,
+      approvedAsType: idea.approvedAsType || "",
+      contentType: idea.contentType as VoteScoutContentType,
+      tabLabel: contentTypeTabLabel(idea.contentType as VoteScoutContentType),
+    };
+  }
+  if (idea.status === "dismissed") {
+    throw new Error("Cannot approve a dismissed idea");
+  }
+
+  const contentType = idea.contentType as VoteScoutContentType;
+  if (
+    contentType !== "matchup" &&
+    contentType !== "sentiment_poll" &&
+    contentType !== "opinion_poll"
+  ) {
+    throw new Error("Unsupported content type");
+  }
+
+  const people = await loadVoteScoutPeople();
+  const rawPayload = (idea.payload || {}) as Record<string, unknown>;
+  const relatedNames = relatedNamesFromPayload(rawPayload);
+
+  let userPayload: Record<string, unknown> = { ...rawPayload };
+  delete userPayload.relatedNames;
+  delete userPayload.optionAImagePrompt;
+  delete userPayload.optionBImagePrompt;
+
+  if (contentType === "matchup") {
+    const optionAText = String(rawPayload.optionAText || "");
+    const optionBText = String(rawPayload.optionBText || "");
+    userPayload = {
+      ...userPayload,
+      title: String(rawPayload.title || ""),
+      category: String(rawPayload.category || "misc"),
+      optionAText,
+      optionBText,
+      promptText: rawPayload.promptText ?? null,
+      description: rawPayload.description ?? null,
+      personAId: resolvePersonIdByName(optionAText, people.byName),
+      personBId: resolvePersonIdByName(optionBText, people.byName),
+      optionAImage: null,
+      optionBImage: null,
+    };
+  } else if (contentType === "sentiment_poll") {
+    const related = resolveRelatedPersonIds(relatedNames, people.byName);
+    userPayload = {
+      ...userPayload,
+      headline: String(rawPayload.headline || ""),
+      subjectText: String(rawPayload.subjectText || ""),
+      category: String(rawPayload.category || "misc"),
+      description: rawPayload.description ?? null,
+      personId: related[0]?.id ?? null,
+      deadlineAt: idea.suggestedEndAt
+        ? idea.suggestedEndAt.toISOString()
+        : null,
+      imageUrl: null,
+    };
+  } else {
+    const optionsRaw = Array.isArray(rawPayload.options) ? rawPayload.options : [];
+    const options = optionsRaw.map((opt) => {
+      const name =
+        typeof opt === "string"
+          ? opt
+          : String((opt as any)?.name || "");
+      return {
+        name,
+        imageUrl: null,
+        personId: resolvePersonIdByName(name, people.byName),
+        seedCount: 0,
+      };
+    });
+    userPayload = {
+      ...userPayload,
+      title: String(rawPayload.title || ""),
+      category: String(rawPayload.category || "misc"),
+      summary: rawPayload.summary ?? null,
+      description: rawPayload.description ?? null,
+      imageUrl: null,
+      options,
+    };
+  }
+
+  const suggestionType = contentTypeToSuggestionType(contentType);
+  const syntheticSuggestion = {
+    id: idea.id,
+    type: suggestionType,
+    payload: userPayload,
+    submittedBy: opts.adminId,
+    status: "pending",
+    adminNotes: null,
+    approvedAsId: null,
+    approvedAsType: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: idea.createdAt,
+    updatedAt: idea.createdAt,
+  } as Suggestion;
+
+  // Force draft: matchup translator defaults visibility "live" (isActive true);
+  // sentiment/opinion default draft. The override keeps every approved idea a
+  // draft until the founder finishes and publishes it in-tab.
+  const adminOverrides: Record<string, unknown> = {
+    visibility: "draft",
+    ...(opts.overrides || {}),
+  };
+
+  const { approvedAsId, approvedAsType } = await dispatchApproval(
+    syntheticSuggestion,
+    opts.adminId,
+    adminOverrides,
+  );
+
+  await db
+    .update(voteScoutIdeas)
+    .set({
+      status: "approved",
+      approvedAsId,
+      approvedAsType,
+      reviewedBy: opts.adminId,
+      reviewedAt: new Date(),
+    })
+    .where(eq(voteScoutIdeas.id, opts.id));
+
+  log(
+    `[VoteScout] Approved idea ${opts.id} → ${approvedAsType} ${approvedAsId}`,
+  );
+
+  return {
+    approvedAsId,
+    approvedAsType,
+    contentType,
+    tabLabel: contentTypeTabLabel(contentType),
+  };
+}
+
+// Re-export for routes / UI helpers
+export { APPROVED_AS_TYPE, contentTypeTabLabel };

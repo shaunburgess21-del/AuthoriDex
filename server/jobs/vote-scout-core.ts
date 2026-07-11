@@ -14,10 +14,6 @@ export type MatchupIdeaPayload = {
   optionBText: string;
   category: string;
   description: string;
-  /** Ready-to-paste image prompt for Option A (Grok Imagine / similar). */
-  optionAImagePrompt?: string;
-  /** Ready-to-paste image prompt for Option B. */
-  optionBImagePrompt?: string;
 };
 
 export type SentimentIdeaPayload = {
@@ -42,10 +38,11 @@ export type VoteScoutIdeaPayload =
 export type ParsedVoteScoutIdea = {
   contentType: VoteScoutContentType;
   payload: VoteScoutIdeaPayload;
-  imagePrompt: string;
   rationale: string;
   fitScore: number;
   suggestedEndAt: string | null;
+  /** Exact tracked-person names for linking (from GPT relatedNames). */
+  relatedNames: string[];
   /** Canonical display title used for denylist / dedupe. */
   displayTitle: string;
 };
@@ -73,7 +70,25 @@ export type CatalogSnapshot = {
     kept: ReviewLearning[];
     dismissed: ReviewLearning[];
   };
+  /** Main leaderboard display names for prompt context / linking. */
+  leaderboardNames: string[];
+  /** Active induction queue display names. */
+  inductionNames: string[];
 };
+
+/** Map scout contentType → suggestions.type / dispatchApproval type. */
+export function contentTypeToSuggestionType(
+  contentType: VoteScoutContentType,
+): "matchup" | "sentiment_poll" | "opinion_poll" {
+  return contentType;
+}
+
+/** Human tab label after approve-to-draft. */
+export function contentTypeTabLabel(contentType: VoteScoutContentType): string {
+  if (contentType === "matchup") return "Matchups";
+  if (contentType === "sentiment_poll") return "Sentiment Polls";
+  return "Opinion Polls";
+}
 
 export type ReviewLearning = {
   status: "kept" | "dismissed";
@@ -222,12 +237,15 @@ export function buildSystemPrompt(mode: VoteScoutMode): string {
     mode === "topical"
       ? `MODE: TOPICAL (web search enabled).
 - Search for debates people are actively arguing about RIGHT NOW on Reddit, X, forums, sports/entertainment discourse, dating etiquette, food culture, etc.
-- Fair game: reality-show seasons, current tournaments, viral etiquette fights, timely culture wars that still pass the dinner-party test.
+- PRIORITY: look for current online debates involving people on the TRACKED PEOPLE lists (main leaderboard + induction queue) provided in the user message. When you find a genuinely divisive, on-genre debate about one or more of them, include it and put their EXACT names from the list into relatedNames.
+- Do NOT flood the batch with reality-TV casting trivia or shallow fandom polls. At most one reality/entertainment-format idea per run, and only if it clears the dinner-party bar.
+- Fair game: viral etiquette fights, timely culture wars, sports/music rivalries in the news, tracked-person debates.
 - For time-sensitive ideas, set suggestedEndAt to an ISO date when the debate naturally expires (end of a season, tournament, awards cycle). Use null when it will stay relevant for months+.
 - Topical ≠ shallow. Skip niche fandom trivia, one-day outrage cycles, and anything that needs a news briefing to understand.
-- Do NOT invent "breaking" celebrity drama or resignation speculation.`
+- Do NOT invent "breaking" celebrity drama, resignation speculation, or invasive gossip.`
       : `MODE: EVERGREEN (no web search — world knowledge only).
 - Prefer classic, durable debates that still spark strong opinions years from now — serious OR casual.
+- You MAY use TRACKED PEOPLE names for evergreen GOAT / rivalry matchups when they fit, and put exact list names in relatedNames.
 - Leave suggestedEndAt as null.
 - Do not invent fake breaking-news hooks or "right now" framing.`;
 
@@ -239,7 +257,7 @@ Use these lenses interchangeably to judge whether a topic "has legs" (they are i
 - The online-debate test: it's the kind of thing that sparks long comment-section threads, quote-tweet wars, or Reddit/group-chat arguments (e.g. tipping culture, reclining plane seats, AI art, pineapple on pizza).
 A great idea usually passes BOTH — a timeless human disagreement that also reliably flares up online. Do not narrow yourself to polite small talk; edgy, opinionated, and culturally divisive is welcome, as long as it stays within the exclusions below.
 
-Your job is ideation only. Return a short cream-of-the-crop list. Returning fewer than ${MAX_IDEAS_PER_RUN} ideas — or an empty array — is the correct outcome when nothing clears the bar. Never pad.
+Your job is ideation only — titles, options, short context. Do NOT generate image prompts. Returning fewer than ${MAX_IDEAS_PER_RUN} ideas — or an empty array — is the correct outcome when nothing clears the bar. Never pad.
 
 ${modeBlock}
 
@@ -249,7 +267,8 @@ WHAT "GOOD" LOOKS LIKE (house genre):
 - Opinion polls are multi-option preference / GOAT / "best X" questions with 4-12 distinct, recognizable options (Greatest band, Best decade for music, How do you like your steak).
 
 WHAT TO AVOID (this is how you produce slop — do not):
-- News-pegged or this-week celebrity content ("Should X resign?", "Is Y cancelled?", trend-of-the-day tech CEOs).
+- News-pegged or this-week celebrity content that is gossip, not a durable debate ("Should X resign?", "Is Y cancelled?").
+- Reality-show casting minutiae and "best age range for a dating show" style filler — keep those rare.
 - Invasive gossip (pregnancy, divorce, custody, breakups, "sexiest" lists).
 - Deaths, tragedies, graphic violence, war-as-entertainment.
 - Near-unanimous moral bait where ~95% would pick the same side.
@@ -258,6 +277,7 @@ WHAT TO AVOID (this is how you produce slop — do not):
 - Meme / one-off humour tweets that only work as a joke (tongue-in-cheek celebrity stunts).
 - Paraphrases of deny-list items ("Cats or Dogs" when "Dogs vs Cats" exists; "Pineapple pizza okay?" when "Pineapple on Pizza" exists).
 - Filling a quota with weak ideas. Empty is better than filler.
+- Ambiguous titles/headlines that can mean two opposite things — write clearly.
 
 CRITICAL CONTEXT — THE CATALOG IS ALREADY DEEP (~300 live items):
 - The obvious canon is largely harvested (Dogs vs Cats, Coffee vs Tea, Messi vs Ronaldo, Greatest boxer, etc.).
@@ -267,7 +287,7 @@ CRITICAL CONTEXT — THE CATALOG IS ALREADY DEEP (~300 live items):
 QUALITY RUBRIC (ALL must pass; fitScore is 0-100 against this rubric):
 1. Divisiveness — passes the dinner-party AND/OR online-debate test: real, sustained disagreement among a broad audience, not a one-day outrage cycle or niche etiquette fight. Understandable without looking anything up.
 2. Shelf life — still makes sense in ~12 months (unless topical + suggestedEndAt).
-3. Instantly votable — clear in one read; titles/headlines must not be ambiguous (e.g. avoid phrasing that could mean two opposite things).
+3. Instantly votable — clear in one read; titles/headlines must not be ambiguous.
 4. Split potential — expected split nearer 60/40 than 95/5.
 5. Fresh vs deny list — not a duplicate or thin paraphrase.
 6. On-genre — matches VoxDex Vote style above, not a prediction-market / news quiz.
@@ -285,12 +305,7 @@ HOUSE STYLE DETAILS:
 - Matchup description: 2-4 short sentences on the tradeoff; balanced; no winner.
 - Sentiment subjectText: stakes + both sides; not a rant.
 - Opinion options: concrete, mutually distinct, recognizable to a general audience.
-- Image prompts (critical — founders paste these into Grok Imagine / similar):
-  - Photorealistic, premium photography, shallow depth of field, square-crop friendly.
-  - Works on a dark UI. No text overlays, watermarks, logos with readable words, or collage grids.
-  - Matchups: ALWAYS supply separate optionAImagePrompt and optionBImagePrompt (one subject each, visually comparable framing/lighting so they sit side-by-side). Also set top-level imagePrompt to a one-line art-direction note for the pair.
-  - Sentiment: one hero image that evokes the debate.
-  - Opinion: one hero image for the poll theme (not every option).
+- relatedNames: ONLY exact names from the TRACKED PEOPLE lists when that person is genuinely central to the idea. [] when none apply. Max 4.
 
 PROCESS:
 1. Internally brainstorm ~30 candidates across matchup / sentiment_poll / opinion_poll.
@@ -306,7 +321,7 @@ OUTPUT: strict JSON only, no markdown fences:
       "contentType": "matchup" | "sentiment_poll" | "opinion_poll",
       "fitScore": 0,
       "rationale": "1 short sentence: why this clears the dinner-party bar AND is not deny-list fluff",
-      "imagePrompt": "short shared art direction OR hero image prompt",
+      "relatedNames": [],
       "suggestedEndAt": null,
       "payload": { ... type-specific fields ... }
     }
@@ -314,7 +329,7 @@ OUTPUT: strict JSON only, no markdown fences:
 }
 
 Payload by contentType:
-- matchup: { "title", "promptText", "optionAText", "optionBText", "category", "description", "optionAImagePrompt", "optionBImagePrompt" }
+- matchup: { "title", "promptText", "optionAText", "optionBText", "category", "description" }
 - sentiment_poll: { "headline", "subjectText", "category", "description" }
 - opinion_poll: { "title", "category", "summary", "options": ["...", "..."] }`;
 }
@@ -332,6 +347,9 @@ export function buildUserPrompt(catalog: CatalogSnapshot, mode: VoteScoutMode): 
     catalog.sentimentHeadlines.length +
     catalog.opinionTitles.length;
 
+  const leaderboard = (catalog.leaderboardNames || []).slice(0, 120);
+  const induction = (catalog.inductionNames || []).slice(0, 80);
+
   return `Today's date: ${new Date().toISOString().split("T")[0]}
 Scan mode: ${mode}
 Live catalog size: ${catalogSize} items (+ ${catalog.priorIdeaTitles.length} prior scout ideas on the deny list). Dig for the next tier — do not recycle the obvious canon.
@@ -340,6 +358,12 @@ CATEGORY COVERAGE (prefer thinner areas only when quality is equal — never for
 - Matchups: ${formatCategoryCounts(catalog.categoryCounts.matchup)}
 - Sentiment polls: ${formatCategoryCounts(catalog.categoryCounts.sentiment_poll)}
 - Opinion polls: ${formatCategoryCounts(catalog.categoryCounts.opinion_poll)}
+
+TRACKED PEOPLE — MAIN LEADERBOARD (exact names only for relatedNames / person-linked ideas):
+${leaderboard.length > 0 ? leaderboard.join(", ") : "(none)"}
+
+TRACKED PEOPLE — INDUCTION QUEUE (exact names only):
+${induction.length > 0 ? induction.join(", ") : "(none)"}
 
 STYLE ANCHORS (match this voice and genre — do NOT copy these topics):
 Matchups:
@@ -355,7 +379,7 @@ ${formatReviewLearningsBlock(catalog.reviewLearnings)}
 DENY LIST (existing content + previously suggested scout ideas — never re-suggest, including reversed matchup sides or thin paraphrases):
 ${formatDenyList(denyTitles)}
 
-Return up to ${MAX_IDEAS_PER_RUN} fresh ideas that clear fitScore >= ${MIN_FIT_SCORE}. Zero is allowed and preferred over slop.`;
+Return up to ${MAX_IDEAS_PER_RUN} fresh ideas that clear fitScore >= ${MIN_FIT_SCORE}. Zero is allowed and preferred over slop. Do not include image prompts.`;
 }
 
 function asNonEmptyString(value: unknown, maxLen = 500): string | null {
@@ -392,9 +416,6 @@ function parseMatchupPayload(raw: unknown): MatchupIdeaPayload | null {
   if (!title || !promptText || !optionAText || !optionBText || !category) return null;
   if (normalizeTitleKey(optionAText) === normalizeTitleKey(optionBText)) return null;
 
-  const optionAImagePrompt = asNonEmptyString(p.optionAImagePrompt, 700) ?? undefined;
-  const optionBImagePrompt = asNonEmptyString(p.optionBImagePrompt, 700) ?? undefined;
-
   return {
     title,
     promptText,
@@ -402,8 +423,6 @@ function parseMatchupPayload(raw: unknown): MatchupIdeaPayload | null {
     optionBText,
     category,
     description,
-    ...(optionAImagePrompt ? { optionAImagePrompt } : {}),
-    ...(optionBImagePrompt ? { optionBImagePrompt } : {}),
   };
 }
 
@@ -454,6 +473,22 @@ function displayTitleFor(
   return (payload as OpinionIdeaPayload).title;
 }
 
+function parseRelatedNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const name = asNonEmptyString(item, 80);
+    if (!name) continue;
+    const key = normalizeTitleKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
 /**
  * Parse and validate GPT JSON. Malformed / low-fit / incomplete ideas are dropped.
  * Does not apply catalog dedupe — caller does that with deny keys.
@@ -497,9 +532,6 @@ export function parseVoteScoutResponse(rawText: string): ParsedVoteScoutIdea[] {
     if (fitScore === null || fitScore < MIN_FIT_SCORE) continue;
 
     const rationale = asNonEmptyString(row.rationale, 400) ?? "";
-    const imagePrompt =
-      asNonEmptyString(row.imagePrompt, 800) ??
-      "Photorealistic dark moody premium photograph, square crop, no text overlay.";
 
     let payload: VoteScoutIdeaPayload | null = null;
     if (contentType === "matchup") payload = parseMatchupPayload(row.payload);
@@ -511,10 +543,10 @@ export function parseVoteScoutResponse(rawText: string): ParsedVoteScoutIdea[] {
     out.push({
       contentType,
       payload,
-      imagePrompt,
       rationale,
       fitScore,
       suggestedEndAt: parseSuggestedEndAt(row.suggestedEndAt),
+      relatedNames: parseRelatedNames(row.relatedNames),
       displayTitle,
     });
   }
