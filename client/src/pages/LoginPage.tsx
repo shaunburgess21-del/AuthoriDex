@@ -310,14 +310,14 @@ export default function LoginPage() {
     setTimeout(() => emailInputRef.current?.focus(), 0);
   };
 
+  // Mode switches only — SignupReasonModal calls onDismiss after its close
+  // animation so the Radix backdrop is torn down before we unmount it.
   const handleContinueToSignUp = () => {
     setIsLogin(false);
-    dismissReason();
   };
 
   const handleSwitchToSignIn = () => {
     setIsLogin(true);
-    dismissReason();
   };
 
   const submitDisabled = loading || otpSending;

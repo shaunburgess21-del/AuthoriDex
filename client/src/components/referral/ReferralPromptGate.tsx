@@ -75,9 +75,17 @@ export function ReferralPromptGate() {
 
     if (!shouldShow()) return;
 
-    shownThisSession.current = true;
-    markSeen();
-    open("auto");
+    // Defer past the post-login "Welcome back" toast so the two don't stack.
+    // Latch + markSeen run when we actually open — not when we schedule —
+    // so a deps-driven re-run that cancels the timer does not burn the
+    // once-per-window slot.
+    const t = window.setTimeout(() => {
+      if (shownThisSession.current) return;
+      shownThisSession.current = true;
+      markSeen();
+      open("auto");
+    }, 750);
+    return () => window.clearTimeout(t);
   }, [loading, profileLoading, user, profile, location, stats, open]);
 
   return null;

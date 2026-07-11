@@ -48,38 +48,42 @@ export function ReferralPromptModal({ open, onOpenChange, source }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          "max-w-md gap-0 p-0 border-0",
-          REFERRAL_PANEL_GLOW_CLASS,
-        )}
-      >
-        <DialogTitle className="sr-only">{headlineFor(source)}</DialogTitle>
-        <DialogDescription className="sr-only">
-          Share your referral link to earn Vox when friends join and make their
-          first move.
-        </DialogDescription>
-        {isLoading ? (
-          <div className="space-y-3 p-6">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ) : !showPanel ? (
-          <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Generating your referral link...
-          </div>
-        ) : (
-          <ReferralFriendPanel
-            title={headlineFor(source)}
-            showEarnMoreLink
-            onEarnMoreClick={goToEarnMore}
-            copyTestId="button-copy-referral-modal"
-            shareTestId="button-share-referral-modal"
-            earnMoreTestId="link-earn-more-vox"
-          />
-        )}
+      {/*
+        Glow skin must live on an INNER wrapper — never on DialogContent.
+        `.pulse-card-*` sets `position: relative`, which overrides the
+        dialog's `fixed` centering and leaves only the dark backdrop
+        visible (content ends up off-screen). Clicking the backdrop
+        dismissed the "stuck darkness" after sign-in.
+      */}
+      <DialogContent className="max-w-md gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none sm:rounded-xl">
+        <div className={cn(REFERRAL_PANEL_GLOW_CLASS, "rounded-xl")}>
+          <DialogTitle className="sr-only">{headlineFor(source)}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Share your referral link to earn Vox when friends join and make their
+            first move.
+          </DialogDescription>
+          {isLoading ? (
+            <div className="space-y-3 p-6">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ) : !showPanel ? (
+            <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Generating your referral link...
+            </div>
+          ) : (
+            <ReferralFriendPanel
+              title={headlineFor(source)}
+              showEarnMoreLink
+              onEarnMoreClick={goToEarnMore}
+              copyTestId="button-copy-referral-modal"
+              shareTestId="button-share-referral-modal"
+              earnMoreTestId="link-earn-more-vox"
+            />
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

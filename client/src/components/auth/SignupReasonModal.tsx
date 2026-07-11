@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import type { AuthReason } from "@/lib/authReturn";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
@@ -12,6 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SignupReasonHeroPlaceholder } from "@/components/auth/SignupReasonHero";
+
+/** Match DialogContent close animation (`duration-200`) before parent unmounts. */
+const CLOSE_UNMOUNT_MS = 200;
 
 const SignupReasonHero = lazy(() =>
   import("@/components/auth/SignupReasonHero").then((m) => ({
@@ -104,12 +107,33 @@ export function SignupReasonModal({
   onSwitchToSignIn,
 }: SignupReasonModalProps) {
   const variant = SIGNUP_REASON_VARIANTS[reason];
+  // Controlled close: set open=false first so Radix can tear down the
+  // backdrop, then notify the parent (which unmounts us). Unmounting while
+  // still open=true can orphan the overlay — the same "stuck darkness"
+  // class of bug as the post-login referral modal.
+  const [open, setOpen] = useState(true);
+  const closingRef = useRef(false);
+
+  const requestClose = useCallback(
+    (afterClose?: () => void) => {
+      // CTA click sets open=false and also fires onOpenChange(false) —
+      // only the first call should schedule dismiss / afterClose work.
+      if (closingRef.current) return;
+      closingRef.current = true;
+      setOpen(false);
+      window.setTimeout(() => {
+        afterClose?.();
+        onDismiss();
+      }, CLOSE_UNMOUNT_MS);
+    },
+    [onDismiss],
+  );
 
   return (
     <Dialog
-      open
+      open={open}
       onOpenChange={(next) => {
-        if (!next) onDismiss();
+        if (!next) requestClose();
       }}
     >
       <DialogPortal>
@@ -152,7 +176,7 @@ export function SignupReasonModal({
                 type="button"
                 size="lg"
                 className={cn("w-full min-h-11", variant.primaryAccentClass)}
-                onClick={onContinueToSignUp}
+                onClick={() => requestClose(onContinueToSignUp)}
                 data-testid="button-signup-reason-primary"
               >
                 {variant.primaryCta}
@@ -164,7 +188,7 @@ export function SignupReasonModal({
               ) : null}
               <button
                 type="button"
-                onClick={onSwitchToSignIn}
+                onClick={() => requestClose(onSwitchToSignIn)}
                 className="pt-1 text-center text-sm text-primary hover:underline"
                 data-testid="button-signup-reason-secondary"
               >

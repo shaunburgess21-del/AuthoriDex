@@ -491,13 +491,15 @@ export function UserMenu() {
   };
   
   const handleSignIn = () => {
-    navigateToLogin(setLocation);
+    // Close the sheet first so Radix can release its backdrop before the
+    // route change unmounts this tree (avoids a stuck dim overlay).
     setSheetOpen(false);
+    navigateToLogin(setLocation);
   };
   
   const handleCreateAccount = () => {
-    navigateToLogin(setLocation, { mode: "signup" });
     setSheetOpen(false);
+    navigateToLogin(setLocation, { mode: "signup" });
   };
   
   const handleSignOut = async () => {
