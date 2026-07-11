@@ -3,6 +3,8 @@
  *
  * Multi-candidate markets (gainer, multi, h2h) name the user's entry
  * pick; up/down markets name the market-level person when available.
+ * World Markets (`community`) are topic-first — linked people are soft
+ * "related to" context only and must not lead notification copy.
  * `formatMarketLead` puts the pick before the market title when it
  * adds context (e.g. "Clavicular · Category Race: Streaming").
  */
@@ -21,6 +23,9 @@ export interface PickContextInput {
  */
 export function resolvePickContextLabel(input: PickContextInput): string | null {
   const { marketType, candidateName, entryLabel, personName } = input;
+  if (marketType === "community") {
+    return null;
+  }
   if (PER_ENTRY_MARKET_TYPES.has(marketType)) {
     return candidateName ?? entryLabel ?? null;
   }

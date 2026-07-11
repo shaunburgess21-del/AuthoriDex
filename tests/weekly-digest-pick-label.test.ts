@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolvePickContextLabel } from "../server/jobs/notification-market-labels";
+import {
+  formatMarketLead,
+  resolvePickContextLabel,
+} from "../server/jobs/notification-market-labels";
 
 test("weekly digest bestPick: gainer uses candidate over market title", () => {
   assert.equal(
@@ -24,5 +27,34 @@ test("weekly digest bestPick: updown uses market person", () => {
       personName: "Andrew Tate",
     }),
     "Andrew Tate",
+  );
+});
+
+test("community World Markets: linked person must not lead notification copy", () => {
+  assert.equal(
+    resolvePickContextLabel({
+      marketType: "community",
+      candidateName: null,
+      entryLabel: "YES England",
+      personName: "Erling Haaland",
+    }),
+    null,
+  );
+});
+
+test("community World Markets: formatMarketLead is topic-only when context is null", () => {
+  const title = "Who will win Norway vs England on July 11?";
+  assert.equal(formatMarketLead(title, null), title);
+  assert.equal(
+    formatMarketLead(
+      title,
+      resolvePickContextLabel({
+        marketType: "community",
+        candidateName: null,
+        entryLabel: "YES England",
+        personName: "Erling Haaland",
+      }),
+    ),
+    title,
   );
 });
