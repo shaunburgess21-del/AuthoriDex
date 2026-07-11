@@ -136,7 +136,14 @@ export function CashOutSheet({
       ? deriveSellQuote(effectiveAmmState, selection.entryId, sharesToSell)
       : null;
 
-  const currentValue = entryPrice != null ? netShares * entryPrice : null;
+  // Full-position value uses quoteSell proceeds (server-canonical P&L),
+  // not marginal MTM — LMSR convexity means netShares × spot overstates
+  // what cashing out actually returns.
+  const fullPositionQuote =
+    netShares > 0
+      ? deriveSellQuote(effectiveAmmState, selection.entryId, netShares)
+      : null;
+  const currentValue = fullPositionQuote ? fullPositionQuote.proceeds : null;
   const unrealisedPnl =
     currentValue != null ? currentValue - selection.netCreditsIn : null;
   // P&L of the slice being sold: proceeds vs the proportional cost basis.
@@ -164,9 +171,14 @@ export function CashOutSheet({
 
   const handleConfirm = async () => {
     if (submitting || sharesToSell <= 0) return;
+    // Mirror StakeModal: floor against quoted avg fill (what the server
+    // validates), not marginal spot. Sell avg is below marginal due to
+    // LMSR convexity — a marginal × 0.95 floor can falsely reject a
+    // same-state cash-out. Fall back to spot if no quote yet.
+    const slippageBasis = quote?.pricePerShareAvg ?? entryPrice ?? null;
     const minPricePerShare =
-      entryPrice != null
-        ? Math.max(1e-6, entryPrice * (1 - SLIPPAGE_TOLERANCE))
+      slippageBasis != null
+        ? Math.max(1e-6, slippageBasis * (1 - SLIPPAGE_TOLERANCE))
         : undefined;
     setSubmitting(true);
     try {

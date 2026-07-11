@@ -256,6 +256,15 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
   const ammNoPrice = ammPrices && noEntry?.id ? Number(ammPrices[noEntry.id] ?? 0) : 0;
   const yesPercent = Math.max(0, Math.min(100, Math.round(ammYesPrice * 100)));
   const noPercent = Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)));
+  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
+  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
+  const pnlIsZero = Math.abs(pnlValue) < 0.005;
+  const pnlClass = pnlIsZero
+    ? "text-muted-foreground"
+    : pnlValue >= 0
+      ? "text-green-700 dark:text-green-500"
+      : "text-red-700 dark:text-red-500";
+  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   return (
     <PredictCard
@@ -319,6 +328,20 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
           <span className="text-red-500 font-semibold">No {noPercent}%</span>
         </div>
       </div>
+
+      {hasPnl && pnlText && (
+        <div
+          className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+          data-testid={`community-card-pnl-${market.slug}`}
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Your position
+          </span>
+          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+            {pnlText}
+          </span>
+        </div>
+      )}
 
       <div>
         {isMarketClosed ? (

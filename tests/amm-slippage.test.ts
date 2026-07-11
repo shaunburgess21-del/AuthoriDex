@@ -121,3 +121,30 @@ test("checkSellSlippage: zero floor is treated as 'no floor' (no-op opt-in)", ()
   const r = checkSellSlippage({ creditsReceived: 0, sharesIn: 100, floor: 0 });
   assert.equal(r.ok, true);
 });
+
+test("checkSellSlippage: quoted-avg floor allows fill that marginal floor rejected (cash-out)", () => {
+  // Mirror of the buy-side Matt Rife case. LMSR sell avg fill sits BELOW
+  // marginal spot (convexity). A floor of marginal × 0.95 can sit above
+  // the quoted avg fill and falsely reject a same-state cash-out.
+  // Example: marginal 0.50, quoted avg fill 0.45, sell 100 shares.
+  const quotedAvg = 0.45;
+  const marginal = 0.5;
+  const sharesIn = 100;
+  const creditsReceived = quotedAvg * sharesIn;
+  const oldMarginalFloor = Math.max(1e-6, marginal * 0.95);
+  const newQuotedFloor = Math.max(1e-6, quotedAvg * 0.95);
+
+  const oldGuard = checkSellSlippage({
+    creditsReceived,
+    sharesIn,
+    floor: oldMarginalFloor,
+  });
+  const newGuard = checkSellSlippage({
+    creditsReceived,
+    sharesIn,
+    floor: newQuotedFloor,
+  });
+
+  assert.equal(oldGuard.ok, false, "marginal-spot floor falsely rejects same-state quote");
+  assert.equal(newGuard.ok, true, "quoted-avg floor accepts same-state quote");
+});
