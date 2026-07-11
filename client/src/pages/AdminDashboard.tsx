@@ -88,6 +88,9 @@ const AdminInductionQueue = lazyWithRetry(() =>
 const AdminOptionSuggestionsSection = lazyWithRetry(() =>
   import("@/components/admin/AdminOptionSuggestionsSection").then((m) => ({ default: m.AdminOptionSuggestionsSection })),
 );
+const AdminVoteScoutSection = lazyWithRetry(() =>
+  import("@/components/admin/AdminVoteScoutSection").then((m) => ({ default: m.AdminVoteScoutSection })),
+);
 const AdminSettlementCenter = lazyWithRetry(() =>
   import("@/components/admin/AdminSettlementCenter").then((m) => ({ default: m.AdminSettlementCenter })),
 );
@@ -3809,6 +3812,9 @@ export default function AdminDashboard() {
                   <TabsTrigger value="option-suggestions" data-testid="tab-option-suggestions">
                     Option Suggestions
                   </TabsTrigger>
+                  <TabsTrigger value="idea-scout" data-testid="tab-idea-scout">
+                    Idea Scout
+                  </TabsTrigger>
                   <TabsTrigger value="matchups" data-testid="tab-matchups">
                     Matchups {matchups ? <span className="ml-1 text-xs opacity-60">({matchups.length})</span> : null}
                   </TabsTrigger>
@@ -4457,6 +4463,12 @@ export default function AdminDashboard() {
               <TabsContent value="option-suggestions" className="mt-4">
                 <SectionSuspense>
                   <AdminOptionSuggestionsSection />
+                </SectionSuspense>
+              </TabsContent>
+
+              <TabsContent value="idea-scout" className="mt-4">
+                <SectionSuspense>
+                  <AdminVoteScoutSection />
                 </SectionSuspense>
               </TabsContent>
 

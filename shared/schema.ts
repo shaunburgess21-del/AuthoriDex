@@ -2560,3 +2560,38 @@ export const insightsEvents = pgTable("insights_events", {
 
 export type InsightsEvent = typeof insightsEvents.$inferSelect;
 export type InsertInsightsEvent = typeof insightsEvents.$inferInsert;
+
+// ============================================================================
+// VOTE SCOUT IDEAS (admin Idea Scout for matchups / sentiment / opinion polls)
+// ============================================================================
+
+export const voteScoutIdeas = pgTable("vote_scout_ideas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** 'matchup' | 'sentiment_poll' | 'opinion_poll' */
+  contentType: text("content_type").notNull(),
+  /** 'evergreen' | 'topical' */
+  mode: text("mode").notNull(),
+  /** Type-specific draft fields for copy into create forms. */
+  payload: jsonb("payload").notNull(),
+  imagePrompt: text("image_prompt"),
+  rationale: text("rationale"),
+  fitScore: integer("fit_score"),
+  suggestedEndAt: timestamp("suggested_end_at"),
+  /** 'new' | 'kept' | 'dismissed' */
+  status: text("status").notNull().default("new"),
+  reviewedBy: varchar("reviewed_by").references(() => profiles.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  statusCreatedIdx: index("vote_scout_ideas_status_created_idx").on(table.status, table.createdAt),
+  contentTypeIdx: index("vote_scout_ideas_content_type_idx").on(table.contentType),
+  modeIdx: index("vote_scout_ideas_mode_idx").on(table.mode),
+}));
+
+export const insertVoteScoutIdeaSchema = createInsertSchema(voteScoutIdeas).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type VoteScoutIdea = typeof voteScoutIdeas.$inferSelect;
+export type InsertVoteScoutIdea = z.infer<typeof insertVoteScoutIdeaSchema>;

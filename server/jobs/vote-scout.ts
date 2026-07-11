@@ -1,0 +1,395 @@
+/**
+ * Vote Scout — admin Idea Scout orchestrator.
+ *
+ * Manual-only (no scheduler). Generates draft Matchup / Sentiment / Opinion
+ * ideas for founder review. Never writes to real content tables.
+ */
+
+import OpenAI from "openai";
+import { desc, eq, sql } from "drizzle-orm";
+import { db } from "../db";
+import {
+  matchups,
+  opinionPolls,
+  trendingPolls,
+  voteScoutIdeas,
+} from "@shared/schema";
+import { getAiModel } from "../config/ai-models";
+import { log } from "../log";
+import {
+  type CatalogSnapshot,
+  type ParsedVoteScoutIdea,
+  type VoteScoutMode,
+  buildDenyKeySet,
+  buildSystemPrompt,
+  buildUserPrompt,
+  filterAgainstDenyList,
+  parseVoteScoutResponse,
+} from "./vote-scout-core";
+
+const API_TIMEOUT_MS = 90_000;
+const MAX_OUTPUT_TOKENS = 5_000;
+const STYLE_SAMPLE_LIMIT = 10;
+
+let _openaiClient: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (!_openaiClient) {
+    _openaiClient = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    });
+  }
+  return _openaiClient;
+}
+
+let runLock = false;
+
+function bumpCategory(
+  map: Record<string, number>,
+  category: string | null | undefined,
+) {
+  const key = (category || "misc").trim().toLowerCase() || "misc";
+  map[key] = (map[key] || 0) + 1;
+}
+
+function sampleTitles(titles: string[], limit: number): string[] {
+  if (titles.length <= limit) return [...titles];
+  // Prefer a spread across the list (recent + older) without randomness for tests.
+  const step = Math.max(1, Math.floor(titles.length / limit));
+  const out: string[] = [];
+  for (let i = 0; i < titles.length && out.length < limit; i += step) {
+    out.push(titles[i]);
+  }
+  return out;
+}
+
+/** Prefer style diversity across categories, not only the newest rows. */
+function sampleStyleByCategory(
+  rows: Array<{ category: string | null; line: string }>,
+  limit: number,
+): string[] {
+  if (rows.length === 0) return [];
+  const byCat = new Map<string, string[]>();
+  for (const row of rows) {
+    const cat = (row.category || "misc").toLowerCase();
+    const list = byCat.get(cat) ?? [];
+    if (list.length < 3) list.push(row.line);
+    byCat.set(cat, list);
+  }
+
+  const out: string[] = [];
+  const queues = Array.from(byCat.values());
+  let idx = 0;
+  while (out.length < limit && queues.some((q) => q.length > 0)) {
+    const q = queues[idx % queues.length];
+    if (q.length > 0) out.push(q.shift()!);
+    idx += 1;
+  }
+  if (out.length < limit) {
+    for (const line of sampleTitles(
+      rows.map((r) => r.line).filter((l) => !out.includes(l)),
+      limit - out.length,
+    )) {
+      out.push(line);
+    }
+  }
+  return out.slice(0, limit);
+}
+
+export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
+  const [matchupRows, sentimentRows, opinionRows, priorRows] = await Promise.all([
+    db
+      .select({
+        title: matchups.title,
+        category: matchups.category,
+        promptText: matchups.promptText,
+        optionAText: matchups.optionAText,
+        optionBText: matchups.optionBText,
+      })
+      .from(matchups)
+      .orderBy(desc(matchups.createdAt)),
+    db
+      .select({
+        headline: trendingPolls.headline,
+        category: trendingPolls.category,
+        subjectText: trendingPolls.subjectText,
+      })
+      .from(trendingPolls)
+      .orderBy(desc(trendingPolls.createdAt)),
+    db
+      .select({
+        title: opinionPolls.title,
+        category: opinionPolls.category,
+        summary: opinionPolls.summary,
+      })
+      .from(opinionPolls)
+      .orderBy(desc(opinionPolls.createdAt)),
+    db
+      .select({
+        contentType: voteScoutIdeas.contentType,
+        payload: voteScoutIdeas.payload,
+      })
+      .from(voteScoutIdeas),
+  ]);
+
+  const categoryCounts = {
+    matchup: {} as Record<string, number>,
+    sentiment_poll: {} as Record<string, number>,
+    opinion_poll: {} as Record<string, number>,
+  };
+
+  const matchupTitles: string[] = [];
+  const matchupStyleRows: Array<{ category: string | null; line: string }> = [];
+  for (const row of matchupRows) {
+    matchupTitles.push(row.title);
+    bumpCategory(categoryCounts.matchup, row.category);
+    matchupStyleRows.push({
+      category: row.category,
+      line: `${row.title} | prompt: ${row.promptText || ""} | ${row.optionAText} vs ${row.optionBText}`,
+    });
+  }
+
+  const sentimentHeadlines: string[] = [];
+  const sentimentStyleRows: Array<{ category: string | null; line: string }> = [];
+  for (const row of sentimentRows) {
+    sentimentHeadlines.push(row.headline);
+    bumpCategory(categoryCounts.sentiment_poll, row.category);
+    sentimentStyleRows.push({
+      category: row.category,
+      line: `${row.headline} | ${(row.subjectText || "").slice(0, 140)}`,
+    });
+  }
+
+  const opinionTitles: string[] = [];
+  const opinionStyleRows: Array<{ category: string | null; line: string }> = [];
+  for (const row of opinionRows) {
+    opinionTitles.push(row.title);
+    bumpCategory(categoryCounts.opinion_poll, row.category);
+    opinionStyleRows.push({
+      category: row.category,
+      line: `${row.title} | ${(row.summary || "").slice(0, 140)}`,
+    });
+  }
+
+  const priorIdeaTitles: string[] = [];
+  for (const row of priorRows) {
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const title =
+      typeof payload.title === "string"
+        ? payload.title
+        : typeof payload.headline === "string"
+          ? payload.headline
+          : null;
+    if (title) priorIdeaTitles.push(title);
+  }
+
+  return {
+    matchupTitles,
+    sentimentHeadlines,
+    opinionTitles,
+    priorIdeaTitles,
+    categoryCounts,
+    styleSamples: {
+      matchups: sampleStyleByCategory(matchupStyleRows, STYLE_SAMPLE_LIMIT),
+      sentiments: sampleStyleByCategory(sentimentStyleRows, STYLE_SAMPLE_LIMIT),
+      opinions: sampleStyleByCategory(opinionStyleRows, STYLE_SAMPLE_LIMIT),
+    },
+  };
+}
+
+function extractOutputText(response: unknown): string | null {
+  const r = response as any;
+  if (typeof r?.output_text === "string" && r.output_text.trim()) {
+    return r.output_text;
+  }
+  const output = Array.isArray(r?.output) ? r.output : [];
+  for (const item of output) {
+    if (item?.type !== "message") continue;
+    for (const part of item.content || []) {
+      if ((part.type === "output_text" || part.type === "text") && part.text) {
+        return part.text;
+      }
+    }
+  }
+  return null;
+}
+
+async function callVoteScoutLlm(
+  mode: VoteScoutMode,
+  catalog: CatalogSnapshot,
+): Promise<ParsedVoteScoutIdea[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const body: Record<string, unknown> = {
+      model: getAiModel("voteScout"),
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      instructions: buildSystemPrompt(mode),
+      input: buildUserPrompt(catalog, mode),
+      // Evergreen: slightly cooler for disciplined next-tier picks.
+      // Topical: a bit warmer once web search has grounded the topic.
+      temperature: mode === "topical" ? 0.8 : 0.7,
+    };
+    if (mode === "topical") {
+      body.tools = [{ type: "web_search" as const }];
+    }
+
+    const response = await getOpenAIClient().responses.create(
+      body as any,
+      { signal: controller.signal },
+    );
+    clearTimeout(timeout);
+
+    const outputText = extractOutputText(response);
+    if (!outputText) {
+      log("[VoteScout] Empty model response");
+      return [];
+    }
+    return parseVoteScoutResponse(outputText);
+  } catch (err) {
+    clearTimeout(timeout);
+    log(
+      `[VoteScout] LLM call failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
+  }
+}
+
+export type VoteScoutRunResult = {
+  mode: VoteScoutMode;
+  created: number;
+  skippedDuplicates: number;
+  parsed: number;
+  locked: boolean;
+};
+
+export async function runVoteScout(mode: VoteScoutMode): Promise<VoteScoutRunResult> {
+  if (mode !== "evergreen" && mode !== "topical") {
+    throw new Error("Invalid vote scout mode");
+  }
+
+  if (runLock) {
+    return { mode, created: 0, skippedDuplicates: 0, parsed: 0, locked: true };
+  }
+
+  runLock = true;
+  try {
+    const catalog = await loadCatalogSnapshot();
+    const denyKeys = buildDenyKeySet(catalog);
+    const parsed = await callVoteScoutLlm(mode, catalog);
+    const { kept, skippedDuplicates } = filterAgainstDenyList(parsed, denyKeys);
+
+    if (kept.length === 0) {
+      log(
+        `[VoteScout] mode=${mode} parsed=${parsed.length} created=0 skippedDuplicates=${skippedDuplicates}`,
+      );
+      return {
+        mode,
+        created: 0,
+        skippedDuplicates,
+        parsed: parsed.length,
+        locked: false,
+      };
+    }
+
+    await db.insert(voteScoutIdeas).values(
+      kept.map((idea) => ({
+        contentType: idea.contentType,
+        mode,
+        payload: idea.payload,
+        imagePrompt: idea.imagePrompt,
+        rationale: idea.rationale,
+        fitScore: idea.fitScore,
+        suggestedEndAt: idea.suggestedEndAt ? new Date(idea.suggestedEndAt) : null,
+        status: "new",
+      })),
+    );
+
+    log(
+      `[VoteScout] mode=${mode} parsed=${parsed.length} created=${kept.length} skippedDuplicates=${skippedDuplicates}`,
+    );
+
+    return {
+      mode,
+      created: kept.length,
+      skippedDuplicates,
+      parsed: parsed.length,
+      locked: false,
+    };
+  } finally {
+    runLock = false;
+  }
+}
+
+export async function listVoteScoutIdeas(status?: string) {
+  const allowed = new Set(["new", "kept", "dismissed"]);
+  const filterStatus = status && allowed.has(status) ? status : null;
+
+  const [ideas, counts] = await Promise.all([
+    filterStatus
+      ? db
+          .select()
+          .from(voteScoutIdeas)
+          .where(eq(voteScoutIdeas.status, filterStatus))
+          .orderBy(desc(voteScoutIdeas.createdAt))
+          .limit(100)
+      : db
+          .select()
+          .from(voteScoutIdeas)
+          .orderBy(desc(voteScoutIdeas.createdAt))
+          .limit(100),
+    db
+      .select({
+        status: voteScoutIdeas.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(voteScoutIdeas)
+      .groupBy(voteScoutIdeas.status),
+  ]);
+
+  const statusCounts = { new: 0, kept: 0, dismissed: 0 };
+  for (const row of counts) {
+    if (row.status === "new" || row.status === "kept" || row.status === "dismissed") {
+      statusCounts[row.status] = Number(row.count) || 0;
+    }
+  }
+
+  const reviewed = statusCounts.kept + statusCounts.dismissed;
+  const hitRate =
+    reviewed > 0 ? Math.round((statusCounts.kept / reviewed) * 100) : null;
+
+  return {
+    ideas: ideas.map((row) => ({
+      ...row,
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      reviewedAt:
+        row.reviewedAt instanceof Date
+          ? row.reviewedAt.toISOString()
+          : row.reviewedAt,
+      suggestedEndAt:
+        row.suggestedEndAt instanceof Date
+          ? row.suggestedEndAt.toISOString()
+          : row.suggestedEndAt,
+    })),
+    statusCounts,
+    hitRate,
+  };
+}
+
+export async function setVoteScoutIdeaStatus(opts: {
+  id: string;
+  status: "kept" | "dismissed";
+  adminId: string;
+}) {
+  const [updated] = await db
+    .update(voteScoutIdeas)
+    .set({
+      status: opts.status,
+      reviewedBy: opts.adminId,
+      reviewedAt: new Date(),
+    })
+    .where(eq(voteScoutIdeas.id, opts.id))
+    .returning();
+
+  return updated ?? null;
+}

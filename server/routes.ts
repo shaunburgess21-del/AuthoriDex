@@ -19625,6 +19625,83 @@ Target length: about 90-150 words.`;
     }
   });
 
+  // Vote Scout (Idea Scout) — manual-only ideation for Matchups / Sentiment /
+  // Opinion polls. Never auto-publishes; ideas land in vote_scout_ideas for
+  // keep/dismiss review. mode=evergreen (default, cheap) or topical (web search).
+  app.post("/api/admin/vote-scout/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const modeRaw = typeof req.body?.mode === "string" ? req.body.mode.trim() : "evergreen";
+      const mode = modeRaw === "topical" ? "topical" : modeRaw === "evergreen" ? "evergreen" : null;
+      if (!mode) {
+        return res.status(400).json({ error: "mode must be evergreen or topical" });
+      }
+      const { runVoteScout } = await import("./jobs/vote-scout");
+      const result = await runVoteScout(mode);
+      if (result.locked) {
+        return res.status(409).json({ error: "Vote scout already running", ...result });
+      }
+      res.json({ data: result });
+    } catch (error: any) {
+      console.error("[VoteScout] Manual run error:", error);
+      res.status(500).json({ error: "Vote scout run failed" });
+    }
+  });
+
+  app.get("/api/admin/vote-scout/ideas", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const status =
+        typeof req.query.status === "string" ? req.query.status.trim() : undefined;
+      const { listVoteScoutIdeas } = await import("./jobs/vote-scout");
+      const data = await listVoteScoutIdeas(status);
+      res.json({ data });
+    } catch (error: any) {
+      console.error("[VoteScout] List ideas error:", error);
+      res.status(500).json({ error: "Failed to list vote scout ideas" });
+    }
+  });
+
+  app.patch("/api/admin/vote-scout/ideas/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const id = req.params.id;
+      const status = req.body?.status;
+      if (status !== "kept" && status !== "dismissed") {
+        return res.status(400).json({ error: "status must be kept or dismissed" });
+      }
+      if (!req.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const { setVoteScoutIdeaStatus } = await import("./jobs/vote-scout");
+      const updated = await setVoteScoutIdeaStatus({
+        id,
+        status,
+        adminId: req.userId,
+      });
+      if (!updated) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      res.json({
+        data: {
+          ...updated,
+          createdAt:
+            updated.createdAt instanceof Date
+              ? updated.createdAt.toISOString()
+              : updated.createdAt,
+          reviewedAt:
+            updated.reviewedAt instanceof Date
+              ? updated.reviewedAt.toISOString()
+              : updated.reviewedAt,
+          suggestedEndAt:
+            updated.suggestedEndAt instanceof Date
+              ? updated.suggestedEndAt.toISOString()
+              : updated.suggestedEndAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("[VoteScout] Update idea error:", error);
+      res.status(500).json({ error: "Failed to update vote scout idea" });
+    }
+  });
+
   // AI-suggest "watch criteria" for the resolution scout. Stateless (works
   // from the create form before a market exists): pass title/category/teaser/
   // outcomes/resolutionCriteria and get back a concise list of the leading
