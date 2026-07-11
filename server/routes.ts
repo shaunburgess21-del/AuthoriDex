@@ -19667,6 +19667,8 @@ Target length: about 90-150 words.`;
       if (status !== "kept" && status !== "dismissed") {
         return res.status(400).json({ error: "status must be kept or dismissed" });
       }
+      const reviewNote =
+        typeof req.body?.reviewNote === "string" ? req.body.reviewNote : null;
       if (!req.userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -19675,6 +19677,7 @@ Target length: about 90-150 words.`;
         id,
         status,
         adminId: req.userId,
+        reviewNote,
       });
       if (!updated) {
         return res.status(404).json({ error: "Idea not found" });

@@ -7,10 +7,12 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   filterAgainstDenyList,
+  formatReviewLearningsBlock,
   ideaDedupeKey,
   matchupCanonicalKey,
   normalizeTitleKey,
   parseVoteScoutResponse,
+  titleFromScoutPayload,
 } from "../server/jobs/vote-scout-core";
 
 function sampleCatalog(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapshot {
@@ -29,6 +31,7 @@ function sampleCatalog(overrides: Partial<CatalogSnapshot> = {}): CatalogSnapsho
       sentiments: ["Pineapple on Pizza | Few food debates divide people"],
       opinions: ["Greatest boxer of all time | Classic GOAT debate"],
     },
+    reviewLearnings: { kept: [], dismissed: [] },
     ...overrides,
   };
 }
@@ -235,5 +238,65 @@ describe("vote-scout-core parsing", () => {
     assert.equal(kept.length, 1);
     assert.equal(kept[0].displayTitle, "Tipping culture has gone too far");
     assert.equal(skippedDuplicates, 2);
+  });
+});
+
+describe("vote-scout-core review learnings", () => {
+  it("includes founder learnings in the user prompt when present", () => {
+    const prompt = buildUserPrompt(
+      sampleCatalog({
+        reviewLearnings: {
+          kept: [
+            {
+              status: "kept",
+              contentType: "matchup",
+              title: "Subtitles On vs Subtitles Off",
+              note: "Perfect modern debate",
+            },
+          ],
+          dismissed: [
+            {
+              status: "dismissed",
+              contentType: "matchup",
+              title: "Fork & Knife vs Hands",
+              note: "Too niche for food-drink",
+            },
+          ],
+        },
+      }),
+      "evergreen",
+    );
+    assert.match(prompt, /FOUNDER REVIEW LEARNINGS/);
+    assert.match(prompt, /why kept: Perfect modern debate/);
+    assert.match(prompt, /why rejected: Too niche for food-drink/);
+  });
+
+  it("formats review learnings block", () => {
+    const block = formatReviewLearningsBlock({
+      kept: [
+        {
+          status: "kept",
+          contentType: "sentiment_poll",
+          title: "First dates should be split 50/50",
+          note: null,
+        },
+      ],
+      dismissed: [
+        {
+          status: "dismissed",
+          contentType: "opinion_poll",
+          title: "How do you prefer to recharge socially?",
+          note: "Title is ambiguous",
+        },
+      ],
+    });
+    assert.match(block, /FOUNDER APPROVED/);
+    assert.match(block, /FOUNDER REJECTED/);
+    assert.match(block, /Title is ambiguous/);
+  });
+
+  it("extracts title from payload", () => {
+    assert.equal(titleFromScoutPayload({ headline: "Spoiler warnings" }), "Spoiler warnings");
+    assert.equal(titleFromScoutPayload({ title: "Coffee vs Tea" }), "Coffee vs Tea");
   });
 });

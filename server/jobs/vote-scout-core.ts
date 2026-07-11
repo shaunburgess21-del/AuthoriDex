@@ -68,6 +68,18 @@ export type CatalogSnapshot = {
     sentiments: string[];
     opinions: string[];
   };
+  /** Recent founder keep/dismiss verdicts (notes steer future scans). */
+  reviewLearnings: {
+    kept: ReviewLearning[];
+    dismissed: ReviewLearning[];
+  };
+};
+
+export type ReviewLearning = {
+  status: "kept" | "dismissed";
+  title: string;
+  contentType: VoteScoutContentType;
+  note: string | null;
 };
 
 export const MAX_IDEAS_PER_RUN = 5;
@@ -150,6 +162,61 @@ function formatDenyList(titles: string[], limit = DENY_LIST_LIMIT): string {
   return unique.map((t) => `- ${t}`).join("\n");
 }
 
+/** Extract display title from a stored scout payload. */
+export function titleFromScoutPayload(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "Untitled";
+  const p = payload as Record<string, unknown>;
+  if (typeof p.title === "string" && p.title.trim()) return p.title.trim();
+  if (typeof p.headline === "string" && p.headline.trim()) return p.headline.trim();
+  return "Untitled";
+}
+
+/** Format recent founder keep/dismiss verdicts for the user prompt. */
+export function formatReviewLearningsBlock(learnings: {
+  kept: ReviewLearning[];
+  dismissed: ReviewLearning[];
+}): string {
+  const keptWithNotes = learnings.kept.filter((l) => l.note);
+  const dismissedWithNotes = learnings.dismissed.filter((l) => l.note);
+  const keptTitlesOnly = learnings.kept.filter((l) => !l.note).slice(0, 8);
+  const dismissedTitlesOnly = learnings.dismissed.filter((l) => !l.note).slice(0, 5);
+
+  if (
+    keptWithNotes.length === 0 &&
+    dismissedWithNotes.length === 0 &&
+    keptTitlesOnly.length === 0 &&
+    dismissedTitlesOnly.length === 0
+  ) {
+    return "(No founder reviews yet — rely on the rubric and style anchors.)";
+  }
+
+  const lines: string[] = [
+    "Apply these founder verdicts from prior Idea Scout runs. Notes explain taste; titles without notes still signal approval/rejection.",
+  ];
+
+  if (keptWithNotes.length > 0 || keptTitlesOnly.length > 0) {
+    lines.push("", "FOUNDER APPROVED — more like these:");
+    for (const row of keptWithNotes.slice(0, 10)) {
+      lines.push(`- [${row.contentType}] "${row.title}" — why kept: ${row.note}`);
+    }
+    for (const row of keptTitlesOnly) {
+      lines.push(`- [${row.contentType}] "${row.title}"`);
+    }
+  }
+
+  if (dismissedWithNotes.length > 0 || dismissedTitlesOnly.length > 0) {
+    lines.push("", "FOUNDER REJECTED — avoid these patterns (do not paraphrase):");
+    for (const row of dismissedWithNotes.slice(0, 15)) {
+      lines.push(`- [${row.contentType}] "${row.title}" — why rejected: ${row.note}`);
+    }
+    for (const row of dismissedTitlesOnly) {
+      lines.push(`- [${row.contentType}] "${row.title}"`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 export function buildSystemPrompt(mode: VoteScoutMode): string {
   const modeBlock =
     mode === "topical"
@@ -187,6 +254,7 @@ WHAT TO AVOID (this is how you produce slop — do not):
 - Deaths, tragedies, graphic violence, war-as-entertainment.
 - Near-unanimous moral bait where ~95% would pick the same side.
 - Insider trivia that needs googling.
+- Technically divisive but niche mechanics when a broad audience would shrug (e.g. pizza utensils when food-drink is already deep).
 - Meme / one-off humour tweets that only work as a joke (tongue-in-cheek celebrity stunts).
 - Paraphrases of deny-list items ("Cats or Dogs" when "Dogs vs Cats" exists; "Pineapple pizza okay?" when "Pineapple on Pizza" exists).
 - Filling a quota with weak ideas. Empty is better than filler.
@@ -197,9 +265,9 @@ CRITICAL CONTEXT — THE CATALOG IS ALREADY DEEP (~300 live items):
 - Prefer thin categories from the coverage summary only when quality is equal — never force a weak idea into a gap.
 
 QUALITY RUBRIC (ALL must pass; fitScore is 0-100 against this rubric):
-1. Divisiveness — passes the dinner-party AND/OR online-debate test: real, sustained disagreement, not a one-day outrage cycle. Understandable without looking anything up.
+1. Divisiveness — passes the dinner-party AND/OR online-debate test: real, sustained disagreement among a broad audience, not a one-day outrage cycle or niche etiquette fight. Understandable without looking anything up.
 2. Shelf life — still makes sense in ~12 months (unless topical + suggestedEndAt).
-3. Instantly votable — clear in one read.
+3. Instantly votable — clear in one read; titles/headlines must not be ambiguous (e.g. avoid phrasing that could mean two opposite things).
 4. Split potential — expected split nearer 60/40 than 95/5.
 5. Fresh vs deny list — not a duplicate or thin paraphrase.
 6. On-genre — matches VoxDex Vote style above, not a prediction-market / news quiz.
@@ -280,6 +348,9 @@ Sentiment polls:
 ${catalog.styleSamples.sentiments.map((s) => `- ${s}`).join("\n") || "- (none)"}
 Opinion polls:
 ${catalog.styleSamples.opinions.map((s) => `- ${s}`).join("\n") || "- (none)"}
+
+FOUNDER REVIEW LEARNINGS (highest-priority taste signal after the deny list):
+${formatReviewLearningsBlock(catalog.reviewLearnings)}
 
 DENY LIST (existing content + previously suggested scout ideas — never re-suggest, including reversed matchup sides or thin paraphrases):
 ${formatDenyList(denyTitles)}

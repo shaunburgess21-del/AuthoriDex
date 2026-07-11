@@ -6,7 +6,7 @@
  */
 
 import OpenAI from "openai";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   matchups,
@@ -25,6 +25,8 @@ import {
   buildUserPrompt,
   filterAgainstDenyList,
   parseVoteScoutResponse,
+  titleFromScoutPayload,
+  type ReviewLearning,
 } from "./vote-scout-core";
 
 const API_TIMEOUT_MS = 90_000;
@@ -96,7 +98,7 @@ function sampleStyleByCategory(
 }
 
 export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
-  const [matchupRows, sentimentRows, opinionRows, priorRows] = await Promise.all([
+  const [matchupRows, sentimentRows, opinionRows, priorRows, reviewedRows] = await Promise.all([
     db
       .select({
         title: matchups.title,
@@ -129,6 +131,17 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
         payload: voteScoutIdeas.payload,
       })
       .from(voteScoutIdeas),
+    db
+      .select({
+        status: voteScoutIdeas.status,
+        contentType: voteScoutIdeas.contentType,
+        payload: voteScoutIdeas.payload,
+        reviewNote: voteScoutIdeas.reviewNote,
+      })
+      .from(voteScoutIdeas)
+      .where(inArray(voteScoutIdeas.status, ["kept", "dismissed"]))
+      .orderBy(desc(voteScoutIdeas.reviewedAt))
+      .limit(50),
   ]);
 
   const categoryCounts = {
@@ -172,14 +185,28 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
 
   const priorIdeaTitles: string[] = [];
   for (const row of priorRows) {
-    const payload = (row.payload || {}) as Record<string, unknown>;
-    const title =
-      typeof payload.title === "string"
-        ? payload.title
-        : typeof payload.headline === "string"
-          ? payload.headline
-          : null;
-    if (title) priorIdeaTitles.push(title);
+    const title = titleFromScoutPayload(row.payload);
+    if (title !== "Untitled") priorIdeaTitles.push(title);
+  }
+
+  const reviewLearnings: { kept: ReviewLearning[]; dismissed: ReviewLearning[] } = {
+    kept: [],
+    dismissed: [],
+  };
+  for (const row of reviewedRows) {
+    const title = titleFromScoutPayload(row.payload);
+    const note =
+      typeof row.reviewNote === "string" && row.reviewNote.trim()
+        ? row.reviewNote.trim().slice(0, 500)
+        : null;
+    const entry: ReviewLearning = {
+      status: row.status === "kept" ? "kept" : "dismissed",
+      title,
+      contentType: row.contentType as ReviewLearning["contentType"],
+      note,
+    };
+    if (row.status === "kept") reviewLearnings.kept.push(entry);
+    else if (row.status === "dismissed") reviewLearnings.dismissed.push(entry);
   }
 
   return {
@@ -193,6 +220,7 @@ export async function loadCatalogSnapshot(): Promise<CatalogSnapshot> {
       sentiments: sampleStyleByCategory(sentimentStyleRows, STYLE_SAMPLE_LIMIT),
       opinions: sampleStyleByCategory(opinionStyleRows, STYLE_SAMPLE_LIMIT),
     },
+    reviewLearnings,
   };
 }
 
@@ -380,13 +408,20 @@ export async function setVoteScoutIdeaStatus(opts: {
   id: string;
   status: "kept" | "dismissed";
   adminId: string;
+  reviewNote?: string | null;
 }) {
+  const trimmedNote =
+    typeof opts.reviewNote === "string" && opts.reviewNote.trim()
+      ? opts.reviewNote.trim().slice(0, 500)
+      : null;
+
   const [updated] = await db
     .update(voteScoutIdeas)
     .set({
       status: opts.status,
       reviewedBy: opts.adminId,
       reviewedAt: new Date(),
+      reviewNote: trimmedNote,
     })
     .where(eq(voteScoutIdeas.id, opts.id))
     .returning();

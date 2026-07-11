@@ -2579,6 +2579,8 @@ export const voteScoutIdeas = pgTable("vote_scout_ideas", {
   suggestedEndAt: timestamp("suggested_end_at"),
   /** 'new' | 'kept' | 'dismissed' */
   status: text("status").notNull().default("new"),
+  /** Optional founder note on keep/dismiss — fed into future scan prompts. */
+  reviewNote: text("review_note"),
   reviewedBy: varchar("reviewed_by").references(() => profiles.id, { onDelete: "set null" }),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

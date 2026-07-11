@@ -7,6 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
   Check,
   Copy,
   Loader2,
@@ -56,8 +66,15 @@ type VoteScoutIdea = {
   fitScore: number | null;
   suggestedEndAt: string | null;
   status: VoteScoutStatus;
+  reviewNote: string | null;
   createdAt: string;
   reviewedAt: string | null;
+};
+
+type PendingVerdict = {
+  id: string;
+  status: "kept" | "dismissed";
+  title: string;
 };
 
 type IdeasResponse = {
@@ -141,6 +158,8 @@ async function copyText(label: string, text: string) {
 export function AdminVoteScoutSection() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<VoteScoutStatus | "all">("new");
+  const [pendingVerdict, setPendingVerdict] = useState<PendingVerdict | null>(null);
+  const [feedbackText, setFeedbackText] = useState("");
 
   const queryKey = useMemo(
     () => ["/api/admin/vote-scout/ideas", statusFilter] as const,
@@ -202,16 +221,43 @@ export function AdminVoteScoutSection() {
   });
 
   const verdictMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "kept" | "dismissed" }) => {
-      const res = await apiRequest("PATCH", `/api/admin/vote-scout/ideas/${id}`, { status });
+    mutationFn: async ({
+      id,
+      status,
+      reviewNote,
+    }: {
+      id: string;
+      status: "kept" | "dismissed";
+      reviewNote?: string;
+    }) => {
+      const res = await apiRequest("PATCH", `/api/admin/vote-scout/ideas/${id}`, {
+        status,
+        reviewNote: reviewNote?.trim() || undefined,
+      });
       return res.json();
     },
     onSuccess: (_json, vars) => {
       toast.success(vars.status === "kept" ? "Marked as kept" : "Dismissed");
+      setPendingVerdict(null);
+      setFeedbackText("");
       invalidate();
     },
     onError: () => toast.error("Could not update idea"),
   });
+
+  const openVerdictDialog = (id: string, status: "kept" | "dismissed", title: string) => {
+    setPendingVerdict({ id, status, title });
+    setFeedbackText("");
+  };
+
+  const submitVerdict = () => {
+    if (!pendingVerdict) return;
+    verdictMutation.mutate({
+      id: pendingVerdict.id,
+      status: pendingVerdict.status,
+      reviewNote: feedbackText,
+    });
+  };
 
   const counts = data?.statusCounts ?? { new: 0, kept: 0, dismissed: 0 };
   const hitRate = data?.hitRate;
@@ -230,8 +276,7 @@ export function AdminVoteScoutSection() {
             <CardDescription>
               Dinner-party quality Matchup, Sentiment, and Opinion ideas.
               Quality over quantity — the model may return fewer than 5, or zero.
-              Nothing auto-publishes: Keep the cream, Dismiss the rest, then paste
-              into your normal create forms and generate images externally.
+              Keep or Dismiss with optional feedback; notes steer future scans.
             </CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
@@ -267,11 +312,11 @@ export function AdminVoteScoutSection() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Evergreen uses world knowledge only (cents) for classic debates.
-            Topical adds web search for what people are arguing about right now
-            and may suggest end dates for time-sensitive topics (costs more — use occasionally).
-            Hit rate = Kept ÷ (Kept + Dismissed); that number decides whether a
-            fuller pipeline is worth building.
+            Evergreen uses world knowledge only (cents). Topical adds web search
+            (costs more — use occasionally). Optional feedback on Keep/Dismiss
+            is injected into the next scan so the model learns your taste — e.g.
+            &quot;title is muddy&quot; or &quot;too niche&quot;. Hit rate =
+            Kept ÷ (Kept + Dismissed).
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -354,6 +399,11 @@ export function AdminVoteScoutSection() {
                       {idea.rationale ? (
                         <p className="text-sm text-muted-foreground">{idea.rationale}</p>
                       ) : null}
+                      {idea.reviewNote ? (
+                        <p className="text-sm text-primary/90 border-l-2 border-primary/40 pl-3">
+                          Your feedback: {idea.reviewNote}
+                        </p>
+                      ) : null}
                     </div>
                     {idea.status === "new" ? (
                       <div className="flex items-center gap-2 shrink-0">
@@ -361,9 +411,7 @@ export function AdminVoteScoutSection() {
                           size="sm"
                           variant="outline"
                           disabled={verdictMutation.isPending}
-                          onClick={() =>
-                            verdictMutation.mutate({ id: idea.id, status: "dismissed" })
-                          }
+                          onClick={() => openVerdictDialog(idea.id, "dismissed", title)}
                           data-testid={`button-vote-scout-dismiss-${idea.id}`}
                         >
                           <ThumbsDown className="h-4 w-4 mr-1" />
@@ -372,9 +420,7 @@ export function AdminVoteScoutSection() {
                         <Button
                           size="sm"
                           disabled={verdictMutation.isPending}
-                          onClick={() =>
-                            verdictMutation.mutate({ id: idea.id, status: "kept" })
-                          }
+                          onClick={() => openVerdictDialog(idea.id, "kept", title)}
                           data-testid={`button-vote-scout-keep-${idea.id}`}
                         >
                           <ThumbsUp className="h-4 w-4 mr-1" />
@@ -548,6 +594,72 @@ export function AdminVoteScoutSection() {
           })}
         </div>
       )}
+
+      <Dialog
+        open={!!pendingVerdict}
+        onOpenChange={(open) => {
+          if (!open && !verdictMutation.isPending) {
+            setPendingVerdict(null);
+            setFeedbackText("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingVerdict?.status === "kept" ? "Keep this idea?" : "Dismiss this idea?"}
+            </DialogTitle>
+            <DialogDescription className="line-clamp-3">
+              {pendingVerdict?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="vote-scout-feedback">
+              Feedback for future scans{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Textarea
+              id="vote-scout-feedback"
+              placeholder={
+                pendingVerdict?.status === "kept"
+                  ? "e.g. Great topic — just reword the title to be clearer"
+                  : "e.g. Too niche, or title is ambiguous"
+              }
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              rows={3}
+              maxLength={500}
+              data-testid="input-vote-scout-feedback"
+            />
+            <p className="text-xs text-muted-foreground">
+              Notes are included in the next scan prompt so the model learns what you
+              want more or less of.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingVerdict(null);
+                setFeedbackText("");
+              }}
+              disabled={verdictMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitVerdict} disabled={verdictMutation.isPending}>
+              {verdictMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : pendingVerdict?.status === "kept" ? (
+                <ThumbsUp className="h-4 w-4 mr-2" />
+              ) : (
+                <ThumbsDown className="h-4 w-4 mr-2" />
+              )}
+              Confirm {pendingVerdict?.status === "kept" ? "Keep" : "Dismiss"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
