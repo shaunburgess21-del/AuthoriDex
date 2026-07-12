@@ -125,7 +125,9 @@ import { getMarketCategoryLabel, normalizeMarketCategory, matchesCategoryFilter,
 import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
 import {
   communityChipForMarket,
+  communityTrendingCompare,
   filterCommunityMarkets,
+  openMarketPool,
 } from "@/lib/filterCommunityMarkets";
 import {
   SuggestCategorySelect,
@@ -163,6 +165,8 @@ import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { WorldMarketsStickyHeader } from "@/components/predict/WorldMarketsStickyHeader";
 import { WorldMarketsCategoryStacks } from "@/components/predict/WorldMarketsCategoryStacks";
+import { WorldMarketsTeaserRail } from "@/components/predict/WorldMarketsTeaserRail";
+import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
@@ -170,7 +174,9 @@ import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed 
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 
 type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
-type PredictOverlayKey = "weekly" | "h2h" | "gainers" | "community";
+// "community" was removed when World mode gained an uncapped feed — the
+// World Markets View All overlay no longer exists.
+type PredictOverlayKey = "weekly" | "h2h" | "gainers";
 
 /** When the user is searching, show every match — not just the preview grid cap. */
 function sectionDesktopLimit(search: string): number {
@@ -249,6 +255,40 @@ function FreshnessBadge({ market }: { market: any }) {
 type PredictionType = "all" | "jackpot" | "updown" | "h2h" | "gainer" | "community";
 type CategoryFilter = string;
 
+/**
+ * Top-level Predict page mode. "weekly" = native markets driven by the
+ * shared weekly cycle (Jackpot, Up/Down, H2H, Category Races); "world" =
+ * event-driven World Markets feed with per-market deadlines.
+ */
+type PredictView = "weekly" | "world";
+
+const PREDICT_VIEW_STORAGE_KEY = "voxdex-predict-view";
+
+/** Hash anchors owned by Weekly mode (`#community` belongs to World). */
+const WEEKLY_HASH_ANCHORS: readonly string[] = ["jackpot", "updown", "h2h", "race"];
+
+/**
+ * Resolve the initial mode. Priority: hash deep link (share links carry
+ * `#community` for World Markets, `#jackpot|#updown|#h2h|#race` for weekly
+ * sections) → `?view=` query param → last mode this session → weekly.
+ * Session-scoped on purpose: fresh visits always land on Weekly.
+ */
+function readInitialPredictView(): PredictView {
+  if (typeof window === "undefined") return "weekly";
+  const hash = window.location.hash.replace(/^#/, "");
+  if (hash === "community") return "world";
+  if (WEEKLY_HASH_ANCHORS.includes(hash)) return "weekly";
+  const viewParam = new URLSearchParams(window.location.search).get("view");
+  if (viewParam === "world") return "world";
+  if (viewParam === "weekly") return "weekly";
+  try {
+    if (sessionStorage.getItem(PREDICT_VIEW_STORAGE_KEY) === "world") return "world";
+  } catch {
+    // sessionStorage unavailable (private mode)
+  }
+  return "weekly";
+}
+
 
 /**
  * Sprint 4.3: minimal shape of /api/me/amm-positions for the
@@ -305,13 +345,14 @@ const ACTIVITY_MARKET_BADGE: Record<string, { label: string; className: string }
 
 type MarketType = "JACKPOT_EXACT" | "BINARY_TREND" | "VERSUS" | "COMMUNITY" | "GAINER";
 
+// World Markets left this row when it became a top-level mode (the
+// Weekly/World toggle above the pills). These pills are Weekly-mode only.
 const PREDICTION_TYPES: { id: PredictionType; label: string; mobileLabel: string; icon: React.ReactNode }[] = [
   { id: "all", label: "All Markets", mobileLabel: "All", icon: <Sparkles className="h-4 w-4" /> },
   { id: "jackpot", label: "Weekly Jackpot", mobileLabel: "Jackpot", icon: <Crown className="h-4 w-4" /> },
   { id: "updown", label: "Up/Down", mobileLabel: "Up/Down", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "h2h", label: "Head-to-Head", mobileLabel: "H2H", icon: <Swords className="h-4 w-4" /> },
   { id: "gainer", label: "Category Races", mobileLabel: "Races", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "community", label: "World Markets", mobileLabel: "Markets", icon: <Scale className="h-4 w-4" /> },
 ];
 
 function HorizontalScroll({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -355,6 +396,47 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
     >
       {children}
     </div>
+  );
+}
+
+/** Cycling Positions filter pill (all → show-mine → hide-mine), rendered in
+ * the contextual filter row of both Weekly and World modes. */
+function MyPositionsPill({
+  filter,
+  activeCount,
+  onClick,
+  shrink,
+}: {
+  filter: HubActivityFilter;
+  activeCount: number;
+  onClick: () => void;
+  /** Set when the pill sits in a plain flex row (not a scroll container). */
+  shrink?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
+        shrink ? "shrink-0 " : ""
+      }focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        filter === "show-mine"
+          ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
+          : filter === "hide-mine"
+            ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
+            : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
+      }`}
+      data-testid="toggle-my-positions-pill"
+    >
+      {filter === "hide-mine" ? (
+        <EyeOff className="h-4 w-4 shrink-0" />
+      ) : (
+        <ListChecks className="h-4 w-4 shrink-0" />
+      )}
+      {filter === "hide-mine"
+        ? `Hidden (${activeCount})`
+        : `Positions (${activeCount})`}
+    </button>
   );
 }
 
@@ -949,6 +1031,78 @@ export default function PredictPage() {
   const leaderboardCats = useLeaderboardCategories();
   const onboardingRef = useRef<OnboardingDrawerHandle>(null);
   const [selectedType, setSelectedType] = useState<PredictionType>("all");
+  const [predictView, setPredictViewState] = useState<PredictView>(readInitialPredictView);
+  // Scroll position per mode so flicking between Weekly and World never
+  // loses the user's place in either feed.
+  const modeScrollPositions = useRef<Record<PredictView, number>>({ weekly: 0, world: 0 });
+  const skipModeScrollRestoreRef = useRef(true);
+
+  const setPredictView = useCallback((next: PredictView) => {
+    setPredictViewState((prev) => {
+      if (prev === next) return prev;
+      if (typeof window !== "undefined") {
+        modeScrollPositions.current[prev] = window.scrollY;
+      }
+      return next;
+    });
+  }, []);
+
+  // Deep-linkable mode: `/predict?view=world`. replaceState (not pushState)
+  // so toggling modes doesn't pollute back-button history; the param is
+  // omitted for the weekly default. Last mode also persists for the session.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (predictView === "world") {
+      url.searchParams.set("view", "world");
+    } else {
+      url.searchParams.delete("view");
+    }
+    // Drop a section hash that belongs to the other mode so a reload after
+    // toggling doesn't bounce the user back via the hash deep-link priority.
+    const hash = url.hash.replace(/^#/, "");
+    if (
+      (predictView === "weekly" && hash === "community") ||
+      (predictView === "world" && WEEKLY_HASH_ANCHORS.includes(hash))
+    ) {
+      url.hash = "";
+    }
+    window.history.replaceState(window.history.state, "", url.toString());
+    try {
+      sessionStorage.setItem(PREDICT_VIEW_STORAGE_KEY, predictView);
+    } catch {
+      // sessionStorage unavailable (private mode)
+    }
+  }, [predictView]);
+
+  // In-page hash navigation (e.g. a shared `/predict#community` link clicked
+  // while already on /predict) must flip the mode before useScrollToHash can
+  // find the target section.
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.replace(/^#/, "");
+      if (hash === "community") {
+        setPredictView("world");
+      } else if (WEEKLY_HASH_ANCHORS.includes(hash)) {
+        setPredictView("weekly");
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [setPredictView]);
+
+  useEffect(() => {
+    // Skip on mount: hash deep links / return-anchor restore own the
+    // initial scroll position.
+    if (skipModeScrollRestoreRef.current) {
+      skipModeScrollRestoreRef.current = false;
+      return;
+    }
+    const y = modeScrollPositions.current[predictView] ?? 0;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: y, behavior: "auto" });
+    });
+  }, [predictView]);
   const [myPositionsFilter, setMyPositionsFilterState] = useState<HubActivityFilter>(() =>
     readHubActivityFilter("predict", user?.id),
   );
@@ -1017,6 +1171,14 @@ export default function PredictPage() {
       return;
     }
     const [, section, marketId] = match;
+    if (section === "community" && predictView === "weekly") {
+      // Community card opened from the Weekly-mode teaser rail: the World
+      // section (and its category-pager handle) isn't mounted, but the same
+      // card testid exists in the rail — scroll straight to it instead of
+      // polling a ref that will never hydrate.
+      scrollToPredictAnchor(anchor);
+      return;
+    }
     const sectionRef =
       section === "weekly"
         ? updownSectionRef
@@ -1064,7 +1226,9 @@ export default function PredictPage() {
     return () => {
       cancelled = true;
     };
-  }, [location]);
+    // predictView listed for completeness; re-runs are no-ops because the
+    // anchor is consumed (removed from sessionStorage) on first read.
+  }, [location, predictView]);
 
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [weeklyOverlaySearchQuery, setWeeklyOverlaySearchQuery] = useState("");
@@ -1073,8 +1237,6 @@ export default function PredictPage() {
   const [h2hOverlayCategoryFilter, setH2hOverlayCategoryFilter] = useState<CategoryFilter>("all");
   const [gainersOverlaySearchQuery, setGainersOverlaySearchQuery] = useState("");
   const [gainersOverlayCategoryFilter, setGainersOverlayCategoryFilter] = useState<CategoryFilter>("all");
-  const [communityOverlaySearchQuery, setCommunityOverlaySearchQuery] = useState("");
-  const [communityOverlayCategoryFilter, setCommunityOverlayCategoryFilter] = useState<CategoryFilter>("all");
   
   // Section-specific filters
   const [updownCategory, setUpdownCategory] = useState<CategoryFilter>("all");
@@ -1087,7 +1249,7 @@ export default function PredictPage() {
   const [communitySearch, setCommunitySearch] = useState("");
   const [viewAllCategory, setViewAllCategory] = useState<PredictOverlayKey | null>(() => {
     const overlay = window.history.state?.overlay;
-    return overlay === "weekly" || overlay === "h2h" || overlay === "gainers" || overlay === "community"
+    return overlay === "weekly" || overlay === "h2h" || overlay === "gainers"
       ? overlay
       : null;
   });
@@ -1312,6 +1474,9 @@ export default function PredictPage() {
     nativeH2hData,
     nativeGainerData,
     openMarketsData,
+    // Sections mount per mode, so a hash target may only appear after the
+    // Weekly/World toggle flips — re-attempt the scroll when it does.
+    predictView,
   ]);
 
   const { serverBettingCutoff, serverResolutionDeadline } = useMemo(() => {
@@ -1780,10 +1945,6 @@ export default function PredictPage() {
         setGainersOverlaySearchQuery(gainerSearch);
         setGainersOverlayCategoryFilter(gainerCategory);
         break;
-      case "community":
-        setCommunityOverlaySearchQuery(communitySearch);
-        setCommunityOverlayCategoryFilter(communityCategory);
-        break;
     }
     window.history.pushState({ overlay: category }, "");
     setViewAllCategory(category);
@@ -1794,12 +1955,10 @@ export default function PredictPage() {
     h2hCategory,
     gainerSearch,
     gainerCategory,
-    communitySearch,
-    communityCategory,
   ]);
 
   const closePredictOverlay = useCallback(() => {
-    ["community", "weekly", "h2h", "gainers"].forEach(clearOverlayScroll);
+    ["weekly", "h2h", "gainers"].forEach(clearOverlayScroll);
     setViewAllCategory(null);
     window.history.back();
   }, []);
@@ -1815,8 +1974,7 @@ export default function PredictPage() {
         setViewAllCategory(
           overlayName === "weekly" ||
             overlayName === "h2h" ||
-            overlayName === "gainers" ||
-            overlayName === "community"
+            overlayName === "gainers"
             ? overlayName
             : null,
         );
@@ -2814,39 +2972,54 @@ export default function PredictPage() {
     }
   }, [gainersOverlayCategoryFilter, gainerCategoryFilters]);
 
-  useEffect(() => {
-    if (!communityCategoryFilters.some((c) => c.id === communityOverlayCategoryFilter)) {
-      setCommunityOverlayCategoryFilter("all");
-    }
-  }, [communityOverlayCategoryFilter, communityCategoryFilters]);
+  // Weekly-mode section pills (World Markets is a top-level mode now).
+  const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
+  const showNativePredictScope = predictView === "weekly";
+  const showWorldPredictScope = predictView === "world";
 
-  const filteredOverlayCommunity = useMemo(
+  // Open+live only, matching the teaser rail and feed filters — the raw
+  // array could disagree if the API ever returns a non-open row.
+  const liveWorldMarketCount = useMemo(
     () =>
-      filterCommunityMarkets(
-        openMarkets,
-        communityOverlayCategoryFilter,
-        communityOverlaySearchQuery,
-        favoriteIds,
-        passesMyPositionsFilter,
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      openMarkets,
-      communityOverlayCategoryFilter,
-      communityOverlaySearchQuery,
-      favoriteIds,
-      myPositionsFilter,
-      userBetsByMarket,
-    ],
+      openMarkets.filter(
+        (m: any) => m.status === "OPEN" && m.visibility === "live",
+      ).length,
+    [openMarkets],
   );
 
-  const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
-  const showNativePredictScope =
-    selectedType === "all" ||
-    selectedType === "jackpot" ||
-    selectedType === "updown" ||
-    selectedType === "h2h" ||
-    selectedType === "gainer";
+  const predictModeTabs = useMemo<ProfileTab[]>(
+    () => [
+      { id: "weekly", label: "Weekly", icon: TrendingUp, accent: "#8B5CF6" },
+      {
+        id: "world",
+        label: "World",
+        icon: Scale,
+        accent: "#10B981",
+        badge: liveWorldMarketCount > 0 ? liveWorldMarketCount : undefined,
+      },
+    ],
+    [liveWorldMarketCount],
+  );
+
+  // Teaser rail (Weekly mode): hottest / soonest-closing world markets.
+  // Soonest close first so urgency surfaces; trending as the tie-breaker.
+  // Markets closing within the hour are excluded so the rail never
+  // showcases a market that locks mid-session.
+  const worldTeaserMarkets = useMemo(() => {
+    const minClose = Date.now() + 60 * 60 * 1000;
+    const closeTime = (m: any) => new Date(m.closeAt || m.endAt || 0).getTime();
+    return openMarkets
+      .filter(
+        (m: any) =>
+          m.status === "OPEN" && m.visibility === "live" && closeTime(m) > minClose,
+      )
+      .sort((a: any, b: any) => {
+        const closeDiff = closeTime(a) - closeTime(b);
+        if (closeDiff !== 0) return closeDiff;
+        return communityTrendingCompare(a, b, openMarketPool(a), openMarketPool(b));
+      })
+      .slice(0, 4);
+  }, [openMarkets]);
 
   // Snap view shows the full category chip row, so it must receive items
   // across every category — not the main page's category-filtered list.
@@ -2995,52 +3168,75 @@ export default function PredictPage() {
         )}
       />
       <div data-testid="pre-timer-sticky-scope">
+      {/* Weekly / World mode toggle. Deliberately NOT sticky: the weekly
+          countdown hero and world chips own the scrolled sticky slot, so the
+          toggle adds zero permanent chrome. It sits full-width at the top
+          where mode decisions happen. */}
+      <div className="container mx-auto px-2 sm:px-4 pt-3 pb-2 max-w-7xl" data-testid="predict-mode-toggle">
+        <ProfileTabs
+          activeTab={predictView}
+          onTabChange={(tab) => setPredictView(tab as PredictView)}
+          noBottomMargin
+          tabs={predictModeTabs}
+        />
+      </div>
       <div
         className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
         data-testid="predict-section-filter-bar"
       >
-        <div className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3">
-          <HorizontalScroll className="pb-1 flex-1 min-w-0">
-            {user && !userBetsError && (
-              <button
-                type="button"
-                onClick={cycleMyPositionsFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                  myPositionsFilter === "show-mine"
-                    ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
-                    : myPositionsFilter === "hide-mine"
-                      ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
-                }`}
-                data-testid="toggle-my-positions-pill"
-              >
-                {myPositionsFilter === "hide-mine" ? (
-                  <EyeOff className="h-4 w-4 shrink-0" />
-                ) : (
-                  <ListChecks className="h-4 w-4 shrink-0" />
-                )}
-                {myPositionsFilter === "hide-mine"
-                  ? `Hidden (${activePredictions})`
-                  : `Positions (${activePredictions})`}
-              </button>
-            )}
-            {PREDICTION_TYPES.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setSelectedType(type.id)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                  selectedType === type.id
-                    ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
-                    : FILTER_INACTIVE_SECTION_TOGGLE
-                }`}
-                data-testid={`toggle-type-${type.id}`}
-              >
-                {type.icon}
-                <span className="sm:hidden">{type.mobileLabel}</span>
-                <span className="hidden sm:inline">{type.label}</span>
-              </button>
-            ))}
-          </HorizontalScroll>
+        <div
+          className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3"
+          data-testid="predict-contextual-filter-row"
+        >
+          {user && !userBetsError && predictView === "world" && (
+            <MyPositionsPill
+              filter={myPositionsFilter}
+              activeCount={activePredictions}
+              onClick={cycleMyPositionsFilter}
+              shrink
+            />
+          )}
+          {predictView === "weekly" ? (
+            <HorizontalScroll className="pb-1 flex-1 min-w-0">
+              {user && !userBetsError && (
+                <MyPositionsPill
+                  filter={myPositionsFilter}
+                  activeCount={activePredictions}
+                  onClick={cycleMyPositionsFilter}
+                />
+              )}
+              {PREDICTION_TYPES.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setSelectedType(type.id)}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    selectedType === type.id
+                      ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
+                      : FILTER_INACTIVE_SECTION_TOGGLE
+                  }`}
+                  data-testid={`toggle-type-${type.id}`}
+                >
+                  {type.icon}
+                  <span className="sm:hidden">{type.mobileLabel}</span>
+                  <span className="hidden sm:inline">{type.label}</span>
+                </button>
+              ))}
+            </HorizontalScroll>
+          ) : (
+            <div className="flex-1 min-w-0" data-testid="world-mode-filter-bar">
+              <SectionFilterBar
+                categoryFilter={communityCategory}
+                onCategoryChange={setCommunityCategory}
+                searchQuery={communitySearch}
+                onSearchChange={setCommunitySearch}
+                searchPlaceholder="Search predictions..."
+                testIdPrefix="community"
+                user={user}
+                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
+                filters={communityCategoryFilters}
+              />
+            </div>
+          )}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -3080,7 +3276,7 @@ export default function PredictPage() {
           Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
         </p>
       </div>
-      {selectedType === "all" && (
+      {predictView === "weekly" && selectedType === "all" && (
         <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
           <div className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
@@ -3652,68 +3848,63 @@ export default function PredictPage() {
             </div>
           </section>
         )}
+
+        {/* World Markets discovery funnel: compact teaser rail inside the
+            default Weekly view. The CTA flips the mode toggle to World. */}
+        {selectedType === "all" && (
+          <WorldMarketsTeaserRail
+            markets={worldTeaserMarkets}
+            liveCount={liveWorldMarketCount}
+            renderMarket={renderCommunityMarketCard}
+            onSeeAll={() => setPredictView("world")}
+          />
+        )}
         </div>
         )}
 
-        {showSection("community") && (
+        {showWorldPredictScope && (
           <div data-testid="world-markets-sticky-scope">
-            <WorldMarketsStickyHeader liveMarketCount={filteredCommunity.length} />
+            <WorldMarketsStickyHeader
+              liveMarketCount={filteredCommunity.length}
+              sticky={false}
+              actions={
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => setRulesModalOpen("community")}
+                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                        aria-label="How it works"
+                        data-testid="button-rules-real-world-markets"
+                      >
+                        <HelpCircle className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
+                  </Tooltip>
+                  <Button 
+                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
+                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
+                    data-testid="button-start-prediction"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Suggest
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
+                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
+                    aria-label="Open immersive browse"
+                    data-testid="button-snap-world-markets"
+                  >
+                    <Maximize2 className="h-5 w-5" aria-hidden />
+                  </button>
+                </>
+              }
+            />
             <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
-              <UnifiedSectionHeader
-                title="World Markets"
-                subtitle="Predict the outcome of global events"
-                icon={<Scale className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-                accent="violet"
-                testId="section-header-world-markets"
-                actions={
-                  <>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => setRulesModalOpen("community")}
-                          className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
-                          aria-label="How it works"
-                          data-testid="button-rules-real-world-markets"
-                        >
-                          <HelpCircle className="h-5 w-5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
-                    </Tooltip>
-                    <Button 
-                      onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
-                      className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
-                      data-testid="button-start-prediction"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Suggest
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
-                      className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
-                      aria-label="Open immersive browse"
-                      data-testid="button-snap-world-markets"
-                    >
-                      <Maximize2 className="h-5 w-5" aria-hidden />
-                    </button>
-                  </>
-                }
-              >
-                <SectionFilterBar
-                  categoryFilter={communityCategory}
-                  onCategoryChange={setCommunityCategory}
-                  searchQuery={communitySearch}
-                  onSearchChange={setCommunitySearch}
-                  searchPlaceholder="Search predictions..."
-                  testIdPrefix="community"
-                  user={user}
-                  onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                  filters={communityCategoryFilters}
-                />
-              </UnifiedSectionHeader>
               {openMarketsError ? (
                 <Card className="p-8 text-center">
                   <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
@@ -3773,7 +3964,8 @@ export default function PredictPage() {
                 ) : (
                   <CardSection
                     ref={communitySectionRef}
-                    desktopLimit={sectionDesktopLimit(communitySearch)}
+                    /* World mode owns the page — show the full feed, no preview cap. */
+                    desktopLimit={Number.POSITIVE_INFINITY}
                     gap="gap-4"
                     testIdPrefix="section-community"
                     dotActiveColor="bg-violet-500"
@@ -3803,18 +3995,6 @@ export default function PredictPage() {
                   )}
                 </div>
               )}
-              <div className="hidden md:block text-center mt-6">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
-                  onClick={() => openPredictOverlay("community")}
-                  data-testid="button-view-all-real-world"
-                >
-                  View All Markets
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
             </section>
           </div>
         )}
@@ -3962,44 +4142,6 @@ export default function PredictPage() {
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             {gainerEmptyMessage}
-          </div>
-        )}
-      </FullScreenOverlay>
-      <FullScreenOverlay
-        open={viewAllCategory === "community"}
-        onClose={closePredictOverlay}
-        title="All World Markets"
-        overlayName="community"
-        categoryFilter={communityOverlayCategoryFilter}
-        onCategoryChange={setCommunityOverlayCategoryFilter}
-        searchQuery={communityOverlaySearchQuery}
-        onSearchChange={setCommunityOverlaySearchQuery}
-        user={user}
-        onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-        categories={communityCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
-      >
-        {filteredOverlayCommunity.length > 0 ? (
-          filteredOverlayCommunity.map((market: any) => (
-            <OpenMarketCard
-              key={market.id}
-              market={market}
-              onNavigate={(slug, pick, direction) => setLocation(`/markets/${slug}${pick ? `?pick=${pick}${direction ? `&direction=${direction}` : ''}` : ''}`)}
-              onPickEntry={handleCommunityPickEntry}
-              isMarketClosed={market.status !== 'OPEN'}
-              userBetResult={userBetsByMarket.get(String(market.id))}
-              userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
-              onFilterCategory={(cat) => setCommunityOverlayCategoryFilter(normalizeMarketCategory(cat) as any)}
-              categoryRaceMap={raceMap}
-              leaderboardCategories={leaderboardCats}
-              unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
-            />
-          ))
-        ) : (
-          <div className="col-span-full text-center py-8 text-muted-foreground">
-            {communityOverlaySearchQuery.trim().length > 0 ||
-            communityOverlayCategoryFilter !== "all"
-              ? "No markets match your filters"
-              : "No markets available yet"}
           </div>
         )}
       </FullScreenOverlay>

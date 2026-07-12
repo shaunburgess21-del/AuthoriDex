@@ -1,11 +1,24 @@
+import type { ReactNode } from "react";
 import { Scale } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface WorldMarketsStickyHeaderProps {
   liveMarketCount?: number;
+  /**
+   * When true (legacy inline-section placement) the header sticks below the
+   * site header. World mode renders it non-sticky so the mode toggle +
+   * category chips keep the sticky slot while scrolling the feed.
+   */
+  sticky?: boolean;
+  /** Optional action buttons (rules, suggest, immersive browse). */
+  actions?: ReactNode;
 }
 
-export function WorldMarketsStickyHeader({ liveMarketCount = 0 }: WorldMarketsStickyHeaderProps) {
+export function WorldMarketsStickyHeader({
+  liveMarketCount = 0,
+  sticky = true,
+  actions,
+}: WorldMarketsStickyHeaderProps) {
   const liveLabel =
     liveMarketCount > 0
       ? `${liveMarketCount.toLocaleString("en-US")} live`
@@ -19,9 +32,9 @@ export function WorldMarketsStickyHeader({ liveMarketCount = 0 }: WorldMarketsSt
         paddingLeft: "calc(50vw - 50%)",
         paddingRight: "calc(50vw - 50%)",
       }}
-      className="sticky top-16 z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm"
+      className={`${sticky ? "sticky top-16" : ""} z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
       data-testid="world-markets-sticky-header"
-      data-sticky-predict-bar
+      {...(sticky ? { "data-sticky-predict-bar": true } : {})}
     >
       <div className="relative z-10 px-2 py-3 md:px-6 md:py-4">
         <div className="flex min-w-0 flex-row flex-nowrap items-center justify-center gap-3 md:justify-between md:gap-4">
@@ -40,12 +53,15 @@ export function WorldMarketsStickyHeader({ liveMarketCount = 0 }: WorldMarketsSt
             </p>
           </div>
 
-          <Badge
-            className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40"
-            data-testid="world-markets-sticky-live-badge"
-          >
-            {liveLabel}
-          </Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge
+              className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40"
+              data-testid="world-markets-sticky-live-badge"
+            >
+              {liveLabel}
+            </Badge>
+            {actions}
+          </div>
         </div>
       </div>
     </div>

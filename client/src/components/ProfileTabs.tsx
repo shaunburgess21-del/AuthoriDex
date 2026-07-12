@@ -1,4 +1,4 @@
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { Eye, Vote, TrendingUp } from "lucide-react";
 
 export interface ProfileTab {
@@ -6,6 +6,8 @@ export interface ProfileTab {
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   accent: string;
+  /** Optional small count chip rendered after the label (e.g. live market count). */
+  badge?: ReactNode;
 }
 
 interface ProfileTabsProps {
@@ -59,6 +61,21 @@ export function ProfileTabs({ activeTab, onTabChange, noBottomMargin, tabs }: Pr
                 style={isActive ? { color: tab.accent } : undefined}
               />
               {tab.label}
+              {tab.badge != null && (
+                <span
+                  className={`ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none ${
+                    isActive ? "" : "bg-muted text-muted-foreground"
+                  }`}
+                  style={
+                    isActive
+                      ? { backgroundColor: `${tab.accent}26`, color: tab.accent }
+                      : undefined
+                  }
+                  data-testid={`tab-${tab.id}-badge`}
+                >
+                  {tab.badge}
+                </span>
+              )}
             </button>
           );
         })}
