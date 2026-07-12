@@ -10788,6 +10788,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         header: req.header("Idempotency-Key"),
         body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
       });
+      // Same contract as /api/open-markets/:slug/bet and native bet routes:
+      // identified retries short-circuit via the ledger; unkeyed bursts hit 429.
+      if (!clientRequestId && !checkBetRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
+      }
       const result = await executeBuy({
         marketId: id,
         userId: req.userId!,
@@ -10861,6 +10866,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         header: req.header("Idempotency-Key"),
         body: (req.body as { idempotencyKey?: unknown })?.idempotencyKey,
       });
+      // Same contract as buy / open-markets / native bet routes: identified
+      // retries short-circuit via the ledger; unkeyed bursts hit 429.
+      if (!clientRequestId && !checkBetRateLimit(req.userId!)) {
+        return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
+      }
       const { parseSlippageBound } = await import("./services/amm-slippage");
       const minPricePerShare = parseSlippageBound(
         (req.body as { minPricePerShare?: unknown })?.minPricePerShare,

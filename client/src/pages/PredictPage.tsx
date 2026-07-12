@@ -2234,7 +2234,7 @@ export default function PredictPage() {
       marketId: market.id,
       entryId: entry.id,
       endAt: market.endAt,
-      bettingCutoff: null,
+      bettingCutoff: market.closeAt ?? market.endAt ?? null,
       direction,
       openMarketType: market.openMarketType ?? null,
       isTopUp,

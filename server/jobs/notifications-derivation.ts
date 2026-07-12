@@ -545,7 +545,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
     const timing = closingSoonTimingLabel(now, earliest);
     const title =
       variant === "amm"
-        ? `Resolves in ${timing} — last chance to trade`
+        ? `Trading closes in ${timing} — last chance`
         : variant === "jackpot"
           ? `Entries close in ${timing}`
           : `Predictions close in ${timing}`;
@@ -569,7 +569,7 @@ async function deriveMarketClosingSoon(): Promise<number> {
         variant === "jackpot"
           ? `Entries close soon on ${count} predictions — tap to review`
           : variant === "amm"
-            ? `${count} markets resolve soon — tap to review`
+            ? `${count} markets close soon — last chance to trade`
             : `Predictions close soon on ${count} markets — tap to review`;
       href = "/predict";
       entityType = "market_digest";

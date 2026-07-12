@@ -39,6 +39,7 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
@@ -1946,7 +1947,7 @@ export default function MarketDetailPage() {
               </div>
             </div>
 
-            {(market.resolutionSummary?.outcomeLabel || market.resolutionSummary?.notesText || market.resolutionSummary?.aiSummary || market.voidReason) && (
+            {(market.resolutionSummary?.outcomeLabel || market.resolutionSummary?.notesText || market.resolutionSummary?.aiSummary || market.voidReason || market.status === "RESOLVED") && (
               <div className="rounded-lg border border-border/50 bg-background/40 px-4 py-3 mb-4">
                 {market.resolutionSummary?.outcomeLabel && (
                   <p className="text-sm">
@@ -1963,6 +1964,30 @@ export default function MarketDetailPage() {
                   <p className="text-sm italic text-muted-foreground mt-1" data-testid="text-ai-resolution-summary">
                     {market.resolutionSummary.aiSummary}
                   </p>
+                )}
+                {market.status === "RESOLVED" && (
+                  <p className="text-xs text-muted-foreground mt-2" data-testid="text-resolve-method">
+                    {market.resolveMethod === "admin_manual"
+                      ? "Resolved by admin"
+                      : "Auto-resolved"}
+                    {market.resolvedAt
+                      ? ` · ${new Date(market.resolvedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}`
+                      : ""}
+                  </p>
+                )}
+                {market.resolutionSources && market.resolutionSources.length > 0 && (
+                  <a
+                    href="#resolution-sources"
+                    className="inline-flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 mt-2 transition-colors"
+                    data-testid="link-see-resolution-sources"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    See sources
+                  </a>
                 )}
               </div>
             )}
@@ -2208,46 +2233,48 @@ export default function MarketDetailPage() {
           </Card>
         )}
 
-        {((market.resolutionCriteria && market.resolutionCriteria.length > 0) ||
-          (market.resolutionSources && market.resolutionSources.length > 0)) && (
-          <Card className="p-5 mb-6" data-testid="section-resolution-rules">
+        {/* Native-parity "How this resolves" — World Markets (community)
+            only. Jackpot keeps its own weekly rules UX. Criteria + cutoff
+            / results / void story live here; the Sources card below is
+            link-only to avoid duplicating criteria. */}
+        {market.marketType === "community" && !isJackpotMarket && (
+          <div className="mb-6" data-testid="section-how-this-resolves">
+            <MarketResolutionInfo
+              mode="community"
+              engine="amm"
+              bettingCutoff={market.closeAt || market.endAt || null}
+              closeTime={
+                market.endAt
+                  ? new Date(market.endAt).toUTCString().replace(/ GMT$/, " UTC")
+                  : undefined
+              }
+              resolutionCriteria={market.resolutionCriteria}
+              resolveMethod={market.resolveMethod ?? undefined}
+            />
+          </div>
+        )}
+
+        {market.resolutionSources && market.resolutionSources.length > 0 && (
+          <Card className="p-5 mb-6" id="resolution-sources" data-testid="section-resolution-sources">
             <h2 className="text-lg font-serif font-bold mb-3 flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-violet-700 dark:text-violet-500" />
-              Resolution Rules
+              Sources
             </h2>
-            {market.resolutionCriteria && market.resolutionCriteria.length > 0 && (
-              <div className="mb-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Criteria</p>
-                <ul className="space-y-1.5">
-                  {market.resolutionCriteria.map((criterion, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-violet-700 dark:text-violet-500 shrink-0 mt-0.5" />
-                      <span>{criterion}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {market.resolutionSources && market.resolutionSources.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Sources</p>
-                <div className="flex flex-col gap-1.5">
-                  {market.resolutionSources.map((source, i) => (
-                    <a
-                      key={i}
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
-                      data-testid={`link-resolution-source-${i}`}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                      {source.label}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="flex flex-col gap-1.5">
+              {market.resolutionSources.map((source, i) => (
+                <a
+                  key={i}
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
+                  data-testid={`link-resolution-source-${i}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  {source.label}
+                </a>
+              ))}
+            </div>
           </Card>
         )}
 

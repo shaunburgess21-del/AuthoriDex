@@ -46,8 +46,8 @@ interface MarketResolutionInfoProps {
   person2Name?: string;
   /** Race only — category label (e.g. "Athletes", "Musicians"). */
   categoryLabel?: string;
-  /** Community only — caller-supplied free-form Yes/No criteria. */
-  resolutionCriteria?: string;
+  /** Community only — free-form criteria (single string or bullet list). */
+  resolutionCriteria?: string | string[] | null;
   /**
    * Engine of the underlying market. AMM is the default verb
    * ("Trading closes"); jackpot keeps "Entries close" by passing
@@ -55,6 +55,15 @@ interface MarketResolutionInfoProps {
    */
   engine?: "amm" | "parimutuel";
   compact?: boolean;
+}
+
+function normalizeCriteriaList(criteria?: string | string[] | null): string[] {
+  if (!criteria) return [];
+  if (typeof criteria === "string") {
+    const trimmed = criteria.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return criteria.map((c) => c.trim()).filter(Boolean);
 }
 
 function formatScore(n: number): string {
@@ -104,10 +113,15 @@ export function MarketResolutionInfo({
   compact = false,
 }: MarketResolutionInfoProps) {
   const tieLabel = TIE_RULE_LABELS[tieRule] || "All positions refunded";
+  const communityCriteria = normalizeCriteriaList(resolutionCriteria);
   const resolutionLabel =
-    resolveMethod === "admin_manual"
-      ? "Admin resolution"
-      : "Auto-calculated from VoxDex trend engine";
+    mode === "community"
+      ? resolveMethod === "admin_manual"
+        ? "Resolved by admin from listed sources"
+        : "Settled from the market's resolution criteria"
+      : resolveMethod === "admin_manual"
+        ? "Admin resolution"
+        : "Auto-calculated from VoxDex trend engine";
   const predictionsCloseLabel = formatBettingCutoffUtc(bettingCutoff) ?? BETTING_CUTOFF_FALLBACK;
   const resultsLabel = closeTime || "Sun 23:59 UTC";
   const isAmm = engine === "amm";
@@ -154,15 +168,20 @@ export function MarketResolutionInfo({
     if (mode === "community") {
       return (
         <>
-          {resolutionCriteria ? (
-            <Bullet icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
-              <span>{resolutionCriteria}</span>
-            </Bullet>
+          {communityCriteria.length > 0 ? (
+            communityCriteria.map((criterion, i) => (
+              <Bullet key={i} icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
+                <span>{criterion}</span>
+              </Bullet>
+            ))
           ) : (
             <Bullet icon={<CheckCircle className="h-3.5 w-3.5 text-violet-500" />}>
-              <span>Resolves Yes / No based on the market description.</span>
+              <span>Resolves based on the market description and listed sources.</span>
             </Bullet>
           )}
+          <Bullet icon={<RefreshCw className="h-3.5 w-3.5" />}>
+            <span>Void = all positions refunded</span>
+          </Bullet>
         </>
       );
     }
@@ -246,11 +265,26 @@ export function MarketResolutionInfo({
             Highest % gain in Trend Score by close wins.
           </p>
         )}
-        {mode === "community" && resolutionCriteria && (
-          <p>
-            <CheckCircle className="inline h-3 w-3 text-violet-500 mr-1" />
-            {resolutionCriteria}
-          </p>
+        {mode === "community" && (
+          <>
+            {communityCriteria.length > 0 ? (
+              communityCriteria.map((criterion, i) => (
+                <p key={i}>
+                  <CheckCircle className="inline h-3 w-3 text-violet-500 mr-1" />
+                  {criterion}
+                </p>
+              ))
+            ) : (
+              <p>
+                <CheckCircle className="inline h-3 w-3 text-violet-500 mr-1" />
+                Resolves based on the market description and listed sources.
+              </p>
+            )}
+            <p>
+              <RefreshCw className="inline h-3 w-3 mr-1" />
+              Void = all positions refunded
+            </p>
+          </>
         )}
       </div>
     );
