@@ -413,9 +413,9 @@ export interface InsightsTrendingPollRow {
   slug: string | null;
   category: string | null;
   totalVotes: number;
-  approvePercent: number;
+  agreePercent: number;
   neutralPercent: number;
-  disapprovePercent: number;
+  disagreePercent: number;
   personName: string | null;
   personAvatar: string | null;
   /** Poll topic image when no linked person (same field as main Vote page). */

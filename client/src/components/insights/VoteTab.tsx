@@ -628,7 +628,7 @@ function SentimentLegend() {
     <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
       <span className="inline-flex items-center gap-1">
         <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" aria-hidden />
-        Approve
+        Agree
       </span>
       <span className="inline-flex items-center gap-1">
         <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
@@ -636,18 +636,18 @@ function SentimentLegend() {
       </span>
       <span className="inline-flex items-center gap-1">
         <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden />
-        Oppose
+        Disagree
       </span>
     </div>
   );
 }
 
 function sentimentCloseness(p: InsightsTrendingPollRow): number {
-  return Math.abs(p.approvePercent - p.disapprovePercent);
+  return Math.abs(p.agreePercent - p.disagreePercent);
 }
 
 function sentimentDominance(p: InsightsTrendingPollRow): number {
-  return Math.max(p.approvePercent, p.neutralPercent, p.disapprovePercent);
+  return Math.max(p.agreePercent, p.neutralPercent, p.disagreePercent);
 }
 
 function useSentimentPollRows() {
@@ -665,12 +665,12 @@ function SentimentSplitBar({ poll }: { poll: InsightsTrendingPollRow }) {
   return (
     <div className="mt-2 flex items-center gap-1.5 sm:gap-2 text-[10px] tabular-nums min-w-0">
       <span className="shrink-0 font-semibold text-green-600 dark:text-green-400 w-[26px] text-right">
-        {poll.approvePercent}%
+        {poll.agreePercent}%
       </span>
       <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60">
         <div
           className="h-full bg-green-500/70"
-          style={{ width: `${poll.approvePercent}%` }}
+          style={{ width: `${poll.agreePercent}%` }}
         />
         <div
           className="h-full bg-slate-400/40"
@@ -678,11 +678,11 @@ function SentimentSplitBar({ poll }: { poll: InsightsTrendingPollRow }) {
         />
         <div
           className="h-full bg-red-500/70"
-          style={{ width: `${poll.disapprovePercent}%` }}
+          style={{ width: `${poll.disagreePercent}%` }}
         />
       </div>
       <span className="shrink-0 font-semibold text-red-500 w-[26px]">
-        {poll.disapprovePercent}%
+        {poll.disagreePercent}%
       </span>
     </div>
   );
@@ -1325,7 +1325,7 @@ export function VoteTab() {
               <Scale className="h-4 w-4 text-amber-500" /> Closest sentiment splits
             </span>
           }
-          description="Sentiment polls with the closest approve-vs-oppose split."
+          description="Sentiment polls with the closest agree-vs-disagree split."
           action={<SentimentLegend />}
         >
           <SentimentPulseTile />

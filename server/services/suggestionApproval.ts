@@ -156,9 +156,9 @@ type SentimentPollAdminPayload = {
   slug: string;
   visibility: string;
   featured: boolean;
-  seedSupportCount: number;
+  seedAgreeCount: number;
   seedNeutralCount: number;
-  seedOpposeCount: number;
+  seedDisagreeCount: number;
   visibleCountries: string[];
 };
 
@@ -178,9 +178,9 @@ export function translateSentimentPollPayload(
     slug: generateSlug(String(userPayload.headline ?? "poll")),
     visibility: "draft",
     featured: false,
-    seedSupportCount: 0,
+    seedAgreeCount: 0,
     seedNeutralCount: 0,
-    seedOpposeCount: 0,
+    seedDisagreeCount: 0,
     visibleCountries: resolveVisibleCountries(userPayload, adminOverrides),
   };
   return mergeOverrides(base, adminOverrides);
@@ -498,9 +498,9 @@ export async function dispatchApproval(
           timeline: p.timeline,
           deadlineAt: p.deadlineAt,
           imageUrl: p.imageUrl,
-          seedSupportCount: p.seedSupportCount,
+          seedAgreeCount: p.seedAgreeCount,
           seedNeutralCount: p.seedNeutralCount,
-          seedOpposeCount: p.seedOpposeCount,
+          seedDisagreeCount: p.seedDisagreeCount,
           slug: p.slug,
           featured: p.featured,
           visibility: p.visibility,

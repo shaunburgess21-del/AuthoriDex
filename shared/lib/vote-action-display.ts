@@ -4,6 +4,7 @@
 
 import type { LedgerMetadata } from "./credit-history-display";
 import { metaString } from "./credit-history-display";
+import { getSentimentPollChoiceLabel } from "./sentiment-poll-choice";
 
 export interface VoteActionDisplayFields {
   displayTitle: string;
@@ -152,7 +153,7 @@ export function buildVoteActionDisplay(
     }
     case "trending_poll": {
       const headline = context.pollHeadline ?? "Poll";
-      const choice = value ? value.charAt(0).toUpperCase() + value.slice(1) : null;
+      const choice = value ? getSentimentPollChoiceLabel(value) : null;
       displayTitle = choice ? `${headline} (${choice})` : headline;
       href = context.trendingPollSlug
         ? `/polls/${context.trendingPollSlug}`

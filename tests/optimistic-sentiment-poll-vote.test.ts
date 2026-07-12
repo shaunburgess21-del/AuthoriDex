@@ -3,23 +3,23 @@ import { optimisticSentimentVotePatch } from "../client/src/lib/optimisticSentim
 
 const base = {
   userVote: null as string | null,
-  supportCount: 10,
+  agreeCount: 10,
   neutralCount: 5,
-  opposeCount: 5,
+  disagreeCount: 5,
   totalVotes: 20,
-  approvePercent: 50,
+  agreePercent: 50,
   neutralPercent: 25,
-  disapprovePercent: 25,
+  disagreePercent: 25,
 };
 
-assert.equal(optimisticSentimentVotePatch(base, "support").userVote, "support");
-assert.equal(optimisticSentimentVotePatch(base, "support").supportCount, 11);
-assert.equal(optimisticSentimentVotePatch(base, "support").totalVotes, 21);
+assert.equal(optimisticSentimentVotePatch(base, "agree").userVote, "agree");
+assert.equal(optimisticSentimentVotePatch(base, "agree").agreeCount, 11);
+assert.equal(optimisticSentimentVotePatch(base, "agree").totalVotes, 21);
 
-const voted = optimisticSentimentVotePatch({ ...base, userVote: "support" }, "oppose");
-assert.equal(voted.userVote, "oppose");
-assert.equal(voted.supportCount, 9);
-assert.equal(voted.opposeCount, 6);
+const voted = optimisticSentimentVotePatch({ ...base, userVote: "agree" }, "disagree");
+assert.equal(voted.userVote, "disagree");
+assert.equal(voted.agreeCount, 9);
+assert.equal(voted.disagreeCount, 6);
 assert.equal(voted.totalVotes, 20);
 
 console.log("optimistic-sentiment-poll-vote.test.ts: ok");

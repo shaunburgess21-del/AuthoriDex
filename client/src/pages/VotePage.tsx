@@ -872,7 +872,7 @@ function DiscourseCard({
   categoryMenuDisabled = false,
 }: {
   topic: any;
-  onVote: (choice: 'support' | 'neutral' | 'oppose') => Promise<void>;
+  onVote: (choice: 'agree' | 'neutral' | 'disagree') => Promise<void>;
   onFilterCategory: (category: string) => void;
   categoryRaceMap: Map<string, string>;
   leaderboardCategories?: Set<string>;
@@ -882,7 +882,7 @@ function DiscourseCard({
   enableDiscussion?: boolean;
   categoryMenuDisabled?: boolean;
 }) {
-  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(topic.userVote || null);
+  const [voted, setVoted] = useState<'agree' | 'neutral' | 'disagree' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!topic.slug;
@@ -908,7 +908,7 @@ function DiscourseCard({
     }
   };
 
-  const handleVote = async (choice: 'support' | 'neutral' | 'oppose') => {
+  const handleVote = async (choice: 'agree' | 'neutral' | 'disagree') => {
     if (voted) return;
     const prev = voted;
     setVoted(choice);
@@ -1011,12 +1011,12 @@ function DiscourseCard({
       {!voted ? (
         <div className="flex flex-col gap-3 mt-auto">
           <button
-            onClick={() => handleVote('support')}
+            onClick={() => handleVote('agree')}
             className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-            data-testid={`button-support-${topic.id}`}
+            data-testid={`button-agree-${topic.id}`}
           >
             <ThumbsUp className="h-4 w-4 shrink-0" />
-            <span>Support</span>
+            <span>{getSentimentPollChoiceLabel("agree")}</span>
           </button>
           <button
             onClick={() => handleVote('neutral')}
@@ -1024,41 +1024,41 @@ function DiscourseCard({
             data-testid={`button-neutral-${topic.id}`}
           >
             <Minus className="h-4 w-4 shrink-0" />
-            <span>Neutral</span>
+            <span>{getSentimentPollChoiceLabel("neutral")}</span>
           </button>
           <button
-            onClick={() => handleVote('oppose')}
+            onClick={() => handleVote('disagree')}
             className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-            data-testid={`button-oppose-${topic.id}`}
+            data-testid={`button-disagree-${topic.id}`}
           >
             <ThumbsDown className="h-4 w-4 shrink-0" />
-            <span>Oppose</span>
+            <span>{getSentimentPollChoiceLabel("disagree")}</span>
           </button>
         </div>
       ) : (
         <>
         <div className="flex flex-col gap-5 md:gap-3 my-auto md:mt-auto">
           <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("support") }} />
+            <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("agree") }} />
             <span
-              className="text-sm w-16 shrink-0 font-medium"
-              style={{ color: getSentimentPollChoiceColor("support") }}
+              className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
+              style={{ color: getSentimentPollChoiceColor("agree") }}
             >
-              {getSentimentPollChoiceLabel("support")}
+              {getSentimentPollChoiceLabel("agree")}
             </span>
             <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#00C853] rounded-full transition-all duration-500"
-                style={{ width: `${topic.approvePercent}%` }}
+                style={{ width: `${topic.agreePercent}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{topic.approvePercent}%</span>
+            <span className="text-sm text-muted-foreground w-10 text-right">{topic.agreePercent}%</span>
           </div>
           
           <div className="flex items-center gap-3">
             <Minus className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("neutral") }} />
             <span
-              className="text-sm w-16 shrink-0 font-medium"
+              className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
               style={{ color: getSentimentPollChoiceColor("neutral") }}
             >
               {getSentimentPollChoiceLabel("neutral")}
@@ -1073,20 +1073,20 @@ function DiscourseCard({
           </div>
           
           <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("oppose") }} />
+            <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("disagree") }} />
             <span
-              className="text-sm w-16 shrink-0 font-medium"
-              style={{ color: getSentimentPollChoiceColor("oppose") }}
+              className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
+              style={{ color: getSentimentPollChoiceColor("disagree") }}
             >
-              {getSentimentPollChoiceLabel("oppose")}
+              {getSentimentPollChoiceLabel("disagree")}
             </span>
             <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
               <div 
                 className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
-                style={{ width: `${topic.disapprovePercent}%` }}
+                style={{ width: `${topic.disagreePercent}%` }}
               />
             </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{topic.disapprovePercent}%</span>
+            <span className="text-sm text-muted-foreground w-10 text-right">{topic.disagreePercent}%</span>
           </div>
         </div>
 
@@ -2732,7 +2732,7 @@ export default function VotePage() {
 
   const handleDiscourseVote = async (
     topicId: string,
-    choice: 'support' | 'neutral' | 'oppose',
+    choice: 'agree' | 'neutral' | 'disagree',
   ): Promise<void> => {
     // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
     // removed; anon users with remaining budget now hit the server.

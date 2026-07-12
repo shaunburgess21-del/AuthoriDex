@@ -324,7 +324,7 @@ export default function AdminDashboard() {
   const [matchupsViewMode, setMatchupsViewModeRaw] = useState<"cards" | "table">(() => (sessionStorage.getItem("admin_matchups_view") as "cards" | "table") || "cards");
   const setMatchupsViewMode = (m: "cards" | "table") => { sessionStorage.setItem("admin_matchups_view", m); setMatchupsViewModeRaw(m); };
 
-  const [pollSeedEdits, setPollSeedEdits] = useState<Record<string, { seedSupportCount: number; seedNeutralCount: number; seedOpposeCount: number }>>({});
+  const [pollSeedEdits, setPollSeedEdits] = useState<Record<string, { seedAgreeCount: number; seedNeutralCount: number; seedDisagreeCount: number }>>({});
   const [matchupSeedEdits, setMatchupSeedEdits] = useState<Record<string, { seedVotesA: number; seedVotesB: number }>>({});
   const [opinionSeedEdits, setOpinionSeedEdits] = useState<Record<string, { options: { name: string; imageUrl: string; personId: string; seedCount: number }[] }>>({});
   const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
@@ -487,9 +487,9 @@ export default function AdminDashboard() {
     timeline: "",
     deadlineAt: "",
     imageUrl: "",
-    seedSupportCount: 0,
+    seedAgreeCount: 0,
     seedNeutralCount: 0,
-    seedOpposeCount: 0,
+    seedDisagreeCount: 0,
     slug: "",
     featured: false,
     visibility: "draft" as "draft" | "live" | "inactive" | "archived",
@@ -2329,9 +2329,9 @@ export default function AdminDashboard() {
       timeline: "",
       deadlineAt: "",
       imageUrl: "",
-      seedSupportCount: 0,
+      seedAgreeCount: 0,
       seedNeutralCount: 0,
-      seedOpposeCount: 0,
+      seedDisagreeCount: 0,
       slug: "",
       featured: false,
       visibility: "draft",
@@ -2388,9 +2388,9 @@ export default function AdminDashboard() {
       timeline: poll.timeline || "",
       deadlineAt: dateToLocal(poll.deadlineAt),
       imageUrl: poll.imageUrl || "",
-      seedSupportCount: poll.seedSupportCount,
+      seedAgreeCount: poll.seedAgreeCount,
       seedNeutralCount: poll.seedNeutralCount,
-      seedOpposeCount: poll.seedOpposeCount,
+      seedDisagreeCount: poll.seedDisagreeCount,
       slug: poll.slug || "",
       featured: poll.featured ?? false,
       visibility: vis,
@@ -3950,9 +3950,9 @@ export default function AdminDashboard() {
                               <th className="py-2 px-3 font-medium">Headline</th>
                               <th className="py-2 px-3 font-medium">Category</th>
                               <th className="py-2 px-3 font-medium">Visibility</th>
-                              <th className="py-2 px-3 font-medium text-right">Seed Support</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed Agree</th>
                               <th className="py-2 px-3 font-medium text-right">Seed Neutral</th>
-                              <th className="py-2 px-3 font-medium text-right">Seed Oppose</th>
+                              <th className="py-2 px-3 font-medium text-right">Seed Disagree</th>
                               <th className="py-2 px-3 font-medium text-right">Actions</th>
                             </tr>
                           </thead>
@@ -3981,15 +3981,15 @@ export default function AdminDashboard() {
                                     <Input
                                       type="number"
                                       className="w-20 h-7 text-xs text-right ml-auto"
-                                      value={edits?.seedSupportCount ?? poll.seedSupportCount ?? 0}
+                                      value={edits?.seedAgreeCount ?? poll.seedAgreeCount ?? 0}
                                       onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
                                         setPollSeedEdits(prev => ({
                                           ...prev,
                                           [poll.id]: {
-                                            seedSupportCount: val,
+                                            seedAgreeCount: val,
                                             seedNeutralCount: prev[poll.id]?.seedNeutralCount ?? poll.seedNeutralCount ?? 0,
-                                            seedOpposeCount: prev[poll.id]?.seedOpposeCount ?? poll.seedOpposeCount ?? 0,
+                                            seedDisagreeCount: prev[poll.id]?.seedDisagreeCount ?? poll.seedDisagreeCount ?? 0,
                                           },
                                         }));
                                       }}
@@ -4005,9 +4005,9 @@ export default function AdminDashboard() {
                                         setPollSeedEdits(prev => ({
                                           ...prev,
                                           [poll.id]: {
-                                            seedSupportCount: prev[poll.id]?.seedSupportCount ?? poll.seedSupportCount ?? 0,
+                                            seedAgreeCount: prev[poll.id]?.seedAgreeCount ?? poll.seedAgreeCount ?? 0,
                                             seedNeutralCount: val,
-                                            seedOpposeCount: prev[poll.id]?.seedOpposeCount ?? poll.seedOpposeCount ?? 0,
+                                            seedDisagreeCount: prev[poll.id]?.seedDisagreeCount ?? poll.seedDisagreeCount ?? 0,
                                           },
                                         }));
                                       }}
@@ -4017,15 +4017,15 @@ export default function AdminDashboard() {
                                     <Input
                                       type="number"
                                       className="w-20 h-7 text-xs text-right ml-auto"
-                                      value={edits?.seedOpposeCount ?? poll.seedOpposeCount ?? 0}
+                                      value={edits?.seedDisagreeCount ?? poll.seedDisagreeCount ?? 0}
                                       onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
                                         setPollSeedEdits(prev => ({
                                           ...prev,
                                           [poll.id]: {
-                                            seedSupportCount: prev[poll.id]?.seedSupportCount ?? poll.seedSupportCount ?? 0,
+                                            seedAgreeCount: prev[poll.id]?.seedAgreeCount ?? poll.seedAgreeCount ?? 0,
                                             seedNeutralCount: prev[poll.id]?.seedNeutralCount ?? poll.seedNeutralCount ?? 0,
-                                            seedOpposeCount: val,
+                                            seedDisagreeCount: val,
                                           },
                                         }));
                                       }}
@@ -9179,14 +9179,14 @@ export default function AdminDashboard() {
               <p className="text-xs text-muted-foreground">Pre-populate display counts (not real vote rows)</p>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="poll-seed-support" className="text-xs">Support</Label>
+                  <Label htmlFor="poll-seed-agree" className="text-xs">Agree</Label>
                   <Input
-                    id="poll-seed-support"
+                    id="poll-seed-agree"
                     type="number"
                     min="0"
-                    value={pollForm.seedSupportCount}
-                    onChange={(e) => setPollForm({ ...pollForm, seedSupportCount: parseInt(e.target.value) || 0 })}
-                    data-testid="input-poll-seed-support"
+                    value={pollForm.seedAgreeCount}
+                    onChange={(e) => setPollForm({ ...pollForm, seedAgreeCount: parseInt(e.target.value) || 0 })}
+                    data-testid="input-poll-seed-agree"
                   />
                 </div>
                 <div className="space-y-1">
@@ -9201,14 +9201,14 @@ export default function AdminDashboard() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="poll-seed-oppose" className="text-xs">Oppose</Label>
+                  <Label htmlFor="poll-seed-disagree" className="text-xs">Disagree</Label>
                   <Input
-                    id="poll-seed-oppose"
+                    id="poll-seed-disagree"
                     type="number"
                     min="0"
-                    value={pollForm.seedOpposeCount}
-                    onChange={(e) => setPollForm({ ...pollForm, seedOpposeCount: parseInt(e.target.value) || 0 })}
-                    data-testid="input-poll-seed-oppose"
+                    value={pollForm.seedDisagreeCount}
+                    onChange={(e) => setPollForm({ ...pollForm, seedDisagreeCount: parseInt(e.target.value) || 0 })}
+                    data-testid="input-poll-seed-disagree"
                   />
                 </div>
               </div>

@@ -194,7 +194,7 @@ const SURFACE_TONE: Record<CommentContext["surface"], string> = {
   matchup:
     "Surface tone: this is a head-to-head opinion vote between two people. Talk about THE PEOPLE — what they've done, who you back, why. Light competitive framing is fine. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
   trending_poll:
-    "Surface tone: this is a sentiment poll (Support / Neutral / Oppose). React to the topic itself the way you would on X — share your gut take, why you feel that way, maybe a little dry wit if it lands. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
+    "Surface tone: this is a sentiment poll (Agree / Neutral / Disagree). React to the topic itself the way you would on X — share your gut take, why you feel that way, maybe a little dry wit if it lands. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
   opinion_poll:
     "Surface tone: this is an opinion poll. React to the topic the way you would on X — your view, why, maybe some dry humour. Do NOT use trading or market language (no 'price', 'odds', 'edge', 'EV', 'value', 'priced', 'lines', 'mispriced'). There is no money on this.",
   open_market:
@@ -285,7 +285,7 @@ function pickImperfection(): string | null {
  * This dice roll picks a hard constraint per comment. We bias hard toward
  * direct openers because the vote badge already announces which option the
  * agent picked — soft "I chose X" / "X gets my vote" openers are functionally
- * identical to the bare label opener ('Support.', 'Oppose:') we already ban.
+ * identical to the bare label opener ('Agree.', 'Disagree:') we already ban.
  *   - 78% direct opener (lead with take/subject, no vote-announce)
  *   - 15% personal lean opener (soft personal framing, NEVER vote-announcing)
  *   - 7%  no constraint (model picks freely)
@@ -377,7 +377,7 @@ function buildSystemPrompt(
     "- EMOJIS: at most ONE emoji, only if it genuinely fits, and only at the END of the comment as casual punctuation (e.g. 'Iron Mike is great, but Ali is the greatest 🐐' or 'Coffee in the morning ☕ tea at night 🌙'). Default is NO emoji. Never sprinkle multiple, never use emojis to replace words, never start with one. ~80%+ of comments should have zero emojis.",
     "- Do not wrap your comment in quotes.",
     "- Do not prefix the comment with your username, display name, or any 'name:' label.",
-    "- Do NOT open the comment by announcing your vote with a label word. Words like 'Support.', 'Support —', 'Oppose:', 'Neutral.', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden — those are the labels under the badge, not how a person talks. (Note: opening with the actual subject like 'No, Ali had to go through so many of them...' is fine — it's the standalone label-as-opener that's banned.) The UI already shows your vote with a coloured badge next to your name.",
+    "- Do NOT open the comment by announcing your vote with a label word. Words like 'Agree.', 'Agree —', 'Disagree:', 'Neutral.', 'Support.', 'Oppose:', 'Approve:', 'Disapprove —', 'Yes,', 'No,' as the FIRST word of the comment are forbidden — those are the labels under the badge, not how a person talks. (Note: opening with the actual subject like 'No, Ali had to go through so many of them...' is fine — it's the standalone label-as-opener that's banned.) The UI already shows your vote with a coloured badge next to your name.",
     "- Do NOT open the comment by announcing which option you picked, even in soft personal phrasing. Forbidden opener forms include 'X gets my vote', 'X is my pick', 'X for me', 'I'm going with X', 'I chose X', 'I went with X', 'I back X', 'I picked X', 'I'd choose X', 'For me, X is…' as the first words of the comment. The vote badge already shows your pick — announcing it again is redundant and reads as bot-like. You may mention your chosen option naturally later in the comment if it fits, just don't lead with the announcement. Lead with the SUBSTANCE instead: instead of 'Princeton gets my vote. It's one of the few where the undergrad side still feels like a priority.' just write 'Princeton is one of the few where the undergrad side still feels like a priority.'",
     "- OPENERS — vary how you start, almost never announce your vote. About 75–80% of the time, lead with the take or the subject directly. The remaining 15–20% can use a soft personal LEAN (not a vote-announce). Both patterns are normal:",
     "    Direct opener (default, ~75-80%): 'Princeton is the one where undergrad still feels like a priority.' / 'Burger every time, hits harder.' / 'Spain by a mile.' / 'Spicy food is my favourite.' / 'Rivian is best-looking by far.' / 'Definitely not!' / 'Blue for sure, grey is a solid second.' / 'Yeah, people just catch the clips now.' / 'Pretty much over already, the comeback feels too forced.'",
@@ -475,8 +475,12 @@ function formatExistingComments(comments: ReadonlyArray<{ body: string }>): stri
 
 function trendingChoiceLabel(choice: string): string {
   const c = choice.toLowerCase();
-  if (c === "support") return "support (you back this side — comment must clearly read as supportive)";
-  if (c === "oppose") return "oppose (you are against this — comment must clearly read as opposed)";
+  if (c === "agree" || c === "support" || c === "approve") {
+    return "agree (you side with this claim — comment must clearly read as agreeing)";
+  }
+  if (c === "disagree" || c === "oppose" || c === "disapprove") {
+    return "disagree (you reject this claim — comment must clearly read as disagreeing)";
+  }
   if (c === "neutral") return "neutral (mixed feelings — comment should read balanced or undecided)";
   return choice;
 }
@@ -507,7 +511,7 @@ function buildMatchupUserPrompt(ctx: MatchupContext): string {
 
 function buildTrendingPollUserPrompt(ctx: TrendingPollContext): string {
   const lines: string[] = [];
-  lines.push("Surface: sentiment poll (community votes Support / Neutral / Oppose).");
+  lines.push("Surface: sentiment poll (community votes Agree / Neutral / Disagree).");
   lines.push(`Headline: ${ctx.headline}`);
   if (ctx.category) lines.push(`Category: ${ctx.category}`);
   lines.push(`Subject: ${ctx.subjectText}`);
@@ -693,14 +697,14 @@ function sanitise(
     text = text.replace(pattern, "");
   }
 
-  // Strip a leading vote-label opener like "Support.", "Oppose —", "Neutral:",
-  // "Approve,", "Disapprove —". The vote already appears as a coloured badge
+  // Strip a leading vote-label opener like "Agree.", "Disagree —", "Neutral:",
+  // "Support,", "Oppose —", "Approve,", "Disapprove —". The vote already appears as a coloured badge
   // next to the username on the UI, so opening with the bare label reads as
   // bot-like.
   //
   // Two patterns:
-  //   1. Formal vote-label words ('support', 'oppose', 'neutral', 'approve',
-  //      'disapprove', 'agree', 'disagree') followed by ANY punctuation -
+  //   1. Formal vote-label words ('agree', 'disagree', 'support', 'oppose', 'neutral', 'approve',
+  //      'disapprove') followed by ANY punctuation -
   //      always stripped. These never appear naturally as the first word of
   //      a real comment unless they're being used as the label.
   //   2. 'Yes' / 'No' followed by hard sentence-end punctuation only
@@ -708,9 +712,9 @@ function sanitise(
   //      followed by a comma — "No, Drake hasn't had a hit in two years"
   //      is exactly how a real user starts a disagreement and shouldn't be
   //      gutted into "Drake hasn't had a hit...".
-  const FORMAL_VOTE_OPENER = /^(?:support|oppose|neutral|approve|disapprove|agree|disagree)\b\s*(?:[:.,!?\-—–]+|\u2014)\s*/i;
+  const FORMAL_VOTE_OPENER = /^(?:agree|disagree|support|oppose|neutral|approve|disapprove)\b\s*(?:[:.,!?\-—–]+|\u2014)\s*/i;
   const YES_NO_LABEL_OPENER = /^(?:yes|no)\s*(?:[:.!?]|\s+[—–-]\s+)\s*/i;
-  // Apply twice so combined openers like "Support — Yeah, ..." get fully cleared.
+  // Apply twice so combined openers like "Agree — Yeah, ..." get fully cleared.
   text = text.replace(FORMAL_VOTE_OPENER, "").replace(FORMAL_VOTE_OPENER, "");
   text = text.replace(YES_NO_LABEL_OPENER, "").replace(YES_NO_LABEL_OPENER, "");
 

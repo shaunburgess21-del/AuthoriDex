@@ -1,40 +1,42 @@
-export type SentimentChoice = "support" | "neutral" | "oppose";
+import type { SentimentPollChoice } from "@shared/lib/sentiment-poll-choice";
+
+export type SentimentChoice = SentimentPollChoice;
 
 export interface SentimentPollVoteShape {
   userVote: string | null;
-  supportCount: number;
+  agreeCount: number;
   neutralCount: number;
-  opposeCount: number;
+  disagreeCount: number;
   totalVotes: number;
-  approvePercent: number;
+  agreePercent: number;
   neutralPercent: number;
-  disapprovePercent: number;
+  disagreePercent: number;
 }
 
 function recomputePercents(
-  support: number,
+  agree: number,
   neutral: number,
-  oppose: number,
+  disagree: number,
   total: number,
-): Pick<SentimentPollVoteShape, "approvePercent" | "neutralPercent" | "disapprovePercent"> {
+): Pick<SentimentPollVoteShape, "agreePercent" | "neutralPercent" | "disagreePercent"> {
   if (total <= 0) {
-    return { approvePercent: 0, neutralPercent: 0, disapprovePercent: 0 };
+    return { agreePercent: 0, neutralPercent: 0, disagreePercent: 0 };
   }
   return {
-    approvePercent: Math.round((support / total) * 100),
+    agreePercent: Math.round((agree / total) * 100),
     neutralPercent: Math.round((neutral / total) * 100),
-    disapprovePercent: Math.round((oppose / total) * 100),
+    disagreePercent: Math.round((disagree / total) * 100),
   };
 }
 
 function bumpChoice(
-  counts: { support: number; neutral: number; oppose: number },
+  counts: { agree: number; neutral: number; disagree: number },
   choice: SentimentChoice,
   delta: number,
-): { support: number; neutral: number; oppose: number } {
-  if (choice === "support") return { ...counts, support: Math.max(0, counts.support + delta) };
+): { agree: number; neutral: number; disagree: number } {
+  if (choice === "agree") return { ...counts, agree: Math.max(0, counts.agree + delta) };
   if (choice === "neutral") return { ...counts, neutral: Math.max(0, counts.neutral + delta) };
-  return { ...counts, oppose: Math.max(0, counts.oppose + delta) };
+  return { ...counts, disagree: Math.max(0, counts.disagree + delta) };
 }
 
 export function optimisticSentimentVotePatch<P extends SentimentPollVoteShape>(
@@ -45,9 +47,9 @@ export function optimisticSentimentVotePatch<P extends SentimentPollVoteShape>(
   if (prev === choice) return poll;
 
   let counts = {
-    support: poll.supportCount,
+    agree: poll.agreeCount,
     neutral: poll.neutralCount,
-    oppose: poll.opposeCount,
+    disagree: poll.disagreeCount,
   };
   let total = poll.totalVotes;
 
@@ -59,13 +61,13 @@ export function optimisticSentimentVotePatch<P extends SentimentPollVoteShape>(
     total += 1;
   }
 
-  const percents = recomputePercents(counts.support, counts.neutral, counts.oppose, total);
+  const percents = recomputePercents(counts.agree, counts.neutral, counts.disagree, total);
   return {
     ...poll,
     userVote: choice,
-    supportCount: counts.support,
+    agreeCount: counts.agree,
     neutralCount: counts.neutral,
-    opposeCount: counts.oppose,
+    disagreeCount: counts.disagree,
     totalVotes: total,
     ...percents,
   };

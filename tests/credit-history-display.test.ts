@@ -64,7 +64,7 @@ test("buildVoteDisplay shows person name for sentiment", () => {
 
 test("buildVoteDisplay links sentiment poll to poll detail page", () => {
   const result = buildVoteDisplay(
-    { voteType: "trending_poll", entityId: "poll-1", choice: "Support" },
+    { voteType: "trending_poll", entityId: "poll-1", choice: "agree" },
     {
       pollHeadline: "Should the USA defend Taiwan if China invades?",
       trendingPollSlug: "should-the-usa-defend-taiwan-if-china-invades",

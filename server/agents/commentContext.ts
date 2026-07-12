@@ -115,7 +115,7 @@ export interface TrendingPollContext extends BaseContext {
   subjectText: string;
   description: string | null;
   timeline: string | null;
-  /** "support" | "neutral" | "oppose" */
+  /** "agree" | "neutral" | "disagree" */
   agentChoice?: string | null;
   existingComments?: Array<{ body: string }>;
   replyTarget?: ReplyTarget | null;

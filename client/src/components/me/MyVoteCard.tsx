@@ -192,14 +192,14 @@ function PickChip({ vote }: { vote: MyVoteCardData }) {
     if (value > 0) {
       return (
         <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30 gap-1">
-          <TrendingUp className="h-3 w-3" /> {detail ?? "Support"}
+          <TrendingUp className="h-3 w-3" /> {detail ?? "Agree"}
         </Badge>
       );
     }
     if (value < 0) {
       return (
         <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-300 border-rose-500/30 gap-1">
-          <TrendingDown className="h-3 w-3" /> {detail ?? "Oppose"}
+          <TrendingDown className="h-3 w-3" /> {detail ?? "Disagree"}
         </Badge>
       );
     }

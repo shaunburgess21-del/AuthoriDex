@@ -13,6 +13,7 @@ import {
 } from "@shared/schema";
 import type { VoteFeedItem } from "@shared/insights/types";
 import { VOTE_SURFACE_LABELS } from "@shared/insights/constants";
+import { getSentimentPollChoiceLabel, normalizeSentimentChoice } from "@shared/lib/sentiment-poll-choice";
 import { memoizeAsync } from "./request-memo";
 
 export const VOTE_RECENT_ACTIVITY_MEMO_MS = 20_000;
@@ -43,10 +44,7 @@ function choiceLabelForFaceOff(value: string, matchup: { optionAText: string; op
 }
 
 function choiceLabelForSentiment(choice: string): string {
-  if (choice === "approve") return "Approve";
-  if (choice === "oppose") return "Oppose";
-  if (choice === "neutral") return "Neutral";
-  return choice;
+  return getSentimentPollChoiceLabel(choice) || choice;
 }
 
 function revealActor(profile: {
@@ -296,16 +294,16 @@ export async function loadRecentVoteActivity(limit: number): Promise<VoteFeedIte
       } else if (surface === "trending_poll") {
         const poll = sentimentPollsMap.get(row.target_id);
         if (!poll || poll.visibility !== "live") continue;
-        const rawChoice = (row.choice ?? "").toLowerCase();
+        const normalized = normalizeSentimentChoice(row.choice);
         choiceLabel = choiceLabelForSentiment(row.choice ?? "");
         targetTitle = poll.headline;
         targetHref = poll.slug ? `/polls/${poll.slug}` : null;
         actionText =
-          rawChoice === "approve"
-            ? "approved"
-            : rawChoice === "oppose"
-              ? "opposed"
-              : rawChoice === "neutral"
+          normalized === "agree"
+            ? "agreed"
+            : normalized === "disagree"
+              ? "disagreed"
+              : normalized === "neutral"
                 ? "stayed neutral on"
                 : `voted on`;
       } else if (surface === "opinion_poll") {

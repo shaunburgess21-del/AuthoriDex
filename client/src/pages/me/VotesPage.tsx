@@ -64,7 +64,7 @@ const VOTE_TYPE_COLOR: Record<string, string> = {
   induction: "#10B981",
 };
 
-// Vote types that carry a Support/Oppose/Neutral stance (used for voice balance).
+// Vote types that carry an Agree/Disagree/Neutral stance (used for voice balance).
 const STANCE_VOTE_TYPES = new Set([
   "sentiment",
   "value_vote",
@@ -482,28 +482,28 @@ function OverviewTab({
       }));
   }, [allVotes]);
 
-  // Doughnut: Support / Oppose / Neutral across stance-carrying votes.
-  // overall_rating is bucketed by zone (1-2 = oppose, 3 = neutral, 4-5 = support).
+  // Doughnut: Agree / Disagree / Neutral across stance-carrying votes.
+  // overall_rating is bucketed by zone (1-2 = disagree, 3 = neutral, 4-5 = agree).
   const voiceBalanceSegments: DoughnutSegment[] = useMemo(() => {
-    let support = 0;
-    let oppose = 0;
+    let agree = 0;
+    let disagree = 0;
     let neutral = 0;
     for (const v of allVotes) {
       if (!STANCE_VOTE_TYPES.has(v.voteType)) continue;
       if (v.voteType === "overall_rating") {
         const r = Math.round(v.value || 0);
-        if (r >= 4) support += 1;
-        else if (r <= 2) oppose += 1;
+        if (r >= 4) agree += 1;
+        else if (r <= 2) disagree += 1;
         else neutral += 1;
         continue;
       }
-      if (v.value > 0) support += 1;
-      else if (v.value < 0) oppose += 1;
+      if (v.value > 0) agree += 1;
+      else if (v.value < 0) disagree += 1;
       else neutral += 1;
     }
     return [
-      { id: "support", label: "Support", value: support, color: "#10B981" },
-      { id: "oppose", label: "Oppose", value: oppose, color: "#F43F5E" },
+      { id: "agree", label: "Agree", value: agree, color: "#10B981" },
+      { id: "disagree", label: "Disagree", value: disagree, color: "#F43F5E" },
       { id: "neutral", label: "Neutral", value: neutral, color: "#64748B" },
     ];
   }, [allVotes]);
@@ -511,9 +511,9 @@ function OverviewTab({
   const voiceTotal = voiceBalanceSegments.reduce((s, seg) => s + seg.value, 0);
   const voiceLean = useMemo(() => {
     if (voiceTotal === 0) return null;
-    const [support, oppose] = voiceBalanceSegments;
-    const sPct = support.value / voiceTotal;
-    const oPct = oppose.value / voiceTotal;
+    const [agree, disagree] = voiceBalanceSegments;
+    const sPct = agree.value / voiceTotal;
+    const oPct = disagree.value / voiceTotal;
     if (Math.abs(sPct - oPct) < 0.05) return "Balanced";
     return sPct > oPct ? "Optimist" : "Sceptic";
   }, [voiceBalanceSegments, voiceTotal]);

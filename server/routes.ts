@@ -70,6 +70,10 @@ import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
+import {
+  getSentimentPollChoiceLabel,
+  normalizeSentimentChoice,
+} from "@shared/lib/sentiment-poll-choice";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
@@ -8797,11 +8801,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       for (const v of pollVotes) {
-        const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+        const normalized = normalizeSentimentChoice(v.choice);
+        const choiceLabel = getSentimentPollChoiceLabel(v.choice) || "Neutral";
         results.push({
           id: v.id,
           voteType: "trending_poll",
-          value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
+          value: normalized === "agree" ? 1 : normalized === "disagree" ? -1 : 0,
           targetName: v.headline || "Poll",
           detail: choiceLabel,
           createdAt: v.createdAt ?? new Date(),
@@ -9239,8 +9244,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             choice: trendingPollVotes.choice,
             createdAt: trendingPollVotes.createdAt,
             headline: trendingPolls.headline,
-            seedSupport: trendingPolls.seedSupportCount,
-            seedOppose: trendingPolls.seedOpposeCount,
+            seedAgree: trendingPolls.seedAgreeCount,
+            seedDisagree: trendingPolls.seedDisagreeCount,
             seedNeutral: trendingPolls.seedNeutralCount,
           })
           .from(trendingPollVotes)
@@ -9402,15 +9407,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const v of pollVotes) {
           if (!v.pollId) continue;
           const m = byPoll.get(v.pollId) ?? new Map<string, number>();
-          m.set("support", (m.get("support") ?? 0) + (v.seedSupport ?? 0));
-          m.set("oppose", (m.get("oppose") ?? 0) + (v.seedOppose ?? 0));
+          m.set("agree", (m.get("agree") ?? 0) + (v.seedAgree ?? 0));
+          m.set("disagree", (m.get("disagree") ?? 0) + (v.seedDisagree ?? 0));
           m.set("neutral", (m.get("neutral") ?? 0) + (v.seedNeutral ?? 0));
           byPoll.set(v.pollId, m);
         }
         for (const row of tallies) {
           if (!row.pollId || !row.choice) continue;
+          const choice = normalizeSentimentChoice(row.choice) ?? row.choice;
           const m = byPoll.get(row.pollId) ?? new Map<string, number>();
-          m.set(row.choice, (m.get(row.choice) ?? 0) + Number(row.c ?? 0));
+          m.set(choice, (m.get(choice) ?? 0) + Number(row.c ?? 0));
           byPoll.set(row.pollId, m);
         }
         for (const [pollId, opts] of byPoll.entries()) {
@@ -9503,12 +9509,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       for (const v of pollVotes) {
-        const choiceLabel = v.choice === "support" ? "Support" : v.choice === "oppose" ? "Oppose" : "Neutral";
+        const normalized = normalizeSentimentChoice(v.choice);
+        const choiceLabel = getSentimentPollChoiceLabel(v.choice) || "Neutral";
         const majority = v.pollId ? pollMajority.get(v.pollId) ?? null : null;
         results.push({
           id: v.id,
           voteType: "trending_poll",
-          value: v.choice === "support" ? 1 : v.choice === "oppose" ? -1 : 0,
+          value: normalized === "agree" ? 1 : normalized === "disagree" ? -1 : 0,
           targetName: v.headline || "Poll",
           detail: choiceLabel,
           createdAt: v.createdAt ?? new Date(),
@@ -9516,7 +9523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectId: null,
           subjectAvatar: null,
           subjectImageSlug: null,
-          alignedWithMajority: majority ? v.choice === majority : null,
+          alignedWithMajority: majority ? normalized === majority : null,
         });
       }
 
@@ -15683,9 +15690,9 @@ Target length: about 90-150 words.`;
           personId: trendingPolls.personId,
           imageUrl: trendingPolls.imageUrl,
           slug: trendingPolls.slug,
-          seedSupportCount: trendingPolls.seedSupportCount,
+          seedAgreeCount: trendingPolls.seedAgreeCount,
           seedNeutralCount: trendingPolls.seedNeutralCount,
-          seedOpposeCount: trendingPolls.seedOpposeCount,
+          seedDisagreeCount: trendingPolls.seedDisagreeCount,
           status: trendingPolls.status,
           createdAt: trendingPolls.createdAt,
           personName: trackedPeople.name,
@@ -15728,7 +15735,7 @@ Target length: about 90-150 words.`;
         }
       }
 
-      const realCountsByPoll = new Map<string, { support: number; neutral: number; oppose: number }>();
+      const realCountsByPoll = new Map<string, { agree: number; neutral: number; disagree: number }>();
       if (pollIds.length > 0) {
         const realVoteRows = await db
           .select({
@@ -15741,20 +15748,21 @@ Target length: about 90-150 words.`;
           .groupBy(trendingPollVotes.pollId, trendingPollVotes.choice);
 
         for (const row of realVoteRows) {
-          const bucket = realCountsByPoll.get(row.pollId) ?? { support: 0, neutral: 0, oppose: 0 };
-          if (row.choice === "support" || row.choice === "neutral" || row.choice === "oppose") {
-            bucket[row.choice] = Number(row.cnt);
+          const bucket = realCountsByPoll.get(row.pollId) ?? { agree: 0, neutral: 0, disagree: 0 };
+          const normalized = normalizeSentimentChoice(String(row.choice));
+          if (normalized) {
+            bucket[normalized] = Number(row.cnt);
           }
           realCountsByPoll.set(row.pollId, bucket);
         }
       }
 
       const result = polls.map(p => {
-        const real = realCountsByPoll.get(p.id) ?? { support: 0, neutral: 0, oppose: 0 };
-        const supportCount = (p.seedSupportCount || 0) + real.support;
+        const real = realCountsByPoll.get(p.id) ?? { agree: 0, neutral: 0, disagree: 0 };
+        const agreeCount = (p.seedAgreeCount || 0) + real.agree;
         const neutralCount = (p.seedNeutralCount || 0) + real.neutral;
-        const opposeCount = (p.seedOpposeCount || 0) + real.oppose;
-        const total = supportCount + neutralCount + opposeCount;
+        const disagreeCount = (p.seedDisagreeCount || 0) + real.disagree;
+        const total = agreeCount + neutralCount + disagreeCount;
         const effectiveSlug = p.slug || slugifyHeadline(p.headline);
         const imageUrl = resolveSentimentPollImageUrl(p.imageUrl, effectiveSlug);
         return {
@@ -15770,13 +15778,16 @@ Target length: about 90-150 words.`;
           imageUrl,
           slug: p.slug || null,
           totalVotes: total,
-          approvePercent: total > 0 ? Math.round((supportCount / total) * 100) : 0,
+          agreeCount,
+          neutralCount,
+          disagreeCount,
+          agreePercent: total > 0 ? Math.round((agreeCount / total) * 100) : 0,
           neutralPercent: total > 0 ? Math.round((neutralCount / total) * 100) : 0,
-          disapprovePercent: total > 0 ? Math.round((opposeCount / total) * 100) : 0,
+          disagreePercent: total > 0 ? Math.round((disagreeCount / total) * 100) : 0,
           status: p.status,
           relatedPersonIds: (relatedMap[p.id] || []).map(rp => rp.id),
           relatedPeople: relatedMap[p.id] || [],
-          userVote: userVoteMap[p.id] || null,
+          userVote: userVoteMap[p.id] ? normalizeSentimentChoice(userVoteMap[p.id]) || userVoteMap[p.id] : null,
           commentCount: commentCountMap.get(p.id) || 0,
         };
       });
@@ -15813,9 +15824,9 @@ Target length: about 90-150 words.`;
           status: trendingPolls.status,
           timeline: trendingPolls.timeline,
           deadlineAt: trendingPolls.deadlineAt,
-          seedSupportCount: trendingPolls.seedSupportCount,
+          seedAgreeCount: trendingPolls.seedAgreeCount,
           seedNeutralCount: trendingPolls.seedNeutralCount,
-          seedOpposeCount: trendingPolls.seedOpposeCount,
+          seedDisagreeCount: trendingPolls.seedDisagreeCount,
           createdAt: trendingPolls.createdAt,
           visibleCountries: trendingPolls.visibleCountries,
           personName: trackedPeople.name,
@@ -15852,15 +15863,18 @@ Target length: about 90-150 words.`;
         .where(eq(trendingPollVotes.pollId, poll.id))
         .groupBy(trendingPollVotes.choice);
 
-      const realCounts: Record<string, number> = {};
+      const realCounts: Record<string, number> = { agree: 0, neutral: 0, disagree: 0 };
       for (const rv of realVotes) {
-        realCounts[rv.choice] = Number(rv.cnt);
+        const normalized = normalizeSentimentChoice(rv.choice);
+        if (normalized) {
+          realCounts[normalized] = (realCounts[normalized] || 0) + Number(rv.cnt);
+        }
       }
 
-      const supportCount = (poll.seedSupportCount || 0) + (realCounts['support'] || 0);
-      const neutralCount = (poll.seedNeutralCount || 0) + (realCounts['neutral'] || 0);
-      const opposeCount = (poll.seedOpposeCount || 0) + (realCounts['oppose'] || 0);
-      const totalVotes = supportCount + neutralCount + opposeCount;
+      const agreeCount = (poll.seedAgreeCount || 0) + (realCounts.agree || 0);
+      const neutralCount = (poll.seedNeutralCount || 0) + (realCounts.neutral || 0);
+      const disagreeCount = (poll.seedDisagreeCount || 0) + (realCounts.disagree || 0);
+      const totalVotes = agreeCount + neutralCount + disagreeCount;
 
       let userVote: string | null = null;
       if (userId) {
@@ -15872,7 +15886,7 @@ Target length: about 90-150 words.`;
             eq(trendingPollVotes.userId, userId)
           ))
           .limit(1);
-        if (uv) userVote = uv.choice;
+        if (uv) userVote = normalizeSentimentChoice(uv.choice) || uv.choice;
       }
 
       const effectiveSlug = poll.slug || slugifyHeadline(poll.headline);
@@ -15882,13 +15896,13 @@ Target length: about 90-150 words.`;
         ...poll,
         imageUrl,
         personAvatar: poll.personAvatar || null,
-        supportCount,
+        agreeCount,
         neutralCount,
-        opposeCount,
+        disagreeCount,
         totalVotes,
-        approvePercent: totalVotes > 0 ? Math.round((supportCount / totalVotes) * 100) : 0,
+        agreePercent: totalVotes > 0 ? Math.round((agreeCount / totalVotes) * 100) : 0,
         neutralPercent: totalVotes > 0 ? Math.round((neutralCount / totalVotes) * 100) : 0,
-        disapprovePercent: totalVotes > 0 ? Math.round((opposeCount / totalVotes) * 100) : 0,
+        disagreePercent: totalVotes > 0 ? Math.round((disagreeCount / totalVotes) * 100) : 0,
         userVote,
       });
     } catch (error: any) {
@@ -15913,8 +15927,8 @@ Target length: about 90-150 words.`;
       const { slug } = req.params;
       const { choice } = req.body;
 
-      if (!choice || !['support', 'neutral', 'oppose'].includes(choice)) {
-        return res.status(400).json({ error: "Choice must be 'support', 'neutral', or 'oppose'" });
+      if (!choice || !['agree', 'neutral', 'disagree'].includes(choice)) {
+        return res.status(400).json({ error: "Choice must be 'agree', 'neutral', or 'disagree'" });
       }
 
       const [poll] = await db
@@ -16068,7 +16082,7 @@ Target length: about 90-150 words.`;
 
   app.post("/api/admin/trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedAgreeCount, seedNeutralCount, seedDisagreeCount, slug, featured, visibility, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
       const adminId = req.userId!;
 
       if (!headline || !subjectText || !category) {
@@ -16095,9 +16109,9 @@ Target length: about 90-150 words.`;
         timeline: timeline || null,
         deadlineAt: deadlineAt ? new Date(deadlineAt) : null,
         imageUrl: imageUrl || null,
-        seedSupportCount: seedSupportCount || 0,
+        seedAgreeCount: seedAgreeCount || 0,
         seedNeutralCount: seedNeutralCount || 0,
-        seedOpposeCount: seedOpposeCount || 0,
+        seedDisagreeCount: seedDisagreeCount || 0,
         slug: slug || null,
         featured: featured ?? false,
         visibility: effectiveVisibility,
@@ -16141,7 +16155,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Trending poll not found" });
       }
 
-      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedSupportCount, seedNeutralCount, seedOpposeCount, slug, featured, visibility, displayOrder, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
+      const { status, category, headline, subjectText, personId, description, timeline, deadlineAt, imageUrl, seedAgreeCount, seedNeutralCount, seedDisagreeCount, slug, featured, visibility, displayOrder, relatedPersonIds, secondaryCategories, visibleCountries } = req.body;
 
       const updates: any = { updatedAt: new Date() };
       if (visibility !== undefined) {
@@ -16166,9 +16180,9 @@ Target length: about 90-150 words.`;
       if (timeline !== undefined) updates.timeline = timeline || null;
       if (deadlineAt !== undefined) updates.deadlineAt = deadlineAt ? new Date(deadlineAt) : null;
       if (imageUrl !== undefined) updates.imageUrl = imageUrl || null;
-      if (seedSupportCount !== undefined) updates.seedSupportCount = seedSupportCount;
+      if (seedAgreeCount !== undefined) updates.seedAgreeCount = seedAgreeCount;
       if (seedNeutralCount !== undefined) updates.seedNeutralCount = seedNeutralCount;
-      if (seedOpposeCount !== undefined) updates.seedOpposeCount = seedOpposeCount;
+      if (seedDisagreeCount !== undefined) updates.seedDisagreeCount = seedDisagreeCount;
       if (slug !== undefined) updates.slug = slug || null;
       if (featured !== undefined) updates.featured = featured;
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
@@ -16313,7 +16327,7 @@ Target length: about 90-150 words.`;
         ? `\nCurrent content for reference (improve upon this):\n"${existingContent}"`
         : "";
 
-      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Support, Neutral, or Oppose on current topics. Use web search to keep facts current and accurate. Write plain text only. Keep it concise and easy to scan. Use short paragraphs with blank lines between them. If a list improves clarity, you may use simple '-' bullet points. Do not use markdown headers or bold formatting.`;
+      const systemPrompt = `You are writing content for a sentiment poll on VoxDex, a trend-tracking and prediction platform. Sentiment polls let users vote Agree, Neutral, or Disagree on current topics. Use web search to keep facts current and accurate. Write plain text only. Keep it concise and easy to scan. Use short paragraphs with blank lines between them. If a list improves clarity, you may use simple '-' bullet points. Do not use markdown headers or bold formatting.`;
 
       let userPrompt: string;
       let maxTokens: number;
@@ -16322,7 +16336,7 @@ Target length: about 90-150 words.`;
         userPrompt = `Poll headline: "${poll.headline}"
 Category: ${poll.category || "General"}${linkedPersonBlock}${existingBlock}
 
-Write a compelling 1-3 sentence question or statement for this sentiment poll card. It should clearly frame the debate and invite users to weigh in with Support, Neutral, or Oppose. Be provocative but fair — present the tension without taking a side.`;
+Write a compelling 1-3 sentence question or statement for this sentiment poll card. It should clearly frame the debate and invite users to weigh in with Agree, Neutral, or Disagree. Be provocative but fair — present the tension without taking a side.`;
         maxTokens = 250;
       } else {
         userPrompt = `Poll headline: "${poll.headline}"
@@ -16456,9 +16470,9 @@ Target length: about 90-150 words.`;
         subjectText: headers.findIndex((h: string) => h.replace(/[\s/]+/g, '').includes('subject') || h.includes('question')),
         description: headers.findIndex((h: string) => h === 'description'),
         celebrity: headers.findIndex((h: string) => h.includes('celebrity') || h.includes('linked')),
-        seedSupport: headers.findIndex((h: string) => h.includes('support')),
+        seedAgree: headers.findIndex((h: string) => h.includes('agree') || h.includes('support')),
         seedNeutral: headers.findIndex((h: string) => h.includes('neutral')),
-        seedOppose: headers.findIndex((h: string) => h.includes('oppose')),
+        seedDisagree: headers.findIndex((h: string) => h.includes('disagree') || h.includes('oppose')),
       };
 
       const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople);
@@ -16496,19 +16510,19 @@ Target length: about 90-150 words.`;
           return v;
         };
 
-        const seedSupportCount = parseSeed(row[idx.seedSupport], 'Seed Support');
+        const seedAgreeCount = parseSeed(row[idx.seedAgree], 'Seed Agree');
         const seedNeutralCount = parseSeed(row[idx.seedNeutral], 'Seed Neutral');
-        const seedOpposeCount = parseSeed(row[idx.seedOppose], 'Seed Oppose');
+        const seedDisagreeCount = parseSeed(row[idx.seedDisagree], 'Seed Disagree');
 
         try {
           const result = await db.execute(sql`
             INSERT INTO trending_polls (
               id, category, headline, slug, subject_text, description,
-              person_id, seed_support_count, seed_neutral_count, seed_oppose_count,
+              person_id, seed_agree_count, seed_neutral_count, seed_disagree_count,
               status, visibility, featured, created_at, updated_at
             ) VALUES (
               gen_random_uuid(), ${category}, ${headline}, ${slug}, ${subjectText}, ${description},
-              ${personId}, ${seedSupportCount}, ${seedNeutralCount}, ${seedOpposeCount},
+              ${personId}, ${seedAgreeCount}, ${seedNeutralCount}, ${seedDisagreeCount},
               'live', 'live', false, NOW(), NOW()
             )
             ON CONFLICT (slug) DO UPDATE SET
@@ -16517,9 +16531,9 @@ Target length: about 90-150 words.`;
               subject_text = EXCLUDED.subject_text,
               description = EXCLUDED.description,
               person_id = EXCLUDED.person_id,
-              seed_support_count = EXCLUDED.seed_support_count,
+              seed_agree_count = EXCLUDED.seed_agree_count,
               seed_neutral_count = EXCLUDED.seed_neutral_count,
-              seed_oppose_count = EXCLUDED.seed_oppose_count,
+              seed_disagree_count = EXCLUDED.seed_disagree_count,
               status = 'live',
               visibility = 'live',
               updated_at = NOW()
@@ -16547,26 +16561,26 @@ Target length: about 90-150 words.`;
   app.post("/api/admin/seed-trending-polls", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const SEED_TOPICS = [
-        { headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432, personName: "Elon Musk" },
-        { headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
-        { headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567, personName: "Taylor Swift" },
-        { headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
-        { headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765, personName: "MrBeast" },
-        { headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", approvePercent: 18, neutralPercent: 22, disapprovePercent: 60, totalVotes: 76543 },
-        { headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 112345, personName: "Mark Zuckerberg" },
-        { headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", approvePercent: 45, neutralPercent: 15, disapprovePercent: 40, totalVotes: 287654, personName: "Drake" },
-        { headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", approvePercent: 55, neutralPercent: 25, disapprovePercent: 20, totalVotes: 198765, personName: "LeBron James" },
-        { headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", approvePercent: 40, neutralPercent: 20, disapprovePercent: 40, totalVotes: 134567 },
-        { headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", approvePercent: 35, neutralPercent: 30, disapprovePercent: 35, totalVotes: 256789 },
-        { headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 189432, personName: "Sam Altman" },
-        { headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", approvePercent: 65, neutralPercent: 20, disapprovePercent: 15, totalVotes: 176543, personName: "Beyonce" },
-        { headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", approvePercent: 48, neutralPercent: 22, disapprovePercent: 30, totalVotes: 87654 },
-        { headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", approvePercent: 40, neutralPercent: 35, disapprovePercent: 25, totalVotes: 65432 },
-        { headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", approvePercent: 30, neutralPercent: 25, disapprovePercent: 45, totalVotes: 145678 },
-        { headline: "Student loan forgiveness", description: "Fair policy or overreach?", category: "Politics", approvePercent: 52, neutralPercent: 18, disapprovePercent: 30, totalVotes: 234567 },
-        { headline: "Ozempic for weight loss", description: "Medical breakthrough or vanity?", category: "Business", approvePercent: 38, neutralPercent: 32, disapprovePercent: 30, totalVotes: 112345 },
-        { headline: "Twitch streamer earnings", description: "Are top streamers overpaid?", category: "Creator", approvePercent: 25, neutralPercent: 35, disapprovePercent: 40, totalVotes: 78965 },
-        { headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", approvePercent: 35, neutralPercent: 25, disapprovePercent: 40, totalVotes: 167890 },
+        { headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", agreePercent: 35, neutralPercent: 20, disagreePercent: 45, totalVotes: 89432, personName: "Elon Musk" },
+        { headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", agreePercent: 28, neutralPercent: 32, disagreePercent: 40, totalVotes: 156789 },
+        { headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", agreePercent: 15, neutralPercent: 25, disagreePercent: 60, totalVotes: 234567, personName: "Taylor Swift" },
+        { headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", agreePercent: 22, neutralPercent: 28, disagreePercent: 50, totalVotes: 145678 },
+        { headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", agreePercent: 68, neutralPercent: 20, disagreePercent: 12, totalVotes: 98765, personName: "MrBeast" },
+        { headline: "NFL Sunday Ticket pricing", description: "Is streaming football too expensive?", category: "Sports", agreePercent: 18, neutralPercent: 22, disagreePercent: 60, totalVotes: 76543 },
+        { headline: "Meta's rebrand to AI company", description: "Is the pivot from social media working?", category: "Tech", agreePercent: 25, neutralPercent: 35, disagreePercent: 40, totalVotes: 112345, personName: "Mark Zuckerberg" },
+        { headline: "Drake vs Kendrick beef", description: "Who won the rap battle?", category: "Music", agreePercent: 45, neutralPercent: 15, disagreePercent: 40, totalVotes: 287654, personName: "Drake" },
+        { headline: "LeBron's longevity", description: "Greatest athlete of all time?", category: "Sports", agreePercent: 55, neutralPercent: 25, disagreePercent: 20, totalVotes: 198765, personName: "LeBron James" },
+        { headline: "Crypto regulation", description: "Should governments control digital currencies?", category: "Business", agreePercent: 40, neutralPercent: 20, disagreePercent: 40, totalVotes: 134567 },
+        { headline: "TikTok ban debate", description: "National security vs free speech?", category: "Politics", agreePercent: 35, neutralPercent: 30, disagreePercent: 35, totalVotes: 256789 },
+        { headline: "OpenAI board drama", description: "Was firing Sam Altman justified?", category: "Tech", agreePercent: 15, neutralPercent: 25, disagreePercent: 60, totalVotes: 189432, personName: "Sam Altman" },
+        { headline: "Beyonce's country album", description: "Authentic exploration or cultural appropriation?", category: "Music", agreePercent: 65, neutralPercent: 20, disagreePercent: 15, totalVotes: 176543, personName: "Beyonce" },
+        { headline: "YouTube Premium worth it?", description: "Is ad-free viewing worth the subscription?", category: "Creator", agreePercent: 48, neutralPercent: 22, disagreePercent: 30, totalVotes: 87654 },
+        { headline: "F1's US expansion", description: "Is Formula 1 becoming too commercial?", category: "Sports", agreePercent: 40, neutralPercent: 35, disagreePercent: 25, totalVotes: 65432 },
+        { headline: "Billionaire space race", description: "Vanity project or advancing humanity?", category: "Tech", agreePercent: 30, neutralPercent: 25, disagreePercent: 45, totalVotes: 145678 },
+        { headline: "Student loan forgiveness", description: "Fair policy or overreach?", category: "Politics", agreePercent: 52, neutralPercent: 18, disagreePercent: 30, totalVotes: 234567 },
+        { headline: "Ozempic for weight loss", description: "Medical breakthrough or vanity?", category: "Business", agreePercent: 38, neutralPercent: 32, disagreePercent: 30, totalVotes: 112345 },
+        { headline: "Twitch streamer earnings", description: "Are top streamers overpaid?", category: "Creator", agreePercent: 25, neutralPercent: 35, disagreePercent: 40, totalVotes: 78965 },
+        { headline: "Climate activism tactics", description: "Is disruption effective or counterproductive?", category: "Politics", agreePercent: 35, neutralPercent: 25, disagreePercent: 40, totalVotes: 167890 },
       ];
 
       let inserted = 0;
@@ -16598,9 +16612,9 @@ Target length: about 90-150 words.`;
           }
         }
 
-        const seedSupportCount = Math.round((topic.approvePercent / 100) * topic.totalVotes);
+        const seedAgreeCount = Math.round((topic.agreePercent / 100) * topic.totalVotes);
         const seedNeutralCount = Math.round((topic.neutralPercent / 100) * topic.totalVotes);
-        const seedOpposeCount = Math.round((topic.disapprovePercent / 100) * topic.totalVotes);
+        const seedDisagreeCount = Math.round((topic.disagreePercent / 100) * topic.totalVotes);
 
         await db.insert(trendingPolls).values({
           status: 'live',
@@ -16610,9 +16624,9 @@ Target length: about 90-150 words.`;
           description: topic.description,
           personId,
           imageUrl: null,
-          seedSupportCount,
+          seedAgreeCount,
           seedNeutralCount,
-          seedOpposeCount,
+          seedDisagreeCount,
           displayOrder: nextDisplayOrder,
           createdBy: req.userId || null,
         });

@@ -3,7 +3,8 @@
  *
  * Usage: npx tsx scripts/import-sentiment-polls.ts [path-to-csv]
  *
- * CSV columns: headline, slug, category, question, linked_celebrity, support_seed, neutral_seed, oppose_seed
+ * CSV columns: headline, slug, category, question, linked_celebrity, agree_seed, neutral_seed, disagree_seed
+ * (legacy headers support_seed / oppose_seed are also accepted)
  * - If a poll with the same slug exists: UPDATE seed counts, person_id, image_url only (do not change headline, slug, visibility, status).
  * - If slug does not exist: INSERT new poll with visibility/status "live"; featured = true if headline contains "Elon" or row is in top 10.
  * - imageUrl set to [SUPABASE_URL]/storage/v1/object/public/sentiment-polls/[slug]/1.webp only when
@@ -141,12 +142,20 @@ async function main() {
     subjectText: headers.findIndex(h => h.replace(/[\s/]+/g, '').includes('subject') || h.includes('question')),
     description: headers.findIndex(h => h === 'description'),
     celebrity: headers.findIndex(h => h.includes('celebrity') || h.includes('linked')),
-    seedSupport: headers.findIndex(h => h.includes('support') && (h.includes('seed') || true)),
+    seedAgree: (() => {
+      const agreeIdx = headers.findIndex((h) => h.includes("agree"));
+      if (agreeIdx >= 0) return agreeIdx;
+      return headers.findIndex((h) => h.includes("support"));
+    })(),
     seedNeutral: headers.findIndex(h => h.includes('neutral')),
-    seedOppose: headers.findIndex(h => h.includes('oppose')),
+    seedDisagree: (() => {
+      const disagreeIdx = headers.findIndex((h) => h.includes("disagree"));
+      if (disagreeIdx >= 0) return disagreeIdx;
+      return headers.findIndex((h) => h.includes("oppose"));
+    })(),
   };
 
-  console.log(`Column mapping: category=${idx.category}, headline=${idx.headline}, slug=${idx.slug}, subjectText=${idx.subjectText}, description=${idx.description}, celebrity=${idx.celebrity}, seedSupport=${idx.seedSupport}, seedNeutral=${idx.seedNeutral}, seedOppose=${idx.seedOppose}\n`);
+  console.log(`Column mapping: category=${idx.category}, headline=${idx.headline}, slug=${idx.slug}, subjectText=${idx.subjectText}, description=${idx.description}, celebrity=${idx.celebrity}, seedAgree=${idx.seedAgree}, seedNeutral=${idx.seedNeutral}, seedDisagree=${idx.seedDisagree}\n`);
 
   const allPeople = await db.select({ id: trackedPeople.id, name: trackedPeople.name }).from(trackedPeople);
   const peopleByName = new Map<string, string>();
@@ -201,9 +210,9 @@ async function main() {
       }
     }
 
-    const seedSupportCount = parseSeedInt(row[idx.seedSupport], rowNum, 'Seed Support', warnings);
+    const seedAgreeCount = parseSeedInt(row[idx.seedAgree], rowNum, 'Seed Agree', warnings);
     const seedNeutralCount = parseSeedInt(row[idx.seedNeutral], rowNum, 'Seed Neutral', warnings);
-    const seedOpposeCount = parseSeedInt(row[idx.seedOppose], rowNum, 'Seed Oppose', warnings);
+    const seedDisagreeCount = parseSeedInt(row[idx.seedDisagree], rowNum, 'Seed Disagree', warnings);
 
     const imageUrl = !personId && SUPABASE_URL
       ? `${SUPABASE_URL}/storage/v1/object/public/sentiment-polls/${slug}/1.webp`
@@ -214,9 +223,9 @@ async function main() {
         await db
           .update(trendingPolls)
           .set({
-            seedSupportCount,
+            seedAgreeCount,
             seedNeutralCount,
-            seedOpposeCount,
+            seedDisagreeCount,
             personId,
             imageUrl,
             updatedAt: new Date(),
@@ -241,9 +250,9 @@ async function main() {
         description: description || null,
         personId,
         imageUrl,
-        seedSupportCount,
+        seedAgreeCount,
         seedNeutralCount,
-        seedOpposeCount,
+        seedDisagreeCount,
         status: "live",
         visibility: "live",
         featured,

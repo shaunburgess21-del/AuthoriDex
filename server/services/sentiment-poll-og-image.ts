@@ -37,7 +37,7 @@ export function getSentimentPollVotePillLayout() {
 
 const VOTE_CHOICES = [
   {
-    label: "Support",
+    label: "Agree",
     fill: "#00C853",
     fillOpacity: 0.12,
     strokeOpacity: 0.55,
@@ -51,7 +51,7 @@ const VOTE_CHOICES = [
     textFill: "#ffffff",
   },
   {
-    label: "Oppose",
+    label: "Disagree",
     fill: "#FF0000",
     fillOpacity: 0.12,
     strokeOpacity: 0.55,

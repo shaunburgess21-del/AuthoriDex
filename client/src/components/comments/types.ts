@@ -3,7 +3,7 @@ export type CommentEntityType = "matchup" | "poll" | "opinion-poll" | "open-mark
 export type VoteType = "up" | "down";
 
 export type ParentVoteLabel =
-  | { type: "trending_poll"; choice: "support" | "neutral" | "oppose" | string }
+  | { type: "trending_poll"; choice: "agree" | "neutral" | "disagree" | string }
   | { type: "matchup"; choice: "option_a" | "option_b" | "neutral" | string; optionName: string }
   | { type: "opinion_poll"; optionName: string }
   | { type: "approval_rating"; rating: number }

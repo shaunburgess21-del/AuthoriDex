@@ -9,23 +9,23 @@ export interface DiscourseTopicData {
   headline: string;
   description: string;
   category: string;
-  approvePercent: number;
+  agreePercent: number;
   neutralPercent: number;
-  disapprovePercent: number;
+  disagreePercent: number;
   totalVotes: number;
 }
 
 export const DISCOURSE_TOPICS: DiscourseTopicData[] = [
-  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", approvePercent: 35, neutralPercent: 20, disapprovePercent: 45, totalVotes: 89432 },
-  { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", approvePercent: 28, neutralPercent: 32, disapprovePercent: 40, totalVotes: 156789 },
-  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", approvePercent: 15, neutralPercent: 25, disapprovePercent: 60, totalVotes: 234567 },
-  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", approvePercent: 22, neutralPercent: 28, disapprovePercent: 50, totalVotes: 145678 },
-  { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", approvePercent: 68, neutralPercent: 20, disapprovePercent: 12, totalVotes: 98765 },
+  { id: "d1", headline: "Elon buys Twitter", description: "Was the $44B acquisition a smart move?", category: "Tech", agreePercent: 35, neutralPercent: 20, disagreePercent: 45, totalVotes: 89432 },
+  { id: "d2", headline: "AI replacing jobs", description: "Should we embrace or regulate AI in the workplace?", category: "Tech", agreePercent: 28, neutralPercent: 32, disagreePercent: 40, totalVotes: 156789 },
+  { id: "d3", headline: "Taylor's Eras Tour pricing", description: "Are dynamic ticket prices fair to fans?", category: "Music", agreePercent: 15, neutralPercent: 25, disagreePercent: 60, totalVotes: 234567 },
+  { id: "d4", headline: "Spotify's royalty model", description: "Are artists fairly compensated by streaming?", category: "Music", agreePercent: 22, neutralPercent: 28, disagreePercent: 50, totalVotes: 145678 },
+  { id: "d5", headline: "MrBeast's philanthropy", description: "Is it genuine or just content?", category: "Creator", agreePercent: 68, neutralPercent: 20, disagreePercent: 12, totalVotes: 98765 },
 ];
 
 export interface PeoplesVoicePollProps {
   topic?: DiscourseTopicData;
-  onVote?: (topicId: string, choice: 'support' | 'neutral' | 'oppose') => void;
+  onVote?: (topicId: string, choice: 'agree' | 'neutral' | 'disagree') => void;
   onExplore?: () => void;
 }
 
@@ -34,9 +34,9 @@ export function PeoplesVoicePoll({
   onVote = () => {},
   onExplore,
 }: PeoplesVoicePollProps) {
-  const [voted, setVoted] = useState<'support' | 'neutral' | 'oppose' | null>(null);
+  const [voted, setVoted] = useState<'agree' | 'neutral' | 'disagree' | null>(null);
 
-  const handleVote = (choice: 'support' | 'neutral' | 'oppose') => {
+  const handleVote = (choice: 'agree' | 'neutral' | 'disagree') => {
     if (!voted) {
       setVoted(choice);
       onVote(topic.id, choice);
@@ -76,15 +76,15 @@ export function PeoplesVoicePoll({
       {!voted ? (
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => handleVote('support')}
+            onClick={() => handleVote('agree')}
             className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
-            data-testid="button-support"
+            data-testid="button-agree"
           >
             <div className="flex items-center gap-2">
               <ThumbsUp className="h-4 w-4" />
-              <span>Support</span>
+              <span>Agree</span>
             </div>
-            <span className="font-mono">{topic.approvePercent}%</span>
+            <span className="font-mono">{topic.agreePercent}%</span>
           </button>
           <button
             onClick={() => handleVote('neutral')}
@@ -98,15 +98,15 @@ export function PeoplesVoicePoll({
             <span className="font-mono">{topic.neutralPercent}%</span>
           </button>
           <button
-            onClick={() => handleVote('oppose')}
+            onClick={() => handleVote('disagree')}
             className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] text-sm font-medium transition-all hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
-            data-testid="button-oppose"
+            data-testid="button-disagree"
           >
             <div className="flex items-center gap-2">
               <ThumbsDown className="h-4 w-4" />
-              <span>Oppose</span>
+              <span>Disagree</span>
             </div>
-            <span className="font-mono">{topic.disapprovePercent}%</span>
+            <span className="font-mono">{topic.disagreePercent}%</span>
           </button>
         </div>
       ) : (
@@ -115,22 +115,22 @@ export function PeoplesVoicePoll({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Your vote</span>
               <span className={`text-xs font-medium ${
-                voted === 'support' ? 'text-[#00C853]' : 
-                voted === 'oppose' ? 'text-[#FF0000]' : 
+                voted === 'agree' ? 'text-[#00C853]' : 
+                voted === 'disagree' ? 'text-[#FF0000]' : 
                 'text-white'
               }`}>
                 {voted.charAt(0).toUpperCase() + voted.slice(1)}
               </span>
             </div>
             <div className="flex gap-1 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#00C853]" style={{ width: `${topic.approvePercent}%` }} />
+              <div className="bg-[#00C853]" style={{ width: `${topic.agreePercent}%` }} />
               <div className="bg-gray-600 dark:bg-gray-400" style={{ width: `${topic.neutralPercent}%` }} />
-              <div className="bg-[#FF0000]" style={{ width: `${topic.disapprovePercent}%` }} />
+              <div className="bg-[#FF0000]" style={{ width: `${topic.disagreePercent}%` }} />
             </div>
             <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
-              <span>{topic.approvePercent}% Support</span>
+              <span>{topic.agreePercent}% Agree</span>
               <span>{topic.neutralPercent}% Neutral</span>
-              <span>{topic.disapprovePercent}% Oppose</span>
+              <span>{topic.disagreePercent}% Disagree</span>
             </div>
           </div>
           <Button 

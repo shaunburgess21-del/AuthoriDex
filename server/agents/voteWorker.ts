@@ -291,9 +291,9 @@ async function getEligibleSentimentPolls(userId: string) {
       id: trendingPolls.id,
       category: trendingPolls.category,
       headline: trendingPolls.headline,
-      seedSupportCount: trendingPolls.seedSupportCount,
+      seedAgreeCount: trendingPolls.seedAgreeCount,
       seedNeutralCount: trendingPolls.seedNeutralCount,
-      seedOpposeCount: trendingPolls.seedOpposeCount,
+      seedDisagreeCount: trendingPolls.seedDisagreeCount,
     })
     .from(trendingPolls)
     .where(eq(trendingPolls.visibility, "live"));
@@ -314,37 +314,42 @@ async function getPollCrowdSplit(pollId: string) {
     .where(eq(trendingPollVotes.pollId, pollId))
     .groupBy(trendingPollVotes.choice);
 
-  return {
-    support: Number(results.find((r) => r.choice === "support")?.c || 0),
-    neutral: Number(results.find((r) => r.choice === "neutral")?.c || 0),
-    oppose: Number(results.find((r) => r.choice === "oppose")?.c || 0),
-  };
+  let agree = 0;
+  let neutral = 0;
+  let disagree = 0;
+  for (const r of results) {
+    const n = Number(r.c || 0);
+    if (r.choice === "agree" || r.choice === "support") agree += n;
+    else if (r.choice === "neutral") neutral += n;
+    else if (r.choice === "disagree" || r.choice === "oppose") disagree += n;
+  }
+  return { agree, neutral, disagree };
 }
 
 function decideSentimentPoll(
   agent: { contrarianism: number },
-  poll: { seedSupportCount: number; seedNeutralCount: number; seedOpposeCount: number },
-  crowd: { support: number; neutral: number; oppose: number }
-): "support" | "neutral" | "oppose" {
-  const s = crowd.support + (poll.seedSupportCount || 0);
+  poll: { seedAgreeCount: number; seedNeutralCount: number; seedDisagreeCount: number },
+  crowd: { agree: number; neutral: number; disagree: number }
+): "agree" | "neutral" | "disagree" {
+  const s = crowd.agree + (poll.seedAgreeCount || 0);
   const n = crowd.neutral + (poll.seedNeutralCount || 0);
-  const o = crowd.oppose + (poll.seedOpposeCount || 0);
+  const o = crowd.disagree + (poll.seedDisagreeCount || 0);
   const total = s + n + o;
 
   if (Math.random() < 0.15) return "neutral";
 
   if (total === 0) {
     const r = Math.random();
-    return r < 0.45 ? "support" : r < 0.90 ? "oppose" : "neutral";
+    return r < 0.45 ? "agree" : r < 0.90 ? "disagree" : "neutral";
   }
 
-  const supportRatio = s / total;
-  const opposeRatio = o / total;
+  const agreeRatio = s / total;
+  const disagreeRatio = o / total;
 
   if (agent.contrarianism > 0.6) {
-    return supportRatio > opposeRatio ? "oppose" : "support";
+    return agreeRatio > disagreeRatio ? "disagree" : "agree";
   }
-  return supportRatio >= opposeRatio ? "support" : "oppose";
+  return agreeRatio >= disagreeRatio ? "agree" : "disagree";
 }
 
 // ── Underrated/Overrated voting ────────────────────────────────────────
@@ -574,9 +579,9 @@ export async function castSentimentPollVoteForUser(
         id: trendingPolls.id,
         category: trendingPolls.category,
         headline: trendingPolls.headline,
-        seedSupportCount: trendingPolls.seedSupportCount,
+        seedAgreeCount: trendingPolls.seedAgreeCount,
         seedNeutralCount: trendingPolls.seedNeutralCount,
-        seedOpposeCount: trendingPolls.seedOpposeCount,
+        seedDisagreeCount: trendingPolls.seedDisagreeCount,
       })
       .from(trendingPolls)
       .where(eq(trendingPolls.id, pollId))

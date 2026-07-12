@@ -10,6 +10,7 @@
 
 import { labelForTxnType } from "@shared/credit-config";
 import { getRecentActivityMarketPath } from "@shared/lib/market-paths";
+import { getSentimentPollChoiceLabel } from "@shared/lib/sentiment-poll-choice";
 
 export interface CreditHistoryDisplayFields {
   displayTitle: string;
@@ -126,7 +127,13 @@ export function buildVoteDisplay(
   } else if (context?.pollHeadline) {
     subject = context.pollHeadline;
     const choice = metaString(metadata, "choice");
-    if (choice) subject = `${subject} (${choice})`;
+    if (choice) {
+      const label =
+        voteType === "trending_poll"
+          ? getSentimentPollChoiceLabel(choice)
+          : choice;
+      subject = `${subject} (${label})`;
+    }
   } else if (context?.pollTitle) {
     subject = context.pollTitle;
   } else if (context?.candidateName) {

@@ -263,7 +263,7 @@ ${modeBlock}
 
 WHAT "GOOD" LOOKS LIKE (house genre):
 - Matchups are usually CONCEPT vs CONCEPT preference fights (Coffee vs Tea, Mountains vs Ocean, Texting vs Calling, Paper Straws vs Plastic Straws) OR evergreen rivalries / GOAT debates people already know (classic sports/music rivalries). Punchy promptText. Balanced description that explains the tradeoff without picking a winner.
-- Sentiment polls are assertive claims people can Support / Neutral / Oppose (e.g. "The guy should pay on the first date", "Tipping culture has gone too far", "Superhero fatigue is real"). subjectText = 2-4 sentences of stakes/nuance.
+- Sentiment polls are assertive claims people can Agree / Neutral / Disagree (e.g. "The guy should pay on the first date", "Tipping culture has gone too far", "Superhero fatigue is real"). subjectText = 2-4 sentences of stakes/nuance.
 - Opinion polls are multi-option preference / GOAT / "best X" questions with 4-12 distinct, recognizable options (Greatest band, Best decade for music, How do you like your steak).
 
 WHAT TO AVOID (this is how you produce slop — do not):

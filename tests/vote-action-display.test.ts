@@ -88,13 +88,13 @@ test("buildVoteActionDisplay trending poll with choice", () => {
       voteType: "trending_poll",
       actionKind: "update",
       targetId: "poll-1",
-      prevValue: "oppose",
-      nextValue: "support",
+      prevValue: "disagree",
+      nextValue: "agree",
     },
     {
       pollHeadline: "Should we expand?",
       trendingPollSlug: "should-we-expand",
     },
   );
-  assert.equal(result.displayTitle, "Should we expand? (Support)");
+  assert.equal(result.displayTitle, "Should we expand? (Agree)");
 });

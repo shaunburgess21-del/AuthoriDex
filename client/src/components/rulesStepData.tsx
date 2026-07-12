@@ -44,7 +44,7 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <ThumbsUp />,
-        headline: "Support, Neutral, or Oppose",
+        headline: "Agree, Neutral, or Disagree",
         body: "Read the topic, pick your stance, and watch the community results update in real time.",
       },
       {
