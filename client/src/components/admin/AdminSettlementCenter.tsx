@@ -287,7 +287,7 @@ export function AdminSettlementCenter() {
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-4">
           <div>
             <CardTitle className="text-lg">Pending Settlements</CardTitle>
-            <CardDescription>Markets awaiting resolution — oldest first</CardDescription>
+            <CardDescription>Closed markets and AI-flagged resolve-now World Markets</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             {pendingCount > 0 && (
@@ -345,7 +345,14 @@ export function AdminSettlementCenter() {
             </div>
           ) : pendingMarkets && pendingMarkets.length > 0 ? (
             <div className="space-y-2">
-              {pendingMarkets.map(market => (
+              {pendingMarkets.map(market => {
+                const isAiResolveNow = market.pendingReason === "ai_resolve_now";
+                const scout = market.metadata?.scoutAssessment;
+                const scoutDetail =
+                  scout?.leaning
+                    ? `${typeof scout.confidence === "number" ? `${Math.round(scout.confidence * 100)}% → ` : ""}${scout.leaning}`
+                    : "Condition met";
+                return (
                 <div
                   key={market.id}
                   className="flex items-center justify-between p-3 rounded-lg border hover-elevate cursor-pointer"
@@ -357,8 +364,13 @@ export function AdminSettlementCenter() {
                       <p className="font-medium text-sm truncate">{market.title}</p>
                       <MarketTypeBadge type={market.marketType} />
                       {market.pendingReason && (
-                        <Badge variant="outline" className="text-xs capitalize">
-                          {market.pendingReason.replace(/_/g, " ")}
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${isAiResolveNow ? "border-amber-500/40 text-amber-600 dark:text-amber-400" : "capitalize"}`}
+                        >
+                          {isAiResolveNow
+                            ? "AI: resolve now"
+                            : market.pendingReason.replace(/_/g, " ")}
                         </Badge>
                       )}
                       {market.warnings.map(w => <WarningBadge key={w} warning={w} />)}
@@ -370,7 +382,11 @@ export function AdminSettlementCenter() {
                       <span>{market.uniqueBettors} bettors</span>
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        {market.pendingHours > 0 ? `${market.pendingHours}h pending` : "Just closed"}
+                        {isAiResolveNow
+                          ? scoutDetail
+                          : market.pendingHours > 0
+                            ? `${market.pendingHours}h pending`
+                            : "Just closed"}
                       </span>
                     </div>
                   </div>
@@ -379,7 +395,8 @@ export function AdminSettlementCenter() {
                     Resolve
                   </Button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">

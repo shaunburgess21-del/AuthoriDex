@@ -718,6 +718,7 @@ export default function AdminDashboard() {
 
   const { data: opsSummary } = useQuery<{
     pendingCount: number;
+    aiResolveNowCount: number;
     closingSoonCount: number;
     resolverLastRunAt: string | null;
     resolverAgeMinutes: number | null;
@@ -2769,14 +2770,19 @@ export default function AdminDashboard() {
               data-testid="card-ops-pending"
             >
               <div className="flex items-center gap-2 mb-1">
-                <div className={`p-1.5 rounded-md ${opsSummary.pendingCount > 0 ? "bg-amber-500/15" : "bg-muted/50"}`}>
-                  <Gavel className={`h-4 w-4 ${opsSummary.pendingCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                <div className={`p-1.5 rounded-md ${(opsSummary.pendingCount + (opsSummary.aiResolveNowCount ?? 0)) > 0 ? "bg-amber-500/15" : "bg-muted/50"}`}>
+                  <Gavel className={`h-4 w-4 ${(opsSummary.pendingCount + (opsSummary.aiResolveNowCount ?? 0)) > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
                 </div>
                 <span className="text-xs text-muted-foreground">Needs Resolution</span>
               </div>
-              <p className={`text-xl font-bold ${opsSummary.pendingCount > 0 ? "text-amber-600 dark:text-amber-400" : ""}`} data-testid="text-ops-pending-count">
-                {opsSummary.pendingCount}
+              <p className={`text-xl font-bold ${(opsSummary.pendingCount + (opsSummary.aiResolveNowCount ?? 0)) > 0 ? "text-amber-600 dark:text-amber-400" : ""}`} data-testid="text-ops-pending-count">
+                {opsSummary.pendingCount + (opsSummary.aiResolveNowCount ?? 0)}
               </p>
+              {(opsSummary.aiResolveNowCount ?? 0) > 0 && (
+                <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5" data-testid="text-ops-ai-flagged">
+                  {opsSummary.aiResolveNowCount} AI-flagged
+                </p>
+              )}
             </button>
             <button
               onClick={() => setActiveSection("predictions")}

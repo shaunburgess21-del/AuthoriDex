@@ -22840,11 +22840,24 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // Shared predicate: OPEN World Markets the AI scout marked resolve_now
+  // (condition met before endAt — e.g. far-future manual markets). Distinct
+  // from CLOSED_PENDING so counts never double.
+  const aiResolveNowWhere = and(
+    eq(predictionMarkets.marketType, "community"),
+    eq(predictionMarkets.status, "OPEN"),
+    sql`${predictionMarkets.metadata} -> 'scoutAssessment' ->> 'recommendedAction' = 'resolve_now'`,
+  );
+
   app.get("/api/admin/ops-summary", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const [{ pendingCount }] = await db.select({ pendingCount: sql<number>`count(*)::int` })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.status, "CLOSED_PENDING"));
+
+      const [{ aiResolveNowCount }] = await db.select({ aiResolveNowCount: sql<number>`count(*)::int` })
+        .from(predictionMarkets)
+        .where(aiResolveNowWhere);
 
       const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const [{ closingSoonCount }] = await db.select({ closingSoonCount: sql<number>`count(*)::int` })
@@ -22878,6 +22891,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       res.json({
         pendingCount,
+        aiResolveNowCount,
         closingSoonCount,
         resolverLastRunAt: resolverLastRunAt?.toISOString() ?? null,
         resolverAgeMinutes,
@@ -23123,8 +23137,14 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
   app.get("/api/admin/markets/pending", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      // CLOSED_PENDING (past endAt) plus OPEN community markets the AI scout
+      // has marked resolve_now — so far-future / manually-created World Markets
+      // that are already decided still surface in Settlement Center.
       const pendingMarkets = await db.select().from(predictionMarkets)
-        .where(eq(predictionMarkets.status, "CLOSED_PENDING"))
+        .where(or(
+          eq(predictionMarkets.status, "CLOSED_PENDING"),
+          aiResolveNowWhere,
+        ))
         .orderBy(predictionMarkets.endAt);
 
       const marketIds = pendingMarkets.map(m => m.id);
@@ -23175,6 +23195,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         const pendingMinutes = Math.floor(pendingMs / (1000 * 60));
         const pendingHours = Math.floor(pendingMs / (1000 * 60 * 60));
         const concentration = stats.pool > 0 && stats.maxStakeUser ? stats.maxStakeUser.total / stats.pool : 0;
+        // Query guarantees OPEN rows here are AI resolve_now; still check
+        // metadata so a future query widen can't mis-tag CLOSED_PENDING peers.
+        const scoutAction =
+          m.metadata && typeof m.metadata === "object"
+            ? (m.metadata as { scoutAssessment?: { recommendedAction?: string } }).scoutAssessment
+                ?.recommendedAction
+            : undefined;
+        const isAiResolveNow =
+          m.status === "OPEN" && scoutAction === "resolve_now";
         const parsedNotes =
           typeof m.resolutionNotes === "string" && m.resolutionNotes.trim().startsWith("{")
             ? (() => {
@@ -23185,17 +23214,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
                 }
               })()
             : null;
-        const pendingReason =
-          parsedNotes?.pendingReason ||
-          (m.marketType === "community"
-            ? "community_requires_manual_resolution"
-            : m.marketType === "jackpot"
-              ? "jackpot_requires_manual_cleanup"
-              : "pending_review");
+        const pendingReason = isAiResolveNow
+          ? "ai_resolve_now"
+          : parsedNotes?.pendingReason ||
+            (m.marketType === "community"
+              ? "community_requires_manual_resolution"
+              : m.marketType === "jackpot"
+                ? "jackpot_requires_manual_cleanup"
+                : "pending_review");
         
         const warnings: string[] = [];
         if (stats.betCount === 0) warnings.push("no_bets");
-        if (pendingMinutes > 30) warnings.push("stuck");
+        // Only CLOSED_PENDING markets can be "stuck"; AI-flagged OPEN rows
+        // still have a future endAt and are not overdue.
+        if (!isAiResolveNow && pendingMinutes > 30) warnings.push("stuck");
         if (concentration > 0.6) warnings.push("concentration");
 
         return {
@@ -23208,6 +23240,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           warnings,
           entries: entriesByMarket.get(m.id) || [],
         };
+      });
+
+      // CLOSED_PENDING first (oldest endAt first among them), then AI-flagged
+      // OPEN rows (soonest endAt).
+      result.sort((a, b) => {
+        const aAi = a.pendingReason === "ai_resolve_now" ? 1 : 0;
+        const bAi = b.pendingReason === "ai_resolve_now" ? 1 : 0;
+        if (aAi !== bAi) return aAi - bAi;
+        const aEnd = a.endAt ? new Date(a.endAt).getTime() : 0;
+        const bEnd = b.endAt ? new Date(b.endAt).getTime() : 0;
+        return aEnd - bEnd;
       });
 
       res.json(result);

@@ -74,6 +74,14 @@ type OpsPreset = "needs_resolution" | "closing_soon" | null;
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
 
+/** OPEN World Market the AI scout has marked as resolvable now. */
+function isAiResolveNow(market: PredictionMarket): boolean {
+  if (market.status !== "OPEN") return false;
+  const assessment = (market.metadata as { scoutAssessment?: { recommendedAction?: string } } | null)
+    ?.scoutAssessment;
+  return assessment?.recommendedAction === "resolve_now";
+}
+
 interface WorldMarketsSectionProps {
   markets: PredictionMarket[] | undefined;
   marketsLoading: boolean;
@@ -93,7 +101,9 @@ interface WorldMarketsSectionProps {
 /**
  * Single state chip merging `status` and `visibility`. For OPEN markets the
  * operational state is the visibility (Draft / Live / Inactive / Archived);
- * once the market leaves OPEN, the status is what matters.
+ * once the market leaves OPEN, the status is what matters. AI-flagged
+ * resolve_now markets still show Live/Draft but get an extra "AI" badge
+ * from the row renderer.
  */
 function MarketStateChip({ market }: { market: PredictionMarket }) {
   if (market.status === "CLOSED_PENDING") {
@@ -208,7 +218,13 @@ export function WorldMarketsSection({
     let open = 0;
     for (const m of communityMarkets) {
       const end = new Date(m.endAt).getTime();
-      if (m.status === "CLOSED_PENDING" || (m.status === "OPEN" && end < now)) needsResolution++;
+      if (
+        m.status === "CLOSED_PENDING" ||
+        (m.status === "OPEN" && end < now) ||
+        isAiResolveNow(m)
+      ) {
+        needsResolution++;
+      }
       if (m.status === "OPEN" && end >= now && end <= now + HOURS_48) closingSoon++;
       // Must match the chip's filter (visibility=draft) so count === list length.
       if (m.visibility === "draft") drafts++;
@@ -258,7 +274,11 @@ export function WorldMarketsSection({
     if (opsPreset === "needs_resolution") {
       list = list.filter((m) => {
         const end = new Date(m.endAt).getTime();
-        return m.status === "CLOSED_PENDING" || (m.status === "OPEN" && end < now);
+        return (
+          m.status === "CLOSED_PENDING" ||
+          (m.status === "OPEN" && end < now) ||
+          isAiResolveNow(m)
+        );
       });
     } else if (opsPreset === "closing_soon") {
       list = list.filter((m) => {
@@ -804,6 +824,15 @@ export function WorldMarketsSection({
                         <p className="font-medium leading-snug line-clamp-2 md:line-clamp-1">{market.title}</p>
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <MarketStateChip market={market} />
+                          {isAiResolveNow(market) && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-500"
+                              data-testid={`badge-ai-resolve-${market.id}`}
+                            >
+                              AI: resolve now
+                            </Badge>
+                          )}
                           {market.openMarketType && (
                             <Badge variant="outline" className="text-xs">
                               {market.openMarketType === "binary" ? "Yes/No" :
