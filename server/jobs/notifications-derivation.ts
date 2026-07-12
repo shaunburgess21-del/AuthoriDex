@@ -1054,7 +1054,6 @@ async function derivePositionResolutionImminent(): Promise<number> {
         contextLabel,
         netShares,
         stakeCredits,
-        hoursRemaining,
       });
 
       const id = await createNotification({

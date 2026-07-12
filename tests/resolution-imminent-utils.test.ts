@@ -13,36 +13,25 @@ function body(stake: number, shares: string, shareWord: string, payout: number):
   return `Staked ${stakeFmt} ${MIDDOT} ${shares} ${shareWord} (${payoutFmt} if your pick wins)`;
 }
 
-test("6h remaining: market-first title and stake + payout body", () => {
+test("market-first title reads 'settles soon' (no precise countdown)", () => {
   const out = formatResolutionImminentNotification({
     marketTitle: "Mark Cuban: Up or Down?",
     contextLabel: "Mark Cuban",
     netShares: 240,
     stakeCredits: 180,
-    hoursRemaining: 6,
   });
-  assert.equal(out.title, "Mark Cuban: Up or Down? resolves in 6h");
+  assert.equal(out.title, "Mark Cuban: Up or Down? settles soon");
   assert.equal(out.body, body(180, "240", "shares", 240));
 });
 
-test("3.7h remaining floors to 3h", () => {
+test("title omits the padded settlement hour entirely", () => {
   const out = formatResolutionImminentNotification({
-    marketTitle: "Conor McGregor: Up or Down?",
-    netShares: 100,
-    stakeCredits: 75,
-    hoursRemaining: 3.7,
+    marketTitle: "Who will win Wimbledon Women's Singles 2026?",
+    netShares: 398,
+    stakeCredits: 100,
   });
-  assert.equal(out.title, "Conor McGregor: Up or Down? resolves in 3h");
-});
-
-test("0.5h remaining renders as <1h", () => {
-  const out = formatResolutionImminentNotification({
-    marketTitle: "Tesla: Up or Down?",
-    netShares: 50,
-    stakeCredits: 40,
-    hoursRemaining: 0.5,
-  });
-  assert.equal(out.title, "Tesla: Up or Down? resolves in <1h");
+  assert.equal(out.title, "Who will win Wimbledon Women's Singles 2026? settles soon");
+  assert.doesNotMatch(out.title, /\dh|<1h/);
 });
 
 test("category race title and body lead with candidate pick", () => {
@@ -51,9 +40,8 @@ test("category race title and body lead with candidate pick", () => {
     contextLabel: "Clavicular",
     netShares: 335,
     stakeCredits: 280,
-    hoursRemaining: 6,
   });
-  assert.equal(out.title, `Clavicular ${MIDDOT} Category Race: Streaming resolves in 6h`);
+  assert.equal(out.title, `Clavicular ${MIDDOT} Category Race: Streaming settles soon`);
   assert.equal(out.body, body(280, "335", "shares", 335));
 });
 
@@ -62,7 +50,6 @@ test("netShares uses singular share when count rounds to 1", () => {
     marketTitle: "Who wins?",
     netShares: 1,
     stakeCredits: 1,
-    hoursRemaining: 4,
   });
   assert.equal(out.body, body(1, "1", "share", 1));
 });
@@ -72,9 +59,8 @@ test("large netShares uses en-US thousands separator", () => {
     marketTitle: "Whale market",
     netShares: 12_345.7,
     stakeCredits: 10_000,
-    hoursRemaining: 5,
   });
-  assert.equal(out.title, "Whale market resolves in 5h");
+  assert.equal(out.title, "Whale market settles soon");
   assert.equal(out.body, body(10_000, "12,346", "shares", 12_346));
 });
 
@@ -83,7 +69,6 @@ test("negative netShares clamps to 0 shares and payout", () => {
     marketTitle: "Defensive",
     netShares: -5,
     stakeCredits: 50,
-    hoursRemaining: 2,
   });
   assert.equal(out.body, body(50, "0", "shares", 0));
 });
@@ -93,9 +78,8 @@ test("losing-side position: stake exceeds max payout if pick wins", () => {
     marketTitle: "Elon Musk vs Dario Amodei",
     netShares: 247,
     stakeCredits: 500,
-    hoursRemaining: 5,
   });
-  assert.equal(out.title, "Elon Musk vs Dario Amodei resolves in 5h");
+  assert.equal(out.title, "Elon Musk vs Dario Amodei settles soon");
   assert.equal(out.body, body(500, "247", "shares", 247));
 });
 
@@ -104,7 +88,6 @@ test("break-even stake equals share count", () => {
     marketTitle: "Even odds",
     netShares: 100,
     stakeCredits: 100,
-    hoursRemaining: 4,
   });
   assert.equal(out.body, body(100, "100", "shares", 100));
 });
@@ -114,7 +97,6 @@ test("negative stakeCredits clamps to 0 staked", () => {
     marketTitle: "Over-sold edge",
     netShares: 50,
     stakeCredits: -20,
-    hoursRemaining: 3,
   });
   assert.equal(out.body, body(0, "50", "shares", 50));
 });

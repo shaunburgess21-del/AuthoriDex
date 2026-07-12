@@ -18,7 +18,6 @@ export interface ResolutionImminentInput {
   netShares: number;
   /** Net credits at risk (buy stakes minus sell proceeds). */
   stakeCredits: number;
-  hoursRemaining: number;
 }
 
 export interface ResolutionImminentOutput {
@@ -29,22 +28,23 @@ export interface ResolutionImminentOutput {
 /**
  * Render the title + body for the resolution-imminent notification.
  *
- * Title leads with the market/pick via formatMarketLead. Body shows
- * stake vs share count and upside if the pick wins (Ꝟ1 per share).
- * Symmetric for winning and losing sides — a losing pick still shows
- * honest stake and max payout without implying current P&L.
+ * Title leads with the market/pick via formatMarketLead and reads
+ * "… settles soon" — deliberately without a precise countdown. The
+ * imported `endAt` is Polymarket's settlement buffer (often padded to
+ * a round hour like midnight UTC), not the real-world event time, so a
+ * precise "resolves in Xh" misleads users into thinking the outcome is
+ * still hours away when it may already be decided. Since this ping is
+ * purely informational (fires as P&L is about to land, when the user
+ * can no longer trade), the exact hour adds noise without value.
  *
- * `hoursRemaining` is clamped to >= 0 and floored to whole hours.
- * Anything under one hour renders as "<1h".
+ * Body shows stake vs share count and upside if the pick wins (Ꝟ1 per
+ * share). Symmetric for winning and losing sides — a losing pick still
+ * shows honest stake and max payout without implying current P&L.
  */
 export function formatResolutionImminentNotification(
   input: ResolutionImminentInput,
 ): ResolutionImminentOutput {
   const { marketTitle, contextLabel, netShares } = input;
-  const hoursRemaining = Number.isFinite(input.hoursRemaining)
-    ? Math.max(0, input.hoursRemaining)
-    : 0;
-  const label = hoursRemaining < 1 ? "<1h" : `${Math.floor(hoursRemaining)}h`;
   const sharesRounded = Math.max(0, Math.round(netShares));
   const shareWord = sharesRounded === 1 ? "share" : "shares";
   const marketLead = formatMarketLead(marketTitle, contextLabel);
@@ -54,7 +54,7 @@ export function formatResolutionImminentNotification(
   const payoutIfWin = sharesRounded;
 
   return {
-    title: `${marketLead} resolves in ${label}`,
+    title: `${marketLead} settles soon`,
     body:
       `Staked ${formatVox(stakeRounded)} · ${sharesRounded.toLocaleString("en-US")} ${shareWord} ` +
       `(${formatVox(payoutIfWin)} if your pick wins)`,
