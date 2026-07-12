@@ -719,6 +719,7 @@ export default function AdminDashboard() {
   const { data: opsSummary } = useQuery<{
     pendingCount: number;
     aiResolveNowCount: number;
+    stuckCount: number;
     closingSoonCount: number;
     resolverLastRunAt: string | null;
     resolverAgeMinutes: number | null;
@@ -2781,6 +2782,11 @@ export default function AdminDashboard() {
               {(opsSummary.aiResolveNowCount ?? 0) > 0 && (
                 <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 mt-0.5" data-testid="text-ops-ai-flagged">
                   {opsSummary.aiResolveNowCount} AI-flagged
+                </p>
+              )}
+              {(opsSummary.stuckCount ?? 0) > 0 && (
+                <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-medium" data-testid="text-ops-stuck">
+                  {opsSummary.stuckCount} stuck
                 </p>
               )}
             </button>

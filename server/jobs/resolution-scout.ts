@@ -507,13 +507,13 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     .where(
       and(
         eq(predictionMarkets.marketType, "community"),
-        eq(predictionMarkets.status, "OPEN"),
+        inArray(predictionMarkets.status, ["OPEN", "CLOSED_PENDING"]),
       ),
     )
     .orderBy(asc(predictionMarkets.endAt))) as ScoutMarket[];
 
   if (markets.length === 0) {
-    log("[ResolutionScout] No open World Markets to scan.");
+    log("[ResolutionScout] No open or pending World Markets to scan.");
     return result;
   }
 

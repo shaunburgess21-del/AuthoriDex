@@ -20066,11 +20066,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       // Match native-market parity: defend against late bets if the resolver
       // hasn't flipped status yet. Either closeAt OR endAt being past is
-      // enough to lock the market.
+      // enough to lock the market. Use <= to match loadAndLockTradeContext.
       const now = new Date();
       if (
-        (market.closeAt && new Date(market.closeAt) < now) ||
-        (market.endAt && new Date(market.endAt) < now)
+        (market.closeAt && new Date(market.closeAt) <= now) ||
+        (market.endAt && new Date(market.endAt) <= now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
@@ -20202,8 +20202,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       }
       if (
-        (market.closeAt && new Date(market.closeAt) < now) ||
-        (market.endAt && new Date(market.endAt) < now)
+        (market.closeAt && new Date(market.closeAt) <= now) ||
+        (market.endAt && new Date(market.endAt) <= now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
@@ -20392,8 +20392,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
       }
       if (
-        (market.closeAt && new Date(market.closeAt) < now) ||
-        (market.endAt && new Date(market.endAt) < now)
+        (market.closeAt && new Date(market.closeAt) <= now) ||
+        (market.endAt && new Date(market.endAt) <= now)
       ) {
         return res.status(400).json({ error: "Betting is closed for this market" });
       }
@@ -22859,6 +22859,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(predictionMarkets)
         .where(aiResolveNowWhere);
 
+      // CLOSED_PENDING community markets whose endAt was >24h ago — same
+      // threshold as the daily digest STUCK bucket. Escalate-only; no auto-void.
+      const stuckCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [{ stuckCount }] = await db.select({ stuckCount: sql<number>`count(*)::int` })
+        .from(predictionMarkets)
+        .where(and(
+          eq(predictionMarkets.marketType, "community"),
+          eq(predictionMarkets.status, "CLOSED_PENDING"),
+          lte(predictionMarkets.endAt, stuckCutoff),
+        ));
+
       const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
       const [{ closingSoonCount }] = await db.select({ closingSoonCount: sql<number>`count(*)::int` })
         .from(predictionMarkets)
@@ -22892,6 +22903,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.json({
         pendingCount,
         aiResolveNowCount,
+        stuckCount,
         closingSoonCount,
         resolverLastRunAt: resolverLastRunAt?.toISOString() ?? null,
         resolverAgeMinutes,
@@ -23325,20 +23337,38 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
 
         if (market.marketType === "community" && activeBetCount === 0) {
-          await voidMarketBets(market.id);
-          await db
-            .update(predictionMarkets)
-            .set({
-              voidReason: `Admin stale pending cleanup (${olderThanHours}h threshold, zero active bets)`,
-              settledBy: req.userId!,
-              resolutionNotes: JSON.stringify({
-                type: "community",
-                pendingReason: "community_auto_voided_zero_bets",
-                cleanupThresholdHours: olderThanHours,
-              }),
-              updatedAt: new Date(),
-            })
-            .where(eq(predictionMarkets.id, market.id));
+          // AMM-correct void: returns house seed via returnAmmSeedAtSettlement.
+          // Legacy voidMarketBets is parimutuel-only and leaves the seed stranded.
+          const { resolveAmmMarket } = await import("./services/amm-resolver");
+          const voidReason = `Admin stale pending cleanup (${olderThanHours}h threshold, zero active bets)`;
+          const ammResult = await resolveAmmMarket({
+            marketId: market.id,
+            voidMarket: true,
+            settledBy: req.userId!,
+            voidReason,
+          });
+          if ("error" in ammResult) {
+            skipped.push({
+              id: market.id,
+              title: market.title,
+              marketType: market.marketType,
+              reason: `amm_void_failed:${ammResult.error}`,
+            });
+            continue;
+          }
+          if (!("idempotentSkip" in ammResult && ammResult.idempotentSkip)) {
+            await db
+              .update(predictionMarkets)
+              .set({
+                resolutionNotes: JSON.stringify({
+                  type: "community",
+                  pendingReason: "community_auto_voided_zero_bets",
+                  cleanupThresholdHours: olderThanHours,
+                }),
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, market.id));
+          }
           cleaned.push({ id: market.id, title: market.title, marketType: market.marketType, action: "voided_zero_bets" });
           continue;
         }
@@ -26713,14 +26743,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // 2's `returnAmmSeedAtSettlement`. Idempotent — re-running on an
   // already-resolved market returns `idempotentSkip: true`.
   //
-  // Body: { winnerEntryId?: string; void?: boolean }
-  //   - To resolve to a winner: pass `winnerEntryId`.
-  //   - To void the market: pass `{ void: true }` (refunds everyone
-  //     their net credits in; house breaks even).
+  // Body: { winnerEntryId?: string; void?: boolean; voidMarket?: boolean; notes?: string }
+  //   - To resolve to a winner: pass `winnerEntryId` (optional `notes` stamped into resolutionNotes).
+  //   - To void the market: pass `{ void: true }` or `{ voidMarket: true }` with optional
+  //     `notes` used as voidReason (refunds everyone their net credits in; house breaks even).
   //
-  // Phase 4 will extend the existing community-resolve flow to call
-  // this when `engine='amm'`. For now, this is the explicit admin-only
-  // entry point so we can smoke-test the full lifecycle on Railway.
+  // Mirrors /api/admin/open-markets/:id/settle guards: self-resolution block,
+  // resolutionNotes stamp, and admin audit log.
   app.post("/api/admin/markets/:id/amm-resolve", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -26733,6 +26762,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       // smoke tests use `void: true`. Honour either to avoid a silent
       // 400 on the void path.
       const voidMarket = req.body?.void === true || req.body?.voidMarket === true;
+      const notesRaw = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+      const notes = notesRaw.length > 0 ? notesRaw : null;
 
       if (!voidMarket && !winnerEntryId) {
         return res.status(400).json({
@@ -26747,12 +26778,65 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         });
       }
 
+      const [market] = await db
+        .select({
+          id: predictionMarkets.id,
+          title: predictionMarkets.title,
+          slug: predictionMarkets.slug,
+          status: predictionMarkets.status,
+          marketType: predictionMarkets.marketType,
+          createdBy: predictionMarkets.createdBy,
+          settledBy: predictionMarkets.settledBy,
+          engine: predictionMarkets.engine,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+
+      if (!market) {
+        return res.status(404).json({ error: "market_not_found", message: "Market not found" });
+      }
+
+      // Self-resolution guard — same as /api/admin/open-markets/:id/settle.
+      // Native (cron-created) markets have createdBy = null so this never
+      // blocks auto-resolver paths.
+      if (market.createdBy && market.createdBy === req.userId) {
+        return res.status(403).json({
+          error: "self_resolution_denied",
+          message:
+            "You created this market — another admin must settle it. " +
+            "This guard prevents conflict of interest on community markets.",
+        });
+      }
+
+      let winnerLabel: string | null = null;
+      if (!voidMarket && winnerEntryId) {
+        const [winnerEntry] = await db
+          .select({ id: marketEntries.id, label: marketEntries.label })
+          .from(marketEntries)
+          .where(
+            and(
+              eq(marketEntries.id, winnerEntryId),
+              eq(marketEntries.marketId, id),
+            ),
+          )
+          .limit(1);
+        if (!winnerEntry) {
+          return res.status(400).json({
+            error: "winner_invalid",
+            message: "Winner entry not found in this market",
+          });
+        }
+        winnerLabel = winnerEntry.label;
+      }
+
       const { resolveAmmMarket } = await import("./services/amm-resolver");
       const result = await resolveAmmMarket({
         marketId: id,
         winnerEntryId,
         voidMarket,
         settledBy: req.userId ?? null,
+        voidReason: voidMarket ? (notes || "amm_admin_void") : undefined,
       });
 
       if ("error" in result) {
@@ -26765,6 +26849,63 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
                 ? 500
                 : 400;
         return res.status(status).json({ error: result.error, message: result.message });
+      }
+
+      const wasIdempotentSkip = "idempotentSkip" in result && result.idempotentSkip;
+      if (!wasIdempotentSkip) {
+        await db
+          .update(predictionMarkets)
+          .set({
+            resolveMethod: "admin_manual",
+            settledBy: req.userId ?? null,
+            resolutionNotes: JSON.stringify(
+              voidMarket
+                ? {
+                    type: market.marketType || "community",
+                    outcome: "void",
+                    voidReason: notes || "amm_admin_void",
+                    resolvedAt: new Date().toISOString(),
+                    ...(notes ? { adminNotes: notes } : {}),
+                  }
+                : {
+                    type: market.marketType || "community",
+                    outcome: winnerLabel,
+                    winnerEntryId,
+                    resolvedAt: new Date().toISOString(),
+                    ...(notes ? { adminNotes: notes } : {}),
+                  },
+            ),
+            updatedAt: new Date(),
+          })
+          .where(eq(predictionMarkets.id, id));
+      }
+
+      try {
+        await db.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          actionType: "amm_market_settle",
+          targetTable: "prediction_markets",
+          targetId: id,
+          previousData: {
+            status: market.status,
+            settledBy: market.settledBy,
+          },
+          newData: {
+            status: voidMarket ? "VOID" : "RESOLVED",
+            winnerEntryId: voidMarket ? null : winnerEntryId,
+            settledBy: req.userId ?? null,
+            voidMarket,
+          },
+          metadata: {
+            marketType: market.marketType,
+            slug: market.slug,
+            title: market.title,
+            notes: notes ?? null,
+            idempotentSkip: wasIdempotentSkip,
+          },
+        });
+      } catch (auditErr) {
+        console.error("[AmmAdmin] Settle audit-log insert failed (settlement still committed):", auditErr);
       }
 
       console.log(

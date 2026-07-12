@@ -172,15 +172,19 @@ export function getCommunityMarketStatusMessage({
 
 /**
  * True when a World Market should show as trading-closed in the UI.
- * Combines DB status with the authoritative `closeAt` gate (same field
- * `amm-trades` enforces) so an auto-lock freezes Buy buttons without
- * waiting for status to flip away from OPEN.
+ * Mirrors `loadAndLockTradeContext` in amm-trades: status must be OPEN,
+ * and trading stops at `closeAt` (auto-lock) or `endAt` (belt-and-
+ * suspenders when closeAt is null or mis-set).
  */
 export function isCommunityTradingClosed(market: {
   status?: string | null;
   closeAt?: string | Date | null;
+  endAt?: string | Date | null;
 }): boolean {
   if (market.status !== "OPEN") return true;
+  const now = Date.now();
   const closeAt = toDate(market.closeAt);
-  return !!closeAt && closeAt.getTime() <= Date.now();
+  if (closeAt && closeAt.getTime() <= now) return true;
+  const endAt = toDate(market.endAt);
+  return !!endAt && endAt.getTime() <= now;
 }

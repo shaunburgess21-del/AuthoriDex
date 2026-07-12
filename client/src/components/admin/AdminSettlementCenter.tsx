@@ -309,8 +309,9 @@ export function AdminSettlementCenter() {
                   <DialogTitle>Clean stale pending markets?</DialogTitle>
                 </DialogHeader>
                 <p className="text-sm text-muted-foreground">
-                  This voids every market that has been pending resolution for more than
-                  24 hours and refunds all stakes. It cannot be undone.
+                  Voids jackpot markets and community markets with zero active bets that have
+                  been pending longer than 24 hours (AMM seed returned). Community markets with
+                  active bets are skipped and still need manual resolution. This cannot be undone.
                 </p>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" size="sm" onClick={() => setShowCleanupConfirm(false)}>

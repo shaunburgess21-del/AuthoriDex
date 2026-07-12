@@ -556,6 +556,21 @@ export async function computeWorldMarketPrediction(
 
   if (!entries.length) return abstain("low_edge");
 
+  // Once Polymarket (or any source) has resolved upstream, settlement owns
+  // the market. Anchor/convergence already stop via sourceFair, but the
+  // LLM path would otherwise keep betting from a cached assessment —
+  // soft counterparty for informed traders. Abstain regardless of the
+  // auto-lock flag so this holds even when AUTO_LOCK_ON_RESOLUTION is off.
+  const sourceMeta =
+    market.metadata && typeof market.metadata === "object"
+      ? (market.metadata as { source?: { upstreamResolvedAt?: unknown } }).source
+      : undefined;
+  if (typeof sourceMeta?.upstreamResolvedAt === "string") {
+    // Pre-LLM gate — use `domain` (silent skip), not `world_abstain`, so
+    // agentRunner does not persist a 7-day world_abstained lockout.
+    return abstain("domain");
+  }
+
   // SAFETY GATE: kill switch. When the env var is off (the safe default after
   // the 2026-05-01 cost incident), no agent ever touches OpenAI for World
   // Markets. They simply abstain with a domain reason so the per-agent

@@ -1095,12 +1095,24 @@ async function loadAndLockTradeContext(
       message: `Market ${marketId} is ${market.status}; trading disabled.`,
     };
   }
+  const nowMs = Date.now();
   const closeAtMs = market.closeAt ? new Date(market.closeAt).getTime() : null;
-  if (closeAtMs !== null && closeAtMs <= Date.now()) {
+  if (closeAtMs !== null && closeAtMs <= nowMs) {
     return {
       error: "market_closed",
       status: 409,
       message: `Market ${marketId} closed at ${market.closeAt!.toISOString()}.`,
+    };
+  }
+  // Belt-and-suspenders: even if closeAt is null (admin PATCH can clear
+  // it) or mis-set past endAt, never accept trades after endAt. Closes
+  // the null-closeAt hole on /api/markets/:id/buy|sell.
+  const endAtMs = market.endAt ? new Date(market.endAt).getTime() : null;
+  if (endAtMs !== null && endAtMs <= nowMs) {
+    return {
+      error: "market_closed",
+      status: 409,
+      message: `Market ${marketId} ended at ${market.endAt!.toISOString()}.`,
     };
   }
   if (market.visibility !== "live" && !isAdmin) {

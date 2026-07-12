@@ -136,12 +136,17 @@ function ScoutPanel({
   scout,
   proposedEntryLabel,
   onUseProposed,
+  suggestVoid,
+  onSuggestVoid,
 }: {
   scout: ScoutAssessmentView;
   /** Label of the proposed winner entry when it maps to a real outcome. */
   proposedEntryLabel?: string | null;
   /** One-tap select of the scout's proposed winner (mobile-friendly). */
   onUseProposed?: () => void;
+  /** Upstream closed with no mappable winner — scout leans void. */
+  suggestVoid?: boolean;
+  onSuggestVoid?: () => void;
 }) {
   const conf =
     typeof scout.confidence === "number"
@@ -230,6 +235,20 @@ function ScoutPanel({
           Use proposed winner: {proposedEntryLabel}
         </Button>
       ) : null}
+
+      {suggestVoid && onSuggestVoid ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full h-10 border-destructive/40 text-destructive"
+          onClick={onSuggestVoid}
+          data-testid="button-scout-suggest-void"
+        >
+          <XCircle className="h-4 w-4 mr-2" />
+          Scout suggests voiding — open void form
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -265,15 +284,31 @@ export function AmmResolutionDialog({
     market.entries.some((e) => e.id === scout.proposedWinnerEntryId)
       ? scout.proposedWinnerEntryId
       : null;
+  // Upstream closed with no mappable winner — scout leans void (escalate-only).
+  const scoutSuggestsVoid =
+    !!scout &&
+    (scout.stage === "met" || scout.recommendedAction === "resolve_now") &&
+    !scout.proposedWinnerEntryId;
 
   // Pre-select the scout's proposed winner when the dialog opens, so a
   // confident assessment becomes a one-click confirm. The operator can
-  // still change the selection before resolving.
+  // still change the selection before resolving. When the scout leans
+  // void (unmappable upstream), surface the void form with a suggested
+  // reason — still requires an explicit confirm click.
   useEffect(() => {
-    if (open && scoutProposedEntry) {
+    if (!open) return;
+    if (scoutProposedEntry) {
       setSelectedEntry(scoutProposedEntry);
+    } else if (scoutSuggestsVoid) {
+      setShowVoid(true);
+      setVoidReason((prev) =>
+        prev.trim()
+          ? prev
+          : scout?.whatChanged ||
+            "Upstream resolved with no mappable winner — voiding.",
+      );
     }
-  }, [open, scoutProposedEntry]);
+  }, [open, scoutProposedEntry, scoutSuggestsVoid, scout?.whatChanged]);
 
   // Parimutuel preview is the only path that needs a server-rendered
   // payout breakdown; AMM payouts are always 1 credit per winning
@@ -403,7 +438,27 @@ export function AmmResolutionDialog({
               onUseProposed={
                 scoutProposedEntry ? () => setSelectedEntry(scoutProposedEntry) : undefined
               }
+              suggestVoid={scoutSuggestsVoid}
+              onSuggestVoid={
+                scoutSuggestsVoid
+                  ? () => {
+                      setShowVoid(true);
+                      setVoidReason((prev) =>
+                        prev.trim()
+                          ? prev
+                          : scout?.whatChanged ||
+                            "Upstream resolved with no mappable winner — voiding.",
+                      );
+                    }
+                  : undefined
+              }
             />
+          )}
+
+          {scout && showVoid && scoutSuggestsVoid && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+              Scout suggests voiding — upstream closed with no mappable winner. Confirm below or cancel to pick an outcome instead.
+            </div>
           )}
 
           {!showVoid && isAmm ? (

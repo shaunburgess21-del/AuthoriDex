@@ -1521,14 +1521,85 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     if (unmappedWinner || winners.length !== 1) {
       if (allClosed) {
         // Upstream fully closed but no clean single winner (voided /
-        // ambiguous). Flag for the human without proposing a winner.
-        // Still lock trading — the outcome is public even if we can't map it.
+        // ambiguous/cancelled). Surface in the Needs Resolution dashboard
+        // via scoutAssessment (OPEN + resolve_now) and ping ops — escalate
+        // only, never auto-void. Still lock trading when the flag is on.
         result.unmappable += 1;
         await tryAutoLock("upstream_closed_unmappable");
+
+        const assessedAt = new Date().toISOString();
+        const assessment = {
+          leaning: "Void / review",
+          proposedWinnerEntryId: null as string | null,
+          confidence: 0.99,
+          stage: "met" as const,
+          recommendedAction: "resolve_now" as const,
+          whatChanged:
+            "Upstream resolved on Polymarket with no mappable single winner " +
+            "(cancelled, voided, or outcomes no longer match). Review and void.",
+          sources: source.url ? [source.url] : [],
+          assessedAt,
+          signature: `met|resolve_now|void_unmappable`,
+        };
+
+        try {
+          const payload: Record<string, unknown> = {
+            scoutAssessment: assessment,
+            source: { ...source, upstreamResolvedAt: assessedAt },
+          };
+          await db
+            .update(predictionMarkets)
+            .set({
+              metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, row.id));
+        } catch (err) {
+          result.errors += 1;
+          log(
+            `[MarketScout] Failed to persist unmappable assessment for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
         log(
           `[MarketScout] Source event ${source.externalId} closed without a mappable winner ` +
             `for market=${row.id.slice(0, 8)} (winners=${winners.length})`,
         );
+
+        void (async () => {
+          try {
+            const { sendOpsAlert, adminResolveMarketUrl } = await import(
+              "../services/ops-alerts"
+            );
+            await sendOpsAlert({
+              kind: "market_source_unmappable",
+              severity: "warning",
+              title: "Scouted market needs manual void/review",
+              summary:
+                `"${row.title}" closed upstream without a mappable winner — ` +
+                `review and void (or pick an outcome) in Settlement.`,
+              sections: [
+                {
+                  heading: "Upstream closed — no mappable winner",
+                  items: [
+                    {
+                      text: row.title,
+                      detail: `Winners mapped: ${winners.length}. Suggest void.`,
+                      url: adminResolveMarketUrl(row.id),
+                    },
+                  ],
+                },
+              ],
+              ctaUrl: adminResolveMarketUrl(row.id),
+              ctaLabel: "Review & void",
+              idempotencyKeyBase: `market_source_unmappable:${row.id}`,
+            });
+          } catch (err) {
+            log(
+              `[MarketScout] Unmappable ops alert failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        })();
       } else {
         // Source still open: refresh the live consensus prices. These are
         // the fair-value anchor for agent convergence on scouted markets
