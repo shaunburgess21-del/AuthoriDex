@@ -56,6 +56,7 @@ function makeSelection(
     relatedPeople: overrides.relatedPeople ?? [],
     fitScore: overrides.fitScore ?? 70,
     entryLabels: overrides.entryLabels ?? ["Yes", "No"],
+    seriesKey: overrides.seriesKey ?? `series-${overrides.eventId}`,
   };
 }
 

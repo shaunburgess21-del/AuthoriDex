@@ -385,12 +385,20 @@ export function WorldMarketsSection({
         queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
         resetFilters();
         setVisFilterRaw("draft");
+        const seriesNote =
+          typeof data.seriesBlocked === "number" && data.seriesBlocked > 0
+            ? `, ${data.seriesBlocked} blocked as series duplicates`
+            : "";
         toast("Scout complete", {
-          description: `${data.created} new draft${data.created === 1 ? "" : "s"} created (${data.deduped} already imported). Review under Visibility: Draft.`,
+          description: `${data.created} new draft${data.created === 1 ? "" : "s"} created (${data.deduped} already imported${seriesNote}). Review under Visibility: Draft.`,
         });
       } else {
+        const seriesNote =
+          typeof data.seriesBlocked === "number" && data.seriesBlocked > 0
+            ? ` ${data.seriesBlocked} blocked as series duplicates.`
+            : "";
         toast("Scout complete", {
-          description: `No new drafts — ${data.fetched} trending candidates, ${data.deduped} already imported.`,
+          description: `No new drafts — ${data.fetched} trending candidates, ${data.deduped} already imported.${seriesNote}`,
         });
       }
     } catch {

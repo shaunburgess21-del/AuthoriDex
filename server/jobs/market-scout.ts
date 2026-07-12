@@ -198,6 +198,8 @@ export interface MarketScoutResult {
   created: number;
   /** GPT selections that failed validation/insert. */
   skipped: number;
+  /** Selections dropped because their series already has an unresolved market. */
+  seriesBlocked: number;
   errors: number;
   drafts: ScoutDraftSummary[];
 }
@@ -217,6 +219,17 @@ export interface ScoutSelection {
   relatedPeople: string[];
   fitScore: number;
   entryLabels: string[];
+  /**
+   * Stable series id that ignores deadline/threshold/date so sibling
+   * rungs (e.g. Hormuz by Jul 15 / Jul 31 / Dec 31) share one key.
+   */
+  seriesKey: string;
+}
+
+/** Unresolved community market shown to the curation prompt for series suppression. */
+export interface UnresolvedMarketRef {
+  title: string;
+  seriesKey: string | null;
 }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -346,6 +359,122 @@ function readSourceExternalId(metadata: unknown): string | null {
   if (!source || typeof source !== "object") return null;
   const id = (source as Record<string, unknown>).externalId;
   return typeof id === "string" ? id : null;
+}
+
+/** Reads metadata.seriesKey when present. Exported for unit tests. */
+export function readSeriesKey(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const key = (metadata as Record<string, unknown>).seriesKey;
+  return typeof key === "string" && key.trim() ? key.trim() : null;
+}
+
+/**
+ * Strip deadline/threshold wording from a title before using it as a
+ * seriesKey fallback. Keeps in-batch siblings ("by July 15" / "by July 31")
+ * colliding when the LLM omits seriesKey. Only used as a fallback — a
+ * real LLM-assigned seriesKey is preferred and left untouched.
+ */
+export function stripSeriesDeadlineNoise(title: string): string {
+  const months =
+    "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+  return title
+    // "by July 15", "by Jul. 31, 2026", "by the end of December"
+    .replace(
+      new RegExp(
+        `\\bby\\s+(?:the\\s+)?(?:end\\s+of\\s+)?(?:${months})\\.?\\s*\\d{0,2}(?:st|nd|rd|th)?(?:,?\\s*\\d{4})?`,
+        "gi",
+      ),
+      " ",
+    )
+    // "by 15 July 2026"
+    .replace(
+      new RegExp(
+        `\\bby\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${months})\\.?(?:,?\\s*\\d{4})?`,
+        "gi",
+      ),
+      " ",
+    )
+    // "by 2026-07-15", "by end of 2026", "by 2026"
+    .replace(/\bby\s+\d{4}-\d{2}-\d{2}\b/gi, " ")
+    .replace(/\bby\s+(?:the\s+)?(?:end\s+of\s+)?\d{4}\b/gi, " ")
+    // Trailing bare date after the question core: "… normal July 15?"
+    .replace(
+      new RegExp(
+        `\\b(?:${months})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s*\\d{4})?(?=\\s*\\??\\s*$)`,
+        "gi",
+      ),
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .replace(/\s+\?/g, "?")
+    .trim();
+}
+
+/**
+ * Normalize a series key to lowercase kebab-case. When the LLM omits or
+ * garbles the key, fall back to a deadline-stripped slugified title so
+ * sibling rungs still share a key. Exported for unit tests.
+ */
+export function normalizeSeriesKey(
+  raw: string | null | undefined,
+  fallbackTitle: string,
+): string {
+  const fromRaw =
+    typeof raw === "string"
+      ? raw
+          .toLowerCase()
+          .replace(/[''`"]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 80)
+      : "";
+  if (fromRaw) return fromRaw;
+  const fromTitle = slugifyTitle(
+    stripSeriesDeadlineNoise(fallbackTitle || "") || fallbackTitle || "series",
+  );
+  return fromTitle || "series";
+}
+
+/**
+ * Hard series-slot filter: drop selections whose series already has an
+ * unresolved VoxDex market, and de-dupe within the batch (first-wins;
+ * callers should pass rank-ordered selections).
+ *
+ * Each selection is checked under BOTH its LLM seriesKey and its
+ * deadline-stripped title key, so legacy unresolved markets (no stored
+ * seriesKey yet) still hard-block siblings via the title stem.
+ * Exported for unit tests.
+ */
+export function filterSelectionsBySeries(
+  selections: ScoutSelection[],
+  occupiedSeriesKeys: Set<string>,
+): { kept: ScoutSelection[]; blocked: ScoutSelection[] } {
+  const kept: ScoutSelection[] = [];
+  const blocked: ScoutSelection[] = [];
+  const seenInBatch = new Set<string>();
+
+  for (const selection of selections) {
+    const primaryKey = normalizeSeriesKey(selection.seriesKey, selection.title);
+    const titleKey = normalizeSeriesKey(null, selection.title);
+    const keys = primaryKey === titleKey ? [primaryKey] : [primaryKey, titleKey];
+
+    const blockedByOccupied = keys.some((k) => occupiedSeriesKeys.has(k));
+    const blockedByBatch = keys.some((k) => seenInBatch.has(k));
+    if (blockedByOccupied || blockedByBatch) {
+      blocked.push(selection);
+      continue;
+    }
+    for (const k of keys) seenInBatch.add(k);
+    kept.push(selection);
+  }
+
+  return { kept, blocked };
+}
+
+/** True when a community market still occupies its series slot. */
+function isUnresolvedCommunityMarket(status: string, visibility: string | null): boolean {
+  if (visibility === "archived") return false;
+  return status === "OPEN" || status === "CLOSED_PENDING";
 }
 
 function extractOutputText(response: any): string | null {
@@ -548,12 +677,14 @@ Selection principles:
 - When quality is equal, prefer markets that can link to a LINKABLE PERSON from the list provided (main leaderboard or induction queue).
 - Induction-queue names on the LINKABLE PEOPLE list are valid for relatedPeople / linkedPerson when genuinely relevant. Prefer them as linkedPerson when they are the face of the market (e.g. a company CEO for a company question).
 - Skip anything that duplicates or nearly duplicates an EXISTING VoxDex market (list provided).
+- ONE MARKET PER SERIES: VoxDex allows at most one unresolved market per series. A series is the same underlying question differing only by deadline, date, or numeric threshold (e.g. "Strait of Hormuz traffic normal by July 15?" and "...by July 31?" and "...recover by Dec 31?" are ONE series). Treat wording variants ("recover" vs "return to normal") as the same series when the subject and resolution condition are the same. Do NOT select any candidate whose series already appears in the EXISTING UNRESOLVED list. Distinct questions about the same topic stay separate series (e.g. Wimbledon Men's vs Women's; "Who wins X?" vs "Will Y happen at X?").
 - Skip questions that are incomprehensible without the source platform's context, purely financial microstructure (e.g. hourly crypto candles), or distasteful (deaths, tragedies, graphic violence, invasive pregnancy/relationship gossip).
 - Prefer questions resolving within days-to-months over ones resolving in a year.
 
 For each selected market, produce:
 - "title": the question rewritten in your own words, clear and punchy (max 120 chars, must end with "?").
 - "slug": URL-safe kebab-case, lowercase letters/numbers/dashes only.
+- "seriesKey": short stable kebab-case id for the series that IGNORES the specific deadline/threshold/date (e.g. "strait-of-hormuz-traffic-normal" for every Hormuz-by-date variant). Reuse the same key for siblings; never encode a date or threshold in the key.
 - "teaser": one catchy sentence (max 140 chars) hooking a casual reader.
 - "summary": 2-3 sentences of neutral context explaining what the market is about.
 - "category": exactly one of: ${allowedCategories.join(", ")}. Use film-tv (not "entertainment") for movies/TV/awards.
@@ -568,12 +699,12 @@ For each selected market, produce:
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
 
 Respond with ONE JSON object and nothing else — no markdown, no code fences:
-{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."] } ] }`;
+{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "seriesKey": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."] } ] }`;
 }
 
 function buildUserPrompt(
   candidates: ScoutCandidate[],
-  existingTitles: string[],
+  unresolvedMarkets: UnresolvedMarketRef[],
   trackedNames: string[],
 ): string {
   const candidateBlocks = candidates.map((c) => ({
@@ -587,11 +718,22 @@ function buildUserPrompt(
     outcomes: c.outcomes.map((o) => ({ label: o.label, price: Number(o.price.toFixed(3)) })),
   }));
 
+  const unresolvedBlock =
+    unresolvedMarkets.length > 0
+      ? unresolvedMarkets
+          .map((m) =>
+            m.seriesKey
+              ? `- ${m.title} [seriesKey: ${m.seriesKey}]`
+              : `- ${m.title}`,
+          )
+          .join("\n")
+      : "(none)";
+
   return `CANDIDATE MARKETS (diversified shortlist — mix of global volume + category-tagged feeds):
 ${JSON.stringify(candidateBlocks, null, 1)}
 
-EXISTING VOXDEX MARKET TITLES (do not duplicate):
-${existingTitles.length > 0 ? existingTitles.map((t) => `- ${t}`).join("\n") : "(none)"}
+EXISTING UNRESOLVED VOXDEX MARKETS (one per series max — do not draft siblings):
+${unresolvedBlock}
 
 LINKABLE PEOPLE (main leaderboard + induction queue — for relatedPeople / linkedPerson matching only — exact names):
 ${trackedNames.join(", ")}
@@ -603,7 +745,7 @@ Today's date: ${new Date().toISOString().split("T")[0]}. Curate now.`;
 
 async function curateCandidates(
   candidates: ScoutCandidate[],
-  existingTitles: string[],
+  unresolvedMarkets: UnresolvedMarketRef[],
   trackedNames: string[],
   maxDrafts: number,
   allowedCategories: string[],
@@ -616,7 +758,7 @@ async function curateCandidates(
         model: getAiModel("marketScout"),
         max_output_tokens: MAX_OUTPUT_TOKENS,
         instructions: buildSystemPrompt(maxDrafts, allowedCategories),
-        input: buildUserPrompt(candidates, existingTitles, trackedNames),
+        input: buildUserPrompt(candidates, unresolvedMarkets, trackedNames),
       } as any,
       { signal: controller.signal },
     );
@@ -632,14 +774,22 @@ async function curateCandidates(
     const parsed = JSON.parse(jsonText);
     if (!Array.isArray(parsed?.selections)) return [];
 
-    return parsed.selections.filter(
-      (s: unknown): s is ScoutSelection =>
-        !!s &&
-        typeof s === "object" &&
-        typeof (s as any).eventId === "string" &&
-        typeof (s as any).title === "string" &&
-        Array.isArray((s as any).entryLabels),
-    );
+    return parsed.selections
+      .filter(
+        (s: unknown): s is ScoutSelection =>
+          !!s &&
+          typeof s === "object" &&
+          typeof (s as any).eventId === "string" &&
+          typeof (s as any).title === "string" &&
+          Array.isArray((s as any).entryLabels),
+      )
+      .map((s: ScoutSelection) => ({
+        ...s,
+        seriesKey: normalizeSeriesKey(
+          typeof (s as any).seriesKey === "string" ? (s as any).seriesKey : null,
+          s.title,
+        ),
+      }));
   } catch (err) {
     clearTimeout(timeout);
     log(
@@ -814,6 +964,7 @@ async function insertScoutedDraft(
       fetchedAt: new Date().toISOString(),
     },
     scoutedByMarketScout: true,
+    seriesKey: normalizeSeriesKey(selection.seriesKey, selection.title),
   };
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
@@ -908,6 +1059,7 @@ function emptyResult(): MarketScoutResult {
     budgetBlocked: false,
     created: 0,
     skipped: 0,
+    seriesBlocked: 0,
     errors: 0,
     drafts: [],
   };
@@ -975,10 +1127,24 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
       .filter((id): id is string => !!id),
   );
   const existingSlugs = new Set(communityRows.map((r) => r.slug));
-  // Only open/draft titles matter for duplicate-question detection.
-  const existingTitles = communityRows
-    .filter((r) => r.status === "OPEN" && r.visibility !== "archived")
-    .map((r) => r.title);
+  // Unresolved = OPEN (live or draft) or CLOSED_PENDING; archived never
+  // occupies a series slot. RESOLVED/VOID free the slot for the next rung.
+  const unresolvedRows = communityRows.filter((r) =>
+    isUnresolvedCommunityMarket(r.status, r.visibility),
+  );
+  const unresolvedMarkets: UnresolvedMarketRef[] = unresolvedRows.map((r) => ({
+    title: r.title,
+    seriesKey: readSeriesKey(r.metadata),
+  }));
+  // Occupy both stored seriesKeys AND deadline-stripped title stems so
+  // legacy unresolved markets (pre-seriesKey) still hard-block siblings.
+  const occupiedSeriesKeys = new Set<string>();
+  for (const m of unresolvedMarkets) {
+    if (m.seriesKey) {
+      occupiedSeriesKeys.add(normalizeSeriesKey(m.seriesKey, m.seriesKey));
+    }
+    occupiedSeriesKeys.add(normalizeSeriesKey(null, m.title));
+  }
 
   const fresh = candidates.filter((c) => !importedEventIds.has(c.eventId));
   result.deduped = candidates.length - fresh.length;
@@ -1018,7 +1184,7 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
 
   const selections = await curateCandidates(
     forLlm,
-    existingTitles,
+    unresolvedMarkets,
     people.map((p) => p.name),
     maxDrafts,
     Array.from(allowedCategoryIds),
@@ -1029,12 +1195,22 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     return result;
   }
 
-  // 4. Soft diversity + fit floor, then insert drafts.
+  // 4. Soft diversity + fit floor, then hard series-slot filter, then insert.
   const candidateById = new Map(forLlm.map((c) => [c.eventId, c]));
   const guarded = applySelectionDiversityGuards(selections, candidateById, maxDrafts);
   if (guarded.length < selections.length) {
     log(
       `[MarketScout] Diversity/fit guards kept ${guarded.length}/${selections.length} GPT selections`,
+    );
+  }
+
+  const { kept, blocked } = filterSelectionsBySeries(guarded, occupiedSeriesKeys);
+  result.seriesBlocked = blocked.length;
+  if (blocked.length > 0) {
+    log(
+      `[MarketScout] Series filter blocked ${blocked.length}/${guarded.length} ` +
+        `(occupiedKeys=${occupiedSeriesKeys.size}): ` +
+        blocked.map((s) => `"${s.title}"`).join(", "),
     );
   }
 
@@ -1044,7 +1220,7 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     .where(eq(predictionMarkets.marketType, "community"));
   let nextCmsOrder = (cmsMax?.max || 0) + 1;
 
-  for (const selection of guarded) {
+  for (const selection of kept) {
     const candidate = candidateById.get(selection.eventId);
     if (!candidate) {
       result.skipped += 1;
@@ -1063,6 +1239,10 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
       }
       nextCmsOrder += 1;
       result.created += 1;
+      // Occupy both the LLM key and the title stem for subsequent picks
+      // in this same run (defensive; filterSelectionsBySeries already first-wins).
+      occupiedSeriesKeys.add(normalizeSeriesKey(selection.seriesKey, selection.title));
+      occupiedSeriesKeys.add(normalizeSeriesKey(null, selection.title));
       result.drafts.push({
         marketId: inserted.marketId,
         title: selection.title,
@@ -1084,7 +1264,8 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   log(
     `[MarketScout] fetched=${result.fetched} deduped=${result.deduped} ` +
       `llmCalls=${result.llmCalls} created=${result.created} ` +
-      `skipped=${result.skipped} errors=${result.errors}`,
+      `skipped=${result.skipped} seriesBlocked=${result.seriesBlocked} ` +
+      `errors=${result.errors}`,
   );
 
   return result;

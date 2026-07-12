@@ -1385,7 +1385,8 @@ async function runScheduledMarketScout(): Promise<void> {
     if (!result.enabled) return;
     log(
       `[MarketScout] OK — fetched=${result.fetched} deduped=${result.deduped} ` +
-        `created=${result.created} skipped=${result.skipped} errors=${result.errors}`,
+        `created=${result.created} skipped=${result.skipped} ` +
+        `seriesBlocked=${result.seriesBlocked} errors=${result.errors}`,
     );
   } catch (err: any) {
     log(`[MarketScout] Scheduler tick failed: ${err?.message ?? err}`);
