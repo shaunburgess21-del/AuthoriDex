@@ -650,7 +650,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     // Only ever touches the scout's OWN locks (autoLockReason=
     // "resolution_scout_met"); upstream/source-watch locks are left alone.
     if (autoLockOnResolutionEnabled() && market.status === "OPEN") {
-      const meta =
+      const meta: Record<string, unknown> =
         market.metadata && typeof market.metadata === "object"
           ? (market.metadata as Record<string, unknown>)
           : {};
