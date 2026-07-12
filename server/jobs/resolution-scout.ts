@@ -36,6 +36,7 @@ import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
 import { getTrendContextBatch } from "../services/trend-context";
 import { computeLockCloseAt } from "./market-time-sync-utils";
+import { getAmmCooldownMs } from "../native-markets/amm-settings";
 
 const RESOLUTION_SCOUT_LOCK_KEY = 5_211;
 
@@ -138,6 +139,8 @@ export interface ResolutionScoutResult {
   errors: number;
   /** Markets whose closeAt was frozen because stage === "met". */
   autoLocked: number;
+  /** Markets whose scout-placed lock was reverted after a stage downgrade. */
+  autoUnlocked: number;
   findings: ScoutFinding[];
 }
 
@@ -267,10 +270,15 @@ function buildSystemPrompt(): string {
 Use web search to find the most recent, credible information relevant to this specific market's resolution criteria. Prefer primary sources and reputable outlets. Always cite the URLs you relied on.
 
 Classify the market's current state:
-- stage "met": the resolution condition is now definitively satisfied (or definitively impossible). The market can be resolved.
+- stage "met": the FINAL outcome is now locked in — the single winning outcome is decided and no other listed outcome is still possible. The market can be resolved.
 - stage "near_certain": ~95%+ likely pending only a formality (e.g. an athlete named in the confirmed starting line-up for a match that will be played; a vote scheduled with a near-certain result).
 - stage "likely": leaning strongly toward one outcome but not yet certain.
 - stage "watch": status quo; no strong signal yet.
+
+CUMULATIVE / ORDINAL / "HOW FAR" MARKETS — read carefully before choosing "met":
+Some markets ask how far a competitor advances, the furthest stage they reach, or whether a threshold is crossed by a deadline. Their outcomes are ordered milestones (e.g. "Quarterfinals" < "Semifinals" < "Final" < "Champion", or "Under X" < "Over X"). For these, reaching a milestone only RULES OUT the lower outcomes — it does NOT confirm that milestone as the final answer while the competitor is still active and could advance further.
+Example: a team that has reached the quarterfinals but has NOT been eliminated is NOT "met" for the "Quarterfinals" outcome — they could still reach the semifinals or beyond, so the market is unresolved.
+Only use stage "met" for such a market when the final position is locked: the competitor has been eliminated at exactly that stage, has clinched that exact outcome, or every higher outcome is now mathematically impossible. While the competitor is still alive and could progress, use stage "likely" (or "watch"), set the leaning to the furthest stage confirmed so far, and recommend "watch" — never "resolve_now".
 
 Recommend an action:
 - "resolve_now": stage is "met" — propose the winning outcome.
@@ -447,6 +455,7 @@ function emptyResult(): ResolutionScoutResult {
     budgetBlocked: 0,
     errors: 0,
     autoLocked: 0,
+    autoUnlocked: 0,
     findings: [],
   };
 }
@@ -486,6 +495,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     budgetBlocked: 0,
     errors: 0,
     autoLocked: 0,
+    autoUnlocked: 0,
     findings: [],
   };
 
@@ -630,26 +640,34 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
 
     await writeAssessment(market.id, assessment);
 
-    // Auto-lock trading when the outcome is definitively public. near_certain
-    // stays advisory (digest only) — locking there would freeze legitimate
-    // pre-event trading. Idempotent via metadata.autoLockedAt.
-    if (
-      autoLockOnResolutionEnabled() &&
-      assessment.stage === "met" &&
-      market.status === "OPEN"
-    ) {
-      const prevLocked =
-        market.metadata &&
-        typeof market.metadata === "object" &&
-        typeof (market.metadata as Record<string, unknown>).autoLockedAt === "string";
-      if (!prevLocked) {
+    // Auto-lock / auto-unlock trading based on the scout's own read.
+    // Locking freezes closeAt=now when an outcome is definitively public
+    // (stage=met); near_certain stays advisory so we don't freeze legitimate
+    // pre-event trading. If a LATER scan reverses that call — e.g. an
+    // ordinal "how far" market the model prematurely flagged, then corrected
+    // once it re-read the rules — we UNLOCK the market we locked, so a false
+    // positive can't freeze trading indefinitely now that auto-lock is on.
+    // Only ever touches the scout's OWN locks (autoLockReason=
+    // "resolution_scout_met"); upstream/source-watch locks are left alone.
+    if (autoLockOnResolutionEnabled() && market.status === "OPEN") {
+      const meta =
+        market.metadata && typeof market.metadata === "object"
+          ? (market.metadata as Record<string, unknown>)
+          : {};
+      const anyLocked = typeof meta.autoLockedAt === "string";
+      const scoutLocked =
+        anyLocked && meta.autoLockReason === "resolution_scout_met";
+
+      if (assessment.stage === "met" && !anyLocked) {
         const lockAt = computeLockCloseAt(market.closeAt);
         if (lockAt) {
           try {
-            const lockedAt = new Date().toISOString();
             const payload = {
-              autoLockedAt: lockedAt,
+              autoLockedAt: new Date().toISOString(),
               autoLockReason: "resolution_scout_met",
+              // Remember the pre-lock cutoff so a later reversal restores it
+              // exactly (null when the market had no explicit closeAt).
+              preAutoLockCloseAt: market.closeAt ? market.closeAt.toISOString() : null,
             };
             await db
               .update(predictionMarkets)
@@ -670,6 +688,38 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
               `[ResolutionScout] Auto-lock failed for ${market.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
+        }
+      } else if (assessment.stage !== "met" && scoutLocked) {
+        // Reversal: the outcome is no longer "met". Restore trading to the
+        // pre-lock cutoff (or endAt − cooldown when we never recorded one,
+        // e.g. locks placed before this field existed) and clear the scout's
+        // lock markers so re-sync and the UI treat it as a normal open market.
+        try {
+          const preRaw =
+            typeof meta.preAutoLockCloseAt === "string" ? meta.preAutoLockCloseAt : null;
+          const preDate = preRaw ? new Date(preRaw) : null;
+          const restoreCloseAt =
+            preDate && !isNaN(preDate.getTime())
+              ? preDate
+              : new Date(market.endAt.getTime() - getAmmCooldownMs());
+          await db
+            .update(predictionMarkets)
+            .set({
+              closeAt: restoreCloseAt,
+              metadata: sql`(COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) - 'autoLockedAt' - 'autoLockReason' - 'preAutoLockCloseAt')`,
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, market.id));
+          result.autoUnlocked += 1;
+          log(
+            `[ResolutionScout] Auto-unlocked "${market.title}" — stage downgraded to ` +
+              `${assessment.stage}; restored closeAt (market=${market.id.slice(0, 8)})`,
+          );
+        } catch (err) {
+          result.errors += 1;
+          log(
+            `[ResolutionScout] Auto-unlock failed for ${market.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
     }
@@ -699,7 +749,8 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     `[ResolutionScout] scanned=${result.scanned} llmCalls=${result.llmCalls} ` +
       `(closingSoon=${closingSoonScanned} newsSpike=${newsSpikeScanned}) ` +
       `budgetBlocked=${result.budgetBlocked} errors=${result.errors} ` +
-      `autoLocked=${result.autoLocked} actionable=${result.findings.length}`,
+      `autoLocked=${result.autoLocked} autoUnlocked=${result.autoUnlocked} ` +
+      `actionable=${result.findings.length}`,
   );
 
   return result;
