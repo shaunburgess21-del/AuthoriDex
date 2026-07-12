@@ -1966,7 +1966,7 @@ export default function MarketDetailPage() {
                   </p>
                 )}
                 {market.status === "RESOLVED" && (
-                  <p className="text-xs text-muted-foreground mt-2" data-testid="text-resolve-method">
+                  <p className="text-xs text-muted-foreground mt-2" data-testid="text-resolve-method-line">
                     {market.resolveMethod === "admin_manual"
                       ? "Resolved by admin"
                       : "Auto-resolved"}
@@ -1984,8 +1984,15 @@ export default function MarketDetailPage() {
                     href="#resolution-sources"
                     className="inline-flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 mt-2 transition-colors"
                     data-testid="link-see-resolution-sources"
+                    onClick={(e) => {
+                      // Smooth in-page jump; keep hash for deep-link/share.
+                      const el = document.getElementById("resolution-sources");
+                      if (!el) return;
+                      e.preventDefault();
+                      el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      window.history.replaceState(null, "", "#resolution-sources");
+                    }}
                   >
-                    <ExternalLink className="h-3 w-3" />
                     See sources
                   </a>
                 )}

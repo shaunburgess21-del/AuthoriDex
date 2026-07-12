@@ -1082,7 +1082,7 @@ export function StakeModal({
                 data-testid="button-confirm-stake"
               >
                 <Lock className="h-4 w-4" />
-                Entries Closed
+                {selection.engine === "amm" ? "Trading Closed" : "Entries Closed"}
               </Button>
             ) : (
               <Button

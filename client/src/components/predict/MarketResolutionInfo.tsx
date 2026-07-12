@@ -114,16 +114,23 @@ export function MarketResolutionInfo({
 }: MarketResolutionInfoProps) {
   const tieLabel = TIE_RULE_LABELS[tieRule] || "All positions refunded";
   const communityCriteria = normalizeCriteriaList(resolutionCriteria);
+  // Community markets are not weekly natives — never fall back to Fri/Sun
+  // weekly cadence labels when closeAt/endAt are missing.
   const resolutionLabel =
     mode === "community"
       ? resolveMethod === "admin_manual"
         ? "Resolved by admin from listed sources"
-        : "Settled from the market's resolution criteria"
+        : resolveMethod
+          ? "Settled from the market's resolution criteria"
+          : "Outcome decided from the market's resolution criteria"
       : resolveMethod === "admin_manual"
         ? "Admin resolution"
         : "Auto-calculated from VoxDex trend engine";
-  const predictionsCloseLabel = formatBettingCutoffUtc(bettingCutoff) ?? BETTING_CUTOFF_FALLBACK;
-  const resultsLabel = closeTime || "Sun 23:59 UTC";
+  const predictionsCloseLabel =
+    formatBettingCutoffUtc(bettingCutoff) ??
+    (mode === "community" ? "at market close" : BETTING_CUTOFF_FALLBACK);
+  const resultsLabel =
+    closeTime || (mode === "community" ? "when the outcome is confirmed" : "Sun 23:59 UTC");
   const isAmm = engine === "amm";
   const closeLabelVerb = isAmm ? "Trading closes" : "Entries close";
 
