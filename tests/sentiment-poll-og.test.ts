@@ -19,11 +19,11 @@ import {
 } from "../server/services/sentiment-poll-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("sentimentPollOgImagePath uses shared cache version v3", () => {
-  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "3");
+test("sentimentPollOgImagePath uses shared cache version v4", () => {
+  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "4");
   assert.equal(
     sentimentPollOgImagePath("elon-musk-ai"),
-    "/api/og/vote/polls/elon-musk-ai.jpg?v=3",
+    "/api/og/vote/polls/elon-musk-ai.jpg?v=4",
   );
 });
 
