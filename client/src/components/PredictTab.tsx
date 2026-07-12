@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
-import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getClosedMarketMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
@@ -773,7 +773,7 @@ export function PredictTab({
   });
 
   const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
-    if (market.status !== "OPEN" || market.visibility !== "live") {
+    if (isCommunityTradingClosed(market) || market.visibility !== "live") {
       return;
     }
     if (!user) {

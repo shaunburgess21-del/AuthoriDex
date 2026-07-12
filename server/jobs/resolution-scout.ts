@@ -35,6 +35,7 @@ import { marketEntries, predictionMarkets, trackedPeople } from "@shared/schema"
 import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
 import { getTrendContextBatch } from "../services/trend-context";
+import { computeLockCloseAt } from "./market-time-sync-utils";
 
 const RESOLUTION_SCOUT_LOCK_KEY = 5_211;
 
@@ -64,6 +65,11 @@ const MAX_OUTPUT_TOKENS = 2_000;
 
 function scoutEnabled(): boolean {
   return envFlag(process.env.RESOLUTION_SCOUT_LLM_ENABLED);
+}
+
+/** Auto-lock trading when scout stage is "met". Default OFF. */
+function autoLockOnResolutionEnabled(): boolean {
+  return envFlag(process.env.AUTO_LOCK_ON_RESOLUTION_ENABLED);
 }
 
 function dailyBudgetUsd(): number {
@@ -130,6 +136,8 @@ export interface ResolutionScoutResult {
   llmCalls: number;
   budgetBlocked: number;
   errors: number;
+  /** Markets whose closeAt was frozen because stage === "met". */
+  autoLocked: number;
   findings: ScoutFinding[];
 }
 
@@ -140,6 +148,8 @@ interface ScoutMarket {
   category: string | null;
   teaser: string | null;
   endAt: Date;
+  closeAt: Date | null;
+  status: string;
   resolutionCriteria: string[] | null;
   metadata: unknown;
   /** Linked celebrity (for the news-spike priority lane). */
@@ -436,6 +446,7 @@ function emptyResult(): ResolutionScoutResult {
     llmCalls: 0,
     budgetBlocked: 0,
     errors: 0,
+    autoLocked: 0,
     findings: [],
   };
 }
@@ -474,6 +485,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     llmCalls: 0,
     budgetBlocked: 0,
     errors: 0,
+    autoLocked: 0,
     findings: [],
   };
 
@@ -485,6 +497,8 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
       category: predictionMarkets.category,
       teaser: predictionMarkets.teaser,
       endAt: predictionMarkets.endAt,
+      closeAt: predictionMarkets.closeAt,
+      status: predictionMarkets.status,
       resolutionCriteria: predictionMarkets.resolutionCriteria,
       metadata: predictionMarkets.metadata,
       personId: predictionMarkets.personId,
@@ -616,6 +630,50 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
 
     await writeAssessment(market.id, assessment);
 
+    // Auto-lock trading when the outcome is definitively public. near_certain
+    // stays advisory (digest only) — locking there would freeze legitimate
+    // pre-event trading. Idempotent via metadata.autoLockedAt.
+    if (
+      autoLockOnResolutionEnabled() &&
+      assessment.stage === "met" &&
+      market.status === "OPEN"
+    ) {
+      const prevLocked =
+        market.metadata &&
+        typeof market.metadata === "object" &&
+        typeof (market.metadata as Record<string, unknown>).autoLockedAt === "string";
+      if (!prevLocked) {
+        const lockAt = computeLockCloseAt(market.closeAt);
+        if (lockAt) {
+          try {
+            const lockedAt = new Date().toISOString();
+            const payload = {
+              autoLockedAt: lockedAt,
+              autoLockReason: "resolution_scout_met",
+            };
+            await db
+              .update(predictionMarkets)
+              .set({
+                closeAt: lockAt,
+                metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, market.id));
+            result.autoLocked += 1;
+            log(
+              `[ResolutionScout] Auto-locked trading for "${market.title}" (stage=met) ` +
+                `(market=${market.id.slice(0, 8)})`,
+            );
+          } catch (err) {
+            result.errors += 1;
+            log(
+              `[ResolutionScout] Auto-lock failed for ${market.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
+    }
+
     if (isActionable(assessment)) {
       result.findings.push({
         marketId: market.id,
@@ -641,7 +699,7 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     `[ResolutionScout] scanned=${result.scanned} llmCalls=${result.llmCalls} ` +
       `(closingSoon=${closingSoonScanned} newsSpike=${newsSpikeScanned}) ` +
       `budgetBlocked=${result.budgetBlocked} errors=${result.errors} ` +
-      `actionable=${result.findings.length}`,
+      `autoLocked=${result.autoLocked} actionable=${result.findings.length}`,
   );
 
   return result;

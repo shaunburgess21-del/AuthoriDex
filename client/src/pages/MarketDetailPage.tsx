@@ -39,7 +39,7 @@ import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton"
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
-import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
+import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
@@ -1273,7 +1273,7 @@ export default function MarketDetailPage() {
   useEffect(() => {
     if (ammAutoOpenFiredRef.current) return;
     if (!ammAutoOpenEntryId || !isAmm || isJackpotMarket) return;
-    if (!market || market.status !== "OPEN") return;
+    if (!market || isCommunityTradingClosed(market)) return;
     const entry = market.entries?.find((e) => e.id === ammAutoOpenEntryId);
     if (!entry) return;
     const direction: "yes" | "no" =
@@ -1334,9 +1334,9 @@ export default function MarketDetailPage() {
   }
 
   const statusConfig = STATUS_CONFIG[market.status] || STATUS_CONFIG.OPEN;
-  const isOpen = market.status === "OPEN";
+  const isOpen = !isCommunityTradingClosed(market);
   const isInactive = (market as any).visibility === "inactive";
-  const isClosedMarket = market.status !== "OPEN";
+  const isClosedMarket = !isOpen;
   const isResolved = market.status === "RESOLVED";
   const resultOpenScore = market.resolutionSummary?.openScore ?? market.baselineScore ?? null;
   const resultCloseScore = market.resolutionSummary?.closeScore ?? null;

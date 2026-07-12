@@ -1377,7 +1377,8 @@ async function runScheduledMarketScout(): Promise<void> {
     if (watch.checked > 0) {
       log(
         `[MarketScout] Source watch OK — checked=${watch.checked} ` +
-          `resolvedUpstream=${watch.resolvedUpstream} errors=${watch.errors}`,
+          `resolvedUpstream=${watch.resolvedUpstream} timesResynced=${watch.timesResynced} ` +
+          `autoLocked=${watch.autoLocked} errors=${watch.errors}`,
       );
     }
     const result = await runMarketScout();
@@ -1425,7 +1426,8 @@ async function runScheduledSourceWatch(): Promise<void> {
     if (watch.checked > 0) {
       log(
         `[SourceWatch] OK — checked=${watch.checked} resolvedUpstream=${watch.resolvedUpstream} ` +
-          `unmappable=${watch.unmappable} livePricesRefreshed=${watch.livePricesRefreshed} errors=${watch.errors}`,
+          `unmappable=${watch.unmappable} livePricesRefreshed=${watch.livePricesRefreshed} ` +
+          `timesResynced=${watch.timesResynced} autoLocked=${watch.autoLocked} errors=${watch.errors}`,
       );
     }
   } catch (err: any) {

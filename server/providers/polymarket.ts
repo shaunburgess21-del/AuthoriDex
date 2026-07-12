@@ -115,6 +115,27 @@ export function parseGammaTimestamp(v: unknown): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
+/**
+ * Earliest valid kickoff across market-level `gameStartTime` values,
+ * falling back to the event-level `startTime`. Null when neither is
+ * provided / parseable. Exported for unit tests and the source-watch
+ * time re-sync path (same formula as scout import).
+ */
+export function earliestGameStartTime(
+  markets: Array<{ gameStartTime?: string }>,
+  fallbackStartTime?: string | null,
+): string | null {
+  const marketStartTimes = markets
+    .map((m) => parseGammaTimestamp(m.gameStartTime))
+    .filter((s): s is string => !!s);
+  if (marketStartTimes.length > 0) {
+    return marketStartTimes.reduce((earliest, s) =>
+      Date.parse(s) < Date.parse(earliest) ? s : earliest,
+    );
+  }
+  return parseGammaTimestamp(fallbackStartTime);
+}
+
 /** Gamma serializes `outcomes` / `outcomePrices` as JSON strings. */
 function parseJsonArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.map((x) => String(x));
@@ -205,15 +226,7 @@ function normalizeEvent(
 
   // Kickoff/start time: earliest valid market-level gameStartTime, falling
   // back to the event-level startTime. Null when neither is provided.
-  const marketStartTimes = markets
-    .map((m) => parseGammaTimestamp(m.gameStartTime))
-    .filter((s): s is string => !!s);
-  const gameStartTime =
-    marketStartTimes.length > 0
-      ? marketStartTimes.reduce((earliest, s) =>
-          Date.parse(s) < Date.parse(earliest) ? s : earliest,
-        )
-      : parseGammaTimestamp(ev.startTime);
+  const gameStartTime = earliestGameStartTime(markets, ev.startTime);
 
   return {
     eventId,
@@ -376,23 +389,39 @@ export async function fetchPolymarketMarketResolution(
   }
 }
 
+/** Event-level schedule + per-market resolution map from one Gamma fetch. */
+export interface PolymarketEventSnapshot {
+  /** Map keyed by source market id. */
+  resolutions: Map<string, PolymarketMarketResolution>;
+  /** Event-level endDate (ISO), or null when missing / unparseable. */
+  endDate: string | null;
+  /** Earliest kickoff across markets (or event startTime), or null. */
+  gameStartTime: string | null;
+}
+
 /**
  * Fetch resolution state for every market inside one Gamma event (single
  * API call — cheaper than per-market lookups on multi-outcome events).
- * Returns a map keyed by source market id, or null on fetch failure.
+ * Also returns event-level endDate / kickoff so the source watch can
+ * re-sync VoxDex times when Polymarket reschedules — at zero extra cost.
+ * Returns null on fetch failure.
  */
 export async function fetchPolymarketEventResolutions(
   eventId: string,
-): Promise<Map<string, PolymarketMarketResolution> | null> {
+): Promise<PolymarketEventSnapshot | null> {
   try {
     const raw = (await gammaGet(`/events/${encodeURIComponent(eventId)}`)) as GammaEvent;
     if (!raw || raw.id == null) return null;
-    const map = new Map<string, PolymarketMarketResolution>();
+    const resolutions = new Map<string, PolymarketMarketResolution>();
     for (const m of raw.markets ?? []) {
       const resolution = toMarketResolution(m);
-      if (resolution) map.set(resolution.marketId, resolution);
+      if (resolution) resolutions.set(resolution.marketId, resolution);
     }
-    return map;
+    return {
+      resolutions,
+      endDate: parseGammaTimestamp(raw.endDate),
+      gameStartTime: earliestGameStartTime(raw.markets ?? [], raw.startTime),
+    };
   } catch (err) {
     log(
       `[Polymarket] Event resolution lookup failed for event=${eventId}: ${err instanceof Error ? err.message : String(err)}`,

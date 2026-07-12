@@ -169,3 +169,18 @@ export function getCommunityMarketStatusMessage({
     description: "Predictions have ended for this market.",
   };
 }
+
+/**
+ * True when a World Market should show as trading-closed in the UI.
+ * Combines DB status with the authoritative `closeAt` gate (same field
+ * `amm-trades` enforces) so an auto-lock freezes Buy buttons without
+ * waiting for status to flip away from OPEN.
+ */
+export function isCommunityTradingClosed(market: {
+  status?: string | null;
+  closeAt?: string | Date | null;
+}): boolean {
+  if (market.status !== "OPEN") return true;
+  const closeAt = toDate(market.closeAt);
+  return !!closeAt && closeAt.getTime() <= Date.now();
+}

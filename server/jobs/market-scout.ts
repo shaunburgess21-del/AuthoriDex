@@ -53,6 +53,12 @@ import {
 import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
 import { getMarketBettingCutoff } from "../native-markets/lifecycle";
+import { getAmmCooldownMs } from "../native-markets/amm-settings";
+import {
+  computeLockCloseAt,
+  computeResyncedTimes,
+  shouldApplyResync,
+} from "./market-time-sync-utils";
 import {
   fetchPolymarketEventResolutions,
   fetchTrendingPolymarketEvents,
@@ -111,6 +117,16 @@ export type ScoutCandidate = PolymarketCandidate & {
 
 function scoutEnabled(): boolean {
   return envFlag(process.env.MARKET_SCOUT_ENABLED);
+}
+
+/** Auto-lock trading (freeze closeAt) when an outcome becomes public. Default OFF. */
+function autoLockOnResolutionEnabled(): boolean {
+  return envFlag(process.env.AUTO_LOCK_ON_RESOLUTION_ENABLED);
+}
+
+/** Auto-apply endAt/closeAt when Polymarket reschedules a source event. Default OFF. */
+function sourceTimeResyncEnabled(): boolean {
+  return envFlag(process.env.SOURCE_TIME_RESYNC_ENABLED);
 }
 
 function dailyBudgetUsd(): number {
@@ -778,6 +794,12 @@ async function insertScoutedDraft(
       url: candidate.url,
       structure: candidate.structure,
       gameStartTime: candidate.gameStartTime,
+      // Baseline for source-watch time re-sync — so we know which schedule
+      // we "own" and can detect admin manual edits (currentEndAt ≠ synced).
+      // Normalize to ISO so comparisons with the watcher's Gamma snapshot
+      // (also ISO) don't depend on Gamma's mixed timestamp formats.
+      syncedEndDate: new Date(Date.parse(candidate.endDate)).toISOString(),
+      syncedGameStartTime: candidate.gameStartTime,
       // Aligned with entry displayOrder — Phase 3 uses this to map the
       // source winner back to a VoxDex entry.
       outcomeMapping: sourceOutcomes.map((o, i) => ({
@@ -1093,6 +1115,11 @@ interface WatchableSource {
   externalId?: string;
   url?: string;
   outcomeMapping?: SourceOutcomeMappingEntry[];
+  gameStartTime?: string | null;
+  /** Last source endDate we applied (or adopted). Used to detect admin overrides. */
+  syncedEndDate?: string | null;
+  syncedGameStartTime?: string | null;
+  lastTimeSyncAt?: string;
   /** Set by the watcher after the upstream resolution is recorded, so
    *  future runs skip the API call. */
   upstreamResolvedAt?: string;
@@ -1107,6 +1134,10 @@ export interface SourceWatchResult {
   unmappable: number;
   /** Markets whose live source prices were refreshed this run. */
   livePricesRefreshed: number;
+  /** Markets whose endAt/closeAt were re-synced from a source reschedule. */
+  timesResynced: number;
+  /** Markets whose closeAt was frozen because the outcome became public. */
+  autoLocked: number;
   errors: number;
   findings: Array<{
     marketId: string;
@@ -1125,6 +1156,12 @@ function readWatchableSource(metadata: unknown): WatchableSource | null {
   return s;
 }
 
+function readAutoLockedAt(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const v = (metadata as Record<string, unknown>).autoLockedAt;
+  return typeof v === "string" && v.trim() ? v : null;
+}
+
 /**
  * Poll upstream resolutions for scouted markets that are still OPEN or
  * CLOSED_PENDING. Advisory-locked; safe to trigger concurrently with the
@@ -1136,6 +1173,8 @@ export async function runSourceResolutionWatch(): Promise<SourceWatchResult> {
     resolvedUpstream: 0,
     unmappable: 0,
     livePricesRefreshed: 0,
+    timesResynced: 0,
+    autoLocked: 0,
     errors: 0,
     findings: [],
   };
@@ -1159,6 +1198,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     resolvedUpstream: 0,
     unmappable: 0,
     livePricesRefreshed: 0,
+    timesResynced: 0,
+    autoLocked: 0,
     errors: 0,
     findings: [],
   };
@@ -1169,6 +1210,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       status: predictionMarkets.status,
+      closeAt: predictionMarkets.closeAt,
+      endAt: predictionMarkets.endAt,
       metadata: predictionMarkets.metadata,
     })
     .from(predictionMarkets)
@@ -1179,6 +1222,10 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       ),
     );
 
+  const resyncEnabled = sourceTimeResyncEnabled();
+  const autoLockEnabled = autoLockOnResolutionEnabled();
+  const cooldownMs = getAmmCooldownMs();
+
   for (const row of rows) {
     const source = readWatchableSource(row.metadata);
     if (!source || source.upstreamResolvedAt) continue;
@@ -1187,10 +1234,185 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
 
     result.checked += 1;
 
-    const resolutions = await fetchPolymarketEventResolutions(source.externalId!);
-    if (!resolutions) {
+    const snapshot = await fetchPolymarketEventResolutions(source.externalId!);
+    if (!snapshot) {
       result.errors += 1;
       continue;
+    }
+    const { resolutions, endDate: sourceEndDate, gameStartTime: sourceGameStartTime } =
+      snapshot;
+
+    // ---- Time re-sync (flag-gated) ----------------------------------------
+    // When Polymarket reschedules, update our endAt/closeAt using the same
+    // formula as scout import. Skip if already auto-locked or admin-edited.
+    const alreadyLocked = !!readAutoLockedAt(row.metadata);
+    if (
+      resyncEnabled &&
+      !alreadyLocked &&
+      row.status === "OPEN" &&
+      sourceEndDate &&
+      row.endAt
+    ) {
+      const decision = shouldApplyResync({
+        currentEndAt: new Date(row.endAt),
+        syncedEndDate: source.syncedEndDate ?? null,
+        sourceEndDate,
+        syncedGameStartTime: source.syncedGameStartTime ?? source.gameStartTime ?? null,
+        sourceGameStartTime,
+      });
+
+      if (decision.apply && decision.isLegacyBaselineAdopt) {
+        // First encounter on a pre-baseline market: record ownership without
+        // moving times (current already matches source).
+        try {
+          const payload = {
+            source: {
+              ...source,
+              syncedEndDate: sourceEndDate,
+              syncedGameStartTime: sourceGameStartTime,
+              lastTimeSyncAt: new Date().toISOString(),
+            },
+          };
+          await db
+            .update(predictionMarkets)
+            .set({
+              metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, row.id));
+          // Keep local source in sync for the rest of this iteration.
+          source.syncedEndDate = sourceEndDate;
+          source.syncedGameStartTime = sourceGameStartTime;
+        } catch (err) {
+          result.errors += 1;
+          log(
+            `[MarketScout] Legacy baseline adopt failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } else if (decision.apply) {
+        const times = computeResyncedTimes({
+          sourceEndDate,
+          sourceGameStartTime,
+          cooldownMs,
+        });
+        if (times) {
+          const prevEnd = row.endAt;
+          const prevClose = row.closeAt;
+          const endChanged =
+            !prevEnd ||
+            Math.abs(times.endAt.getTime() - new Date(prevEnd).getTime()) > 60_000;
+          const closeChanged =
+            !prevClose ||
+            Math.abs(times.closeAt.getTime() - new Date(prevClose).getTime()) > 60_000;
+
+          // Kickoff can move without affecting our cutoff (e.g. still after
+          // endAt − cooldown). Refresh the synced baseline so we don't
+          // re-detect the same move every watch tick, but skip the write
+          // + ops alert when nothing user-facing changed.
+          if (!endChanged && !closeChanged) {
+            try {
+              const payload = {
+                source: {
+                  ...source,
+                  gameStartTime: sourceGameStartTime,
+                  syncedEndDate: sourceEndDate,
+                  syncedGameStartTime: sourceGameStartTime,
+                  lastTimeSyncAt: new Date().toISOString(),
+                },
+              };
+              await db
+                .update(predictionMarkets)
+                .set({
+                  metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                  updatedAt: new Date(),
+                })
+                .where(eq(predictionMarkets.id, row.id));
+              source.syncedEndDate = sourceEndDate;
+              source.syncedGameStartTime = sourceGameStartTime;
+              source.gameStartTime = sourceGameStartTime;
+            } catch (err) {
+              result.errors += 1;
+              log(
+                `[MarketScout] Baseline refresh after no-op schedule drift failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          } else {
+          try {
+            const syncedAt = new Date().toISOString();
+            const payload = {
+              source: {
+                ...source,
+                gameStartTime: sourceGameStartTime,
+                syncedEndDate: sourceEndDate,
+                syncedGameStartTime: sourceGameStartTime,
+                lastTimeSyncAt: syncedAt,
+              },
+            };
+            await db
+              .update(predictionMarkets)
+              .set({
+                endAt: times.endAt,
+                closeAt: times.closeAt,
+                metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, row.id));
+            result.timesResynced += 1;
+            row.endAt = times.endAt;
+            row.closeAt = times.closeAt;
+            source.syncedEndDate = sourceEndDate;
+            source.syncedGameStartTime = sourceGameStartTime;
+            source.gameStartTime = sourceGameStartTime;
+            log(
+              `[MarketScout] Time re-sync for "${row.title}" — endAt ${prevEnd?.toISOString?.() ?? prevEnd} → ${times.endAt.toISOString()} ` +
+                `(market=${row.id.slice(0, 8)})`,
+            );
+
+            void (async () => {
+              try {
+                const { sendOpsAlert, adminResolveMarketUrl } = await import(
+                  "../services/ops-alerts"
+                );
+                await sendOpsAlert({
+                  kind: "market_source_rescheduled",
+                  severity: "info",
+                  title: "Scouted market rescheduled on Polymarket",
+                  summary: `"${row.title}" source times changed — VoxDex endAt/closeAt were auto-updated.`,
+                  sections: [
+                    {
+                      heading: "Schedule change",
+                      items: [
+                        {
+                          text: row.title,
+                          detail:
+                            `endAt: ${prevEnd instanceof Date ? prevEnd.toISOString() : String(prevEnd)} → ${times.endAt.toISOString()}` +
+                            (prevClose
+                              ? ` · closeAt: ${prevClose instanceof Date ? prevClose.toISOString() : String(prevClose)} → ${times.closeAt.toISOString()}`
+                              : ` · closeAt: → ${times.closeAt.toISOString()}`),
+                          url: adminResolveMarketUrl(row.id),
+                        },
+                      ],
+                    },
+                  ],
+                  ctaUrl: adminResolveMarketUrl(row.id),
+                  ctaLabel: "Review market",
+                  idempotencyKeyBase: `market_source_rescheduled:${row.id}:${sourceEndDate}:${sourceGameStartTime ?? "none"}`,
+                });
+              } catch (err) {
+                log(
+                  `[MarketScout] Reschedule ops alert failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            })();
+          } catch (err) {
+            result.errors += 1;
+            log(
+              `[MarketScout] Time re-sync failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          }
+        }
+      }
     }
 
     // An entry wins when its source market resolved with the entry's
@@ -1257,11 +1479,52 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       }
     }
 
+    /** Freeze closeAt when the outcome is public knowledge (flag-gated). */
+    const tryAutoLock = async (reason: string): Promise<boolean> => {
+      if (!autoLockEnabled || row.status !== "OPEN") return false;
+      if (readAutoLockedAt(row.metadata)) return false;
+      const lockAt = computeLockCloseAt(row.closeAt);
+      if (!lockAt) return false;
+      const lockedAt = new Date().toISOString();
+      try {
+        const payload = {
+          autoLockedAt: lockedAt,
+          autoLockReason: reason,
+        };
+        await db
+          .update(predictionMarkets)
+          .set({
+            closeAt: lockAt,
+            metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+            updatedAt: new Date(),
+          })
+          .where(eq(predictionMarkets.id, row.id));
+        row.closeAt = lockAt;
+        if (row.metadata && typeof row.metadata === "object") {
+          (row.metadata as Record<string, unknown>).autoLockedAt = lockedAt;
+        }
+        result.autoLocked += 1;
+        log(
+          `[MarketScout] Auto-locked trading for "${row.title}" (${reason}) ` +
+            `(market=${row.id.slice(0, 8)})`,
+        );
+        return true;
+      } catch (err) {
+        result.errors += 1;
+        log(
+          `[MarketScout] Auto-lock failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return false;
+      }
+    };
+
     if (unmappedWinner || winners.length !== 1) {
       if (allClosed) {
         // Upstream fully closed but no clean single winner (voided /
         // ambiguous). Flag for the human without proposing a winner.
+        // Still lock trading — the outcome is public even if we can't map it.
         result.unmappable += 1;
+        await tryAutoLock("upstream_closed_unmappable");
         log(
           `[MarketScout] Source event ${source.externalId} closed without a mappable winner ` +
             `for market=${row.id.slice(0, 8)} (winners=${winners.length})`,
@@ -1332,17 +1595,34 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       // JSONB merge (same pattern as resolution-scout) so we never
       // clobber concurrent metadata writers. `source` is deep-merged
       // manually since `||` is a shallow merge at the top level.
-      const payload = {
+      const lockAt =
+        autoLockEnabled && row.status === "OPEN" && !readAutoLockedAt(row.metadata)
+          ? computeLockCloseAt(row.closeAt)
+          : null;
+      const payload: Record<string, unknown> = {
         scoutAssessment: assessment,
         source: { ...source, upstreamResolvedAt: assessedAt },
       };
+      if (lockAt) {
+        payload.autoLockedAt = assessedAt;
+        payload.autoLockReason = "upstream_resolved";
+      }
       await db
         .update(predictionMarkets)
         .set({
+          ...(lockAt ? { closeAt: lockAt } : {}),
           metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
           updatedAt: new Date(),
         })
         .where(eq(predictionMarkets.id, row.id));
+
+      if (lockAt) {
+        result.autoLocked += 1;
+        log(
+          `[MarketScout] Auto-locked trading for "${row.title}" (upstream_resolved) ` +
+            `(market=${row.id.slice(0, 8)})`,
+        );
+      }
 
       result.resolvedUpstream += 1;
       result.findings.push({
@@ -1404,7 +1684,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
   if (result.checked > 0) {
     log(
       `[MarketScout] Source watch — checked=${result.checked} resolvedUpstream=${result.resolvedUpstream} ` +
-        `unmappable=${result.unmappable} livePricesRefreshed=${result.livePricesRefreshed} errors=${result.errors}`,
+        `unmappable=${result.unmappable} livePricesRefreshed=${result.livePricesRefreshed} ` +
+        `timesResynced=${result.timesResynced} autoLocked=${result.autoLocked} errors=${result.errors}`,
     );
   }
 

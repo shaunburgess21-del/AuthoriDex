@@ -39,7 +39,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getSupabase } from "@/lib/supabase";
-import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
+import { getClosedMarketMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { formatVox, voxWord, formatVoxPrice } from "@/lib/currency";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
@@ -2178,7 +2178,7 @@ export default function PredictPage() {
   });
 
   const handleCommunityPickEntry = (market: any, entry: any, direction: "yes" | "no") => {
-    if (market.status !== "OPEN" || market.visibility !== "live") {
+    if (isCommunityTradingClosed(market) || market.visibility !== "live") {
       return;
     }
     if (!user) {

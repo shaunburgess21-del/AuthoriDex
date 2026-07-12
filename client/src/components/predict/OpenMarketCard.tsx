@@ -14,6 +14,7 @@ import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClie
 import { worldMarketShare } from "@/lib/share";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
+import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 
 /**
  * Sprint 5 / Phase 0: build the predict-page return anchor key for a
@@ -1041,6 +1042,10 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
 
+  // Honor stored closeAt (auto-lock / kickoff cutoff) even while status is
+  // still OPEN — matches the server trade gate in amm-trades.
+  const tradingClosed = isMarketClosed || isCommunityTradingClosed(market);
+
   // Time badge counts down to the actual trading cutoff (closeAt =
   // endAt − pre-resolve cooldown) rather than endAt, so "Nd left" means
   // "days you can still trade" — matching the native MarketCycleStrip.
@@ -1050,10 +1055,10 @@ export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed
   const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
 
   if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
   }
-  return <BinaryMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={isMarketClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+  return <BinaryMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
 }
