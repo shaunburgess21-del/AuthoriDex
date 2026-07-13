@@ -10,10 +10,60 @@
  * handful of calls per day.
  */
 
+import {
+  OTHER_OUTCOME_LABEL,
+  OTHER_OUTCOME_RESIDUAL_THRESHOLD,
+  isOtherStyleOutcomeLabel,
+} from "@shared/lib/other-outcome";
 import { log } from "../log";
 
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * Kill switch for auto-appending a residual "Other" outcome on multi
+ * (negRisk) imports. Default ON — set SCOUT_OTHER_OUTCOME_ENABLED=false
+ * to disable. Binary Yes/No markets are never affected.
+ */
+function otherOutcomeEnabled(): boolean {
+  const v = process.env.SCOUT_OTHER_OUTCOME_ENABLED;
+  if (v === undefined || v === "") return true;
+  const normalized = v.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+}
+
+/**
+ * When a multi-outcome event's named prices leave a meaningful residual
+ * (and no catch-all already exists), append a synthetic "Other" row so
+ * VoxDex can settle cleanly if no listed name wins. Exported for tests.
+ */
+export function maybeAppendOtherOutcome(
+  outcomes: PolymarketOutcome[],
+  structure: "binary" | "multi",
+  maxOutcomes: number,
+): PolymarketOutcome[] {
+  if (!otherOutcomeEnabled()) return outcomes;
+  if (structure !== "multi") return outcomes;
+  if (outcomes.length < 2 || outcomes.length >= maxOutcomes) return outcomes;
+  if (outcomes.some((o) => isOtherStyleOutcomeLabel(o.label))) return outcomes;
+
+  const namedSum = outcomes.reduce((s, o) => s + o.price, 0);
+  const residual = 1 - namedSum;
+  if (residual < OTHER_OUTCOME_RESIDUAL_THRESHOLD) return outcomes;
+  // Don't invent Other when the book is over-subscribed (misread prices).
+  if (namedSum > 1.05) return outcomes;
+
+  return [
+    ...outcomes,
+    {
+      label: OTHER_OUTCOME_LABEL,
+      price: Math.max(0, Math.min(1, residual)),
+      sourceMarketId: "",
+      sourceOutcomeIndex: 0,
+      isResidual: true,
+    },
+  ];
+}
 
 /** One tradable outcome on the source event, with its live price. */
 export interface PolymarketOutcome {
@@ -21,13 +71,22 @@ export interface PolymarketOutcome {
   label: string;
   /** Current price in [0, 1] (probability implied by the order book). */
   price: number;
-  /** Gamma market id this outcome belongs to. */
+  /**
+   * Gamma market id this outcome belongs to. Empty string for a VoxDex-
+   * synthesized residual "Other" row that has no upstream market.
+   */
   sourceMarketId: string;
   /**
    * Index into that market's `outcomes` array (0 = Yes side for negRisk
    * multi events; 0/1 for plain binary markets).
    */
   sourceOutcomeIndex: number;
+  /**
+   * True when this row is a VoxDex-synthesized catch-all ("Other") whose
+   * price is the residual 1 − Σ named prices. Source-watch treats these
+   * specially (propose Other when no named upstream winner).
+   */
+  isResidual?: boolean;
 }
 
 /** A normalized candidate event suitable for import as a VoxDex World Market. */
@@ -219,6 +278,11 @@ function normalizeEvent(
       .filter((o): o is PolymarketOutcome => o !== null)
       .sort((a, b) => b.price - a.price);
   }
+
+  // Append a residual "Other" when the named set is non-exhaustive, so the
+  // exhaustiveness guard below sees a complete probability vector and
+  // settlement has a clean target if no listed name wins.
+  outcomes = maybeAppendOtherOutcome(outcomes, structure, opts.maxOutcomes);
 
   if (outcomes.length < opts.minOutcomes || outcomes.length > opts.maxOutcomes) {
     return null;

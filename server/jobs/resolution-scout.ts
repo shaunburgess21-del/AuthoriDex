@@ -267,7 +267,13 @@ function normalizeAction(a: unknown): ScoutAction {
 function buildSystemPrompt(): string {
   return `You are the resolution scout for VoxDex, a prediction-market platform. Your job is to monitor a real-world prediction market and report whether anything has happened that moves it toward resolution. You DO NOT resolve markets — a human operator confirms every outcome. Your output is an advisory heads-up.
 
-Use web search to find the most recent, credible information relevant to this specific market's resolution criteria. Prefer primary sources and reputable outlets. Always cite the URLs you relied on.
+Use web search to find the most recent, credible information relevant to this specific market's resolution criteria. Prefer primary sources and reputable outlets (official results, major newsrooms, league/show pages). Always cite the URLs you relied on.
+
+CONSENSUS REQUIREMENT — read carefully:
+- Before stage "met" or recommendedAction "resolve_now", require agreement across at least TWO independent, credible primary sources that name the same winning outcome.
+- Do NOT treat AI-generated aggregator summaries as sufficient evidence on their own. Discount or ignore: MSN "Curated by Copilot", Google AI Overview / AI summaries, auto-generated news digests, and similar LLM-aggregated feeds when they are the only source.
+- Prefer original reporting (AP, Reuters, Variety, official show/league statements, primary broadcasters) over secondary republishers.
+- When sources conflict (different winners named), stay at stage "watch" (or at most "likely"), set recommendedAction to "watch", leave selectedOutcomeIndex null if unclear, and describe the conflict in whatChanged. Never escalate conflicting coverage to "met".
 
 Classify the market's current state:
 - stage "met": the FINAL outcome is now locked in — the single winning outcome is decided and no other listed outcome is still possible. The market can be resolved.
@@ -279,6 +285,9 @@ CUMULATIVE / ORDINAL / "HOW FAR" MARKETS — read carefully before choosing "met
 Some markets ask how far a competitor advances, the furthest stage they reach, or whether a threshold is crossed by a deadline. Their outcomes are ordered milestones (e.g. "Quarterfinals" < "Semifinals" < "Final" < "Champion", or "Under X" < "Over X"). For these, reaching a milestone only RULES OUT the lower outcomes — it does NOT confirm that milestone as the final answer while the competitor is still active and could advance further.
 Example: a team that has reached the quarterfinals but has NOT been eliminated is NOT "met" for the "Quarterfinals" outcome — they could still reach the semifinals or beyond, so the market is unresolved.
 Only use stage "met" for such a market when the final position is locked: the competitor has been eliminated at exactly that stage, has clinched that exact outcome, or every higher outcome is now mathematically impossible. While the competitor is still alive and could progress, use stage "likely" (or "watch"), set the leaning to the furthest stage confirmed so far, and recommend "watch" — never "resolve_now".
+
+CATCH-ALL / "OTHER" OUTCOMES:
+If the market lists an "Other" / "None of the listed" outcome, select it only when a credible consensus shows the true winner is NOT among the named outcomes (or upstream rules resolve to Other). Do not pick Other merely because coverage is messy.
 
 Recommend an action:
 - "resolve_now": stage is "met" — propose the winning outcome.
@@ -300,6 +309,15 @@ Respond with ONE JSON object and nothing else — no markdown, no code fences:
 }`;
 }
 
+function readSourceRulesText(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const source = (metadata as Record<string, unknown>).source;
+  if (!source || typeof source !== "object") return null;
+  const text = (source as Record<string, unknown>).resolutionRulesText;
+  if (typeof text === "string" && text.trim()) return text.trim().slice(0, 4000);
+  return null;
+}
+
 function buildUserPrompt(
   market: ScoutMarket,
   entries: ScoutEntry[],
@@ -315,13 +333,14 @@ function buildUserPrompt(
   const resolutionDate = market.endAt
     ? market.endAt.toISOString().split("T")[0]
     : "Not specified";
+  const sourceRules = readSourceRulesText(market.metadata);
 
   return `MARKET: ${market.title}
 CATEGORY: ${market.category ?? "General"}
 TEASER: ${market.teaser ?? "N/A"}
 RESOLUTION DATE (deadline): ${resolutionDate}
 RESOLUTION CRITERIA: ${criteria}
-WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
+${sourceRules ? `UPSTREAM RESOLUTION RULES (verbatim):\n${sourceRules}\n` : ""}WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
 
 OUTCOMES:
 ${outcomes}

@@ -64,6 +64,10 @@ import {
   fetchTrendingPolymarketEvents,
   type PolymarketCandidate,
 } from "../providers/polymarket";
+import {
+  OTHER_OUTCOME_LABEL,
+  isOtherStyleOutcomeLabel,
+} from "@shared/lib/other-outcome";
 
 const MARKET_SCOUT_LOCK_KEY = 5_212;
 const SOURCE_WATCH_LOCK_KEY = 5_213;
@@ -694,7 +698,7 @@ For each selected market, produce:
 - "relatedPeople": ALL names from the LINKABLE PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every linkable person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple linkable people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
 - "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
 - "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability). Prefer 55+; weak fits should be omitted.
-- "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes.
+- "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes. Some multi-outcome events include a trailing synthesized "Other" catch-all — preserve it exactly as listed.
 
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
 
@@ -950,6 +954,11 @@ async function insertScoutedDraft(
       // (also ISO) don't depend on Gamma's mixed timestamp formats.
       syncedEndDate: new Date(Date.parse(candidate.endDate)).toISOString(),
       syncedGameStartTime: candidate.gameStartTime,
+      // Verbatim upstream rules prose (tie-breakers, "Other" clauses, etc.).
+      // Shown in the admin resolve modal; GPT summary stays in resolutionCriteria.
+      resolutionRulesText: candidate.description
+        ? candidate.description.slice(0, 8000)
+        : null,
       // Aligned with entry displayOrder — Phase 3 uses this to map the
       // source winner back to a VoxDex entry.
       outcomeMapping: sourceOutcomes.map((o, i) => ({
@@ -957,6 +966,7 @@ async function insertScoutedDraft(
         sourceLabel: o.label,
         sourceMarketId: o.sourceMarketId,
         sourceOutcomeIndex: o.sourceOutcomeIndex,
+        ...(o.isResidual ? { isResidual: true } : {}),
       })),
       // Aligned with entry displayOrder — Phase 2 price-matched seeding input.
       pricesAtImport: sourceOutcomes.map((o) => Number(o.price.toFixed(4))),
@@ -1289,6 +1299,8 @@ interface SourceOutcomeMappingEntry {
   sourceLabel?: string;
   sourceMarketId?: string;
   sourceOutcomeIndex?: number;
+  /** True for a VoxDex-synthesized residual "Other" with no upstream market. */
+  isResidual?: boolean;
 }
 
 interface WatchableSource {
@@ -1612,10 +1624,12 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       continue;
     }
 
-    const allClosed = mapping.every((m) => {
-      const res = m.sourceMarketId ? resolutions.get(m.sourceMarketId) : undefined;
-      return res?.closed === true;
-    });
+    // Residual "Other" rows have no upstream market — they don't participate
+    // in the closed check. Require every named source market to be closed.
+    const namedMappings = mapping.filter((m) => !m.isResidual && !!m.sourceMarketId);
+    const allClosed =
+      namedMappings.length > 0 &&
+      namedMappings.every((m) => resolutions.get(m.sourceMarketId!)?.closed === true);
 
     // Resolve a mapping row to a VoxDex entry by LABEL first (robust to
     // admins reordering entries after import), falling back to position
@@ -1701,10 +1715,123 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
 
     if (unmappedWinner || winners.length !== 1) {
       if (allClosed) {
+        // Prefer a residual / catch-all "Other" entry when every named
+        // upstream outcome clearly lost (Yes-side = No) — settles cleanly
+        // instead of voiding. Skip when any named market is ambiguous
+        // (closed without a ~1 price) or we failed to map a winner.
+        const allNamedClearlyLost =
+          !unmappedWinner &&
+          winners.length === 0 &&
+          namedMappings.length > 0 &&
+          namedMappings.every((m) => {
+            const res = resolutions.get(m.sourceMarketId!);
+            return (
+              res?.closed === true &&
+              typeof res.winningOutcomeIndex === "number" &&
+              res.winningOutcomeIndex !== m.sourceOutcomeIndex
+            );
+          });
+        const residualMappingIdx = mapping.findIndex((m) => m.isResidual === true);
+        const residualMapped =
+          residualMappingIdx >= 0
+            ? resolveMappedEntry(mapping[residualMappingIdx], residualMappingIdx)
+            : null;
+        const otherEntry = allNamedClearlyLost
+          ? residualMapped ??
+            entryLabels.find((e) => isOtherStyleOutcomeLabel(e.label))
+          : undefined;
+
+        if (otherEntry) {
+          result.resolvedUpstream += 1;
+          await tryAutoLock("upstream_resolved_other");
+
+          const assessedAt = new Date().toISOString();
+          const assessment = {
+            leaning: otherEntry.label,
+            proposedWinnerEntryId: otherEntry.id,
+            confidence: 0.99,
+            stage: "met" as const,
+            recommendedAction: "resolve_now" as const,
+            whatChanged:
+              `Source market on Polymarket closed with no listed name winning — ` +
+              `proposing "${otherEntry.label || OTHER_OUTCOME_LABEL}". Verify and settle.`,
+            sources: source.url ? [source.url] : [],
+            assessedAt,
+            signature: `met|resolve_now|${otherEntry.id}`,
+          };
+
+          try {
+            const payload: Record<string, unknown> = {
+              scoutAssessment: assessment,
+              source: { ...source, upstreamResolvedAt: assessedAt },
+            };
+            await db
+              .update(predictionMarkets)
+              .set({
+                metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, row.id));
+
+            result.findings.push({
+              marketId: row.id,
+              title: row.title,
+              slug: row.slug,
+              proposedWinnerLabel: otherEntry.label,
+            });
+            log(
+              `[MarketScout] Upstream closed with no named winner for "${row.title}" — proposing "${otherEntry.label}" ` +
+                `(market=${row.id.slice(0, 8)})`,
+            );
+
+            void (async () => {
+              try {
+                const { sendOpsAlert, adminResolveMarketUrl } = await import(
+                  "../services/ops-alerts"
+                );
+                await sendOpsAlert({
+                  kind: "market_source_resolved",
+                  severity: "info",
+                  title: "Scouted market resolved on Polymarket",
+                  summary:
+                    `"${row.title}" resolved upstream with no listed name winning — ` +
+                    `proposed winner "${otherEntry.label}" is pre-filled in Settlement.`,
+                  sections: [
+                    {
+                      heading: "Ready to settle (one-click confirm)",
+                      items: [
+                        {
+                          text: row.title,
+                          detail: `Proposed winner: ${otherEntry.label}`,
+                          url: adminResolveMarketUrl(row.id),
+                        },
+                      ],
+                    },
+                  ],
+                  ctaUrl: adminResolveMarketUrl(row.id),
+                  ctaLabel: "Confirm & resolve",
+                  idempotencyKeyBase: `market_source_resolved:${row.id}`,
+                });
+              } catch (err) {
+                log(
+                  `[MarketScout] Other-outcome ops alert failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            })();
+          } catch (err) {
+            result.errors += 1;
+            log(
+              `[MarketScout] Failed to persist Other assessment for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          continue;
+        }
+
         // Upstream fully closed but no clean single winner (voided /
-        // ambiguous/cancelled). Surface in the Needs Resolution dashboard
-        // via scoutAssessment (OPEN + resolve_now) and ping ops — escalate
-        // only, never auto-void. Still lock trading when the flag is on.
+        // ambiguous/cancelled) and no catch-all Other entry. Surface in
+        // the Needs Resolution dashboard via scoutAssessment (OPEN +
+        // resolve_now) and ping ops — escalate only, never auto-void.
+        // Still lock trading when the flag is on.
         result.unmappable += 1;
         await tryAutoLock("upstream_closed_unmappable");
 
@@ -1785,11 +1912,20 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         // Source still open: refresh the live consensus prices. These are
         // the fair-value anchor for agent convergence on scouted markets
         // (metadata.source.livePrices, aligned with pricesAtImport /
-        // entry displayOrder). Best effort — any gap skips the refresh.
+        // entry displayOrder). Residual "Other" rows have no upstream
+        // market — fill them with max(0, 1 − Σ named). Best effort.
         const livePrices: number[] = [];
         let pricesComplete = true;
-        for (const m of mapping) {
-          if (!m.sourceMarketId || typeof m.sourceOutcomeIndex !== "number") {
+        let namedSum = 0;
+        let residualIdx = -1;
+        for (let i = 0; i < mapping.length; i++) {
+          const m = mapping[i];
+          if (m.isResidual || !m.sourceMarketId) {
+            residualIdx = i;
+            livePrices.push(0); // placeholder; filled below
+            continue;
+          }
+          if (typeof m.sourceOutcomeIndex !== "number") {
             pricesComplete = false;
             break;
           }
@@ -1799,9 +1935,14 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
             pricesComplete = false;
             break;
           }
-          livePrices.push(Number(p.toFixed(4)));
+          const rounded = Number(p.toFixed(4));
+          livePrices.push(rounded);
+          namedSum += rounded;
         }
         if (pricesComplete && livePrices.length === mapping.length) {
+          if (residualIdx >= 0) {
+            livePrices[residualIdx] = Number(Math.max(0, 1 - namedSum).toFixed(4));
+          }
           try {
             const payload = {
               source: {

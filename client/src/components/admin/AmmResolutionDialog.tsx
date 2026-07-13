@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { CURRENCY } from "@/lib/currency";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +83,12 @@ export interface ResolvableMarket {
   entries: Array<{ id: string; label: string; marketId?: string }>;
   /** Optional AI scout assessment from when the market was open. */
   scoutAssessment?: ScoutAssessmentView | null;
+  /** Admin-facing resolution criteria bullets (GPT summary or manual). */
+  resolutionCriteria?: string[] | null;
+  /** Verbatim upstream (Polymarket) rules prose from metadata.source. */
+  sourceRulesText?: string | null;
+  /** Upstream event URL for the operator to verify. */
+  sourceUrl?: string | null;
 }
 
 interface ResolutionPreview {
@@ -115,6 +122,58 @@ function MarketTypeBadge({ type }: { type: string }) {
     <Badge variant="outline" className={`text-xs border-0 ${colors[type] || ""}`}>
       {type === "h2h" ? "H2H" : type === "updown" ? "Up/Down" : type.charAt(0).toUpperCase() + type.slice(1)}
     </Badge>
+  );
+}
+
+function ResolutionRulesPanel({
+  criteria,
+  sourceRulesText,
+  sourceUrl,
+}: {
+  criteria?: string[] | null;
+  sourceRulesText?: string | null;
+  sourceUrl?: string | null;
+}) {
+  const bullets = Array.isArray(criteria) ? criteria.filter((c) => typeof c === "string" && c.trim()) : [];
+  const hasRules = bullets.length > 0 || !!sourceRulesText || !!sourceUrl;
+  if (!hasRules) return null;
+
+  return (
+    <details className="rounded-md border border-border bg-muted/30 p-3 group">
+      <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between gap-2">
+        <span>Resolution rules</span>
+        <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
+        <span className="text-xs text-muted-foreground hidden group-open:inline">Hide</span>
+      </summary>
+      <div className="mt-3 space-y-3">
+        {bullets.length > 0 ? (
+          <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+            {bullets.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+        ) : null}
+        {sourceRulesText ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-foreground">Upstream rules (verbatim)</p>
+            <pre className="whitespace-pre-wrap text-xs text-muted-foreground max-h-48 overflow-y-auto rounded border border-border/60 bg-background/50 p-2">
+              {sourceRulesText}
+            </pre>
+          </div>
+        ) : null}
+        {sourceUrl ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1 break-all"
+          >
+            <ExternalLink className="h-3 w-3 shrink-0" />
+            {sourceUrl}
+          </a>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -431,6 +490,12 @@ export function AmmResolutionDialog({
             </div>
           )}
 
+          <ResolutionRulesPanel
+            criteria={market.resolutionCriteria}
+            sourceRulesText={market.sourceRulesText}
+            sourceUrl={market.sourceUrl}
+          />
+
           {scout && !showVoid && (
             <ScoutPanel
               scout={scout}
@@ -464,8 +529,15 @@ export function AmmResolutionDialog({
           {!showVoid && isAmm ? (
             <div className="space-y-3">
               <p className="text-sm font-medium">Select winning outcome:</p>
-              {market.entries.map((entry) => {
+              {[...market.entries]
+                .sort((a, b) => {
+                  const aOther = isOtherStyleOutcomeLabel(a.label) ? 1 : 0;
+                  const bOther = isOtherStyleOutcomeLabel(b.label) ? 1 : 0;
+                  return aOther - bOther;
+                })
+                .map((entry) => {
                 const isSelected = selectedEntry === entry.id;
+                const isOther = isOtherStyleOutcomeLabel(entry.label);
                 return (
                   <Card
                     key={entry.id}
@@ -477,7 +549,9 @@ export function AmmResolutionDialog({
                       <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-muted-foreground/30"}`}>
                         {isSelected && <div className="h-2 w-2 rounded-full bg-primary" />}
                       </div>
-                      <span className="font-medium">{entry.label}</span>
+                      <span className={`font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
+                        {entry.label}
+                      </span>
                       {scoutProposedEntry === entry.id && (
                         <Badge
                           variant="outline"

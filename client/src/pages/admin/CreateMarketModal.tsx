@@ -41,6 +41,7 @@ import {
 } from "@/components/geo/GeoCountryTargeting";
 import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
 import { normalizeMarketCategory, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { OTHER_OUTCOME_LABEL, isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { type MarketEntryForm, createMarketEntry } from "@/pages/admin/adminTypes";
 import { fetchWithAuth } from "@/pages/admin/adminAuth";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
@@ -348,6 +349,18 @@ export function CreateMarketModal({
     if (entries.length < OPINION_POLL_MAX_OPTIONS) {
       setEntries([...entries, createMarketEntry()]);
     }
+  };
+
+  const hasOtherOutcome = entries.some((e) => isOtherStyleOutcomeLabel(e.label));
+  const toggleOtherOutcome = (include: boolean) => {
+    if (include) {
+      if (hasOtherOutcome || entries.length >= OPINION_POLL_MAX_OPTIONS) return;
+      setEntries([...entries, createMarketEntry({ label: OTHER_OUTCOME_LABEL })]);
+      return;
+    }
+    // Keep at least 3 multi outcomes when removing Other.
+    const without = entries.filter((e) => !isOtherStyleOutcomeLabel(e.label));
+    if (without.length >= 3) setEntries(without);
   };
 
   const removeEntry = (clientId: string) => {
@@ -1122,6 +1135,25 @@ export function CreateMarketModal({
               entries.map((entry, idx) => (
                 <div key={entry.clientId}>{renderOutcomeEntry(entry, idx)}</div>
               ))
+            )}
+            {openMarketType === "multi" && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Include &quot;Other&quot; catch-all</p>
+                  <p className="text-xs text-muted-foreground">
+                    Adds a trailing outcome for when no listed name wins. Recommended for incomplete fields.
+                  </p>
+                </div>
+                <Switch
+                  checked={hasOtherOutcome}
+                  onCheckedChange={toggleOtherOutcome}
+                  disabled={
+                    (!hasOtherOutcome && entries.length >= OPINION_POLL_MAX_OPTIONS) ||
+                    (hasOtherOutcome && entries.filter((e) => !isOtherStyleOutcomeLabel(e.label)).length < 3)
+                  }
+                  data-testid="switch-include-other-outcome"
+                />
+              </div>
             )}
           </div>
         </div>

@@ -53,8 +53,16 @@ interface PendingMarket {
   pendingReason?: string;
   warnings: string[];
   entries: Array<{ id: string; label: string; marketId: string }>;
+  resolutionCriteria?: string[] | null;
+  sourceUrl?: string | null;
   /** Flexible market metadata; may carry the AI scout's last assessment. */
-  metadata?: { scoutAssessment?: ScoutAssessmentView | null } | null;
+  metadata?: {
+    scoutAssessment?: ScoutAssessmentView | null;
+    source?: {
+      url?: string | null;
+      resolutionRulesText?: string | null;
+    } | null;
+  } | null;
 }
 
 interface ResolvedMarket {
@@ -495,7 +503,17 @@ export function AdminSettlementCenter() {
 
       {resolveMarket && (
         <AmmResolutionDialog
-          market={{ ...resolveMarket, scoutAssessment: resolveMarket.metadata?.scoutAssessment ?? null }}
+          market={{
+            ...resolveMarket,
+            scoutAssessment: resolveMarket.metadata?.scoutAssessment ?? null,
+            resolutionCriteria: resolveMarket.resolutionCriteria ?? null,
+            sourceRulesText:
+              resolveMarket.metadata?.source?.resolutionRulesText ?? null,
+            sourceUrl:
+              resolveMarket.metadata?.source?.url ??
+              resolveMarket.sourceUrl ??
+              null,
+          }}
           open={!!resolveMarket}
           onOpenChange={open => { if (!open) setResolveMarket(null); }}
         />

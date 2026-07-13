@@ -1016,15 +1016,20 @@ export default function AdminDashboard() {
   }, [markets, editMarketId]);
 
   const settleMarket = settleMarketId ? markets?.find(m => m.id === settleMarketId) : null;
-  const { data: settleMarketDetail } = useQuery<{ entries: { id: string; label: string; totalStake: number }[]; totalParticipants?: number }>({
-    queryKey: ["/api/open-markets", settleMarket?.slug],
+  // Prefer the admin detail endpoint so drafts / non-live markets still
+  // return entries (public /api/open-markets/:slug only serves live/inactive/archived).
+  const { data: settleMarketDetail } = useQuery<{
+    entries: { id: string; label: string; totalStake?: number }[];
+    totalParticipants?: number;
+  }>({
+    queryKey: ["/api/admin/open-markets", settleMarket?.id],
     queryFn: async () => {
-      if (!settleMarket?.slug) return { entries: [] };
-      const res = await fetch(`/api/open-markets/${settleMarket.slug}`);
+      if (!settleMarket?.id) return { entries: [] };
+      const res = await fetchWithAuth(`/api/admin/open-markets/${settleMarket.id}`);
       if (!res.ok) return { entries: [] };
       return res.json();
     },
-    enabled: !!settleMarket?.slug,
+    enabled: !!settleMarket?.id,
   });
 
   const createMarketMutation = useMutation({
@@ -9476,6 +9481,13 @@ export default function AdminDashboard() {
               marketId: settleMarket.id,
             })),
             scoutAssessment: settleMarket.metadata?.scoutAssessment ?? null,
+            resolutionCriteria: settleMarket.resolutionCriteria ?? null,
+            sourceRulesText:
+              settleMarket.metadata?.source?.resolutionRulesText ?? null,
+            sourceUrl:
+              settleMarket.metadata?.source?.url ??
+              settleMarket.sourceUrl ??
+              null,
           }}
           open={!!settleMarketId}
           onOpenChange={(isOpen) => { if (!isOpen) setSettleMarketId(null); }}

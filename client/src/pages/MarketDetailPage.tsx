@@ -41,6 +41,7 @@ import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import { goBack } from "@/lib/goBack";
@@ -391,6 +392,9 @@ function MultiOutcomes({
       const bWin = b.resolutionStatus === "winner" ? 1 : 0;
       if (aWin !== bWin) return bWin - aWin;
     }
+    const aOther = isOtherStyleOutcomeLabel(a.label) ? 1 : 0;
+    const bOther = isOtherStyleOutcomeLabel(b.label) ? 1 : 0;
+    if (aOther !== bOther) return aOther - bOther;
     return b.percentage - a.percentage;
   });
   const maxPercentage = Math.max(...sorted.map((e) => e.percentage), 0);
@@ -416,7 +420,13 @@ function MultiOutcomes({
                 read better than "S." on mobile when the column shrinks. */}
             <span
               className={`w-[40%] sm:w-[30%] text-sm truncate shrink-0 ${
-                isUserPick ? "font-semibold text-foreground" : isLeading ? "font-medium text-violet-600 dark:text-violet-400" : "text-muted-foreground"
+                isOtherStyleOutcomeLabel(entry.label)
+                  ? "italic text-muted-foreground"
+                  : isUserPick
+                    ? "font-semibold text-foreground"
+                    : isLeading
+                      ? "font-medium text-violet-600 dark:text-violet-400"
+                      : "text-muted-foreground"
               }`}
             >
               {entry.label}
@@ -1724,15 +1734,25 @@ export default function MarketDetailPage() {
 
               {effectiveOpenMarketType === "multi" ? (
                 <div className="space-y-2">
-                  {[...entriesWithPercentages].sort((a, b) => b.percentage - a.percentage).map((entry) => {
+                  {[...entriesWithPercentages]
+                    .sort((a, b) => {
+                      const aOther = isOtherStyleOutcomeLabel(a.label) ? 1 : 0;
+                      const bOther = isOtherStyleOutcomeLabel(b.label) ? 1 : 0;
+                      if (aOther !== bOther) return aOther - bOther;
+                      return b.percentage - a.percentage;
+                    })
+                    .map((entry) => {
                     const livePrice = Number(ammPriceMap[entry.id] ?? 0);
+                    const isOther = isOtherStyleOutcomeLabel(entry.label);
                     return (
                       <div
                         key={entry.id}
                         className="flex items-center gap-3 text-sm rounded-lg border border-border/40 bg-background/40 p-2"
                         data-testid={`amm-live-row-${entry.id}`}
                       >
-                        <span className="w-[28%] sm:w-[26%] truncate font-medium">{entry.label}</span>
+                        <span className={`w-[28%] sm:w-[26%] truncate font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
+                          {entry.label}
+                        </span>
                         <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
                           <div
                             className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"

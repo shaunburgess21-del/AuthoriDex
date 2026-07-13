@@ -23396,7 +23396,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       }
 
       const entries = marketIds.length > 0
-        ? await db.select().from(marketEntries).where(sql`${marketEntries.marketId} IN (${sql.join(marketIds.map(id => sql`${id}`), sql`, `)})`)
+        ? await db.select().from(marketEntries)
+            .where(sql`${marketEntries.marketId} IN (${sql.join(marketIds.map(id => sql`${id}`), sql`, `)})`)
+            .orderBy(asc(marketEntries.displayOrder))
         : [];
       const entriesByMarket = new Map<string, typeof entries>();
       for (const e of entries) {

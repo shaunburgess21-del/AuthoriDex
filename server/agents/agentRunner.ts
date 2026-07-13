@@ -20,7 +20,8 @@ import {
   type AmmStateSnapshot,
   currentPrices as ammCurrentPrices,
 } from "@shared/lib/amm/positions";
-import { eq, and, sql, gte, lte, desc, inArray } from "drizzle-orm";
+import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
+import { eq, and, sql, gte, lte, desc, asc, inArray } from "drizzle-orm";
 import { log } from "../log";
 import { computePrediction, computeJackpotPrediction } from "./decisionEngine";
 import {
@@ -449,7 +450,8 @@ async function runAgentBatchOnce(): Promise<{
             personId: marketEntries.personId,
           })
           .from(marketEntries)
-          .where(eq(marketEntries.marketId, m.id));
+          .where(eq(marketEntries.marketId, m.id))
+          .orderBy(asc(marketEntries.displayOrder));
         if (entries.length === 0) return null;
 
         const marketData: MarketWithEntries = { ...m, entries };
@@ -652,7 +654,8 @@ async function runAgentBatchOnce(): Promise<{
           personId: marketEntries.personId,
         })
         .from(marketEntries)
-        .where(eq(marketEntries.marketId, market.id));
+        .where(eq(marketEntries.marketId, market.id))
+        .orderBy(asc(marketEntries.displayOrder));
 
       if (!entries.length) {
         skippedNoEntries++;
@@ -1053,7 +1056,7 @@ async function runAgentBatchOnce(): Promise<{
         if (override.floor) {
           const shouldApplyFloor =
             agent.username !== "wildcard_za" ||
-            isOtherStyleOutcome(chosenEntry?.label ?? null);
+            isOtherStyleOutcomeLabel(chosenEntry?.label ?? null);
           if (shouldApplyFloor) {
             stakeAmount = Math.max(stakeAmount, override.floor);
           }
@@ -2404,9 +2407,15 @@ async function runConvergenceSweepCommunity(
 
   const entriesByMarket = new Map<string, { id: string; label: string | null }[]>();
   const entryRows = await db
-    .select({ marketId: marketEntries.marketId, id: marketEntries.id, label: marketEntries.label })
+    .select({
+      marketId: marketEntries.marketId,
+      id: marketEntries.id,
+      label: marketEntries.label,
+      displayOrder: marketEntries.displayOrder,
+    })
     .from(marketEntries)
-    .where(inArray(marketEntries.marketId, marketIds));
+    .where(inArray(marketEntries.marketId, marketIds))
+    .orderBy(asc(marketEntries.displayOrder));
   for (const row of entryRows) {
     const list = entriesByMarket.get(row.marketId) ?? [];
     list.push({ id: row.id, label: row.label });
@@ -4290,16 +4299,6 @@ function rankerPickMatchesChosenEntry(
 ): boolean {
   if (!pick || !chosenEntry?.label) return false;
   return chosenEntry.label.toLowerCase() === pick.side.toLowerCase();
-}
-
-function isOtherStyleOutcome(label: string | null): boolean {
-  const normalized = (label ?? "").trim().toLowerCase();
-  return (
-    normalized === "other" ||
-    normalized.includes(" other") ||
-    normalized.startsWith("other ") ||
-    normalized.includes("field")
-  );
 }
 
 export function startAgentRunnerScheduler(): void {

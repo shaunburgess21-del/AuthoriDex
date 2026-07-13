@@ -15,6 +15,7 @@ import { worldMarketShare } from "@/lib/share";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 
 /**
  * Sprint 5 / Phase 0: build the predict-page return anchor key for a
@@ -504,7 +505,13 @@ function MultiMarketEntryRow({
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 min-w-0">
-        <div className="truncate text-[13px] md:text-[14px] font-medium">{entry.label}</div>
+        <div
+          className={`truncate text-[13px] md:text-[14px] font-medium ${
+            isOtherStyleOutcomeLabel(entry.label) ? "text-muted-foreground italic" : ""
+          }`}
+        >
+          {entry.label}
+        </div>
         {showEntryPool && (
           <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
             {voxWord(entryPool)} in pool
@@ -648,6 +655,10 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     const aPinned = hasPendingResult && userBetsPerEntry?.has(String(a.id)) ? 1 : 0;
     const bPinned = hasPendingResult && userBetsPerEntry?.has(String(b.id)) ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
+    // Catch-all "Other" stays at the bottom unless the user has a pick on it.
+    const aOther = isOtherStyleOutcomeLabel(a.label) ? 1 : 0;
+    const bOther = isOtherStyleOutcomeLabel(b.label) ? 1 : 0;
+    if (aOther !== bOther) return aOther - bOther;
     return b.pct - a.pct;
   });
 

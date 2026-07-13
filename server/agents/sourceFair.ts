@@ -16,8 +16,10 @@
  * case-insensitive) or the whole anchor is rejected — a wrong anchor
  * is worse than no anchor.
  *
- * Manual (non-scouted) markets return null and keep their existing
- * LLM-driven agent behaviour.
+ * Residual "Other" rows (isResidual / catch-all labels) are included in
+ * the same length-aligned vectors; the watcher fills their live price as
+ * max(0, 1 − Σ named). Manual (non-scouted) markets return null and keep
+ * their existing LLM-driven agent behaviour.
  */
 
 import { LOCKIN_FAIR_MAX, LOCKIN_FAIR_MIN } from "./lockInFair";
