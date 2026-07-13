@@ -114,6 +114,42 @@ test("inferDrawEligibleForSportsImport defaults World Cup knockouts to single-wi
   );
 });
 
+test("inferDrawEligibleForSportsImport overrides GPT true on clear WC knockouts", () => {
+  // Regression: England vs Argentina — GPT mirrored Polymarket's 90-min
+  // 1X2 and said drawEligible=true; import must still strip Draw.
+  assert.equal(
+    inferDrawEligibleForSportsImport({
+      drawEligible: true,
+      category: "sports",
+      entryLabels: ["England", "Draw", "Argentina"],
+      externalSlug: "fifwc-eng-arg-2026-07-15",
+      title: "Who wins England vs. Argentina at the World Cup?",
+    }),
+    false,
+  );
+  // Explicit GPT false still wins.
+  assert.equal(
+    inferDrawEligibleForSportsImport({
+      drawEligible: false,
+      category: "sports",
+      entryLabels: ["A", "Draw", "B"],
+      title: "Random match",
+    }),
+    false,
+  );
+  // Group stage stays draw-eligible even with fifwc slug.
+  assert.equal(
+    inferDrawEligibleForSportsImport({
+      drawEligible: true,
+      category: "sports",
+      entryLabels: ["England", "Draw", "Argentina"],
+      externalSlug: "fifwc-eng-arg-group",
+      title: "England vs Argentina — Group C",
+    }),
+    true,
+  );
+});
+
 test("inferLikelySingleWinnerKnockout detects fifwc who-will-win without metadata", () => {
   assert.equal(
     inferLikelySingleWinnerKnockout({

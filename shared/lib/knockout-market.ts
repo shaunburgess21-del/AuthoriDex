@@ -47,8 +47,63 @@ function readMetadataRecord(metadata: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Infer knockout single-winner for scouted World Cup sports 1X2 imports
- * when GPT omits `drawEligible`. Group-stage fixtures stay draw-eligible.
+ * True when title/slug/tags clearly indicate a World Cup (or similar)
+ * knockout / must-have-a-winner tie — used to override a wrong GPT
+ * `drawEligible=true` on Polymarket 90-minute 1X2 imports.
+ */
+function looksLikeWorldCupKnockoutImport(args: {
+  category: string;
+  entryLabels: string[];
+  externalSlug?: string | null;
+  tags?: string[] | null;
+  title?: string;
+  summary?: string | null;
+  description?: string | null;
+}): boolean {
+  if (args.category !== "sports") return false;
+  if (!looksLikeThreeWayMoneyline(args.entryLabels)) return false;
+
+  const slug = (args.externalSlug ?? "").trim().toLowerCase();
+  const text = [
+    args.title ?? "",
+    args.summary ?? "",
+    args.description ?? "",
+    ...(args.tags ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (/\bgroup\s+[a-h]\b|\bgroup stage\b/.test(text)) return false;
+
+  const isWorldCup =
+    slug.startsWith("fifwc-") ||
+    /\bworld cup\b|\bfifa\b/.test(text);
+  if (!isWorldCup) return false;
+
+  if (
+    /\b(quarter[- ]?final|semi[- ]?final|semifinal|round of 16|round of 32|last 16|knockout|playoff|play-off|elimination)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+
+  // Polymarket World Cup 1X2 slug + "who wins / who will win" title:
+  // treat as knockout even when GPT marks drawEligible=true (mirrors the
+  // 90-minute moneyline, not our advancing-team model).
+  if (slug.startsWith("fifwc-") && /\bwho (will )?wins?\b/.test((args.title ?? "").toLowerCase())) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Infer knockout single-winner for scouted World Cup sports 1X2 imports.
+ * Explicit GPT `drawEligible=false` always wins. Explicit `true` is
+ * respected for group-stage / non-WC fixtures, but overridden when the
+ * source clearly looks like a World Cup knockout (GPT often mirrors
+ * Polymarket's regulation 1X2 and wrongly keeps Draw).
  */
 export function inferDrawEligibleForSportsImport(args: {
   drawEligible?: boolean;
@@ -61,29 +116,13 @@ export function inferDrawEligibleForSportsImport(args: {
   description?: string | null;
 }): boolean {
   if (args.drawEligible === false) return false;
-  if (args.drawEligible === true) return true;
-  if (args.category !== "sports") return true;
-  if (!looksLikeThreeWayMoneyline(args.entryLabels)) return true;
 
-  const slug = (args.externalSlug ?? "").trim().toLowerCase();
-  const text = [
-    args.title ?? "",
-    args.summary ?? "",
-    args.description ?? "",
-    ...(args.tags ?? []),
-  ]
-    .join(" ")
-    .toLowerCase();
+  // Strong knockout signal beats a mistaken GPT true (England/Argentina
+  // style: GPT said drawEligible=true because Polymarket lists Draw).
+  if (looksLikeWorldCupKnockoutImport(args)) return false;
 
-  const isWorldCup =
-    slug.startsWith("fifwc-") ||
-    /\bworld cup\b|\bfifa\b/.test(text);
-  if (!isWorldCup) return true;
-
-  if (/\bgroup\s+[a-h]\b|\bgroup stage\b/.test(text)) return true;
-
-  // Round of 16+ at World Cup: default single-winner unless GPT said otherwise.
-  return false;
+  // GPT said true, or omitted / non-knockout → keep Draw eligible.
+  return true;
 }
 
 /**
@@ -148,7 +187,7 @@ export function inferLikelySingleWinnerKnockout(hints: KnockoutMarketHints): boo
     return true;
   }
 
-  if (slug.startsWith("fifwc-") && /\bwho (will )?win\b/.test((hints.title ?? "").toLowerCase())) {
+  if (slug.startsWith("fifwc-") && /\bwho (will )?wins?\b/.test((hints.title ?? "").toLowerCase())) {
     return true;
   }
 
