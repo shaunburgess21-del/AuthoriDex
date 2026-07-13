@@ -36,7 +36,8 @@ function sampleText(text: string): string {
   return `${trimmed.slice(0, SAMPLE_MAX)}…`;
 }
 
-function decideFromScores(
+/** Exported for unit tests — maps Omni category scores to allow/review/auto_hide. */
+export function decideFromScores(
   scores: ModerationCategoryScores,
   _flagged: boolean,
 ): { decision: ModerationDecision; matchedCategories: string[] } {

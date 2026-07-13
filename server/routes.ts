@@ -5778,9 +5778,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "open_market",
       ]);
       const trimmedContent = storedBody.trim();
+      const moderationBlocked = commentModerationStatus === "hidden";
 
       let xpResult;
-      if (isTopLevelProfilePost) {
+      if (!moderationBlocked && isTopLevelProfilePost) {
         if (trimmedContent.length >= 20) {
           try {
             xpResult = await gamificationService.awardXp(
@@ -5798,7 +5799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await maybeFireReferralCredit(userId);
           await checkAndAwardInsightBadges(userId);
         }
-      } else {
+      } else if (!moderationBlocked) {
         let shouldAwardXp =
           REWARDABLE_COMMENT_PARENT_TYPES.has(parsed.parentType) &&
           trimmedContent.length >= 20;
@@ -5858,7 +5859,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Best-effort; runs after we've already responded would be ideal,
       // but the response payload doesn't depend on it and the cost is
       // tiny, so we await for simpler error reporting.
-      if (newComment.parentCommentId) {
+      if (newComment.parentCommentId && !moderationBlocked) {
         try {
           const [parentRow] = await db
             .select({
@@ -5915,7 +5916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      if (mentionResult.userMentions.length > 0) {
+      if (!moderationBlocked && mentionResult.userMentions.length > 0) {
         try {
           const baseHref = await resolveUnifiedCommentHref(
             parsed.parentType as CommentParentType,
@@ -7070,8 +7071,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Automated moderation review queue (review + auto_hide decisions).
   app.get("/api/admin/moderation/queue", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      const allowedStatuses = new Set([
+        "pending",
+        "approved",
+        "removed",
+        "dismissed",
+        "all",
+      ]);
       const statusFilter =
-        typeof req.query.status === "string" && req.query.status.length > 0
+        typeof req.query.status === "string" && allowedStatuses.has(req.query.status)
           ? req.query.status
           : "pending";
       const limitRaw = Number(req.query.limit ?? 100);
@@ -7081,7 +7089,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conditions = [];
       if (statusFilter !== "all") {
-        conditions.push(eq(moderationEvents.status, statusFilter as "pending"));
+        conditions.push(
+          eq(
+            moderationEvents.status,
+            statusFilter as "pending" | "approved" | "removed" | "dismissed",
+          ),
+        );
       }
 
       const rows = await db
@@ -8066,6 +8079,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
       if (taken.length > 0) {
         return res.status(409).json({ error: "username_taken" });
+      }
+
+      try {
+        const applied = await applyTextModeration({
+          contentType: "profile_username",
+          contentId: userId,
+          authorId: userId,
+          text: username,
+        });
+        if (applied.result.decision === "auto_hide") {
+          return res.status(400).json({ error: "username_not_allowed" });
+        }
+      } catch (modErr: unknown) {
+        console.warn(
+          "[moderation] welcome username scan failed (fail-open):",
+          modErr instanceof Error ? modErr.message : modErr,
+        );
       }
 
       // Read the existing row first so we can:

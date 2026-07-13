@@ -498,19 +498,21 @@ export function registerVoicesRoutes(app: Express): void {
         });
         const publicBody = modStatus === "hidden" ? "" : body;
 
-        try {
-          await gamificationService.awardXp(
-            userId,
-            "post_insight",
-            `insight_${newComment.id}_${userId}`,
-            { insightId: newComment.id, personId: person.id },
-          );
-        } catch (e) {
-          console.error("[voices] insight XP failed:", e);
+        if (modStatus === "visible") {
+          try {
+            await gamificationService.awardXp(
+              userId,
+              "post_insight",
+              `insight_${newComment.id}_${userId}`,
+              { insightId: newComment.id, personId: person.id },
+            );
+          } catch (e) {
+            console.error("[voices] insight XP failed:", e);
+          }
+          await awardInsightCredits(userId, newComment.id, { personId: person.id });
+          await maybeFireReferralCredit(userId);
+          await checkAndAwardInsightBadges(userId);
         }
-        await awardInsightCredits(userId, newComment.id, { personId: person.id });
-        await maybeFireReferralCredit(userId);
-        await checkAndAwardInsightBadges(userId);
 
         const entities = await resolveCommentEntities([
           { parentType: "community_insight", parentId: person.id },

@@ -12,14 +12,32 @@ function envFlag(value: string | undefined): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }
 
+function envFlagOff(value: string | undefined): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off";
+}
+
 function envFloat(value: string | undefined, fallback: number): number {
   if (typeof value !== "string" || value.trim() === "") return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** Master kill switch. Off by default until explicitly enabled in env. */
-export const TEXT_MODERATION_ENABLED = envFlag(process.env.TEXT_MODERATION_ENABLED);
+/**
+ * Master kill switch. On by default in production (set TEXT_MODERATION_ENABLED=false
+ * to disable). Off in dev/test unless explicitly enabled.
+ */
+export function isTextModerationEnabled(): boolean {
+  const raw = process.env.TEXT_MODERATION_ENABLED;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    if (envFlagOff(raw)) return false;
+    return envFlag(raw);
+  }
+  return process.env.NODE_ENV === "production";
+}
+
+export const TEXT_MODERATION_ENABLED = isTextModerationEnabled();
 
 /**
  * Score ≥ this → auto_hide (when category is in AUTO_HIDE_CATEGORIES).
