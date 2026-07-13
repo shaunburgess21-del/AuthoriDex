@@ -270,11 +270,11 @@ const WEEKLY_HASH_ANCHORS: readonly string[] = ["jackpot", "updown", "h2h", "rac
 /**
  * Resolve the initial mode. Priority: hash deep link (share links carry
  * `#community` for World Markets, `#jackpot|#updown|#h2h|#race` for weekly
- * sections) → `?view=` query param → last mode this session → weekly.
- * Session-scoped on purpose: fresh visits always land on Weekly.
+ * sections) → `?view=` query param → last mode this session → world.
+ * Session-scoped on purpose: fresh visits always land on World.
  */
 function readInitialPredictView(): PredictView {
-  if (typeof window === "undefined") return "weekly";
+  if (typeof window === "undefined") return "world";
   const hash = window.location.hash.replace(/^#/, "");
   if (hash === "community") return "world";
   if (WEEKLY_HASH_ANCHORS.includes(hash)) return "weekly";
@@ -282,11 +282,12 @@ function readInitialPredictView(): PredictView {
   if (viewParam === "world") return "world";
   if (viewParam === "weekly") return "weekly";
   try {
-    if (sessionStorage.getItem(PREDICT_VIEW_STORAGE_KEY) === "world") return "world";
+    const stored = sessionStorage.getItem(PREDICT_VIEW_STORAGE_KEY);
+    if (stored === "weekly" || stored === "world") return stored;
   } catch {
     // sessionStorage unavailable (private mode)
   }
-  return "weekly";
+  return "world";
 }
 
 
@@ -1047,14 +1048,14 @@ export default function PredictPage() {
     });
   }, []);
 
-  // Deep-linkable mode: `/predict?view=world`. replaceState (not pushState)
+  // Deep-linkable mode: `/predict?view=weekly`. replaceState (not pushState)
   // so toggling modes doesn't pollute back-button history; the param is
-  // omitted for the weekly default. Last mode also persists for the session.
+  // omitted for the world default. Last mode also persists for the session.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (predictView === "world") {
-      url.searchParams.set("view", "world");
+    if (predictView === "weekly") {
+      url.searchParams.set("view", "weekly");
     } else {
       url.searchParams.delete("view");
     }
@@ -2989,7 +2990,6 @@ export default function PredictPage() {
 
   const predictModeTabs = useMemo<ProfileTab[]>(
     () => [
-      { id: "weekly", label: "Weekly", icon: TrendingUp, accent: "#8B5CF6" },
       {
         id: "world",
         label: "World",
@@ -2997,6 +2997,7 @@ export default function PredictPage() {
         accent: "#10B981",
         badge: liveWorldMarketCount > 0 ? liveWorldMarketCount : undefined,
       },
+      { id: "weekly", label: "Weekly", icon: TrendingUp, accent: "#8B5CF6" },
     ],
     [liveWorldMarketCount],
   );
