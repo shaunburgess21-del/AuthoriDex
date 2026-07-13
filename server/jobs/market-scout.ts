@@ -77,6 +77,7 @@ import {
   normalizeKnockoutResolutionCriteria,
   stripDrawForKnockoutImport,
 } from "@shared/lib/knockout-market";
+import { logAutoResolveShadowDecision } from "./auto-resolve-shadow";
 
 const MARKET_SCOUT_LOCK_KEY = 5_212;
 const SOURCE_WATCH_LOCK_KEY = 5_213;
@@ -1491,6 +1492,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       status: predictionMarkets.status,
+      openMarketType: predictionMarkets.openMarketType,
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
       metadata: predictionMarkets.metadata,
@@ -1712,6 +1714,37 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       continue;
     }
 
+    // Auto-resolve SHADOW MODE (read-only): whenever this watcher reaches a
+    // resolution signal below, log what auto-resolve WOULD do vs. what a
+    // human actually settles. Never affects settlement. No-op unless
+    // AUTO_RESOLVE_SHADOW_ENABLED. `upstreamResolved` is true at every call
+    // site (they all sit under an all-closed / upstream-settled branch).
+    const shadowKnockout = isSingleWinnerKnockoutMarket(
+      row.metadata,
+      knockoutHintsFromRow(row, entryLabels),
+    );
+    const emitShadow = (partial: {
+      stage: string;
+      recommendedAction: string;
+      confidence: number;
+      proposedWinnerEntryId: string | null;
+      proposedWinnerLabel: string | null;
+      isResidualOther: boolean;
+    }) => {
+      logAutoResolveShadowDecision({
+        marketId: row.id,
+        title: row.title,
+        slug: row.slug,
+        marketType: "community",
+        openMarketType: row.openMarketType ?? null,
+        signalSource: "source_watch",
+        entryCount: entryLabels.length,
+        isKnockoutSingleWinner: shadowKnockout,
+        upstreamResolved: true,
+        ...partial,
+      });
+    };
+
     // Residual "Other" rows have no upstream market — they don't participate
     // in the closed check. Require every named source market to be closed.
     const namedMappings = mapping.filter((m) => !m.isResidual && !!m.sourceMarketId);
@@ -1851,6 +1884,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
             signature: `near_certain|resolve_soon|knockout_confirm_advancer`,
           };
 
+          emitShadow({
+            stage: assessment.stage,
+            recommendedAction: assessment.recommendedAction,
+            confidence: assessment.confidence,
+            proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+            proposedWinnerLabel: assessment.leaning,
+            isResidualOther: false,
+          });
+
           try {
             const payload: Record<string, unknown> = {
               scoutAssessment: assessment,
@@ -1948,6 +1990,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
             signature: `met|resolve_now|${otherEntry.id}`,
           };
 
+          emitShadow({
+            stage: assessment.stage,
+            recommendedAction: assessment.recommendedAction,
+            confidence: assessment.confidence,
+            proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+            proposedWinnerLabel: assessment.leaning,
+            isResidualOther: true,
+          });
+
           try {
             const payload: Record<string, unknown> = {
               scoutAssessment: assessment,
@@ -2037,6 +2088,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
           assessedAt,
           signature: `met|resolve_now|void_unmappable`,
         };
+
+        emitShadow({
+          stage: assessment.stage,
+          recommendedAction: assessment.recommendedAction,
+          confidence: assessment.confidence,
+          proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+          proposedWinnerLabel: assessment.leaning,
+          isResidualOther: false,
+        });
 
         try {
           const payload: Record<string, unknown> = {
@@ -2189,6 +2249,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         signature: `near_certain|resolve_soon|knockout_draw_blocked`,
       };
 
+      emitShadow({
+        stage: assessment.stage,
+        recommendedAction: assessment.recommendedAction,
+        confidence: assessment.confidence,
+        proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+        proposedWinnerLabel: assessment.leaning,
+        isResidualOther: false,
+      });
+
       try {
         const payload: Record<string, unknown> = {
           scoutAssessment: assessment,
@@ -2270,6 +2339,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       assessedAt,
       signature: `met|resolve_now|${winner.entryId}`,
     };
+
+    emitShadow({
+      stage: assessment.stage,
+      recommendedAction: assessment.recommendedAction,
+      confidence: assessment.confidence,
+      proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+      proposedWinnerLabel: assessment.leaning,
+      isResidualOther: isOtherStyleOutcomeLabel(winner.label),
+    });
 
     try {
       // JSONB merge (same pattern as resolution-scout) so we never

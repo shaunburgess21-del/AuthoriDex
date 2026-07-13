@@ -316,7 +316,7 @@ export async function resolveAmmMarket(
     // settled. `emitResolutionSideEffects` wraps its whole body in a
     // try/catch that logs and swallows, so it never rejects — `void` is
     // safe and cannot produce an unhandled rejection.
-    void emitResolutionSideEffects(txResult);
+    void emitResolutionSideEffects(txResult, settledBy);
   }
   return txResult;
 }
@@ -328,7 +328,10 @@ export async function resolveAmmMarket(
 // the old engine did. Failures are logged and swallowed — settlement
 // already committed.
 // ---------------------------------------------------------------------------
-async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promise<void> {
+async function emitResolutionSideEffects(
+  result: ResolveAmmMarketResult,
+  settledBy: string | null = null,
+): Promise<void> {
   const { marketId, outcome, winnerEntryId } = result;
 
   try {
@@ -342,6 +345,20 @@ async function emitResolutionSideEffects(result: ResolveAmmMarketResult): Promis
       .where(eq(predictionMarkets.id, marketId))
       .limit(1);
     const marketTitle = marketMeta?.title ?? "your prediction";
+
+    // Auto-resolve shadow: log the human-settled ground truth for World
+    // Markets so shadow decisions can be scored. No-op unless the flag is on.
+    if (marketMeta?.marketType === "community") {
+      const { logAutoResolveActual } = await import("../jobs/auto-resolve-shadow");
+      logAutoResolveActual({
+        marketId,
+        title: marketMeta.title,
+        marketType: marketMeta.marketType,
+        outcome,
+        winnerEntryId,
+        settledBy,
+      });
+    }
     const { getRecentActivityMarketPath } = await import("@shared/lib/market-paths");
     const href = marketMeta
       ? getRecentActivityMarketPath(marketMeta.slug, marketMeta.marketType, marketId)

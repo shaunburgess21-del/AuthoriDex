@@ -41,6 +41,7 @@ import { getAiModel } from "../config/ai-models";
 import { getTrendContextBatch } from "../services/trend-context";
 import { computeLockCloseAt } from "./market-time-sync-utils";
 import { getAmmCooldownMs } from "../native-markets/amm-settings";
+import { logAutoResolveShadowDecision } from "./auto-resolve-shadow";
 
 const RESOLUTION_SCOUT_LOCK_KEY = 5_211;
 
@@ -680,6 +681,28 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
     const changed = prevSignature !== assessment.signature;
 
     await writeAssessment(market.id, assessment);
+
+    // Auto-resolve shadow (read-only): log the LLM scout's would-be decision.
+    // Always HELD in v1 (LLM is advisory, not a trigger) — this data shows how
+    // often the LLM alone would have wanted to resolve vs the deterministic
+    // source watch. No-op unless AUTO_RESOLVE_SHADOW_ENABLED.
+    logAutoResolveShadowDecision({
+      marketId: market.id,
+      title: market.title,
+      slug: market.slug,
+      marketType: "community",
+      openMarketType: null,
+      signalSource: "llm_scout",
+      stage: assessment.stage,
+      recommendedAction: assessment.recommendedAction,
+      confidence: assessment.confidence,
+      proposedWinnerEntryId: assessment.proposedWinnerEntryId,
+      proposedWinnerLabel: assessment.leaning,
+      entryCount: entries.length,
+      isResidualOther: false,
+      isKnockoutSingleWinner: false,
+      upstreamResolved: false,
+    });
 
     // Auto-lock / auto-unlock trading based on the scout's own read.
     // Locking freezes closeAt=now when an outcome is definitively public
