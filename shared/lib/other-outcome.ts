@@ -65,12 +65,16 @@ export const OTHER_OUTCOME_ADVICE_RESIDUAL_THRESHOLD = 0.02;
  * Placeholder outcome slots Polymarket parks in an augmented negRisk event
  * (e.g. "Movie B", "Person A", "Team 1"). Their presence is a strong signal
  * that the field is open-ended and should carry an "Other" catch-all.
- * Word-bounded so real names ("Movie Night", "Person of Interest") don't match.
+ *
+ * Requires a generic noun + a SINGLE trailing letter/digit — matching the
+ * real "Movie B"…"Movie O" / "Person A" convention — so genuine short names
+ * like "Team USA", "Team GB", or "Person of Interest" are never mistaken for
+ * placeholders.
  */
 export function isPlaceholderOutcomeLabel(label: string | null | undefined): boolean {
   const normalized = (label ?? "").trim().toLowerCase();
   if (!normalized) return false;
-  return /^(movie|person|team|candidate|player|option|choice|entry|contestant|nominee|driver|horse)\s+[a-z0-9]{1,3}$/.test(
+  return /^(movie|person|team|candidate|player|option|choice|entry|contestant|nominee|driver|horse)\s+[a-z0-9]$/.test(
     normalized,
   );
 }
@@ -181,7 +185,7 @@ export function computeOtherOutcomeAdvice(args: {
       ...base,
       recommended: true,
       signal: "semantic",
-      reason: 'This reads like an open-ended "which/who will…" field — consider an "Other" in case a contender outside the list wins.',
+      reason: 'This reads like an open-ended "which/who will..." field - consider an "Other" in case a contender outside the list wins.',
     };
   }
 

@@ -119,8 +119,13 @@ test("isPlaceholderOutcomeLabel matches augmented-negRisk slots only", () => {
   assert.equal(isPlaceholderOutcomeLabel("Person A"), true);
   assert.equal(isPlaceholderOutcomeLabel("Team 1"), true);
   assert.equal(isPlaceholderOutcomeLabel("Candidate C"), true);
+  assert.equal(isPlaceholderOutcomeLabel("Movie O"), true);
   assert.equal(isPlaceholderOutcomeLabel("Movie Night"), false);
   assert.equal(isPlaceholderOutcomeLabel("Avengers: Doomsday"), false);
+  // Real short names must NOT be treated as placeholders (single-char only).
+  assert.equal(isPlaceholderOutcomeLabel("Team USA"), false);
+  assert.equal(isPlaceholderOutcomeLabel("Team GB"), false);
+  assert.equal(isPlaceholderOutcomeLabel("Movie 10"), false);
   assert.equal(isPlaceholderOutcomeLabel(""), false);
   assert.equal(isPlaceholderOutcomeLabel(null), false);
 });
