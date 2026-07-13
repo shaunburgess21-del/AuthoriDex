@@ -15,6 +15,7 @@ import { startLiveTickScheduler, setLastFullRefreshAt, applySnapBackDampening } 
 import { startNotificationsDerivationScheduler } from "./jobs/notifications-derivation";
 import { startMarketResolverScheduler } from "./jobs/market-resolver";
 import { runMarketOpsDigest } from "./jobs/market-ops-digest";
+import { runModerationDigest } from "./jobs/moderation-digest";
 import { startAmmPriceSamplerScheduler } from "./jobs/amm-price-sampler";
 import { startRetentionCleanupScheduler } from "./jobs/retention-cleanup";
 import { startAgentRunnerScheduler } from "./agents/agentRunner";
@@ -957,6 +958,13 @@ async function startServer() {
       log("[MarketOpsDigest] Skipped - serverless mode. Use POST /api/cron/market-ops-digest.");
     }
 
+    // Content moderation digest (daily 09:00 UTC — after market ops).
+    if (!SERVERLESS_MODE) {
+      startScheduler("ModerationDigest", startModerationDigestScheduler);
+    } else {
+      log("[ModerationDigest] Skipped - serverless mode. Use POST /api/cron/moderation-digest.");
+    }
+
     // Market Scout: sources trending World Market drafts from Polymarket
     // (daily 07:00 UTC, before the ops digest). Kill switch:
     // MARKET_SCOUT_ENABLED (default off) — the job no-ops when disabled.
@@ -1356,6 +1364,36 @@ function startMarketOpsDigestScheduler() {
   setTimeout(() => {
     void runScheduledMarketOpsDigest();
     setInterval(() => void runScheduledMarketOpsDigest(), MARKET_OPS_DIGEST_INTERVAL_MS);
+  }, initialDelay);
+}
+
+// ─── Content moderation digest scheduler ─────────────────────────────────────
+// Once daily at 09:00 UTC. Surfaces pending moderation_events + recent
+// comment reports to OPS_ALERT_EMAILS. Read-only.
+const MODERATION_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MODERATION_DIGEST_UTC_HOUR = 9;
+
+async function runScheduledModerationDigest(): Promise<void> {
+  try {
+    const result = await runModerationDigest();
+    log(
+      `[ModerationDigest] OK — pending=${result.pendingQueue} autoHide=${result.autoHidePending} ` +
+        `reports24h=${result.reports24h} delivered=${result.alert.delivered} failed=${result.alert.failed}`,
+    );
+  } catch (err: any) {
+    log(`[ModerationDigest] Scheduler tick failed: ${err?.message ?? err}`);
+  }
+}
+
+function startModerationDigestScheduler() {
+  if (SERVERLESS_MODE) return;
+  const initialDelay = msUntilNextUtcHour(MODERATION_DIGEST_UTC_HOUR);
+  log(
+    `[ModerationDigest] Starting (daily ~${MODERATION_DIGEST_UTC_HOUR}:00 UTC, first run in ${Math.round(initialDelay / 60000)}m)`,
+  );
+  setTimeout(() => {
+    void runScheduledModerationDigest();
+    setInterval(() => void runScheduledModerationDigest(), MODERATION_DIGEST_INTERVAL_MS);
   }, initialDelay);
 }
 

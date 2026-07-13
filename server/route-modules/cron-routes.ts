@@ -630,6 +630,30 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // Content moderation digest. Mirrors in-process scheduler in server/index.ts.
+  app.post("/api/cron/moderation-digest", verifyCronSecret, async (_req, res) => {
+    const startTime = Date.now();
+    try {
+      const { runModerationDigest } = await import("../jobs/moderation-digest");
+      const result = await runModerationDigest();
+      res.json({
+        success: true,
+        message: "Content moderation digest completed",
+        ...result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("[Cron] Moderation digest error:", error);
+      res.status(500).json({
+        success: false,
+        error: error?.message ?? String(error),
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
   // Market Scout: sources trending World Market drafts from Polymarket via
   // GPT curation. Mirrors the in-process daily scheduler in server/index.ts
   // so external cron / SERVERLESS_MODE deployments can drive it. Advisory-

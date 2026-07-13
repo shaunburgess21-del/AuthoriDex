@@ -347,11 +347,17 @@ export default function AdminDashboard() {
   }, []);
 
   const [moderationSubTab, setModerationSubTabRaw] = useState(() => {
+    const allowed = new Set(["queue", "reports", "comments"]);
+    if (deepLink.section === "moderation" && deepLink.tab && allowed.has(deepLink.tab)) {
+      sessionStorage.setItem("admin_moderation_tab", deepLink.tab);
+      return deepLink.tab;
+    }
     const stored = sessionStorage.getItem("admin_moderation_tab");
     // The "insights" sub-tab was merged into "comments" (community_insights →
     // comments merge); a stale stored value would select a tab that no longer
     // exists and render an empty panel.
-    return stored && stored !== "insights" ? stored : "comments";
+    if (stored && allowed.has(stored)) return stored;
+    return "queue";
   });
   const setModerationSubTab = (tab: string) => { sessionStorage.setItem("admin_moderation_tab", tab); setModerationSubTabRaw(tab); };
   const [searchQuery, setSearchQuery] = useState("");
@@ -859,7 +865,7 @@ export default function AdminDashboard() {
   // Comment moderation filters — kept in component state, applied to the
   // query key so a change refetches with new server-side filters.
   const [commentParentFilter, setCommentParentFilter] = useState<
-    "all" | "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight"
+    "all" | "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight" | "voices_post"
   >("all");
   const [commentAuthorFilter, setCommentAuthorFilter] = useState<"all" | "agents" | "humans">("all");
   const [commentSearch, setCommentSearch] = useState("");
@@ -887,6 +893,82 @@ export default function AdminDashboard() {
       return res.json();
     },
     enabled: isAdmin && activeSection === "moderation",
+  });
+
+  const { data: moderationQueueData, isLoading: moderationQueueLoading, refetch: refetchModerationQueue } = useQuery<{
+    data: Array<{
+      id: string;
+      contentType: string;
+      contentId: string;
+      authorId: string | null;
+      decision: string;
+      status: string;
+      provider: string;
+      flagged: boolean;
+      matchedCategories: string[] | null;
+      sampleText: string | null;
+      authorUsername: string | null;
+      authorIsAgent: boolean | null;
+      createdAt: string;
+    }>;
+  }>({
+    queryKey: ["/api/admin/moderation/queue", "pending"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/moderation/queue?status=pending&limit=100");
+      if (!res.ok) throw new Error("Failed to fetch moderation queue");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "moderation" && moderationSubTab === "queue",
+  });
+
+  const { data: commentReportsData, isLoading: commentReportsLoading } = useQuery<
+    Array<{
+      id: string;
+      commentId: string;
+      entityType: string;
+      reporterId: string;
+      reason: string | null;
+      createdAt: string;
+      commentBody: string | null;
+      commentParentType: string | null;
+      authorUsername: string | null;
+      authorIsAgent: boolean | null;
+    }>
+  >({
+    queryKey: ["/api/admin/moderation/comment-reports"],
+    queryFn: async () => {
+      const res = await fetchWithAuth("/api/admin/moderation/comment-reports");
+      if (!res.ok) throw new Error("Failed to fetch comment reports");
+      return res.json();
+    },
+    enabled: isAdmin && activeSection === "moderation" && moderationSubTab === "reports",
+  });
+
+  const resolveModerationMutation = useMutation({
+    mutationFn: async ({
+      id,
+      action,
+    }: {
+      id: string;
+      action: "approve" | "remove" | "dismiss";
+    }) => {
+      const res = await fetchWithAuth(`/api/admin/moderation/queue/${id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to resolve");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void refetchModerationQueue();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/moderation/comments"] });
+      toast.success("Moderation action saved");
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // Fetch engine health diagnostics - only on tools section
@@ -4784,10 +4866,123 @@ export default function AdminDashboard() {
 
             <Tabs value={moderationSubTab} onValueChange={setModerationSubTab} className="w-full">
               <TabsList>
+                <TabsTrigger value="queue" data-testid="tab-moderation-queue">
+                  Review queue
+                </TabsTrigger>
+                <TabsTrigger value="reports" data-testid="tab-comment-reports">
+                  Reports
+                </TabsTrigger>
                 <TabsTrigger value="comments" data-testid="tab-comments">
                   Comments
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="queue" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Automated review queue</CardTitle>
+                    <CardDescription>
+                      Items flagged by OpenAI omni-moderation (or the local blocklist). Approve restores visibility; Remove hides/rejects; Dismiss closes without changing content further.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {moderationQueueLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading queue…</p>
+                    ) : !moderationQueueData?.data?.length ? (
+                      <p className="text-sm text-muted-foreground">Queue is clear.</p>
+                    ) : (
+                      moderationQueueData.data.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-lg border p-3 space-y-2"
+                          data-testid={`moderation-queue-item-${item.id}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant={item.decision === "auto_hide" ? "destructive" : "secondary"}>
+                              {item.decision}
+                            </Badge>
+                            <span>{item.contentType}</span>
+                            <span>·</span>
+                            <span>@{item.authorUsername || "unknown"}{item.authorIsAgent ? " (agent)" : ""}</span>
+                            <span>·</span>
+                            <span>{new Date(item.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap break-words">
+                            {item.sampleText || "(no sample)"}
+                          </p>
+                          {Array.isArray(item.matchedCategories) && item.matchedCategories.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Categories: {item.matchedCategories.join(", ")}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={resolveModerationMutation.isPending}
+                              onClick={() => resolveModerationMutation.mutate({ id: item.id, action: "approve" })}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={resolveModerationMutation.isPending}
+                              onClick={() => resolveModerationMutation.mutate({ id: item.id, action: "remove" })}
+                            >
+                              Remove
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={resolveModerationMutation.isPending}
+                              onClick={() => resolveModerationMutation.mutate({ id: item.id, action: "dismiss" })}
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="reports" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>User comment reports</CardTitle>
+                    <CardDescription>
+                      Reports submitted via the in-app Report action. Use the Comments tab to hard-delete offending rows.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {commentReportsLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading reports…</p>
+                    ) : !commentReportsData?.length ? (
+                      <p className="text-sm text-muted-foreground">No reports yet.</p>
+                    ) : (
+                      commentReportsData.map((report) => (
+                        <div key={report.id} className="rounded-lg border p-3 space-y-1">
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>{report.entityType}</span>
+                            <span>·</span>
+                            <span>@{report.authorUsername || "unknown"}{report.authorIsAgent ? " (agent)" : ""}</span>
+                            <span>·</span>
+                            <span>{new Date(report.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap break-words">
+                            {report.commentBody || "(comment missing)"}
+                          </p>
+                          {report.reason && (
+                            <p className="text-xs text-muted-foreground">Reason: {report.reason}</p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
               <TabsContent value="comments" className="mt-4">
                 <Card>
@@ -4829,6 +5024,7 @@ export default function AdminDashboard() {
                           <SelectItem value="opinion_poll">Opinion polls</SelectItem>
                           <SelectItem value="open_market">World markets</SelectItem>
                           <SelectItem value="community_insight">Community insights</SelectItem>
+                          <SelectItem value="voices_post">Voices posts</SelectItem>
                         </SelectContent>
                       </Select>
                       <Select value={commentAuthorFilter} onValueChange={(v) => setCommentAuthorFilter(v as typeof commentAuthorFilter)}>
@@ -4866,12 +5062,13 @@ export default function AdminDashboard() {
                     ) : moderationComments && moderationComments.length > 0 ? (
                       <div className="space-y-3" data-testid="comments-list">
                         {moderationComments.map((comment) => {
-                          const surfaceLabel: Record<typeof comment.parentType, string> = {
+                          const surfaceLabel: Record<string, string> = {
                             matchup: "Matchup",
                             trending_poll: "Sentiment poll",
                             opinion_poll: "Opinion poll",
                             open_market: "World market",
                             community_insight: "Insight",
+                            voices_post: "Voices",
                           };
                           return (
                             <div

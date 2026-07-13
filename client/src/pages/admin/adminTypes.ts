@@ -285,7 +285,7 @@ export interface CommunityInsight {
 export interface InsightComment {
   id: string;
   /** Polymorphic parent type. */
-  parentType: "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight";
+  parentType: "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight" | "voices_post";
   parentId: string;
   parentCommentId: string | null;
   /** Friendly title resolved from the parent table. */

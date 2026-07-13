@@ -19,7 +19,13 @@ import {
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, moderationEvents, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import {
+  applyTextModeration,
+  isAllowedAvatarsBucketUrl,
+  isAllowedProfileAvatarUrl,
+  resolveModerationEvent,
+} from "./services/moderation";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
 import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
@@ -793,16 +799,20 @@ function toUnifiedCommentItem(row: {
   upvotes: number;
   downvotes: number;
   deletedAt: Date | null;
+  /** When `hidden`, treat like soft-deleted for public body/author. */
+  moderationStatus?: "visible" | "hidden" | null;
   createdAt: Date;
   updatedAt: Date;
   /** Optional reply count (returned by GET /api/comments for top-level posts). */
   replyCount?: number;
 } & CommentAuthorJoin, userVote: CommentVoteState = null, parentVoteLabel: ParentVoteLabel = null) {
   const { authorId, authorUsername, authorAvatarUrl, authorRank, ...comment } = row;
-  const isDeleted = Boolean(comment.deletedAt);
+  const isHidden = comment.moderationStatus === "hidden";
+  const isDeleted = Boolean(comment.deletedAt) || isHidden;
   return {
     ...comment,
     body: isDeleted ? "" : comment.body,
+    moderationStatus: comment.moderationStatus ?? "visible",
     ...(isDeleted
       ? { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null }
       : formatCommentAuthor({ authorId, authorUsername, authorAvatarUrl, authorRank })),
@@ -5548,6 +5558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         upvotes: unifiedComments.upvotes,
         downvotes: unifiedComments.downvotes,
         deletedAt: unifiedComments.deletedAt,
+        moderationStatus: unifiedComments.moderationStatus,
         createdAt: unifiedComments.createdAt,
         updatedAt: unifiedComments.updatedAt,
         // Reply count subquery — cheap via comments_parent_comment_idx.
@@ -5725,6 +5736,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           body: storedBody,
         })
         .returning();
+
+      // Allow-and-queue: publish first, then scan. High-confidence hits
+      // flip moderation_status → hidden before we respond.
+      let commentModerationStatus: "visible" | "hidden" =
+        newComment.moderationStatus ?? "visible";
+      try {
+        const applied = await applyTextModeration({
+          contentType: "comment",
+          contentId: newComment.id,
+          authorId: userId,
+          text: storedBody,
+          metadata: {
+            parentType: parsed.parentType,
+            parentId: resolvedParentId,
+          },
+        });
+        if (applied.hidden) commentModerationStatus = "hidden";
+      } catch (modErr: unknown) {
+        console.warn(
+          "[moderation] comment scan failed (fail-open):",
+          modErr instanceof Error ? modErr.message : modErr,
+        );
+      }
 
       // Rewards:
       //   - Top-level profile posts (community_insight, parentCommentId=null)
@@ -5910,6 +5944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           upvotes: newComment.upvotes,
           downvotes: newComment.downvotes,
           deletedAt: newComment.deletedAt,
+          moderationStatus: commentModerationStatus,
           createdAt: newComment.createdAt,
           updatedAt: newComment.updatedAt,
           ...(profile ?? {
@@ -7013,7 +7048,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reporterId: commentReports.reporterId,
         reason: commentReports.reason,
         createdAt: commentReports.createdAt,
-      }).from(commentReports).orderBy(desc(commentReports.createdAt)).limit(200);
+        commentBody: unifiedComments.body,
+        commentParentType: unifiedComments.parentType,
+        commentDeletedAt: unifiedComments.deletedAt,
+        commentModerationStatus: unifiedComments.moderationStatus,
+        authorUsername: profiles.username,
+        authorIsAgent: profiles.isAgent,
+      }).from(commentReports)
+        .leftJoin(unifiedComments, eq(commentReports.commentId, unifiedComments.id))
+        .leftJoin(profiles, eq(unifiedComments.userId, profiles.id))
+        .orderBy(desc(commentReports.createdAt))
+        .limit(200);
 
       res.json(reports);
     } catch (error: any) {
@@ -7021,6 +7066,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch comment reports" });
     }
   });
+
+  // Automated moderation review queue (review + auto_hide decisions).
+  app.get("/api/admin/moderation/queue", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const statusFilter =
+        typeof req.query.status === "string" && req.query.status.length > 0
+          ? req.query.status
+          : "pending";
+      const limitRaw = Number(req.query.limit ?? 100);
+      const limit = Number.isFinite(limitRaw)
+        ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200)
+        : 100;
+
+      const conditions = [];
+      if (statusFilter !== "all") {
+        conditions.push(eq(moderationEvents.status, statusFilter as "pending"));
+      }
+
+      const rows = await db
+        .select({
+          id: moderationEvents.id,
+          contentType: moderationEvents.contentType,
+          contentId: moderationEvents.contentId,
+          authorId: moderationEvents.authorId,
+          decision: moderationEvents.decision,
+          status: moderationEvents.status,
+          provider: moderationEvents.provider,
+          flagged: moderationEvents.flagged,
+          scores: moderationEvents.scores,
+          matchedCategories: moderationEvents.matchedCategories,
+          sampleText: moderationEvents.sampleText,
+          metadata: moderationEvents.metadata,
+          reviewedBy: moderationEvents.reviewedBy,
+          reviewedAt: moderationEvents.reviewedAt,
+          reviewNote: moderationEvents.reviewNote,
+          createdAt: moderationEvents.createdAt,
+          authorUsername: profiles.username,
+          authorIsAgent: profiles.isAgent,
+        })
+        .from(moderationEvents)
+        .leftJoin(profiles, eq(moderationEvents.authorId, profiles.id))
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(moderationEvents.createdAt))
+        .limit(limit);
+
+      res.json({ data: rows });
+    } catch (error: any) {
+      console.error("Error fetching moderation queue:", error.message);
+      res.status(500).json({ error: "Failed to fetch moderation queue" });
+    }
+  });
+
+  app.post(
+    "/api/admin/moderation/queue/:id/resolve",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthRequest, res) => {
+      try {
+        const { id } = req.params;
+        const action = req.body?.action;
+        const reason =
+          typeof req.body?.reason === "string" ? req.body.reason.slice(0, 500) : undefined;
+        if (action !== "approve" && action !== "remove" && action !== "dismiss") {
+          return res.status(400).json({ error: "action must be approve, remove, or dismiss" });
+        }
+        const result = await resolveModerationEvent({
+          eventId: id,
+          adminId: req.userId!,
+          action,
+          reason,
+        });
+        if (!result.ok) {
+          return res.status(400).json({ error: result.error });
+        }
+        res.json({ success: true });
+      } catch (error: any) {
+        console.error("Error resolving moderation event:", error.message);
+        res.status(500).json({ error: "Failed to resolve moderation event" });
+      }
+    },
+  );
 
   // ============================================================================
   // GAMIFICATION ROUTES
@@ -7225,12 +7351,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updateData: Partial<Profile> = {
           lastActiveAt: new Date(),
         };
-        // Do not import OAuth provider photos while onboarding is
-        // incomplete — Welcome step 0 uploads our generative PNG.
+        // Import Google OAuth profile photos when the user has none yet and
+        // onboarding is complete. Google hosts/scans these; we only store the
+        // CDN URL (not arbitrary user uploads). Generative path still wins
+        // during Welcome before onboardingCompletedAt is set.
         const canImportOAuthAvatar =
-          avatarUrl &&
+          !!avatarUrl &&
           !existing[0].avatarUrl &&
-          existing[0].onboardingCompletedAt != null;
+          existing[0].onboardingCompletedAt != null &&
+          isAllowedProfileAvatarUrl(avatarUrl);
         if (canImportOAuthAvatar) updateData.avatarUrl = avatarUrl;
         // Backfill referralCode for accounts that pre-date the
         // referral system. New accounts always get one at insert
@@ -7545,9 +7674,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existingUsername.length > 0) {
           return res.status(400).json({ error: "Username already taken" });
         }
+        // High-confidence abuse on usernames: reject before write (can't "hide" a username).
+        try {
+          const applied = await applyTextModeration({
+            contentType: "profile_username",
+            contentId: userId,
+            authorId: userId,
+            text: username,
+          });
+          if (applied.result.decision === "auto_hide") {
+            return res.status(400).json({ error: "That username is not allowed. Please choose another." });
+          }
+          // review decisions already queued by applyTextModeration when decision !== allow
+        } catch (modErr: unknown) {
+          console.warn(
+            "[moderation] username scan failed (fail-open):",
+            modErr instanceof Error ? modErr.message : modErr,
+          );
+        }
         updateData.username = username;
       }
-      if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+      if (avatarUrl !== undefined) {
+        if (avatarUrl === null || avatarUrl === "") {
+          updateData.avatarUrl = null;
+        } else if (typeof avatarUrl === "string" && isAllowedProfileAvatarUrl(avatarUrl.trim())) {
+          updateData.avatarUrl = avatarUrl.trim();
+        } else {
+          return res.status(400).json({ error: "invalid_avatar_url" });
+        }
+      }
       if (isPublic !== undefined) updateData.isPublic = isPublic;
       // AMM Sprint 1, Phase 15.C.2: per-user open-position visibility.
       if (typeof positionsPublic === "boolean") {
@@ -7579,7 +7734,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isValidEmail = (raw: string): boolean =>
         /^[^\s@]{1,64}@[^\s@]{1,253}\.[^\s@]{2,}$/.test(raw);
 
-      if (bio !== undefined) updateData.bio = cap(bio, 280);
+      if (bio !== undefined) {
+        const cappedBio = cap(bio, 280);
+        if (cappedBio) {
+          try {
+            const applied = await applyTextModeration({
+              contentType: "profile_bio",
+              contentId: userId,
+              authorId: userId,
+              text: cappedBio,
+            });
+            if (applied.result.decision === "auto_hide") {
+              return res.status(400).json({ error: "That bio is not allowed. Please revise and try again." });
+            }
+          } catch (modErr: unknown) {
+            console.warn(
+              "[moderation] bio scan failed (fail-open):",
+              modErr instanceof Error ? modErr.message : modErr,
+            );
+          }
+        }
+        updateData.bio = cappedBio;
+      }
       if (dateOfBirth !== undefined) {
         if (dateOfBirth === null) {
           updateData.dateOfBirth = null;
@@ -7733,15 +7909,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const trimmed = profileBannerUrl.trim();
             if (trimmed.length === 0) {
               updateData.profileBannerUrl = null;
-            } else if (currentTier < PROFILE_BANNER_MIN_TIER) {
-              return res.status(403).json({
-                error: "rank_too_low_for_banner",
-                requiredTier: PROFILE_BANNER_MIN_TIER,
-              });
-            } else if (!/^https?:\/\//i.test(trimmed) || trimmed.length > 2048) {
-              return res.status(400).json({ error: "invalid_banner_url" });
             } else {
-              updateData.profileBannerUrl = trimmed;
+              // P0 launch: custom banner uploads disabled (generative-only
+              // avatar posture). Keep clearing via null; reject new URLs.
+              return res.status(403).json({
+                error: "banner_uploads_disabled",
+                message: "Custom profile banners are temporarily unavailable.",
+              });
             }
           } else {
             return res.status(400).json({ error: "invalid_banner_url" });
@@ -8191,6 +8365,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (typeof avatarUrl !== "string" || avatarUrl.trim().length === 0) {
         return res.status(400).json({ error: "avatarUrl is required and must be a non-empty string" });
+      }
+      if (!isAllowedAvatarsBucketUrl(avatarUrl.trim())) {
+        return res.status(400).json({ error: "invalid_avatar_url" });
+      }
+      // P0: photo uploads disabled — only generative avatars (seed string) allowed.
+      // seed === null was the photo-upload path; reject it for launch.
+      if (seed === null) {
+        return res.status(403).json({
+          error: "photo_avatars_disabled",
+          message: "Photo avatars are temporarily unavailable. Please choose a generative avatar.",
+        });
       }
 
       const [existing] = await db
@@ -12526,88 +12711,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User avatar upload — converts to optimized .webp via sharp and writes
-  // to the `avatars` bucket at `${userId}/avatar.webp`. Mirrors the admin
-  // upload pipeline so a user-supplied JPEG/PNG ends up at the same
-  // bandwidth/quality profile as a CMS image.
+  // User avatar upload — DISABLED for P0 public launch (generative-only).
+  // Photo uploads re-enable behind a CSAM-capable pipeline later.
   app.post(
     "/api/me/avatar/upload",
     requireAuth,
     upload.single("file"),
     handleMulterUploadErrors,
-    async (req: AuthRequest, res: Response) => {
-      try {
-        const file = req.file;
-        if (!file) {
-          return res.status(400).json({ error: "No file uploaded" });
-        }
-
-        const userId = req.userId!;
-
-        // Avatars render at most ~96px in the UI today (and 288 in the
-        // largest places like Settings), so a 512px WebP is more than
-        // enough headroom for retina displays while keeping the file
-        // tiny. Quality 85 is the sweet spot we use elsewhere for
-        // photographic content.
-        const optimized = await optimizeImage(file.buffer, {
-          maxWidth: 512,
-          quality: 85,
-        });
-
-        const bucketName = "avatars";
-        const filePath = `${userId}/avatar.webp`;
-
-        const { error: uploadError } = await supabaseServer.storage
-          .from(bucketName)
-          .upload(filePath, optimized.buffer, {
-            contentType: optimized.contentType,
-            upsert: true,
-            cacheControl: "3600",
-          });
-
-        if (uploadError) {
-          // Log the full storage error server-side, but don't echo
-          // Supabase internals back to the client — the user just
-          // needs to know the upload failed and to try again.
-          console.error("Avatar upload error:", uploadError);
-          return res.status(500).json({ error: "Avatar upload failed" });
-        }
-
-        // Best-effort cleanup of the legacy PNG path written by the
-        // generative pipeline (`avatar.png`). If the user had a
-        // generated avatar before uploading a photo, we don't want a
-        // stale orphan sitting in the bucket. Failure is non-fatal:
-        // the new WebP is already live and the DB will point at it.
-        supabaseServer.storage
-          .from(bucketName)
-          .remove([`${userId}/avatar.png`])
-          .catch((err) => {
-            console.warn(
-              "[avatar-upload] legacy PNG cleanup failed (non-fatal):",
-              err?.message ?? err,
-            );
-          });
-
-        const { data: urlData } = supabaseServer.storage
-          .from(bucketName)
-          .getPublicUrl(filePath);
-
-        // Cache-bust the public URL so the new WebP is served
-        // immediately instead of any previously cached image at the
-        // same path.
-        const url = `${urlData.publicUrl}?v=${Date.now()}`;
-        res.json({ url, path: filePath });
-      } catch (error: unknown) {
-        console.error("Avatar upload error:", error);
-        const message = error instanceof Error ? error.message : "";
-        if (
-          message.includes("Only PNG") ||
-          message.includes("Could not compress image below")
-        ) {
-          return res.status(400).json({ error: message });
-        }
-        res.status(500).json({ error: "Avatar upload failed" });
-      }
+    async (_req: AuthRequest, res: Response) => {
+      return res.status(403).json({
+        error: "photo_avatars_disabled",
+        message: "Photo avatars are temporarily unavailable. Please choose a generative avatar.",
+      });
     },
   );
 
@@ -15153,6 +15268,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const m = personMeta.get(row.parentId);
           parentTitle = m?.personName ? `Insight on ${m.personName}` : null;
           parentLink = `/person/${row.parentId}`;
+        } else if (row.parentType === "voices_post") {
+          parentTitle = "Voices timeline";
+          parentLink = `/voices#comment-${row.id}`;
         }
 
         const isAgent = !!row.authorIsAgent;
@@ -17401,6 +17519,38 @@ Target length: about 90-150 words.`;
         .insert(opinionPollOptionSuggestions)
         .values({ pollId: poll.id, name, suggestedBy: userId, status: "pending" })
         .returning();
+
+      // Allow-and-queue: option names are public while pending. Auto-hide
+      // immediately rejects the suggestion so it never surfaces.
+      try {
+        const applied = await applyTextModeration({
+          contentType: "opinion_option_suggestion",
+          contentId: created.id,
+          authorId: userId,
+          text: name,
+          metadata: { pollId: poll.id, slug },
+        });
+        if (applied.result.decision === "auto_hide") {
+          await db
+            .update(opinionPollOptionSuggestions)
+            .set({
+              status: "rejected",
+              reviewedBy: null,
+              reviewedAt: new Date(),
+              adminNotes: "Auto-rejected by content moderation",
+              updatedAt: new Date(),
+            })
+            .where(eq(opinionPollOptionSuggestions.id, created.id));
+          return res.status(400).json({
+            error: "That suggestion is not allowed. Please try a different option name.",
+          });
+        }
+      } catch (modErr: unknown) {
+        console.warn(
+          "[moderation] opinion option scan failed (fail-open):",
+          modErr instanceof Error ? modErr.message : modErr,
+        );
+      }
 
       res.json({ success: true, suggestion: { id: created.id, name: created.name, voteCount: 0, userHasVoted: false, createdAt: created.createdAt } });
     } catch (error: any) {

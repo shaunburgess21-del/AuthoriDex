@@ -93,6 +93,12 @@ export function adminWorldMarketsUrl(): string {
   return `${getAdminBaseUrl()}/admin?section=predictions&tab=real-world`;
 }
 
+/** Deep link to the admin Moderation section (optional sub-tab). */
+export function adminModerationUrl(tab?: "queue" | "reports" | "comments"): string {
+  const base = `${getAdminBaseUrl()}/admin?section=moderation`;
+  return tab ? `${base}&tab=${tab}` : base;
+}
+
 /**
  * Deep link that opens the admin panel with the resolve dialog already open
  * for the given market — one tap from the ops email to settling on a phone.

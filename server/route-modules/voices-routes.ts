@@ -32,9 +32,35 @@ import {
 } from "../services/voices/entities";
 import { sanitizeMentions, notifyMentionedUsers } from "../services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
+import { applyTextModeration } from "../services/moderation";
 
 const VOICES_POST_MAX_LENGTH = 5000;
 const DELETED_USER = "[deleted user]";
+
+async function moderateNewComment(opts: {
+  commentId: string;
+  userId: string;
+  body: string;
+  parentType: string;
+  parentId: string;
+}): Promise<"visible" | "hidden"> {
+  try {
+    const applied = await applyTextModeration({
+      contentType: "comment",
+      contentId: opts.commentId,
+      authorId: opts.userId,
+      text: opts.body,
+      metadata: { parentType: opts.parentType, parentId: opts.parentId, source: "voices" },
+    });
+    return applied.hidden ? "hidden" : "visible";
+  } catch (modErr: unknown) {
+    console.warn(
+      "[moderation] voices comment scan failed (fail-open):",
+      modErr instanceof Error ? modErr.message : modErr,
+    );
+    return "visible";
+  }
+}
 
 type CardParentType = "matchup" | "trending_poll" | "opinion_poll" | "open_market";
 
@@ -248,9 +274,10 @@ function mapReplyRow(row: {
   upvotes: number;
   downvotes: number;
   deletedAt: Date | null;
+  moderationStatus?: "visible" | "hidden" | null;
   createdAt: Date;
 }, userVoted: Set<string>): ReplyDTO {
-  const isDeleted = Boolean(row.deletedAt);
+  const isDeleted = Boolean(row.deletedAt) || row.moderationStatus === "hidden";
   return {
     id: row.id,
     userId: row.userId,
@@ -282,6 +309,7 @@ async function loadThreadReplies(rootId: string, userId: string | null): Promise
         upvotes: unifiedComments.upvotes,
         downvotes: unifiedComments.downvotes,
         deletedAt: unifiedComments.deletedAt,
+        moderationStatus: unifiedComments.moderationStatus,
         createdAt: unifiedComments.createdAt,
         authorUsername: profiles.username,
         authorAvatarUrl: profiles.avatarUrl,
@@ -326,6 +354,8 @@ async function buildCommentFeedItem(
     downvotes: number;
     createdAt: Date;
     parentCommentId?: string | null;
+    deletedAt?: Date | null;
+    moderationStatus?: "visible" | "hidden" | null;
   },
   userId: string | null,
 ): Promise<VoicesFeedItem | null> {
@@ -340,16 +370,18 @@ async function buildCommentFeedItem(
   const replies = await loadThreadReplies(row.id, null);
   const isTopLevelProfilePost =
     row.parentType === "community_insight" && (row.parentCommentId ?? null) === null;
+  const isHidden =
+    Boolean(row.deletedAt) || row.moderationStatus === "hidden";
   return {
     id: row.id,
     source: isTopLevelProfilePost ? "insight" : "comment",
     parentType: row.parentType as VoicesFeedItem["parentType"],
-    body: row.body,
+    body: isHidden ? "" : row.body,
     author: {
       userId: row.userId,
-      username: author?.username ?? null,
-      avatarUrl: author?.avatarUrl ?? null,
-      rank: author?.rank ?? null,
+      username: isHidden ? DELETED_USER : (author?.username ?? null),
+      avatarUrl: isHidden ? null : (author?.avatarUrl ?? null),
+      rank: isHidden ? null : (author?.rank ?? null),
     },
     upvotes: row.upvotes,
     downvotes: row.downvotes,
@@ -457,6 +489,15 @@ export function registerVoicesRoutes(app: Express): void {
           .values({ parentType: "community_insight", parentId: person.id, parentCommentId: null, userId, body })
           .returning();
 
+        const modStatus = await moderateNewComment({
+          commentId: newComment.id,
+          userId,
+          body,
+          parentType: "community_insight",
+          parentId: person.id,
+        });
+        const publicBody = modStatus === "hidden" ? "" : body;
+
         try {
           await gamificationService.awardXp(
             userId,
@@ -481,15 +522,17 @@ export function registerVoicesRoutes(app: Express): void {
           .where(eq(profiles.id, userId))
           .limit(1);
 
-        await fanoutVoicePostMentions({
-          userMentions: mentionResult.userMentions,
-          authorId: userId,
-          authorUsername: author?.username ?? null,
-          contentId: newComment.id,
-          entityType: "community_insight",
-          href: `/person/${person.id}#insight-${newComment.id}`,
-          storedBody: body,
-        });
+        if (modStatus === "visible") {
+          await fanoutVoicePostMentions({
+            userMentions: mentionResult.userMentions,
+            authorId: userId,
+            authorUsername: author?.username ?? null,
+            contentId: newComment.id,
+            entityType: "community_insight",
+            href: `/person/${person.id}#insight-${newComment.id}`,
+            storedBody: body,
+          });
+        }
 
         return res.status(201).json({
           item: entity
@@ -497,12 +540,12 @@ export function registerVoicesRoutes(app: Express): void {
                 id: newComment.id,
                 source: "insight",
                 parentType: "community_insight",
-                body,
+                body: publicBody,
                 author: {
                   userId,
-                  username: author?.username ?? null,
-                  avatarUrl: author?.avatarUrl ?? null,
-                  rank: author?.rank ?? null,
+                  username: modStatus === "hidden" ? DELETED_USER : (author?.username ?? null),
+                  avatarUrl: modStatus === "hidden" ? null : (author?.avatarUrl ?? null),
+                  rank: modStatus === "hidden" ? null : (author?.rank ?? null),
                 },
                 upvotes: 0,
                 downvotes: 0,
@@ -528,23 +571,36 @@ export function registerVoicesRoutes(app: Express): void {
           .values({ parentType: cardType, parentId: resolvedParentId, userId, body })
           .returning();
 
+        const modStatus = await moderateNewComment({
+          commentId: created.id,
+          userId,
+          body,
+          parentType: cardType,
+          parentId: resolvedParentId,
+        });
+
         const [author] = await db
           .select({ username: profiles.username })
           .from(profiles)
           .where(eq(profiles.id, userId))
           .limit(1);
         const cardHref = await resolveCardHref(cardType, attachment.idOrSlug);
-        await fanoutVoicePostMentions({
-          userMentions: mentionResult.userMentions,
-          authorId: userId,
-          authorUsername: author?.username ?? null,
-          contentId: created.id,
-          entityType: "comment",
-          href: `${cardHref}#comment-${created.id}`,
-          storedBody: body,
-        });
+        if (modStatus === "visible") {
+          await fanoutVoicePostMentions({
+            userMentions: mentionResult.userMentions,
+            authorId: userId,
+            authorUsername: author?.username ?? null,
+            contentId: created.id,
+            entityType: "comment",
+            href: `${cardHref}#comment-${created.id}`,
+            storedBody: body,
+          });
+        }
 
-        const item = await buildCommentFeedItem(created, userId);
+        const item = await buildCommentFeedItem(
+          { ...created, moderationStatus: modStatus },
+          userId,
+        );
         return res.status(201).json({ item });
       }
 
@@ -554,22 +610,35 @@ export function registerVoicesRoutes(app: Express): void {
         .values({ parentType: "voices_post", parentId: VOICES_TIMELINE_ID, userId, body })
         .returning();
 
+      const modStatus = await moderateNewComment({
+        commentId: created.id,
+        userId,
+        body,
+        parentType: "voices_post",
+        parentId: VOICES_TIMELINE_ID,
+      });
+
       const [author] = await db
         .select({ username: profiles.username })
         .from(profiles)
         .where(eq(profiles.id, userId))
         .limit(1);
-      await fanoutVoicePostMentions({
-        userMentions: mentionResult.userMentions,
-        authorId: userId,
-        authorUsername: author?.username ?? null,
-        contentId: created.id,
-        entityType: "comment",
-        href: `/voices#comment-${created.id}`,
-        storedBody: body,
-      });
+      if (modStatus === "visible") {
+        await fanoutVoicePostMentions({
+          userMentions: mentionResult.userMentions,
+          authorId: userId,
+          authorUsername: author?.username ?? null,
+          contentId: created.id,
+          entityType: "comment",
+          href: `/voices#comment-${created.id}`,
+          storedBody: body,
+        });
+      }
 
-      const item = await buildCommentFeedItem(created, userId);
+      const item = await buildCommentFeedItem(
+        { ...created, moderationStatus: modStatus },
+        userId,
+      );
       return res.status(201).json({ item });
     } catch (error) {
       console.error("[voices] create post error:", error);
@@ -598,6 +667,7 @@ export function registerVoicesRoutes(app: Express): void {
           upvotes: unifiedComments.upvotes,
           downvotes: unifiedComments.downvotes,
           deletedAt: unifiedComments.deletedAt,
+          moderationStatus: unifiedComments.moderationStatus,
           createdAt: unifiedComments.createdAt,
         })
         .from(unifiedComments)

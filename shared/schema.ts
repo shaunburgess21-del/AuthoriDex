@@ -24,6 +24,27 @@ export const commentParentTypeEnum = pgEnum("comment_parent_type", [
 ]);
 export const commentVoteTypeEnum = pgEnum("comment_vote_type", ["up", "down"]);
 
+/** Public visibility for comments after automated / manual moderation. */
+export const commentModerationStatusEnum = pgEnum("comment_moderation_status", [
+  "visible",
+  "hidden",
+]);
+
+/** Automated decision band written into moderation_events.decision. */
+export const moderationDecisionEnum = pgEnum("moderation_decision", [
+  "allow",
+  "review",
+  "auto_hide",
+]);
+
+/** Human review lifecycle for moderation_events.status. */
+export const moderationEventStatusEnum = pgEnum("moderation_event_status", [
+  "pending",
+  "approved",
+  "removed",
+  "dismissed",
+]);
+
 // NOTE: Auth and live account state are handled via Supabase + profiles.
 // The legacy users table is kept only for migration-era compatibility and should not be used for runtime reads/writes.
 export const users = pgTable("users", {
@@ -325,6 +346,12 @@ export const comments = pgTable("comments", {
   upvotes: integer("upvotes").notNull().default(0),
   downvotes: integer("downvotes").notNull().default(0),
   deletedAt: timestamp("deleted_at"),
+  /**
+   * Automated / manual moderation visibility. `hidden` is treated like a
+   * soft-delete for public reads (empty body + placeholder author) but keeps
+   * the original body for admin review. Default `visible`.
+   */
+  moderationStatus: commentModerationStatusEnum("moderation_status").notNull().default("visible"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -332,6 +359,7 @@ export const comments = pgTable("comments", {
   parentCommentIdx: index("comments_parent_comment_idx").on(table.parentCommentId),
   // Author timeline lookups (e.g. /me/comments history, profile comment count).
   userCreatedIdx: index("comments_user_created_idx").on(table.userId, table.createdAt),
+  moderationStatusIdx: index("comments_moderation_status_idx").on(table.moderationStatus),
 }));
 
 export const insertCommentSchema = createInsertSchema(comments).omit({
@@ -1991,6 +2019,43 @@ export const commentReports = pgTable("comment_reports", {
 }));
 
 export type CommentReport = typeof commentReports.$inferSelect;
+
+// ============================================================================
+// CONTENT MODERATION QUEUE (P0)
+// ============================================================================
+
+/**
+ * One row per automated (or future manual) moderation decision that needs
+ * human attention. `allow` decisions are not persisted — only `review` and
+ * `auto_hide`. Backend-only; RLS enabled with no policies (service role).
+ */
+export const moderationEvents = pgTable("moderation_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentType: text("content_type").notNull(), // comment | profile_bio | …
+  contentId: varchar("content_id").notNull(),
+  authorId: varchar("author_id"),
+  decision: moderationDecisionEnum("decision").notNull(),
+  status: moderationEventStatusEnum("status").notNull().default("pending"),
+  provider: text("provider").notNull(), // openai_omni | local_blocklist | …
+  flagged: boolean("flagged").notNull().default(false),
+  scores: jsonb("scores"),
+  matchedCategories: jsonb("matched_categories").$type<string[]>(),
+  sampleText: text("sample_text"),
+  metadata: jsonb("metadata"),
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  statusCreatedIdx: index("moderation_events_status_created_idx").on(
+    table.status,
+    table.createdAt.desc(),
+  ),
+  contentIdx: index("moderation_events_content_idx").on(table.contentType, table.contentId),
+  authorIdx: index("moderation_events_author_idx").on(table.authorId),
+}));
+
+export type ModerationEvent = typeof moderationEvents.$inferSelect;
 
 // ============================================================================
 // AI AGENT PREDICTION SYSTEM

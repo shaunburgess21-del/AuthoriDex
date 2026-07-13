@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,6 @@ import {
   ChevronDown,
   Camera,
   Sparkles,
-  Upload,
   IdCard,
   KeyRound,
   Check,
@@ -65,7 +64,7 @@ import {
 } from "@/components/ui/popover";
 import { AvatarPicker } from "@/components/avatar/AvatarPicker";
 import { NotificationPreferences } from "@/components/notifications/NotificationPreferences";
-import { uploadAvatarFile, uploadGeneratedAvatar, uploadBannerFile } from "@/lib/avatar/upload";
+import { uploadGeneratedAvatar } from "@/lib/avatar/upload";
 import { getRankByName } from "@shared/rank-config";
 import {
   PROFILE_BANNER_MIN_TIER,
@@ -336,8 +335,6 @@ function ProfileTab() {
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!profile || hasLocalChanges) return;
@@ -394,31 +391,6 @@ function ProfileTab() {
     }
   };
 
-  const onAvatarFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setAvatarUploading(true);
-    try {
-      const { url } = await uploadAvatarFile(file);
-      await apiRequest("PATCH", "/api/profile/avatar", {
-        seed: null,
-        avatarUrl: url,
-        customizationSource: "settings",
-      });
-      setAvatarUrl(url);
-      await refreshProfile();
-      toast("Avatar updated", { description: "Looking sharp." });
-    } catch (err) {
-      console.error("[SettingsPage] Avatar upload failed:", err);
-      toast.error("Could not upload photo", {
-        description: err instanceof Error ? err.message : "Please try again.",
-      });
-    } finally {
-      setAvatarUploading(false);
-    }
-  };
-
   const displayName = username || user?.email?.split("@")[0] || "User";
 
   return (
@@ -436,7 +408,6 @@ function ProfileTab() {
               type="button"
               className="group relative h-20 w-20 shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="Change profile photo"
-              disabled={avatarUploading}
               data-testid="button-open-avatar-menu"
             >
               <UserProfileAvatar
@@ -449,11 +420,7 @@ function ProfileTab() {
                 className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/55 opacity-30 transition-opacity duration-150 md:opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                 aria-hidden
               >
-                {avatarUploading ? (
-                  <Loader2 className="h-6 w-6 animate-spin text-white" />
-                ) : (
-                  <Camera className="h-6 w-6 text-white" />
-                )}
+                <Camera className="h-6 w-6 text-white" />
               </span>
             </button>
           </PopoverTrigger>
@@ -469,17 +436,9 @@ function ProfileTab() {
               <Sparkles className="h-4 w-4 text-violet-500" />
               <span>Pick a generative avatar</span>
             </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-left hover:bg-muted/60 transition-colors"
-              onClick={() => {
-                setAvatarMenuOpen(false);
-                fileInputRef.current?.click();
-              }}
-            >
-              <Upload className="h-4 w-4 text-blue-500" />
-              <span>Upload a photo</span>
-            </button>
+            <p className="px-3 py-2 text-[11px] text-muted-foreground leading-snug">
+              Photo uploads are temporarily unavailable.
+            </p>
           </PopoverContent>
         </Popover>
         <div className="min-w-0 flex-1">
@@ -487,14 +446,6 @@ function ProfileTab() {
           <p className="text-xs text-muted-foreground break-all">{user?.email}</p>
         </div>
       </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        className="hidden"
-        onChange={onAvatarFile}
-      />
 
       <div className="space-y-5">
         <div className="space-y-2">
@@ -576,36 +527,15 @@ function ProfileTab() {
  * PATCH /api/profile/me, which re-checks the tier server-side.
  */
 function RankRewardsCard() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const tier = getRankByName(profile?.rank ?? "")?.tier ?? 1;
   const canBanner = tier >= PROFILE_BANNER_MIN_TIER;
   const canTheme = tier >= PROFILE_THEME_MIN_TIER;
   const [bannerBusy, setBannerBusy] = useState(false);
   const [themeBusy, setThemeBusy] = useState(false);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const bannerUrl = profile?.profileBannerUrl ?? null;
   const activeTheme = profile?.profileTheme ?? null;
-
-  const onBannerFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setBannerBusy(true);
-    try {
-      const userId = profile?.id || user!.id;
-      const { url } = await uploadBannerFile(userId, file);
-      await apiRequest("PATCH", "/api/profile/me", { profileBannerUrl: url });
-      await refreshProfile();
-      toast("Banner updated", { description: "Your profile is looking elite." });
-    } catch (err) {
-      toast.error("Could not upload banner", {
-        description: err instanceof Error ? err.message : "Please try again.",
-      });
-    } finally {
-      setBannerBusy(false);
-    }
-  };
 
   const onRemoveBanner = async () => {
     setBannerBusy(true);
@@ -648,67 +578,40 @@ function RankRewardsCard() {
         public profile while you hold the rank.
       </p>
 
-      {/* Banner — Maven (Tier 6+) */}
+      {/* Banner — Maven (Tier 6+). Custom uploads disabled for launch. */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <Label>Profile banner</Label>
-          {!canBanner && (
-            <Badge variant="outline" className="text-[10px]">
-              Unlocks at Maven (Tier {PROFILE_BANNER_MIN_TIER})
-            </Badge>
-          )}
+          <Badge variant="outline" className="text-[10px]">
+            Coming soon
+          </Badge>
         </div>
-        {canBanner ? (
+        {canBanner && bannerUrl ? (
           <div className="space-y-3">
             <div className="relative h-28 w-full overflow-hidden rounded-lg border bg-muted/40">
-              {bannerUrl ? (
-                <img
-                  src={bannerUrl}
-                  alt="Profile banner preview"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                  No banner yet
-                </div>
-              )}
+              <img
+                src={bannerUrl}
+                alt="Profile banner preview"
+                className="h-full w-full object-cover"
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={bannerBusy}
-                onClick={() => bannerInputRef.current?.click()}
-              >
-                {bannerBusy ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                {bannerUrl ? "Replace banner" : "Upload banner"}
-              </Button>
-              {bannerUrl && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={bannerBusy}
-                  onClick={onRemoveBanner}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-            <input
-              ref={bannerInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={onBannerFile}
-            />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bannerBusy}
+              onClick={onRemoveBanner}
+            >
+              Remove
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              New banner uploads are temporarily unavailable. You can remove your current banner.
+            </p>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Reach Maven to add a custom banner to your profile.
+            {canBanner
+              ? "Custom profile banners are temporarily unavailable."
+              : `Reach Maven (Tier ${PROFILE_BANNER_MIN_TIER}) to unlock a custom banner — uploads coming soon.`}
           </p>
         )}
       </div>
