@@ -14,6 +14,7 @@ import {
   OTHER_OUTCOME_LABEL,
   OTHER_OUTCOME_RESIDUAL_THRESHOLD,
   isOtherStyleOutcomeLabel,
+  isPlaceholderOutcomeLabel,
 } from "@shared/lib/other-outcome";
 import { log } from "../log";
 
@@ -41,6 +42,7 @@ export function maybeAppendOtherOutcome(
   outcomes: PolymarketOutcome[],
   structure: "binary" | "multi",
   maxOutcomes: number,
+  opts: { force?: boolean } = {},
 ): PolymarketOutcome[] {
   if (!otherOutcomeEnabled()) return outcomes;
   if (structure !== "multi") return outcomes;
@@ -49,9 +51,14 @@ export function maybeAppendOtherOutcome(
 
   const namedSum = outcomes.reduce((s, o) => s + o.price, 0);
   const residual = 1 - namedSum;
-  if (residual < OTHER_OUTCOME_RESIDUAL_THRESHOLD) return outcomes;
-  // Don't invent Other when the book is over-subscribed (misread prices).
-  if (namedSum > 1.05) return outcomes;
+  // `force` (augmented negRisk source) appends Other even when the named
+  // book looks exhaustive — Polymarket itself keeps an Other/placeholder for
+  // this field, so an unlisted winner is possible.
+  if (!opts.force) {
+    if (residual < OTHER_OUTCOME_RESIDUAL_THRESHOLD) return outcomes;
+    // Don't invent Other when the book is over-subscribed (misread prices).
+    if (namedSum > 1.05) return outcomes;
+  }
 
   return [
     ...outcomes,
@@ -63,6 +70,36 @@ export function maybeAppendOtherOutcome(
       isResidual: true,
     },
   ];
+}
+
+/**
+ * Detect Polymarket "augmented negRisk": an open/evolving field that carries
+ * an explicit "Other" and/or reserved placeholder slots ("Movie B", "Person
+ * A"). Those markets are frequently dormant (`active=false`) on the source,
+ * so we inspect the FULL market list (pre-active-filter) to catch them.
+ */
+export function detectAugmentedNegRisk(ev: GammaEvent): {
+  augmented: boolean;
+  placeholderCount: number;
+  hasExplicitOther: boolean;
+} {
+  const enabled = ev.negRisk === true || ev.enableNegRisk === true;
+  if (!enabled) {
+    return { augmented: false, placeholderCount: 0, hasExplicitOther: false };
+  }
+  let placeholderCount = 0;
+  let hasExplicitOther = false;
+  for (const m of ev.markets ?? []) {
+    const label = (m.groupItemTitle || m.question || "").trim();
+    if (!label) continue;
+    if (isOtherStyleOutcomeLabel(label)) hasExplicitOther = true;
+    else if (isPlaceholderOutcomeLabel(label)) placeholderCount += 1;
+  }
+  return {
+    augmented: hasExplicitOther || placeholderCount > 0,
+    placeholderCount,
+    hasExplicitOther,
+  };
 }
 
 /** One tradable outcome on the source event, with its live price. */
@@ -114,6 +151,17 @@ export interface PolymarketCandidate {
   /** binary = single Yes/No market; multi = negRisk event, one entry per market. */
   structure: "binary" | "multi";
   outcomes: PolymarketOutcome[];
+  /**
+   * Source uses augmented negRisk (explicit "Other" and/or placeholder
+   * slots) — a strong signal the field is open-ended and should carry a
+   * catch-all. Drives the auto-Other import and the admin advisory.
+   */
+  augmentedNegRisk?: boolean;
+  /** Count of dormant placeholder slots on the source. */
+  placeholderCount?: number;
+  hasExplicitOther?: boolean;
+  /** Σ of named (non-Other) outcome prices at import, for Other advice. */
+  namedPriceSum?: number;
 }
 
 interface GammaMarket {
@@ -148,6 +196,8 @@ interface GammaEvent {
   active?: boolean;
   closed?: boolean;
   negRisk?: boolean;
+  /** Augmented negRisk flag (evolving field with placeholders / Other). */
+  enableNegRisk?: boolean;
   tags?: Array<{ label?: string; slug?: string }>;
   markets?: GammaMarket[];
 }
@@ -281,12 +331,20 @@ function normalizeEvent(
 
   // Append a residual "Other" when the named set is non-exhaustive, so the
   // exhaustiveness guard below sees a complete probability vector and
-  // settlement has a clean target if no listed name wins.
-  outcomes = maybeAppendOtherOutcome(outcomes, structure, opts.maxOutcomes);
+  // settlement has a clean target if no listed name wins. `force` when the
+  // source is augmented negRisk (Polymarket itself keeps an Other slot).
+  const aug = detectAugmentedNegRisk(ev);
+  outcomes = maybeAppendOtherOutcome(outcomes, structure, opts.maxOutcomes, {
+    force: aug.augmented,
+  });
 
   if (outcomes.length < opts.minOutcomes || outcomes.length > opts.maxOutcomes) {
     return null;
   }
+
+  const namedPriceSum = outcomes
+    .filter((o) => !isOtherStyleOutcomeLabel(o.label))
+    .reduce((s, o) => s + o.price, 0);
 
   // Kickoff/start time: earliest valid market-level gameStartTime, falling
   // back to the event-level startTime. Null when neither is provided.
@@ -307,6 +365,10 @@ function normalizeEvent(
       .filter((t): t is string => !!t),
     structure,
     outcomes,
+    augmentedNegRisk: aug.augmented,
+    placeholderCount: aug.placeholderCount,
+    hasExplicitOther: aug.hasExplicitOther,
+    namedPriceSum,
   };
 }
 

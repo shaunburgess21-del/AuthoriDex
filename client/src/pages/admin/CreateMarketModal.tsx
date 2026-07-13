@@ -41,7 +41,12 @@ import {
 } from "@/components/geo/GeoCountryTargeting";
 import { dateToLocal, localDatetimeToIso } from "@/lib/datetime-local";
 import { normalizeMarketCategory, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { OTHER_OUTCOME_LABEL, isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
+import {
+  OTHER_OUTCOME_LABEL,
+  isOtherStyleOutcomeLabel,
+  computeOtherOutcomeAdvice,
+  type OtherOutcomeAdvice,
+} from "@shared/lib/other-outcome";
 import { type MarketEntryForm, createMarketEntry } from "@/pages/admin/adminTypes";
 import { fetchWithAuth } from "@/pages/admin/adminAuth";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
@@ -352,6 +357,26 @@ export function CreateMarketModal({
   };
 
   const hasOtherOutcome = entries.some((e) => isOtherStyleOutcomeLabel(e.label));
+  // Advisory: recommend an "Other" catch-all when the scout flagged the source
+  // as an open field, or the current title/outcomes read open-ended. Prefer the
+  // scout's server-side advice (has price/negRisk signals) and fall back to a
+  // live, semantic-only read for manually-built markets.
+  const serverOtherAdvice: OtherOutcomeAdvice | undefined =
+    editMarket?.metadata?.otherOutcomeAdvice;
+  const liveOtherAdvice = computeOtherOutcomeAdvice({
+    structure: openMarketType,
+    entryLabels: entries.map((e) => e.label),
+    title,
+  });
+  const otherAdvice: OtherOutcomeAdvice =
+    serverOtherAdvice && serverOtherAdvice.recommended && !hasOtherOutcome
+      ? serverOtherAdvice
+      : liveOtherAdvice;
+  const showOtherAdvice =
+    openMarketType === "multi" &&
+    !hasOtherOutcome &&
+    otherAdvice.recommended &&
+    entries.filter((e) => !isOtherStyleOutcomeLabel(e.label)).length < OPINION_POLL_MAX_OPTIONS;
   const toggleOtherOutcome = (include: boolean) => {
     if (include) {
       if (hasOtherOutcome || entries.length >= OPINION_POLL_MAX_OPTIONS) return;
@@ -1137,22 +1162,44 @@ export function CreateMarketModal({
               ))
             )}
             {openMarketType === "multi" && (
-              <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">Include &quot;Other&quot; catch-all</p>
-                  <p className="text-xs text-muted-foreground">
-                    Adds a trailing outcome for when no listed name wins. Recommended for incomplete fields.
-                  </p>
+              <div className="space-y-2">
+                {showOtherAdvice && (
+                  <div className="flex items-start justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                        AI suggests adding an &quot;Other&quot; outcome
+                      </p>
+                      <p className="text-xs text-muted-foreground">{otherAdvice.reason}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-amber-500/50"
+                      onClick={() => toggleOtherOutcome(true)}
+                      data-testid="button-add-other-outcome"
+                    >
+                      Add Other
+                    </Button>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Include &quot;Other&quot; catch-all</p>
+                    <p className="text-xs text-muted-foreground">
+                      Adds a trailing outcome for when no listed name wins. Recommended for incomplete fields.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={hasOtherOutcome}
+                    onCheckedChange={toggleOtherOutcome}
+                    disabled={
+                      (!hasOtherOutcome && entries.length >= OPINION_POLL_MAX_OPTIONS) ||
+                      (hasOtherOutcome && entries.filter((e) => !isOtherStyleOutcomeLabel(e.label)).length < 3)
+                    }
+                    data-testid="switch-include-other-outcome"
+                  />
                 </div>
-                <Switch
-                  checked={hasOtherOutcome}
-                  onCheckedChange={toggleOtherOutcome}
-                  disabled={
-                    (!hasOtherOutcome && entries.length >= OPINION_POLL_MAX_OPTIONS) ||
-                    (hasOtherOutcome && entries.filter((e) => !isOtherStyleOutcomeLabel(e.label)).length < 3)
-                  }
-                  data-testid="switch-include-other-outcome"
-                />
               </div>
             )}
           </div>

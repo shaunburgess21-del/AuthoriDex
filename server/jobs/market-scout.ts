@@ -66,6 +66,7 @@ import {
 } from "../providers/polymarket";
 import {
   OTHER_OUTCOME_LABEL,
+  computeOtherOutcomeAdvice,
   isOtherStyleOutcomeLabel,
 } from "@shared/lib/other-outcome";
 import {
@@ -1047,6 +1048,25 @@ async function insertScoutedDraft(
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
     metadata.scoutWatch = selection.scoutWatch.trim();
+  }
+
+  // Advisory: should this market carry an "Other" catch-all? Persisted so the
+  // admin edit modal can surface a recommendation next to the toggle. New
+  // augmented-negRisk imports already ship an Other (auto-added above), so
+  // this mostly documents why — but it also flags borderline/manual cases.
+  if (openMarketType === "multi") {
+    const namedPriceSum = sourceOutcomes
+      .filter((o) => !isOtherStyleOutcomeLabel(o.label))
+      .reduce((s, o) => s + o.price, 0);
+    metadata.otherOutcomeAdvice = computeOtherOutcomeAdvice({
+      structure: candidate.structure,
+      entryLabels,
+      namedPriceSum,
+      augmentedNegRisk: candidate.augmentedNegRisk,
+      hasExplicitOther: candidate.hasExplicitOther,
+      placeholderCount: candidate.placeholderCount,
+      title: selection.title,
+    });
   }
   // Traceability: canonical names of everyone the scout auto-linked
   // (index 0 = primary). Founders can prune/extend in the edit modal.

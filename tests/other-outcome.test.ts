@@ -9,8 +9,12 @@ const {
   OTHER_OUTCOME_LABEL,
   OTHER_OUTCOME_RESIDUAL_THRESHOLD,
   isOtherStyleOutcomeLabel,
+  isPlaceholderOutcomeLabel,
+  computeOtherOutcomeAdvice,
 } = await import("../shared/lib/other-outcome");
-const { maybeAppendOtherOutcome } = await import("../server/providers/polymarket");
+const { maybeAppendOtherOutcome, detectAugmentedNegRisk } = await import(
+  "../server/providers/polymarket"
+);
 const { readSourceFairByEntryId } = await import("../server/agents/sourceFair");
 
 test("isOtherStyleOutcomeLabel matches catch-all variants", () => {
@@ -108,6 +112,127 @@ test("maybeAppendOtherOutcome respects kill switch", () => {
   ];
   assert.equal(maybeAppendOtherOutcome(outcomes, "multi", 30).length, 2);
   delete process.env.SCOUT_OTHER_OUTCOME_ENABLED;
+});
+
+test("isPlaceholderOutcomeLabel matches augmented-negRisk slots only", () => {
+  assert.equal(isPlaceholderOutcomeLabel("Movie B"), true);
+  assert.equal(isPlaceholderOutcomeLabel("Person A"), true);
+  assert.equal(isPlaceholderOutcomeLabel("Team 1"), true);
+  assert.equal(isPlaceholderOutcomeLabel("Candidate C"), true);
+  assert.equal(isPlaceholderOutcomeLabel("Movie Night"), false);
+  assert.equal(isPlaceholderOutcomeLabel("Avengers: Doomsday"), false);
+  assert.equal(isPlaceholderOutcomeLabel(""), false);
+  assert.equal(isPlaceholderOutcomeLabel(null), false);
+});
+
+test("maybeAppendOtherOutcome force appends Other even on an exhaustive book", () => {
+  process.env.SCOUT_OTHER_OUTCOME_ENABLED = "true";
+  const outcomes = [
+    { label: "Alice", price: 0.5, sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+    { label: "Bob", price: 0.49, sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+    { label: "Carol", price: 0.005, sourceMarketId: "m3", sourceOutcomeIndex: 0 },
+  ];
+  // residual ~0.005 < threshold — no append without force.
+  assert.equal(maybeAppendOtherOutcome(outcomes, "multi", 30).length, 3);
+  // With force (augmented negRisk source), Other is appended anyway.
+  const forced = maybeAppendOtherOutcome(outcomes, "multi", 30, { force: true });
+  assert.equal(forced.length, 4);
+  assert.equal(forced[3].label, OTHER_OUTCOME_LABEL);
+  assert.equal(forced[3].isResidual, true);
+  assert.ok(forced[3].price >= 0);
+});
+
+test("detectAugmentedNegRisk finds explicit Other and placeholder slots", () => {
+  const ev = {
+    negRisk: true,
+    markets: [
+      { groupItemTitle: "Avengers: Doomsday" },
+      { groupItemTitle: "Spider-Man: Brand New Day" },
+      { groupItemTitle: "Movie B" },
+      { groupItemTitle: "Movie C" },
+      { groupItemTitle: "Other" },
+    ],
+  };
+  const res = detectAugmentedNegRisk(ev as any);
+  assert.equal(res.augmented, true);
+  assert.equal(res.hasExplicitOther, true);
+  assert.equal(res.placeholderCount, 2);
+});
+
+test("detectAugmentedNegRisk is inert for a closed negRisk field", () => {
+  const ev = {
+    negRisk: true,
+    markets: [
+      { groupItemTitle: "Last Week Tonight" },
+      { groupItemTitle: "Jimmy Kimmel Live!" },
+      { groupItemTitle: "Saturday Night Live" },
+    ],
+  };
+  const res = detectAugmentedNegRisk(ev as any);
+  assert.equal(res.augmented, false);
+  assert.equal(res.placeholderCount, 0);
+  assert.equal(res.hasExplicitOther, false);
+});
+
+test("computeOtherOutcomeAdvice recommends Other for augmented negRisk", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Avengers: Doomsday", "Spider-Man", "Toy Story 5", "Dune: Messiah"],
+    namedPriceSum: 0.953,
+    augmentedNegRisk: true,
+    hasExplicitOther: true,
+    placeholderCount: 14,
+    title: "Which 2026 movie will have the biggest opening weekend?",
+  });
+  assert.equal(advice.recommended, true);
+  assert.equal(advice.signal, "augmented_negrisk");
+  assert.equal(advice.hasOther, false);
+});
+
+test("computeOtherOutcomeAdvice recommends Other on a large residual", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Alice", "Bob", "Carol"],
+    namedPriceSum: 0.9,
+    title: "Who wins the thing?",
+  });
+  assert.equal(advice.recommended, true);
+  assert.equal(advice.signal, "residual");
+});
+
+test("computeOtherOutcomeAdvice uses semantic title signal without prices", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Movie 1", "Movie 2", "Movie 3"],
+    title: "Which movie will have the biggest box office in 2027?",
+  });
+  assert.equal(advice.recommended, true);
+  assert.equal(advice.signal, "semantic");
+});
+
+test("computeOtherOutcomeAdvice stays quiet on closed / binary fields", () => {
+  const nominees = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Last Week Tonight", "Jimmy Kimmel Live!", "Saturday Night Live", "The Daily Show"],
+    namedPriceSum: 1.0,
+    title: "Which show wins the 2026 Emmy for Outstanding Variety Series?",
+  });
+  assert.equal(nominees.recommended, false);
+
+  const alreadyHasOther = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Alice", "Bob", "Other"],
+    namedPriceSum: 0.8,
+  });
+  assert.equal(alreadyHasOther.recommended, false);
+  assert.equal(alreadyHasOther.hasOther, true);
+
+  const binary = computeOtherOutcomeAdvice({
+    structure: "binary",
+    entryLabels: ["Yes", "No"],
+    title: "Will the biggest thing happen?",
+  });
+  assert.equal(binary.recommended, false);
 });
 
 test("readSourceFairByEntryId anchors markets that include residual Other", () => {
