@@ -74,11 +74,7 @@ const CATEGORIES: string[] = ["All", ...CANONICAL_CATEGORIES.map((c) => c.label)
 
 const APPROVAL_COLORS = ["#FF0000", "#FF6D00", "#FFC400", "#76FF03", "#00C853"];
 
-type SpeedMultiplier = 1 | 1.5 | 2;
-const SPEED_CYCLE: SpeedMultiplier[] = [1, 1.5, 2];
-const BASE_FRAME_INTERVAL_MS = 2000;
-const speedMsFor = (mult: SpeedMultiplier) => Math.round(BASE_FRAME_INTERVAL_MS / mult);
-const formatSpeedLabel = (mult: SpeedMultiplier) => `${mult}x`;
+const FRAME_INTERVAL_MS = 1000; // 2000ms base @ 2x
 const MAX_FRAMES = 100;
 
 // --------------- Helpers ---------------
@@ -412,17 +408,6 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   const [category, setCategory] = useState<typeof CATEGORIES[number]>("All");
   const [isPlaying, setIsPlaying] = useState(false);
   const [frameIndex, setFrameIndex] = useState(0);
-  const [speedMultiplier, setSpeedMultiplier] = useState<SpeedMultiplier>(1);
-  const speed = speedMsFor(speedMultiplier);
-  const cycleSpeed = useCallback(() => {
-    setSpeedMultiplier((prev) => {
-      const idx = SPEED_CYCLE.indexOf(prev);
-      return SPEED_CYCLE[(idx + 1) % SPEED_CYCLE.length];
-    });
-  }, []);
-  const nextSpeedLabel = formatSpeedLabel(
-    SPEED_CYCLE[(SPEED_CYCLE.indexOf(speedMultiplier) + 1) % SPEED_CYCLE.length]
-  );
   const [limit, setLimit] = useState(10);
   const [autoStarted, setAutoStarted] = useState(false);
   const [approvalBreakdownCache, setApprovalBreakdownCache] = useState<Record<string, ApprovalBreakdown>>({});
@@ -575,9 +560,9 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
         }
         return prev + 1;
       });
-    }, speed);
+    }, FRAME_INTERVAL_MS);
     return () => { if (playRef.current) clearInterval(playRef.current); };
-  }, [isPlaying, frames.length, speed]);
+  }, [isPlaying, frames.length]);
 
   useEffect(() => {
     stopPlayback();
@@ -592,7 +577,6 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
   useEffect(() => {
     if (mode === "trend" && hasFrames && !autoStarted && !trendLoading) {
       setAutoStarted(true);
-      setSpeedMultiplier(1);
       setFrameIndex(0);
       setIsPlaying(true);
     }
@@ -772,18 +756,6 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
                   {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
                 </button>
               )}
-              {isTimelapse && (
-                <button
-                  type="button"
-                  onClick={cycleSpeed}
-                  className="flex items-center justify-center h-7 min-w-[2.5rem] px-2 rounded-lg bg-blue-500/25 dark:bg-blue-500/20 border border-blue-400/50 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30 transition-all shadow-[0_0_8px_rgba(59,130,246,0.15)] shrink-0 text-xs font-semibold tabular-nums"
-                  aria-label="Playback speed"
-                  title={`Switch to ${nextSpeedLabel}`}
-                  data-testid="button-pulse-speed"
-                >
-                  {formatSpeedLabel(speedMultiplier)}
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -807,7 +779,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
             <motion.div
               className="h-full min-h-[4px] w-0 rounded-full pointer-events-none shrink-0"
               animate={{ width: `${progressPct}%` }}
-              transition={{ duration: isPlaying ? speed / 1000 : 0, ease: "linear" }}
+              transition={{ duration: isPlaying ? FRAME_INTERVAL_MS / 1000 : 0, ease: "linear" }}
               style={{ backgroundColor: accentColor }}
             />
           </div>
