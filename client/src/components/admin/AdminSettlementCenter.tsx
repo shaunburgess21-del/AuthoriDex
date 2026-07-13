@@ -58,6 +58,8 @@ interface PendingMarket {
   /** Flexible market metadata; may carry the AI scout's last assessment. */
   metadata?: {
     scoutAssessment?: ScoutAssessmentView | null;
+    singleWinnerKnockout?: boolean;
+    drawEligible?: boolean;
     source?: {
       url?: string | null;
       resolutionRulesText?: string | null;
@@ -513,6 +515,7 @@ export function AdminSettlementCenter() {
               resolveMarket.metadata?.source?.url ??
               resolveMarket.sourceUrl ??
               null,
+            metadata: resolveMarket.metadata ?? null,
           }}
           open={!!resolveMarket}
           onOpenChange={open => { if (!open) setResolveMarket(null); }}

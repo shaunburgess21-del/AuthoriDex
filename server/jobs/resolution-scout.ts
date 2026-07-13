@@ -341,13 +341,22 @@ function buildUserPrompt(
     ? market.endAt.toISOString().split("T")[0]
     : "Not specified";
   const sourceRules = readSourceRulesText(market.metadata);
+  const meta =
+    market.metadata && typeof market.metadata === "object"
+      ? (market.metadata as Record<string, unknown>)
+      : null;
+  const singleWinnerKnockout =
+    meta?.singleWinnerKnockout === true || meta?.drawEligible === false;
+  const knockoutNote = singleWinnerKnockout
+    ? `SINGLE-WINNER KNOCKOUT: true. Resolve to the team that advances (including extra time / penalties). Never select Draw even if upstream 90-minute markets settled Draw.\n`
+    : "";
 
   return `MARKET: ${market.title}
 CATEGORY: ${market.category ?? "General"}
 TEASER: ${market.teaser ?? "N/A"}
 RESOLUTION DATE (deadline): ${resolutionDate}
 RESOLUTION CRITERIA: ${criteria}
-${sourceRules ? `UPSTREAM RESOLUTION RULES (verbatim):\n${sourceRules}\n` : ""}WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
+${knockoutNote}${sourceRules ? `UPSTREAM RESOLUTION RULES (verbatim):\n${sourceRules}\n` : ""}WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
 
 OUTCOMES:
 ${outcomes}

@@ -18,6 +18,10 @@ import { CURRENCY } from "@/lib/currency";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import {
+  isDrawStyleOutcomeLabel,
+  isSingleWinnerKnockoutMarket,
+} from "@shared/lib/knockout-market";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -89,6 +93,11 @@ export interface ResolvableMarket {
   sourceRulesText?: string | null;
   /** Upstream event URL for the operator to verify. */
   sourceUrl?: string | null;
+  /**
+   * Market metadata — used to detect single-winner knockout markets
+   * (Draw must not be selectable as the winner).
+   */
+  metadata?: unknown;
 }
 
 interface ResolutionPreview {
@@ -336,18 +345,29 @@ export function AmmResolutionDialog({
   const [voidReason, setVoidReason] = useState("");
 
   const isAmm = market.engine === "amm";
+  const singleWinnerKnockout = isSingleWinnerKnockoutMarket(market.metadata);
 
   const scout = market.scoutAssessment ?? null;
   const scoutProposedEntry =
     scout?.proposedWinnerEntryId &&
-    market.entries.some((e) => e.id === scout.proposedWinnerEntryId)
+    market.entries.some((e) => e.id === scout.proposedWinnerEntryId) &&
+    // Never pre-select Draw on a knockout even if a stale assessment named it.
+    !(
+      singleWinnerKnockout &&
+      isDrawStyleOutcomeLabel(
+        market.entries.find((e) => e.id === scout.proposedWinnerEntryId)?.label,
+      )
+    )
       ? scout.proposedWinnerEntryId
       : null;
   // Upstream closed with no mappable winner — scout leans void (escalate-only).
+  // Knockout "confirm advancing team" assessments leave proposedWinner null
+  // with resolve_soon / near_certain — those must NOT open the void form.
   const scoutSuggestsVoid =
     !!scout &&
     (scout.stage === "met" || scout.recommendedAction === "resolve_now") &&
-    !scout.proposedWinnerEntryId;
+    !scout.proposedWinnerEntryId &&
+    !singleWinnerKnockout;
 
   // Pre-select the scout's proposed winner when the dialog opens, so a
   // confident assessment becomes a one-click confirm. The operator can
@@ -467,6 +487,12 @@ export function AmmResolutionDialog({
     ? market.entries.find((e) => e.id === scoutProposedEntry)?.label ?? null
     : null;
 
+  const selectedEntryLabel = selectedEntry
+    ? market.entries.find((e) => e.id === selectedEntry)?.label
+    : null;
+  const drawSelectionBlocked =
+    singleWinnerKnockout && isDrawStyleOutcomeLabel(selectedEntryLabel);
+
   const body = (
         <div className="space-y-4">
           <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
@@ -487,6 +513,14 @@ export function AmmResolutionDialog({
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
               This is an AMM market. Settling pays each holder of the winning side
               <span className="font-mono"> Ꝟ1 per share</span>; voiding refunds every position at its cost basis. The house keeps the rest as market-maker P/L.
+            </div>
+          )}
+
+          {singleWinnerKnockout && !showVoid && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+              Single-winner knockout: resolve to the team that advanced (including
+              extra time / penalties). <span className="font-medium">Draw is not a valid outcome</span> —
+              even if Polymarket&apos;s 90-minute moneyline settled Draw.
             </div>
           )}
 
@@ -538,20 +572,37 @@ export function AmmResolutionDialog({
                 .map((entry) => {
                 const isSelected = selectedEntry === entry.id;
                 const isOther = isOtherStyleOutcomeLabel(entry.label);
+                const drawBlocked =
+                  singleWinnerKnockout && isDrawStyleOutcomeLabel(entry.label);
                 return (
                   <Card
                     key={entry.id}
-                    className={`cursor-pointer transition-colors ${isSelected ? "ring-2 ring-primary" : ""}`}
-                    onClick={() => setSelectedEntry(entry.id)}
+                    className={`transition-colors ${
+                      drawBlocked
+                        ? "opacity-50 cursor-not-allowed"
+                        : `cursor-pointer ${isSelected ? "ring-2 ring-primary" : ""}`
+                    }`}
+                    onClick={() => {
+                      if (drawBlocked) return;
+                      setSelectedEntry(entry.id);
+                    }}
                     data-testid={`entry-option-${entry.id}`}
                   >
                     <CardContent className="p-4 flex items-center gap-2">
                       <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-primary" : "border-muted-foreground/30"}`}>
                         {isSelected && <div className="h-2 w-2 rounded-full bg-primary" />}
                       </div>
-                      <span className={`font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
+                      <span className={`font-medium ${isOther || drawBlocked ? "text-muted-foreground italic" : ""}`}>
                         {entry.label}
                       </span>
+                      {drawBlocked && (
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300"
+                        >
+                          Not valid (knockout)
+                        </Badge>
+                      )}
                       {scoutProposedEntry === entry.id && (
                         <Badge
                           variant="outline"
@@ -693,7 +744,7 @@ export function AmmResolutionDialog({
       </Button>
       <Button
         onClick={() => settleMutation.mutate()}
-        disabled={!selectedEntry || settleMutation.isPending}
+        disabled={!selectedEntry || drawSelectionBlocked || settleMutation.isPending}
         className="h-11 md:h-9"
         data-testid="button-confirm-resolve"
       >

@@ -9488,6 +9488,7 @@ export default function AdminDashboard() {
               settleMarket.metadata?.source?.url ??
               settleMarket.sourceUrl ??
               null,
+            metadata: settleMarket.metadata ?? null,
           }}
           open={!!settleMarketId}
           onOpenChange={(isOpen) => { if (!isOpen) setSettleMarketId(null); }}

@@ -27034,6 +27034,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           createdBy: predictionMarkets.createdBy,
           settledBy: predictionMarkets.settledBy,
           engine: predictionMarkets.engine,
+          metadata: predictionMarkets.metadata,
         })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.id, id))
@@ -27074,6 +27075,18 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           });
         }
         winnerLabel = winnerEntry.label;
+
+        const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+        const drawGuard = rejectDrawWinnerOnKnockout({
+          metadata: market.metadata,
+          winnerLabel: winnerEntry.label,
+        });
+        if (drawGuard.rejected) {
+          return res.status(400).json({
+            error: "knockout_draw_not_allowed",
+            message: drawGuard.message,
+          });
+        }
       }
 
       const { resolveAmmMarket } = await import("./services/amm-resolver");
