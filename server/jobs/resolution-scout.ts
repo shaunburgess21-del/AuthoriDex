@@ -289,6 +289,13 @@ Only use stage "met" for such a market when the final position is locked: the co
 CATCH-ALL / "OTHER" OUTCOMES:
 If the market lists an "Other" / "None of the listed" outcome, select it only when a credible consensus shows the true winner is NOT among the named outcomes (or upstream rules resolve to Other). Do not pick Other merely because coverage is messy.
 
+KNOCKOUT / SINGLE-WINNER SPORTS — read carefully:
+Some sports markets ask "Who will win A vs B?" for a knockout / cup / playoff tie. Even when a Draw outcome is listed (mirroring a 90-minute moneyline), the FINAL result of a knockout always has an advancing team (extra time and/or penalties). For these markets:
+- Never select Draw as the winner once the tie is complete.
+- Prefer the team that advanced (won the match including ET/pens).
+- If sources only confirm "level after 90 minutes" and the tie is still unfinished, stay at stage "likely" / "watch" — do not resolve_now to Draw.
+- Resolution criteria that mention "regulation" or "after 90 minutes" for a knockout title should be overridden by the advancing-team rule above.
+
 Recommend an action:
 - "resolve_now": stage is "met" — propose the winning outcome.
 - "resolve_soon": near-certain — propose the likely winner; the operator should resolve once the formality completes.

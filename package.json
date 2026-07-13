@@ -44,6 +44,7 @@
     "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts",
     "amm:mark-settled-orphans": "tsx ops/mark-settled-orphan-markets.ts",
     "amm:reconcile-house-ledger": "tsx ops/reconcile-house-ledger-drift.ts",
+    "repair:knockout-draw": "tsx --env-file=.env ops/repair-knockout-draw-resolutions.ts",
     "world:calibrate": "tsx scripts/world-market-calibration.ts",
     "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts",
     "settle:week23-updown": "tsx --env-file=.env server/scripts/settle-week23-stranded-updown.ts"

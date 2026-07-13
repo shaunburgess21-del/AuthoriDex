@@ -68,6 +68,11 @@ import {
   OTHER_OUTCOME_LABEL,
   isOtherStyleOutcomeLabel,
 } from "@shared/lib/other-outcome";
+import {
+  isDrawStyleOutcomeLabel,
+  isSingleWinnerKnockoutMarket,
+  stripDrawForKnockoutImport,
+} from "@shared/lib/knockout-market";
 
 const MARKET_SCOUT_LOCK_KEY = 5_212;
 const SOURCE_WATCH_LOCK_KEY = 5_213;
@@ -228,6 +233,14 @@ export interface ScoutSelection {
    * rungs (e.g. Hormuz by Jul 15 / Jul 31 / Dec 31) share one key.
    */
   seriesKey: string;
+  /**
+   * False for knockout / single-elimination ties where a draw after
+   * regulation is not a final result (extra time / penalties decide).
+   * True for group-stage / league fixtures where Draw is a valid outcome.
+   * When false, import strips any Draw outcome and marks the market
+   * single-winner.
+   */
+  drawEligible: boolean;
 }
 
 /** Unresolved community market shown to the curation prompt for series suppression. */
@@ -693,17 +706,18 @@ For each selected market, produce:
 - "summary": 2-3 sentences of neutral context explaining what the market is about.
 - "category": exactly one of: ${allowedCategories.join(", ")}. Use film-tv (not "entertainment") for movies/TV/awards.
 - "secondaryCategories": 0-2 additional ids from the same list.
-- "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text.
+- "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text. For knockout / single-elimination sports (drawEligible=false), criteria MUST say the market resolves to the team/player that wins the tie and advances (including extra time and penalties) — never "draw wins if level after regulation".
 - "scoutWatch": one sentence listing the leading indicators a human should watch to know the outcome early.
 - "relatedPeople": ALL names from the LINKABLE PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every linkable person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple linkable people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
 - "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
 - "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability). Prefer 55+; weak fits should be omitted.
-- "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes. Some multi-outcome events include a trailing synthesized "Other" catch-all — preserve it exactly as listed.
+- "entryLabels": the outcome labels, SAME COUNT AND SAME ORDER as the source outcomes given for that event. You may shorten/clean labels but never reorder, add, or remove outcomes. Some multi-outcome events include a trailing synthesized "Other" catch-all — preserve it exactly as listed. (Code may later strip Draw when drawEligible is false.)
+- "drawEligible": boolean. true when a regulation-time Draw/Tie is a valid FINAL result (group stage, league, round-robin). false for knockout / single-elimination / "must have a winner" ties (World Cup knockout, playoffs, cup ties) even if the source lists a Draw outcome for the 90-minute moneyline. Tennis/UFC/boxing with no Draw listed → true is fine (no Draw to strip). Prefer false whenever the title reads like "Who will win A vs B?" for a scheduled knockout.
 
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
 
 Respond with ONE JSON object and nothing else — no markdown, no code fences:
-{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "seriesKey": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."] } ] }`;
+{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "seriesKey": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."], "drawEligible": true } ] }`;
 }
 
 function buildUserPrompt(
@@ -793,6 +807,9 @@ async function curateCandidates(
           typeof (s as any).seriesKey === "string" ? (s as any).seriesKey : null,
           s.title,
         ),
+        // Default true (keep Draw) when GPT omits the field — safer for
+        // group-stage imports than accidentally stripping Draw.
+        drawEligible: (s as any).drawEligible === false ? false : true,
       }));
   } catch (err) {
     clearTimeout(timeout);
@@ -845,7 +862,7 @@ async function insertScoutedDraft(
   // may polish labels but any count mismatch OR positional drift (a label
   // that doesn't correspond to the source outcome at the same index —
   // e.g. a swapped Yes/No) falls back to the source labels wholesale.
-  const sourceOutcomes = candidate.outcomes;
+  let sourceOutcomes = candidate.outcomes;
   const gptLabels = selection.entryLabels
     .map((l) => (typeof l === "string" ? l.trim() : ""))
     .filter(Boolean);
@@ -864,6 +881,21 @@ async function insertScoutedDraft(
       );
     }
     entryLabels = sourceOutcomes.map((o) => o.label);
+  }
+
+  // Knockout / single-elimination: strip regulation-time Draw so the
+  // market is two-team single-winner (who advances). Source mapping and
+  // prices stay aligned with the remaining outcomes.
+  const drawEligible = selection.drawEligible !== false;
+  if (!drawEligible) {
+    const stripped = stripDrawForKnockoutImport(sourceOutcomes, entryLabels);
+    if (stripped.stripped) {
+      sourceOutcomes = stripped.outcomes;
+      entryLabels = stripped.labels;
+      log(
+        `[MarketScout] "${selection.title}" — knockout (drawEligible=false); stripped Draw → [${entryLabels.join(", ")}]`,
+      );
+    }
   }
 
   const openMarketType = entryLabels.length === 2 ? "binary" : "multi";
@@ -975,6 +1007,9 @@ async function insertScoutedDraft(
     },
     scoutedByMarketScout: true,
     seriesKey: normalizeSeriesKey(selection.seriesKey, selection.title),
+    // Knockout single-winner: Draw must never be proposed/settled as winner.
+    drawEligible,
+    ...(drawEligible ? {} : { singleWinnerKnockout: true }),
   };
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
@@ -1731,6 +1766,102 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
               res.winningOutcomeIndex !== m.sourceOutcomeIndex
             );
           });
+
+        // Knockout single-winner (Draw stripped at import, or flagged):
+        // Polymarket's 90-min Draw winning means both team sub-markets lost.
+        // Do NOT void / propose Other — ask the operator to confirm who
+        // advanced in ET/penalties.
+        if (
+          allNamedClearlyLost &&
+          isSingleWinnerKnockoutMarket(row.metadata)
+        ) {
+          result.resolvedUpstream += 1;
+          await tryAutoLock("upstream_knockout_level_at_90");
+
+          const assessedAt = new Date().toISOString();
+          const assessment = {
+            leaning: "Confirm advancing team",
+            proposedWinnerEntryId: null as string | null,
+            confidence: 0.9,
+            stage: "near_certain" as const,
+            recommendedAction: "resolve_soon" as const,
+            whatChanged:
+              "Polymarket's 90-minute moneyline settled Draw (level after regulation). " +
+              "This is a single-winner knockout — confirm which team advanced in " +
+              "extra time / penalties before settling. Do not resolve Draw.",
+            sources: source.url ? [source.url] : [],
+            assessedAt,
+            signature: `near_certain|resolve_soon|knockout_confirm_advancer`,
+          };
+
+          try {
+            const payload: Record<string, unknown> = {
+              scoutAssessment: assessment,
+              source: { ...source, upstreamResolvedAt: assessedAt },
+            };
+            await db
+              .update(predictionMarkets)
+              .set({
+                metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(predictionMarkets.id, row.id));
+
+            result.findings.push({
+              marketId: row.id,
+              title: row.title,
+              slug: row.slug,
+              proposedWinnerLabel: "Confirm advancing team",
+            });
+            log(
+              `[MarketScout] Knockout level-at-90 for "${row.title}" — awaiting advancing team ` +
+                `(market=${row.id.slice(0, 8)})`,
+            );
+
+            void (async () => {
+              try {
+                const { sendOpsAlert, adminResolveMarketUrl } = await import(
+                  "../services/ops-alerts"
+                );
+                await sendOpsAlert({
+                  kind: "market_source_resolved",
+                  severity: "info",
+                  title: "Knockout market needs advancing team",
+                  summary:
+                    `"${row.title}" was level after regulation on Polymarket. ` +
+                    `Confirm which team advanced (ET/pens) — do not settle Draw.`,
+                  sections: [
+                    {
+                      heading: "Confirm advancing team",
+                      items: [
+                        {
+                          text: row.title,
+                          detail:
+                            "Level after 90 minutes — resolve to the team that advanced",
+                          url: adminResolveMarketUrl(row.id),
+                        },
+                      ],
+                    },
+                  ],
+                  ctaUrl: adminResolveMarketUrl(row.id),
+                  ctaLabel: "Confirm & resolve",
+                  idempotencyKeyBase: `knockout_confirm_advancer:${row.id}`,
+                });
+              } catch (err) {
+                log(
+                  `[MarketScout] Knockout confirm-advancer ops alert failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            })();
+          } catch (err) {
+            result.errors += 1;
+            log(
+              `[MarketScout] Knockout confirm-advancer write failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          continue;
+        }
+
         const residualMappingIdx = mapping.findIndex((m) => m.isResidual === true);
         const residualMapped =
           residualMappingIdx >= 0
@@ -1971,6 +2102,64 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     }
 
     const winner = winners[0];
+
+    // Flagged knockout that still lists Draw (e.g. France vs Spain mid-flight):
+    // never propose Draw even when Polymarket's 90-min Draw sub-market won.
+    if (
+      isSingleWinnerKnockoutMarket(row.metadata) &&
+      isDrawStyleOutcomeLabel(winner.label)
+    ) {
+      result.resolvedUpstream += 1;
+      await tryAutoLock("upstream_knockout_draw_blocked");
+
+      const assessedAt = new Date().toISOString();
+      const assessment = {
+        leaning: "Confirm advancing team",
+        proposedWinnerEntryId: null as string | null,
+        confidence: 0.9,
+        stage: "near_certain" as const,
+        recommendedAction: "resolve_soon" as const,
+        whatChanged:
+          `Source market on Polymarket resolved "Draw" (level after regulation). ` +
+          `This is a single-winner knockout — confirm which team advanced in ` +
+          `extra time / penalties. Do not settle Draw.`,
+        sources: source.url ? [source.url] : [],
+        assessedAt,
+        signature: `near_certain|resolve_soon|knockout_draw_blocked`,
+      };
+
+      try {
+        const payload: Record<string, unknown> = {
+          scoutAssessment: assessment,
+          source: { ...source, upstreamResolvedAt: assessedAt },
+        };
+        await db
+          .update(predictionMarkets)
+          .set({
+            metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+            updatedAt: new Date(),
+          })
+          .where(eq(predictionMarkets.id, row.id));
+
+        result.findings.push({
+          marketId: row.id,
+          title: row.title,
+          slug: row.slug,
+          proposedWinnerLabel: "Confirm advancing team",
+        });
+        log(
+          `[MarketScout] Blocked Draw proposal on knockout "${row.title}" ` +
+            `(market=${row.id.slice(0, 8)})`,
+        );
+      } catch (err) {
+        result.errors += 1;
+        log(
+          `[MarketScout] Knockout Draw-block write failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      continue;
+    }
+
     const assessedAt = new Date().toISOString();
     const assessment = {
       leaning: winner.label,

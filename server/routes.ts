@@ -19152,6 +19152,20 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Winner entry not found in this market" });
       }
 
+      // Knockout single-winner guard: refuse Draw even if Polymarket's
+      // 90-minute moneyline settled Draw.
+      const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+      const drawGuard = rejectDrawWinnerOnKnockout({
+        metadata: market.metadata,
+        winnerLabel: winnerEntry.label,
+      });
+      if (drawGuard.rejected) {
+        return res.status(400).json({
+          error: "knockout_draw_not_allowed",
+          message: drawGuard.message,
+        });
+      }
+
       // Parimutuel sunset: every community market is AMM. Delegate to
       // `resolveAmmMarket` which handles AMM-correct payout (1 credit per
       // winning share) and seed return. The legacy `settleMarketBets`
@@ -22090,6 +22104,32 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           updatedAt: new Date(),
         }).where(eq(predictionMarkets.id, id));
       } else {
+        if (winnerEntryId) {
+          const [winnerEntry] = await db
+            .select({ label: marketEntries.label })
+            .from(marketEntries)
+            .where(
+              and(
+                eq(marketEntries.id, winnerEntryId),
+                eq(marketEntries.marketId, id),
+              ),
+            )
+            .limit(1);
+          if (winnerEntry) {
+            const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+            const drawGuard = rejectDrawWinnerOnKnockout({
+              metadata: market.metadata,
+              winnerLabel: winnerEntry.label,
+            });
+            if (drawGuard.rejected) {
+              return res.status(400).json({
+                error: "knockout_draw_not_allowed",
+                message: drawGuard.message,
+              });
+            }
+          }
+        }
+
         const { resolveAmmMarket } = await import("./services/amm-resolver");
         const ammResult = await resolveAmmMarket({
           marketId: id,
