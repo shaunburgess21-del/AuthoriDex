@@ -87,3 +87,70 @@ test("rejectDrawWinnerOnKnockout blocks Draw on flagged markets", () => {
   });
   assert.equal(okGroup.rejected, false);
 });
+
+const {
+  inferDrawEligibleForSportsImport,
+  inferLikelySingleWinnerKnockout,
+  normalizeKnockoutResolutionCriteria,
+} = await import("../shared/lib/knockout-market");
+
+test("inferDrawEligibleForSportsImport defaults World Cup knockouts to single-winner", () => {
+  assert.equal(
+    inferDrawEligibleForSportsImport({
+      category: "sports",
+      entryLabels: ["France", "Draw", "Spain"],
+      externalSlug: "fifwc-france-spain-semi",
+      title: "Who will win France vs Spain?",
+    }),
+    false,
+  );
+  assert.equal(
+    inferDrawEligibleForSportsImport({
+      category: "sports",
+      entryLabels: ["France", "Draw", "Spain"],
+      title: "France vs Spain — Group D",
+    }),
+    true,
+  );
+});
+
+test("inferLikelySingleWinnerKnockout detects fifwc who-will-win without metadata", () => {
+  assert.equal(
+    inferLikelySingleWinnerKnockout({
+      title: "Who will win France vs Spain?",
+      externalSlug: "fifwc-france-spain-semi",
+      entryLabels: ["France", "Draw", "Spain"],
+    }),
+    true,
+  );
+  assert.equal(
+    inferLikelySingleWinnerKnockout({
+      title: "Will Bitcoin hit $100k?",
+      category: "crypto",
+      entryLabels: ["Yes", "No"],
+    }),
+    false,
+  );
+});
+
+test("rejectDrawWinnerOnKnockout uses hints for legacy knockout rows", () => {
+  const blocked = rejectDrawWinnerOnKnockout({
+    metadata: {},
+    winnerLabel: "Draw",
+    hints: {
+      title: "Who will win France vs Spain?",
+      externalSlug: "fifwc-france-spain-semi",
+      entryLabels: ["France", "Draw", "Spain"],
+    },
+  });
+  assert.equal(blocked.rejected, true);
+});
+
+test("normalizeKnockoutResolutionCriteria replaces regulation-draw bullets", () => {
+  const normalized = normalizeKnockoutResolutionCriteria([
+    "If the match ends in a draw after 90 minutes, resolves to Draw.",
+    "Use official FIFA results.",
+  ]);
+  assert.ok(!normalized.some((c) => /draw after 90/i.test(c)));
+  assert.ok(normalized.some((c) => /advances/i.test(c)));
+});

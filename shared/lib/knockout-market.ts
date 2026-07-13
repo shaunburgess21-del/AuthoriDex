@@ -31,16 +31,162 @@ export function looksLikeThreeWayMoneyline(
   return labels.some((l) => isDrawStyleOutcomeLabel(l));
 }
 
+/** Optional market fields used to infer knockout when metadata is missing. */
+export interface KnockoutMarketHints {
+  title?: string | null;
+  category?: string | null;
+  entryLabels?: Array<string | null | undefined>;
+  externalSlug?: string | null;
+  tags?: string[] | null;
+  summaryOrDescription?: string | null;
+}
+
+function readMetadataRecord(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  return metadata as Record<string, unknown>;
+}
+
 /**
- * Read the single-winner knockout flag from market metadata.
- * Set at scout import when `drawEligible === false`.
+ * Infer knockout single-winner for scouted World Cup sports 1X2 imports
+ * when GPT omits `drawEligible`. Group-stage fixtures stay draw-eligible.
  */
-export function isSingleWinnerKnockoutMarket(metadata: unknown): boolean {
-  if (!metadata || typeof metadata !== "object") return false;
-  const m = metadata as Record<string, unknown>;
-  if (m.singleWinnerKnockout === true) return true;
-  if (m.drawEligible === false) return true;
+export function inferDrawEligibleForSportsImport(args: {
+  drawEligible?: boolean;
+  category: string;
+  entryLabels: string[];
+  externalSlug?: string | null;
+  tags?: string[] | null;
+  title?: string;
+  summary?: string | null;
+  description?: string | null;
+}): boolean {
+  if (args.drawEligible === false) return false;
+  if (args.drawEligible === true) return true;
+  if (args.category !== "sports") return true;
+  if (!looksLikeThreeWayMoneyline(args.entryLabels)) return true;
+
+  const slug = (args.externalSlug ?? "").trim().toLowerCase();
+  const text = [
+    args.title ?? "",
+    args.summary ?? "",
+    args.description ?? "",
+    ...(args.tags ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const isWorldCup =
+    slug.startsWith("fifwc-") ||
+    /\bworld cup\b|\bfifa\b/.test(text);
+  if (!isWorldCup) return true;
+
+  if (/\bgroup\s+[a-h]\b|\bgroup stage\b/.test(text)) return true;
+
+  // Round of 16+ at World Cup: default single-winner unless GPT said otherwise.
   return false;
+}
+
+/**
+ * Build runtime knockout hints from a market row + entries.
+ */
+export function knockoutHintsFromMarket(
+  market: {
+    title?: string | null;
+    category?: string | null;
+    metadata?: unknown;
+  },
+  entryLabels?: Array<string | null | undefined>,
+): KnockoutMarketHints {
+  const meta = readMetadataRecord(market.metadata);
+  const source =
+    meta?.source && typeof meta.source === "object"
+      ? (meta.source as Record<string, unknown>)
+      : null;
+  return {
+    title: market.title,
+    category: market.category,
+    entryLabels,
+    externalSlug:
+      typeof source?.externalSlug === "string" ? source.externalSlug : null,
+    tags: Array.isArray(source?.tags)
+      ? (source.tags as string[])
+      : null,
+    summaryOrDescription:
+      typeof meta?.scoutWatch === "string" ? meta.scoutWatch : null,
+  };
+}
+
+/**
+ * Conservative runtime hint when metadata was not stamped at import
+ * (legacy rows, or mid-flight markets like France vs Spain).
+ */
+export function inferLikelySingleWinnerKnockout(hints: KnockoutMarketHints): boolean {
+  const labels = hints.entryLabels ?? [];
+  if (labels.length > 0 && !looksLikeThreeWayMoneyline(labels)) return false;
+
+  const category = (hints.category ?? "").toLowerCase();
+  const slug = (hints.externalSlug ?? "").trim().toLowerCase();
+  const isSports = category === "sports" || slug.startsWith("fifwc-");
+  if (!isSports) return false;
+
+  const text = [
+    hints.title ?? "",
+    hints.summaryOrDescription ?? "",
+    hints.externalSlug ?? "",
+    ...(hints.tags ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (/\bgroup\s+[a-h]\b|\bgroup stage\b/.test(text)) return false;
+
+  if (
+    /\b(quarter[- ]?final|semi[- ]?final|semifinal|round of 16|round of 32|last 16|knockout|playoff|play-off|elimination)\b/.test(
+      text,
+    )
+  ) {
+    return true;
+  }
+
+  if (slug.startsWith("fifwc-") && /\bwho (will )?win\b/.test((hints.title ?? "").toLowerCase())) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Read the single-winner knockout flag from market metadata, with optional
+ * hints for legacy / mid-flight markets missing metadata stamps.
+ */
+export function isSingleWinnerKnockoutMarket(
+  metadata: unknown,
+  hints?: KnockoutMarketHints,
+): boolean {
+  const m = readMetadataRecord(metadata);
+  if (m?.singleWinnerKnockout === true) return true;
+  if (m?.drawEligible === false) return true;
+  // Explicit group-stage marker — never treat as knockout.
+  if (m?.drawEligible === true) return false;
+  if (hints) return inferLikelySingleWinnerKnockout(hints);
+  return false;
+}
+
+/** Replace regulation-draw criteria when importing a knockout market. */
+export function normalizeKnockoutResolutionCriteria(
+  criteria: string[],
+): string[] {
+  const kept = criteria.filter(
+    (c) =>
+      !/\bdraw\b.*\b(regulation|90|level|tie)\b/i.test(c) &&
+      !/\bif the (match|game).*\b(level|draw|tie)\b/i.test(c),
+  );
+  const knockoutBullets = [
+    "Resolves to the team that wins the tie and advances, including extra time and penalties.",
+    "Draw is not a valid final outcome for this knockout market.",
+    "Use the official competition match result as the source of truth.",
+  ];
+  return [...kept, ...knockoutBullets].slice(0, 5);
 }
 
 /**
@@ -99,8 +245,9 @@ export function stripDrawForKnockoutImport<
 export function rejectDrawWinnerOnKnockout(args: {
   metadata: unknown;
   winnerLabel: string | null | undefined;
+  hints?: KnockoutMarketHints;
 }): { rejected: true; message: string } | { rejected: false } {
-  if (!isSingleWinnerKnockoutMarket(args.metadata)) {
+  if (!isSingleWinnerKnockoutMarket(args.metadata, args.hints)) {
     return { rejected: false };
   }
   if (!isDrawStyleOutcomeLabel(args.winnerLabel)) {

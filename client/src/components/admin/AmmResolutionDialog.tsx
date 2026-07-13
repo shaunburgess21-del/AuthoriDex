@@ -20,6 +20,7 @@ import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import {
   isDrawStyleOutcomeLabel,
   isSingleWinnerKnockoutMarket,
+  knockoutHintsFromMarket,
 } from "@shared/lib/knockout-market";
 import {
   Dialog,
@@ -93,6 +94,7 @@ export interface ResolvableMarket {
   sourceRulesText?: string | null;
   /** Upstream event URL for the operator to verify. */
   sourceUrl?: string | null;
+  category?: string | null;
   /**
    * Market metadata — used to detect single-winner knockout markets
    * (Draw must not be selectable as the winner).
@@ -345,7 +347,18 @@ export function AmmResolutionDialog({
   const [voidReason, setVoidReason] = useState("");
 
   const isAmm = market.engine === "amm";
-  const singleWinnerKnockout = isSingleWinnerKnockoutMarket(market.metadata);
+  const knockoutHints = knockoutHintsFromMarket(
+    {
+      title: market.title,
+      category: market.category,
+      metadata: market.metadata,
+    },
+    market.entries.map((e) => e.label),
+  );
+  const singleWinnerKnockout = isSingleWinnerKnockoutMarket(
+    market.metadata,
+    knockoutHints,
+  );
 
   const scout = market.scoutAssessment ?? null;
   const scoutProposedEntry =
@@ -376,9 +389,7 @@ export function AmmResolutionDialog({
   // reason — still requires an explicit confirm click.
   useEffect(() => {
     if (!open) return;
-    if (scoutProposedEntry) {
-      setSelectedEntry(scoutProposedEntry);
-    } else if (scoutSuggestsVoid) {
+    if (scoutSuggestsVoid) {
       setShowVoid(true);
       setVoidReason((prev) =>
         prev.trim()
@@ -386,8 +397,20 @@ export function AmmResolutionDialog({
           : scout?.whatChanged ||
             "Upstream resolved with no mappable winner — voiding.",
       );
+      return;
     }
-  }, [open, scoutProposedEntry, scoutSuggestsVoid, scout?.whatChanged]);
+    setShowVoid(false);
+    if (scoutProposedEntry) {
+      setSelectedEntry(scoutProposedEntry);
+      return;
+    }
+    setSelectedEntry((prev) => {
+      if (!prev) return prev;
+      const label = market.entries.find((e) => e.id === prev)?.label;
+      if (singleWinnerKnockout && isDrawStyleOutcomeLabel(label)) return null;
+      return prev;
+    });
+  }, [open, scoutProposedEntry, scoutSuggestsVoid, scout?.whatChanged, singleWinnerKnockout, market.entries]);
 
   // Parimutuel preview is the only path that needs a server-rendered
   // payout breakdown; AMM payouts are always 1 credit per winning

@@ -31,6 +31,10 @@ import OpenAI from "openai";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
+import {
+  isSingleWinnerKnockoutMarket,
+  knockoutHintsFromMarket,
+} from "@shared/lib/knockout-market";
 import { marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
 import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
@@ -341,12 +345,14 @@ function buildUserPrompt(
     ? market.endAt.toISOString().split("T")[0]
     : "Not specified";
   const sourceRules = readSourceRulesText(market.metadata);
-  const meta =
-    market.metadata && typeof market.metadata === "object"
-      ? (market.metadata as Record<string, unknown>)
-      : null;
-  const singleWinnerKnockout =
-    meta?.singleWinnerKnockout === true || meta?.drawEligible === false;
+  const knockoutHints = knockoutHintsFromMarket(
+    { title: market.title, category: market.category, metadata: market.metadata },
+    entries.map((e) => e.label),
+  );
+  const singleWinnerKnockout = isSingleWinnerKnockoutMarket(
+    market.metadata,
+    knockoutHints,
+  );
   const knockoutNote = singleWinnerKnockout
     ? `SINGLE-WINNER KNOCKOUT: true. Resolve to the team that advances (including extra time / penalties). Never select Draw even if upstream 90-minute markets settled Draw.\n`
     : "";

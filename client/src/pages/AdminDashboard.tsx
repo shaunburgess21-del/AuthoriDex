@@ -9471,6 +9471,7 @@ export default function AdminDashboard() {
             id: settleMarket.id,
             title: settleMarket.title,
             marketType: settleMarket.marketType,
+            category: settleMarket.category ?? null,
             // Community markets are always AMM; default defensively in case
             // the list row predates the engine column.
             engine: settleMarket.engine ?? "amm",

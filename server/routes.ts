@@ -19154,10 +19154,20 @@ Target length: about 90-150 words.`;
 
       // Knockout single-winner guard: refuse Draw even if Polymarket's
       // 90-minute moneyline settled Draw.
-      const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+      const entryLabels = await db
+        .select({ label: marketEntries.label })
+        .from(marketEntries)
+        .where(eq(marketEntries.marketId, id));
+      const { rejectDrawWinnerOnKnockout, knockoutHintsFromMarket } = await import(
+        "@shared/lib/knockout-market"
+      );
       const drawGuard = rejectDrawWinnerOnKnockout({
         metadata: market.metadata,
         winnerLabel: winnerEntry.label,
+        hints: knockoutHintsFromMarket(
+          market,
+          entryLabels.map((e) => e.label),
+        ),
       });
       if (drawGuard.rejected) {
         return res.status(400).json({
@@ -22116,10 +22126,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             )
             .limit(1);
           if (winnerEntry) {
-            const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+            const entryLabels = await db
+              .select({ label: marketEntries.label })
+              .from(marketEntries)
+              .where(eq(marketEntries.marketId, id));
+            const { rejectDrawWinnerOnKnockout, knockoutHintsFromMarket } = await import(
+              "@shared/lib/knockout-market"
+            );
             const drawGuard = rejectDrawWinnerOnKnockout({
               metadata: market.metadata,
               winnerLabel: winnerEntry.label,
+              hints: knockoutHintsFromMarket(
+                market,
+                entryLabels.map((e) => e.label),
+              ),
             });
             if (drawGuard.rejected) {
               return res.status(400).json({
@@ -27029,6 +27049,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
           id: predictionMarkets.id,
           title: predictionMarkets.title,
           slug: predictionMarkets.slug,
+          category: predictionMarkets.category,
           status: predictionMarkets.status,
           marketType: predictionMarkets.marketType,
           createdBy: predictionMarkets.createdBy,
@@ -27076,10 +27097,20 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         }
         winnerLabel = winnerEntry.label;
 
-        const { rejectDrawWinnerOnKnockout } = await import("@shared/lib/knockout-market");
+        const entryLabels = await db
+          .select({ label: marketEntries.label })
+          .from(marketEntries)
+          .where(eq(marketEntries.marketId, id));
+        const { rejectDrawWinnerOnKnockout, knockoutHintsFromMarket } = await import(
+          "@shared/lib/knockout-market"
+        );
         const drawGuard = rejectDrawWinnerOnKnockout({
           metadata: market.metadata,
           winnerLabel: winnerEntry.label,
+          hints: knockoutHintsFromMarket(
+            market,
+            entryLabels.map((e) => e.label),
+          ),
         });
         if (drawGuard.rejected) {
           return res.status(400).json({

@@ -71,6 +71,9 @@ import {
 import {
   isDrawStyleOutcomeLabel,
   isSingleWinnerKnockoutMarket,
+  inferDrawEligibleForSportsImport,
+  knockoutHintsFromMarket,
+  normalizeKnockoutResolutionCriteria,
   stripDrawForKnockoutImport,
 } from "@shared/lib/knockout-market";
 
@@ -252,6 +255,24 @@ export interface UnresolvedMarketRef {
 // ---- Helpers ---------------------------------------------------------------
 
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function knockoutHintsFromRow(
+  row: { title: string; category?: string | null; metadata?: unknown },
+  entryLabels: Array<{ label: string }>,
+): ReturnType<typeof knockoutHintsFromMarket> {
+  return knockoutHintsFromMarket(row, entryLabels.map((e) => e.label));
+}
+
+async function persistSingleWinnerKnockoutFlag(marketId: string): Promise<void> {
+  const payload = { singleWinnerKnockout: true, drawEligible: false };
+  await db
+    .update(predictionMarkets)
+    .set({
+      metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+      updatedAt: new Date(),
+    })
+    .where(eq(predictionMarkets.id, marketId));
+}
 
 function slugifyTitle(title: string): string {
   return title
@@ -886,12 +907,34 @@ async function insertScoutedDraft(
   // Knockout / single-elimination: strip regulation-time Draw so the
   // market is two-team single-winner (who advances). Source mapping and
   // prices stay aligned with the remaining outcomes.
-  const drawEligible = selection.drawEligible !== false;
+  const category = ctx.allowedCategoryIds.has(normalizeMarketCategory(selection.category))
+    ? normalizeMarketCategory(selection.category)
+    : "misc";
+
+  const drawEligible = inferDrawEligibleForSportsImport({
+    drawEligible: selection.drawEligible,
+    category,
+    entryLabels,
+    externalSlug: candidate.eventSlug,
+    tags: candidate.tags,
+    title: selection.title,
+    summary: selection.summary,
+    description: candidate.description,
+  });
+
+  let resolutionCriteria = Array.isArray(selection.resolutionCriteria)
+    ? selection.resolutionCriteria
+        .map((c) => (typeof c === "string" ? c.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 5)
+    : [];
+
   if (!drawEligible) {
     const stripped = stripDrawForKnockoutImport(sourceOutcomes, entryLabels);
     if (stripped.stripped) {
       sourceOutcomes = stripped.outcomes;
       entryLabels = stripped.labels;
+      resolutionCriteria = normalizeKnockoutResolutionCriteria(resolutionCriteria);
       log(
         `[MarketScout] "${selection.title}" — knockout (drawEligible=false); stripped Draw → [${entryLabels.join(", ")}]`,
       );
@@ -919,9 +962,6 @@ async function insertScoutedDraft(
     slug = `${slug}-${i}`;
   }
 
-  const category = ctx.allowedCategoryIds.has(normalizeMarketCategory(selection.category))
-    ? normalizeMarketCategory(selection.category)
-    : "misc";
   const secondaryCategories = sanitizeSecondaryCategories(
     Array.isArray(selection.secondaryCategories) ? selection.secondaryCategories : [],
     category,
@@ -964,13 +1004,6 @@ async function insertScoutedDraft(
     typeof selection.fitScore === "number" && Number.isFinite(selection.fitScore)
       ? Math.max(0, Math.min(100, Math.round(selection.fitScore)))
       : null;
-
-  const resolutionCriteria = Array.isArray(selection.resolutionCriteria)
-    ? selection.resolutionCriteria
-        .map((c) => (typeof c === "string" ? c.trim() : ""))
-        .filter(Boolean)
-        .slice(0, 5)
-    : [];
 
   const metadata: Record<string, unknown> = {
     source: {
@@ -1773,10 +1806,14 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         // advanced in ET/penalties.
         if (
           allNamedClearlyLost &&
-          isSingleWinnerKnockoutMarket(row.metadata)
+          isSingleWinnerKnockoutMarket(
+            row.metadata,
+            knockoutHintsFromRow(row, entryLabels),
+          )
         ) {
           result.resolvedUpstream += 1;
           await tryAutoLock("upstream_knockout_level_at_90");
+          await persistSingleWinnerKnockoutFlag(row.id);
 
           const assessedAt = new Date().toISOString();
           const assessment = {
@@ -2106,11 +2143,15 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     // Flagged knockout that still lists Draw (e.g. France vs Spain mid-flight):
     // never propose Draw even when Polymarket's 90-min Draw sub-market won.
     if (
-      isSingleWinnerKnockoutMarket(row.metadata) &&
+      isSingleWinnerKnockoutMarket(
+        row.metadata,
+        knockoutHintsFromRow(row, entryLabels),
+      ) &&
       isDrawStyleOutcomeLabel(winner.label)
     ) {
       result.resolvedUpstream += 1;
       await tryAutoLock("upstream_knockout_draw_blocked");
+      await persistSingleWinnerKnockoutFlag(row.id);
 
       const assessedAt = new Date().toISOString();
       const assessment = {
@@ -2132,6 +2173,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         const payload: Record<string, unknown> = {
           scoutAssessment: assessment,
           source: { ...source, upstreamResolvedAt: assessedAt },
+          singleWinnerKnockout: true,
+          drawEligible: false,
         };
         await db
           .update(predictionMarkets)
@@ -2151,6 +2194,41 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
           `[MarketScout] Blocked Draw proposal on knockout "${row.title}" ` +
             `(market=${row.id.slice(0, 8)})`,
         );
+
+        void (async () => {
+          try {
+            const { sendOpsAlert, adminResolveMarketUrl } = await import(
+              "../services/ops-alerts"
+            );
+            await sendOpsAlert({
+              kind: "market_source_resolved",
+              severity: "info",
+              title: "Knockout market needs advancing team",
+              summary:
+                `"${row.title}" — Polymarket settled Draw (90 min). ` +
+                `Confirm which team advanced — do not settle Draw.`,
+              sections: [
+                {
+                  heading: "Confirm advancing team",
+                  items: [
+                    {
+                      text: row.title,
+                      detail: "Level after 90 minutes — pick the team that advanced",
+                      url: adminResolveMarketUrl(row.id),
+                    },
+                  ],
+                },
+              ],
+              ctaUrl: adminResolveMarketUrl(row.id),
+              ctaLabel: "Confirm & resolve",
+              idempotencyKeyBase: `knockout_draw_blocked:${row.id}`,
+            });
+          } catch (err) {
+            log(
+              `[MarketScout] Knockout Draw-blocked ops alert failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        })();
       } catch (err) {
         result.errors += 1;
         log(
