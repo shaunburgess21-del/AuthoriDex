@@ -81,7 +81,7 @@ const rng = createPRNG(42);
 test("H2H lock-in: no force-pick when flags off", () => {
   const prevEn = process.env.LOCKIN_FAIR_H2H_ENABLED;
   const prevSh = process.env.LOCKIN_FAIR_H2H_SHADOW;
-  delete process.env.LOCKIN_FAIR_H2H_ENABLED;
+  process.env.LOCKIN_FAIR_H2H_ENABLED = "false";
   delete process.env.LOCKIN_FAIR_H2H_SHADOW;
   try {
     const d = computePrediction(

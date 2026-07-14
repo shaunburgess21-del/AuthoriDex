@@ -1,6 +1,31 @@
 # Convergence rollout (ops)
 
-Shipped in commit `05ed297a`. All behavior is **env-flag gated** (default OFF).
+**Jul 2026 Track 3 defaults:** lock-in fair (up/down + H2H + gainer), arb cohort,
+mid-week convergence, and latch-revert are **ON by default**. Set any flag to
+`false` / `0` / `off` to disable without a code change.
+
+Settlement close (Track 2): `NATIVE_CLOSE_MEDIAN_HOURS` defaults to **6** (trailing
+median of official hourly ingest closes). Set `=1` to restore single-snapshot close.
+
+## Railway flags
+
+| Flag | Default | Notes |
+|------|---------|--------|
+| `LOCKIN_FAIR_ENABLED` | **ON** | Agents use fair floor on up/down |
+| `LOCKIN_FAIR_H2H_ENABLED` | **ON** | H2H confidence floor + force-pick |
+| `LOCKIN_FAIR_GAINER_ENABLED` | **ON** | Gainer confidence floor + force-pick |
+| `ARB_COHORT_ENABLED` | **ON** | Arb personaBand converges prices (8 agents seeded) |
+| `MIDWEEK_CONVERGENCE_ENABLED` | **ON** | Mid-week arb sweeps |
+| `LATCH_REVERT_ENABLED` | **ON** | Disarm sticky decisive latch on revert |
+| `NATIVE_CLOSE_MEDIAN_HOURS` | **6** | Trailing median close for settlement |
+| `WARM_START_PRIORS_ENABLED` | OFF unless set | House warm-starts up/down opens |
+| `NATIVE_FRIDAY_CUTOFF_ENABLED` | OFF | Up/Down betting closes Friday 23:59 UTC |
+
+Shadow-only flags (`*_SHADOW=true`) still log candidates without changing bets.
+
+## Railway flags (legacy staged order — historical)
+
+Shipped in commit `05ed297a`. Behavior was previously **env-flag gated** (default OFF).
 
 ## Railway flags (order)
 

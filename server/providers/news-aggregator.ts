@@ -326,14 +326,18 @@ export { gdeltUnionAttributionCount } from "./gdelt-parse";
 
 /**
  * GDELT is excluded from the union. Two reasons (confirmed against live data
- * June 2026):
+ * June 2026; re-checked Jul 2026 historic union runs):
  *   1. Its artlist query has no language filter, so it injects foreign-language
  *      articles (Russian/Arabic/Hindi/Greek/etc.) into an English/US attention
  *      signal where every other provider is scoped to English.
- *   2. Its live contribution is negligible — ~6/162 people had any URLs.
+ *   2. Its live contribution is negligible — typically ~6–9 people with any
+ *      URL-bearing articles (vs Mediastack/Currents/Serper in the dozens–100+),
+ *      while adding ~50–220s of wall time per ingest.
  * Set to true to re-enable. Cascade and tiered modes still use GDELT independently.
+ * When false, ingest surfaces status DISABLED (not SKIPPED) so System Tools
+ * does not look like a cadence gate.
  */
-const UNION_INCLUDE_GDELT = false;
+export const UNION_INCLUDE_GDELT = false;
 
 export async function fetchMultiSourceNewsBatch(
   people: AggregatorPerson[],

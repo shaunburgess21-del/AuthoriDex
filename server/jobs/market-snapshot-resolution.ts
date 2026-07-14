@@ -13,16 +13,22 @@ import { db } from "../db";
 import { log } from "../log";
 import { officialSnapshotOriginCondition } from "../scoring/official-snapshots";
 import {
+  computeMedianFameScore,
   ensureDate,
   getCloseSnapshotFallbackMaxHours,
+  getNativeCloseMedianHours,
   getStoredOpeningScore,
+  type MedianCloseSnapshot,
   type SnapshotScore,
 } from "./market-snapshot-utils";
 
 export {
+  computeMedianFameScore,
   ensureDate,
   getCloseSnapshotFallbackMaxHours,
+  getNativeCloseMedianHours,
   getStoredOpeningScore,
+  type MedianCloseSnapshot,
   type SnapshotScore,
 } from "./market-snapshot-utils";
 
@@ -149,6 +155,114 @@ export async function getCloseSnapshot(personId: string, endAt: Date): Promise<S
       `last ingest before endAt (${fallback.capturedAt.toISOString()}, score=${fallback.score})`,
   );
   return fallback;
+}
+
+/**
+ * Trailing-median close for native settlement (up/down, H2H, gainer).
+ *
+ * Mirrors the 6h opening-score median so open→close is not comparing a
+ * smoothed week-open to a single Sunday-night tick (the weekend common-mode
+ * artifact). When fewer than 2 valid hourly samples exist in the window,
+ * falls through to {@link getCloseSnapshot} (single-point / staleness-guarded).
+ *
+ * Pass `preloadedSingle` to avoid a duplicate `getCloseSnapshot` round-trip
+ * when the caller already fetched it for flip-audit comparison.
+ */
+export async function getMedianCloseSnapshot(
+  personId: string,
+  endAt: Date,
+  windowHours: number = getNativeCloseMedianHours(),
+  options?: { preloadedSingle?: SnapshotScore | null },
+): Promise<MedianCloseSnapshot | null> {
+  const hours = Number.isFinite(windowHours) && windowHours >= 1
+    ? Math.min(12, Math.floor(windowHours))
+    : getNativeCloseMedianHours();
+  const windowStart = new Date(endAt.getTime() - hours * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
+    .from(trendSnapshots)
+    .where(and(
+      eq(trendSnapshots.personId, personId),
+      officialSnapshotOriginCondition(),
+      lte(trendSnapshots.timestamp, endAt),
+      gte(trendSnapshots.timestamp, windowStart),
+    ))
+    .orderBy(desc(trendSnapshots.timestamp))
+    .limit(hours);
+
+  const valid = rows.filter((r) => r.fameIndex != null && Number.isFinite(Number(r.fameIndex)));
+  if (valid.length >= 2) {
+    const median = computeMedianFameScore(valid.map((r) => Number(r.fameIndex)));
+    if (median == null) return null;
+    const capturedAt = ensureDate(valid[0]!.timestamp)!;
+    return {
+      score: median,
+      capturedAt,
+      method: "median",
+      windowHours: hours,
+      sampleCount: valid.length,
+    };
+  }
+
+  const single =
+    options && "preloadedSingle" in (options ?? {})
+      ? (options!.preloadedSingle ?? null)
+      : await getCloseSnapshot(personId, endAt);
+  if (!single) return null;
+  return {
+    ...single,
+    method: "single",
+    windowHours: hours,
+    sampleCount: 1,
+  };
+}
+
+export type NativeClosePair = {
+  /** Score used for settlement (median when available, else single). */
+  settled: MedianCloseSnapshot;
+  /** Single-point close for flip-audit comparison (may be null). */
+  single: SnapshotScore | null;
+};
+
+/**
+ * One round-trip pair: single close + median close (median reuses the single
+ * on fallback so we never hit `getCloseSnapshot` twice).
+ */
+export async function resolveNativeClosePair(
+  personId: string,
+  endAt: Date,
+): Promise<NativeClosePair | null> {
+  const single = await getCloseSnapshot(personId, endAt);
+  const settled = await getMedianCloseSnapshot(personId, endAt, getNativeCloseMedianHours(), {
+    preloadedSingle: single,
+  });
+  if (!settled) return null;
+  return { settled, single };
+}
+
+/**
+ * When any entry in a multi-person market falls back to single-point close,
+ * force every entry onto single so we don't compare median vs single across
+ * people. Pure helper — exported for unit tests.
+ */
+export function alignCloseMethodsForMarket(
+  pairs: NativeClosePair[],
+): MedianCloseSnapshot[] {
+  const anySingle = pairs.some((p) => p.settled.method === "single");
+  if (!anySingle) return pairs.map((p) => p.settled);
+
+  return pairs.map((p) => {
+    if (p.single) {
+      return {
+        ...p.single,
+        method: "single" as const,
+        windowHours: p.settled.windowHours,
+        sampleCount: 1,
+      };
+    }
+    return p.settled;
+  });
 }
 
 export async function getOpenSnapshot(

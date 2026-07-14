@@ -23,8 +23,8 @@ import {
   NO_SIGNAL_ABSTAIN_RATE_SHARP,
   YOUNG_MARKET_HOURS,
   NATIVE_LLM_BOOST_WEIGHT,
-  LOCKIN_FAIR_ENABLED,
   LOCKIN_FAIR_SHADOW,
+  isLockInFairEnabled,
   isLockInFairH2HShadow,
   isLockInFairH2HEnabled,
   isLockInFairGainerShadow,
@@ -530,7 +530,7 @@ export function computePrediction(
   ) {
     lockInForcedEntryId = gainerFavored.entryId;
   } else if (
-    LOCKIN_FAIR_ENABLED &&
+    isLockInFairEnabled() &&
     lockInDecisive &&
     fairUp != null
   ) {
@@ -666,7 +666,7 @@ export function computePrediction(
         ? gainerFavored.fair
         : Math.max(opinionConfidence, chosenFair);
     }
-  } else if (LOCKIN_FAIR_ENABLED && fairUp != null) {
+  } else if (isLockInFairEnabled() && fairUp != null) {
     const chosenEntry = entries.find((e) => e.id === chosenEntryId);
     const fairSide = fairForEntry(
       fairUp,

@@ -131,6 +131,26 @@ function envFlag(value: string | undefined): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
 }
 
+/**
+ * Default-ON flag parser. Unset / empty → true. Explicit false/0/no/off → false.
+ * Used for Track 3 convergence flags that are production-ready (Jul 2026).
+ */
+function envFlagDefaultOn(value: string | undefined): boolean {
+  if (typeof value !== "string" || value.trim() === "") return true;
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "false" ||
+    normalized === "0" ||
+    normalized === "no" ||
+    normalized === "off"
+  ) {
+    return false;
+  }
+  // Any other non-empty value: treat truthy aliases as on, unknown as on
+  // (pre-launch: prefer enabled; explicit false is the only kill switch).
+  return true;
+}
+
 // World Market boost mode (toggle via env WORLD_MARKET_BOOST_ENABLED).
 // SAFETY: Default flipped to OFF (2026-05-01). When enabled, drops the
 // per-market skip rate dramatically and 1.5x's the activity gate, which
@@ -238,8 +258,8 @@ export const DECISIVE_REVERT_PCT = (() => {
 })();
 /** Log latch-revert disarm candidates without changing bets. */
 export const LATCH_REVERT_SHADOW = envFlag(process.env.LATCH_REVERT_SHADOW);
-/** Treat latched markets as non-decisive when score reverts near flat. */
-export const LATCH_REVERT_ENABLED = envFlag(process.env.LATCH_REVERT_ENABLED);
+/** Treat latched markets as non-decisive when score reverts near flat. Default ON. */
+export const LATCH_REVERT_ENABLED = envFlagDefaultOn(process.env.LATCH_REVERT_ENABLED);
 /** Hourly fame samples when deciding whether to set weeklyOpen.decisiveLatched. */
 export const LATCH_TRAILING_SAMPLE_COUNT = (() => {
   const raw = Number(process.env.LATCH_TRAILING_SAMPLE_COUNT);
@@ -247,8 +267,8 @@ export const LATCH_TRAILING_SAMPLE_COUNT = (() => {
 })();
 /** Log mid-week convergence candidates without scheduling bets. */
 export const MIDWEEK_CONVERGENCE_SHADOW = envFlag(process.env.MIDWEEK_CONVERGENCE_SHADOW);
-/** Arb cohort nudges mispriced up/down markets before the final-6h window. */
-export const MIDWEEK_CONVERGENCE_ENABLED = envFlag(process.env.MIDWEEK_CONVERGENCE_ENABLED);
+/** Arb cohort nudges mispriced up/down markets before the final-6h window. Default ON. */
+export const MIDWEEK_CONVERGENCE_ENABLED = envFlagDefaultOn(process.env.MIDWEEK_CONVERGENCE_ENABLED);
 /** Higher edge bar than ARB_MIN_EDGE_PP to avoid mid-week thrash. */
 export const ARB_MIDWEEK_MIN_EDGE_PP = (() => {
   const raw = Number(process.env.ARB_MIDWEEK_MIN_EDGE_PP);
@@ -279,16 +299,18 @@ export function isLatchRevertShadow(): boolean {
   return envFlag(process.env.LATCH_REVERT_SHADOW);
 }
 
+/** Default ON (Jul 2026 Track 3 companion). Set LATCH_REVERT_ENABLED=false to disable. */
 export function isLatchRevertEnabled(): boolean {
-  return envFlag(process.env.LATCH_REVERT_ENABLED);
+  return envFlagDefaultOn(process.env.LATCH_REVERT_ENABLED);
 }
 
 export function isMidweekConvergenceShadow(): boolean {
   return envFlag(process.env.MIDWEEK_CONVERGENCE_SHADOW);
 }
 
+/** Default ON (Jul 2026 Track 3 companion). Set MIDWEEK_CONVERGENCE_ENABLED=false to disable. */
 export function isMidweekConvergenceEnabled(): boolean {
-  return envFlag(process.env.MIDWEEK_CONVERGENCE_ENABLED);
+  return envFlagDefaultOn(process.env.MIDWEEK_CONVERGENCE_ENABLED);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,10 +392,24 @@ export const LOCKIN_SIGMA_1D_DEFAULT = 0.109;
 export const LOCKIN_BETA_DEFAULT = 0.36;
 /** Log shadow fair targets without changing bets. */
 export const LOCKIN_FAIR_SHADOW = envFlag(process.env.LOCKIN_FAIR_SHADOW);
-/** Apply fair as confidence floor in computePrediction. */
-export const LOCKIN_FAIR_ENABLED = envFlag(process.env.LOCKIN_FAIR_ENABLED);
-/** Dedicated arb / convergence cohort places trades. */
-export const ARB_COHORT_ENABLED = envFlag(process.env.ARB_COHORT_ENABLED);
+/**
+ * Apply fair as confidence floor in computePrediction.
+ * Default ON (Jul 2026 Track 3). Set LOCKIN_FAIR_ENABLED=false to disable.
+ */
+export function isLockInFairEnabled(): boolean {
+  return envFlagDefaultOn(process.env.LOCKIN_FAIR_ENABLED);
+}
+/** @deprecated Prefer isLockInFairEnabled() — snapshot at module load. */
+export const LOCKIN_FAIR_ENABLED = isLockInFairEnabled();
+/**
+ * Dedicated arb / convergence cohort places trades.
+ * Default ON (Jul 2026 Track 3). Requires arb personaBand agents (already seeded).
+ */
+export function isArbCohortEnabled(): boolean {
+  return envFlagDefaultOn(process.env.ARB_COHORT_ENABLED);
+}
+/** @deprecated Prefer isArbCohortEnabled() — snapshot at module load. */
+export const ARB_COHORT_ENABLED = isArbCohortEnabled();
 /** Friday 23:59 UTC betting cutoff for native AMM up/down (not just jackpot). */
 export const NATIVE_FRIDAY_CUTOFF_ENABLED = envFlag(process.env.NATIVE_FRIDAY_CUTOFF_ENABLED);
 
@@ -393,8 +429,8 @@ export const ARB_CONVERGENCE_MARKETS_PER_SWEEP = (() => {
 
 /** H2H lock-in: shadow logs only (no bet changes). */
 export const LOCKIN_FAIR_H2H_SHADOW = envFlag(process.env.LOCKIN_FAIR_H2H_SHADOW);
-/** H2H lock-in: confidence floor + force-pick + arb convergence. */
-export const LOCKIN_FAIR_H2H_ENABLED = envFlag(process.env.LOCKIN_FAIR_H2H_ENABLED);
+/** H2H lock-in: confidence floor + force-pick + arb convergence. Default ON. */
+export const LOCKIN_FAIR_H2H_ENABLED = envFlagDefaultOn(process.env.LOCKIN_FAIR_H2H_ENABLED);
 /** Favored-side fair at or above this → force-pick that entry (H2H). */
 export const LOCKIN_H2H_DECISIVE_FAIR = (() => {
   const raw = Number(process.env.LOCKIN_H2H_DECISIVE_FAIR);
@@ -418,14 +454,15 @@ export function isLockInFairH2HShadow(): boolean {
   return envFlag(process.env.LOCKIN_FAIR_H2H_SHADOW);
 }
 
+/** Default ON (Jul 2026 Track 3). Set LOCKIN_FAIR_H2H_ENABLED=false to disable. */
 export function isLockInFairH2HEnabled(): boolean {
-  return envFlag(process.env.LOCKIN_FAIR_H2H_ENABLED);
+  return envFlagDefaultOn(process.env.LOCKIN_FAIR_H2H_ENABLED);
 }
 
 /** Gainer lock-in: shadow logs only (no bet changes). */
 export const LOCKIN_FAIR_GAINER_SHADOW = envFlag(process.env.LOCKIN_FAIR_GAINER_SHADOW);
-/** Gainer lock-in: confidence floor + force-pick + arb convergence. */
-export const LOCKIN_FAIR_GAINER_ENABLED = envFlag(process.env.LOCKIN_FAIR_GAINER_ENABLED);
+/** Gainer lock-in: confidence floor + force-pick + arb convergence. Default ON. */
+export const LOCKIN_FAIR_GAINER_ENABLED = envFlagDefaultOn(process.env.LOCKIN_FAIR_GAINER_ENABLED);
 /** Favored-side fair at or above this → force-pick that entry (gainer). */
 export const LOCKIN_GAINER_DECISIVE_FAIR = (() => {
   const raw = Number(process.env.LOCKIN_GAINER_DECISIVE_FAIR);
@@ -449,8 +486,9 @@ export function isLockInFairGainerShadow(): boolean {
   return envFlag(process.env.LOCKIN_FAIR_GAINER_SHADOW);
 }
 
+/** Default ON (Jul 2026 Track 3). Set LOCKIN_FAIR_GAINER_ENABLED=false to disable. */
 export function isLockInFairGainerEnabled(): boolean {
-  return envFlag(process.env.LOCKIN_FAIR_GAINER_ENABLED);
+  return envFlagDefaultOn(process.env.LOCKIN_FAIR_GAINER_ENABLED);
 }
 
 // ---------------------------------------------------------------------------

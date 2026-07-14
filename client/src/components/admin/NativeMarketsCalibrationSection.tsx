@@ -66,6 +66,31 @@ interface CalibrationResponse {
   histogram: {
     buckets: Array<{ pctOpenMid: number; avgAmmUpPct: number; count: number }>;
   };
+  settlementClose?: {
+    closeWindowHours: number;
+    lookbackDays: number;
+    resolvedWithCloseMethod: number;
+    medianCloseCount: number;
+    singleCloseCount: number;
+    winnerWouldFlipCount: number;
+    updownDirection: { up: number; down: number; voidTie: number };
+    sampleFlips: Array<{
+      marketId: string;
+      title: string;
+      marketType: string;
+      outcome: string | null;
+      singleOutcome: string | null;
+      weekNumber: number | null;
+    }>;
+  };
+  convergenceFlags?: {
+    lockInFair: boolean;
+    arbCohort: boolean;
+    lockInH2H: boolean;
+    lockInGainer: boolean;
+    midweekConvergence: boolean;
+    latchRevert: boolean;
+  };
 }
 
 function pct(n: number | null): string {
@@ -148,6 +173,28 @@ export function NativeMarketsCalibrationSection() {
               <Badge variant={data?.status.enabled ? "default" : "secondary"}>
                 LLM {data?.status.enabled ? "ON" : "OFF"}
               </Badge>
+              {data?.convergenceFlags && (
+                <>
+                  <Badge variant={data.convergenceFlags.lockInFair ? "default" : "secondary"}>
+                    Lock-in {data.convergenceFlags.lockInFair ? "ON" : "OFF"}
+                  </Badge>
+                  <Badge variant={data.convergenceFlags.arbCohort ? "default" : "secondary"}>
+                    Arb {data.convergenceFlags.arbCohort ? "ON" : "OFF"}
+                  </Badge>
+                  <Badge variant={data.convergenceFlags.lockInH2H ? "default" : "outline"}>
+                    H2H lock-in
+                  </Badge>
+                  <Badge variant={data.convergenceFlags.lockInGainer ? "default" : "outline"}>
+                    Gainer lock-in
+                  </Badge>
+                  <Badge variant={data.convergenceFlags.midweekConvergence ? "default" : "outline"}>
+                    Midweek
+                  </Badge>
+                  <Badge variant={data.convergenceFlags.latchRevert ? "default" : "outline"}>
+                    Latch revert
+                  </Badge>
+                </>
+              )}
               {data?.status.model && (
                 <Badge variant="outline" className="font-mono text-[10px]">
                   {data.status.model}
@@ -170,6 +217,55 @@ export function NativeMarketsCalibrationSection() {
                 Refresh
               </Button>
             </div>
+
+            {data?.settlementClose && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="text-xs font-medium">
+                  Settlement close audit ({data.settlementClose.lookbackDays}d) — median window{" "}
+                  {data.settlementClose.closeWindowHours}h
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground text-xs">Median closes</div>
+                    <div className="font-semibold tabular-nums">
+                      {data.settlementClose.medianCloseCount}
+                    </div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground text-xs">Single fallbacks</div>
+                    <div className="font-semibold tabular-nums">
+                      {data.settlementClose.singleCloseCount}
+                    </div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground text-xs">Winner would flip</div>
+                    <div className="font-semibold tabular-nums">
+                      {data.settlementClose.winnerWouldFlipCount}
+                    </div>
+                  </div>
+                  <div className="rounded border p-2">
+                    <div className="text-muted-foreground text-xs">Up/Down skew</div>
+                    <div className="font-semibold tabular-nums text-xs">
+                      ↑{data.settlementClose.updownDirection.up} / ↓
+                      {data.settlementClose.updownDirection.down}
+                      {data.settlementClose.updownDirection.voidTie > 0
+                        ? ` / tie ${data.settlementClose.updownDirection.voidTie}`
+                        : ""}
+                    </div>
+                  </div>
+                </div>
+                {data.settlementClose.sampleFlips.length > 0 && (
+                  <div className="text-[11px] text-muted-foreground space-y-1">
+                    {data.settlementClose.sampleFlips.slice(0, 5).map((f) => (
+                      <div key={f.marketId} className="truncate">
+                        W{f.weekNumber ?? "?"} {f.marketType}: {f.title} — single=
+                        {f.singleOutcome ?? "?"} → settled={f.outcome ?? "?"}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {data && (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">

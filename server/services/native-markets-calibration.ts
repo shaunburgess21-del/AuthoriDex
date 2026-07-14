@@ -11,7 +11,16 @@ import {
 } from "@shared/schema";
 import { eq, and, gte, inArray } from "drizzle-orm";
 import { currentPrices as ammCurrentPrices, type AmmStateSnapshot } from "@shared/lib/amm/positions";
-import { NATIVE_MARKETS_LLM_ENABLED } from "../agents/constants";
+import {
+  isArbCohortEnabled,
+  isLatchRevertEnabled,
+  isLockInFairEnabled,
+  isLockInFairGainerEnabled,
+  isLockInFairH2HEnabled,
+  isMidweekConvergenceEnabled,
+  NATIVE_MARKETS_LLM_ENABLED,
+} from "../agents/constants";
+import { getNativeCloseMedianHours } from "../jobs/market-snapshot-utils";
 import { getNativeBudgetSnapshot } from "../agents/nativeMarketBudget";
 import { getAiModel } from "../config/ai-models";
 import { getOrFetchNativeAssessment } from "../agents/nativeMarketEngine";
@@ -285,4 +294,149 @@ export function buildCalibrationHistogram(rows: NativeCalibrationRow[]): {
     }))
     .sort((a, b) => a.pctOpenMid - b.pctOpenMid);
   return { buckets };
+}
+
+export interface SettlementCloseAudit {
+  closeWindowHours: number;
+  lookbackDays: number;
+  resolvedWithCloseMethod: number;
+  medianCloseCount: number;
+  singleCloseCount: number;
+  winnerWouldFlipCount: number;
+  updownDirection: { up: number; down: number; voidTie: number };
+  sampleFlips: Array<{
+    marketId: string;
+    title: string;
+    marketType: string;
+    outcome: string | null;
+    singleOutcome: string | null;
+    weekNumber: number | null;
+  }>;
+}
+
+/**
+ * Extract settlement close method from resolution_notes.
+ * Up/down stores top-level `closeMethod`; H2H/gainer nest it under entries
+ * (and also stamp top-level after the Track 2/3 review fix).
+ */
+export function extractSettlementCloseMethod(
+  notes: Record<string, unknown>,
+): "median" | "single" | null {
+  if (notes.closeMethod === "median" || notes.closeMethod === "single") {
+    return notes.closeMethod;
+  }
+
+  const entryMethods: string[] = [];
+  const entryA = notes.entryA as { closeMethod?: string } | undefined;
+  const entryB = notes.entryB as { closeMethod?: string } | undefined;
+  if (entryA?.closeMethod) entryMethods.push(entryA.closeMethod);
+  if (entryB?.closeMethod) entryMethods.push(entryB.closeMethod);
+
+  const rankings = notes.rankings as Array<{ closeMethod?: string }> | undefined;
+  if (Array.isArray(rankings)) {
+    for (const r of rankings) {
+      if (r.closeMethod) entryMethods.push(r.closeMethod);
+    }
+  }
+
+  if (entryMethods.length === 0) return null;
+  if (entryMethods.every((m) => m === "median")) return "median";
+  if (entryMethods.every((m) => m === "single")) return "single";
+  // Pre-alignment historical notes may mix methods; count as single fallback.
+  return "single";
+}
+
+/**
+ * Post-resolve audit of median vs single-point close (Track 2).
+ * Reads resolution_notes written by the auto-resolver.
+ */
+export async function getSettlementCloseAudit(
+  lookbackDays = 21,
+): Promise<SettlementCloseAudit> {
+  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      id: predictionMarkets.id,
+      title: predictionMarkets.title,
+      marketType: predictionMarkets.marketType,
+      weekNumber: predictionMarkets.weekNumber,
+      resolutionNotes: predictionMarkets.resolutionNotes,
+    })
+    .from(predictionMarkets)
+    .where(
+      and(
+        inArray(predictionMarkets.marketType, [...NATIVE_TYPES]),
+        inArray(predictionMarkets.status, ["RESOLVED", "VOID"]),
+        gte(predictionMarkets.resolvedAt, since),
+      ),
+    );
+
+  let resolvedWithCloseMethod = 0;
+  let medianCloseCount = 0;
+  let singleCloseCount = 0;
+  let winnerWouldFlipCount = 0;
+  const updownDirection = { up: 0, down: 0, voidTie: 0 };
+  const sampleFlips: SettlementCloseAudit["sampleFlips"] = [];
+
+  for (const row of rows) {
+    if (!row.resolutionNotes) continue;
+    let notes: Record<string, unknown>;
+    try {
+      notes = JSON.parse(row.resolutionNotes) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    const closeMethod = extractSettlementCloseMethod(notes);
+    if (closeMethod) {
+      resolvedWithCloseMethod += 1;
+      if (closeMethod === "median") medianCloseCount += 1;
+      else singleCloseCount += 1;
+    }
+
+    if (notes.winnerWouldFlip === true) {
+      winnerWouldFlipCount += 1;
+      if (sampleFlips.length < 12) {
+        sampleFlips.push({
+          marketId: row.id,
+          title: row.title ?? "—",
+          marketType: row.marketType,
+          outcome: typeof notes.outcome === "string" ? notes.outcome : null,
+          singleOutcome:
+            typeof notes.singleOutcome === "string" ? notes.singleOutcome : null,
+          weekNumber: row.weekNumber,
+        });
+      }
+    }
+
+    if (row.marketType === "updown") {
+      const outcome = typeof notes.outcome === "string" ? notes.outcome : "";
+      if (outcome === "Up") updownDirection.up += 1;
+      else if (outcome === "Down") updownDirection.down += 1;
+      else if (outcome === "void_tie") updownDirection.voidTie += 1;
+    }
+  }
+
+  return {
+    closeWindowHours: getNativeCloseMedianHours(),
+    lookbackDays,
+    resolvedWithCloseMethod,
+    medianCloseCount,
+    singleCloseCount,
+    winnerWouldFlipCount,
+    updownDirection,
+    sampleFlips,
+  };
+}
+
+export function getConvergenceFlagStatus() {
+  return {
+    lockInFair: isLockInFairEnabled(),
+    arbCohort: isArbCohortEnabled(),
+    lockInH2H: isLockInFairH2HEnabled(),
+    lockInGainer: isLockInFairGainerEnabled(),
+    midweekConvergence: isMidweekConvergenceEnabled(),
+    latchRevert: isLatchRevertEnabled(),
+  };
 }

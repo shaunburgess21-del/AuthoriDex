@@ -1,6 +1,6 @@
 import { db, withDbAdvisoryLock } from "../db";
-import { predictionMarkets, marketEntries, marketBets, marketAmmState, trendSnapshots, profiles, creditLedger, trendingPeople } from "@shared/schema";
-import { eq, and, sql, inArray, lte, gte, desc, asc } from "drizzle-orm";
+import { predictionMarkets, marketEntries, marketBets, marketAmmState, profiles, creditLedger, trendingPeople } from "@shared/schema";
+import { eq, and, sql, inArray, lte } from "drizzle-orm";
 import { log } from "../log";
 import { computeEarlyBirdMultiplier } from "./settlement-utils";
 // `scoreResolvedMarket` used to fire from each resolveX after settlement.
@@ -19,24 +19,22 @@ import {
 import { createNotification } from "../services/notifications";
 import OpenAI from "openai";
 import { fetchTrendingNewsContext } from "../providers/serper";
-import { officialSnapshotOriginCondition } from "../scoring/official-snapshots";
 import {
+  alignCloseMethodsForMarket,
   ensureDate,
   getCloseSnapshot,
+  getNativeCloseMedianHours,
   getOpenSnapshot,
+  resolveNativeClosePair,
+  type MedianCloseSnapshot,
 } from "./market-snapshot-resolution";
 
 /**
- * Official hourly closes to median for gainer settlement (blunts last-hour
- * pumps). DEFAULT 1 = legacy single-snapshot close (inert: a 1h window yields
- * <=1 row, so getGainerCloseSnapshot falls through to getCloseSnapshot). Enable
- * the trailing median deliberately at the Sunday-resolve -> Monday-open boundary
- * via GAINER_CLOSE_MEDIAN_HOURS=4. Note: 2 is NOT a no-op (it medians 2 rows).
+ * Official hourly closes to median for native settlement (blunts weekend
+ * boundary / last-hour pumps). Shared by up/down, H2H, and gainer via
+ * `getNativeCloseMedianHours()` (default 6). Set NATIVE_CLOSE_MEDIAN_HOURS=1
+ * to restore legacy single-snapshot close.
  */
-const GAINER_CLOSE_MEDIAN_HOURS = (() => {
-  const raw = Number(process.env.GAINER_CLOSE_MEDIAN_HOURS);
-  return Number.isFinite(raw) && raw >= 1 && raw <= 12 ? Math.floor(raw) : 1;
-})();
 
 const RESOLVER_INTERVAL_MS = 5 * 60 * 1000;
 const RESOLVER_STARTUP_DELAY_MS = 2 * 60 * 1000;
@@ -422,43 +420,15 @@ export async function voidMarketBets(marketId: string): Promise<number> {
 }
 
 /**
- * Gainer close: median of the last N official hourly ingest closes at or before
- * `endAt` (default 4h). Open stays a single stored point (fixed at market
- * creation); close is median-blunted — asymmetry is intentional. Both legs use
- * the official `ingest` snapshot stream. Tie band uses GAINER_TIE_EPSILON_PCT on
- * the resulting % change.
+ * Pure helper — compares single-point vs median close outcomes for audit
+ * logging in resolution_notes. Exported for unit tests.
  */
-async function getGainerCloseSnapshot(
-  personId: string,
-  endAt: Date,
-): Promise<{ score: number; capturedAt: Date; method: "median" | "single" } | null> {
-  const windowStart = new Date(endAt.getTime() - GAINER_CLOSE_MEDIAN_HOURS * 60 * 60 * 1000);
-  const rows = await db
-    .select({ fameIndex: trendSnapshots.fameIndex, timestamp: trendSnapshots.timestamp })
-    .from(trendSnapshots)
-    .where(and(
-      eq(trendSnapshots.personId, personId),
-      officialSnapshotOriginCondition(),
-      lte(trendSnapshots.timestamp, endAt),
-      gte(trendSnapshots.timestamp, windowStart),
-    ))
-    .orderBy(desc(trendSnapshots.timestamp))
-    .limit(GAINER_CLOSE_MEDIAN_HOURS);
-
-  const valid = rows.filter((r) => r.fameIndex != null && Number.isFinite(Number(r.fameIndex)));
-  if (valid.length >= 2) {
-    const scores = valid.map((r) => Number(r.fameIndex)).sort((a, b) => a - b);
-    const mid = Math.floor(scores.length / 2);
-    const median = scores.length % 2 === 0
-      ? Math.round((scores[mid - 1]! + scores[mid]!) / 2)
-      : scores[mid]!;
-    const capturedAt = ensureDate(valid[0]!.timestamp)!;
-    return { score: median, capturedAt, method: "median" };
-  }
-
-  const single = await getCloseSnapshot(personId, endAt);
-  if (!single) return null;
-  return { ...single, method: "single" };
+export function upDownOutcomeFromScores(
+  openScore: number,
+  closeScore: number,
+): "Up" | "Down" | "void_tie" {
+  if (closeScore === openScore) return "void_tie";
+  return closeScore > openScore ? "Up" : "Down";
 }
 
 export async function resolveUpDownMarket(market: any): Promise<"resolved" | "voided" | "blocked"> {
@@ -485,12 +455,22 @@ export async function resolveUpDownMarket(market: any): Promise<"resolved" | "vo
   }
 
   const openSnap = await getOpenSnapshot(personId, market.startAt, market);
-  const closeSnap = await getCloseSnapshot(personId, market.endAt);
-  if (!openSnap || !closeSnap) {
-    log(`[MarketResolver] updown ${market.id}: missing snapshots (open=${!!openSnap}, close=${!!closeSnap}), marking blocked`);
+  const closePair = await resolveNativeClosePair(personId, market.endAt);
+  if (!openSnap || !closePair) {
+    log(`[MarketResolver] updown ${market.id}: missing snapshots (open=${!!openSnap}, close=${!!closePair}), marking blocked`);
     await db.update(predictionMarkets).set({ resolutionNotes: "Auto-resolution blocked: missing snapshot data", updatedAt: new Date() }).where(eq(predictionMarkets.id, market.id));
     return "blocked";
   }
+
+  const closeSnap = closePair.settled;
+  const singleClose = closePair.single;
+  const windowHours = getNativeCloseMedianHours();
+  const settledOutcome = upDownOutcomeFromScores(openSnap.score, closeSnap.score);
+  const singleOutcome = singleClose
+    ? upDownOutcomeFromScores(openSnap.score, singleClose.score)
+    : null;
+  const winnerWouldFlip =
+    singleOutcome != null && singleOutcome !== settledOutcome;
 
   const evidence = {
     type: "updown",
@@ -499,11 +479,18 @@ export async function resolveUpDownMarket(market: any): Promise<"resolved" | "vo
     openSnapshotAt: openSnap.capturedAt.toISOString(),
     closeScore: closeSnap.score,
     closeSnapshotAt: closeSnap.capturedAt.toISOString(),
+    closeMethod: closeSnap.method,
+    closeWindowHours: windowHours,
+    closeSampleCount: closeSnap.sampleCount,
+    singleCloseScore: singleClose?.score ?? null,
+    singleCloseSnapshotAt: singleClose?.capturedAt?.toISOString?.() ?? null,
+    singleOutcome,
+    winnerWouldFlip,
     change: closeSnap.score - openSnap.score,
     percentChange: openSnap.score > 0 ? ((closeSnap.score - openSnap.score) / openSnap.score * 100).toFixed(2) + "%" : "N/A",
   };
 
-  if (closeSnap.score === openSnap.score) {
+  if (settledOutcome === "void_tie") {
     const ammResult = await resolveAmmMarket({
       marketId: market.id,
       voidMarket: true,
@@ -524,8 +511,8 @@ export async function resolveUpDownMarket(market: any): Promise<"resolved" | "vo
     return "voided";
   }
 
-  const winnerId = closeSnap.score > openSnap.score ? upEntry.id : downEntry.id;
-  const winnerLabel = closeSnap.score > openSnap.score ? "Up" : "Down";
+  const winnerId = settledOutcome === "Up" ? upEntry.id : downEntry.id;
+  const winnerLabel = settledOutcome;
 
   const ammResult = await resolveAmmMarket({
     marketId: market.id,
@@ -541,7 +528,11 @@ export async function resolveUpDownMarket(market: any): Promise<"resolved" | "vo
     resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winnerLabel, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
-  log(`[MarketResolver] updown ${market.id}: AMM ${winnerLabel} wins (${openSnap.score} → ${closeSnap.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+  log(
+    `[MarketResolver] updown ${market.id}: AMM ${winnerLabel} wins (${openSnap.score} → ${closeSnap.score}, ` +
+      `method=${evidence.closeMethod}, flip=${winnerWouldFlip}), ` +
+      `payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`,
+  );
   return "resolved";
 }
 
@@ -563,18 +554,62 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
     return "blocked";
   }
 
-  const closeA = await getCloseSnapshot(entryA.personId, market.endAt);
-  const closeB = await getCloseSnapshot(entryB.personId, market.endAt);
-  if (!closeA || !closeB) {
+  const pairA = await resolveNativeClosePair(entryA.personId, market.endAt);
+  const pairB = await resolveNativeClosePair(entryB.personId, market.endAt);
+  if (!pairA || !pairB) {
     log(`[MarketResolver] h2h ${market.id}: missing close snapshots, marking blocked`);
     await db.update(predictionMarkets).set({ resolutionNotes: "Auto-resolution blocked: missing snapshot data", updatedAt: new Date() }).where(eq(predictionMarkets.id, market.id));
     return "blocked";
   }
 
+  const [closeA, closeB] = alignCloseMethodsForMarket([pairA, pairB]);
+  const singleA = pairA.single;
+  const singleB = pairB.single;
+  const windowHours = getNativeCloseMedianHours();
+  const marketCloseMethod =
+    closeA.method === "single" || closeB.method === "single" ? "single" : "median";
+
+  const singleWinnerLabel =
+    singleA && singleB
+      ? singleA.score === singleB.score
+        ? "void_tie"
+        : singleA.score > singleB.score
+          ? entryA.label
+          : entryB.label
+      : null;
+  const settledWinnerLabel =
+    closeA.score === closeB.score
+      ? "void_tie"
+      : closeA.score > closeB.score
+        ? entryA.label
+        : entryB.label;
+  const winnerWouldFlip =
+    singleWinnerLabel != null && singleWinnerLabel !== settledWinnerLabel;
+
   const evidence = {
     type: "h2h",
-    entryA: { personId: entryA.personId, label: entryA.label, score: closeA.score, snapshotAt: closeA.capturedAt.toISOString() },
-    entryB: { personId: entryB.personId, label: entryB.label, score: closeB.score, snapshotAt: closeB.capturedAt.toISOString() },
+    closeMethod: marketCloseMethod,
+    entryA: {
+      personId: entryA.personId,
+      label: entryA.label,
+      score: closeA.score,
+      snapshotAt: closeA.capturedAt.toISOString(),
+      closeMethod: closeA.method,
+      sampleCount: closeA.sampleCount,
+      singleScore: singleA?.score ?? null,
+    },
+    entryB: {
+      personId: entryB.personId,
+      label: entryB.label,
+      score: closeB.score,
+      snapshotAt: closeB.capturedAt.toISOString(),
+      closeMethod: closeB.method,
+      sampleCount: closeB.sampleCount,
+      singleScore: singleB?.score ?? null,
+    },
+    closeWindowHours: windowHours,
+    singleOutcome: singleWinnerLabel,
+    winnerWouldFlip,
   };
 
   if (closeA.score === closeB.score) {
@@ -613,7 +648,11 @@ async function resolveH2H(market: any): Promise<"resolved" | "voided" | "blocked
     resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winner.label, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
-  log(`[MarketResolver] h2h ${market.id}: AMM ${winner.label} wins (${closeA.score} vs ${closeB.score}), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+  log(
+    `[MarketResolver] h2h ${market.id}: AMM ${winner.label} wins (${closeA.score} vs ${closeB.score}, ` +
+      `flip=${winnerWouldFlip}), payoutLiability=${ammResult.payoutLiability}, ` +
+      `house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`,
+  );
   return "resolved";
 }
 
@@ -635,32 +674,105 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     return "blocked";
   }
 
-  const gains: { entry: typeof entries[0]; openScore: number; closeScore: number; pctChange: number }[] = [];
+  type GainRow = {
+    entry: (typeof entries)[0];
+    openScore: number;
+    closeScore: number;
+    pctChange: number;
+    closeMethod: string;
+    sampleCount: number;
+    singleCloseScore: number | null;
+    singlePctChange: number | null;
+  };
+
+  const pending: Array<{
+    entry: (typeof entries)[0];
+    openScore: number;
+    pair: NonNullable<Awaited<ReturnType<typeof resolveNativeClosePair>>>;
+  }> = [];
 
   for (const entry of entriesWithPersonId) {
     const openSnap = await getOpenSnapshot(entry.personId!, market.startAt, market);
-    const closeSnap = await getGainerCloseSnapshot(entry.personId!, market.endAt);
-    if (!openSnap || !closeSnap) continue;
-    const pctChange = openSnap.score > 0 ? ((closeSnap.score - openSnap.score) / openSnap.score) * 100 : 0;
-    gains.push({ entry, openScore: openSnap.score, closeScore: closeSnap.score, pctChange });
+    const pair = await resolveNativeClosePair(entry.personId!, market.endAt);
+    if (!openSnap || !pair) continue;
+    pending.push({ entry, openScore: openSnap.score, pair });
   }
 
-  if (gains.length === 0) {
+  if (pending.length === 0) {
     log(`[MarketResolver] gainer ${market.id}: no valid snapshots for any entry, marking blocked`);
     await db.update(predictionMarkets).set({ resolutionNotes: "Auto-resolution blocked: missing snapshot data", updatedAt: new Date() }).where(eq(predictionMarkets.id, market.id));
     return "blocked";
   }
 
+  const alignedCloses = alignCloseMethodsForMarket(pending.map((p) => p.pair));
+  const gains: GainRow[] = pending.map((p, i) => {
+    const closeSnap: MedianCloseSnapshot = alignedCloses[i]!;
+    const pctChange =
+      p.openScore > 0 ? ((closeSnap.score - p.openScore) / p.openScore) * 100 : 0;
+    const singleCloseScore = p.pair.single?.score ?? null;
+    const singlePctChange =
+      singleCloseScore != null && p.openScore > 0
+        ? ((singleCloseScore - p.openScore) / p.openScore) * 100
+        : singleCloseScore != null
+          ? 0
+          : null;
+    return {
+      entry: p.entry,
+      openScore: p.openScore,
+      closeScore: closeSnap.score,
+      pctChange,
+      closeMethod: closeSnap.method,
+      sampleCount: closeSnap.sampleCount,
+      singleCloseScore,
+      singlePctChange,
+    };
+  });
+
   gains.sort((a, b) => b.pctChange - a.pctChange);
+
+  const singleRankable = gains.filter((g) => g.singlePctChange != null);
+  let singleOutcome: string | null = null;
+  if (singleRankable.length === gains.length && gains.length > 0) {
+    const bySingle = [...gains].sort(
+      (a, b) => (b.singlePctChange ?? -Infinity) - (a.singlePctChange ?? -Infinity),
+    );
+    if (
+      bySingle.length >= 2 &&
+      isGainerTie(bySingle[0]!.singlePctChange!, bySingle[1]!.singlePctChange!)
+    ) {
+      singleOutcome = "void_tie";
+    } else {
+      singleOutcome = bySingle[0]!.entry.label;
+    }
+  }
+
+  const settledOutcome =
+    gains.length >= 2 && isGainerTie(gains[0]!.pctChange, gains[1]!.pctChange)
+      ? "void_tie"
+      : gains[0]!.entry.label;
+  const winnerWouldFlip =
+    singleOutcome != null && singleOutcome !== settledOutcome;
+  const marketCloseMethod = gains.some((g) => g.closeMethod === "single")
+    ? "single"
+    : "median";
 
   const evidence = {
     type: "gainer",
-    rankings: gains.map(g => ({
+    closeMethod: marketCloseMethod,
+    closeWindowHours: getNativeCloseMedianHours(),
+    singleOutcome,
+    winnerWouldFlip,
+    rankings: gains.map((g) => ({
       personId: g.entry.personId,
       label: g.entry.label,
       openScore: g.openScore,
       closeScore: g.closeScore,
       pctChange: g.pctChange.toFixed(2) + "%",
+      closeMethod: g.closeMethod,
+      sampleCount: g.sampleCount,
+      singleCloseScore: g.singleCloseScore,
+      singlePctChange:
+        g.singlePctChange != null ? g.singlePctChange.toFixed(2) + "%" : null,
     })),
   };
 
@@ -704,7 +816,11 @@ async function resolveGainer(market: any): Promise<"resolved" | "voided" | "bloc
     resolutionNotes: JSON.stringify(buildAmmResolutionNotes(evidence, winner.label, ammResult)),
     updatedAt: new Date(),
   }).where(eq(predictionMarkets.id, market.id));
-  log(`[MarketResolver] gainer ${market.id}: AMM ${winner.label} wins (+${gains[0].pctChange.toFixed(2)}%), payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`);
+  log(
+    `[MarketResolver] gainer ${market.id}: AMM ${winner.label} wins (+${gains[0].pctChange.toFixed(2)}%, ` +
+      `method=${marketCloseMethod}, flip=${winnerWouldFlip}), ` +
+      `payoutLiability=${ammResult.payoutLiability}, house P&L=${ammResult.creditedToHouse}, settledUsers=${ammResult.settledUserCount}`,
+  );
   return "resolved";
 }
 

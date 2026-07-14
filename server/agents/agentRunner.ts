@@ -59,10 +59,10 @@ import {
   QUIET_HOUR_END_SAST,
   BASE_STAKE_AMOUNT,
   MAX_AGENT_STAKE,
-  ARB_COHORT_ENABLED,
   ARB_AGENT_MAX_STAKE,
   ARB_CONVERGENCE_MARKETS_PER_SWEEP,
   ARB_MIN_EDGE_PP,
+  isArbCohortEnabled,
   isLockInFairH2HEnabled,
   isLockInFairGainerEnabled,
   LOCKIN_H2H_SIGMA_1D,
@@ -687,7 +687,7 @@ async function runAgentBatchOnce(): Promise<{
           // Near-close window: arb cohort is handled by runConvergenceSweep.
           if (
             !(
-              ARB_COHORT_ENABLED &&
+              isArbCohortEnabled() &&
               isArbAgent(agentData) &&
               (market.marketType === "updown" ||
                 market.marketType === "h2h" ||
@@ -859,12 +859,12 @@ async function runAgentBatchOnce(): Promise<{
             ? Math.max(0, (market.endAt.getTime() - now.getTime()) / 3_600_000)
             : 7 * 24;
 
-        if (ARB_COHORT_ENABLED && isArbAgent(agentData) && market.marketType === "updown") {
+        if (isArbCohortEnabled() && isArbAgent(agentData) && market.marketType === "updown") {
           const snap = ammStateByMarket.get(market.id);
           const prices = snap ? ammCurrentPrices(snap) : {};
           decision = computeArbPrediction(marketData, signals, hoursRemaining, prices);
         } else if (
-          ARB_COHORT_ENABLED &&
+          isArbCohortEnabled() &&
           isArbAgent(agentData) &&
           market.marketType === "h2h" &&
           isLockInFairH2HEnabled() &&
@@ -884,7 +884,7 @@ async function runAgentBatchOnce(): Promise<{
             prices,
           );
         } else if (
-          ARB_COHORT_ENABLED &&
+          isArbCohortEnabled() &&
           isArbAgent(agentData) &&
           market.marketType === "gainer" &&
           isLockInFairGainerEnabled() &&
@@ -2005,7 +2005,7 @@ async function runConvergenceSweep(
   now: Date,
   ctx: UpdownSweepContext,
 ): Promise<number> {
-  if (!ARB_COHORT_ENABLED) return 0;
+  if (!isArbCohortEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -2174,7 +2174,7 @@ async function runMidweekConvergenceSweep(
   const shadow = isMidweekConvergenceShadow();
   const enabled = isMidweekConvergenceEnabled();
   if (!shadow && !enabled) return 0;
-  if (!ARB_COHORT_ENABLED) return 0;
+  if (!isArbCohortEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -2373,7 +2373,7 @@ async function runConvergenceSweepCommunity(
   const shadow = isCommunityConvergenceShadow();
   const enabled = isCommunityConvergenceEnabled();
   if (!shadow && !enabled) return 0;
-  if (!ARB_COHORT_ENABLED) return 0;
+  if (!isArbCohortEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -2670,7 +2670,7 @@ async function runConvergenceSweepH2H(
   allMarkets: UpdownMarketRow[],
   now: Date,
 ): Promise<number> {
-  if (!ARB_COHORT_ENABLED || !isLockInFairH2HEnabled()) return 0;
+  if (!isArbCohortEnabled() || !isLockInFairH2HEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -2920,7 +2920,7 @@ async function runConvergenceSweepGainer(
   allMarkets: UpdownMarketRow[],
   now: Date,
 ): Promise<number> {
-  if (!ARB_COHORT_ENABLED || !isLockInFairGainerEnabled()) return 0;
+  if (!isArbCohortEnabled() || !isLockInFairGainerEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -3087,7 +3087,7 @@ async function runConvergenceSweepGainer(
  * near-close window using a higher edge bar (ARB_MIDWEEK_GAINER_MIN_EDGE_PP)
  * and `allowUnfavoredSide` so the most underpriced entry is bought even when
  * it's not the highest-fair favorite. Gated by MIDWEEK_CONVERGENCE_SHADOW /
- * _ENABLED (same flags as updown midweek) plus ARB_COHORT_ENABLED and
+ * _ENABLED (same flags as updown midweek) plus arb cohort and
  * LOCKIN_FAIR_GAINER_ENABLED.
  */
 async function runMidweekGainerConvergenceSweep(
@@ -3098,7 +3098,7 @@ async function runMidweekGainerConvergenceSweep(
   const shadow = isMidweekConvergenceShadow();
   const enabled = isMidweekConvergenceEnabled();
   if (!shadow && !enabled) return 0;
-  if (!ARB_COHORT_ENABLED || !isLockInFairGainerEnabled()) return 0;
+  if (!isArbCohortEnabled() || !isLockInFairGainerEnabled()) return 0;
 
   const arbAgents = agents.filter((a) => isArbAgent(toAgentData(a)));
   if (!arbAgents.length) return 0;
@@ -4265,7 +4265,7 @@ function computeAgentStakeAmount(
   // signals drive size, not RNG.
   const variance = 0.85 + Math.random() * 0.30;
   const stakeCap =
-    ARB_COHORT_ENABLED && isArbAgent(agent) ? ARB_AGENT_MAX_STAKE : MAX_AGENT_STAKE;
+    isArbCohortEnabled() && isArbAgent(agent) ? ARB_AGENT_MAX_STAKE : MAX_AGENT_STAKE;
   const base = computeStakeAmount(confidence, stakeCap);
   const rawStake = base * simulation.stakeMultiplier * smartnessMultiplier * variance;
   const stake = Number.isFinite(rawStake) ? Math.round(rawStake) : simulation.minStake;

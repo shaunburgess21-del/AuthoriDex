@@ -129,6 +129,7 @@ import {
 import { getLastFullRefreshAt } from "./jobs/live-tick";
 import { getLastRunMeta } from "./jobs/ingest";
 import { getMediastackBudgetSummary, getMediastackRefreshIntervalMinutes, probeMediastackLive } from "./providers/mediastack";
+import { UNION_INCLUDE_GDELT } from "./providers/news-aggregator";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
 import { memoizeAsync, memoizeAsyncSwr } from "./services/insights/request-memo";
@@ -11388,29 +11389,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? { ...(lastSuccessfulRun.sourceStatuses as Record<string, string>) }
         : null;
       // For sources that run on a slower cadence than the hourly ingest
-      // (e.g. Google Trends every 12h), the most recent run usually shows
-      // SKIPPED. That's technically correct but makes the panel
-      // pessimistically read as "Trends is down". Substitute the most
-      // recent run that actually fetched the source so the panel reflects
-      // the *health* of the source, not the cadence gating.
+      // (Trends 12h, Search Interest 24h, Web Sentiment 7d), the most
+      // recent run usually shows SKIPPED. That's technically correct but
+      // makes the panel pessimistically read as "down". Substitute the
+      // most recent run that actually fetched the source so the panel
+      // reflects *health*, not cadence gating.
+      //
+      // recentRuns is only ~20 rows (~20h) — too short for daily/weekly
+      // sources — so we also scan a 10-day completed-run window when the
+      // short list misses.
       const latestSourceLastRefreshAt: Record<string, string> = {};
       if (latestSourceStatuses) {
-        const SLOW_CADENCE_SOURCES = ["trends"] as const;
-        for (const src of SLOW_CADENCE_SOURCES) {
-          if (latestSourceStatuses[src] === "SKIPPED") {
-            const recentNonSkipped = recentRuns.find((r: any) => {
-              const st = r.sourceStatuses?.[src];
-              return st === "OK" || st === "OK_FALLBACK" || st === "DEGRADED" || st === "FAILED";
-            });
-            if (recentNonSkipped) {
-              latestSourceStatuses[src] = recentNonSkipped.sourceStatuses[src];
-              if (recentNonSkipped.sourceTimings?.[src] != null && latestSourceTimings) {
-                latestSourceTimings[src] = recentNonSkipped.sourceTimings[src];
-              }
-              const refreshAt = recentNonSkipped.finishedAt || recentNonSkipped.startedAt;
-              if (refreshAt) latestSourceLastRefreshAt[src] = refreshAt;
-            }
+        const SLOW_CADENCE_SOURCES = ["trends", "searchVolume", "webSentiment"] as const;
+        const isFetchedStatus = (st: string | undefined) =>
+          st === "OK" || st === "OK_FALLBACK" || st === "DEGRADED" || st === "FAILED";
+
+        const sourcesNeedingHeal = SLOW_CADENCE_SOURCES.filter(
+          (src) => latestSourceStatuses[src] === "SKIPPED",
+        );
+
+        let healRuns: Array<{
+          sourceStatuses: Record<string, string> | null;
+          sourceTimings: Record<string, number> | null;
+          finishedAt: string | null;
+          startedAt: string | null;
+        }> = recentRuns;
+
+        if (sourcesNeedingHeal.length > 0) {
+          const stillMissing = sourcesNeedingHeal.filter(
+            (src) => !recentRuns.some((r: any) => isFetchedStatus(r.sourceStatuses?.[src])),
+          );
+          if (stillMissing.length > 0) {
+            const lookback = await db.execute(sql`
+              SELECT source_statuses, source_timings, finished_at, started_at
+              FROM ingestion_runs
+              WHERE status = 'completed'
+                AND started_at > NOW() - INTERVAL '10 days'
+                AND (
+                  source_statuses->>'trends' IN ('OK', 'OK_FALLBACK', 'DEGRADED', 'FAILED')
+                  OR source_statuses->>'searchVolume' IN ('OK', 'OK_FALLBACK', 'DEGRADED', 'FAILED')
+                  OR source_statuses->>'webSentiment' IN ('OK', 'OK_FALLBACK', 'DEGRADED', 'FAILED')
+                )
+              ORDER BY started_at DESC
+              LIMIT 250
+            `);
+            healRuns = (lookback.rows || []).map((r: any) => ({
+              sourceStatuses: r.source_statuses,
+              sourceTimings: r.source_timings,
+              finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
+              startedAt: r.started_at ? new Date(r.started_at).toISOString() : null,
+            }));
           }
+        }
+
+        for (const src of sourcesNeedingHeal) {
+          const recentNonSkipped = healRuns.find((r) => isFetchedStatus(r.sourceStatuses?.[src]));
+          if (recentNonSkipped?.sourceStatuses) {
+            latestSourceStatuses[src] = recentNonSkipped.sourceStatuses[src];
+            if (recentNonSkipped.sourceTimings?.[src] != null && latestSourceTimings) {
+              latestSourceTimings[src] = recentNonSkipped.sourceTimings[src];
+            }
+            const refreshAt = recentNonSkipped.finishedAt || recentNonSkipped.startedAt;
+            if (refreshAt) latestSourceLastRefreshAt[src] = refreshAt;
+          }
+        }
+
+        // Union mode permanently excludes GDELT — rewrite legacy SKIPPED rows
+        // so the panel reads DISABLED rather than "cadence-gated".
+        if (!UNION_INCLUDE_GDELT && latestSourceStatuses.gdelt === "SKIPPED") {
+          latestSourceStatuses.gdelt = "DISABLED";
         }
       }
 
@@ -25340,13 +25387,21 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         getNativeCalibrationRows,
         getNativeLlmStatus,
         buildCalibrationHistogram,
+        getSettlementCloseAudit,
+        getConvergenceFlagStatus,
       } = await import("./services/native-markets-calibration");
       const rows = await getNativeCalibrationRows();
+      const [settlementClose, convergenceFlags] = await Promise.all([
+        getSettlementCloseAudit(21),
+        Promise.resolve(getConvergenceFlagStatus()),
+      ]);
       res.json({
         ok: true,
         status: getNativeLlmStatus(rows),
         rows,
         histogram: buildCalibrationHistogram(rows),
+        settlementClose,
+        convergenceFlags,
       });
     } catch (err: any) {
       console.error("[AgentAdmin] native-markets calibration failed:", err);

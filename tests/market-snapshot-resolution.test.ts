@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   ensureDate,
   getCloseSnapshotFallbackMaxHours,
+  getNativeCloseMedianHours,
+  computeMedianFameScore,
   getStoredOpeningScore,
 } from "../server/jobs/market-snapshot-utils";
 import {
@@ -71,4 +73,94 @@ test("close snapshot fallback max age defaults to 24 hours", () => {
   if (prev !== undefined) {
     process.env.CLOSE_SNAPSHOT_FALLBACK_MAX_HOURS = prev;
   }
+});
+
+test("native close median hours defaults to 6", () => {
+  const prevNative = process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  const prevGainer = process.env.GAINER_CLOSE_MEDIAN_HOURS;
+  delete process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  delete process.env.GAINER_CLOSE_MEDIAN_HOURS;
+  assert.equal(getNativeCloseMedianHours(), 6);
+  if (prevNative !== undefined) process.env.NATIVE_CLOSE_MEDIAN_HOURS = prevNative;
+  if (prevGainer !== undefined) process.env.GAINER_CLOSE_MEDIAN_HOURS = prevGainer;
+});
+
+test("native close median hours honors NATIVE_CLOSE_MEDIAN_HOURS and clamps", () => {
+  const prevNative = process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  const prevGainer = process.env.GAINER_CLOSE_MEDIAN_HOURS;
+  delete process.env.GAINER_CLOSE_MEDIAN_HOURS;
+  process.env.NATIVE_CLOSE_MEDIAN_HOURS = "1";
+  assert.equal(getNativeCloseMedianHours(), 1);
+  process.env.NATIVE_CLOSE_MEDIAN_HOURS = "12";
+  assert.equal(getNativeCloseMedianHours(), 12);
+  process.env.NATIVE_CLOSE_MEDIAN_HOURS = "99";
+  assert.equal(getNativeCloseMedianHours(), 6); // out of range → default
+  if (prevNative !== undefined) process.env.NATIVE_CLOSE_MEDIAN_HOURS = prevNative;
+  else delete process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  if (prevGainer !== undefined) process.env.GAINER_CLOSE_MEDIAN_HOURS = prevGainer;
+});
+
+test("native close median hours falls back to GAINER_CLOSE_MEDIAN_HOURS alias", () => {
+  const prevNative = process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  const prevGainer = process.env.GAINER_CLOSE_MEDIAN_HOURS;
+  delete process.env.NATIVE_CLOSE_MEDIAN_HOURS;
+  process.env.GAINER_CLOSE_MEDIAN_HOURS = "4";
+  assert.equal(getNativeCloseMedianHours(), 4);
+  if (prevNative !== undefined) process.env.NATIVE_CLOSE_MEDIAN_HOURS = prevNative;
+  if (prevGainer !== undefined) process.env.GAINER_CLOSE_MEDIAN_HOURS = prevGainer;
+  else delete process.env.GAINER_CLOSE_MEDIAN_HOURS;
+});
+
+test("computeMedianFameScore: odd, even, empty, non-finite", () => {
+  assert.equal(computeMedianFameScore([]), null);
+  assert.equal(computeMedianFameScore([10]), 10);
+  assert.equal(computeMedianFameScore([1, 3, 5]), 3);
+  assert.equal(computeMedianFameScore([1, 2, 3, 4]), 3); // (2+3)/2 rounded
+  assert.equal(computeMedianFameScore([Number.NaN, 5, 7]), 6); // (5+7)/2
+  assert.equal(computeMedianFameScore([Number.NaN]), null);
+});
+
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL ?? "postgres://test:test@127.0.0.1:5432/test";
+
+const { alignCloseMethodsForMarket } = await import(
+  "../server/jobs/market-snapshot-resolution"
+);
+
+test("alignCloseMethodsForMarket keeps median when all median", () => {
+  const at = new Date("2026-07-12T23:00:00.000Z");
+  const pairs = [
+    {
+      settled: { score: 100, capturedAt: at, method: "median" as const, windowHours: 6, sampleCount: 4 },
+      single: { score: 90, capturedAt: at },
+    },
+    {
+      settled: { score: 200, capturedAt: at, method: "median" as const, windowHours: 6, sampleCount: 5 },
+      single: { score: 210, capturedAt: at },
+    },
+  ];
+  const aligned = alignCloseMethodsForMarket(pairs);
+  assert.equal(aligned[0]!.method, "median");
+  assert.equal(aligned[0]!.score, 100);
+  assert.equal(aligned[1]!.method, "median");
+  assert.equal(aligned[1]!.score, 200);
+});
+
+test("alignCloseMethodsForMarket forces single when any entry fell back", () => {
+  const at = new Date("2026-07-12T23:00:00.000Z");
+  const pairs = [
+    {
+      settled: { score: 100, capturedAt: at, method: "median" as const, windowHours: 6, sampleCount: 4 },
+      single: { score: 90, capturedAt: at },
+    },
+    {
+      settled: { score: 200, capturedAt: at, method: "single" as const, windowHours: 6, sampleCount: 1 },
+      single: { score: 200, capturedAt: at },
+    },
+  ];
+  const aligned = alignCloseMethodsForMarket(pairs);
+  assert.equal(aligned[0]!.method, "single");
+  assert.equal(aligned[0]!.score, 90);
+  assert.equal(aligned[1]!.method, "single");
+  assert.equal(aligned[1]!.score, 200);
 });

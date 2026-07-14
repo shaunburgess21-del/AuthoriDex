@@ -258,15 +258,21 @@ function sourceStatusColor(status: string | null | undefined): string {
   if (status === "OK" || status === "OK_FALLBACK") return "text-green-500";
   if (status === "DEGRADED") return "text-yellow-500";
   if (status === "THROTTLED") return "text-blue-500";
-  if (!status || status === "SKIPPED") return "text-muted-foreground";
+  if (!status || status === "SKIPPED" || status === "DISABLED") return "text-muted-foreground";
   return "text-red-500";
 }
 
 function sourceStatusTooltip(provider: string, status: string | null | undefined): string {
   const base = `${provider}: ${status ?? "—"}`;
   if (status === "THROTTLED") return `${base} (cache-only mode — Mediastack budget hard-stop active)`;
+  if (status === "DISABLED" && (provider === "News (GDELT)" || provider === "GDELT")) {
+    return `${base} (excluded from union news aggregation — negligible English URL contribution + no language filter)`;
+  }
   if (status === "SKIPPED" && provider === "Search Momentum") {
     return `${base} (12h fetch cadence — fetched separately, not every cycle)`;
+  }
+  if (status === "SKIPPED" && provider === "Search Interest") {
+    return `${base} (24h fetch cadence — monthly search-volume figure, refreshed daily)`;
   }
   if (status === "SKIPPED" && provider === "Web Sentiment") {
     return `${base} (7d fetch cadence — fetched separately, not every cycle)`;
@@ -5967,7 +5973,7 @@ export default function AdminDashboard() {
                             status === "OK" || status === "OK_FALLBACK" ? "bg-green-500" :
                             status === "DEGRADED" ? "bg-yellow-500" :
                             status === "THROTTLED" ? "bg-blue-500" :
-                            status === "SKIPPED" ? "bg-muted-foreground" :
+                            status === "SKIPPED" || status === "DISABLED" ? "bg-muted-foreground" :
                             "bg-red-500";
                           const textColor = sourceStatusColor(status);
                           // Some sources run on a slower cadence than the
@@ -5984,7 +5990,9 @@ export default function AdminDashboard() {
                             const ageHours = ageMs / (60 * 60 * 1000);
                             ageLabel = ageHours < 1
                               ? `${Math.max(1, Math.round(ageMs / 60000))}m ago`
-                              : `${Math.round(ageHours)}h ago`;
+                              : ageHours < 48
+                                ? `${Math.round(ageHours)}h ago`
+                                : `${Math.round(ageHours / 24)}d ago`;
                           }
                           const tooltip = ageLabel
                             ? `${sourceStatusTooltip(label, status)} · last refreshed ${ageLabel}`

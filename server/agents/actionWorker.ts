@@ -23,7 +23,7 @@ import {
   BASE_STAKE_AMOUNT,
   MAX_AGENT_STAKE,
   ARB_AGENT_MAX_STAKE,
-  ARB_COHORT_ENABLED,
+  isArbCohortEnabled,
   ARB_EDGE_BAND,
 } from "./constants";
 import { getSimulationProfile } from "./simulationProfile";
@@ -438,7 +438,7 @@ async function executeAmmBuy(
   // confidence target is reached cheaply. Floor at MIN_AMM_BUY_CREDITS=5
   // (mirrored in sizeAmmBudget defaults).
   const isArb =
-    ARB_COHORT_ENABLED &&
+    isArbCohortEnabled() &&
     getSimulationProfile(agent.simulationProfile).personaBand === "arb";
   const agentMaxStake = isArb ? ARB_AGENT_MAX_STAKE : MAX_AGENT_STAKE;
   const maxBudget = Math.max(

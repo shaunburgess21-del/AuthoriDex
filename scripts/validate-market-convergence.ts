@@ -43,11 +43,11 @@ for (const b of cal.buckets) {
 }
 
 console.log("\nFor OPEN markets (mid-week), run: npm run amm:convergence");
-console.log("\nFlags to enable in order:");
-console.log("  1. LOCKIN_FAIR_SHADOW → validate shadow logs");
-console.log("  2. LOCKIN_FAIR_ENABLED");
-console.log("  3. ARB_COHORT_ENABLED (after POST /api/admin/agents/seed)");
-console.log("  4. NATIVE_FRIDAY_CUTOFF_ENABLED (next Monday gen)\n");
+console.log("\nTrack 3 defaults (Jul 2026) — already ON unless set to false:");
+console.log("  LOCKIN_FAIR_ENABLED / LOCKIN_FAIR_H2H_ENABLED / LOCKIN_FAIR_GAINER_ENABLED");
+console.log("  ARB_COHORT_ENABLED / MIDWEEK_CONVERGENCE_ENABLED / LATCH_REVERT_ENABLED");
+console.log("Settlement close: NATIVE_CLOSE_MEDIAN_HOURS (default 6; set 1 for single-tick)");
+console.log("Optional Monday: NATIVE_FRIDAY_CUTOFF_ENABLED (updown only)\n");
 console.log("Friday cutoff scope: updown only (see docs/ops/convergence-rollout.md)\n");
 
 const fail = cal.avgGapOnDecided != null && cal.avgGapOnDecided > 0.12;

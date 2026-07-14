@@ -712,19 +712,19 @@ export function isMediastackConfigured(): boolean {
 }
 
 const LAST_FETCH_KEY = "system:mediastack:last_fetch_at";
-// Default refresh cadence: 180 minutes (3h) to stay inside the 50k/month plan
-// at the current ~159-people roster. Math: 159 people × (24/3) refreshes/day ×
-// ~30 days ≈ 38k calls/cycle (~76% of 50k). At 120min it would be ~57k/cycle
-// which exceeds the plan limit and trips the budget hard-stop weeks early.
-// Drop to MEDIASTACK_REFRESH_INTERVAL_MINUTES=120 only after upgrading to a
-// higher tier. The cycle-aware budget check below will throttle automatically
-// if projected usage approaches the BUDGET_HARD_STOP_PCT ceiling.
+// Default refresh cadence: 240 minutes (4h) to stay inside the 50k/month plan
+// with headroom for roster growth. Math: 159 people × (24/4) refreshes/day ×
+// ~30 days ≈ 29k calls/cycle (~57% of 50k); at ~200 people ≈ 36k (~72%).
+// At 180min the ~159 roster was already near the ceiling (~45k with widen
+// overhead). Drop to MEDIASTACK_REFRESH_INTERVAL_MINUTES=120 only after
+// upgrading to a higher tier. The cycle-aware budget check below will
+// throttle automatically if projected usage approaches BUDGET_HARD_STOP_PCT.
 const MEDIASTACK_REFRESH_INTERVAL_MINUTES = resolveMediastackRefreshIntervalMinutes();
 const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 * 1000;
 
 // Cache TTL is pinned exactly to the refresh interval. Previously TTL was
-// hardcoded at 2h while the refresh interval defaults to 3h, leaving a ~1h
-// window each cycle where the cache was dead and `cacheOnly=true` ticks
+// hardcoded at 2h while the refresh interval defaults to 4h, leaving a gap
+// each cycle where the cache was dead and `cacheOnly=true` ticks
 // returned empty results — driving the hourly news-count sawtooth (and,
 // downstream, the trend-score sawtooth). Pinning the two equal closes the
 // gap with no risk of a "cache outlives refresh" loop: at the exact boundary

@@ -12,7 +12,7 @@ import {
   POSITIVE_HINTS,
   NEGATIVE_HINTS,
   ARB_MIN_EDGE_PP,
-  ARB_COHORT_ENABLED,
+  isArbCohortEnabled,
   isLockInFairH2HEnabled,
   isLockInFairGainerEnabled,
   LOCKIN_H2H_SIGMA_1D,
@@ -33,7 +33,7 @@ import type { MarketEntryData } from "./types";
 import { getSimulationProfile } from "./simulationProfile";
 
 export function isArbAgent(agent: AgentConfigData): boolean {
-  if (!ARB_COHORT_ENABLED) return false;
+  if (!isArbCohortEnabled()) return false;
   return getSimulationProfile(agent.simulationProfile).personaBand === "arb";
 }
 

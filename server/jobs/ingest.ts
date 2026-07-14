@@ -10,6 +10,7 @@ import { fetchMediastackBatch, isMediastackConfigured, MediastackBatchStats, sho
 import type { CurrentsBatchStats } from "../providers/currents";
 import type { DataForSeoNewsBatchStats } from "../providers/dataforseo-news";
 import {
+  UNION_INCLUDE_GDELT,
   fetchMultiSourceNewsBatch,
   fetchCascadeNewsBatch,
   type AggregatorStats,
@@ -701,7 +702,9 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
             : (ps.currents.attempted ? "FAILED" : "SKIPPED");
         sourceStatuses.gdelt = ps.gdelt.succeeded
           ? (ps.gdelt.peopleWithData > 0 ? "OK" : "DEGRADED")
-          : (ps.gdelt.attempted ? "FAILED" : "SKIPPED");
+          : (ps.gdelt.attempted
+            ? "FAILED"
+            : (UNION_INCLUDE_GDELT ? "SKIPPED" : "DISABLED"));
         sourceStatuses.serper = ps.serper.succeeded
           ? (ps.serper.peopleWithData > 0 ? "OK" : "DEGRADED")
           : "FAILED";
@@ -719,7 +722,7 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       } catch (err) {
         console.error(`[Ingest] Union aggregator failed, aborting news fetch:`, err);
         sourceStatuses.mediastack = "FAILED";
-        sourceStatuses.gdelt = "SKIPPED";
+        sourceStatuses.gdelt = UNION_INCLUDE_GDELT ? "SKIPPED" : "DISABLED";
         newsData = new Map();
       }
       console.log(`[Ingest] Union aggregation complete in ${((Date.now() - unionStart) / 1000).toFixed(1)}s — ${newsData.size}/${people.length} people with data`);

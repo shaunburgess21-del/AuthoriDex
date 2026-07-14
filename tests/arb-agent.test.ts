@@ -156,7 +156,7 @@ test("computeArbPrediction allowUnfavoredSide still enforces the edge bar", () =
 
 test("computeArbPredictionH2H abstains when flag off", () => {
   const prev = process.env.LOCKIN_FAIR_H2H_ENABLED;
-  delete process.env.LOCKIN_FAIR_H2H_ENABLED;
+  process.env.LOCKIN_FAIR_H2H_ENABLED = "false";
   try {
     const h2hEntries = [
       { id: "a", label: "Alice", totalStake: 0, noStake: 0, personId: "p1" },
@@ -200,7 +200,7 @@ test("computeArbPredictionH2H buys leader when underpriced", () => {
 
 test("computeArbPredictionGainer abstains when flag off", () => {
   const prev = process.env.LOCKIN_FAIR_GAINER_ENABLED;
-  delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
+  process.env.LOCKIN_FAIR_GAINER_ENABLED = "false";
   try {
     const gainerEntries = [
       { id: "a", label: "Alice", totalStake: 0, noStake: 0, personId: "p1" },

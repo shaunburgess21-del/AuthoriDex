@@ -8,8 +8,8 @@ type EnvLike = Pick<NodeJS.ProcessEnv, string>;
 export function resolveMediastackRefreshIntervalMinutes(
   env: EnvLike = process.env,
 ): number {
-  const raw = parseInt(env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "180", 10);
-  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 180;
+  const raw = parseInt(env.MEDIASTACK_REFRESH_INTERVAL_MINUTES ?? "240", 10);
+  if (!Number.isFinite(raw) || raw < 30 || raw > 360) return 240;
   return raw;
 }
 
