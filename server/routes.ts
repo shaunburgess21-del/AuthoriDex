@@ -26434,7 +26434,11 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   app.get("/api/admin/amm/world-market-budget", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
     try {
       const { getBudgetSnapshot } = await import("./agents/worldMarketBudget");
-      const { WORLD_MARKETS_LLM_ENABLED, WORLD_MARKETS_PER_CALL_ESTIMATE_USD } = await import("./agents/constants");
+      const {
+        WORLD_MARKETS_LLM_ENABLED,
+        WORLD_MARKETS_PER_CALL_ESTIMATE_USD,
+        isWorldMarketsLlmAssessmentsEnabled,
+      } = await import("./agents/constants");
       const snapshot = getBudgetSnapshot();
       res.json({
         ...snapshot,
@@ -26442,6 +26446,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         // "flag is off — budget moot" copy when applicable, and show the
         // estimate next to the spend counter for context.
         flagEnabled: WORLD_MARKETS_LLM_ENABLED,
+        assessmentsEnabled: isWorldMarketsLlmAssessmentsEnabled(),
         perCallEstimateUsd: WORLD_MARKETS_PER_CALL_ESTIMATE_USD,
       });
     } catch (err: any) {
@@ -27917,6 +27922,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS,
         WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS,
         WORLD_MARKET_ASSESSMENT_TTL_LONG_MS,
+        isWorldMarketsLlmAssessmentsEnabled,
       } = await import("./agents/constants");
       const ttlFinalSec = WORLD_MARKET_ASSESSMENT_TTL_FINAL_MS / 1000;
       const ttlNearSec = WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS / 1000;
@@ -27981,6 +27987,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         pool_realism: poolRows.rows,
         cost_safety: {
           world_markets_llm_enabled: WORLD_MARKETS_LLM_ENABLED,
+          world_markets_llm_assessments_enabled: isWorldMarketsLlmAssessmentsEnabled(),
           world_market_boost_enabled: WORLD_MARKET_BOOST_ENABLED,
           cached_world_assessments: cachedAssessments,
           open_world_markets: openWorldMarkets,

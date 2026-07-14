@@ -207,3 +207,110 @@ test("anchor: non-scouted market (no source metadata) uses the LLM path", async 
 
   _resetBudgetForTesting();
 });
+
+test("assessments off: anchored market still bets without LLM budget", async () => {
+  const prev = process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+  process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = "false";
+  try {
+    _resetBudgetForTesting();
+    const before = getBudgetSnapshot();
+    const { market, entries } = makeAnchoredMarket();
+    const decision = await computeWorldMarketPrediction(
+      makeAgent(),
+      market,
+      entries,
+      seqRng([0.5, 0.5, 0.1]),
+    );
+
+    assert.equal(decision.abstain, false);
+    assert.equal(decision.source, "source_anchor");
+    assert.equal(decision.entryId, "entry-a");
+
+    const after = getBudgetSnapshot();
+    assert.equal(after.callsReserved, before.callsReserved);
+    assert.equal(after.callsBlocked, before.callsBlocked);
+  } finally {
+    if (prev === undefined) delete process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+    else process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = prev;
+  }
+});
+
+test("assessments off: unanchored / manual market abstains without LLM", async () => {
+  const prev = process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+  process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = "false";
+  try {
+    _resetBudgetForTesting();
+    const before = getBudgetSnapshot();
+
+    const entries: MarketEntryData[] = [
+      { id: "entry-a", label: "Yes", totalStake: 100 },
+      { id: "entry-b", label: "No", totalStake: 100 },
+    ];
+    // Fresh LLM cache present — must still be ignored when assessments are off.
+    const market: MarketWithEntries = {
+      id: "market-manual-cached",
+      marketType: "community",
+      status: "OPEN",
+      title: "Manual world market with stale GPT cache?",
+      category: "sports",
+      personId: null,
+      endAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      metadata: {
+        worldAssessment: {
+          assessment: {
+            decision: "bet",
+            selectedOutcomeIndex: 1,
+            confidence: 0.8,
+            probabilities: [
+              { outcomeIndex: 1, probability: 0.8 },
+              { outcomeIndex: 2, probability: 0.2 },
+            ],
+            briefReasoning: "cached GPT pick",
+          },
+          cachedAt: new Date().toISOString(),
+        },
+      },
+      entries,
+    };
+
+    const decision = await computeWorldMarketPrediction(
+      makeAgent(),
+      market,
+      entries,
+      seqRng([0.5, 0.5]),
+    );
+
+    assert.equal(decision.abstain, true);
+    assert.equal(decision.abstainReason, "domain");
+    // No budget interaction — getOrCreateAssessment must not run.
+    const after = getBudgetSnapshot();
+    assert.equal(after.callsReserved, before.callsReserved);
+    assert.equal(after.callsBlocked, before.callsBlocked);
+  } finally {
+    if (prev === undefined) delete process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+    else process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = prev;
+  }
+});
+
+test("assessments off: stale anchor does not fall through to LLM", async () => {
+  const prev = process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+  process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = "false";
+  try {
+    _resetBudgetForTesting();
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const { market, entries } = makeAnchoredMarket({ livePricesAt: fiveDaysAgo });
+    const decision = await computeWorldMarketPrediction(
+      makeAgent(),
+      market,
+      entries,
+      seqRng([0.5, 0.5, 0.1]),
+    );
+
+    // Stale anchor → no LLM fallback when assessments are off.
+    assert.equal(decision.abstain, true);
+    assert.equal(decision.abstainReason, "domain");
+  } finally {
+    if (prev === undefined) delete process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED;
+    else process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED = prev;
+  }
+});

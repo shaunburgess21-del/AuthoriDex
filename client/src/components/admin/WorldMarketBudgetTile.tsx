@@ -50,6 +50,7 @@ interface BudgetResponse {
   remainingUsd: number;
   exhausted: boolean;
   flagEnabled: boolean;
+  assessmentsEnabled?: boolean;
   perCallEstimateUsd: number;
 }
 
@@ -99,33 +100,40 @@ export function WorldMarketBudgetTile() {
             <CardTitle>World-market LLM budget</CardTitle>
           </div>
           {data ? (
-            data.flagEnabled ? (
-              data.exhausted ? (
-                <Badge
-                  variant="outline"
-                  className="border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10"
-                  data-testid="badge-budget-exhausted"
-                >
-                  <PauseCircle className="h-3 w-3 mr-1" />
-                  Cap reached
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
-                  data-testid="badge-budget-active"
-                >
-                  <CheckCircle className="h-3 w-3 mr-1" />
-                  Active
-                </Badge>
-              )
-            ) : (
+            !data.flagEnabled ? (
               <Badge
                 variant="outline"
                 className="border-muted-foreground/30 text-muted-foreground"
                 data-testid="badge-budget-flag-off"
               >
                 Flag off
+              </Badge>
+            ) : data.assessmentsEnabled === false ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                data-testid="badge-budget-assessments-off"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Anchor only
+              </Badge>
+            ) : data.exhausted ? (
+              <Badge
+                variant="outline"
+                className="border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10"
+                data-testid="badge-budget-exhausted"
+              >
+                <PauseCircle className="h-3 w-3 mr-1" />
+                Cap reached
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                data-testid="badge-budget-active"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Active
               </Badge>
             )
           ) : null}
@@ -160,12 +168,23 @@ export function WorldMarketBudgetTile() {
             {!data.flagEnabled ? (
               <div className="rounded-md border border-muted-foreground/20 bg-muted/30 p-3 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">
-                  World-market LLM is disabled.
+                  World-market agents are disabled.
                 </span>{" "}
-                Agents abstain from world markets entirely; no OpenAI calls
-                fire so the budget counter stays at $0. Numbers below will
-                stay at zero until <span className="font-mono">WORLD_MARKETS_LLM_ENABLED=true</span>{" "}
+                Agents abstain from world markets entirely (except convergence/sell
+                carve-outs); no OpenAI calls fire so the budget counter stays at $0.
+                Numbers below will stay at zero until{" "}
+                <span className="font-mono">WORLD_MARKETS_LLM_ENABLED=true</span>{" "}
                 is set in Railway.
+              </div>
+            ) : data.assessmentsEnabled === false ? (
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  LLM assessments are off (anchor-only).
+                </span>{" "}
+                Scouted markets can still trade via source-anchor; manual/unanchored
+                markets abstain. Budget should stay near $0 unless assessments are
+                re-enabled. Controlled by{" "}
+                <span className="font-mono">WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED</span>.
               </div>
             ) : null}
 
@@ -244,19 +263,18 @@ export function WorldMarketBudgetTile() {
             </div>
 
             {/* Exhausted callout */}
-            {data.exhausted && data.flagEnabled ? (
+            {data.exhausted && data.flagEnabled && data.assessmentsEnabled !== false ? (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                 <p className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="h-4 w-4" />
-                  Daily cap reached — world-market agents abstaining
+                  Daily cap reached — new LLM assessments abstaining
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Every new agent assessment will return null (abstain) until
-                  the UTC day rolls over. Cached assessments still serve
-                  normally. If this fires unexpectedly, check Railway logs for{" "}
-                  <span className="font-mono">[WorldEngineBudget]</span> +
-                  audit the last hour of world-market activity for a TTL bug
-                  or short-horizon catalogue spike. Raise{" "}
+                  Fresh OpenAI assessments will abstain until the UTC day rolls
+                  over. Source-anchor bets on scouted markets are unaffected by
+                  this cap. Cached assessments still serve when assessments are
+                  enabled. If this fires unexpectedly, check Railway logs for{" "}
+                  <span className="font-mono">[WorldEngineBudget]</span>. Raise{" "}
                   <span className="font-mono">WORLD_MARKETS_DAILY_BUDGET_USD</span>{" "}
                   in Railway if steady-state cost has simply outgrown the
                   current cap.

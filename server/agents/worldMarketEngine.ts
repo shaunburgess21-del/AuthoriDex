@@ -24,6 +24,7 @@ import {
   WORLD_MARKET_ASSESSMENT_TTL_NEAR_MS,
   WORLD_MARKET_ASSESSMENT_TTL_MEDIUM_MS,
   WORLD_MARKET_ASSESSMENT_TTL_LONG_MS,
+  isWorldMarketsLlmAssessmentsEnabled,
 } from "./constants";
 import { getAiModel } from "../config/ai-models";
 import { tryReserveLlmCall } from "./worldMarketBudget";
@@ -608,8 +609,20 @@ export async function computeWorldMarketPrediction(
   // web_search call (~$0.25 each, 56 agents per market = ~$14/market).
   // Post-cache: ONE call per market per 24h, shared by all 56 agents
   // (~$0.25/market). 56x savings.
-  const assessment =
-    anchorAssessment ?? (await getOrCreateAssessment(agent, market, entries));
+  //
+  // When WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED=false, skip the LLM path
+  // entirely — including reuse of metadata.worldAssessment caches — so
+  // manual / unanchored markets stop on the next sweep (not after TTL).
+  // Anchored markets keep using `anchorAssessment` below (zero OpenAI).
+  let assessment: AssessmentResult;
+  if (anchorAssessment) {
+    assessment = anchorAssessment;
+  } else if (!isWorldMarketsLlmAssessmentsEnabled()) {
+    // Silent skip (domain): do not persist world_abstained lockout.
+    return abstain("domain");
+  } else {
+    assessment = await getOrCreateAssessment(agent, market, entries);
+  }
   if (assessment === BUDGET_EXHAUSTED) {
     // Not persisted by the runner — the agent silently retries on a
     // later sweep once the daily budget resets.

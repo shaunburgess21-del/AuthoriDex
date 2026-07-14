@@ -104,6 +104,7 @@ interface PendingActionRow {
 
 interface CostSafetyInfo {
   world_markets_llm_enabled: boolean;
+  world_markets_llm_assessments_enabled?: boolean;
   world_market_boost_enabled: boolean;
   cached_world_assessments: number;
   open_world_markets: number;
@@ -843,7 +844,8 @@ export function AdminAgentsSection() {
         <Card
           data-testid="card-agents-cost-safety"
           className={
-            status.cost_safety.world_markets_llm_enabled
+            status.cost_safety.world_markets_llm_enabled &&
+            (status.cost_safety.world_markets_llm_assessments_enabled !== false)
               ? "border-amber-500/40"
               : "border-emerald-500/40"
           }
@@ -855,13 +857,13 @@ export function AdminAgentsSection() {
             </CardTitle>
             <CardDescription>
               World Markets used to fire one LLM web-search call per agent per market (~$0.25 each, ~$45 burned in 2 hours on 2026-05-01).
-              The kill switch below pauses all World Market LLM activity. When enabled, the per-market cache means only ONE call per market per refresh window (shared by all {cohort?.active_v2_agents ?? 0} V2 agents). The refresh window is adaptive — short for markets resolving in days, long for year-out markets.
+              Master kill switch pauses all World Market agent buys (including source-anchor). Soft assessments flag blocks OpenAI only — scouted/anchor markets can still trade. When assessments are on, the per-market cache means only ONE call per market per refresh window (shared by all {cohort?.active_v2_agents ?? 0} V2 agents).
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground">World Market LLM</div>
+                <div className="text-xs text-muted-foreground">World Market agents</div>
                 <div
                   className={`text-lg font-semibold ${
                     status.cost_safety.world_markets_llm_enabled
@@ -873,6 +875,26 @@ export function AdminAgentsSection() {
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
                   env: <code>WORLD_MARKETS_LLM_ENABLED</code>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">LLM assessments</div>
+                <div
+                  className={`text-lg font-semibold ${
+                    status.cost_safety.world_markets_llm_enabled &&
+                    status.cost_safety.world_markets_llm_assessments_enabled !== false
+                      ? "text-amber-500"
+                      : "text-emerald-500"
+                  }`}
+                >
+                  {!status.cost_safety.world_markets_llm_enabled
+                    ? "N/A (master off)"
+                    : status.cost_safety.world_markets_llm_assessments_enabled === false
+                      ? "OFF (anchor only)"
+                      : "ON"}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  env: <code>WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED</code>
                 </div>
               </div>
               <div className="rounded-lg border bg-muted/30 p-3">
@@ -897,6 +919,8 @@ export function AdminAgentsSection() {
                   open world markets covered by cache
                 </div>
               </div>
+            </div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="text-xs text-muted-foreground">Adaptive refresh windows</div>
                 {status.cost_safety.ttl_tiers ? (
@@ -910,26 +934,33 @@ export function AdminAgentsSection() {
                   <div className="text-lg font-semibold">—</div>
                 )}
               </div>
-            </div>
-            {status.cost_safety.markets_by_tier && (
-              <div className="mt-3 rounded-md border bg-muted/20 p-3 text-xs">
-                <div className="mb-1 text-muted-foreground">Open world markets by resolution window:</div>
-                <div className="flex flex-wrap gap-3 text-foreground">
-                  <span>Final stretch (&lt;3d): <span className="font-semibold">{status.cost_safety.markets_by_tier.final}</span></span>
-                  <span>Near (3-14d): <span className="font-semibold">{status.cost_safety.markets_by_tier.near}</span></span>
-                  <span>Medium (14-60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.medium}</span></span>
-                  <span>Long (&gt;60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.long}</span></span>
+              {status.cost_safety.markets_by_tier ? (
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+                  <div className="mb-1 text-muted-foreground">Open world markets by resolution window</div>
+                  <div className="flex flex-wrap gap-3 text-foreground">
+                    <span>Final (&lt;3d): <span className="font-semibold">{status.cost_safety.markets_by_tier.final}</span></span>
+                    <span>Near (3-14d): <span className="font-semibold">{status.cost_safety.markets_by_tier.near}</span></span>
+                    <span>Medium (14-60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.medium}</span></span>
+                    <span>Long (&gt;60d): <span className="font-semibold">{status.cost_safety.markets_by_tier.long}</span></span>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null}
+            </div>
             {!status.cost_safety.world_markets_llm_enabled && (
               <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-                Safe mode: agents are abstaining on World Markets without touching OpenAI. Native markets (Jackpot, H2H, UpDown, Gainer) are unaffected and still use the deterministic engine (no LLM cost).
+                Safe mode: agents are abstaining on World Markets without touching OpenAI (except convergence/sells carve-outs). Native markets (Jackpot, H2H, UpDown, Gainer) are unaffected.
               </div>
             )}
-            {status.cost_safety.world_markets_llm_enabled && (
+            {status.cost_safety.world_markets_llm_enabled &&
+              status.cost_safety.world_markets_llm_assessments_enabled === false && (
+              <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
+                Anchor-only mode: OpenAI assessments are off. Agents still bet on scouted markets via source-anchor (and convergence if enabled); manual/unanchored World Markets abstain. No new OpenAI spend from this path.
+              </div>
+            )}
+            {status.cost_safety.world_markets_llm_enabled &&
+              status.cost_safety.world_markets_llm_assessments_enabled !== false && (
               <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-                LLM mode active. Expected spend: ~$0.25 per uncovered World Market per refresh window. Estimated cost for next sweep: ~$
+                LLM assessments active. Expected spend: ~$0.25 per uncovered World Market per refresh window. Estimated cost for next sweep: ~$
                 {(
                   Math.max(0, status.cost_safety.open_world_markets - status.cost_safety.cached_world_assessments) * 0.25
                 ).toFixed(2)}
@@ -949,7 +980,7 @@ export function AdminAgentsSection() {
                       kind: "reset-gate",
                       title: "Reset the world-market re-eval gate?",
                       description:
-                        "Clears the abstain-cooldown and conviction-window scheduling rows for community markets so every agent re-evaluates them on the next sweep. Bet ledger and P&L are untouched. If LLM mode is ON this can trigger paid OpenAI calls on the next sweep.",
+                        "Clears the abstain-cooldown and conviction-window scheduling rows for community markets so every agent re-evaluates them on the next sweep. Bet ledger and P&L are untouched. Paid OpenAI calls only fire when both WORLD_MARKETS_LLM_ENABLED and WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED are on.",
                       confirmLabel: "Reset gate",
                     })
                   }

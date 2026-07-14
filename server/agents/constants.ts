@@ -159,16 +159,34 @@ function envFlagDefaultOn(value: string | undefined): boolean {
 export const WORLD_MARKET_BOOST_ENABLED = envFlag(process.env.WORLD_MARKET_BOOST_ENABLED);
 export const WORLD_MARKET_ACTIVITY_MULTIPLIER = 1.5;
 
-// HARD KILL SWITCH for World Market LLM calls (web_search Responses API).
-// Each call costs ~$0.20-0.40 (web search + ~1k output tokens). With 56 agents
-// independently evaluating each market, a single sweep can burn $40+. When
-// false, agents abstain from World Markets without ever touching OpenAI.
+// HARD KILL SWITCH for World Market agent path (engine + action-worker buys).
+// When false, agents abstain from World Markets (except convergence/sells
+// carve-outs). This is coarser than WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED:
+// master off also blocks the zero-cost source_anchor path.
 //
-// Set WORLD_MARKETS_LLM_ENABLED=true ONLY after:
-//   1. Topping up the OpenAI billing balance, AND
-//   2. Confirming the per-market cache (predictionMarkets.metadata.worldAssessment)
-//      is in place so the LLM only runs ONCE per market per TTL.
+// Cost-efficient recipe (scouted/anchor still on, no OpenAI assessments):
+//   WORLD_MARKETS_LLM_ENABLED=true
+//   WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED=false
+//
+// Full OpenAI path (web_search, ~$0.20-0.40/call) also requires assessments
+// enabled, plus a healthy billing balance and the per-market cache.
 export const WORLD_MARKETS_LLM_ENABLED = envFlag(process.env.WORLD_MARKETS_LLM_ENABLED);
+
+// Soft gate for OpenAI / cached-LLM assessments on unanchored World Markets.
+// Default ON (unset → true). When false, agents still enter the world-market
+// engine (requires WORLD_MARKETS_LLM_ENABLED=true) and may bet via the
+// zero-cost source_anchor path on scouted markets, but never call OpenAI
+// and never reuse metadata.worldAssessment caches. Manual / unanchored
+// markets abstain immediately. Community convergence remains governed by
+// COMMUNITY_CONVERGENCE_ENABLED (independent).
+// Read at call time so tests (and a same-process env flip) take effect
+// without relying on module-load snapshot order.
+export function isWorldMarketsLlmAssessmentsEnabled(): boolean {
+  return envFlagDefaultOn(process.env.WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED);
+}
+/** Module-load snapshot for docs / IDE discoverability. Prefer the live getter. */
+export const WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED =
+  isWorldMarketsLlmAssessmentsEnabled();
 
 // TTL for cached per-market LLM assessments — adaptive by time-to-resolution.
 //
