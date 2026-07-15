@@ -2,10 +2,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
-import { FILTER_ROW_SEARCH_INPUT, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import {
+  FILTER_ROW_SEARCH_INPUT,
+  CATEGORY_CHIP_RADIUS,
+  FILTER_ACTIVE_CHIP_WEEKLY,
+  FILTER_ACTIVE_CHIP_WORLD,
+} from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 
-type FilterVariant = "vote" | "predict";
+type FilterVariant = "vote" | "predict" | "predict-weekly";
 
 interface CategoryRowWithSearchProps {
   children: ReactNode;
@@ -20,8 +25,10 @@ interface CategoryRowWithSearchProps {
 /** Accent styling for the active mobile search chip, per page family. */
 const SEARCH_CHIP_ACTIVE: Record<FilterVariant, string> = {
   vote: "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 text-cyan-600 dark:text-cyan-300",
-  predict:
-    "bg-violet-500/25 dark:bg-violet-500/20 border-violet-500/50 text-violet-600 dark:text-violet-300",
+  /** World mode / violet Predict surfaces. */
+  predict: FILTER_ACTIVE_CHIP_WORLD,
+  /** Weekly mode Predict section bars (VoxDex blue). */
+  "predict-weekly": FILTER_ACTIVE_CHIP_WEEKLY,
 };
 
 const SEARCH_CHIP_INACTIVE =

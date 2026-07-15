@@ -59,7 +59,16 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
-import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_SECTION_TOGGLE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import {
+  FILTER_INACTIVE_PILL_PREDICT,
+  FILTER_INACTIVE_PILL_WEEKLY,
+  FILTER_INACTIVE_SECTION_TOGGLE,
+  FILTER_ACTIVE_PILL_WEEKLY,
+  FILTER_ACTIVE_PILL_WORLD,
+  FILTER_ACTIVE_CHIP_WEEKLY,
+  FILTER_ACTIVE_CHIP_WORLD,
+  CATEGORY_CHIP_RADIUS,
+} from "@/lib/filterControlStyles";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -283,7 +292,7 @@ function readInitialPredictView(): PredictView {
   if (viewParam === "weekly") return "weekly";
   try {
     const stored = sessionStorage.getItem(PREDICT_VIEW_STORAGE_KEY);
-    if (stored === "weekly" || stored === "world") return stored;
+    if (stored === "world" || stored === "weekly") return stored;
   } catch {
     // sessionStorage unavailable (private mode)
   }
@@ -336,11 +345,11 @@ interface RecentPredictionActivity {
 }
 
 const ACTIVITY_MARKET_BADGE: Record<string, { label: string; className: string }> = {
-  updown:    { label: "Up/Down", className: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  updown:    { label: "Up/Down", className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
   h2h:       { label: "H2H",     className: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
   gainer:    { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
   race:      { label: "Race",    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  community: { label: "World",   className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  community: { label: "World",   className: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
   jackpot:   { label: "Jackpot", className: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400" },
 };
 
@@ -407,13 +416,19 @@ function MyPositionsPill({
   activeCount,
   onClick,
   shrink,
+  accent = "world",
 }: {
   filter: HubActivityFilter;
   activeCount: number;
   onClick: () => void;
   /** Set when the pill sits in a plain flex row (not a scroll container). */
   shrink?: boolean;
+  /** Mode chrome: Weekly = VoxDex blue, World = violet. */
+  accent?: "weekly" | "world";
 }) {
+  const activePill =
+    accent === "weekly" ? FILTER_ACTIVE_PILL_WEEKLY : FILTER_ACTIVE_PILL_WORLD;
+
   return (
     <button
       type="button"
@@ -422,7 +437,7 @@ function MyPositionsPill({
         shrink ? "shrink-0 " : ""
       }focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
         filter === "show-mine"
-          ? "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20"
+          ? activePill
           : filter === "hide-mine"
             ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
             : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
@@ -451,6 +466,7 @@ function SectionFilterBar({
   user,
   onAuthRequired,
   filters,
+  accent = "world",
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -461,6 +477,8 @@ function SectionFilterBar({
   user?: any;
   onAuthRequired?: () => void;
   filters: Array<{ id: string; label: string }>;
+  /** Weekly = VoxDex blue chips; World = violet chips. */
+  accent?: "weekly" | "world";
 }) {
   const handleCategoryClick = (catId: CategoryFilter) => {
     if (catId === "favorites" && !user) {
@@ -470,6 +488,12 @@ function SectionFilterBar({
     onCategoryChange(catId);
   };
 
+  const activeChip =
+    accent === "weekly" ? FILTER_ACTIVE_CHIP_WEEKLY : FILTER_ACTIVE_CHIP_WORLD;
+  const inactiveChip =
+    accent === "weekly" ? FILTER_INACTIVE_PILL_WEEKLY : FILTER_INACTIVE_PILL_PREDICT;
+  const searchVariant = accent === "weekly" ? "predict-weekly" : "predict";
+
   return (
     <div>
       <CategoryRowWithSearch
@@ -477,7 +501,7 @@ function SectionFilterBar({
         onSearchChange={onSearchChange}
         placeholder={searchPlaceholder}
         testId={`${testIdPrefix}-search`}
-        variant="predict"
+        variant={searchVariant}
         activeCategory={categoryFilter}
       >
         {filters.map((cat) => {
@@ -488,9 +512,7 @@ function SectionFilterBar({
               onClick={() => handleCategoryClick(cat.id)}
               data-scroll-chip={cat.id}
               className={`px-3 py-1.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                categoryFilter === cat.id
-                  ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
-                  : FILTER_INACTIVE_PILL_PREDICT
+                categoryFilter === cat.id ? activeChip : inactiveChip
               }`}
               data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
             >
@@ -613,7 +635,7 @@ function FullScreenOverlay({
             allValue="all"
             placeholder="Search..."
             testIdPrefix="overlay-predict"
-            variant="predict"
+            variant="predict-weekly"
             user={user}
             onAuthRequired={onAuthRequired}
           />
@@ -1054,6 +1076,7 @@ export default function PredictPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
+    // World is the default — keep `/predict` clean. Weekly is opt-in via `?view=weekly`.
     if (predictView === "weekly") {
       url.searchParams.set("view", "weekly");
     } else {
@@ -2994,10 +3017,10 @@ export default function PredictPage() {
         id: "world",
         label: "World",
         icon: Scale,
-        accent: "#10B981",
+        accent: "#8B5CF6",
         badge: liveWorldMarketCount > 0 ? liveWorldMarketCount : undefined,
       },
-      { id: "weekly", label: "Weekly", icon: TrendingUp, accent: "#8B5CF6" },
+      { id: "weekly", label: "Weekly", icon: TrendingUp, accent: "#3B82F6" },
     ],
     [liveWorldMarketCount],
   );
@@ -3154,11 +3177,21 @@ export default function PredictPage() {
             {user && (
               <button
                 type="button"
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  predictView === "weekly"
+                    ? "bg-blue-500/15 dark:bg-blue-500/10 border-blue-500/40 dark:border-blue-500/30 hover:bg-blue-500/20 dark:hover:bg-blue-500/15"
+                    : "bg-violet-500/15 dark:bg-violet-500/10 border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/20 dark:hover:bg-violet-500/15"
+                }`}
                 onClick={() => setLocation("/me/credits")}
                 data-testid="predict-mobile-credits-pill"
               >
-                <Wallet className="hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
+                <Wallet
+                  className={`hidden [@media(min-width:360px)]:inline-block h-[14px] w-[14px] ${
+                    predictView === "weekly"
+                      ? "text-blue-700 dark:text-blue-500"
+                      : "text-violet-700 dark:text-violet-500"
+                  }`}
+                />
                 <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
               </button>
             )}
@@ -3195,6 +3228,7 @@ export default function PredictPage() {
               activeCount={activePredictions}
               onClick={cycleMyPositionsFilter}
               shrink
+              accent="world"
             />
           )}
           {predictView === "weekly" ? (
@@ -3204,6 +3238,7 @@ export default function PredictPage() {
                   filter={myPositionsFilter}
                   activeCount={activePredictions}
                   onClick={cycleMyPositionsFilter}
+                  accent="weekly"
                 />
               )}
               {PREDICTION_TYPES.map((type) => (
@@ -3212,7 +3247,7 @@ export default function PredictPage() {
                   onClick={() => setSelectedType(type.id)}
                   className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     selectedType === type.id
-                      ? 'bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20'
+                      ? FILTER_ACTIVE_PILL_WEEKLY
                       : FILTER_INACTIVE_SECTION_TOGGLE
                   }`}
                   data-testid={`toggle-type-${type.id}`}
@@ -3235,6 +3270,7 @@ export default function PredictPage() {
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={communityCategoryFilters}
+                accent="world"
               />
             </div>
           )}
@@ -3250,12 +3286,30 @@ export default function PredictPage() {
             {user && (
               <button
                 type="button"
-                className="flex items-center gap-1.5 px-3 min-h-8 rounded-md bg-violet-500/20 dark:bg-violet-500/15 border border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={`flex items-center gap-1.5 px-3 min-h-8 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  predictView === "weekly"
+                    ? "bg-blue-500/20 dark:bg-blue-500/15 border-blue-500/40 dark:border-blue-500/30 hover:bg-blue-500/25 dark:hover:bg-blue-500/20"
+                    : "bg-violet-500/20 dark:bg-violet-500/15 border-violet-500/40 dark:border-violet-500/30 hover:bg-violet-500/25 dark:hover:bg-violet-500/20"
+                }`}
                 onClick={() => setLocation("/me/credits")}
                 data-testid="predict-desktop-credits-pill"
               >
-                <Wallet className="h-[14px] w-[14px] text-violet-700 dark:text-violet-500" />
-                <span className="font-mono font-bold text-xs text-violet-700 dark:text-violet-500">{formatVox(walletCredits)}</span>
+                <Wallet
+                  className={`h-[14px] w-[14px] ${
+                    predictView === "weekly"
+                      ? "text-blue-700 dark:text-blue-500"
+                      : "text-violet-700 dark:text-violet-500"
+                  }`}
+                />
+                <span
+                  className={`font-mono font-bold text-xs ${
+                    predictView === "weekly"
+                      ? "text-blue-700 dark:text-blue-500"
+                      : "text-violet-700 dark:text-violet-500"
+                  }`}
+                >
+                  {formatVox(walletCredits)}
+                </span>
               </button>
             )}
           </div>
@@ -3543,8 +3597,8 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Weekly Up / Down"
               subtitle="Will their Trend Score be higher / lower"
-              icon={<TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-              accent="violet"
+              icon={<TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
+              accent="blue"
               testId="section-header-updown"
               actions={
                 <>
@@ -3554,7 +3608,7 @@ export default function PredictPage() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => setRulesModalOpen("updown")}
-                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                         aria-label="How it works"
                         data-testid="button-rules-weekly-up-/-down"
                       >
@@ -3566,7 +3620,7 @@ export default function PredictPage() {
                   <button
                     type="button"
                     onClick={() => openSnapScroll("updown", filteredUpDown[0]?.id ? String(filteredUpDown[0].id) : undefined, "header-icon")}
-                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
+                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-blue-600 dark:text-blue-400 transition-colors hover:text-blue-500 dark:hover:text-blue-300 hover:bg-muted/40 active:opacity-80"
                     aria-label="Open immersive browse"
                     data-testid="button-snap-updown"
                   >
@@ -3585,6 +3639,7 @@ export default function PredictPage() {
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={updownCategoryFilters}
+                accent="weekly"
               />
             </UnifiedSectionHeader>
             {updownError ? (
@@ -3596,7 +3651,7 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-violet-500">
+              <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-blue-500">
                 {filteredUpDown.map((market) => (
                   <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
                     <WeeklyUpDownCard 
@@ -3644,7 +3699,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
+                className="text-blue-700 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 text-[14px]"
                 onClick={() => openPredictOverlay("weekly")}
                 data-testid="button-view-all-updown"
               >
@@ -3660,8 +3715,8 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
               subtitle="Who will finish with the higher Trend Score?"
-              icon={<Swords className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-              accent="violet"
+              icon={<Swords className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
+              accent="blue"
               testId="section-header-h2h"
               actions={
                 <Tooltip>
@@ -3670,7 +3725,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("h2h")}
-                      className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                       aria-label="How it works"
                       data-testid="button-rules-head-to-head-battles"
                     >
@@ -3691,6 +3746,7 @@ export default function PredictPage() {
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={h2hCategoryFilters}
+                accent="weekly"
               />
             </UnifiedSectionHeader>
             {h2hError ? (
@@ -3702,7 +3758,7 @@ export default function PredictPage() {
             ) : h2hLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
-              <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-violet-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-blue-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
@@ -3752,7 +3808,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
+                className="text-blue-700 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 text-[14px]"
                 onClick={() => openPredictOverlay("h2h")}
                 data-testid="button-view-all-h2h"
               >
@@ -3768,8 +3824,8 @@ export default function PredictPage() {
             <UnifiedSectionHeader
               title="Category Races"
               subtitle="Pick the biggest mover in each category"
-              icon={<Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />}
-              accent="violet"
+              icon={<Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
+              accent="blue"
               testId="section-header-gainer"
               actions={
                 <Tooltip>
@@ -3778,7 +3834,7 @@ export default function PredictPage() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => setRulesModalOpen("gainer")}
-                      className="text-violet-600 dark:text-violet-400 hover:text-violet-600 dark:hover:text-violet-400"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
                       aria-label="How it works"
                       data-testid="button-rules-category-races"
                     >
@@ -3799,6 +3855,7 @@ export default function PredictPage() {
                 user={user}
                 onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                 filters={gainerCategoryFilters}
+                accent="weekly"
               />
             </UnifiedSectionHeader>
             {gainerError ? (
@@ -3810,7 +3867,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-violet-500" autoHeight>
+              <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-blue-500" autoHeight>
                 {filteredGainers.map((market) => (
                   <TopGainerCard 
                     key={market.id}
@@ -3839,7 +3896,7 @@ export default function PredictPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-violet-700 dark:text-violet-500 hover:text-violet-600 dark:hover:text-violet-400 text-[14px]"
+                className="text-blue-700 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 text-[14px]"
                 onClick={() => openPredictOverlay("gainers")}
                 data-testid="button-view-all-gainer"
               >

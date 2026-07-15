@@ -4,7 +4,7 @@ interface UnifiedSectionHeaderProps {
   subtitle?: string;
   subtitleMeta?: React.ReactNode;
   icon?: React.ReactNode;
-  accent: "cyan" | "violet";
+  accent: "cyan" | "violet" | "blue";
   actions?: React.ReactNode;
   meta?: React.ReactNode;
   children?: React.ReactNode;
@@ -23,6 +23,13 @@ const accentMap = {
     shellBg:
       "bg-[linear-gradient(to_bottom,rgba(139,92,246,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(139,92,246,0.08)_0%,transparent_75%)]",
     iconBg: "bg-violet-500/15 dark:bg-violet-500/10",
+  },
+  /** VoxDex leaderboard blue (#3B82F6) — Weekly Predict sections. */
+  blue: {
+    borderTop: "border-t-blue-500",
+    shellBg:
+      "bg-[linear-gradient(to_bottom,rgba(59,130,246,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(59,130,246,0.08)_0%,transparent_75%)]",
+    iconBg: "bg-blue-500/15 dark:bg-blue-500/10",
   },
 } as const;
 

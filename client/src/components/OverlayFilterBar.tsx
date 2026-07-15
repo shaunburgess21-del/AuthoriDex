@@ -1,5 +1,13 @@
 import { Input } from "@/components/ui/input";
-import { FILTER_INACTIVE_PILL_PREDICT, FILTER_INACTIVE_PILL_VOTE, FILTER_ROW_SEARCH_INPUT, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
+import {
+  FILTER_INACTIVE_PILL_PREDICT,
+  FILTER_INACTIVE_PILL_WEEKLY,
+  FILTER_INACTIVE_PILL_VOTE,
+  FILTER_ACTIVE_CHIP_WEEKLY,
+  FILTER_ACTIVE_CHIP_WORLD,
+  FILTER_ROW_SEARCH_INPUT,
+  CATEGORY_CHIP_RADIUS,
+} from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
@@ -15,7 +23,8 @@ interface OverlayFilterBarProps {
   allValue: string;
   placeholder?: string;
   testIdPrefix?: string;
-  variant?: "vote" | "predict";
+  /** vote = cyan; predict = World violet; predict-weekly = VoxDex blue. */
+  variant?: "vote" | "predict" | "predict-weekly";
   user?: any;
   onAuthRequired?: () => void;
 }
@@ -33,11 +42,18 @@ export function OverlayFilterBar({
   user,
   onAuthRequired,
 }: OverlayFilterBarProps) {
-  const isVote = variant === "vote";
-  const activeClasses = isVote
-    ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
-    : "bg-violet-500/25 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/50 dark:border-violet-400/40";
-  const inactiveClasses = isVote ? FILTER_INACTIVE_PILL_VOTE : FILTER_INACTIVE_PILL_PREDICT;
+  const activeClasses =
+    variant === "vote"
+      ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
+      : variant === "predict-weekly"
+        ? FILTER_ACTIVE_CHIP_WEEKLY
+        : FILTER_ACTIVE_CHIP_WORLD;
+  const inactiveClasses =
+    variant === "vote"
+      ? FILTER_INACTIVE_PILL_VOTE
+      : variant === "predict-weekly"
+        ? FILTER_INACTIVE_PILL_WEEKLY
+        : FILTER_INACTIVE_PILL_PREDICT;
 
   return (
     <div className="sticky top-0 z-10 px-4 py-3 border-b bg-background/95 backdrop-blur-sm">
