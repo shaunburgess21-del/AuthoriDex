@@ -12,7 +12,7 @@ import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, Extern
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { worldMarketShare } from "@/lib/share";
-import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { formatVox, formatVoxCompact, formatVoxDelta, voxWord } from "@/lib/currency";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
@@ -317,98 +317,94 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
         </a>
       )}
 
-      <div className="mb-2">
-        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-      </div>
-
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+      <div className="mt-auto">
+        <div className="mb-2">
+          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-          <span className="text-red-500 font-semibold">No {noPercent}%</span>
-        </div>
-      </div>
 
-      {hasPnl && pnlText && (
-        <div
-          className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-          data-testid={`community-card-pnl-${market.slug}`}
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Your position
-          </span>
-          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-            {pnlText}
-          </span>
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
+            <span className="text-red-500 font-semibold">No {noPercent}%</span>
+          </div>
         </div>
-      )}
 
-      <div>
-        {isMarketClosed ? (
-          <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-            <Lock className="h-4 w-4 mr-2" />
-            Closed
-          </Button>
-        ) : userBetResult?.result === "pending" ? (
-          (() => {
-              const topUpTarget =
-                onPickEntry
-                  ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
-                  : null;
-            return (
-              <PendingBetLinkRow
-                entryLabel={userBetResult.entryLabel}
-                stakeAmount={userBetResult.stakeAmount}
-                href={`/markets/${market.slug}`}
-                onLinkClick={rememberAnchor}
-                onTopUp={
-                  topUpTarget && onPickEntry
-                    ? () => onPickEntry(market, topUpTarget.entry, topUpTarget.direction)
-                    : undefined
-                }
-                unrealisedPnl={unrealisedPnl ?? null}
-              />
-            );
-          })()
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
-              onClick={() => {
-                if (onPickEntry && yesEntry) {
-                  onPickEntry(market, yesEntry, "yes");
-                } else {
-                  navigateWithAnchor(market.slug, "yes");
-                }
-              }}
-              data-testid={`button-yes-${market.slug}`}
-            >
-              <span className="leading-none">Yes {yesPercent}%</span>
-              <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(ammYesPrice)}/share
-              </span>
-            </Button>
-            <Button
-              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
-              onClick={() => {
-                if (onPickEntry && noEntry) {
-                  onPickEntry(market, noEntry, "yes");
-                } else {
-                  navigateWithAnchor(market.slug, "no");
-                }
-              }}
-              data-testid={`button-no-${market.slug}`}
-            >
-              <span className="leading-none">No {noPercent}%</span>
-              <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(ammNoPrice)}/share
-              </span>
-            </Button>
+        {hasPnl && pnlText && (
+          <div
+            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+            data-testid={`community-card-pnl-${market.slug}`}
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Your position
+            </span>
+            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+              {pnlText}
+            </span>
           </div>
         )}
-        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+
+        <div>
+          {isMarketClosed ? (
+            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+              <Lock className="h-4 w-4 mr-2" />
+              Closed
+            </Button>
+          ) : userBetResult?.result === "pending" ? (
+            (() => {
+                const topUpTarget =
+                  onPickEntry
+                    ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
+                    : null;
+              return (
+                <PendingBetLinkRow
+                  entryLabel={userBetResult.entryLabel}
+                  stakeAmount={userBetResult.stakeAmount}
+                  href={`/markets/${market.slug}`}
+                  onLinkClick={rememberAnchor}
+                  onTopUp={
+                    topUpTarget && onPickEntry
+                      ? () => onPickEntry(market, topUpTarget.entry, topUpTarget.direction)
+                      : undefined
+                  }
+                  unrealisedPnl={unrealisedPnl ?? null}
+                />
+              );
+            })()
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                onClick={() => {
+                  if (onPickEntry && yesEntry) {
+                    onPickEntry(market, yesEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "yes");
+                  }
+                }}
+                data-testid={`button-yes-${market.slug}`}
+              >
+                Yes {yesPercent}%
+              </Button>
+              <Button
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                onClick={() => {
+                  if (onPickEntry && noEntry) {
+                    onPickEntry(market, noEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "no");
+                  }
+                }}
+                data-testid={`button-no-${market.slug}`}
+              >
+                No {noPercent}%
+              </Button>
+            </div>
+          )}
+          <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+        </div>
       </div>
     </PredictCard>
   );
@@ -494,13 +490,11 @@ function MultiMarketEntryRow({
   // than just the name. The card hero image already sets the visual context.
 
   // Fixed-width Yes button keeps the right-hand column aligned across all
-  // rows. Two-line label ("Yes pct%" on top, "Ꝟ0.XX/share" below) and
-  // colour (#00C853 brand green) match the binary + Up/Down card Yes
-  // buttons exactly so the three card variants are visually consistent.
-  // Width is sized to fit the worst-case mono "Ꝟ1.00/share" string +
-  // padding on both desktop and mobile.
+  // rows. Single-line "Yes pct%" label and colour (#00C853 brand green)
+  // match the binary + Up/Down card Yes buttons so the three card
+  // variants are visually consistent.
   const buttonClass =
-    "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex flex-col items-center justify-center gap-0.5";
+    "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex items-center justify-center";
 
   return (
     <div className="flex items-center gap-2">
@@ -582,10 +576,8 @@ function MultiMarketEntryRow({
         // YES-only Buy button (Buy NO on multi is deferred pending an
         // engine extension — LMSR has no native NO shares). Wording +
         // colour intentionally mirror the binary Yes button so the
-        // three card variants read consistently: "Yes {pct}%" on top,
-        // "Ꝟ{X.XX}/share" below, identical in both the card preview
-        // and the drawer view so users see the same information
-        // regardless of surface.
+        // three card variants read consistently: "Yes {pct}%", identical
+        // in both the card preview and the drawer view.
         <div className="flex shrink-0">
           <button
             className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
@@ -593,9 +585,6 @@ function MultiMarketEntryRow({
             data-testid={`button-buy-${entry.id}`}
           >
             <span className="text-[11px] md:text-xs font-semibold leading-none">Yes {entry.pct}%</span>
-            <span className="text-[9px] md:text-[10px] font-mono opacity-80 leading-none">
-              {formatVoxPrice(Number(entry.ammPrice ?? 0))}/share
-            </span>
           </button>
         </div>
       ) : (
@@ -721,92 +710,94 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
       </div>
 
-      {/* AMM unrealised P&L banner for community markets where the
-          user holds a position. Multi-outcome markets can have
-          positions on several entries, but a single market-level P&L
-          still has signal value — we show the TOP position P&L
-          (PredictPage's `ammPositionByMarket` already picks the
-          largest currentValue), which mirrors the Race pattern. */}
-      {hasPnl && pnlText && (
-        <div
-          className="mb-3 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-          data-testid={`community-card-pnl-${market.slug}`}
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Your position
-          </span>
-          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-            {pnlText}
-          </span>
+      <div className="mt-auto">
+        {/* AMM unrealised P&L banner for community markets where the
+            user holds a position. Multi-outcome markets can have
+            positions on several entries, but a single market-level P&L
+            still has signal value — we show the TOP position P&L
+            (PredictPage's `ammPositionByMarket` already picks the
+            largest currentValue), which mirrors the Race pattern. */}
+        {hasPnl && pnlText && (
+          <div
+            className="mb-3 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+            data-testid={`community-card-pnl-${market.slug}`}
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Your position
+            </span>
+            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+              {pnlText}
+            </span>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          {visibleEntries.map((entry: any) => {
+            const entryBet = userBetsPerEntry?.get(String(entry.id));
+            return (
+              <MultiMarketEntryRow
+                key={entry.id}
+                entry={entry}
+                market={market}
+                userBet={entryBet}
+                hasPendingBet={!!entryBet && hasPendingResult}
+                isMarketClosed={isMarketClosed}
+                onNavigate={navigateWithAnchor}
+                onPickEntry={onPickEntry}
+              />
+            );
+          })}
         </div>
-      )}
 
-      <div className="space-y-1.5">
-        {visibleEntries.map((entry: any) => {
-          const entryBet = userBetsPerEntry?.get(String(entry.id));
-          return (
-            <MultiMarketEntryRow
-              key={entry.id}
-              entry={entry}
-              market={market}
-              userBet={entryBet}
-              hasPendingBet={!!entryBet && hasPendingResult}
-              isMarketClosed={isMarketClosed}
-              onNavigate={navigateWithAnchor}
-              onPickEntry={onPickEntry}
-            />
-          );
-        })}
-      </div>
-
-      {/* Three-column footer: +N more (left), View details (center), options pill (right). */}
-      <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
-        <div className="min-w-0">
-          {remainingCount > 0 && (
+        {/* Three-column footer: +N more (left), View details (center), options pill (right). */}
+        <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
+          <div className="min-w-0">
+            {remainingCount > 0 && (
+              <button
+                type="button"
+                onClick={openOptionsDrawer}
+                className="text-left w-full min-h-10 md:min-h-0 flex items-center max-md:-ml-1 max-md:pl-1"
+                data-testid={`link-more-options-${market.slug}`}
+                aria-label={`Show ${remainingCount} more options`}
+              >
+                <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline truncate">
+                  +{remainingCount} more
+                </span>
+              </button>
+            )}
+          </div>
+          <div className="min-w-0 text-center">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isInactive) navigateWithAnchor(market.slug);
+              }}
+              disabled={isInactive}
+              className={`inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${isInactive ? "text-muted-foreground cursor-default" : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"}`}
+              data-testid={`link-view-details-${market.slug}`}
+              aria-label="View market details"
+            >
+              View details →
+            </button>
+          </div>
+          <div className="min-w-0 flex justify-end">
             <button
               type="button"
               onClick={openOptionsDrawer}
-              className="text-left w-full min-h-10 md:min-h-0 flex items-center max-md:-ml-1 max-md:pl-1"
-              data-testid={`link-more-options-${market.slug}`}
-              aria-label={`Show ${remainingCount} more options`}
+              className="min-h-10 md:min-h-0 flex items-center justify-end rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              data-testid={`button-options-count-${market.slug}`}
+              aria-label={`Show all ${entries.length} options`}
             >
-              <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline truncate">
-                +{remainingCount} more
-              </span>
+              <Badge variant="outline" className="text-[10px] shrink-0 max-w-full truncate pointer-events-none">
+                {entries.length} options
+              </Badge>
             </button>
-          )}
+          </div>
         </div>
-        <div className="min-w-0 text-center">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isInactive) navigateWithAnchor(market.slug);
-            }}
-            disabled={isInactive}
-            className={`inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${isInactive ? "text-muted-foreground cursor-default" : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"}`}
-            data-testid={`link-view-details-${market.slug}`}
-            aria-label="View market details"
-          >
-            View details →
-          </button>
-        </div>
-        <div className="min-w-0 flex justify-end">
-          <button
-            type="button"
-            onClick={openOptionsDrawer}
-            className="min-h-10 md:min-h-0 flex items-center justify-end rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            data-testid={`button-options-count-${market.slug}`}
-            aria-label={`Show all ${entries.length} options`}
-          >
-            <Badge variant="outline" className="text-[10px] shrink-0 max-w-full truncate pointer-events-none">
-              {entries.length} options
-            </Badge>
-          </button>
-        </div>
-      </div>
 
-      <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+      </div>
 
       <Drawer.Root open={optionsDrawerOpen} onOpenChange={setOptionsDrawerOpen}>
         <Drawer.Portal>
@@ -951,98 +942,94 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
         </a>
       )}
 
-      <div className="mb-2">
-        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-      </div>
-
-      <div className="mb-2">
-        <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+      <div className="mt-auto">
+        <div className="mb-2">
+          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
         </div>
-        <div className="flex items-center justify-between text-xs mt-1.5">
-          <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
-          <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
-        </div>
-      </div>
 
-      {hasPnl && pnlText && (
-        <div
-          className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-          data-testid={`community-card-pnl-${market.slug}`}
-        >
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Your position
-          </span>
-          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-            {pnlText}
-          </span>
+        <div className="mb-2">
+          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${abovePercent}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-1.5">
+            <span className="text-green-500 font-semibold">Above {abovePercent}%</span>
+            <span className="text-red-500 font-semibold">Below {belowPercent}%</span>
+          </div>
         </div>
-      )}
 
-      <div>
-        {isMarketClosed ? (
-          <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
-            <Lock className="h-4 w-4 mr-2" />
-            Closed
-          </Button>
-        ) : userBetResult?.result === "pending" ? (
-          (() => {
-            const topUpTarget =
-              onPickEntry
-                ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
-                : null;
-            return (
-              <PendingBetLinkRow
-                entryLabel={userBetResult.entryLabel}
-                stakeAmount={userBetResult.stakeAmount}
-                href={`/markets/${market.slug}`}
-                onLinkClick={rememberAnchor}
-                onTopUp={
-                  topUpTarget && onPickEntry
-                    ? () => onPickEntry(market, topUpTarget.entry, topUpTarget.direction)
-                    : undefined
-                }
-                unrealisedPnl={unrealisedPnl ?? null}
-              />
-            );
-          })()
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 flex flex-col items-center justify-center gap-0.5"
-              onClick={() => {
-                if (onPickEntry && aboveEntry) {
-                  onPickEntry(market, aboveEntry, "yes");
-                } else {
-                  navigateWithAnchor(market.slug, "above");
-                }
-              }}
-              data-testid={`button-above-${market.slug}`}
-            >
-              <span className="leading-none">Above {abovePercent}%</span>
-              <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(abovePrice)}/share
-              </span>
-            </Button>
-            <Button
-              className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 flex flex-col items-center justify-center gap-0.5"
-              onClick={() => {
-                if (onPickEntry && belowEntry) {
-                  onPickEntry(market, belowEntry, "yes");
-                } else {
-                  navigateWithAnchor(market.slug, "below");
-                }
-              }}
-              data-testid={`button-below-${market.slug}`}
-            >
-              <span className="leading-none">Below {belowPercent}%</span>
-              <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(belowPrice)}/share
-              </span>
-            </Button>
+        {hasPnl && pnlText && (
+          <div
+            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
+            data-testid={`community-card-pnl-${market.slug}`}
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Your position
+            </span>
+            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
+              {pnlText}
+            </span>
           </div>
         )}
-        <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+
+        <div>
+          {isMarketClosed ? (
+            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+              <Lock className="h-4 w-4 mr-2" />
+              Closed
+            </Button>
+          ) : userBetResult?.result === "pending" ? (
+            (() => {
+              const topUpTarget =
+                onPickEntry
+                  ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
+                  : null;
+              return (
+                <PendingBetLinkRow
+                  entryLabel={userBetResult.entryLabel}
+                  stakeAmount={userBetResult.stakeAmount}
+                  href={`/markets/${market.slug}`}
+                  onLinkClick={rememberAnchor}
+                  onTopUp={
+                    topUpTarget && onPickEntry
+                      ? () => onPickEntry(market, topUpTarget.entry, topUpTarget.direction)
+                      : undefined
+                  }
+                  unrealisedPnl={unrealisedPnl ?? null}
+                />
+              );
+            })()
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                onClick={() => {
+                  if (onPickEntry && aboveEntry) {
+                    onPickEntry(market, aboveEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "above");
+                  }
+                }}
+                data-testid={`button-above-${market.slug}`}
+              >
+                Above {abovePercent}%
+              </Button>
+              <Button
+                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                onClick={() => {
+                  if (onPickEntry && belowEntry) {
+                    onPickEntry(market, belowEntry, "yes");
+                  } else {
+                    navigateWithAnchor(market.slug, "below");
+                  }
+                }}
+                data-testid={`button-below-${market.slug}`}
+              >
+                Below {belowPercent}%
+              </Button>
+            </div>
+          )}
+          <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
+        </div>
       </div>
     </PredictCard>
   );
