@@ -87,6 +87,74 @@ function isYesLikeLabel(label: string) {
   return l === "yes" || l === "above";
 }
 
+function normalizeEntryLabel(label: unknown) {
+  return String(label || "").trim();
+}
+
+function isClassicYesNoLabels(leftLabel: string, rightLabel: string) {
+  return leftLabel.toLowerCase() === "yes" && rightLabel.toLowerCase() === "no";
+}
+
+/** Resolve binary sides by Yes/No label when present; otherwise display order. */
+function resolveBinaryEntries(entries: any[]) {
+  const byLabel = (wanted: string) =>
+    entries.find((e: any) => normalizeEntryLabel(e?.label).toLowerCase() === wanted);
+  const leftEntry = byLabel("yes") || entries[0];
+  const rightEntry =
+    byLabel("no") ||
+    entries.find((e: any) => e && e !== leftEntry) ||
+    entries[1];
+  return { leftEntry, rightEntry };
+}
+
+type BinarySideStyle = {
+  textClass: string;
+  buttonClass: string;
+  accent: string;
+};
+
+function binarySideStyles(isYesNo: boolean): { left: BinarySideStyle; right: BinarySideStyle } {
+  if (isYesNo) {
+    return {
+      left: {
+        textClass: "text-green-600 dark:text-green-500",
+        buttonClass:
+          "bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20",
+        accent: "#00C853",
+      },
+      right: {
+        textClass: "text-red-600 dark:text-red-500",
+        buttonClass:
+          "bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20",
+        accent: "#FF0000",
+      },
+    };
+  }
+
+  // Match native H2H blue / violet so neither side reads as "bad".
+  return {
+    left: {
+      textClass: "text-blue-600 dark:text-blue-400",
+      buttonClass:
+        "bg-[#3B82F6]/10 border border-[#3B82F6]/50 text-[#3B82F6] hover:border-[#3B82F6]/80 hover:bg-[#3B82F6]/20",
+      accent: "#3B82F6",
+    },
+    right: {
+      textClass: "text-purple-600 dark:text-purple-400",
+      buttonClass:
+        "bg-[#7C3AED]/10 border border-[#7C3AED]/50 text-[#7C3AED] hover:border-[#7C3AED]/80 hover:bg-[#7C3AED]/20",
+      accent: "#7C3AED",
+    },
+  };
+}
+
+function binaryLabelTextClass(label: string) {
+  const len = label.trim().length;
+  if (len > 24) return "text-[10px]";
+  if (len > 16) return "text-xs";
+  return "";
+}
+
 /** Resolve which entry/direction to top up from aggregated bet rows. */
 function resolvePendingTopUpTarget(
   entries: any[],
@@ -129,9 +197,9 @@ function resolvePendingTopUpTarget(
   return resolved;
 }
 
-function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick, unrealisedPnl }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void; /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */ onLinkClick?: () => void; /** AMM unrealised P&L (`buy.netShares × livePrice − costBasis`). Shown next to Stake. */ unrealisedPnl?: number | null }) {
+function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick, unrealisedPnl, accentColor }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void; /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */ onLinkClick?: () => void; /** AMM unrealised P&L (`buy.netShares × livePrice − costBasis`). Shown next to Stake. */ unrealisedPnl?: number | null; /** Override accent when the pick isn't a classic Yes/No (e.g. England vs Argentina). */ accentColor?: string }) {
   const yesLike = isYesLikeLabel(entryLabel);
-  const accent = yesLike ? "#00C853" : "#FF0000";
+  const accent = accentColor || (yesLike ? "#00C853" : "#FF0000");
 
   // P&L delta with the same sub-cent zero clamp we apply on Up/Down +
   // H2H + Race cards. Hidden when `unrealisedPnl` is unavailable.
@@ -250,14 +318,17 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
   const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
-  const yesEntry = entries.find((e: any) => e.label === "Yes") || entries[0];
-  const noEntry = entries.find((e: any) => e.label === "No") || entries[1];
+  const { leftEntry, rightEntry } = resolveBinaryEntries(entries);
+  const leftLabel = normalizeEntryLabel(leftEntry?.label) || "Yes";
+  const rightLabel = normalizeEntryLabel(rightEntry?.label) || "No";
+  const isYesNoMarket = isClassicYesNoLabels(leftLabel, rightLabel);
+  const sideStyles = binarySideStyles(isYesNoMarket);
   // AMM markets price each share class via LMSR. We map prices to %
   // for the bar and the button label.
-  const ammYesPrice = ammPrices && yesEntry?.id ? Number(ammPrices[yesEntry.id] ?? 0) : 0;
-  const ammNoPrice = ammPrices && noEntry?.id ? Number(ammPrices[noEntry.id] ?? 0) : 0;
-  const yesPercent = Math.max(0, Math.min(100, Math.round(ammYesPrice * 100)));
-  const noPercent = Math.max(0, Math.min(100, Math.round(ammNoPrice * 100)));
+  const leftPrice = ammPrices && leftEntry?.id ? Number(ammPrices[leftEntry.id] ?? 0) : 0;
+  const leftPercent = Math.max(0, Math.min(100, Math.round(leftPrice * 100)));
+  // Complementary fill so the dual/single bar never overflows from rounding.
+  const rightPercent = Math.max(0, 100 - leftPercent);
   const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
   const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
   const pnlIsZero = Math.abs(pnlValue) < 0.005;
@@ -267,6 +338,17 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
       ? "text-green-700 dark:text-green-500"
       : "text-red-700 dark:text-red-500";
   const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
+  const pendingAccent = (() => {
+    if (!userBetResult?.entryLabel) return undefined;
+    const pick = userBetResult.entryLabel.trim().toLowerCase();
+    if (pick === leftLabel.toLowerCase()) return sideStyles.left.accent;
+    if (pick === rightLabel.toLowerCase()) return sideStyles.right.accent;
+    return undefined;
+  })();
+  const navigateToSide = (entry: any, legacyPick: "yes" | "no") => {
+    const raw = entry?.id || normalizeEntryLabel(entry?.label) || legacyPick;
+    navigateWithAnchor(market.slug, encodeURIComponent(String(raw)));
+  };
 
   return (
     <PredictCard
@@ -323,12 +405,38 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
         </div>
 
         <div className="mb-2">
-          <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all" style={{ width: `${yesPercent}%` }} />
-          </div>
-          <div className="flex items-center justify-between text-xs mt-1.5">
-            <span className="text-green-500 font-semibold">Yes {yesPercent}%</span>
-            <span className="text-red-500 font-semibold">No {noPercent}%</span>
+          {isYesNoMarket ? (
+            <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all"
+                style={{ width: `${leftPercent}%` }}
+              />
+            </div>
+          ) : (
+            <div className="h-3 rounded-full overflow-hidden flex">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all"
+                style={{ width: `${leftPercent}%` }}
+              />
+              <div
+                className="h-full bg-gradient-to-l from-purple-500 to-purple-400 transition-all"
+                style={{ width: `${rightPercent}%` }}
+              />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2 text-xs mt-1.5 min-w-0">
+            <span
+              className={`${sideStyles.left.textClass} font-semibold truncate max-w-[48%] ${binaryLabelTextClass(leftLabel)}`}
+              title={`${leftLabel} ${leftPercent}%`}
+            >
+              {leftLabel} {leftPercent}%
+            </span>
+            <span
+              className={`${sideStyles.right.textClass} font-semibold truncate max-w-[48%] text-right ${binaryLabelTextClass(rightLabel)}`}
+              title={`${rightLabel} ${rightPercent}%`}
+            >
+              {rightLabel} {rightPercent}%
+            </span>
           </div>
         </div>
 
@@ -370,36 +478,41 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
                       : undefined
                   }
                   unrealisedPnl={unrealisedPnl ?? null}
+                  accentColor={pendingAccent}
                 />
               );
             })()
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <Button
-                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20"
+                className={`!min-h-0 h-auto px-3 py-3 md:py-2.5 min-w-0 truncate ${sideStyles.left.buttonClass} ${binaryLabelTextClass(leftLabel)}`}
                 onClick={() => {
-                  if (onPickEntry && yesEntry) {
-                    onPickEntry(market, yesEntry, "yes");
+                  if (onPickEntry && leftEntry) {
+                    onPickEntry(market, leftEntry, "yes");
                   } else {
-                    navigateWithAnchor(market.slug, "yes");
+                    navigateToSide(leftEntry, "yes");
                   }
                 }}
                 data-testid={`button-yes-${market.slug}`}
+                aria-label={`Pick ${leftLabel}`}
+                title={`${leftLabel} ${leftPercent}%`}
               >
-                Yes {yesPercent}%
+                {leftLabel} {leftPercent}%
               </Button>
               <Button
-                className="!min-h-0 h-auto px-4 py-3 md:py-2.5 bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20"
+                className={`!min-h-0 h-auto px-3 py-3 md:py-2.5 min-w-0 truncate ${sideStyles.right.buttonClass} ${binaryLabelTextClass(rightLabel)}`}
                 onClick={() => {
-                  if (onPickEntry && noEntry) {
-                    onPickEntry(market, noEntry, "yes");
+                  if (onPickEntry && rightEntry) {
+                    onPickEntry(market, rightEntry, "yes");
                   } else {
-                    navigateWithAnchor(market.slug, "no");
+                    navigateToSide(rightEntry, "no");
                   }
                 }}
                 data-testid={`button-no-${market.slug}`}
+                aria-label={`Pick ${rightLabel}`}
+                title={`${rightLabel} ${rightPercent}%`}
               >
-                No {noPercent}%
+                {rightLabel} {rightPercent}%
               </Button>
             </div>
           )}
