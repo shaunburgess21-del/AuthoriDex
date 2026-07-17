@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentType, type SVGProps } from "react";
 import { useLocation } from "wouter";
-import { Star, Trophy } from "lucide-react";
+import { ArrowRight, ChevronRight, Star, Trophy, TrendingUp, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -70,6 +70,49 @@ interface InsightSignal {
 
 // Hide chips for signals between ±5% so tiny noise doesn't pile up.
 const INSIGHT_SIGNAL_DEAD_ZONE_PCT = 5;
+
+const VOTE_ACCENT = "#22D3EE";
+const PREDICT_ACCENT = "#8B5CF6";
+
+function InsightActionTile({
+  accent,
+  iconBadgeClass,
+  hoverClass,
+  chevronHoverClass,
+  icon: Icon,
+  label,
+  hint,
+  onClick,
+  testId,
+}: {
+  accent: string;
+  iconBadgeClass: string;
+  hoverClass: string;
+  chevronHoverClass: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  label: string;
+  hint: string;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className={`group flex min-w-0 items-center gap-2.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-left transition-all ${hoverClass}`}
+    >
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${iconBadgeClass}`}>
+        <Icon className="h-4 w-4" style={{ color: accent }} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
+      </span>
+      <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground/50 transition-colors ${chevronHoverClass}`} />
+    </button>
+  );
+}
 
 function InsightWhyTrendingSnippet({
   personId,
@@ -413,33 +456,40 @@ function InsightPanelContent({
         </>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:justify-end min-w-0 w-full">
-        <div className="flex flex-row gap-2 min-w-0 w-full sm:w-auto">
-          <Button
-          variant="outline"
-          onClick={() => {
-            setLocation(`/person/${person.id}?tab=vote`);
-            onClose();
-          }}
-          className="flex-1 sm:flex-none shrink-0 bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20 hover:bg-cyan-500/35 dark:hover:bg-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400"
-          data-testid="button-insight-vote"
-        >
-          Vote
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setLocation(`/person/${person.id}?tab=predict`);
-            onClose();
-          }}
-          className="flex-1 sm:flex-none shrink-0 bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20 hover:bg-violet-500/35 dark:hover:bg-violet-500/30 hover:text-violet-600 dark:hover:text-violet-400"
-          data-testid="button-insight-predict"
-        >
-          Predict
-        </Button>
+      <div className="space-y-2 min-w-0 w-full">
+        <div className="grid grid-cols-2 gap-2 min-w-0 w-full">
+          <InsightActionTile
+            accent={VOTE_ACCENT}
+            iconBadgeClass="pulse-icon-cyan"
+            hoverClass="hover:border-cyan-500/35 hover:bg-cyan-500/[0.06]"
+            chevronHoverClass="group-hover:text-cyan-500"
+            icon={Vote}
+            label="Vote"
+            hint="Rate them"
+            onClick={() => {
+              setLocation(`/person/${person.id}?tab=vote`);
+              onClose();
+            }}
+            testId="button-insight-vote"
+          />
+          <InsightActionTile
+            accent={PREDICT_ACCENT}
+            iconBadgeClass="pulse-icon-purple"
+            hoverClass="hover:border-violet-500/35 hover:bg-violet-500/[0.06]"
+            chevronHoverClass="group-hover:text-violet-500"
+            icon={TrendingUp}
+            label="Predict"
+            hint="Trade on them"
+            onClick={() => {
+              setLocation(`/person/${person.id}?tab=predict`);
+              onClose();
+            }}
+            testId="button-insight-predict"
+          />
         </div>
-        <Button onClick={onViewProfile} className="flex-1 sm:flex-none shrink-0">
+        <Button variant="outline" onClick={onViewProfile} className="w-full gap-2">
           View full profile
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

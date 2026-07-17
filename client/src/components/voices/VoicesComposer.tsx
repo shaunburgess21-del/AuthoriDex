@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ChevronRight, UserRound, X } from "lucide-react";
+import { UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CommentComposer } from "@/components/comments/CommentComposer";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +33,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
   const queryClient = useQueryClient();
   const [body, setBody] = useState("");
   const [attachPerson, setAttachPerson] = useState<PersonResult | null>(null);
+  const [timelinePickerOpen, setTimelinePickerOpen] = useState(false);
 
   const isAuthenticated = isLoggedIn || !!user;
 
@@ -46,6 +52,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
       toast(attachPerson ? `Posted to ${attachPerson.name}'s profile` : "Posted to Voices");
       setBody("");
       setAttachPerson(null);
+      setTimelinePickerOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
@@ -56,40 +63,47 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
     },
   });
 
-  const timelineAccessory = attachPerson ? (
-    <div className="flex h-9 w-full items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm">
-      <span className="truncate text-amber-800 dark:text-amber-200">
-        {attachPerson.name}&apos;s timeline
+  const timelineFooterAccessory = attachPerson ? (
+    <div className="flex h-8 max-w-full items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 text-xs">
+      <span className="min-w-0 truncate text-amber-800 dark:text-amber-200">
+        Also on {attachPerson.name}
       </span>
       <button
         type="button"
         onClick={() => setAttachPerson(null)}
-        className="ml-2 shrink-0 rounded-full text-amber-800 hover:text-destructive dark:text-amber-200"
-        aria-label="Remove celebrity timeline"
+        className="shrink-0 rounded-full text-amber-800 hover:text-destructive dark:text-amber-200"
+        aria-label="Remove also-on-profile"
       >
-        <X className="h-4 w-4" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   ) : (
-    <PersonSearchPopover
-      closeOnSelect
-      onSelect={(p) => setAttachPerson(p)}
-      placeholder="Search celebrities…"
-      trigger={
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 w-full justify-between gap-2 border-dashed font-normal text-muted-foreground hover:border-amber-500/40 hover:bg-amber-500/5 hover:text-foreground"
-          data-testid="voices-composer-attach"
-        >
-          <span className="flex items-center gap-2">
-            <UserRound className="h-4 w-4 shrink-0" />
-            Post to celebrity timeline
-          </span>
-          <ChevronRight className="h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      }
-    />
+    <Tooltip>
+      <PersonSearchPopover
+        closeOnSelect
+        onSelect={(p) => setAttachPerson(p)}
+        onOpenChange={setTimelinePickerOpen}
+        placeholder="Search celebrities…"
+        hint="Also posts to their profile timeline."
+        trigger={
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 max-w-full gap-1.5 px-2 font-normal text-muted-foreground hover:text-foreground"
+              data-testid="voices-composer-attach"
+            >
+              <UserRound className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Also on profile</span>
+            </Button>
+          </TooltipTrigger>
+        }
+      />
+      <TooltipContent side="top" sideOffset={6} className="max-w-[240px]">
+        Also publish this post on a celebrity&apos;s profile timeline.
+      </TooltipContent>
+    </Tooltip>
   );
 
   if (!isAuthenticated) {
@@ -121,13 +135,18 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
         authorDisplayName={profile?.username || user?.email || ""}
         replyTo={null}
         onCancelReply={() => {}}
+        onCancel={() => {
+          setAttachPerson(null);
+          setTimelinePickerOpen(false);
+        }}
         supportsFullscreen
         parentExpanded={false}
         scrollIntoViewOnExpand={false}
         hideTopBorder
         inputClassName={VOICES_COMPOSER_INPUT_CLASS}
         variant="card"
-        accessory={timelineAccessory}
+        footerAccessory={timelineFooterAccessory}
+        keepActionsVisible={Boolean(attachPerson) || timelinePickerOpen}
         testIds={{ input: "voices-composer-input", submit: "voices-composer-submit" }}
       />
     </Card>

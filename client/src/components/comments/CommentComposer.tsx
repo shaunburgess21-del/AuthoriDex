@@ -41,8 +41,17 @@ export interface CommentComposerProps {
   variant?: "card" | "inline";
   /** Hard character cap; mirrors the server limit. */
   maxLength?: number;
-  /** Optional slot below the textarea (e.g. Voices timeline picker). */
+  /** Optional slot below the textarea (e.g. legacy Voices timeline picker). */
   accessory?: ReactNode;
+  /** Compact control in the action row, just before Cancel (e.g. Voices timeline). */
+  footerAccessory?: ReactNode;
+  /** Called when the user abandons the draft (Cancel / Escape). */
+  onCancel?: () => void;
+  /**
+   * Keep Cancel/Post/footer visible even when the textarea is blurred
+   * (e.g. Voices celebrity picker open, or a timeline person selected).
+   */
+  keepActionsVisible?: boolean;
   /** Omit the top divider above the composer (e.g. Voices inline card). */
   hideTopBorder?: boolean;
   /** Extra classes merged onto the inline textarea. */
@@ -74,6 +83,9 @@ export function CommentComposer({
   variant = "card",
   maxLength = DEFAULT_COMMENT_MAX_LENGTH,
   accessory,
+  footerAccessory,
+  onCancel,
+  keepActionsVisible = false,
   hideTopBorder = false,
   inputClassName,
   testIds,
@@ -105,11 +117,36 @@ export function CommentComposer({
     isOpen: mentionMenuOpen,
   } = useMentionAutocomplete(value, cursor);
 
-  const showButtons = isFocused || value.length > 0;
+  const showButtons = isFocused || value.length > 0 || Boolean(keepActionsVisible);
   const perceivedLength = mentionAwareLength(value);
   const overLimit = perceivedLength > maxLength;
   const nearLimit = perceivedLength > maxLength - 200;
   const submitDisabled = disabled || !value.trim() || isPending || overLimit;
+
+  const handleTextareaBlur = useCallback(() => {
+    // Defer so focus can land in a portaled celebrity search popover without
+    // collapsing the action row mid-interaction.
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (
+        active?.closest(
+          "[data-radix-popper-content-wrapper], [data-radix-popover-content]",
+        )
+      ) {
+        return;
+      }
+      setIsFocused(false);
+    });
+  }, []);
+
+  // When an external pin (e.g. Voices picker) releases, drop the focused
+  // flag unless the textarea itself still has focus.
+  useEffect(() => {
+    if (keepActionsVisible) return;
+    const active = document.activeElement;
+    if (active === inputRef.current || active === fullscreenInputRef.current) return;
+    setIsFocused(false);
+  }, [keepActionsVisible]);
 
   const syncCursorFromTextarea = useCallback(() => {
     const el = activeTextareaRef.current;
@@ -212,10 +249,11 @@ export function CommentComposer({
     onChange("");
     clearMentions();
     onCancelReply();
+    onCancel?.();
     setComposerMode("auto");
     inputRef.current?.blur();
     fullscreenInputRef.current?.blur();
-  }, [onChange, clearMentions, onCancelReply]);
+  }, [onChange, clearMentions, onCancelReply, onCancel]);
 
   const handleSubmit = useCallback(() => {
     if (submitDisabled) return;
@@ -302,7 +340,7 @@ export function CommentComposer({
     const isFullscreen = idSuffix === "-fullscreen";
     return (
       <div className={buttonRowClass} aria-hidden={!showButtons}>
-        <div className="mr-auto flex items-center gap-2 text-[11px] text-muted-foreground/80">
+        <div className="mr-auto flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground/80">
           <span className="hidden sm:inline">Ctrl + Enter to post</span>
           {nearLimit && (
             <span className={overLimit ? "text-rose-500" : "text-amber-500"}>
@@ -310,12 +348,20 @@ export function CommentComposer({
             </span>
           )}
         </div>
+        {footerAccessory ? (
+          <div
+            className="min-w-0 max-w-[40%] shrink sm:max-w-[45%]"
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {footerAccessory}
+          </div>
+        ) : null}
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={handleCancel}
-          className="min-h-9"
+          className="min-h-9 shrink-0"
           tabIndex={showButtons ? 0 : -1}
           data-testid={(isFullscreen ? testIds?.cancelFullscreen : testIds?.cancel) ?? `button-cancel-comment${idSuffix}`}
         >
@@ -326,7 +372,7 @@ export function CommentComposer({
           disabled={submitDisabled}
           onClick={handleSubmit}
           tabIndex={showButtons ? 0 : -1}
-          className={postButtonClass}
+          className={cn(postButtonClass, "shrink-0")}
           data-testid={(isFullscreen ? testIds?.submitFullscreen : testIds?.submit) ?? `button-submit-comment${idSuffix}`}
         >
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -370,7 +416,7 @@ export function CommentComposer({
             setCursor(e.target.selectionStart ?? e.target.value.length);
           }}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onBlur={handleTextareaBlur}
           onClick={syncCursorFromTextarea}
           onKeyUp={syncCursorFromTextarea}
           onSelect={syncCursorFromTextarea}
@@ -440,7 +486,7 @@ export function CommentComposer({
                   }
                 }}
                 onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
+                onBlur={handleTextareaBlur}
                 onClick={syncCursorFromTextarea}
                 onKeyUp={syncCursorFromTextarea}
                 onSelect={syncCursorFromTextarea}

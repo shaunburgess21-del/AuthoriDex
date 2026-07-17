@@ -28,6 +28,8 @@ export interface VoicesEntity {
   href: string;
   slug: string | null;
   imageUrl: string | null;
+  /** Secondary image when the primary hero fails to load (e.g. first opinion option). */
+  fallbackImageUrl: string | null;
   category: string | null;
   personIds: string[];
   /** Present for matchups only — drives the A/B split preview banner. */

@@ -59,6 +59,44 @@ test("resolveOpinionPollImageUrl uses convention when stored empty", () => {
   );
 });
 
+test("pickVoicesOpinionPollImages uses option when convention hero is unreachable", async () => {
+  const { pickVoicesOpinionPollImages } = await import("../server/services/opinion-poll-images");
+  const hero =
+    "https://example.supabase.co/storage/v1/object/public/opinion-polls/broken-poll/1.webp";
+  const option =
+    "https://example.supabase.co/storage/v1/object/public/public-images/opinion-poll-options/opt-0.webp";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(null, { status: 400 })) as typeof fetch;
+  try {
+    const picked = await pickVoicesOpinionPollImages(hero, option);
+    assert.equal(picked.imageUrl, option);
+    assert.equal(picked.fallbackImageUrl, hero);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("pickVoicesOpinionPollImages keeps convention hero when reachable", async () => {
+  const { pickVoicesOpinionPollImages } = await import("../server/services/opinion-poll-images");
+  const hero =
+    "https://example.supabase.co/storage/v1/object/public/opinion-polls/good-poll/1.webp";
+  const option =
+    "https://example.supabase.co/storage/v1/object/public/public-images/opinion-poll-options/opt-0.webp";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(null, { status: 200 })) as typeof fetch;
+  try {
+    const picked = await pickVoicesOpinionPollImages(hero, option);
+    assert.equal(picked.imageUrl, hero);
+    assert.equal(picked.fallbackImageUrl, option);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("opinionPollConventionImageUrl shape", () => {
   const prev = process.env.SUPABASE_URL;
   process.env.SUPABASE_URL = "https://example.supabase.co";

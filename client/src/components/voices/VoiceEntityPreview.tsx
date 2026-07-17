@@ -25,10 +25,10 @@ interface VoiceEntityPreviewProps {
 
 /**
  * Visual preview of the card a Voices comment is attached to. Matchups render
- * an A/B split with a VS badge; single-image cards render an image + heading
- * banner; profiles and image-less cards fall back to the original compact chip.
- * Always deep-links to the source card (stops propagation so the tap doesn't
- * open the reply overlay).
+ * an A/B split with a VS badge; single-image cards (polls, world markets,
+ * profiles) render an image + heading banner; image-less cards fall back to
+ * the original compact chip. Always deep-links to the source card (stops
+ * propagation so the tap doesn't open the reply overlay).
  */
 export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) {
   const isMatchup = entity.refType === "matchup";
@@ -37,7 +37,8 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
   const isBannerType =
     entity.refType === "trending_poll" ||
     entity.refType === "opinion_poll" ||
-    entity.refType === "open_market";
+    entity.refType === "open_market" ||
+    entity.refType === "person";
   const hasBannerImage = isBannerType && Boolean(entity.imageUrl);
 
   if (hasMatchupMedia && entity.media) {
@@ -87,11 +88,16 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
       <Link
         href={entity.href}
         onClick={(e) => e.stopPropagation()}
-        className="group/preview mt-2.5 flex h-20 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] transition-colors hover:border-amber-500/40"
+        className="group/preview mt-2.5 flex h-36 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] transition-colors hover:border-amber-500/40"
         data-testid={`voice-card-entity-${itemId}`}
       >
-        <div className="relative w-24 shrink-0 overflow-hidden">
-          <CardImage src={entity.imageUrl} alt={entity.title} width={192} />
+        <div className="relative h-36 w-36 shrink-0 overflow-hidden rounded-lg">
+          <CardImage
+            src={entity.imageUrl}
+            alt={entity.title}
+            width={288}
+            fallbackSrc={entity.fallbackImageUrl}
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-3 py-2">
           {entity.subtitle && (
@@ -107,7 +113,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
     );
   }
 
-  // Fallback: original compact chip (profiles, timeline mirrors, image-less cards).
+  // Fallback: original compact chip (timeline mirrors, image-less cards).
   const SurfaceIcon = SURFACE_ICON[entity.refType] ?? MessagesSquare;
   return (
     <Link

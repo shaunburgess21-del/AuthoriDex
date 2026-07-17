@@ -1,9 +1,10 @@
-import { inArray, eq } from "drizzle-orm";
+import { inArray, asc } from "drizzle-orm";
 import { db } from "../../db";
 import {
   matchups,
   trendingPolls,
   opinionPolls,
+  opinionPollOptions,
   predictionMarkets,
   trackedPeople,
   cardRelatedPeople,
@@ -14,7 +15,7 @@ import {
   resolveSentimentPollImageUrl,
   slugifySentimentPollHeadline,
 } from "../sentiment-poll-images";
-import { resolveOpinionPollImageUrl } from "../opinion-poll-images";
+import { resolveOpinionPollImageUrl, pickVoicesOpinionPollImages } from "../opinion-poll-images";
 
 /**
  * The card / profile / timeline an aggregated Voices item is attached to.
@@ -33,6 +34,8 @@ export interface VoicesEntity {
   /** Card slug for card surfaces (null for person/timeline) — feeds the focus overlay. */
   slug: string | null;
   imageUrl: string | null;
+  /** Secondary image when the primary hero fails to load (e.g. first opinion option). */
+  fallbackImageUrl: string | null;
   category: string | null;
   /** Linked tracked_people ids (for the celebrity filter). */
   personIds: string[];
@@ -43,6 +46,10 @@ export interface VoicesEntity {
     optionBImage: string | null;
     optionBText: string;
   } | null;
+}
+
+function isHttpImageUrl(url: string | null | undefined): url is string {
+  return !!url && /^https?:\/\//i.test(url.trim());
 }
 
 /** Parent type stored on a unified comment row. */
@@ -160,6 +167,7 @@ export async function resolveCommentEntities(
         href: "/voices",
         slug: null,
         imageUrl: null,
+        fallbackImageUrl: null,
         category: null,
         personIds: [],
       });
@@ -235,6 +243,7 @@ export async function resolveCommentEntities(
         href: r.slug ? `/vote/matchups/${r.slug}` : "/vote",
         slug: r.slug ?? null,
         imageUrl: r.optionAImage ?? r.optionBImage ?? null,
+        fallbackImageUrl: null,
         category: r.category ?? null,
         personIds: uniq([r.personAId, r.personBId, ...(relatedPeople.get(`matchup:${r.id}`) ?? [])]),
         media: {
@@ -276,6 +285,7 @@ export async function resolveCommentEntities(
         imageUrl: effectiveSlug
           ? resolveSentimentPollImageUrl(r.imageUrl ?? null, effectiveSlug)
           : r.imageUrl ?? null,
+        fallbackImageUrl: null,
         category: r.category ?? null,
         personIds: uniq([r.personId, ...(relatedPeople.get(`sentiment_poll:${r.id}`) ?? [])]),
       });
@@ -293,8 +303,44 @@ export async function resolveCommentEntities(
       })
       .from(opinionPolls)
       .where(inArray(opinionPolls.id, Array.from(opinionPollIds)));
+
+    // Prefer a reachable thumbnail: when convention hero `1.webp` is missing,
+    // use the first option image (same recovery as the detail page header).
+    const optionRows = await db
+      .select({
+        pollId: opinionPollOptions.pollId,
+        imageUrl: opinionPollOptions.imageUrl,
+        orderIndex: opinionPollOptions.orderIndex,
+      })
+      .from(opinionPollOptions)
+      .where(inArray(opinionPollOptions.pollId, Array.from(opinionPollIds)))
+      .orderBy(asc(opinionPollOptions.orderIndex));
+
+    const firstOptionImageByPoll = new Map<string, string>();
+    for (const opt of optionRows) {
+      if (firstOptionImageByPoll.has(opt.pollId)) continue;
+      const url = opt.imageUrl?.trim() ?? null;
+      if (isHttpImageUrl(url)) firstOptionImageByPoll.set(opt.pollId, url);
+    }
+
+    const pickedByPollId = new Map<
+      string,
+      { imageUrl: string | null; fallbackImageUrl: string | null }
+    >();
+    await Promise.all(
+      rows.map(async (r) => {
+        const hero = resolveOpinionPollImageUrl(r.imageUrl ?? null, r.slug);
+        const option = firstOptionImageByPoll.get(r.id) ?? null;
+        pickedByPollId.set(r.id, await pickVoicesOpinionPollImages(hero, option));
+      }),
+    );
+
     for (const r of rows) {
       const key = entityKey("opinion_poll", r.id);
+      const picked = pickedByPollId.get(r.id) ?? {
+        imageUrl: null,
+        fallbackImageUrl: null,
+      };
       result.set(key, {
         surface: SURFACE_BY_REF.opinion_poll,
         refType: "opinion_poll",
@@ -303,7 +349,8 @@ export async function resolveCommentEntities(
         subtitle: SUBTITLE.opinion_poll,
         href: r.slug ? `/vote/opinion-polls/${r.slug}` : "/vote",
         slug: r.slug ?? null,
-        imageUrl: resolveOpinionPollImageUrl(r.imageUrl ?? null, r.slug),
+        imageUrl: picked.imageUrl,
+        fallbackImageUrl: picked.fallbackImageUrl,
         category: r.category ?? null,
         personIds: uniq(relatedPeople.get(`opinion_poll:${r.id}`) ?? []),
       });
@@ -333,6 +380,7 @@ export async function resolveCommentEntities(
         href: r.slug ? `/markets/${r.slug}` : "/predict",
         slug: r.slug ?? null,
         imageUrl: r.coverImageUrl ?? null,
+        fallbackImageUrl: null,
         category: r.category ?? null,
         personIds: uniq([r.personId, ...(relatedPeople.get(`world_market:${r.id}`) ?? [])]),
       });
@@ -356,6 +404,7 @@ export async function resolveCommentEntities(
         href: `/person/${personId}`,
         slug: null,
         imageUrl: person?.avatar ?? null,
+        fallbackImageUrl: null,
         category: person?.category ?? null,
         personIds: [personId],
       });
@@ -395,17 +444,28 @@ async function loadPeople(
   return out;
 }
 
-/** For card entities missing an image, fall back to the primary linked person's avatar. */
+/**
+ * For card entities missing an image, fall back to the primary linked person's
+ * avatar. When a hero URL exists but may 404, also set fallbackImageUrl from
+ * that avatar so CardImage can recover (same idea as opinion-poll option fallback).
+ */
 async function hydratePersonImages(entities: Map<string, VoicesEntity>): Promise<void> {
   const needed = new Set<string>();
   for (const e of entities.values()) {
-    if (!e.imageUrl && e.personIds[0]) needed.add(e.personIds[0]);
+    if (!e.personIds[0]) continue;
+    if (!e.imageUrl || !e.fallbackImageUrl) needed.add(e.personIds[0]);
   }
   if (needed.size === 0) return;
   const people = await loadPeople(Array.from(needed));
   for (const e of entities.values()) {
-    if (!e.imageUrl && e.personIds[0]) {
-      e.imageUrl = people.get(e.personIds[0])?.avatar ?? null;
+    const avatar = e.personIds[0] ? people.get(e.personIds[0])?.avatar ?? null : null;
+    if (!avatar) continue;
+    if (!e.imageUrl) {
+      e.imageUrl = avatar;
+      continue;
+    }
+    if (!e.fallbackImageUrl && avatar !== e.imageUrl) {
+      e.fallbackImageUrl = avatar;
     }
   }
 }

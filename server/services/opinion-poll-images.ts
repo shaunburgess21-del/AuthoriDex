@@ -67,6 +67,51 @@ function isOpinionPollConventionImageUrl(url: string | null): boolean {
   return url != null && url.includes("/opinion-polls/") && url.endsWith("/1.webp");
 }
 
+/** True when URL is the bucket convention hero (`…/opinion-polls/{slug}/1.webp`). */
+export function isOpinionPollConventionHeroUrl(url: string | null | undefined): boolean {
+  return isOpinionPollConventionImageUrl(url ?? null);
+}
+
+const IMAGE_HEAD_TIMEOUT_MS = 800;
+
+/** HEAD-check whether an image URL is reachable (short timeout for feed hydration). */
+export async function urlLooksReachable(url: string): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), IMAGE_HEAD_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { method: "HEAD", signal: ctrl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Pick Voices feed thumbnail URLs for an opinion poll. Prefer the poll hero when
+ * it loads; if the hero is a missing convention `1.webp`, use the first option
+ * image instead so the feed never shows an empty placeholder.
+ */
+export async function pickVoicesOpinionPollImages(
+  hero: string | null,
+  optionImage: string | null,
+): Promise<{ imageUrl: string | null; fallbackImageUrl: string | null }> {
+  if (!hero && !optionImage) return { imageUrl: null, fallbackImageUrl: null };
+  if (!optionImage) return { imageUrl: hero, fallbackImageUrl: null };
+  if (!hero) return { imageUrl: optionImage, fallbackImageUrl: null };
+  if (hero === optionImage) return { imageUrl: hero, fallbackImageUrl: null };
+
+  if (isOpinionPollConventionImageUrl(hero)) {
+    const ok = await urlLooksReachable(hero);
+    if (!ok) {
+      return { imageUrl: optionImage, fallbackImageUrl: hero };
+    }
+  }
+
+  return { imageUrl: hero, fallbackImageUrl: optionImage };
+}
+
 export function resolveOpinionPollImageUrl(
   stored: string | null,
   pollSlug: string | null | undefined,

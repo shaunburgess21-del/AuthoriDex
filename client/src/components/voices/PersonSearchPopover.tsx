@@ -30,6 +30,10 @@ interface PersonSearchPopoverProps {
   closeOnSelect?: boolean;
   align?: "start" | "center" | "end";
   placeholder?: string;
+  /** Optional muted explanation above the search field. */
+  hint?: string;
+  /** Notified when the popover opens/closes. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -44,6 +48,8 @@ export function PersonSearchPopover({
   closeOnSelect = false,
   align = "start",
   placeholder = "Search celebrities…",
+  hint,
+  onOpenChange,
 }: PersonSearchPopoverProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -70,11 +76,20 @@ export function PersonSearchPopover({
     [results, excludeIds],
   );
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+    if (!next) setQuery("");
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="w-[260px] p-0" align={align}>
         <Command shouldFilter={false}>
+          {hint ? (
+            <p className="border-b px-3 py-2 text-xs text-muted-foreground">{hint}</p>
+          ) : null}
           <div className="flex items-center border-b px-3">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
             <input
@@ -101,7 +116,7 @@ export function PersonSearchPopover({
                     onSelect={() => {
                       onSelect(p);
                       setQuery("");
-                      if (closeOnSelect) setOpen(false);
+                      if (closeOnSelect) handleOpenChange(false);
                     }}
                     className="gap-2"
                   >
