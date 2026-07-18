@@ -38,6 +38,7 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
+import { SentimentPollResultsBars } from "@/components/sentiment/SentimentPollResultsBars";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -536,26 +537,12 @@ export default function PollDetailPage() {
             Results
           </h2>
 
-          <div className="flex flex-col gap-2 mb-4" data-testid="bar-results">
-            <div
-              className="h-9 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 flex items-center justify-center transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20 cursor-default"
-              style={{ width: `${Math.max(poll.agreePercent, 15)}%` }}
-            >
-              <span className="text-xs font-semibold text-[#00C853]">{poll.agreePercent}%</span>
-            </div>
-            <div
-              className="h-9 rounded-md bg-white/5 border border-white/40 flex items-center justify-center transition-all duration-300 hover:border-white/80 hover:bg-white/15 cursor-default"
-              style={{ width: `${Math.max(poll.neutralPercent, 15)}%` }}
-            >
-              <span className="text-xs font-semibold text-white">{poll.neutralPercent}%</span>
-            </div>
-            <div
-              className="h-9 rounded-md bg-[#FF0000]/10 border border-[#FF0000]/50 flex items-center justify-center transition-all duration-300 hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 cursor-default"
-              style={{ width: `${Math.max(poll.disagreePercent, 15)}%` }}
-            >
-              <span className="text-xs font-semibold text-[#FF0000]">{poll.disagreePercent}%</span>
-            </div>
-          </div>
+          <SentimentPollResultsBars
+            agreePercent={poll.agreePercent}
+            neutralPercent={poll.neutralPercent}
+            disagreePercent={poll.disagreePercent}
+            className="mb-4"
+          />
 
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>

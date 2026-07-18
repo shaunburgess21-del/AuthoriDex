@@ -40,6 +40,32 @@ export interface VoicesEntity {
     change7d: number | null;
     approvalAvgRating: number | null;
   } | null;
+  /** Vote distribution for sentiment poll link cards (trending_poll only). */
+  sentimentResults?: {
+    agreePercent: number;
+    neutralPercent: number;
+    disagreePercent: number;
+  } | null;
+  /** Top leading options for opinion poll link cards (opinion_poll only). */
+  opinionPreview?: {
+    totalOptions: number;
+    totalVotes: number;
+    topOptions: Array<{ name: string; percent: number; votes: number }>;
+  } | null;
+  /** Live LMSR outcome split for world market link cards (open_market only). */
+  worldMarketPreview?:
+    | {
+        layout: "binary";
+        left: { label: string; percent: number };
+        right: { label: string; percent: number };
+        isClassicYesNo: boolean;
+      }
+    | {
+        layout: "multi";
+        totalOutcomes: number;
+        topOutcomes: Array<{ label: string; percent: number }>;
+      }
+    | null;
   /** Present for matchups only — drives the A/B split preview banner. */
   media?: {
     optionAImage: string | null;

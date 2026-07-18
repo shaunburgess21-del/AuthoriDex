@@ -11,6 +11,9 @@ import { CardImage } from "@/components/ui/card-image";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import type { VoicesEntity } from "./types";
 import { VoiceProfilePreviewStats } from "./VoiceProfilePreviewStats";
+import { VoiceSentimentPollPreview } from "./VoiceSentimentPollPreview";
+import { VoiceOpinionPollPreview } from "./VoiceOpinionPollPreview";
+import { VoiceWorldMarketPreview } from "./VoiceWorldMarketPreview";
 
 const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
   matchup: VoteIcon,
@@ -88,6 +91,9 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
 
   if (hasBannerImage && entity.imageUrl) {
     const isProfile = entity.refType === "person";
+    const isSentimentPoll = entity.refType === "trending_poll";
+    const isOpinionPoll = entity.refType === "opinion_poll";
+    const isOpenMarket = entity.refType === "open_market";
     const categoryStyle =
       isProfile && entity.category ? getCategoryStyle(entity.category) : null;
     const categoryRank = entity.profileStats?.categoryRank;
@@ -137,6 +143,54 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             </div>
             {entity.profileStats ? (
               <VoiceProfilePreviewStats stats={entity.profileStats} />
+            ) : (
+              <div className="min-h-0 flex-1" />
+            )}
+          </div>
+        ) : isSentimentPoll ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+            {entity.subtitle && (
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {entity.subtitle}
+              </span>
+            )}
+            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+              {entity.title}
+            </span>
+            {entity.sentimentResults ? (
+              <VoiceSentimentPollPreview results={entity.sentimentResults} />
+            ) : (
+              <div className="min-h-0 flex-1" />
+            )}
+          </div>
+        ) : isOpinionPoll ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+            {entity.subtitle && (
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {entity.subtitle}
+              </span>
+            )}
+            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+              {entity.title}
+            </span>
+            {entity.opinionPreview ? (
+              <VoiceOpinionPollPreview preview={entity.opinionPreview} />
+            ) : (
+              <div className="min-h-0 flex-1" />
+            )}
+          </div>
+        ) : isOpenMarket ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+            {entity.subtitle && (
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {entity.subtitle}
+              </span>
+            )}
+            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+              {entity.title}
+            </span>
+            {entity.worldMarketPreview ? (
+              <VoiceWorldMarketPreview preview={entity.worldMarketPreview} />
             ) : (
               <div className="min-h-0 flex-1" />
             )}

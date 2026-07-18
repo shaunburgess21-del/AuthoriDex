@@ -20,6 +20,18 @@ import {
   loadPersonProfileStats,
   type VoicesProfileStats,
 } from "../person-profile-stats";
+import {
+  loadSentimentPollResults,
+  type VoicesSentimentResults,
+} from "../sentiment-poll-results";
+import {
+  loadOpinionPollPreview,
+  type VoicesOpinionPreview,
+} from "../opinion-poll-preview";
+import {
+  loadWorldMarketPreview,
+  type VoicesWorldMarketPreview,
+} from "../world-market-preview";
 
 /**
  * The card / profile / timeline an aggregated Voices item is attached to.
@@ -45,6 +57,12 @@ export interface VoicesEntity {
   personIds: string[];
   /** Leaderboard stats for profile link cards (person entities only). */
   profileStats?: VoicesProfileStats | null;
+  /** Vote distribution for sentiment poll link cards (trending_poll only). */
+  sentimentResults?: VoicesSentimentResults | null;
+  /** Top leading options for opinion poll link cards (opinion_poll only). */
+  opinionPreview?: VoicesOpinionPreview | null;
+  /** Live LMSR outcome split for world market link cards (open_market only). */
+  worldMarketPreview?: VoicesWorldMarketPreview | null;
   /** Present for matchups only — drives the A/B split preview banner. */
   media?: {
     optionAImage: string | null;
@@ -263,6 +281,7 @@ export async function resolveCommentEntities(
   }
 
   if (trendingPollIds.size > 0) {
+    const ids = Array.from(trendingPollIds);
     const rows = await db
       .select({
         id: trendingPolls.id,
@@ -274,7 +293,8 @@ export async function resolveCommentEntities(
         personId: trendingPolls.personId,
       })
       .from(trendingPolls)
-      .where(inArray(trendingPolls.id, Array.from(trendingPollIds)));
+      .where(inArray(trendingPolls.id, ids));
+    const sentimentResultsByPoll = await loadSentimentPollResults(ids);
     for (const r of rows) {
       const key = entityKey("trending_poll", r.id);
       // Same convention-based resolution as GET /api/polls/:slug so polls
@@ -294,11 +314,13 @@ export async function resolveCommentEntities(
         fallbackImageUrl: null,
         category: r.category ?? null,
         personIds: uniq([r.personId, ...(relatedPeople.get(`sentiment_poll:${r.id}`) ?? [])]),
+        sentimentResults: sentimentResultsByPoll.get(r.id) ?? null,
       });
     }
   }
 
   if (opinionPollIds.size > 0) {
+    const ids = Array.from(opinionPollIds);
     const rows = await db
       .select({
         id: opinionPolls.id,
@@ -308,7 +330,9 @@ export async function resolveCommentEntities(
         imageUrl: opinionPolls.imageUrl,
       })
       .from(opinionPolls)
-      .where(inArray(opinionPolls.id, Array.from(opinionPollIds)));
+      .where(inArray(opinionPolls.id, ids));
+
+    const opinionPreviewByPoll = await loadOpinionPollPreview(ids);
 
     // Prefer a reachable thumbnail: when convention hero `1.webp` is missing,
     // use the first option image (same recovery as the detail page header).
@@ -319,7 +343,7 @@ export async function resolveCommentEntities(
         orderIndex: opinionPollOptions.orderIndex,
       })
       .from(opinionPollOptions)
-      .where(inArray(opinionPollOptions.pollId, Array.from(opinionPollIds)))
+      .where(inArray(opinionPollOptions.pollId, ids))
       .orderBy(asc(opinionPollOptions.orderIndex));
 
     const firstOptionImageByPoll = new Map<string, string>();
@@ -359,11 +383,13 @@ export async function resolveCommentEntities(
         fallbackImageUrl: picked.fallbackImageUrl,
         category: r.category ?? null,
         personIds: uniq(relatedPeople.get(`opinion_poll:${r.id}`) ?? []),
+        opinionPreview: opinionPreviewByPoll.get(r.id) ?? null,
       });
     }
   }
 
   if (openMarketIds.size > 0) {
+    const ids = Array.from(openMarketIds);
     const rows = await db
       .select({
         id: predictionMarkets.id,
@@ -374,7 +400,10 @@ export async function resolveCommentEntities(
         personId: predictionMarkets.personId,
       })
       .from(predictionMarkets)
-      .where(inArray(predictionMarkets.id, Array.from(openMarketIds)));
+      .where(inArray(predictionMarkets.id, ids));
+
+    const worldMarketPreviewByMarket = await loadWorldMarketPreview(ids);
+
     for (const r of rows) {
       const key = entityKey("open_market", r.id);
       result.set(key, {
@@ -389,6 +418,7 @@ export async function resolveCommentEntities(
         fallbackImageUrl: null,
         category: r.category ?? null,
         personIds: uniq([r.personId, ...(relatedPeople.get(`world_market:${r.id}`) ?? [])]),
+        worldMarketPreview: worldMarketPreviewByMarket.get(r.id) ?? null,
       });
     }
   }
