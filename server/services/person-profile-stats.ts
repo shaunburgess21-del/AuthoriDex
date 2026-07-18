@@ -49,9 +49,7 @@ export async function loadPersonProfileStats(
   `);
 
   const rankById = new Map<string, number>();
-  const rankResultRows =
-    (rankRows as { rows?: Record<string, unknown>[] }).rows ?? (rankRows as Record<string, unknown>[]);
-  for (const row of rankResultRows) {
+  for (const row of rankRows.rows ?? []) {
     const id = String(row.id);
     const raw = row.category_rank ?? row.categoryRank;
     const n = raw != null ? Number(raw) : NaN;
