@@ -18,7 +18,10 @@ import {
 import { resolveOpinionPollImageUrl, pickVoicesOpinionPollImages } from "../opinion-poll-images";
 import {
   loadPersonProfileStats,
+  loadInductionProfilePreview,
+  EMPTY_PROFILE_STATS,
   type VoicesProfileStats,
+  type VoicesInductionPreview,
 } from "../person-profile-stats";
 import {
   loadSentimentPollResults,
@@ -57,6 +60,8 @@ export interface VoicesEntity {
   personIds: string[];
   /** Leaderboard stats for profile link cards (person entities only). */
   profileStats?: VoicesProfileStats | null;
+  /** Induction-queue CTA preview for profile link cards (person entities only). */
+  inductionPreview?: VoicesInductionPreview | null;
   /** Vote distribution for sentiment poll link cards (trending_poll only). */
   sentimentResults?: VoicesSentimentResults | null;
   /** Top leading options for opinion poll link cards (opinion_poll only). */
@@ -430,6 +435,7 @@ export async function resolveCommentEntities(
     const ids = Array.from(personIds);
     const people = await loadPeople(ids);
     const profileStatsByPerson = await loadPersonProfileStats(ids);
+    const inductionPreviewByPerson = await loadInductionProfilePreview(ids);
     for (const personId of personIds) {
       const key = entityKey("community_insight", personId);
       const person = people.get(personId);
@@ -445,7 +451,8 @@ export async function resolveCommentEntities(
         fallbackImageUrl: null,
         category: person?.category ?? null,
         personIds: [personId],
-        profileStats: profileStatsByPerson.get(personId) ?? null,
+        profileStats: profileStatsByPerson.get(personId) ?? EMPTY_PROFILE_STATS,
+        inductionPreview: inductionPreviewByPerson.get(personId) ?? null,
       });
     }
   }

@@ -19,6 +19,22 @@ export type VoicesParentType =
   | "community_insight"
   | "voices_post";
 
+export type VoicesProfileStats = {
+  categoryRank: number | null;
+  fameIndex: number | null;
+  change24h: number | null;
+  change7d: number | null;
+  approvalAvgRating: number | null;
+};
+
+export const EMPTY_PROFILE_STATS: VoicesProfileStats = {
+  categoryRank: null,
+  fameIndex: null,
+  change24h: null,
+  change7d: null,
+  approvalAvgRating: null,
+};
+
 export interface VoicesEntity {
   surface: VoicesSurface;
   refType: "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "person" | "timeline";
@@ -33,12 +49,11 @@ export interface VoicesEntity {
   category: string | null;
   personIds: string[];
   /** Leaderboard stats for profile link cards (person entities only). */
-  profileStats?: {
-    categoryRank: number | null;
-    fameIndex: number | null;
-    change24h: number | null;
-    change7d: number | null;
-    approvalAvgRating: number | null;
+  profileStats?: VoicesProfileStats | null;
+  /** Induction-queue CTA preview for profile link cards (person entities only). */
+  inductionPreview?: {
+    inductionCandidateId: string | null;
+    seedVotes: number;
   } | null;
   /** Vote distribution for sentiment poll link cards (trending_poll only). */
   sentimentResults?: {

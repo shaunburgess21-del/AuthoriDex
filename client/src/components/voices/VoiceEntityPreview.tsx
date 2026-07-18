@@ -10,7 +10,9 @@ import {
 import { CardImage } from "@/components/ui/card-image";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import type { VoicesEntity } from "./types";
+import { EMPTY_PROFILE_STATS } from "./types";
 import { VoiceProfilePreviewStats } from "./VoiceProfilePreviewStats";
+import { VoiceInductionProfilePreview } from "./VoiceInductionProfilePreview";
 import { VoiceSentimentPollPreview } from "./VoiceSentimentPollPreview";
 import { VoiceOpinionPollPreview } from "./VoiceOpinionPollPreview";
 import { VoiceWorldMarketPreview } from "./VoiceWorldMarketPreview";
@@ -141,10 +143,10 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
                 </>
               )}
             </div>
-            {entity.profileStats ? (
-              <VoiceProfilePreviewStats stats={entity.profileStats} />
+            {entity.inductionPreview ? (
+              <VoiceInductionProfilePreview preview={entity.inductionPreview} />
             ) : (
-              <div className="min-h-0 flex-1" />
+              <VoiceProfilePreviewStats stats={entity.profileStats ?? EMPTY_PROFILE_STATS} />
             )}
           </div>
         ) : isSentimentPoll ? (
