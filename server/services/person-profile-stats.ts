@@ -50,7 +50,8 @@ export async function loadPersonProfileStats(
 
   const rankById = new Map<string, number>();
   const rankResultRows =
-    (rankRows as { rows?: Record<string, unknown>[] }).rows ?? (rankRows as Record<string, unknown>[]);
+    (rankRows as { rows?: Record<string, unknown>[] }).rows ??
+    (rankRows as unknown as Record<string, unknown>[]);
   for (const row of rankResultRows) {
     const id = String(row.id);
     const raw = row.category_rank ?? row.categoryRank;
