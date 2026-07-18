@@ -16,6 +16,10 @@ import {
   slugifySentimentPollHeadline,
 } from "../sentiment-poll-images";
 import { resolveOpinionPollImageUrl, pickVoicesOpinionPollImages } from "../opinion-poll-images";
+import {
+  loadPersonProfileStats,
+  type VoicesProfileStats,
+} from "../person-profile-stats";
 
 /**
  * The card / profile / timeline an aggregated Voices item is attached to.
@@ -39,6 +43,8 @@ export interface VoicesEntity {
   category: string | null;
   /** Linked tracked_people ids (for the celebrity filter). */
   personIds: string[];
+  /** Leaderboard stats for profile link cards (person entities only). */
+  profileStats?: VoicesProfileStats | null;
   /** Present for matchups only — drives the A/B split preview banner. */
   media?: {
     optionAImage: string | null;
@@ -391,7 +397,9 @@ export async function resolveCommentEntities(
   // directly (mirrors the old resolveInsightEntities shape, but keyed by
   // (parentType, parentId) so it merges seamlessly with the card entities above).
   if (personIds.size > 0) {
-    const people = await loadPeople(Array.from(personIds));
+    const ids = Array.from(personIds);
+    const people = await loadPeople(ids);
+    const profileStatsByPerson = await loadPersonProfileStats(ids);
     for (const personId of personIds) {
       const key = entityKey("community_insight", personId);
       const person = people.get(personId);
@@ -407,6 +415,7 @@ export async function resolveCommentEntities(
         fallbackImageUrl: null,
         category: person?.category ?? null,
         personIds: [personId],
+        profileStats: profileStatsByPerson.get(personId) ?? null,
       });
     }
   }

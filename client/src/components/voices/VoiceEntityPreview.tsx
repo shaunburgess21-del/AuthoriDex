@@ -5,9 +5,12 @@ import {
   Globe,
   User as UserIcon,
   MessagesSquare,
+  Trophy,
 } from "lucide-react";
 import { CardImage } from "@/components/ui/card-image";
+import { getCategoryStyle } from "@/components/CategoryPill";
 import type { VoicesEntity } from "./types";
+import { VoiceProfilePreviewStats } from "./VoiceProfilePreviewStats";
 
 const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
   matchup: VoteIcon,
@@ -84,6 +87,11 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
   }
 
   if (hasBannerImage && entity.imageUrl) {
+    const isProfile = entity.refType === "person";
+    const categoryStyle =
+      isProfile && entity.category ? getCategoryStyle(entity.category) : null;
+    const categoryRank = entity.profileStats?.categoryRank;
+
     return (
       <Link
         href={entity.href}
@@ -99,16 +107,52 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             fallbackSrc={entity.fallbackImageUrl}
           />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-3 py-2">
-          {entity.subtitle && (
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {entity.subtitle}
+        {isProfile ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+            {entity.subtitle && (
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {entity.subtitle}
+              </span>
+            )}
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <span className="line-clamp-1 shrink text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+                {entity.title}
+              </span>
+              {entity.category && (
+                <>
+                  <span className="shrink-0 text-sm text-muted-foreground/60">·</span>
+                  <span className="line-clamp-1 shrink text-sm text-muted-foreground">
+                    {entity.category}
+                  </span>
+                  {categoryRank != null && categoryRank > 0 && categoryStyle && (
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${categoryStyle.bg} border ${categoryStyle.border} ${categoryStyle.text}`}
+                    >
+                      <Trophy className="h-3 w-3" />
+                      #{categoryRank}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            {entity.profileStats ? (
+              <VoiceProfilePreviewStats stats={entity.profileStats} />
+            ) : (
+              <div className="min-h-0 flex-1" />
+            )}
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-3 py-2">
+            {entity.subtitle && (
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {entity.subtitle}
+              </span>
+            )}
+            <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+              {entity.title}
             </span>
-          )}
-          <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
-            {entity.title}
-          </span>
-        </div>
+          </div>
+        )}
       </Link>
     );
   }

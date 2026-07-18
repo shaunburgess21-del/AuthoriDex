@@ -32,6 +32,14 @@ export interface VoicesEntity {
   fallbackImageUrl: string | null;
   category: string | null;
   personIds: string[];
+  /** Leaderboard stats for profile link cards (person entities only). */
+  profileStats?: {
+    categoryRank: number | null;
+    fameIndex: number | null;
+    change24h: number | null;
+    change7d: number | null;
+    approvalAvgRating: number | null;
+  } | null;
   /** Present for matchups only — drives the A/B split preview banner. */
   media?: {
     optionAImage: string | null;
