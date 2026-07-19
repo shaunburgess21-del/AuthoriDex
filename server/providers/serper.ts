@@ -51,6 +51,9 @@ export interface SerperDegradedState {
 }
 
 let _serperDegradedState: SerperDegradedState | null = null;
+/** Last time a caller was allowed to probe Serper while degraded (recovery check). */
+let _lastSerperDegradedProbeAtMs = 0;
+const SERPER_DEGRADED_PROBE_INTERVAL_MS = 15 * 60 * 1000;
 
 export function getSerperDegradedState(): SerperDegradedState | null {
   return _serperDegradedState;
@@ -61,6 +64,21 @@ export function clearSerperDegradedState(): void {
     console.info(`[Serper] Degraded state cleared (was ${_serperDegradedState.reason} since ${_serperDegradedState.since})`);
     _serperDegradedState = null;
   }
+}
+
+/**
+ * While Serper is degraded, allow at most one live probe every 15 minutes so
+ * Why Trending / cron can detect recovery (e.g. after topping up credits)
+ * without hammering a dead provider on every profile view.
+ * Returns true when the caller should proceed with a live Serper request.
+ */
+export function consumeSerperDegradedProbe(nowMs: number = Date.now()): boolean {
+  if (!_serperDegradedState) return true;
+  if (nowMs - _lastSerperDegradedProbeAtMs >= SERPER_DEGRADED_PROBE_INTERVAL_MS) {
+    _lastSerperDegradedProbeAtMs = nowMs;
+    return true;
+  }
+  return false;
 }
 
 function classifyDegradedStatus(status: number, body?: string): SerperDegradedReason | null {

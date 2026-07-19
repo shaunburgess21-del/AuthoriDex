@@ -3,8 +3,35 @@ import { createHash } from "crypto";
 import { eq, inArray } from "drizzle-orm";
 import { apiCache, type TrendingPerson } from "@shared/schema";
 import { db } from "../db";
-import { fetchTrendingNewsContext, getSerperDegradedState } from "../providers/serper";
+import {
+  fetchTrendingNewsContext,
+  getSerperDegradedState,
+  consumeSerperDegradedProbe,
+} from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { isWithinWhyTrendingStaleGrace } from "./why-trending-stale";
+
+export {
+  WHY_TRENDING_MAX_STALE_HOURS,
+  isWithinWhyTrendingStaleGrace,
+} from "./why-trending-stale";
+
+function providerUnavailablePayload(
+  person: TrendingPerson,
+  degraded: NonNullable<ReturnType<typeof getSerperDegradedState>>,
+): WhyTrendingPayload {
+  return {
+    personId: person.id,
+    personName: person.name,
+    hasContext: false,
+    cacheStatus: "PROVIDER_UNAVAILABLE",
+    providerReason: degraded.reason,
+    providerSince: degraded.since,
+    staleAgeMinutes: null,
+    message: "Trending insights are temporarily unavailable. Please try again shortly.",
+    fetchedAt: new Date(),
+  };
+}
 
 export const WHY_TRENDING_PROMPT_VERSION = 5;
 export const WHY_TRENDING_CACHE_TTL_HOURS = 4;
@@ -302,6 +329,20 @@ export async function generateWhyTrendingSummary(
     };
   }
 
+  // While Serper is degraded, avoid live calls except for a rare recovery probe
+  // (or force). Prefer serving grace-window stale content over blanking the UI.
+  const degradedBeforeFetch = getSerperDegradedState();
+  if (degradedBeforeFetch && !options.force && !consumeSerperDegradedProbe()) {
+    if (cached && isWithinWhyTrendingStaleGrace(cached.fetchedAt)) {
+      const stale = parseCachedPayload(cached);
+      if (stale) {
+        stale.cacheStatus = "STALE_SERVING";
+        return attachStaleAge(stale);
+      }
+    }
+    return providerUnavailablePayload(person, degradedBeforeFetch);
+  }
+
   await acquireLock(lockKey, personId);
 
   try {
@@ -309,18 +350,15 @@ export async function generateWhyTrendingSummary(
 
     if (!newsContext || newsContext.sources.length === 0) {
       const degraded = getSerperDegradedState();
+      if (cached && isWithinWhyTrendingStaleGrace(cached.fetchedAt)) {
+        const stale = parseCachedPayload(cached);
+        if (stale) {
+          stale.cacheStatus = "STALE_SERVING";
+          return attachStaleAge(stale);
+        }
+      }
       if (degraded) {
-        return {
-          personId,
-          personName: person.name,
-          hasContext: false,
-          cacheStatus: "PROVIDER_UNAVAILABLE",
-          providerReason: degraded.reason,
-          providerSince: degraded.since,
-          staleAgeMinutes: null,
-          message: "Trending insights are temporarily unavailable. Please try again shortly.",
-          fetchedAt: new Date(),
-        };
+        return providerUnavailablePayload(person, degraded);
       }
       return {
         personId,
@@ -530,10 +568,18 @@ export async function fetchWhyTrendingForPerson(
     return attachStaleAge(payload);
   }
 
-  if (cached && payload) {
+  // Serve expired summaries for up to WHY_TRENDING_MAX_STALE_HOURS so a Serper
+  // outage (e.g. overnight quota exhaustion) does not blank the UI immediately.
+  // Past the grace window, fall through to generation → PROVIDER_UNAVAILABLE
+  // while Serper is still down, or a fresh summary once it recovers.
+  if (cached && payload && isWithinWhyTrendingStaleGrace(cached.fetchedAt)) {
     payload.cacheStatus = "STALE_SERVING";
     attachStaleAge(payload);
-    scheduleBackgroundWhyTrendingRefresh(person, { hotMover });
+    // Skip background refresh while Serper is known-degraded (401/402/429/quota)
+    // so every profile view does not hammer a dead provider.
+    if (!getSerperDegradedState()) {
+      scheduleBackgroundWhyTrendingRefresh(person, { hotMover });
+    }
     return payload;
   }
 

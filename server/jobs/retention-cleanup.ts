@@ -1,6 +1,10 @@
 import { db } from "../db";
 import { apiCache, ingestionRuns, ammHealthCheckRuns } from "@shared/schema";
 import { sql, lt, and } from "drizzle-orm";
+import {
+  WHY_TRENDING_MAX_STALE_HOURS,
+  WHY_TRENDING_SUMMARY_CACHE_PREFIX,
+} from "../services/why-trending-stale";
 
 const SNAPSHOT_RETENTION_DAYS = 90;
 const INGESTION_RUN_RETENTION_DAYS = 60;
@@ -72,14 +76,43 @@ export async function runRetentionCleanup(): Promise<RetentionCleanupResult> {
     console.error("[Retention] Error pruning trend_snapshots:", err);
   }
 
-  // 2. Delete expired api_cache entries
+  // 2. Delete expired api_cache entries, with a grace window for Why Trending
+  // summaries so short Serper outages do not wipe the last-known UI content.
+  // why_trending_lock:* / why_trending_ratelimit:* use underscores and are
+  // pruned with the normal expired-row path.
   try {
     const now = new Date();
-    const deleted = await db
+    const whyTrendingCutoff = new Date(
+      now.getTime() - WHY_TRENDING_MAX_STALE_HOURS * 60 * 60 * 1000,
+    );
+
+    const summaryPrefixLike = `${WHY_TRENDING_SUMMARY_CACHE_PREFIX}%`;
+
+    const deletedOther = await db
       .delete(apiCache)
-      .where(lt(apiCache.expiresAt, now));
-    cacheEntriesDeleted = Number((deleted as any).rowCount ?? 0);
-    console.log(`[Retention] Deleted ${cacheEntriesDeleted} expired api_cache entries`);
+      .where(
+        and(
+          lt(apiCache.expiresAt, now),
+          sql`${apiCache.cacheKey} NOT LIKE ${summaryPrefixLike}`,
+        ),
+      );
+    const otherCount = Number((deletedOther as any).rowCount ?? 0);
+
+    const deletedWhyTrending = await db
+      .delete(apiCache)
+      .where(
+        and(
+          sql`${apiCache.cacheKey} LIKE ${summaryPrefixLike}`,
+          lt(apiCache.fetchedAt, whyTrendingCutoff),
+        ),
+      );
+    const whyTrendingCount = Number((deletedWhyTrending as any).rowCount ?? 0);
+
+    cacheEntriesDeleted = otherCount + whyTrendingCount;
+    console.log(
+      `[Retention] Deleted ${cacheEntriesDeleted} api_cache entries ` +
+        `(${otherCount} expired non-why_trending, ${whyTrendingCount} why_trending older than ${WHY_TRENDING_MAX_STALE_HOURS}h)`,
+    );
   } catch (err) {
     console.error("[Retention] Error pruning api_cache:", err);
   }
