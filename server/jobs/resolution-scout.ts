@@ -32,6 +32,10 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
 import {
+  hardenAggregateLeaderboardAssessment,
+  isAggregateLeaderboardMarket,
+} from "@shared/lib/aggregate-leaderboard-market";
+import {
   isSingleWinnerKnockoutMarket,
   knockoutHintsFromMarket,
 } from "@shared/lib/knockout-market";
@@ -267,6 +271,14 @@ function normalizeAction(a: unknown): ScoutAction {
     : "none";
 }
 
+function assessmentSignature(
+  stage: ScoutStage,
+  recommendedAction: ScoutAction,
+  proposedWinnerEntryId: string | null,
+): string {
+  return `${stage}|${recommendedAction}|${proposedWinnerEntryId ?? "none"}`;
+}
+
 // ---- Prompt ---------------------------------------------------------------
 
 function buildSystemPrompt(): string {
@@ -291,8 +303,16 @@ Some markets ask how far a competitor advances, the furthest stage they reach, o
 Example: a team that has reached the quarterfinals but has NOT been eliminated is NOT "met" for the "Quarterfinals" outcome — they could still reach the semifinals or beyond, so the market is unresolved.
 Only use stage "met" for such a market when the final position is locked: the competitor has been eliminated at exactly that stage, has clinched that exact outcome, or every higher outcome is now mathematically impossible. While the competitor is still alive and could progress, use stage "likely" (or "watch"), set the leaning to the furthest stage confirmed so far, and recommend "watch" — never "resolve_now".
 
+LEADERBOARD / AGGREGATE / "MOST X" MARKETS — read carefully before choosing "met":
+Some markets ask who will finish with the most goals, points, assists, wins, or a named award (Golden Boot, top scorer, Cy Young, etc.). Outcomes are people/teams plus often an "Other" catch-all. A provisional lead is NOT a final result while remaining fixtures, games, or counting periods can still change the standings.
+Rules:
+- Never use stage "met" or recommendedAction "resolve_now" / "resolve_soon" while relevant matches or counting windows remain (including a final, consolation match, or later rounds that listed contenders can still play).
+- Do NOT claim that "none of the listed players can win" merely because an unlisted player currently leads — listed players may still catch up, and Other is only correct after the event is fully complete and no named outcome won.
+- Prefer stage "likely" (or "watch") with leaning set to the current leader among listed outcomes when known; use recommendedAction "watch". Mention the provisional leader and remaining fixtures in whatChanged.
+- Only escalate to "met" / "resolve_now" after the competition window is finished AND either (a) a listed outcome has clinched the award / most-X title, or (b) a credible official source confirms the award and it is not among the named outcomes (then Other).
+
 CATCH-ALL / "OTHER" OUTCOMES:
-If the market lists an "Other" / "None of the listed" outcome, select it only when a credible consensus shows the true winner is NOT among the named outcomes (or upstream rules resolve to Other). Do not pick Other merely because coverage is messy.
+If the market lists an "Other" / "None of the listed" outcome, select it only when a credible consensus shows the true winner is NOT among the named outcomes (or upstream rules resolve to Other). Do not pick Other merely because coverage is messy. On open leaderboard markets, never pick Other as met while listed contenders can still play.
 
 KNOCKOUT / SINGLE-WINNER SPORTS — read carefully:
 Some sports markets ask "Who will win A vs B?" for a knockout / cup / playoff tie. Even when a Draw outcome is listed (mirroring a 90-minute moneyline), the FINAL result of a knockout always has an advancing team (extra time and/or penalties). For these markets:
@@ -357,13 +377,21 @@ function buildUserPrompt(
   const knockoutNote = singleWinnerKnockout
     ? `SINGLE-WINNER KNOCKOUT: true. Resolve to the team that advances (including extra time / penalties). Never select Draw even if upstream 90-minute markets settled Draw.\n`
     : "";
+  const aggregateLeaderboard = isAggregateLeaderboardMarket({
+    title: market.title,
+    teaser: market.teaser,
+    resolutionCriteria: market.resolutionCriteria,
+  });
+  const aggregateNote = aggregateLeaderboard
+    ? `AGGREGATE / LEADERBOARD MARKET: true. Do NOT use stage "met" or resolve_now/resolve_soon while remaining fixtures or counting can still change standings. A provisional lead (including an unlisted leader pointing at Other) is "likely" + "watch" only until the competition window is finished.\n`
+    : "";
 
   return `MARKET: ${market.title}
 CATEGORY: ${market.category ?? "General"}
 TEASER: ${market.teaser ?? "N/A"}
 RESOLUTION DATE (deadline): ${resolutionDate}
 RESOLUTION CRITERIA: ${criteria}
-${knockoutNote}${sourceRules ? `UPSTREAM RESOLUTION RULES (verbatim):\n${sourceRules}\n` : ""}WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
+${knockoutNote}${aggregateNote}${sourceRules ? `UPSTREAM RESOLUTION RULES (verbatim):\n${sourceRules}\n` : ""}WHAT TO WATCH FOR: ${watch ?? "Infer the key leading indicators from the title and resolution criteria."}
 
 OUTCOMES:
 ${outcomes}
@@ -445,9 +473,7 @@ async function assessMarket(
         ? parsed.whatChanged.trim()
         : "No material change.";
 
-    const signature = `${stage}|${recommendedAction}|${proposedWinnerEntryId ?? "none"}`;
-
-    return {
+    const raw: ScoutAssessment = {
       leaning,
       proposedWinnerEntryId,
       confidence,
@@ -456,8 +482,17 @@ async function assessMarket(
       whatChanged,
       sources,
       assessedAt: new Date().toISOString(),
-      signature,
+      signature: assessmentSignature(stage, recommendedAction, proposedWinnerEntryId),
     };
+
+    const hardened = hardenAggregateLeaderboardAssessment(raw, market, entries);
+    if (hardened.signature !== raw.signature) {
+      log(
+        `[ResolutionScout] Held premature aggregate assessment for "${market.title}" ` +
+          `(${raw.signature} → ${hardened.signature})`,
+      );
+    }
+    return hardened;
   } catch (err) {
     clearTimeout(timeout);
     log(
