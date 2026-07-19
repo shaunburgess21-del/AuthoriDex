@@ -351,17 +351,57 @@ export const LeaderboardRow = memo(function LeaderboardRow({
   const hasMobileMovement = hasPct || showRankDelta;
   const pctMuted = !showPctColor;
 
+  // Podium accents (ranks 1–3): restrained metallic border + rank-well tints.
+  const podiumRank = !isColdStart && rank != null && rank >= 1 && rank <= 3 ? rank : null;
+  const cardBorderClass =
+    podiumRank === 1
+      ? "border-amber-400/30 hover:border-amber-400/50 dark:border-amber-400/20 dark:hover:border-amber-400/40"
+      : podiumRank === 2
+        ? "border-slate-400/40 hover:border-slate-400/60 dark:border-slate-300/20 dark:hover:border-slate-300/40"
+        : podiumRank === 3
+          ? "border-orange-500/30 hover:border-orange-500/50 dark:border-orange-400/20 dark:hover:border-orange-400/40"
+          : "border-border/40 hover:border-border/70";
+  const rankWellClass =
+    podiumRank === 1
+      ? "bg-amber-400/15 dark:bg-amber-400/10"
+      : podiumRank === 2
+        ? "bg-slate-400/15 dark:bg-slate-300/10"
+        : podiumRank === 3
+          ? "bg-orange-500/15 dark:bg-orange-400/10"
+          : "bg-muted dark:bg-[#101318]";
+  const rankNumeralClass =
+    podiumRank === 1
+      ? "text-amber-600 dark:text-amber-400"
+      : podiumRank === 2
+        ? "text-slate-600 dark:text-slate-300"
+        : podiumRank === 3
+          ? "text-orange-600 dark:text-orange-400"
+          : "text-muted-foreground dark:text-slate-400";
+
+  // Movement edge: a soft inner left stripe for hot movers / big rank moves.
+  // Fame tab only — rankChange compares against the prior fame-rank snapshot,
+  // which is meaningless on the approval leaderboard.
+  const movementEdgeClass =
+    activeTab === "fame"
+      ? isHotMover
+        ? "bg-amber-400/40"
+        : showRankDelta && person.rankChange != null
+          ? person.rankChange > 0
+            ? "bg-emerald-500/30"
+            : "bg-red-500/30"
+          : null
+      : null;
+
+  // role=button (not a real <button>) because the row contains nested
+  // interactive controls (Rate button, popovers) — nested buttons are
+  // invalid HTML and break click handling. Keydown only fires for the
+  // row itself so nested controls keep their own key behaviour.
   return (
-    <div className="border-b">
-      {/* role=button (not a real <button>) because the row contains nested
-          interactive controls (Rate button, popovers) — nested buttons are
-          invalid HTML and break click handling. Keydown only fires for the
-          row itself so nested controls keep their own key behaviour. */}
       <div
         role="button"
         tabIndex={0}
         aria-label={`View insights for ${person.name}`}
-        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`lb-row-enter relative flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl border bg-card/40 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-md ${cardBorderClass} hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
         onClick={onOpenInsight}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
@@ -372,15 +412,21 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         }}
         data-testid={`row-person-${person.id}`}
       >
+        {movementEdgeClass && (
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute left-0 top-2 bottom-2 w-[2px] rounded-full ${movementEdgeClass}`}
+          />
+        )}
         <div
           className="relative flex items-center rounded-lg overflow-hidden shrink-0"
           data-testid={`rank-avatar-unit-${person.id}`}
         >
-          <div className="flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg bg-muted border-r border-border dark:border-transparent dark:bg-[#101318]">
+          <div className={`flex items-center justify-center min-w-[32px] sm:min-w-[36px] h-12 lg:h-[58px] rounded-l-lg border-r border-border dark:border-transparent ${rankWellClass}`}>
             {isColdStart ? (
               <span className="text-[10px] sm:text-xs font-bold text-cyan-600 dark:text-cyan-400 leading-tight">New</span>
             ) : (
-              <span className="font-mono font-semibold text-muted-foreground dark:text-slate-400 text-[16px] sm:text-[18px]">
+              <span className={`font-mono font-semibold text-[16px] sm:text-[18px] ${rankNumeralClass}`}>
                 {rank}
               </span>
             )}
@@ -569,6 +615,5 @@ export const LeaderboardRow = memo(function LeaderboardRow({
           </>
         )}
       </div>
-    </div>
   );
 });

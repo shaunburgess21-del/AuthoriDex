@@ -1026,10 +1026,11 @@ export default function HomePage() {
                     </CardHeader>
                 </div>
                 <div
-                  className="sticky top-16 z-30 border-b border-border/60 bg-card/95 backdrop-blur-md"
+                  className="sticky top-16 z-30 border-b border-border/40 bg-card/95 backdrop-blur-md"
                   data-testid="leaderboard-sticky-toolbar"
                 >
-                  <div className="pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
+                  {/* pl-4/pr-4 (sm:pl-6/pr-9) = list container inset + row padding, keeping column headers aligned with the inset card rows */}
+                  <div className="pl-4 pr-4 sm:pl-6 sm:pr-9 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -1104,7 +1105,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <CardContent className="p-0">
-                  <div>
+                  <div className="lb-row-list px-2 py-2 sm:px-3 sm:py-3 space-y-1.5">
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center">
                         <p className="text-muted-foreground mb-3">
@@ -1139,7 +1140,7 @@ export default function HomePage() {
                   {hasNextPage && (
                     <div 
                       ref={loadMoreRef}
-                      className="p-6 border-t text-center"
+                      className="p-6 text-center"
                       data-testid="infinite-scroll-trigger"
                     >
                       {isFetchingNextPage ? (
@@ -1157,7 +1158,7 @@ export default function HomePage() {
                   
                   {/* All loaded message */}
                   {!hasNextPage && allPeople.length > 0 && (
-                    <div className="p-4 border-t text-center text-muted-foreground text-sm space-y-2">
+                    <div className="p-4 text-center text-muted-foreground text-sm space-y-2">
                       <p>Showing all {allPeople.length} results</p>
                       <p>
                         Don't see who you're looking for? Vote them onto the leaderboard via the{" "}

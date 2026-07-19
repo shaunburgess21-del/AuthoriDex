@@ -1200,6 +1200,33 @@
     }
   }
 
+  /* ===== LEADERBOARD CARD ROW ENTRANCE ===== */
+  /* One-time fade + 4px rise on mount. Rows are memoized and keyed by person
+     id, so live-tick refetches never remount them — this only fires on initial
+     load and when infinite-scroll pages append. */
+  @keyframes lb-row-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lb-row-enter {
+    animation: lb-row-enter 0.35s ease-out both;
+  }
+  /* Tiny stagger for the first rows in view on initial load; rows appended
+     later (infinite scroll) animate immediately with no delay. */
+  .lb-row-list > .lb-row-enter:nth-child(2) { animation-delay: 30ms; }
+  .lb-row-list > .lb-row-enter:nth-child(3) { animation-delay: 60ms; }
+  .lb-row-list > .lb-row-enter:nth-child(4) { animation-delay: 90ms; }
+  .lb-row-list > .lb-row-enter:nth-child(5) { animation-delay: 120ms; }
+  .lb-row-list > .lb-row-enter:nth-child(6) { animation-delay: 150ms; }
+  .lb-row-list > .lb-row-enter:nth-child(7) { animation-delay: 180ms; }
+  .lb-row-list > .lb-row-enter:nth-child(8) { animation-delay: 210ms; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lb-row-enter {
+      animation: none;
+    }
+  }
+
 }
 
 /* ===== JACKPOT HERO BACKGROUND ===== */

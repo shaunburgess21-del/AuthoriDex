@@ -44,9 +44,12 @@ export function MatchupCardSkeleton({ count = 3 }: { count?: number }) {
 
 export function LeaderboardRowSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="divide-y divide-border/60">
+    <div className="px-2 py-2 sm:px-3 sm:py-3 space-y-1.5">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 py-4 px-3">
+        <div
+          key={i}
+          className="flex items-center gap-3 py-4 px-3 rounded-xl border border-border/40 bg-card/40"
+        >
           <Skeleton className="h-12 w-[4.5rem] rounded-lg shrink-0" />
           <div className="flex-1 min-w-0 space-y-1.5">
             <Skeleton className="h-4 w-2/5" />
