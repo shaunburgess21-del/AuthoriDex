@@ -7,9 +7,12 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   contentTypeToSuggestionType,
+  defaultBreakingEndAt,
+  ensureBreakingEndAt,
   filterAgainstDenyList,
   formatReviewLearningsBlock,
   ideaDedupeKey,
+  isVoteScoutMode,
   matchupCanonicalKey,
   normalizeTitleKey,
   parseVoteScoutResponse,
@@ -89,6 +92,34 @@ describe("vote-scout-core deny list", () => {
     assert.doesNotMatch(evergreen, /optionAImagePrompt/);
     assert.match(evergreen, /relatedNames/);
     assert.match(evergreen, new RegExp(String(MIN_FIT_SCORE)));
+    assert.match(evergreen, /Invasive (celebrity )?gossip/i);
+    assert.match(evergreen, /Light, try-worthy public-figure/i);
+  });
+
+  it("uses a short-lived breaking rubric with web search and invasive-gossip exclusions", () => {
+    const breaking = buildSystemPrompt("breaking");
+    assert.match(breaking, /MODE: BREAKING/i);
+    assert.match(breaking, /web search/i);
+    assert.match(breaking, /SHORT-LIVED|short-lived/i);
+    assert.match(breaking, /do not default to sports only/i);
+    assert.match(breaking, /suggestedEndAt/);
+    assert.match(breaking, /3–14 days|days–weeks/i);
+    assert.match(breaking, /Invasive (celebrity )?gossip/i);
+    assert.match(breaking, /Light, try-worthy gossip/i);
+    assert.match(breaking, /are NOT excluded/i);
+    assert.match(breaking, /do NOT need to be timeless/i);
+    assert.match(breaking, /Prefer CURRENT controversies/i);
+    assert.doesNotMatch(breaking, /still makes sense in ~12 months/);
+    assert.doesNotMatch(breaking, /Dig for the NEXT TIER/);
+    // Example end date should not be null for breaking (models mirror the schema).
+    assert.match(breaking, /"suggestedEndAt": "20\d{2}-\d{2}-\d{2}/);
+  });
+
+  it("steers breaking user prompts toward current debates", () => {
+    const prompt = buildUserPrompt(sampleCatalog(), "breaking");
+    assert.match(prompt, /Scan mode: breaking/);
+    assert.match(prompt, /CURRENT short-lived debates/i);
+    assert.doesNotMatch(prompt, /Dig for the next tier/i);
   });
 });
 
@@ -304,5 +335,51 @@ describe("vote-scout-core type mapping", () => {
     assert.equal(contentTypeToSuggestionType("matchup"), "matchup");
     assert.equal(contentTypeToSuggestionType("sentiment_poll"), "sentiment_poll");
     assert.equal(contentTypeToSuggestionType("opinion_poll"), "opinion_poll");
+  });
+
+  it("validates scout modes including breaking", () => {
+    assert.equal(isVoteScoutMode("evergreen"), true);
+    assert.equal(isVoteScoutMode("topical"), true);
+    assert.equal(isVoteScoutMode("breaking"), true);
+    assert.equal(isVoteScoutMode("flash"), false);
+  });
+
+  it("defaults and clamps breaking suggestedEndAt", () => {
+    const now = new Date("2026-07-19T10:00:00.000Z");
+    const ideas = ensureBreakingEndAt(
+      [
+        {
+          contentType: "sentiment_poll",
+          payload: {
+            headline: "Was the penalty fair?",
+            subjectText: "Debate.",
+            category: "sports",
+            description: "",
+          },
+          rationale: "hot take",
+          fitScore: 80,
+          suggestedEndAt: null,
+          relatedNames: [],
+          displayTitle: "Was the penalty fair?",
+        },
+        {
+          contentType: "sentiment_poll",
+          payload: {
+            headline: "Far future",
+            subjectText: "Debate.",
+            category: "sports",
+            description: "",
+          },
+          rationale: "hot take",
+          fitScore: 80,
+          suggestedEndAt: "2027-12-01T00:00:00.000Z",
+          relatedNames: [],
+          displayTitle: "Far future",
+        },
+      ],
+      now,
+    );
+    assert.equal(ideas[0].suggestedEndAt, defaultBreakingEndAt(now));
+    assert.equal(ideas[1].suggestedEndAt?.startsWith("2026-08-02"), true);
   });
 });

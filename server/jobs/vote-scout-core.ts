@@ -4,8 +4,18 @@
  * Kept import-clean so unit tests can run without DATABASE_URL.
  */
 
-export type VoteScoutMode = "evergreen" | "topical";
+export type VoteScoutMode = "evergreen" | "topical" | "breaking";
 export type VoteScoutContentType = "matchup" | "sentiment_poll" | "opinion_poll";
+
+export const VOTE_SCOUT_MODES: readonly VoteScoutMode[] = [
+  "evergreen",
+  "topical",
+  "breaking",
+] as const;
+
+export function isVoteScoutMode(value: string): value is VoteScoutMode {
+  return (VOTE_SCOUT_MODES as readonly string[]).includes(value);
+}
 
 export type MatchupIdeaPayload = {
   title: string;
@@ -234,28 +244,77 @@ export function formatReviewLearningsBlock(learnings: {
 
 export function buildSystemPrompt(mode: VoteScoutMode): string {
   const modeBlock =
-    mode === "topical"
-      ? `MODE: TOPICAL (web search enabled).
+    mode === "breaking"
+      ? `MODE: BREAKING (web search enabled).
+- Search for SHORT-LIVED debates people are arguing about RIGHT NOW across sports, entertainment, tech, politics, culture, creator drama, music, gaming, etc. Stay broad — do not default to sports only.
+- Fair game: rules/fairness/cheating controversies, "was that OK?", etiquette flashpoints, viral culture fights, awards/show controversies, tracked-person debates that need a brief news peg to understand.
+- Light, try-worthy gossip / public-figure opinion fights are OK when they are a clear Agree/Disagree or preference question (e.g. "Was the penalty fair?", "Did they cross the line?").
+- PRIORITY when quality is equal: debates involving TRACKED PEOPLE (main leaderboard + induction). Put EXACT list names into relatedNames when they are central.
+- Almost every idea SHOULD set suggestedEndAt to a SHORT ISO date (typically 3–14 days out, or when the news cycle / tournament round naturally dies). Null only if it clearly has longer legs.
+- Write titles/headlines so a casual voter gets the stakes WITHOUT needing the full article — one short clause of context is fine in subjectText / description / summary.
+- Do NOT invent unverified breaking drama. Prefer real, currently discussed controversies from search.
+- Still skip: niche fandom trivia, meme-only jokes, and anything that fails the online-debate test.`
+      : mode === "topical"
+        ? `MODE: TOPICAL (web search enabled).
 - Search for debates people are actively arguing about RIGHT NOW on Reddit, X, forums, sports/entertainment discourse, dating etiquette, food culture, etc.
 - PRIORITY: look for current online debates involving people on the TRACKED PEOPLE lists (main leaderboard + induction queue) provided in the user message. When you find a genuinely divisive, on-genre debate about one or more of them, include it and put their EXACT names from the list into relatedNames.
 - Do NOT flood the batch with reality-TV casting trivia or shallow fandom polls. At most one reality/entertainment-format idea per run, and only if it clears the dinner-party bar.
 - Fair game: viral etiquette fights, timely culture wars, sports/music rivalries in the news, tracked-person debates.
+- Light, try-worthy public-figure opinion fights are OK when they are a durable debate (not invasive private-life gossip).
 - For time-sensitive ideas, set suggestedEndAt to an ISO date when the debate naturally expires (end of a season, tournament, awards cycle). Use null when it will stay relevant for months+.
-- Topical ≠ shallow. Skip niche fandom trivia, one-day outrage cycles, and anything that needs a news briefing to understand.
-- Do NOT invent "breaking" celebrity drama, resignation speculation, or invasive gossip.`
-      : `MODE: EVERGREEN (no web search — world knowledge only).
+- Topical ≠ shallow. Skip niche fandom trivia and pure one-day outrage with no real disagreement. Prefer topics that still make sense after a short news peg.
+- Do NOT invent unverified "breaking" celebrity drama or invasive gossip.`
+        : `MODE: EVERGREEN (no web search — world knowledge only).
 - Prefer classic, durable debates that still spark strong opinions years from now — serious OR casual.
 - You MAY use TRACKED PEOPLE names for evergreen GOAT / rivalry matchups when they fit, and put exact list names in relatedNames.
+- Light, try-worthy public-figure preference fights are OK when evergreen (rivalries, GOAT, public persona debates) — not invasive private-life gossip.
 - Leave suggestedEndAt as null.
 - Do not invent fake breaking-news hooks or "right now" framing.`;
+
+  const shelfLifeRule =
+    mode === "breaking"
+      ? `2. Shelf life — short-lived is EXPECTED here; suggestedEndAt should usually be days–weeks out. Still must be a real debate people argue about now, not a trivia quiz about a headline.`
+      : `2. Shelf life — still makes sense in ~12 months (unless topical/breaking + suggestedEndAt).`;
+
+  const avoidNewsPeg =
+    mode === "breaking"
+      ? `- Pure news quizzes with no opinion split ("Who won yesterday?"). Breaking mode wants ARGUMENT, not trivia.`
+      : `- News-pegged this-week content with no durable disagreement — prefer a real opinion fight over a headline quiz.`;
+
+  const legsIntro =
+    mode === "breaking"
+      ? `Use these lenses to judge whether a topic is worth voting on (illustrative, not a whitelist):
+- The online-debate test: people are arguing about it RIGHT NOW (X, Reddit, group chats, sports/entertainment discourse).
+- The dinner-party / barbecue test: two people could passionately disagree once they know the one-line context.
+Breaking ideas do NOT need to be timeless. Short news-cycle debates are the point, as long as there is a real opinion split — not a quiz about who won.`
+      : `Use these lenses interchangeably to judge whether a topic "has legs" (they are illustrative, not a narrow whitelist):
+- The dinner-party / barbecue test: two people could passionately disagree in person.
+- The online-debate test: it's the kind of thing that sparks long comment-section threads, quote-tweet wars, or Reddit/group-chat arguments (e.g. tipping culture, reclining plane seats, AI art, pineapple on pizza).
+A great idea usually passes BOTH — a timeless human disagreement that also reliably flares up online. Do not narrow yourself to polite small talk; edgy, opinionated, and culturally divisive is welcome, as long as it stays within the exclusions below.`;
+
+  const catalogContext =
+    mode === "breaking"
+      ? `CRITICAL CONTEXT — DENY LIST STILL APPLIES:
+- Do not re-suggest existing live titles or prior scout ideas (including thin paraphrases / reversed matchups).
+- Prefer CURRENT controversies from web search over digging the durable Vote canon.
+- Prefer thinner categories from the coverage summary only when quality is equal — never force a weak idea into a gap.`
+      : `CRITICAL CONTEXT — THE CATALOG IS ALREADY DEEP (~300 live items):
+- The obvious canon is largely harvested (Dogs vs Cats, Coffee vs Tea, Messi vs Ronaldo, Greatest boxer, etc.).
+- Dig for the NEXT TIER: still universal and divisive, but not already on the deny list.
+- Prefer thin categories from the coverage summary only when quality is equal — never force a weak idea into a gap.`;
+
+  const endAtExample =
+    mode === "breaking" ? `"2026-08-01T00:00:00.000Z"` : "null";
+
+  const rationaleHint =
+    mode === "breaking"
+      ? "1 short sentence: why people are arguing about this now AND it is not deny-list fluff"
+      : "1 short sentence: why this clears the dinner-party bar AND is not deny-list fluff";
 
   return `You are the Idea Scout for VoxDex's Vote page.
 Founders curate Matchups, Sentiment Polls, and Opinion Polls by hand. They want QUALITY over quantity: questions people genuinely argue about — strong opinions, real disagreement, serious or casual.
 
-Use these lenses interchangeably to judge whether a topic "has legs" (they are illustrative, not a narrow whitelist):
-- The dinner-party / barbecue test: two people could passionately disagree in person.
-- The online-debate test: it's the kind of thing that sparks long comment-section threads, quote-tweet wars, or Reddit/group-chat arguments (e.g. tipping culture, reclining plane seats, AI art, pineapple on pizza).
-A great idea usually passes BOTH — a timeless human disagreement that also reliably flares up online. Do not narrow yourself to polite small talk; edgy, opinionated, and culturally divisive is welcome, as long as it stays within the exclusions below.
+${legsIntro}
 
 Your job is ideation only — titles, options, short context. Do NOT generate image prompts. Returning fewer than ${MAX_IDEAS_PER_RUN} ideas — or an empty array — is the correct outcome when nothing clears the bar. Never pad.
 
@@ -267,26 +326,23 @@ WHAT "GOOD" LOOKS LIKE (house genre):
 - Opinion polls are multi-option preference / GOAT / "best X" questions with 4-12 distinct, recognizable options (Greatest band, Best decade for music, How do you like your steak).
 
 WHAT TO AVOID (this is how you produce slop — do not):
-- News-pegged or this-week celebrity content that is gossip, not a durable debate ("Should X resign?", "Is Y cancelled?").
+${avoidNewsPeg}
 - Reality-show casting minutiae and "best age range for a dating show" style filler — keep those rare.
-- Invasive gossip (pregnancy, divorce, custody, breakups, "sexiest" lists).
+- Invasive gossip (pregnancy, divorce, custody, breakups, "sexiest" lists, private medical/sexual life). Light public opinion fights about public figures are fine.
 - Deaths, tragedies, graphic violence, war-as-entertainment.
 - Near-unanimous moral bait where ~95% would pick the same side.
-- Insider trivia that needs googling.
+- Insider trivia that needs googling${mode === "breaking" ? " beyond a one-line context clause" : ""}.
 - Technically divisive but niche mechanics when a broad audience would shrug (e.g. pizza utensils when food-drink is already deep).
 - Meme / one-off humour tweets that only work as a joke (tongue-in-cheek celebrity stunts).
 - Paraphrases of deny-list items ("Cats or Dogs" when "Dogs vs Cats" exists; "Pineapple pizza okay?" when "Pineapple on Pizza" exists).
 - Filling a quota with weak ideas. Empty is better than filler.
 - Ambiguous titles/headlines that can mean two opposite things — write clearly.
 
-CRITICAL CONTEXT — THE CATALOG IS ALREADY DEEP (~300 live items):
-- The obvious canon is largely harvested (Dogs vs Cats, Coffee vs Tea, Messi vs Ronaldo, Greatest boxer, etc.).
-- Dig for the NEXT TIER: still universal and divisive, but not already on the deny list.
-- Prefer thin categories from the coverage summary only when quality is equal — never force a weak idea into a gap.
+${catalogContext}
 
 QUALITY RUBRIC (ALL must pass; fitScore is 0-100 against this rubric):
-1. Divisiveness — passes the dinner-party AND/OR online-debate test: real, sustained disagreement among a broad audience, not a one-day outrage cycle or niche etiquette fight. Understandable without looking anything up.
-2. Shelf life — still makes sense in ~12 months (unless topical + suggestedEndAt).
+1. Divisiveness — passes the dinner-party AND/OR online-debate test: real disagreement among a broad audience${mode === "breaking" ? " (short news-cycle debates OK if people are actually arguing)" : ", not a one-day outrage cycle or niche etiquette fight"}. Understandable without looking anything up${mode === "breaking" ? " beyond brief context in the copy" : ""}.
+${shelfLifeRule}
 3. Instantly votable — clear in one read; titles/headlines must not be ambiguous.
 4. Split potential — expected split nearer 60/40 than 95/5.
 5. Fresh vs deny list — not a duplicate or thin paraphrase.
@@ -296,7 +352,7 @@ Score honestly. fitScore < ${MIN_FIT_SCORE} must be omitted from the output.
 
 HARD EXCLUSIONS:
 - Deaths, tragedies, graphic violence, war atrocities framed as entertainment.
-- Invasive celebrity gossip (pregnancy, divorce, custody, breakups, sexiest lists).
+- Invasive celebrity gossip only (pregnancy, divorce, custody, breakups, sexiest lists, private medical/sexual life). Light try-worthy public-figure opinion fights (fairness, "did they cross the line?", public persona) are NOT excluded.
 - Pure financial microstructure or incomprehensible jargon.
 - Exact or near-exact duplicates of the deny list (including reversed matchup sides).
 
@@ -320,9 +376,9 @@ OUTPUT: strict JSON only, no markdown fences:
     {
       "contentType": "matchup" | "sentiment_poll" | "opinion_poll",
       "fitScore": 0,
-      "rationale": "1 short sentence: why this clears the dinner-party bar AND is not deny-list fluff",
+      "rationale": "${rationaleHint}",
       "relatedNames": [],
-      "suggestedEndAt": null,
+      "suggestedEndAt": ${endAtExample},
       "payload": { ... type-specific fields ... }
     }
   ]
@@ -352,7 +408,11 @@ export function buildUserPrompt(catalog: CatalogSnapshot, mode: VoteScoutMode): 
 
   return `Today's date: ${new Date().toISOString().split("T")[0]}
 Scan mode: ${mode}
-Live catalog size: ${catalogSize} items (+ ${catalog.priorIdeaTitles.length} prior scout ideas on the deny list). Dig for the next tier — do not recycle the obvious canon.
+Live catalog size: ${catalogSize} items (+ ${catalog.priorIdeaTitles.length} prior scout ideas on the deny list). ${
+    mode === "breaking"
+      ? "Surface CURRENT short-lived debates via web search — do not recycle deny-list titles."
+      : "Dig for the next tier — do not recycle the obvious canon."
+  }
 
 CATEGORY COVERAGE (prefer thinner areas only when quality is equal — never force filler):
 - Matchups: ${formatCategoryCounts(catalog.categoryCounts.matchup)}
@@ -394,7 +454,7 @@ function clampFitScore(value: unknown): number | null {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function parseSuggestedEndAt(value: unknown): string | null {
+export function parseSuggestedEndAt(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -402,6 +462,43 @@ function parseSuggestedEndAt(value: unknown): string | null {
   const d = new Date(trimmed);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+/** Default short end date for breaking ideas that omit suggestedEndAt (7 days out, UTC noon). */
+export function defaultBreakingEndAt(now = new Date()): string {
+  const d = new Date(now);
+  d.setUTCDate(d.getUTCDate() + 7);
+  d.setUTCHours(12, 0, 0, 0);
+  return d.toISOString();
+}
+
+function daysFromNowIso(days: number, now = new Date()): string {
+  const d = new Date(now);
+  d.setUTCDate(d.getUTCDate() + days);
+  d.setUTCHours(12, 0, 0, 0);
+  return d.toISOString();
+}
+
+/**
+ * Ensure breaking-mode ideas have a short suggestedEndAt.
+ * Missing → +7 days. Far-future (>45 days) → clamp to +14 days.
+ */
+export function ensureBreakingEndAt(
+  ideas: ParsedVoteScoutIdea[],
+  now = new Date(),
+): ParsedVoteScoutIdea[] {
+  const maxMs = 45 * 24 * 60 * 60 * 1000;
+
+  return ideas.map((idea) => {
+    if (!idea.suggestedEndAt) {
+      return { ...idea, suggestedEndAt: defaultBreakingEndAt(now) };
+    }
+    const end = new Date(idea.suggestedEndAt);
+    if (Number.isNaN(end.getTime()) || end.getTime() - now.getTime() > maxMs) {
+      return { ...idea, suggestedEndAt: daysFromNowIso(14, now) };
+    }
+    return idea;
+  });
 }
 
 function parseMatchupPayload(raw: unknown): MatchupIdeaPayload | null {

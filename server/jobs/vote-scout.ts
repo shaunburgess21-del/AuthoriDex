@@ -27,6 +27,8 @@ import {
   contentTypeTabLabel,
   contentTypeToSuggestionType,
   filterAgainstDenyList,
+  isVoteScoutMode,
+  ensureBreakingEndAt,
   parseVoteScoutResponse,
   titleFromScoutPayload,
   type ReviewLearning,
@@ -271,10 +273,10 @@ async function callVoteScoutLlm(
       instructions: buildSystemPrompt(mode),
       input: buildUserPrompt(catalog, mode),
       // Evergreen: slightly cooler for disciplined next-tier picks.
-      // Topical: a bit warmer once web search has grounded the topic.
-      temperature: mode === "topical" ? 0.8 : 0.7,
+      // Topical/Breaking: a bit warmer once web search has grounded the topic.
+      temperature: mode === "evergreen" ? 0.7 : 0.8,
     };
-    if (mode === "topical") {
+    if (mode === "topical" || mode === "breaking") {
       body.tools = [{ type: "web_search" as const }];
     }
 
@@ -308,7 +310,7 @@ export type VoteScoutRunResult = {
 };
 
 export async function runVoteScout(mode: VoteScoutMode): Promise<VoteScoutRunResult> {
-  if (mode !== "evergreen" && mode !== "topical") {
+  if (!isVoteScoutMode(mode)) {
     throw new Error("Invalid vote scout mode");
   }
 
@@ -320,7 +322,9 @@ export async function runVoteScout(mode: VoteScoutMode): Promise<VoteScoutRunRes
   try {
     const catalog = await loadCatalogSnapshot();
     const denyKeys = buildDenyKeySet(catalog);
-    const parsed = await callVoteScoutLlm(mode, catalog);
+    const parsedRaw = await callVoteScoutLlm(mode, catalog);
+    const parsed =
+      mode === "breaking" ? ensureBreakingEndAt(parsedRaw) : parsedRaw;
     const { kept, skippedDuplicates } = filterAgainstDenyList(parsed, denyKeys);
 
     if (kept.length === 0) {

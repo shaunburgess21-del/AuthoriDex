@@ -26,9 +26,10 @@ import {
   ThumbsUp,
   Globe,
   Leaf,
+  Zap,
 } from "lucide-react";
 
-type VoteScoutMode = "evergreen" | "topical";
+type VoteScoutMode = "evergreen" | "topical" | "breaking";
 type VoteScoutStatus = "new" | "kept" | "dismissed" | "approved";
 type VoteScoutContentType = "matchup" | "sentiment_poll" | "opinion_poll";
 
@@ -102,6 +103,12 @@ const TYPE_BADGE: Record<VoteScoutContentType, string> = {
   matchup: "bg-cyan-500/15 border-cyan-500/40 text-cyan-600 dark:text-cyan-300",
   sentiment_poll: "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300",
   opinion_poll: "bg-violet-500/15 border-violet-500/40 text-violet-600 dark:text-violet-300",
+};
+
+const MODE_BADGE: Record<VoteScoutMode, string> = {
+  evergreen: "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
+  topical: "bg-sky-500/15 border-sky-500/40 text-sky-700 dark:text-sky-300",
+  breaking: "bg-orange-500/15 border-orange-500/40 text-orange-700 dark:text-orange-300",
 };
 
 function ideaTitle(idea: VoteScoutIdea): string {
@@ -361,13 +368,29 @@ export function AdminVoteScoutSection() {
               )}
               Scan Topical
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => scanMutation.mutate("breaking")}
+              disabled={scanning}
+              title="Uses web search — short-lived controversies and fairness debates"
+              data-testid="button-vote-scout-breaking"
+            >
+              {scanning && scanMutation.variables === "breaking" ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              Scan Breaking
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Evergreen = world knowledge. Topical = web search + debates involving
-            leaderboard/induction people when relevant. Approve creates a DRAFT only —
-            finish summaries/images in the tab, then make live. Hit rate =
+            Evergreen = world knowledge. Topical = durable current debates + tracked
+            people when relevant. Breaking = short-lived controversies / fairness
+            fights (web search; usually short end dates). Approve creates a DRAFT
+            only — finish summaries/images in the tab, then make live. Hit rate =
             Kept ÷ (Kept + Dismissed).
           </p>
 
@@ -442,7 +465,10 @@ export function AdminVoteScoutSection() {
                         >
                           {TYPE_LABEL[idea.contentType]}
                         </Badge>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge
+                          variant="outline"
+                          className={`capitalize ${MODE_BADGE[idea.mode] || ""}`}
+                        >
                           {idea.mode}
                         </Badge>
                         {typeof idea.fitScore === "number" ? (

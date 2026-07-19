@@ -19902,14 +19902,15 @@ Target length: about 90-150 words.`;
 
   // Vote Scout (Idea Scout) — manual-only ideation for Matchups / Sentiment /
   // Opinion polls. Never auto-publishes; ideas land in vote_scout_ideas for
-  // keep/dismiss review. mode=evergreen (default, cheap) or topical (web search).
+  // keep/dismiss review. mode=evergreen | topical | breaking (web search on last two).
   app.post("/api/admin/vote-scout/run", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
+      const { isVoteScoutMode } = await import("./jobs/vote-scout-core");
       const modeRaw = typeof req.body?.mode === "string" ? req.body.mode.trim() : "evergreen";
-      const mode = modeRaw === "topical" ? "topical" : modeRaw === "evergreen" ? "evergreen" : null;
-      if (!mode) {
-        return res.status(400).json({ error: "mode must be evergreen or topical" });
+      if (!isVoteScoutMode(modeRaw)) {
+        return res.status(400).json({ error: "mode must be evergreen, topical, or breaking" });
       }
+      const mode = modeRaw;
       const { runVoteScout } = await import("./jobs/vote-scout");
       const result = await runVoteScout(mode);
       if (result.locked) {

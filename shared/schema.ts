@@ -2634,7 +2634,7 @@ export const voteScoutIdeas = pgTable("vote_scout_ideas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   /** 'matchup' | 'sentiment_poll' | 'opinion_poll' */
   contentType: text("content_type").notNull(),
-  /** 'evergreen' | 'topical' */
+  /** 'evergreen' | 'topical' | 'breaking' */
   mode: text("mode").notNull(),
   /** Type-specific draft fields for copy into create forms. */
   payload: jsonb("payload").notNull(),
