@@ -86,6 +86,9 @@ export function CreateMarketModal({
   const [sourceUrl, setSourceUrl] = useState("");
   const [resolveMethod, setResolveMethod] = useState("admin_manual");
   const [resolutionCriteria, setResolutionCriteria] = useState<string[]>([""]);
+  const [resolutionSources, setResolutionSources] = useState<{ label: string; url: string }[]>([
+    { label: "", url: "" },
+  ]);
   const [scoutWatch, setScoutWatch] = useState("");
   const [isSuggestingWatch, setIsSuggestingWatch] = useState(false);
   const [underlying, setUnderlying] = useState("");
@@ -157,7 +160,7 @@ export function CreateMarketModal({
       }
       const data = await res.json();
       setScoutWatch(data.scoutWatch);
-      toast("Watch criteria drafted", { description: "Review and edit before saving." });
+      toast("What to watch drafted", { description: "Review and edit before saving." });
     } catch (err: any) {
       toast.error("Suggestion failed", { description: err.message });
     } finally {
@@ -238,6 +241,14 @@ export function CreateMarketModal({
       setSourceUrl(editMarket.sourceUrl || "");
       setResolveMethod(editMarket.resolveMethod || "admin_manual");
       setResolutionCriteria(editMarket.resolutionCriteria?.length ? editMarket.resolutionCriteria : [""]);
+      setResolutionSources(
+        Array.isArray(editMarket.resolutionSources) && editMarket.resolutionSources.length > 0
+          ? editMarket.resolutionSources.map((s: any) => ({
+              label: typeof s?.label === "string" ? s.label : "",
+              url: typeof s?.url === "string" ? s.url : "",
+            }))
+          : [{ label: "", url: "" }],
+      );
       setScoutWatch(
         typeof editMarket.metadata?.scoutWatch === "string" ? editMarket.metadata.scoutWatch : "",
       );
@@ -302,6 +313,14 @@ export function CreateMarketModal({
             if (typeof data?.metadata?.scoutWatch === "string") {
               setScoutWatch(data.metadata.scoutWatch);
             }
+            if (Array.isArray(data?.resolutionSources) && data.resolutionSources.length > 0) {
+              setResolutionSources(
+                data.resolutionSources.map((s: any) => ({
+                  label: typeof s?.label === "string" ? s.label : "",
+                  url: typeof s?.url === "string" ? s.url : "",
+                })),
+              );
+            }
           })
           .catch(() => {});
       } else if (editMarket.entries?.length) {
@@ -330,6 +349,7 @@ export function CreateMarketModal({
       setSourceUrl("");
       setResolveMethod("admin_manual");
       setResolutionCriteria([""]);
+      setResolutionSources([{ label: "", url: "" }]);
       setScoutWatch("");
       setUnderlying("");
       setMetric("");
@@ -547,6 +567,12 @@ export function CreateMarketModal({
       sourceUrl: sourceUrl || null,
       resolveMethod,
       resolutionCriteria: resolutionCriteria.filter(c => c.trim()),
+      resolutionSources: resolutionSources
+        .map((s) => ({
+          label: s.label.trim(),
+          ...(s.url.trim() ? { url: s.url.trim() } : {}),
+        }))
+        .filter((s) => s.label),
       scoutWatch: scoutWatch.trim() || null,
       underlying: openMarketType === "updown" ? underlying : undefined,
       metric: openMarketType === "updown" ? metric : undefined,
@@ -771,7 +797,7 @@ export function CreateMarketModal({
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Summary</Label>
+              <Label>About / Background</Label>
               {editMarket && (
                 <Button
                   type="button"
@@ -793,11 +819,14 @@ export function CreateMarketModal({
             <Textarea 
               value={summary} 
               onChange={(e) => setSummary(e.target.value)} 
-              placeholder="Additional context about this market..."
+              placeholder="Background story: what's happening, key players, stakes, current state of play. Do not restate resolution rules here."
               rows={8}
               className="resize-none"
               data-testid="input-market-summary"
             />
+            <p className="text-xs text-muted-foreground">
+              Shown to users as &quot;About&quot;. Keep resolution mechanics in Resolution Criteria below.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -1047,8 +1076,60 @@ export function CreateMarketModal({
           </div>
 
           <div className="space-y-2">
+            <Label>Sources (shown to users)</Label>
+            <p className="text-xs text-muted-foreground">
+              Authoritative real-world sources of truth — not Polymarket or other prediction platforms.
+            </p>
+            {resolutionSources.map((source, idx) => (
+              <div key={idx} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  value={source.label}
+                  onChange={(e) => {
+                    const updated = [...resolutionSources];
+                    updated[idx] = { ...updated[idx], label: e.target.value };
+                    setResolutionSources(updated);
+                  }}
+                  placeholder="e.g. Official UK Parliament by-election result"
+                  data-testid={`input-resolution-source-label-${idx}`}
+                />
+                <Input
+                  value={source.url}
+                  onChange={(e) => {
+                    const updated = [...resolutionSources];
+                    updated[idx] = { ...updated[idx], url: e.target.value };
+                    setResolutionSources(updated);
+                  }}
+                  placeholder="Optional URL"
+                  data-testid={`input-resolution-source-url-${idx}`}
+                />
+                {resolutionSources.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      setResolutionSources(resolutionSources.filter((_, i) => i !== idx))
+                    }
+                    aria-label="Remove source"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setResolutionSources([...resolutionSources, { label: "", url: "" }])}
+              data-testid="button-add-resolution-source"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Source
+            </Button>
+          </div>
+
+          <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label>AI Scout — Watch Criteria</Label>
+              <Label>What to watch (shown to users)</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -1068,12 +1149,12 @@ export function CreateMarketModal({
             <Textarea
               value={scoutWatch}
               onChange={(e) => setScoutWatch(e.target.value)}
-              placeholder="Leading indicators the daily AI scout should watch for, e.g. Portugal squad announcement; Ronaldo named in starting XI; official withdrawal."
+              placeholder="Leading indicators users (and our resolution scout) should watch, e.g. Portugal squad announcement; Ronaldo named in starting XI; official withdrawal."
               rows={3}
               data-testid="input-scout-watch"
             />
             <p className="text-xs text-muted-foreground">
-              Optional. Guides the once-daily resolution scout on what real-world signals would move this market toward resolution. Leave blank to let the scout infer from the title and criteria.
+              Shown on the market page as &quot;What to watch&quot;. Also guides the daily resolution scout. Leave blank to omit the section.
             </p>
           </div>
 

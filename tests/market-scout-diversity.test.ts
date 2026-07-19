@@ -51,12 +51,14 @@ function makeSelection(
     category: overrides.category,
     secondaryCategories: overrides.secondaryCategories ?? [],
     resolutionCriteria: overrides.resolutionCriteria ?? ["Official announcement"],
+    resolutionSources: overrides.resolutionSources ?? [{ label: "Official announcement" }],
     scoutWatch: overrides.scoutWatch ?? "Watch the news",
     linkedPerson: overrides.linkedPerson ?? null,
     relatedPeople: overrides.relatedPeople ?? [],
     fitScore: overrides.fitScore ?? 70,
     entryLabels: overrides.entryLabels ?? ["Yes", "No"],
     seriesKey: overrides.seriesKey ?? `series-${overrides.eventId}`,
+    drawEligible: overrides.drawEligible ?? true,
   };
 }
 

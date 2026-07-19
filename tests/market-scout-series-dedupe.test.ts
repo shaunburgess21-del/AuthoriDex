@@ -27,12 +27,14 @@ function makeSelection(
     category: overrides.category ?? "politics",
     secondaryCategories: overrides.secondaryCategories ?? [],
     resolutionCriteria: overrides.resolutionCriteria ?? ["Official source"],
+    resolutionSources: overrides.resolutionSources ?? [{ label: "Official source" }],
     scoutWatch: overrides.scoutWatch ?? "Watch the news",
     linkedPerson: overrides.linkedPerson ?? null,
     relatedPeople: overrides.relatedPeople ?? [],
     fitScore: overrides.fitScore ?? 70,
     entryLabels: overrides.entryLabels ?? ["Yes", "No"],
     seriesKey: overrides.seriesKey,
+    drawEligible: overrides.drawEligible ?? true,
   };
 }
 

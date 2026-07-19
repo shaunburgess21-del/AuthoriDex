@@ -76,6 +76,7 @@ import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
+import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
 import {
   getSentimentPollChoiceLabel,
   normalizeSentimentChoice,
@@ -18569,6 +18570,8 @@ Target length: about 90-150 words.`;
           unit: predictionMarkets.unit,
           createdAt: predictionMarkets.createdAt,
           visibleCountries: predictionMarkets.visibleCountries,
+          // Only used to derive public `whatToWatch` below — never spread.
+          metadata: predictionMarkets.metadata,
         })
         .from(predictionMarkets)
         .where(
@@ -18753,7 +18756,16 @@ Target length: about 90-150 words.`;
       // Explicit public DTO — never spread the raw row. Dropped fields
       // (admin/internal): rules, startAt, timezone, resolutionNotes,
       // personId, weekNumber, tieRule, cadence, createdAt,
-      // visibleCountries, raw resolutionSummary column, comments.
+      // visibleCountries, raw resolutionSummary column, comments, metadata.
+      // `whatToWatch` is the only metadata-derived public field.
+      const meta = (market.metadata && typeof market.metadata === "object"
+        ? market.metadata
+        : {}) as Record<string, unknown>;
+      const whatToWatch =
+        typeof meta.scoutWatch === "string" && meta.scoutWatch.trim()
+          ? meta.scoutWatch.trim()
+          : null;
+
       res.json({
         id: market.id,
         marketType: market.marketType,
@@ -18784,6 +18796,7 @@ Target length: about 90-150 words.`;
         closeAt: market.closeAt,
         visibility: market.visibility,
         inactiveMessage: market.inactiveMessage,
+        whatToWatch,
         entries: entriesWithCounts,
         totalParticipants: Number(participantResult?.uniqueParticipants || 0),
         linkedPersonName,
@@ -18819,7 +18832,7 @@ Target length: about 90-150 words.`;
       // monitor). Stored in metadata so no schema migration is needed.
       const scoutWatchValue =
         typeof scoutWatch === "string" && scoutWatch.trim()
-          ? scoutWatch.trim()
+          ? scoutWatch.trim().slice(0, 600)
           : null;
 
       if (!openMarketType || !["binary", "multi", "updown"].includes(openMarketType)) {
@@ -18892,7 +18905,7 @@ Target length: about 90-150 words.`;
             // rejected at endAt — inconsistent cutoffs between endpoints.
             closeAt: closeAt ? new Date(closeAt) : getMarketBettingCutoff(new Date(endAt), "amm", "community"),
             resolutionCriteria: resolutionCriteria || null,
-            resolutionSources: resolutionSources || null,
+            resolutionSources: sanitizeResolutionSources(resolutionSources),
             resolveMethod: resolveMethod || null,
             rules: rules || null,
             underlying: underlying || null,
@@ -19020,7 +19033,9 @@ Target length: about 90-150 words.`;
       if (endAt !== undefined) updates.endAt = new Date(endAt);
       if (closeAt !== undefined) updates.closeAt = closeAt ? new Date(closeAt) : null;
       if (resolutionCriteria !== undefined) updates.resolutionCriteria = resolutionCriteria;
-      if (resolutionSources !== undefined) updates.resolutionSources = resolutionSources;
+      if (resolutionSources !== undefined) {
+        updates.resolutionSources = sanitizeResolutionSources(resolutionSources);
+      }
       if (resolveMethod !== undefined) updates.resolveMethod = resolveMethod;
       if (rules !== undefined) updates.rules = rules;
       if (underlying !== undefined) updates.underlying = underlying;
@@ -19045,7 +19060,7 @@ Target length: about 90-150 words.`;
       if (scoutWatch !== undefined) {
         const trimmed =
           typeof scoutWatch === "string" && scoutWatch.trim()
-            ? scoutWatch.trim()
+            ? scoutWatch.trim().slice(0, 600)
             : null;
         updates.metadata = trimmed
           ? sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify({ scoutWatch: trimmed })}::jsonb`
@@ -20052,13 +20067,14 @@ Target length: about 90-150 words.`;
           ? resolutionCriteria
           : "";
 
-      const systemPrompt = `You help operators of a prediction-market platform monitor real-world events. For a given market, list the concrete LEADING INDICATORS an automated scout should watch for to know the market is moving toward resolution — the specific, verifiable developments that would make the outcome certain, near-certain, or materially more likely.
+      const systemPrompt = `You write the user-facing "What to watch" blurb for a prediction market on VoxDex. List concrete LEADING INDICATORS a casual reader (and our automated resolution scout) should monitor — verifiable developments that would make the outcome certain, near-certain, or materially more likely.
 
 Rules:
-- Output 2-4 short indicators, separated by semicolons, plain text only.
-- Be specific and verifiable (e.g. "Portugal squad announcement for the 2026 World Cup", "Ronaldo named in the starting XI for a match", "official resignation or removal from office", "exchange price crosses the threshold").
+- Output 1-2 plain-text sentences OR 2-4 short indicators separated by semicolons.
+- Be specific and verifiable (e.g. "Portugal squad announcement for the 2026 World Cup", "Ronaldo named in the starting XI", "official resignation or removal from office").
 - Cover both the YES-trigger and the NO-trigger when relevant.
-- No preamble, no markdown, no numbering — just the semicolon-separated indicators.`;
+- Write for a casual reader — not internal ops jargon.
+- No preamble, no markdown, no numbering.`;
 
       const userPrompt = `Market: "${title}"
 Category: ${category || "General"}
@@ -20066,7 +20082,7 @@ ${teaser ? `Teaser: "${teaser}"` : ""}
 Outcomes: ${outcomesStr || "Not specified"}
 Resolution criteria: ${criteriaStr || "Not specified"}
 
-List the leading indicators to watch for.`;
+Write the "What to watch" text.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -20131,16 +20147,16 @@ List the leading indicators to watch for.`;
         ? `\nLinked to: ${linkedPerson.name} (current trend score: ${linkedPerson.trendScore?.toLocaleString() ?? "N/A"}, category: ${linkedPerson.category ?? "N/A"})`
         : "";
 
-      const systemPrompt = `You are writing a brief market context summary for a prediction market on VoxDex, a trend-tracking and prediction platform. Use web search to ensure all facts are current and accurate, but write in durable, evergreen phrasing. Do not mention the generation date or use phrases like "as of today", "as of [date]", or "currently on [date]". Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability.`;
+      const systemPrompt = `You are writing the user-facing "About / Background" section for a prediction market on VoxDex. This is BACKGROUND CONTEXT only — what's happening, who the key players are, why it matters, and the current state of play. Do NOT restate how the market resolves, outcome labels, "Other" catch-alls, or resolution mechanics (those live in a separate criteria section). Use web search to ensure facts are current, but write in durable, evergreen phrasing. Do not mention the generation date or use phrases like "as of today", "as of [date]", or "currently on [date]". Write plain text only — no markdown, no headers, no bullets, no bold. Use blank lines between paragraphs for readability. Aim for roughly 60-110 words (about 3-5 sentences), or up to 2 short paragraphs.`;
 
       const userPrompt = `Market: "${market.title}"
 Category: ${market.category || "General"}
 ${market.teaser ? `Teaser: "${market.teaser}"` : ""}
-Prediction Deadline (market resolution date): ${resolutionDate}
-Resolution Criteria: ${resolutionCriteria}
-Outcomes: ${outcomesStr}${linkedPersonBlock}
+Prediction Deadline (for context only — do not turn this into resolution rules): ${resolutionDate}
+Outcomes (for context only — do not list them as rules): ${outcomesStr}${linkedPersonBlock}
+Existing resolution criteria (DO NOT paraphrase into the About text): ${resolutionCriteria}
 
-Write 2-3 short paragraphs (separated by blank lines) that help users make an informed prediction. Focus on enduring background context, the stakes involved, historical precedent, and the key factors that will ultimately decide the outcome. Use the prediction deadline only when it helps explain how the market resolves. Be factual and neutral — do not recommend a side.`;
+Write engaging background context so a casual reader instantly gets why this market is interesting. Cover what's happening, key players, stakes, and current state of play. Be factual and neutral — do not recommend a side. Do not explain how the market resolves.`;
 
       const openai = new OpenAI({
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,

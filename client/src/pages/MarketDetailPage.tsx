@@ -73,6 +73,7 @@ import {
   ChevronRight,
   Activity,
   Banknote,
+  Eye,
 } from "lucide-react";
 
 interface MarketEntry {
@@ -87,7 +88,7 @@ interface MarketEntry {
 
 interface ResolutionSource {
   label: string;
-  url: string;
+  url?: string;
 }
 
 interface ResolutionSummary {
@@ -147,6 +148,8 @@ interface MarketData {
   featured?: boolean;
   resolutionCriteria?: string[] | null;
   resolutionSources?: ResolutionSource[] | null;
+  /** User-facing leading indicators (derived from metadata.scoutWatch). */
+  whatToWatch?: string | null;
   resolveMethod?: string | null;
   underlying?: string | null;
   metric?: string | null;
@@ -2247,16 +2250,32 @@ export default function MarketDetailPage() {
           </Card>
         </div>
 
-        {market.summary && (
+        {(market.summary || market.description) && (
           <Card className="p-5 mb-6" data-testid="section-summary">
             <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
               <Info className="h-5 w-5 text-violet-700 dark:text-violet-500" />
               About
             </h2>
-            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{market.summary}</p>
-            {market.description && market.description !== market.summary && (
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap mt-3">{market.description}</p>
+            {market.summary && (
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{market.summary}</p>
             )}
+            {market.description && market.description !== market.summary && (
+              <p className={`text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap ${market.summary ? "mt-3" : ""}`}>
+                {market.description}
+              </p>
+            )}
+          </Card>
+        )}
+
+        {market.whatToWatch && (
+          <Card className="p-5 mb-6" data-testid="section-what-to-watch">
+            <h2 className="text-lg font-serif font-bold mb-2 flex items-center gap-2">
+              <Eye className="h-5 w-5 text-violet-700 dark:text-violet-500" />
+              What to watch
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {market.whatToWatch}
+            </p>
           </Card>
         )}
 
@@ -2288,19 +2307,30 @@ export default function MarketDetailPage() {
               Sources
             </h2>
             <div className="flex flex-col gap-1.5">
-              {market.resolutionSources.map((source, i) => (
-                <a
-                  key={i}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
-                  data-testid={`link-resolution-source-${i}`}
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  {source.label}
-                </a>
-              ))}
+              {market.resolutionSources.map((source, i) =>
+                source.url ? (
+                  <a
+                    key={i}
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 transition-colors"
+                    data-testid={`link-resolution-source-${i}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    {source.label}
+                  </a>
+                ) : (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                    data-testid={`text-resolution-source-${i}`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-violet-700 dark:text-violet-500" />
+                    {source.label}
+                  </div>
+                ),
+              )}
             </div>
           </Card>
         )}

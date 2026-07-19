@@ -78,6 +78,7 @@ import {
   stripDrawForKnockoutImport,
 } from "@shared/lib/knockout-market";
 import { logAutoResolveShadowDecision } from "./auto-resolve-shadow";
+import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
 
 const MARKET_SCOUT_LOCK_KEY = 5_212;
 const SOURCE_WATCH_LOCK_KEY = 5_213;
@@ -100,7 +101,8 @@ function envFlag(value: string | undefined): boolean {
 }
 
 const API_TIMEOUT_MS = 90_000;
-const MAX_OUTPUT_TOKENS = 4_000;
+/** Longer summaries + resolutionSources across a multi-draft run. */
+const MAX_OUTPUT_TOKENS = 6_000;
 /** How many deduped candidates to show GPT after stratified shortlisting. */
 const MAX_CANDIDATES_FOR_LLM = 30;
 /** Soft floor — GPT fitScore below this is dropped before insert. */
@@ -218,6 +220,12 @@ export interface MarketScoutResult {
   drafts: ScoutDraftSummary[];
 }
 
+/** Authoritative real-world resolution source proposed by the scout. */
+export interface ScoutResolutionSource {
+  label: string;
+  url?: string;
+}
+
 /** Shape GPT must return for each curated market. */
 export interface ScoutSelection {
   eventId: string;
@@ -228,6 +236,11 @@ export interface ScoutSelection {
   category: string;
   secondaryCategories: string[];
   resolutionCriteria: string[];
+  /**
+   * Authoritative real-world sources of truth (never Polymarket).
+   * Persisted to prediction_markets.resolution_sources.
+   */
+  resolutionSources: ScoutResolutionSource[];
   scoutWatch: string;
   linkedPerson: string | null;
   relatedPeople: string[];
@@ -726,11 +739,12 @@ For each selected market, produce:
 - "slug": URL-safe kebab-case, lowercase letters/numbers/dashes only.
 - "seriesKey": short stable kebab-case id for the series that IGNORES the specific deadline/threshold/date (e.g. "strait-of-hormuz-traffic-normal" for every Hormuz-by-date variant). Reuse the same key for siblings; never encode a date or threshold in the key.
 - "teaser": one catchy sentence (max 140 chars) hooking a casual reader.
-- "summary": 2-3 sentences of neutral context explaining what the market is about.
+- "summary": 3-5 sentences (~60-110 words) of engaging BACKGROUND CONTEXT so a casual reader instantly gets why this market is interesting. Cover: what's happening, who the key players are, why it matters / what's at stake, and the current state of play or key date. Write it self-contained, neutral, and in your own words. Do NOT restate how the market resolves, outcome labels, "Other" catch-alls, or resolution mechanics — that belongs in resolutionCriteria only.
 - "category": exactly one of: ${allowedCategories.join(", ")}. Use film-tv (not "entertainment") for movies/TV/awards.
 - "secondaryCategories": 0-2 additional ids from the same list.
 - "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text. For knockout / single-elimination sports (drawEligible=false), criteria MUST say the market resolves to the team/player that wins the tie and advances (including extra time and penalties) — never "draw wins if level after regulation".
-- "scoutWatch": one sentence listing the leading indicators a human should watch to know the outcome early.
+- "resolutionSources": 1-3 objects { "label": "...", "url"?: "..." } naming the AUTHORITATIVE real-world source(s) of truth a human would check to settle the market (e.g. "Official UK Parliament by-election result", "FIFA match report", "Box Office Mojo opening weekend"). Prefer a public URL when you know a stable one; omit url when unsure. NEVER include Polymarket, Kalshi, PredictIt, or other prediction-market platforms as sources.
+- "scoutWatch": 1-2 sentences of leading indicators a user (and our resolution scout) should watch to know the outcome early. This is shown to users as "What to watch" — write it for a casual reader, not as internal ops notes.
 - "relatedPeople": ALL names from the LINKABLE PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every linkable person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple linkable people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
 - "linkedPerson": the single most prominent name from relatedPeople — the "face" of the market; null if relatedPeople is empty.
 - "fitScore": integer 0-100 for how well this fits VoxDex (engagement potential, clarity, settleability). Prefer 55+; weak fits should be omitted.
@@ -740,7 +754,7 @@ For each selected market, produce:
 Select AT MOST ${maxDrafts} markets. Quality over quantity — returning fewer (or zero) is correct when candidates are weak or duplicative.
 
 Respond with ONE JSON object and nothing else — no markdown, no code fences:
-{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "seriesKey": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."], "drawEligible": true } ] }`;
+{ "selections": [ { "eventId": "...", "title": "...", "slug": "...", "seriesKey": "...", "teaser": "...", "summary": "...", "category": "...", "secondaryCategories": [], "resolutionCriteria": ["..."], "resolutionSources": [{ "label": "...", "url": "..." }], "scoutWatch": "...", "linkedPerson": null, "relatedPeople": [], "fitScore": 0, "entryLabels": ["..."], "drawEligible": true } ] }`;
 }
 
 function buildUserPrompt(
@@ -751,7 +765,7 @@ function buildUserPrompt(
   const candidateBlocks = candidates.map((c) => ({
     eventId: c.eventId,
     title: c.title,
-    description: c.description ? c.description.slice(0, 400) : null,
+    description: c.description ? c.description.slice(0, 2000) : null,
     endDate: c.endDate,
     volume24hUsd: Math.round(c.volume24hr),
     sourceBucket: c.sourceBucket,
@@ -833,6 +847,9 @@ async function curateCandidates(
         // Default true (keep Draw) when GPT omits the field — safer for
         // group-stage imports than accidentally stripping Draw.
         drawEligible: (s as any).drawEligible === false ? false : true,
+        resolutionSources: Array.isArray((s as any).resolutionSources)
+          ? (s as any).resolutionSources
+          : [],
       }));
   } catch (err) {
     clearTimeout(timeout);
@@ -930,6 +947,10 @@ async function insertScoutedDraft(
         .filter(Boolean)
         .slice(0, 5)
     : [];
+
+  const resolutionSources = sanitizeResolutionSources(selection.resolutionSources, {
+    max: 3,
+  });
 
   if (!drawEligible) {
     const stripped = stripDrawForKnockoutImport(sourceOutcomes, entryLabels);
@@ -1048,7 +1069,8 @@ async function insertScoutedDraft(
   };
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
-    metadata.scoutWatch = selection.scoutWatch.trim();
+    // Cap length — this is user-facing "What to watch" as well as scout input.
+    metadata.scoutWatch = selection.scoutWatch.trim().slice(0, 600);
   }
 
   // Advisory: should this market carry an "Other" catch-all? Persisted so the
@@ -1087,7 +1109,10 @@ async function insertScoutedDraft(
         slug,
         openMarketType,
         teaser: typeof selection.teaser === "string" ? selection.teaser.trim().slice(0, 200) || null : null,
-        summary: typeof selection.summary === "string" ? selection.summary.trim() || null : null,
+        summary:
+          typeof selection.summary === "string"
+            ? selection.summary.trim().slice(0, 2000) || null
+            : null,
         category,
         secondaryCategories,
         coverImageUrl: candidate.image || null,
@@ -1106,6 +1131,7 @@ async function insertScoutedDraft(
         // the trade path and the slug bet route agree on when trading closes.
         closeAt,
         resolutionCriteria: resolutionCriteria.length > 0 ? resolutionCriteria : null,
+        resolutionSources,
         resolveMethod: "admin_manual",
         status: "OPEN",
         // Draft: hidden from users, AMM house seed deferred until a founder

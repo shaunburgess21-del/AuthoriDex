@@ -31,6 +31,7 @@
     "validate:induction-post-import": "tsx --env-file=.env server/scripts/validate-induction-post-import.ts",
     "backfill:curate-seed-votes": "tsx --env-file=.env server/scripts/backfill-curate-seed-votes.ts",
     "backfill:induction-shadow-sync": "tsx --env-file=.env server/scripts/backfill-induction-shadow-sync.ts",
+    "backfill:world-market-content": "tsx --env-file=.env server/scripts/backfill-world-market-content.ts",
     "normalize:people-categories": "tsx --env-file=.env server/scripts/normalize-people-categories.ts",
     "amm:smoke": "tsx scripts/amm-smoke.ts",
     "amm:loadgen": "tsx scripts/amm-loadgen.ts",
