@@ -289,7 +289,16 @@ export function VoteSnapScrollView({
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const dragStartY = useRef<number | null>(null);
+  /** Window-sash drag session on the expand/collapse handle. Card styles are
+   * mutated directly during touchmove so the card follows the finger without
+   * re-rendering; on release the existing 200ms class transition settles it. */
+  const sashDragRef = useRef<{
+    el: HTMLElement | null;
+    startY: number;
+    fullHeight: number;
+    startExpanded: boolean;
+    moved: boolean;
+  } | null>(null);
   const commentTapStartRef = useRef<{ itemId: string; x: number; y: number } | null>(null);
   const commentSwipeStartRef = useRef<{ itemId: string; x: number; y: number; time: number } | null>(null);
   const commentSwipeConsumedRef = useRef(false);
@@ -776,16 +785,66 @@ export function VoteSnapScrollView({
     if (item) sharePage(item.title, { sharerUserId: user?.id, surface: "vote_deck" });
   }, [getVisibleItem, user?.id]);
 
-  const handleDragStart = useCallback((e: React.TouchEvent) => {
-    dragStartY.current = e.touches[0].clientY;
+  const handleDragStart = useCallback((e: React.TouchEvent, isExpanded: boolean) => {
+    // Handle wrapper ("flex justify-center") sits directly after the card wrapper.
+    const cardEl = (e.currentTarget.parentElement?.previousElementSibling ?? null) as HTMLElement | null;
+    sashDragRef.current = {
+      el: cardEl,
+      startY: e.touches[0].clientY,
+      // scrollHeight reads the natural content height even at max-height 0.
+      fullHeight: cardEl?.scrollHeight ?? 0,
+      startExpanded: isExpanded,
+      moved: false,
+    };
+  }, []);
+
+  const handleDragMove = useCallback((e: React.TouchEvent) => {
+    const drag = sashDragRef.current;
+    if (!drag?.el || drag.fullHeight === 0) return;
+    const deltaY = e.touches[0].clientY - drag.startY;
+    if (!drag.moved && Math.abs(deltaY) > 6) drag.moved = true;
+    if (!drag.moved) return;
+    const raw = drag.startExpanded ? deltaY : drag.fullHeight + deltaY;
+    const height = Math.min(Math.max(raw, 0), drag.fullHeight);
+    drag.el.style.transition = "none";
+    drag.el.style.maxHeight = `${height}px`;
+    drag.el.style.opacity = String(height / drag.fullHeight);
   }, []);
 
   const handleDragEnd = useCallback((e: React.TouchEvent, itemId: string) => {
-    if (dragStartY.current === null) return;
-    const deltaY = e.changedTouches[0].clientY - dragStartY.current;
-    dragStartY.current = null;
-    if (deltaY < -DRAG_THRESHOLD) setExpandedItemId(itemId);
-    else if (deltaY > DRAG_THRESHOLD) setExpandedItemId(null);
+    const drag = sashDragRef.current;
+    if (!drag) return;
+    const el = drag.el;
+    if (!drag.moved) {
+      // Tap: the click handler performs the toggle.
+      if (el) {
+        el.style.transition = "";
+        el.style.maxHeight = "";
+        el.style.opacity = "";
+      }
+      return;
+    }
+    const deltaY = e.changedTouches[0].clientY - drag.startY;
+    const raw = drag.startExpanded ? deltaY : drag.fullHeight + deltaY;
+    const height = Math.min(Math.max(raw, 0), drag.fullHeight);
+    const cardOpenPastHalf = drag.fullHeight > 0 && height > drag.fullHeight / 2;
+    setExpandedItemId(cardOpenPastHalf ? null : itemId);
+    if (el) {
+      // Re-arm the class transition, then release inline styles next frame so
+      // the card eases from the drag position to its settled state.
+      el.style.transition = "";
+      requestAnimationFrame(() => {
+        el.style.maxHeight = "";
+        el.style.opacity = "";
+      });
+    }
+  }, []);
+
+  const handleHandleClick = useCallback((itemId: string, isExpanded: boolean) => {
+    const dragMoved = sashDragRef.current?.moved ?? false;
+    sashDragRef.current = null;
+    if (dragMoved) return;
+    setExpandedItemId(isExpanded ? null : itemId);
   }, []);
 
   const handleCommentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
@@ -1024,14 +1083,19 @@ export function VoteSnapScrollView({
 
                                           <div className="flex justify-center">
                                             <div
-                                              className="flex flex-col items-center px-6 pt-3 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
-                                              onTouchStart={handleDragStart}
+                                              className="flex flex-col items-center px-6 pb-2.5 cursor-grab active:cursor-grabbing touch-none select-none"
+                                              onTouchStart={(e) => handleDragStart(e, isExpanded)}
+                                              onTouchMove={handleDragMove}
                                               onTouchEnd={(e) => handleDragEnd(e, item.id)}
-                                              onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                                              onClick={() => handleHandleClick(item.id, isExpanded)}
                                               role="button"
                                               aria-label={isExpanded ? "Collapse" : "Expand"}
                                             >
-                                              <div className="w-16 h-[3px] rounded-full bg-muted-foreground/[0.42]" />
+                                              {/* U-bracket: side rails rise to meet the card's bottom border */}
+                                              <div className="w-14 h-4 -mt-px border-l-2 border-r-2 border-b-2 border-muted-foreground/[0.42] rounded-b-lg flex flex-col items-center justify-center gap-[3px]">
+                                                <div className="w-8 h-[2px] rounded-full bg-muted-foreground/[0.42]" />
+                                                <div className="w-8 h-[2px] rounded-full bg-muted-foreground/[0.42]" />
+                                              </div>
                                             </div>
                                           </div>
 
