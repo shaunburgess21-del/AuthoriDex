@@ -3,7 +3,7 @@ const OVERLAY_DISMISS_SUPPRESSION_MS = 300;
 let suppressedUntil = 0;
 let suppressTimeout: number | null = null;
 
-/** Arm a short window where snap/card-tap handlers should ignore ghost clicks after dialog dismiss. */
+/** Arm a short window where snap handlers should ignore ghost clicks after dialog dismiss. */
 export function markOverlayDismissSuppress() {
   suppressedUntil = Date.now() + OVERLAY_DISMISS_SUPPRESSION_MS;
   if (suppressTimeout !== null) {

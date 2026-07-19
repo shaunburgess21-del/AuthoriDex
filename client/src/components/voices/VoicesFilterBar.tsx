@@ -153,10 +153,11 @@ export function VoicesFilterBar({
                 type="button"
                 onClick={() => onModeChange(m.id)}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                  "inline-flex h-8 items-center border px-3 text-xs font-medium transition-colors",
+                  CATEGORY_CHIP_RADIUS,
                   mode === m.id
-                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
                 data-testid={`voices-mode-${m.id}`}
               >

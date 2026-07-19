@@ -179,10 +179,10 @@ import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
-import { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed } from "@/components/InteractiveCategoryPill";
+import { consumeCategoryPillBrowseIntent } from "@/components/InteractiveCategoryPill";
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 
-type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
+type SnapOpenSource = "browse-button" | "header-icon";
 // "community" was removed when World mode gained an uncapped feed — the
 // World Markets View All overlay no longer exists.
 type PredictOverlayKey = "weekly" | "h2h" | "gainers";
@@ -1308,13 +1308,11 @@ export default function PredictPage() {
     open();
   };
 
-  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
+  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "browse-button") => {
     if (!isMobile) return;
     if (isOverlayDismissSuppressed()) return;
     if (source === "browse-button") {
       if (!consumeCategoryPillBrowseIntent()) return;
-    } else if (source !== "header-icon" && isCategoryPillDrawerDismissSuppressed()) {
-      return;
     }
     savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
@@ -1339,25 +1337,6 @@ export default function PredictPage() {
       });
     }
   }, [snapScrollOpen]);
-
-  const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
-    if (!isMobile) return;
-    const target = e.target as HTMLElement;
-    const wrapper = e.currentTarget as HTMLElement;
-    let node: HTMLElement | null = target;
-    while (node && node !== wrapper) {
-      if (
-        node.matches(
-          'button, a, input, textarea, select, [role="button"], [data-interactive], [data-vaul-overlay]',
-        )
-      ) {
-        return;
-      }
-      node = node.parentElement;
-    }
-    e.stopPropagation();
-    openSnapScroll(section, itemId, "card-tap");
-  }, [isMobile, openSnapScroll]);
 
   const [pendingSelection, setPendingSelection] = useState<StakeSelection | null>(null);
   const [stakeModalOpen, setStakeModalOpen] = useState(false);
@@ -3067,7 +3046,6 @@ export default function PredictPage() {
           key={market.id}
           className="max-md:h-auto max-md:self-start w-full"
           data-testid={`card-community-${market.id}`}
-          onClick={(e) => handleCardEmptyTap(e, "world-markets", String(market.id))}
         >
           <OpenMarketCard
             market={market}
@@ -3092,7 +3070,6 @@ export default function PredictPage() {
     ),
     [
       ammPositionByMarket,
-      handleCardEmptyTap,
       handleCategoryPillFilter,
       handleCommunityPickEntry,
       isMobile,
@@ -3653,7 +3630,7 @@ export default function PredictPage() {
             ) : filteredUpDown.length > 0 ? (
               <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-blue-500">
                 {filteredUpDown.map((market) => (
-                  <div key={market.id} onClick={(e) => handleCardEmptyTap(e, "updown", String(market.id))}>
+                  <div key={market.id}>
                     <WeeklyUpDownCard 
                       market={market} 
                       isMarketClosed={isMarketClosed}

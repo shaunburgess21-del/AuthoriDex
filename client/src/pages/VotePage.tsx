@@ -14,7 +14,6 @@ import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import {
   consumeCategoryPillBrowseIntent,
   InteractiveCategoryPill,
-  isCategoryPillDrawerDismissSuppressed,
 } from "@/components/InteractiveCategoryPill";
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
@@ -337,14 +336,10 @@ const OPTIMISTIC_VOTE_XP = 20;
 function HideExitCard({
   isMobile,
   exiting,
-  onClick,
-  onKeyDown,
   children,
 }: {
   isMobile: boolean;
   exiting: boolean;
-  onClick: (e: React.MouseEvent) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
   children: React.ReactNode;
 }) {
   const flying = exiting && !isMobile;
@@ -353,10 +348,6 @@ function HideExitCard({
       layout={isMobile ? false : "position"}
       transition={HIDE_EXIT_LAYOUT_TRANSITION}
       className="h-full"
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={onKeyDown}
     >
       <motion.div
         className="h-full"
@@ -1299,7 +1290,7 @@ function FilterChip({
 }
 
 const OVERLAY_SCROLL_PREFIX = "overlay_scroll_";
-type SnapOpenSource = "card-tap" | "browse-button" | "header-icon";
+type SnapOpenSource = "browse-button" | "header-icon";
 
 const overlayScrollPending = new Map<string, { rafId: number; scrollTop: number }>();
 
@@ -2368,13 +2359,11 @@ export default function VotePage() {
     [curateSnapSource],
   );
 
-  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "card-tap") => {
+  const openSnapScroll = useCallback((section: SnapSectionType, itemId?: string, source: SnapOpenSource = "browse-button") => {
     if (!isMobile) return;
     if (isOverlayDismissSuppressed()) return;
     if (source === "browse-button") {
       if (!consumeCategoryPillBrowseIntent()) return;
-    } else if (source !== "header-icon" && isCategoryPillDrawerDismissSuppressed()) {
-      return;
     }
     savedSnapWindowScrollRef.current = window.scrollY;
     setSnapScrollSection(section);
@@ -2404,27 +2393,6 @@ export default function VotePage() {
       });
     }
   }, [snapScrollOpen]);
-
-  const handleCardEmptyTap = useCallback((e: React.MouseEvent, section: SnapSectionType, itemId: string) => {
-    if (!isMobile) return;
-    const target = e.target as HTMLElement;
-    const wrapper = e.currentTarget as HTMLElement;
-    // Walk up from target but stop at the wrapper — excludes interactive descendants
-    // without matching the wrapper's own role="button" attribute.
-    let node: HTMLElement | null = target;
-    while (node && node !== wrapper) {
-      if (
-        node.matches(
-          'button, a, input, textarea, select, [role="button"], [data-interactive], [data-vaul-overlay]',
-        )
-      ) {
-        return;
-      }
-      node = node.parentElement;
-    }
-    e.stopPropagation();
-    openSnapScroll(section, itemId, "card-tap");
-  }, [isMobile, openSnapScroll]);
 
   useEffect(() => {
     if (prevInductionOverlayOpenRef.current && !inductionOverlayOpen) {
@@ -3210,8 +3178,6 @@ export default function VotePage() {
                   key={topic.id}
                   isMobile={isMobile}
                   exiting={isHideExiting(`sentiment:${topic.id}`)}
-                  onClick={(e) => handleCardEmptyTap(e, "sentiment", topic.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "sentiment", topic.id); }}
                 >
                   <DiscourseCard
                     topic={topic}
@@ -3327,8 +3293,6 @@ export default function VotePage() {
                   key={matchup.id}
                   isMobile={isMobile}
                   exiting={isHideExiting(`matchups:${matchup.id}`)}
-                  onClick={(e) => handleCardEmptyTap(e, "matchups", matchup.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "matchups", matchup.id); }}
                 >
                   <VersusCard
                     matchup={matchup}
@@ -3445,8 +3409,6 @@ export default function VotePage() {
                   key={poll.id}
                   isMobile={isMobile}
                   exiting={isHideExiting(`opinion:${poll.id}`)}
-                  onClick={(e) => handleCardEmptyTap(e, "opinion", poll.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCardEmptyTap(e as any, "opinion", poll.id); }}
                 >
                   <OpinionPollCard
                     poll={poll}
@@ -3552,7 +3514,7 @@ export default function VotePage() {
           ) : filteredValueCelebrities.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-value">
               {filteredValueCelebrities.map((person) => (
-                <div key={person.id} onClick={(e) => handleCardEmptyTap(e, "value", person.id)}>
+                <div key={person.id}>
                   <UnderratedOverratedCard 
                     person={person}
                     onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
@@ -3657,7 +3619,7 @@ export default function VotePage() {
           ) : filteredCandidates.length > 0 ? (
             <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
               {filteredCandidates.map((candidate, index) => (
-                <div key={candidate.id} onClick={(e) => handleCardEmptyTap(e, "induction", candidate.id)}>
+                <div key={candidate.id}>
                   <InductionCandidateCard
                     candidate={candidate}
                     rank={candidateRankById.get(candidate.id) ?? index + 1}
@@ -3773,7 +3735,6 @@ export default function VotePage() {
             categoryRaceMap={raceMap}
             leaderboardCategories={leaderboardCats}
             onBrowseFullScreen={isMobile ? (personId) => openSnapScroll("curate", personId, "browse-button") : undefined}
-            onCardEmptyTap={isMobile ? (personId, e) => handleCardEmptyTap(e, "curate", personId) : undefined}
           />
         </section>
         )}
