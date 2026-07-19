@@ -1,4 +1,3 @@
-import { VoxDexPulse } from "@/components/VoxDexPulse";
 import { WelcomeModal } from "@/components/WelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
@@ -16,7 +15,6 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { MoverRowSubtext } from "@/components/MoverRowSubtext";
-import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { TrendScoreLaunchpad } from "@/components/TrendScoreActionDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -655,35 +653,7 @@ export default function HomePage() {
   const [trendScoreLaunchpadOpen, setTrendScoreLaunchpadOpen] = useState(false);
   const [moversCollapsed, setMoversCollapsed] = useState(true);
   const welcomeOnboardingRef = useRef<OnboardingDrawerHandle>(null);
-  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
-    try {
-      const saved = localStorage.getItem('trending_now_collapsed');
-      return saved !== null ? saved === 'true' : true;
-    } catch { return true; }
-  });
-
-  const handleTrendingNowToggle = () => {
-    const next = !trendingNowCollapsed;
-    setTrendingNowCollapsed(next);
-    try { localStorage.setItem('trending_now_collapsed', String(next)); } catch {}
-  };
-
   const [selectedInsightPerson, setSelectedInsightPerson] = useState<InsightPerson | null>(null);
-
-  const [pulseCollapsed, setPulseCollapsed] = useState(() => {
-    try {
-      const saved = localStorage.getItem('voxdex_pulse_collapsed');
-      // Default-collapsed for new users so all home cards open uniformly.
-      // Returning users with a saved preference keep their last state.
-      return saved !== null ? saved === 'true' : true;
-    } catch { return true; }
-  });
-
-  const handlePulseToggle = () => {
-    const next = !pulseCollapsed;
-    setPulseCollapsed(next);
-    try { localStorage.setItem('voxdex_pulse_collapsed', String(next)); } catch {}
-  };
 
   const {
     data,
@@ -822,19 +792,6 @@ export default function HomePage() {
     setLocation(`/person/${personId}`);
   };
 
-  const openInsightFromHotMover = (person: HotMover) => {
-    setSelectedInsightPerson({
-      id: person.id,
-      name: person.name,
-      avatar: person.avatar,
-      category: person.category,
-      rank: person.rank ?? null,
-      change24h: person.change24h ?? null,
-      rankChange: person.rankChange ?? null,
-      hotMover: true,
-    });
-  };
-
   const openInsightFromTrendingPerson = (person: TrendingPerson) => {
     setSelectedInsightPerson({
       id: person.id,
@@ -949,7 +906,6 @@ export default function HomePage() {
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
       />
-      <VoxDexPulse collapsed={pulseCollapsed} onToggle={handlePulseToggle} />
       <WelcomeModal ref={welcomeOnboardingRef} />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
@@ -979,7 +935,7 @@ export default function HomePage() {
         </div>
       </div>
       */}
-      <div className="container mx-auto px-2 sm:px-4 pt-0 pb-8 max-w-7xl" data-content-section>
+      <div className="container mx-auto px-2 sm:px-4 pt-[18px] pb-8 max-w-7xl" data-content-section>
                             <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-6 mb-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-2 md:mb-4" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
@@ -1007,14 +963,6 @@ export default function HomePage() {
                   onOpenInsight={openInsightFromTrendingPerson}
                   collapsed={moversCollapsed}
                   onToggle={() => setMoversCollapsed(!moversCollapsed)}
-                />
-              </div>
-
-              <div className="mb-6">
-                <TrendingNowFeed
-                  onOpenInsight={openInsightFromHotMover}
-                  collapsed={trendingNowCollapsed}
-                  onToggle={handleTrendingNowToggle}
                 />
               </div>
 

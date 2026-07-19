@@ -684,7 +684,7 @@ export function VoxDexPulse({ collapsed, onToggle }: VoxDexPulseProps) {
     : APPROVAL_COLORS[2];
 
   return (
-    <section className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[18px] pb-0 mb-6">
+    <section>
       <div className="rounded-xl pulse-card-voxdex transition-all duration-200">
         <div className={`px-3 sm:px-4 ${collapsed ? 'py-4' : 'pt-5 pb-4'}`}>
           {/* Header row — always visible */}

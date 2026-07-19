@@ -13,6 +13,8 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { useInsightsOverview } from "@/lib/insights-hooks";
+import { VoxDexPulse } from "@/components/VoxDexPulse";
+import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { PersonInsightModal, type InsightPerson } from "@/components/PersonInsightModal";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -508,22 +510,101 @@ export function OverviewTab() {
   const [moversWindow, setMoversWindow] = useState<InsightsWindow>("24h");
   const [selectedMover, setSelectedMover] = useState<InsightPerson | null>(null);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 md:space-y-6">
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <div className="grid md:grid-cols-2 gap-4">
-          <Skeleton className="h-64 w-full rounded-xl" />
-          <Skeleton className="h-64 w-full rounded-xl" />
-        </div>
-        <Skeleton className="h-48 w-full rounded-xl" />
-      </div>
-    );
-  }
-  if (isError || !data) {
-    return <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>;
-  }
+  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("trending_now_collapsed");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
 
+  const handleTrendingNowToggle = () => {
+    const next = !trendingNowCollapsed;
+    setTrendingNowCollapsed(next);
+    try {
+      localStorage.setItem("trending_now_collapsed", String(next));
+    } catch {}
+  };
+
+  const [pulseCollapsed, setPulseCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("voxdex_pulse_collapsed");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handlePulseToggle = () => {
+    const next = !pulseCollapsed;
+    setPulseCollapsed(next);
+    try {
+      localStorage.setItem("voxdex_pulse_collapsed", String(next));
+    } catch {}
+  };
+
+  const openInsightFromHotMover = (person: HotMover) => {
+    setSelectedMover({
+      id: person.id,
+      name: person.name,
+      avatar: person.avatar,
+      category: person.category,
+      rank: person.rank ?? null,
+      change24h: person.change24h ?? null,
+      rankChange: person.rankChange ?? null,
+      hotMover: true,
+    });
+  };
+
+  return (
+    <div className="space-y-6 md:space-y-8">
+      <VoxDexPulse collapsed={pulseCollapsed} onToggle={handlePulseToggle} />
+      <TrendingNowFeed
+        onOpenInsight={openInsightFromHotMover}
+        collapsed={trendingNowCollapsed}
+        onToggle={handleTrendingNowToggle}
+      />
+
+      {isLoading ? (
+        <div className="space-y-4 md:space-y-6">
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <div className="grid md:grid-cols-2 gap-4">
+            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded-xl" />
+          </div>
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
+      ) : isError || !data ? (
+        <p className="text-sm text-destructive">Could not load overview. Try again shortly.</p>
+      ) : (
+        <OverviewTabContent
+          data={data}
+          isLoggedIn={isLoggedIn}
+          moversWindow={moversWindow}
+          setMoversWindow={setMoversWindow}
+          onSelectMover={setSelectedMover}
+        />
+      )}
+
+      <PersonInsightModal person={selectedMover} onClose={() => setSelectedMover(null)} />
+    </div>
+  );
+}
+
+function OverviewTabContent({
+  data,
+  isLoggedIn,
+  moversWindow,
+  setMoversWindow,
+  onSelectMover,
+}: {
+  data: NonNullable<ReturnType<typeof useInsightsOverview>["data"]>;
+  isLoggedIn: boolean;
+  moversWindow: InsightsWindow;
+  setMoversWindow: (window: InsightsWindow) => void;
+  onSelectMover: (person: InsightPerson | null) => void;
+}) {
   const { story, movers, boardLeader, favouritesSignals, categoryMix } = data;
   const windowMovers = movers[moversWindow] ?? { climbers: [], droppers: [] };
 
@@ -536,7 +617,7 @@ export function OverviewTab() {
   });
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <>
       <section className={cn("relative overflow-hidden rounded-xl", getInsightsTabCardClass("today"))}>
         <div className="p-5 md:p-6">
           <div className="flex items-center gap-3">
@@ -597,7 +678,7 @@ export function OverviewTab() {
                 items={windowMovers.climbers.slice(0, 8)}
                 positive
                 window={moversWindow}
-                onSelect={(m) => setSelectedMover(moverToInsightPerson(m))}
+                onSelect={(m) => onSelectMover(moverToInsightPerson(m))}
               />
             </div>
             <div>
@@ -608,7 +689,7 @@ export function OverviewTab() {
                 items={windowMovers.droppers.slice(0, 8)}
                 positive={false}
                 window={moversWindow}
-                onSelect={(m) => setSelectedMover(moverToInsightPerson(m))}
+                onSelect={(m) => onSelectMover(moverToInsightPerson(m))}
               />
             </div>
           </div>
@@ -721,8 +802,6 @@ export function OverviewTab() {
           <TopCategoryMixTile mix={categoryMix} />
         </Suspense>
       </InsightsSection>
-
-      <PersonInsightModal person={selectedMover} onClose={() => setSelectedMover(null)} />
-    </div>
+    </>
   );
 }
