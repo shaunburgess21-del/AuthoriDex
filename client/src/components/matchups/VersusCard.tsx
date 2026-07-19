@@ -115,7 +115,7 @@ export function VersusCard({
       <Card className="relative overflow-visible bg-card dark:bg-[#11151D] border border-border/40 dark:border-0 md:border md:border-border/40 dark:md:border-transparent shadow-sm dark:shadow-none md:shadow-sm group-hover:shadow-lg dark:md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] md:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
-        <div className={`relative pt-4 pb-4 ${hasVoted ? "md:pb-[10px]" : ""} flex flex-col flex-1`}>
+        <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>
           <div className="absolute top-3 right-3 z-10">
             <InteractiveCategoryPill
               category={matchup.category}
