@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react";
@@ -63,6 +63,16 @@ function replyToCommentItem(reply: VoicesReply, postId: string): CommentItem {
  */
 export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
   const { user, isLoggedIn, profile } = useAuth();
+
+  // Lock background scroll while the overlay is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
@@ -171,7 +181,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
     >
       <div
         className={cn(
-          "relative my-8 mx-4 w-full max-w-2xl bg-background",
+          "relative min-h-dvh w-full bg-background sm:mx-4 sm:my-8 sm:min-h-0 sm:max-w-2xl",
           VOICES_PANEL_SURFACE_CLASS,
         )}
         onClick={(e) => e.stopPropagation()}
@@ -188,8 +198,8 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
           </Button>
         </div>
 
-        <div className="p-6">
-          <div className="flex items-start gap-4">
+        <div className="p-4 sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-4">
             {!postDeleted && (
               <UserProfileAvatar
                 displayName={item.author.username}

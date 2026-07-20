@@ -3,25 +3,19 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { UserRound, X } from "lucide-react";
 import { toast } from "sonner";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { CommentComposer } from "@/components/comments/CommentComposer";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { PersonSearchPopover, type PersonResult } from "./PersonSearchPopover";
 import type { VoicesFeedItem } from "./types";
-import {
-  VOICES_COMPOSER_INPUT_CLASS,
-  VOICES_COMPOSER_SURFACE_CLASS,
-  VOICES_FEED_SURFACE_CLASS,
-} from "./voicesSurface";
+import { VOICES_COMPOSER_INPUT_CLASS } from "./voicesSurface";
 
 interface VoicesComposerProps {
   onPosted?: (item: VoicesFeedItem | null) => void;
@@ -108,7 +102,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
 
   if (!isAuthenticated) {
     return (
-      <Card className={cn("p-4 text-center", VOICES_FEED_SURFACE_CLASS)}>
+      <div className="px-4 py-4 text-center">
         <p className="text-sm text-muted-foreground">
           <button
             className="text-amber-600 underline hover:text-amber-500 dark:text-amber-400"
@@ -119,12 +113,12 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
           </button>{" "}
           to share your voice
         </p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className={cn("p-3", VOICES_COMPOSER_SURFACE_CLASS)} data-testid="voices-composer">
+    <div className="px-4 py-3" data-testid="voices-composer">
       <CommentComposer
         value={body}
         onChange={setBody}
@@ -149,6 +143,6 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
         keepActionsVisible={Boolean(attachPerson) || timelinePickerOpen}
         testIds={{ input: "voices-composer-input", submit: "voices-composer-submit" }}
       />
-    </Card>
+    </div>
   );
 }

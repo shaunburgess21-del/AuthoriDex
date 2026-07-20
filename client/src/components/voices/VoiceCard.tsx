@@ -1,5 +1,4 @@
 import { Crown, Flame, MessageCircle, ThumbsUp } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
@@ -8,7 +7,7 @@ import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import type { VoicesFeedItem } from "./types";
 import { VoiceEntityPreview } from "./VoiceEntityPreview";
-import { VOICES_FEED_SURFACE_CLASS } from "./voicesSurface";
+import { VOICES_POST_ROW_CLASS } from "./voicesSurface";
 
 const DELETED_USER = "[deleted user]";
 
@@ -24,8 +23,8 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
   const isTimeline = item.entity.refType === "timeline";
 
   return (
-    <Card
-      className={cn("cursor-pointer p-4 transition-colors", VOICES_FEED_SURFACE_CLASS)}
+    <article
+      className={cn("cursor-pointer", VOICES_POST_ROW_CLASS)}
       role="button"
       tabIndex={0}
       onClick={() => onOpen(item)}
@@ -41,7 +40,7 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
         <UserProfileAvatar
           displayName={item.author.username || ""}
           avatarUrl={item.author.avatarUrl}
-          size="sm"
+          size="md"
           className="shrink-0"
         />
         <div className="min-w-0 flex-1">
@@ -121,6 +120,6 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
           </div>
         </div>
       </div>
-    </Card>
+    </article>
   );
 }

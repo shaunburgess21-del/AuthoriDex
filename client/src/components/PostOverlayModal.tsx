@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -192,6 +192,16 @@ function PostOverlayModalContent({
   const { user, profile } = useAuth();
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
+
+  // Lock background scroll while the overlay is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
   const [rootActionsOpen, setRootActionsOpen] = useState(false);
@@ -225,8 +235,8 @@ function PostOverlayModalContent({
       onClick={onClose}
       data-testid="post-overlay-modal"
     >
-      <div 
-        className="relative w-full max-w-2xl my-8 mx-4 bg-background rounded-xl shadow-2xl border border-border overflow-hidden"
+      <div
+        className="relative min-h-dvh w-full overflow-hidden rounded-none border-0 bg-background shadow-2xl sm:mx-4 sm:my-8 sm:min-h-0 sm:max-w-2xl sm:rounded-xl sm:border sm:border-border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur-sm">
@@ -243,8 +253,8 @@ function PostOverlayModalContent({
           </Button>
         </div>
 
-        <div className="p-6">
-          <div className="flex items-start gap-4">
+        <div className="p-4 sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-4">
             {!isInsightDeleted && (
               <UserProfileAvatar
                 displayName={insight.username}

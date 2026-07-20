@@ -32,7 +32,7 @@ export function VoiceProfilePreviewStats({ stats }: VoiceProfilePreviewStatsProp
     <div className="flex min-h-0 flex-1 flex-col justify-end">
       {/* Mobile: Trend Score + Approval only */}
       <div className="md:hidden">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
           <p className="truncate text-center font-mono text-base font-bold leading-tight text-foreground">
             {fameIndex}
           </p>

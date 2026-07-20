@@ -104,10 +104,10 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
       <Link
         href={entity.href}
         onClick={(e) => e.stopPropagation()}
-        className="group/preview mt-2.5 flex h-36 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] transition-colors hover:border-amber-500/40"
+        className="group/preview mt-2.5 flex h-32 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] transition-colors hover:border-amber-500/40 sm:h-36"
         data-testid={`voice-card-entity-${itemId}`}
       >
-        <div className="relative h-36 w-36 shrink-0 overflow-hidden rounded-lg">
+        <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg sm:h-36 sm:w-36">
           <CardImage
             src={entity.imageUrl}
             alt={entity.title}
@@ -116,7 +116,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           />
         </div>
         {isProfile ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}
@@ -150,7 +150,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             )}
           </div>
         ) : isSentimentPoll ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}
@@ -166,7 +166,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             )}
           </div>
         ) : isOpinionPoll ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}
@@ -182,7 +182,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             )}
           </div>
         ) : isOpenMarket ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 py-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}
@@ -198,7 +198,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
             )}
           </div>
         ) : (
-          <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-3 py-2">
+          <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}

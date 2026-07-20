@@ -23,7 +23,12 @@ import {
   type VoicesFeedResponse,
   type VoicesFilters,
 } from "@/components/voices/types";
-import { VOICES_FEED_SURFACE_CLASS, VOICES_PAGE_CANVAS_CLASS, VOICES_PAGE_HEADER_CLASS } from "@/components/voices/voicesSurface";
+import {
+  VOICES_FEED_LANE_CLASS,
+  VOICES_PAGE_CANVAS_CLASS,
+  VOICES_PAGE_HEADER_CLASS,
+  VOICES_POST_ROW_CLASS,
+} from "@/components/voices/voicesSurface";
 
 export default function VoicesPage() {
   const { user, isLoggedIn } = useAuth();
@@ -173,44 +178,46 @@ export default function VoicesPage() {
         </div>
       </div>
 
-      <main className="container mx-auto max-w-2xl space-y-2 px-4 py-4">
-        <VoicesComposer />
+      <main className="container mx-auto max-w-2xl px-0 py-0 sm:px-4 sm:py-4">
+        <div className={VOICES_FEED_LANE_CLASS}>
+          <VoicesComposer />
 
-        {isLoading ? (
-          <FeedSkeleton />
-        ) : isError ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <p className="text-sm text-muted-foreground">
-              Could not load Voices. Check your connection and try again.
-            </p>
-            <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isRefetching}>
-              {isRefetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Retry
-            </Button>
-          </div>
-        ) : items.length === 0 ? (
-          <EmptyState hasFilters={
-            filters.surfaces.length + filters.personIds.length + filters.categories.length > 0
-          } />
-        ) : (
-          <>
-            {items.map((item) => (
-              <VoiceCard
-                key={`${item.source}:${item.id}`}
-                item={item}
-                onOpen={setSelected}
-                onVote={handleVote}
-              />
-            ))}
-            <div ref={sentinelRef} className="flex min-h-10 justify-center py-4">
-              {isFetchingNextPage ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              ) : !hasNextPage ? (
-                <span className="text-xs text-muted-foreground">You&apos;re all caught up</span>
-              ) : null}
+          {isLoading ? (
+            <FeedSkeleton />
+          ) : isError ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <p className="text-sm text-muted-foreground">
+                Could not load Voices. Check your connection and try again.
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isRefetching}>
+                {isRefetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Retry
+              </Button>
             </div>
-          </>
-        )}
+          ) : items.length === 0 ? (
+            <EmptyState hasFilters={
+              filters.surfaces.length + filters.personIds.length + filters.categories.length > 0
+            } />
+          ) : (
+            <>
+              {items.map((item) => (
+                <VoiceCard
+                  key={`${item.source}:${item.id}`}
+                  item={item}
+                  onOpen={setSelected}
+                  onVote={handleVote}
+                />
+              ))}
+              <div ref={sentinelRef} className="flex min-h-10 justify-center py-4">
+                {isFetchingNextPage ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : !hasNextPage ? (
+                  <span className="text-xs text-muted-foreground">You&apos;re all caught up</span>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
       </main>
 
       <VoiceDetailOverlay item={selected} onClose={() => setSelected(null)} />
@@ -220,11 +227,11 @@ export default function VoicesPage() {
 
 function FeedSkeleton() {
   return (
-    <div className="space-y-2">
+    <>
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className={cn("p-4", VOICES_FEED_SURFACE_CLASS)}>
+        <div key={i} className={VOICES_POST_ROW_CLASS}>
           <div className="flex items-start gap-3">
-            <Skeleton className="h-8 w-8 rounded-full" />
+            <Skeleton className="h-10 w-10 rounded-full" />
             <div className="flex-1 space-y-2">
               <Skeleton className="h-3 w-32" />
               <Skeleton className="h-3 w-full" />
@@ -234,7 +241,7 @@ function FeedSkeleton() {
           </div>
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
