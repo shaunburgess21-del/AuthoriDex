@@ -74,9 +74,10 @@ type OpsPreset = "needs_resolution" | "closing_soon" | null;
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
 
-/** OPEN World Market the AI scout has marked as resolvable now. */
+/** OPEN live/inactive World Market the AI scout has marked as resolvable now. */
 function isAiResolveNow(market: PredictionMarket): boolean {
   if (market.status !== "OPEN") return false;
+  if (market.visibility !== "live" && market.visibility !== "inactive") return false;
   const assessment = (market.metadata as { scoutAssessment?: { recommendedAction?: string } } | null)
     ?.scoutAssessment;
   return assessment?.recommendedAction === "resolve_now";
@@ -102,7 +103,7 @@ interface WorldMarketsSectionProps {
  * Single state chip merging `status` and `visibility`. For OPEN markets the
  * operational state is the visibility (Draft / Live / Inactive / Archived);
  * once the market leaves OPEN, the status is what matters. AI-flagged
- * resolve_now markets still show Live/Draft but get an extra "AI" badge
+ * resolve_now markets (live/inactive only) get an extra "AI" badge
  * from the row renderer.
  */
 function MarketStateChip({ market }: { market: PredictionMarket }) {

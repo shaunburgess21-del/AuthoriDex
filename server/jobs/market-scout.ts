@@ -69,6 +69,7 @@ import {
   computeOtherOutcomeAdvice,
   isOtherStyleOutcomeLabel,
 } from "@shared/lib/other-outcome";
+import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
 import {
   isDrawStyleOutcomeLabel,
   isSingleWinnerKnockoutMarket,
@@ -1402,12 +1403,15 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
 //
 // For scouted markets (metadata.source.provider = 'polymarket'), the source
 // market resolves authoritatively upstream. This watcher polls Gamma for
-// resolutions and, when the source has settled, writes a
-// `metadata.scoutAssessment` (stage 'met', action 'resolve_now', with the
-// mapped `proposedWinnerEntryId`) — the exact shape the resolution scout
-// uses, so the settlement center + AmmResolutionDialog surface it with the
-// winner pre-selected. It NEVER settles anything: a founder confirms with
-// one click. Zero LLM cost, so it runs regardless of MARKET_SCOUT_ENABLED.
+// resolutions and, when the source has settled on a *live or inactive*
+// VoxDex market, writes a `metadata.scoutAssessment` (stage 'met', action
+// 'resolve_now', with the mapped `proposedWinnerEntryId`) — the exact shape
+// the resolution scout uses, so the settlement center + AmmResolutionDialog
+// surface it with the winner pre-selected. Draft/archived markets only get
+// `upstreamResolvedAt` stamped (so we stop re-polling) — never a settle
+// recommendation, since they were never made live. It NEVER settles
+// anything: a founder confirms with one click. Zero LLM cost, so it runs
+// regardless of MARKET_SCOUT_ENABLED.
 
 interface SourceOutcomeMappingEntry {
   entryLabel?: string;
@@ -1518,6 +1522,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       status: predictionMarkets.status,
+      visibility: predictionMarkets.visibility,
       openMarketType: predictionMarkets.openMarketType,
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
@@ -1859,6 +1864,40 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         return false;
       }
     };
+
+    // Draft / archived: never recommend settlement. If upstream is done,
+    // stamp upstreamResolvedAt so we stop re-polling; still allow live
+    // price refresh below when the source is open.
+    const settlementEligible = isSettlementEligibleVisibility(row.visibility);
+    const wouldRecommendSettlement =
+      winners.length === 1 && !unmappedWinner ? true : allClosed;
+    if (wouldRecommendSettlement && !settlementEligible) {
+      const assessedAt = new Date().toISOString();
+      try {
+        const payload = {
+          source: { ...source, upstreamResolvedAt: assessedAt },
+        };
+        await db
+          .update(predictionMarkets)
+          .set({
+            metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(payload)}::jsonb`,
+            updatedAt: new Date(),
+          })
+          .where(eq(predictionMarkets.id, row.id));
+        log(
+          `[MarketScout] Upstream resolved for ${row.visibility ?? "non-live"} ` +
+            `"${row.title}" — skipping settle recommendation ` +
+            `(market=${row.id.slice(0, 8)})`,
+        );
+      } catch (err) {
+        result.errors += 1;
+        log(
+          `[MarketScout] Failed to stamp upstreamResolvedAt for non-live ` +
+            `${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      continue;
+    }
 
     if (unmappedWinner || winners.length !== 1) {
       if (allClosed) {

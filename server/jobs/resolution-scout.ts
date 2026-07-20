@@ -1,13 +1,15 @@
 /**
  * AI early-resolution scout (alert / propose only).
  *
- * Once a day, scans open World Markets (community) and asks GPT — with web
- * search — whether anything has happened in the real world that moves the
- * market toward resolution (condition met, near-certain, or a material
- * development worth a heads-up). It NEVER settles anything: it writes its
- * assessment to `prediction_markets.metadata.scoutAssessment` and returns
- * the actionable findings for the daily ops digest to surface. A human
- * still confirms every resolution.
+ * Once a day, scans open World Markets (community) that are live or
+ * inactive and asks GPT — with web search — whether anything has happened
+ * in the real world that moves the market toward resolution (condition met,
+ * near-certain, or a material development worth a heads-up). Draft and
+ * archived markets are skipped: they were never (or are no longer) live, so
+ * recommending settlement would be wrong. It NEVER settles anything: it
+ * writes its assessment to `prediction_markets.metadata.scoutAssessment`
+ * and returns the actionable findings for the daily ops digest to surface.
+ * A human still confirms every resolution.
  *
  * Design notes:
  *   - Kill switch: RESOLUTION_SCOUT_LLM_ENABLED (default OFF). When off,
@@ -40,6 +42,9 @@ import {
   knockoutHintsFromMarket,
 } from "@shared/lib/knockout-market";
 import { marketEntries, predictionMarkets, trackedPeople } from "@shared/schema";
+import {
+  SETTLEMENT_ELIGIBLE_VISIBILITIES,
+} from "@shared/lib/market-visibility";
 import { log } from "../log";
 import { getAiModel } from "../config/ai-models";
 import { getTrendContextBatch } from "../services/trend-context";
@@ -595,12 +600,15 @@ async function runResolutionScoutOnce(): Promise<ResolutionScoutResult> {
       and(
         eq(predictionMarkets.marketType, "community"),
         inArray(predictionMarkets.status, ["OPEN", "CLOSED_PENDING"]),
+        // Never spend LLM budget or recommend resolve on draft/archived —
+        // those were never (or are no longer) live for users.
+        inArray(predictionMarkets.visibility, [...SETTLEMENT_ELIGIBLE_VISIBILITIES]),
       ),
     )
     .orderBy(asc(predictionMarkets.endAt))) as ScoutMarket[];
 
   if (markets.length === 0) {
-    log("[ResolutionScout] No open or pending World Markets to scan.");
+    log("[ResolutionScout] No live/inactive open or pending World Markets to scan.");
     return result;
   }
 

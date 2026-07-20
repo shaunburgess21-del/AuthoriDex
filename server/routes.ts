@@ -23169,11 +23169,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   });
 
   // Shared predicate: OPEN World Markets the AI scout marked resolve_now
-  // (condition met before endAt — e.g. far-future manual markets). Distinct
-  // from CLOSED_PENDING so counts never double.
+  // (condition met before endAt — e.g. far-future manual markets).
+  // Only live/inactive — drafts were never published, so recommending settle is wrong.
+  // Distinct from CLOSED_PENDING so counts never double.
   const aiResolveNowWhere = and(
     eq(predictionMarkets.marketType, "community"),
     eq(predictionMarkets.status, "OPEN"),
+    inArray(predictionMarkets.visibility, ["live", "inactive"]),
     sql`${predictionMarkets.metadata} -> 'scoutAssessment' ->> 'recommendedAction' = 'resolve_now'`,
   );
 
@@ -23545,7 +23547,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
                 ?.recommendedAction
             : undefined;
         const isAiResolveNow =
-          m.status === "OPEN" && scoutAction === "resolve_now";
+          m.status === "OPEN" &&
+          (m.visibility === "live" || m.visibility === "inactive") &&
+          scoutAction === "resolve_now";
         const parsedNotes =
           typeof m.resolutionNotes === "string" && m.resolutionNotes.trim().startsWith("{")
             ? (() => {
