@@ -48,7 +48,7 @@ export function LeaderboardRowSkeleton({ count = 5 }: { count?: number }) {
       {Array.from({ length: count }, (_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 py-4 px-3 rounded-xl border border-border/40 bg-card/60"
+          className="lb-row-card lb-row-neutral flex items-center gap-3 py-4 px-3 rounded-xl"
         >
           <Skeleton className="h-12 w-[4.5rem] rounded-lg shrink-0" />
           <div className="flex-1 min-w-0 space-y-1.5">

@@ -175,6 +175,9 @@ export function ApprovalTab() {
 
   return (
     <>
+      {/* Single wrapper so CrowdTab's space-y-4 doesn't add a gap between the
+          header/toolbar card and the row list. */}
+      <div>
       <Card className={insightsCrowdBoardCardClass()}>
         <div className="relative isolate overflow-hidden rounded-t-xl">
           <InsightsCrowdTopAccentBar />
@@ -338,6 +341,7 @@ export function ApprovalTab() {
               )}
             </>
           )}
+      </div>
       </div>
 
       {isMobile ? (

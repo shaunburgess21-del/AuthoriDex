@@ -351,16 +351,16 @@ export const LeaderboardRow = memo(function LeaderboardRow({
   const hasMobileMovement = hasPct || showRankDelta;
   const pctMuted = !showPctColor;
 
-  // Podium accents (ranks 1–3): restrained metallic border + rank-well tints.
+  // Podium accents (ranks 1–3): pulse-style card variant + rank-well tints.
   const podiumRank = !isColdStart && rank != null && rank >= 1 && rank <= 3 ? rank : null;
-  const cardBorderClass =
+  const rowVariantClass =
     podiumRank === 1
-      ? "border-amber-400/30 hover:border-amber-400/50 dark:border-amber-400/20 dark:hover:border-amber-400/40"
+      ? "lb-row-gold"
       : podiumRank === 2
-        ? "border-slate-400/40 hover:border-slate-400/60 dark:border-slate-300/20 dark:hover:border-slate-300/40"
+        ? "lb-row-silver"
         : podiumRank === 3
-          ? "border-orange-500/30 hover:border-orange-500/50 dark:border-orange-400/20 dark:hover:border-orange-400/40"
-          : "border-border/40 hover:border-border/70";
+          ? "lb-row-bronze"
+          : "lb-row-neutral";
   const rankWellClass =
     podiumRank === 1
       ? "bg-amber-400/15 dark:bg-amber-400/10"
@@ -378,20 +378,6 @@ export const LeaderboardRow = memo(function LeaderboardRow({
           ? "text-orange-600 dark:text-orange-400"
           : "text-muted-foreground dark:text-slate-400";
 
-  // Movement edge: a soft inner left stripe for hot movers / big rank moves.
-  // Fame tab only — rankChange compares against the prior fame-rank snapshot,
-  // which is meaningless on the approval leaderboard.
-  const movementEdgeClass =
-    activeTab === "fame"
-      ? isHotMover
-        ? "bg-amber-400/40"
-        : showRankDelta && person.rankChange != null
-          ? person.rankChange > 0
-            ? "bg-emerald-500/30"
-            : "bg-red-500/30"
-          : null
-      : null;
-
   // role=button (not a real <button>) because the row contains nested
   // interactive controls (Rate button, popovers) — nested buttons are
   // invalid HTML and break click handling. Keydown only fires for the
@@ -401,8 +387,12 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         role="button"
         tabIndex={0}
         aria-label={`View insights for ${person.name}`}
-        className={`lb-row-enter relative flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl border bg-card/60 shadow-sm transform-gpu transition-[transform,border-color,box-shadow] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:shadow-lg ${cardBorderClass} hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+        className={`lb-row-enter lb-row-card ${rowVariantClass} flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
         onClick={onOpenInsight}
+        // No-op touch handler: iOS Safari only applies :active (the press
+        // glow/expand in .lb-row-card) to non-form elements that have a touch
+        // listener attached.
+        onTouchStart={() => {}}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
@@ -412,12 +402,6 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         }}
         data-testid={`row-person-${person.id}`}
       >
-        {movementEdgeClass && (
-          <span
-            aria-hidden
-            className={`pointer-events-none absolute left-0 top-2 bottom-2 w-[2px] rounded-full ${movementEdgeClass}`}
-          />
-        )}
         <div
           className="relative flex items-center rounded-lg overflow-hidden shrink-0"
           data-testid={`rank-avatar-unit-${person.id}`}

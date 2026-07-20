@@ -1229,6 +1229,152 @@
     }
   }
 
+  /* ===== LEADERBOARD ROW CARDS =====
+     Pulse-widget border anatomy (1px tinted hairline + 3px top bar fading out
+     at both ends) with NO resting glow — glow + expand appear on hover/press.
+     Variants: gold/silver/bronze podium + chrome neutral for everyone else. */
+  .lb-row-card {
+    position: relative;
+    overflow: hidden; /* clips the top-bar lip at rounded corners */
+    -webkit-tap-highlight-color: transparent; /* our glow replaces the native grey tap flash */
+    border: 1px solid var(--lb-row-border);
+    background:
+      linear-gradient(135deg, var(--lb-row-tint) 0%, transparent 40%),
+      linear-gradient(180deg, hsl(var(--background) / 0.95) 0%, hsl(var(--background)) 100%);
+    transition:
+      transform 0.2s ease-out,
+      border-color 0.2s ease-out,
+      box-shadow 0.2s ease-out;
+  }
+  .lb-row-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, var(--lb-row-bar) 50%, transparent 100%);
+  }
+  .lb-row-card::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+    pointer-events: none;
+    background: radial-gradient(ellipse at top left, var(--lb-row-glow) 0%, transparent 60%);
+  }
+  .lb-row-card > * {
+    position: relative;
+    z-index: 1;
+  }
+  /* Hover gated to real pointers so touch devices don't get sticky hover. */
+  @media (hover: hover) {
+    .lb-row-card:hover {
+      transform: translateY(-2px) scale(1.015);
+      border-color: var(--lb-row-border-hover);
+      box-shadow:
+        0 8px 30px -4px var(--lb-row-glow),
+        0 0 50px -10px var(--lb-row-glow-soft);
+    }
+    .lb-row-card:hover::after {
+      opacity: 1;
+    }
+  }
+  /* Press feedback — mobile hold and desktop click share the expand + glow. */
+  .lb-row-card:active {
+    transform: scale(1.015);
+    border-color: var(--lb-row-border-hover);
+    box-shadow:
+      0 8px 30px -4px var(--lb-row-glow),
+      0 0 50px -10px var(--lb-row-glow-soft);
+  }
+  .lb-row-card:active::after {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lb-row-card:hover,
+    .lb-row-card:active {
+      transform: none;
+    }
+  }
+
+  /* Chrome neutral (ranks 4+) — same family as .pulse-card-blue, top bar
+     toned down (0.45 vs 0.7) so ~150 stacked rows don't strobe. */
+  .lb-row-neutral {
+    --lb-row-border: rgba(255, 255, 255, 0.13);
+    --lb-row-border-hover: rgba(255, 255, 255, 0.25);
+    --lb-row-bar: rgba(255, 255, 255, 0.45);
+    --lb-row-glow: rgba(255, 255, 255, 0.1);
+    --lb-row-glow-soft: rgba(255, 255, 255, 0.06);
+    --lb-row-tint: rgba(255, 255, 255, 0.04);
+  }
+  .lb-row-gold {
+    --lb-row-border: rgba(251, 191, 36, 0.28);
+    --lb-row-border-hover: rgba(251, 191, 36, 0.45);
+    --lb-row-bar: rgba(251, 191, 36, 0.9);
+    --lb-row-glow: rgba(251, 191, 36, 0.14);
+    --lb-row-glow-soft: rgba(251, 191, 36, 0.08);
+    --lb-row-tint: rgba(251, 191, 36, 0.05);
+  }
+  .lb-row-silver {
+    --lb-row-border: rgba(203, 213, 225, 0.25);
+    --lb-row-border-hover: rgba(203, 213, 225, 0.42);
+    --lb-row-bar: rgba(203, 213, 225, 0.8);
+    --lb-row-glow: rgba(203, 213, 225, 0.12);
+    --lb-row-glow-soft: rgba(203, 213, 225, 0.07);
+    --lb-row-tint: rgba(203, 213, 225, 0.05);
+  }
+  .lb-row-bronze {
+    --lb-row-border: rgba(251, 146, 60, 0.28);
+    --lb-row-border-hover: rgba(251, 146, 60, 0.45);
+    --lb-row-bar: rgba(251, 146, 60, 0.85);
+    --lb-row-glow: rgba(251, 146, 60, 0.14);
+    --lb-row-glow-soft: rgba(251, 146, 60, 0.08);
+    --lb-row-tint: rgba(251, 146, 60, 0.05);
+  }
+
+  /* Light mode — slate-based neutral (mirrors light .pulse-card-blue); podium
+     hues deepened for contrast on light surfaces. */
+  :root:not(.dark) .lb-row-card {
+    background:
+      linear-gradient(135deg, var(--lb-row-tint) 0%, transparent 40%),
+      linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 14% 96%) 100%);
+  }
+  :root:not(.dark) .lb-row-neutral {
+    --lb-row-border: rgba(148, 163, 184, 0.25);
+    --lb-row-border-hover: rgba(148, 163, 184, 0.4);
+    --lb-row-bar: rgba(100, 116, 139, 0.5);
+    --lb-row-glow: rgba(148, 163, 184, 0.12);
+    --lb-row-glow-soft: rgba(148, 163, 184, 0.08);
+    --lb-row-tint: rgba(148, 163, 184, 0.08);
+  }
+  :root:not(.dark) .lb-row-gold {
+    --lb-row-border: rgba(217, 119, 6, 0.3);
+    --lb-row-border-hover: rgba(217, 119, 6, 0.45);
+    --lb-row-bar: rgba(217, 119, 6, 0.75);
+    --lb-row-glow: rgba(217, 119, 6, 0.12);
+    --lb-row-glow-soft: rgba(217, 119, 6, 0.07);
+    --lb-row-tint: rgba(217, 119, 6, 0.06);
+  }
+  :root:not(.dark) .lb-row-silver {
+    --lb-row-border: rgba(100, 116, 139, 0.3);
+    --lb-row-border-hover: rgba(100, 116, 139, 0.45);
+    --lb-row-bar: rgba(100, 116, 139, 0.6);
+    --lb-row-glow: rgba(100, 116, 139, 0.12);
+    --lb-row-glow-soft: rgba(100, 116, 139, 0.07);
+    --lb-row-tint: rgba(100, 116, 139, 0.06);
+  }
+  :root:not(.dark) .lb-row-bronze {
+    --lb-row-border: rgba(234, 88, 12, 0.3);
+    --lb-row-border-hover: rgba(234, 88, 12, 0.45);
+    --lb-row-bar: rgba(234, 88, 12, 0.7);
+    --lb-row-glow: rgba(234, 88, 12, 0.12);
+    --lb-row-glow-soft: rgba(234, 88, 12, 0.07);
+    --lb-row-tint: rgba(234, 88, 12, 0.06);
+  }
+
 }
 
 /* ===== JACKPOT HERO BACKGROUND ===== */
