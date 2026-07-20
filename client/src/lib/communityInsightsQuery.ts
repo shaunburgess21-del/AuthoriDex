@@ -1,6 +1,7 @@
 import { apiRequest } from "@/lib/queryClient";
 import type { CommentItem, ParentVoteLabel, VoteType } from "@/components/comments/types";
 import {
+  toInsightReplyCommentItem,
   toPersonThreadCommentItem,
   type InsightCommentResponse,
 } from "@/lib/communityInsightsMappers";
@@ -33,7 +34,7 @@ export async function fetchInsightReplies(personId: string, insightId: string): 
     `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(personId)}&parentCommentId=${encodeURIComponent(insightId)}&limit=100`,
   );
   const raw = (await res.json()) as InsightCommentResponse[];
-  return raw.map(toPersonThreadCommentItem);
+  return raw.map((row) => toInsightReplyCommentItem(row, insightId));
 }
 
 /** TanStack Query key for a single insight's reply thread (PostOverlayModal). */

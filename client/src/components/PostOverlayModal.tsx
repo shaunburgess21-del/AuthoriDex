@@ -18,24 +18,11 @@ import { DeleteContentDialog } from "./comments/DeleteContentDialog";
 import { useXpBurst } from "./XpBurstProvider";
 import type { CommentAdapter, CommentItem, ParentVoteLabel, VoteType } from "./comments/types";
 import { communityInsightsQueryKey } from "@/lib/communityInsightsQuery";
+import {
+  toInsightReplyCommentItem,
+  type InsightCommentResponse,
+} from "@/lib/communityInsightsMappers";
 import { toast } from "sonner";
-
-interface InsightCommentResponse {
-  id: string;
-  parentCommentId: string | null;
-  userId: string;
-  username: string | null;
-  avatarUrl: string | null;
-  authorRank?: string | null;
-  body: string;
-  createdAt: string;
-  upvotes: number;
-  downvotes: number;
-  userVote?: VoteType | null;
-  deletedAt: string | null;
-  parentVoteLabel?: ParentVoteLabel | null;
-  xp?: unknown;
-}
 
 interface CommunityInsight {
   id: string;
@@ -60,24 +47,6 @@ function getSentimentColor(vote: number): string {
   return colors[vote - 1] || colors[4];
 }
 
-function toCommentItem(comment: InsightCommentResponse): CommentItem {
-  return {
-    id: comment.id,
-    userId: comment.userId,
-    username: comment.username,
-    avatarUrl: comment.avatarUrl,
-    authorRank: comment.authorRank ?? null,
-    body: comment.body,
-    parentId: comment.parentCommentId,
-    upvotes: comment.upvotes ?? 0,
-    downvotes: comment.downvotes ?? 0,
-    userVote: comment.userVote ?? null,
-    deletedAt: comment.deletedAt,
-    parentVoteLabel: comment.parentVoteLabel ?? null,
-    createdAt: comment.createdAt,
-  };
-}
-
 function useInsightCommentsAdapter({
   insightId,
   personId,
@@ -99,7 +68,7 @@ function useInsightCommentsAdapter({
       // page in-memory when the UI switches sort modes.
       const res = await apiRequest("GET", `/api/comments?parentType=community_insight&parentId=${encodeURIComponent(personId)}&parentCommentId=${encodeURIComponent(insightId)}&limit=100`);
       const raw = (await res.json()) as InsightCommentResponse[];
-      return raw.map(toCommentItem);
+      return raw.map((row) => toInsightReplyCommentItem(row, insightId));
     },
     postComment: async ({ body, parentId }) => {
       // parentId here is the parent COMMENT id (the post being replied to, or
@@ -111,7 +80,7 @@ function useInsightCommentsAdapter({
         body,
       });
       const raw = (await res.json()) as InsightCommentResponse;
-      return { ...toCommentItem(raw), xp: raw.xp };
+      return { ...toInsightReplyCommentItem(raw, insightId), xp: raw.xp };
     },
     voteComment: async ({ commentId, voteType }) => {
       const res = await apiRequest(

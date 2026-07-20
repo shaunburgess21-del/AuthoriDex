@@ -42,7 +42,18 @@ export function toPersonThreadCommentItem(comment: InsightCommentResponse): Comm
   };
 }
 
-/** @deprecated Prefer toPersonThreadCommentItem — kept for PostOverlayModal reply mapping. */
-export function toInsightReplyCommentItem(comment: InsightCommentResponse): CommentItem {
-  return toPersonThreadCommentItem(comment);
+/**
+ * Map reply-only thread rows (parentCommentId filter) for overlays where the
+ * root post is rendered outside the comment list. Direct replies store
+ * parentCommentId = insightId; normalize that to parentId null for threading.
+ */
+export function toInsightReplyCommentItem(
+  comment: InsightCommentResponse,
+  insightId: string,
+): CommentItem {
+  return {
+    ...toPersonThreadCommentItem(comment),
+    parentId:
+      comment.parentCommentId === insightId ? null : comment.parentCommentId,
+  };
 }
