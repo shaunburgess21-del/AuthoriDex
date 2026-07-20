@@ -183,6 +183,9 @@ export function WebSentimentTab() {
 
   return (
     <>
+      {/* Single wrapper so CrowdTab's space-y-4 doesn't add a gap between the
+          header/toolbar card and the row list. */}
+      <div>
       <Card className={insightsCrowdBoardCardClass()}>
         <div className="relative isolate overflow-hidden rounded-t-xl">
           <InsightsCrowdTopAccentBar />
@@ -200,10 +203,11 @@ export function WebSentimentTab() {
         </div>
 
         <div
-          className="border-b border-border/60 bg-card/95"
+          className="rounded-b-xl bg-card/95"
           data-testid="web-sentiment-toolbar"
         >
-          <div className="pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
+          {/* Padding mirrors the row padding (pl-2/pr-2, sm:pl-3/pr-6) so column headers align with row columns */}
+          <div className="rounded-b-xl pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <FilterDropdown
@@ -260,7 +264,10 @@ export function WebSentimentTab() {
           </div>
         </div>
 
-        <CardContent className="p-0">
+      </Card>
+
+      {/* Row list floats on the page background — border stops at the toolbar above. */}
+      <div>
           {isLoading && allRows.length === 0 ? (
             <div className="p-12 text-center">
               <Loader2 className="h-6 w-6 text-muted-foreground/50 mx-auto animate-spin" />
@@ -281,18 +288,20 @@ export function WebSentimentTab() {
             </div>
           ) : (
             <>
-              {allRows.map((row) => (
-                <WebSentimentLeaderboardRow
-                  key={row.id}
-                  row={row}
-                  displayRank={row.leaderboardRank}
-                />
-              ))}
+              <div className="lb-row-list pt-2 sm:pt-3 space-y-1.5">
+                {allRows.map((row) => (
+                  <WebSentimentLeaderboardRow
+                    key={row.id}
+                    row={row}
+                    displayRank={row.leaderboardRank}
+                  />
+                ))}
+              </div>
 
               {hasNextPage && (
                 <div
                   id="web-sentiment-infinite-sentinel"
-                  className="p-6 border-t text-center"
+                  className="p-6 text-center"
                   data-testid="web-sentiment-infinite-scroll-trigger"
                 >
                   {isFetchingNextPage ? (
@@ -309,7 +318,7 @@ export function WebSentimentTab() {
               )}
 
               {!hasNextPage && allRows.length > 0 && (
-                <div className="p-4 border-t text-center text-muted-foreground text-sm">
+                <div className="p-4 text-center text-muted-foreground text-sm">
                   Showing all {allRows.length} results
                 </div>
               )}
@@ -317,7 +326,7 @@ export function WebSentimentTab() {
           )}
 
           {asOf && (
-            <div className="border-t border-border/40 p-3 text-center">
+            <div className="p-3 text-center">
               <p className="text-[10px] text-muted-foreground leading-relaxed">
                 Updated {formatRelativeTime(asOf)}
                 {hasCarriedForward
@@ -328,8 +337,8 @@ export function WebSentimentTab() {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
+      </div>
 
       {isMobile ? (
         <SentimentInfoDrawer open={sentimentInfoOpen} onOpenChange={setSentimentInfoOpen}>

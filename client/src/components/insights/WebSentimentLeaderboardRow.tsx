@@ -34,8 +34,26 @@ export function WebSentimentLeaderboardRow({
   const categoryRegistry = useCategoryRegistry();
   const mentionCount = row.positive + row.negative;
 
+  // Podium accents (ranks 1–3): pulse-style card variant + numeral tint,
+  // matching LeaderboardRow on the Home/Approval boards.
+  const rowVariantClass =
+    displayRank === 1
+      ? "lb-row-gold"
+      : displayRank === 2
+        ? "lb-row-silver"
+        : displayRank === 3
+          ? "lb-row-bronze"
+          : "lb-row-neutral";
+  const rankNumeralClass =
+    displayRank === 1
+      ? "text-amber-600 dark:text-amber-400"
+      : displayRank === 2
+        ? "text-slate-600 dark:text-slate-300"
+        : displayRank === 3
+          ? "text-orange-600 dark:text-orange-400"
+          : null;
+
   return (
-    <div className="border-b">
       <Link
         href={`/person/${row.id}`}
         onClick={() =>
@@ -43,11 +61,26 @@ export function WebSentimentLeaderboardRow({
             personId: row.id,
           })
         }
-        className="flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 hover-elevate active-elevate-2 cursor-pointer"
+        // No-op touch handler: iOS Safari only applies :active (the press
+        // glow/expand in .lb-row-card) to elements with a touch listener.
+        onTouchStart={() => {}}
+        className={`lb-row-enter lb-row-card ${rowVariantClass} flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl cursor-pointer`}
         data-testid={`web-sentiment-row-${row.id}`}
       >
         <LeaderboardRankAvatar
           rank={displayRank}
+          rankSlot={
+            rankNumeralClass ? (
+              <span
+                className={cn(
+                  "font-mono font-semibold tabular-nums text-center leading-none px-0.5 text-[16px] sm:text-[18px]",
+                  rankNumeralClass,
+                )}
+              >
+                {displayRank}
+              </span>
+            ) : undefined
+          }
           name={row.name}
           avatar={row.avatar}
         />
@@ -114,6 +147,5 @@ export function WebSentimentLeaderboardRow({
           </p>
         </div>
       </Link>
-    </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { motion, type PanInfo } from "framer-motion";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { motion, useDragControls, type PanInfo } from "framer-motion";
 
 interface SwipeNavigatorProps {
   /** Called when user swipes right (drag x > 0). Wire to "previous card". */
@@ -57,7 +57,7 @@ export function SwipeNavigator({
   className,
 }: SwipeNavigatorProps) {
   const [isTouch, setIsTouch] = useState(false);
-  const ignoredGestureRef = useRef(false);
+  const dragControls = useDragControls();
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -79,21 +79,18 @@ export function SwipeNavigator({
     return <div className={className}>{children}</div>;
   }
 
-  const handleDragStart = (event: MouseEvent | TouchEvent | PointerEvent) => {
-    ignoredGestureRef.current = false;
-    if (!ignoreSelector) return;
+  // Manual drag initiation so gestures that begin inside `ignoreSelector`
+  // (e.g. horizontally scrollable chip rows) never start the page drag at
+  // all — the child's native overflow scroll handles them instead.
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(ignoreSelector)) {
-      ignoredGestureRef.current = true;
+    if (ignoreSelector && target instanceof Element && target.closest(ignoreSelector)) {
+      return;
     }
+    dragControls.start(event);
   };
 
   const handleDragEnd = (_event: unknown, info: PanInfo) => {
-    if (ignoredGestureRef.current) {
-      ignoredGestureRef.current = false;
-      return;
-    }
-
     const { offset, velocity } = info;
     const absX = Math.abs(offset.x);
     const absVx = Math.abs(velocity.x);
@@ -110,11 +107,13 @@ export function SwipeNavigator({
   return (
     <motion.div
       drag="x"
+      dragControls={dragControls}
+      dragListener={false}
       dragDirectionLock
       dragSnapToOrigin
       dragElastic={0.15}
       dragMomentum={false}
-      onDragStart={handleDragStart}
+      onPointerDown={handlePointerDown}
       onDragEnd={handleDragEnd}
       className={className}
       style={{ touchAction: "pan-y" }}

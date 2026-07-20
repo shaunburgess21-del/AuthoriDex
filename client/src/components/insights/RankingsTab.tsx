@@ -21,7 +21,7 @@ import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { LeaderboardRankAvatar } from "@/components/LeaderboardRankAvatar";
 import { OverallRankPill } from "@/components/OverallRankPill";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -58,6 +58,37 @@ function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
   return String(Math.round(n));
+}
+
+/** Pulse-style card variant per display rank — matches LeaderboardRow. */
+function rankingsRowVariantClass(displayRank: number): string {
+  if (displayRank === 1) return "lb-row-gold";
+  if (displayRank === 2) return "lb-row-silver";
+  if (displayRank === 3) return "lb-row-bronze";
+  return "lb-row-neutral";
+}
+
+/** Gold/silver/bronze rank numeral for the podium; undefined falls back to the default slot. */
+function rankingsRankSlot(displayRank: number): ReactNode | undefined {
+  const tint =
+    displayRank === 1
+      ? "text-amber-600 dark:text-amber-400"
+      : displayRank === 2
+        ? "text-slate-600 dark:text-slate-300"
+        : displayRank === 3
+          ? "text-orange-600 dark:text-orange-400"
+          : null;
+  if (!tint) return undefined;
+  return (
+    <span
+      className={cn(
+        "font-mono font-semibold tabular-nums text-center leading-none px-0.5 text-[16px] sm:text-[18px]",
+        tint,
+      )}
+    >
+      {displayRank}
+    </span>
+  );
 }
 
 function formatSortValue(source: InsightsSource, row: InsightsRankingRow): string {
@@ -364,14 +395,6 @@ export function RankingsTab() {
     : metricColumnLabel(filters.source, filters.window);
   const secondaryColLabel = isMovers ? "Trend Score" : isSearch ? "MoM" : "";
 
-  const rankingsMetricColgroup = (
-    <colgroup>
-      <col />
-      <col className="w-36" />
-      {hasSecondaryCol && <col className="w-24" />}
-    </colgroup>
-  );
-
   const renderPrimary = (row: InsightsRankingRow) =>
     isMovers ? (
       <DeltaCell value={row.metricDelta} />
@@ -443,7 +466,7 @@ export function RankingsTab() {
       {isLoading && (
         <div className="space-y-2">
           {Array.from({ length: 10 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            <Skeleton key={i} className="h-14 w-full rounded-xl" />
           ))}
         </div>
       )}
@@ -452,6 +475,9 @@ export function RankingsTab() {
       )}
 
       {data && (
+        // Single wrapper so the root's space-y doesn't add a gap between the
+        // header/toolbar card and the row list.
+        <div>
         <Card className={insightsTabShadcnCardClass("rankings", "overflow-hidden")}>
           <div className="relative isolate overflow-hidden rounded-t-xl">
             <CardHeader className="relative z-[2] gap-3 space-y-0 bg-card/95 pb-4 pt-5">
@@ -516,8 +542,8 @@ export function RankingsTab() {
             </CardHeader>
           </div>
 
-          {/* Toolbar — keep outside <table>; Radix dropdowns inside <th> crash in some browsers */}
-          <div className="border-b border-border/60 bg-muted/30 px-3 py-3 md:px-4">
+          {/* Toolbar — closes the bordered header unit; rows float below on the page background */}
+          <div className="bg-muted/30 px-3 py-3 md:px-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">{filterToolbar}</div>
               <div className="flex shrink-0 items-center gap-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -536,65 +562,74 @@ export function RankingsTab() {
             </div>
           </div>
 
-          <CardContent className="p-0">
+        </Card>
+
+        {/* Row list floats on the page background — border stops at the toolbar above. */}
+        <div>
             {allRows.length === 0 ? (
               <p className="px-4 py-12 text-center text-sm text-muted-foreground">
                 No results for these filters.
               </p>
             ) : (
             <>
-            {/* DESKTOP — single table so filter/header cells share column widths with data */}
-            <div className="hidden md:block">
-              <table className="w-full table-fixed text-sm">
-                {rankingsMetricColgroup}
-                <tbody>
-                  {allRows.map((row, idx) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-border/30 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="pl-4 px-2 py-3">
-                        <Link
-                          href={`/person/${row.id}`}
-                          onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
-                          className="flex items-center gap-3 group"
-                        >
-                          <LeaderboardRankAvatar rank={idx + 1} name={row.name} avatar={row.avatar} />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                              {row.name}
-                            </p>
-                            <RankingsPersonMeta
-                              category={row.category}
-                              rank={row.rank}
-                            />
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="w-36 px-4 py-3 text-right font-semibold tabular-nums">
-                        {renderPrimary(row)}
-                      </td>
-                      {hasSecondaryCol && (
-                        <td className="w-24 px-4 py-3 text-right text-xs tabular-nums">
-                          {renderSecondary(row)}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* MOBILE — stacked rows */}
-            <div className="md:hidden divide-y divide-border/30">
+            {/* DESKTOP — fixed-width metric columns mirror the toolbar labels */}
+            <div className="hidden md:block lb-row-list pt-2 sm:pt-3 space-y-1.5 text-sm">
               {allRows.map((row, idx) => (
                 <Link
                   key={row.id}
                   href={`/person/${row.id}`}
                   onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
-                  className="flex items-center gap-3 pl-2 pr-2 py-3.5 hover:bg-muted/30 transition-colors"
+                  // No-op touch handler: iOS Safari only applies :active (the
+                  // press glow/expand in .lb-row-card) to elements with a
+                  // touch listener.
+                  onTouchStart={() => {}}
+                  className={`lb-row-enter lb-row-card ${rankingsRowVariantClass(idx + 1)} group flex items-center gap-3 rounded-xl pl-4 pr-4 py-3 cursor-pointer`}
                 >
-                  <LeaderboardRankAvatar rank={idx + 1} name={row.name} avatar={row.avatar} />
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <LeaderboardRankAvatar
+                      rank={idx + 1}
+                      rankSlot={rankingsRankSlot(idx + 1)}
+                      name={row.name}
+                      avatar={row.avatar}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                        {row.name}
+                      </p>
+                      <RankingsPersonMeta
+                        category={row.category}
+                        rank={row.rank}
+                      />
+                    </div>
+                  </div>
+                  <div className="w-28 shrink-0 text-right font-semibold tabular-nums">
+                    {renderPrimary(row)}
+                  </div>
+                  {hasSecondaryCol && (
+                    <div className="w-24 shrink-0 text-right text-xs tabular-nums">
+                      {renderSecondary(row)}
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+
+            {/* MOBILE — stacked rows */}
+            <div className="md:hidden lb-row-list pt-2 space-y-1.5">
+              {allRows.map((row, idx) => (
+                <Link
+                  key={row.id}
+                  href={`/person/${row.id}`}
+                  onClick={() => logInsightsEvent("rankings", "row_click", { personId: row.id })}
+                  onTouchStart={() => {}}
+                  className={`lb-row-enter lb-row-card ${rankingsRowVariantClass(idx + 1)} flex items-center gap-3 rounded-xl pl-2 pr-2 py-3.5`}
+                >
+                  <LeaderboardRankAvatar
+                    rank={idx + 1}
+                    rankSlot={rankingsRankSlot(idx + 1)}
+                    name={row.name}
+                    avatar={row.avatar}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{row.name}</p>
                     <RankingsPersonMeta category={row.category} rank={row.rank} />
@@ -614,7 +649,7 @@ export function RankingsTab() {
             {/* Infinite-scroll sentinel + load state */}
             <div
               ref={loadMoreRef}
-              className="px-4 py-3 text-center border-t border-border/30"
+              className="px-4 py-3 text-center"
               data-testid="rankings-load-more"
             >
               {isFetchingNextPage ? (
@@ -629,8 +664,8 @@ export function RankingsTab() {
             </div>
             </>
             )}
-          </CardContent>
-        </Card>
+        </div>
+        </div>
       )}
     </div>
   );
