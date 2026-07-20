@@ -401,7 +401,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         role="button"
         tabIndex={0}
         aria-label={`View insights for ${person.name}`}
-        className={`lb-row-enter relative flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl border bg-card/40 shadow-sm transition-[border-color,box-shadow] duration-200 hover:shadow-md ${cardBorderClass} hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+        className={`lb-row-enter relative flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl border bg-card/60 shadow-sm transform-gpu transition-[transform,border-color,box-shadow] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:shadow-lg ${cardBorderClass} hover-elevate active-elevate-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
         onClick={onOpenInsight}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;

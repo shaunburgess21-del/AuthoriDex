@@ -1209,7 +1209,9 @@
     to   { opacity: 1; transform: translateY(0); }
   }
   .lb-row-enter {
-    animation: lb-row-enter 0.35s ease-out both;
+    /* `backwards` (not `both`): a forwards-filled animation would keep owning
+       `transform` after it ends, blocking the hover translate lift. */
+    animation: lb-row-enter 0.35s ease-out backwards;
   }
   /* Tiny stagger for the first rows in view on initial load; rows appended
      later (infinite scroll) animate immediately with no delay. */

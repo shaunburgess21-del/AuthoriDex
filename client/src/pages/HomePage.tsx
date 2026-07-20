@@ -967,8 +967,10 @@ export default function HomePage() {
               </div>
 
               <div id="leaderboard" className="scroll-mt-24" />
-              <Card className="overflow-visible">
-                <div className="relative isolate overflow-hidden rounded-t-xl">
+              {/* Header + toolbar form one bordered rounded box; the row list below
+                  is borderless so cards float on the page background. */}
+              <div>
+                <div className="relative isolate overflow-hidden rounded-t-xl border border-b-0 border-card-border bg-card text-card-foreground">
                   {/* Same accent as .pulse-card-voxdex::before: 3px top bar only; overflow clips rounded-corner lip */}
                   <div
                     className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px] bg-[linear-gradient(90deg,transparent_0%,rgb(59,130,246)_50%,transparent_100%)]"
@@ -1026,11 +1028,11 @@ export default function HomePage() {
                     </CardHeader>
                 </div>
                 <div
-                  className="sticky top-16 z-30 border-b border-border/40 bg-card/95 backdrop-blur-md"
+                  className="sticky top-16 z-30 rounded-b-xl border border-t-0 border-card-border bg-card/95 backdrop-blur-md"
                   data-testid="leaderboard-sticky-toolbar"
                 >
-                  {/* pl-4/pr-4 (sm:pl-6/pr-9) = list container inset + row padding, keeping column headers aligned with the inset card rows */}
-                  <div className="pl-4 pr-4 sm:pl-6 sm:pr-9 py-4 bg-muted/30">
+                  {/* Padding mirrors the row padding (pl-2/pr-2, sm:pl-3/pr-6) so column headers align with row columns */}
+                  <div className="rounded-b-xl pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
                         <FilterDropdown
@@ -1104,8 +1106,8 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-                <CardContent className="p-0">
-                  <div className="lb-row-list px-2 py-2 sm:px-3 sm:py-3 space-y-1.5">
+                <div>
+                  <div className="lb-row-list pt-2 sm:pt-3 space-y-1.5">
                     {displayPeople.length === 0 && !isLoading && (
                       <div className="p-8 text-center">
                         <p className="text-muted-foreground mb-3">
@@ -1183,8 +1185,8 @@ export default function HomePage() {
                       )}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
       </div>
       <footer className="border-t mt-24 py-12">
         <div className="container mx-auto px-4 text-center space-y-3">

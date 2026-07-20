@@ -196,11 +196,11 @@ export function ApprovalTab() {
         </div>
 
         <div
-          className="border-b border-border/40 bg-card/95"
+          className="rounded-b-xl bg-card/95"
           data-testid="approval-leaderboard-toolbar"
         >
-          {/* pl-4/pr-4 (sm:pl-6/pr-9) = list container inset + row padding, keeping column headers aligned with the inset card rows */}
-          <div className="pl-4 pr-4 sm:pl-6 sm:pr-9 py-4 bg-muted/30">
+          {/* Padding mirrors the row padding (pl-2/pr-2, sm:pl-3/pr-6) so column headers align with row columns */}
+          <div className="rounded-b-xl pl-2 pr-2 sm:pl-3 sm:pr-6 py-4 bg-muted/30">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <FilterDropdown
@@ -256,7 +256,10 @@ export function ApprovalTab() {
           </div>
         </div>
 
-        <CardContent className="p-0">
+      </Card>
+
+      {/* Row list floats on the page background — border stops at the toolbar above. */}
+      <div>
           {isLoading && allPeople.length === 0 ? (
             <div className="p-12 text-center">
               <Loader2 className="h-6 w-6 text-muted-foreground/50 mx-auto animate-spin" />
@@ -280,7 +283,7 @@ export function ApprovalTab() {
                 </div>
               )}
 
-              <div className="lb-row-list px-2 py-2 sm:px-3 sm:py-3 space-y-1.5">
+              <div className="lb-row-list pt-2 sm:pt-3 space-y-1.5">
                 {allPeople.map((person) => (
                   <LeaderboardRow
                     key={person.id}
@@ -335,8 +338,7 @@ export function ApprovalTab() {
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {isMobile ? (
         <YourVoteInfoDrawer
