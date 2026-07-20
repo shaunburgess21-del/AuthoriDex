@@ -10,7 +10,6 @@ const REPLY_PREVIEW_COUNT = 2;
 export interface CommentListProps {
   threaded: ThreadedComment[];
   sort: CommentSort;
-  variant?: "card" | "inline";
   maxHeight?: string;
   emptyMessage?: string;
   showReplies?: boolean;
@@ -146,7 +145,6 @@ function CommentBranch({
 export function CommentList({
   threaded,
   sort,
-  variant: _variant = "card",
   maxHeight = "500px",
   emptyMessage = "No comments yet",
   showReplies = true,

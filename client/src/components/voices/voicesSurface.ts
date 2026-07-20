@@ -15,9 +15,12 @@ export const VOICES_TILE_FILL_CLASS = "dark:bg-[#10141B]";
 export const VOICES_FEED_LANE_CLASS =
   `divide-y divide-border/40 bg-card sm:rounded-xl ${VOICES_TILE_FILL_CLASS}`;
 
+/** Avatar + content row inside a post/composer (X-style tight gutter). */
+export const VOICES_ROW_INNER_CLASS = "flex items-start gap-2";
+
 /** Flat post row inside the feed lane (replaces the per-post bubble). */
 export const VOICES_POST_ROW_CLASS =
-  "px-4 py-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]";
+  "px-1.5 py-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03] sm:px-4";
 
 /** Flat textarea styling inside Voices composer surfaces. */
 export const VOICES_COMPOSER_INPUT_CLASS =

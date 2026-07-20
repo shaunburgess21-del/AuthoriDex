@@ -7,7 +7,7 @@ import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import type { VoicesFeedItem } from "./types";
 import { VoiceEntityPreview } from "./VoiceEntityPreview";
-import { VOICES_POST_ROW_CLASS } from "./voicesSurface";
+import { VOICES_POST_ROW_CLASS, VOICES_ROW_INNER_CLASS } from "./voicesSurface";
 
 const DELETED_USER = "[deleted user]";
 
@@ -36,11 +36,11 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
       }}
       data-testid={`voice-card-${item.id}`}
     >
-      <div className="flex items-start gap-3">
+      <div className={VOICES_ROW_INNER_CLASS}>
         <UserProfileAvatar
           displayName={item.author.username || ""}
           avatarUrl={item.author.avatarUrl}
-          size="md"
+          size="sm"
           className="shrink-0"
         />
         <div className="min-w-0 flex-1">

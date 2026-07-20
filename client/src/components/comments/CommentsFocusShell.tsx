@@ -77,7 +77,7 @@ export function CommentsFocusShell({
           </header>
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden px-4",
+              "flex min-h-0 flex-1 flex-col overflow-hidden px-1.5",
               "md:mx-auto md:max-w-3xl md:w-full md:px-8 lg:max-w-4xl lg:px-12",
             )}
           >

@@ -44,7 +44,7 @@ export function CommentsBottomSheet({
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 pb-4 min-h-0">
+          <div className="flex-1 overflow-y-auto px-1.5 pb-4 min-h-0">
             {slug && (
               <CardComments
                 entityType={entityType}

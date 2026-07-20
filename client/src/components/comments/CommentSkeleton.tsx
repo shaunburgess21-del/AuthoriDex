@@ -11,7 +11,7 @@ export function CommentSkeleton({ rows = 3 }: CommentSkeletonProps) {
   return (
     <div className="divide-y divide-border/10" aria-hidden="true" data-testid="comment-skeleton">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-3 py-3">
+        <div key={i} className="flex gap-2 py-3">
           <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
           <div className="flex-1 space-y-2 py-0.5">
             <Skeleton className="h-3 w-28" />

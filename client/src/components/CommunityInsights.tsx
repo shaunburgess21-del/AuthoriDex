@@ -19,6 +19,7 @@ import { CommentList } from "./comments/CommentList";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
 import { CommentSkeleton } from "./comments/CommentSkeleton";
 import { DeleteContentDialog } from "./comments/DeleteContentDialog";
+import { SignInPrompt } from "./comments/SignInPrompt";
 import { useCommentThread } from "./comments/useCommentThread";
 import { useCommentDeepLink } from "./comments/useCommentDeepLink";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
@@ -159,7 +160,7 @@ export function CommunityInsights({
 
   const variant = compact ? "inline" : "card";
   const rootClass =
-    variant === "inline" ? "flex flex-col h-full min-h-0" : "mb-6 px-1";
+    variant === "inline" ? "flex flex-col h-full min-h-0" : "mb-6";
   const maxHeight = "none";
 
   const handleVote = useCallback(
@@ -181,7 +182,6 @@ export function CommunityInsights({
     <CommentList
       threaded={thread.threaded}
       sort={thread.sort}
-      variant={variant}
       maxHeight={maxHeight}
       onVote={handleVote}
       onReply={thread.startReply}
@@ -207,7 +207,7 @@ export function CommunityInsights({
       maxLength={2500}
     />
   ) : (
-    <SignInToDiscuss onLogin={() => navigateToLogin(setLocation)} />
+    <SignInPrompt onLogin={() => navigateToLogin(setLocation)} />
   );
 
   return (
@@ -301,19 +301,3 @@ export function CommunityInsights({
   );
 }
 
-function SignInToDiscuss({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="text-center py-3 border-t border-border/20">
-      <p className="text-sm text-muted-foreground">
-        <button
-          className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
-          onClick={onLogin}
-          data-testid="link-login-to-comment"
-        >
-          Sign in
-        </button>{" "}
-        to join the discussion
-      </p>
-    </div>
-  );
-}

@@ -198,7 +198,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
           </Button>
         </div>
 
-        <div className="p-4 sm:p-6">
+        <div className="px-1.5 py-4 sm:p-6">
           <div className="flex items-start gap-3 sm:gap-4">
             {!postDeleted && (
               <UserProfileAvatar
@@ -259,7 +259,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
         </div>
 
         <div className="border-t border-border/40">
-          <div className="p-4">
+          <div className="px-1.5 py-4 sm:px-4">
             <CommentSortHeader
               count={thread.visibleCount}
               countLabel="Replies"

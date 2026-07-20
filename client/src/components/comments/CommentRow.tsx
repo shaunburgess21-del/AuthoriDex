@@ -69,7 +69,7 @@ export function CommentRow({
   return (
     <div
       id={`comment-${comment.id}`}
-      className={`flex gap-3 py-3 rounded-lg motion-safe:transition-[background-color,box-shadow] motion-safe:duration-500 ${isNested ? "pl-3 border-l-2 border-border/20" : ""} ${isHighlighted ? "bg-cyan-500/5 ring-2 ring-cyan-500/40" : "ring-0"}`}
+      className={`flex gap-2 py-3 rounded-lg motion-safe:transition-[background-color,box-shadow] motion-safe:duration-500 ${isNested ? "pl-3 border-l-2 border-border/20" : ""} ${isHighlighted ? "bg-cyan-500/5 ring-2 ring-cyan-500/40" : "ring-0"}`}
       style={indentRem > 0 ? { marginLeft: `${indentRem}rem` } : undefined}
       data-testid={testIds?.root ?? `comment-${comment.id}`}
     >

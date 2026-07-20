@@ -17,6 +17,7 @@ import { useCommentThreadInfinite } from "./useCommentThreadInfinite";
 import { useCommentDeepLink } from "./useCommentDeepLink";
 import { DeleteContentDialog } from "./DeleteContentDialog";
 import { CommentsFocusShell } from "./CommentsFocusShell";
+import { SignInPrompt } from "./SignInPrompt";
 import type { CommentAdapter, CommentItem, CommentEntityType } from "./types";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 
@@ -244,7 +245,7 @@ function CardCommentsEmbedded({
 
   return (
     <>
-      <div className={`${variant === "inline" ? "flex flex-col h-full min-h-0" : "mb-6 px-1"}`} data-testid="section-comments">
+      <div className={`${variant === "inline" ? "flex flex-col h-full min-h-0" : "mb-6"}`} data-testid="section-comments">
         <CommentSortHeader
           count={fetchEnabled ? thread.visibleCount : 0}
           countLabel="Discussion"
@@ -266,7 +267,6 @@ function CardCommentsEmbedded({
                 <CommentList
                   threaded={thread.threaded}
                   sort={thread.sort}
-                  variant={variant}
                   maxHeight={maxHeight}
                   onVote={thread.vote}
                   onReply={thread.startReply}
@@ -291,7 +291,7 @@ function CardCommentsEmbedded({
                 variant={variant}
               />
             ) : (
-              <SignInToComment onLogin={() => navigateToLogin(setLocation)} />
+              <SignInPrompt onLogin={() => navigateToLogin(setLocation)} />
             )}
           </>
         ) : (
@@ -299,7 +299,6 @@ function CardCommentsEmbedded({
             <CommentList
               threaded={thread.threaded}
               sort={thread.sort}
-              variant={variant}
               maxHeight={maxHeight}
               onVote={thread.vote}
               onReply={thread.startReply}
@@ -322,7 +321,7 @@ function CardCommentsEmbedded({
                 variant={variant}
               />
             ) : (
-              <SignInToComment onLogin={() => navigateToLogin(setLocation)} />
+              <SignInPrompt onLogin={() => navigateToLogin(setLocation)} />
             )}
           </>
         )}
@@ -477,7 +476,6 @@ function CardCommentsFocusInner({
               <CommentList
                 threaded={thread.threaded}
                 sort={thread.sort}
-                variant="inline"
                 maxHeight="none"
                 onVote={thread.vote}
                 onReply={thread.startReply}
@@ -508,7 +506,7 @@ function CardCommentsFocusInner({
             variant="inline"
           />
         ) : (
-          <SignInToComment onLogin={() => navigateToLogin(setLocation)} />
+          <SignInPrompt onLogin={() => navigateToLogin(setLocation)} />
         )}
       </div>
       <CommentActionDrawer
@@ -627,22 +625,6 @@ export function CardCommentsFocusOverlay({
   );
 }
 
-function SignInToComment({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="text-center py-3 border-t border-border/20">
-      <p className="text-sm text-muted-foreground">
-        <button
-          className="text-cyan-600 dark:text-cyan-400 underline hover:text-cyan-500 dark:hover:text-cyan-300 transition-colors"
-          onClick={onLogin}
-          data-testid="link-login-to-comment"
-        >
-          Sign in
-        </button>{" "}
-        to join the discussion
-      </p>
-    </div>
-  );
-}
 
 export function useCommentCount(entityType: CommentEntityType, slug: string): number {
   const parentType = COMMENT_PARENT_TYPE[entityType];
