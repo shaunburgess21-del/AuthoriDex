@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
+import { trackVoteCast } from "@/lib/funnelTelemetry";
 
 type VoteType = 'underrated' | 'overrated' | 'fairly_rated';
 
@@ -62,6 +63,19 @@ export function UnderratedOverratedCard({
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
+  // Mirror server state across card instances (grid / snap / overlay): when the
+  // list refetch delivers a new userValueVote, adopt it. Only reacts to prop
+  // *changes* so the local "Change" flow (localVote=null while the prop still
+  // holds the old vote) isn't clobbered on unrelated re-renders.
+  const prevUserVoteRef = useRef<VoteType | null>(person.userValueVote ?? null);
+  useEffect(() => {
+    const incoming = person.userValueVote ?? null;
+    if (prevUserVoteRef.current !== incoming) {
+      prevUserVoteRef.current = incoming;
+      setLocalVote(incoming);
+    }
+  }, [person.userValueVote]);
+
   const totalVotes = (person.underratedCount ?? 0) + (person.overratedCount ?? 0) + (person.fairlyRatedCount ?? 0);
   const underratedPct = person.underratedPct ?? 33;
   const overratedPct = person.overratedPct ?? 33;
@@ -77,10 +91,17 @@ export function UnderratedOverratedCard({
       showVoteToast("overrated", "Vote recorded!", { description: `You voted ${person.name} as ${label}.` });
     },
     onSuccess: () => {
+      trackVoteCast("celebrity_person", { kind: "value_vote" });
       queryClient.invalidateQueries({ queryKey: ['/api/celebrity', person.id, 'value-vote'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trending'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/leaderboard?tab=value&limit=20'] });
+      // Leaderboard is queried under several literal keys ('?tab=value&limit=20',
+      // '…=100', '…=1000'), which array-prefix matching can't cover — match any
+      // string key that starts with the endpoint so every instance refetches.
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/leaderboard"),
+      });
     },
     onError: (error: any) => {
       setLocalVote(person.userValueVote ?? null);

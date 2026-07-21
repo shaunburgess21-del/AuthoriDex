@@ -12,6 +12,10 @@ export interface VoteResumePayload {
   snapScrollInitialId?: string;
   /** Main window scroll Y when snap was opened (mobile). */
   savedWindowScrollY?: number;
+  /** Quick Vote overlay was open when the user was sent to login. */
+  quickVoteOpen?: boolean;
+  /** Card visible in the Quick Vote overlay at redirect time. */
+  quickVoteCardId?: string;
 }
 
 /**
@@ -64,6 +68,13 @@ export const AUTH_APPLY_VOTE_UI_ONCE_KEY = "voxdex_apply_vote_ui_once";
  */
 export const AUTH_APPLY_RESUME_ACTION_ONCE_KEY =
   "voxdex_apply_resume_action_once";
+
+/**
+ * Quick Vote overlay hosts (Home + Vote) read this once after auth to reopen
+ * the overlay at the card the user was on when the budget gate redirected
+ * them. Payload: { cardId: string | null }.
+ */
+export const AUTH_APPLY_QUICK_VOTE_ONCE_KEY = "voxdex_apply_quick_vote_once";
 
 /**
  * Ephemeral flag set by `navigateToLogin` (and pre-OAuth) to indicate the current /login
@@ -187,6 +198,23 @@ export function redirectAfterLogin(setLocation: AuthSetLocation): void {
       sessionStorage.setItem(
         AUTH_APPLY_VOTE_UI_ONCE_KEY,
         JSON.stringify(snap.voteUi),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Quick Vote overlay restore — hosts live on Home ("/") and Vote ("/vote").
+  // Sibling to the /vote branch above: a quickVote payload carries all VotePage
+  // overlay flags as false, so both consumers can run without conflict.
+  if (
+    snap.voteUi?.quickVoteOpen &&
+    (target === "/" || target.startsWith("/vote"))
+  ) {
+    try {
+      sessionStorage.setItem(
+        AUTH_APPLY_QUICK_VOTE_ONCE_KEY,
+        JSON.stringify({ cardId: snap.voteUi.quickVoteCardId ?? null }),
       );
     } catch {
       /* ignore */

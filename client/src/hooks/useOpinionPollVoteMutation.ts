@@ -5,6 +5,7 @@ import {
   applyBudgetFromVoteResponse,
   type VoteResponseBudget,
 } from "@/hooks/useAnonBudget";
+import { trackVoteCast } from "@/lib/funnelTelemetry";
 
 const OPINION_POLLS_LIST_KEY = ["/api/opinion-polls"] as const;
 
@@ -130,6 +131,9 @@ export function useOpinionPollVoteMutation() {
       // snapshot in the response. No-op for authed users (response.budget
       // is null), so safe to call unconditionally.
       applyBudgetFromVoteResponse(queryClient, data);
+      if (action.kind === "vote" && !data?.removed) {
+        trackVoteCast("opinion_poll");
+      }
       const serverPoll = data?.poll;
       if (serverPoll) {
         queryClient.setQueryData<OpinionPollLike[] | undefined>(OPINION_POLLS_LIST_KEY, (old) => {

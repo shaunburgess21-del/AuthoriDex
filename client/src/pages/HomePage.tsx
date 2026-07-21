@@ -1,4 +1,5 @@
 import { WelcomeModal } from "@/components/WelcomeModal";
+import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SearchBar } from "@/components/SearchBar";
 import { LeaderboardRow } from "@/components/LeaderboardRow";
@@ -907,6 +908,7 @@ export default function HomePage() {
         }}
       />
       <WelcomeModal ref={welcomeOnboardingRef} />
+      <QuickVoteHost surface="home" />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
       <div className="sticky top-16 z-40 border-b bg-gradient-to-r from-blue-500/5 via-background/95 to-blue-500/5 backdrop-blur-xl" data-toggle-bar>
         <div className="container mx-auto px-4">

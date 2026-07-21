@@ -29,6 +29,7 @@ import { Mail, Chrome } from "lucide-react";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import type { AuthReason } from "@/lib/authReturn";
 import { SignupReasonModal } from "@/components/auth/SignupReasonModal";
+import { logFunnelEvent } from "@/lib/funnelTelemetry";
 
 function parseReason(value: string | null): AuthReason | null {
   return value === "vote_limit_reached" || value === "predict_signup"
@@ -73,6 +74,16 @@ export default function LoginPage() {
   useEffect(() => {
     clearStaleAuthReturnSnapshotOnDirectVisit();
   }, []);
+
+  // Funnel baseline: one signup_started per LoginPage mount, on first entry
+  // into signup mode (toggling login/signup tabs doesn't re-log).
+  const signupStartedLoggedRef = useRef(false);
+  useEffect(() => {
+    if (isLogin || signupStartedLoggedRef.current) return;
+    signupStartedLoggedRef.current = true;
+    logFunnelEvent("signup_started", "login", { reason });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLogin]);
 
   // Google OAuth returns here with a session. Un-onboarded users go straight
   // to welcome — never via / (avoids a flash of home before NewUserGate).

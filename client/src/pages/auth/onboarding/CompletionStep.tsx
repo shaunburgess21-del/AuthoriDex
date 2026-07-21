@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
+import { logFunnelEvent } from "@/lib/funnelTelemetry";
 import { formatVox } from "@/lib/currency";
 
 interface BadgeRow {
@@ -80,6 +81,9 @@ export function CompletionStep({ onMounted }: CompletionStepProps) {
 
   const finish = useMemo(() => {
     return () => {
+      logFunnelEvent("signup_completed", "onboarding", {
+        hadReturnSnapshot: hasPendingAuthReturnSnapshot(),
+      });
       if (hasPendingAuthReturnSnapshot()) {
         redirectAfterLogin(setLocation);
       } else {

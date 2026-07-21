@@ -6,6 +6,8 @@ import { useLocation } from "wouter";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
+import { isQuickVoteNudgeEligible } from "@/lib/quickVoteNudge";
+import { isSessionInterruptUsed } from "@/lib/interruptArbiter";
 
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 
@@ -65,7 +67,14 @@ export const WelcomeModal = forwardRef<OnboardingDrawerHandle>(function WelcomeM
 
   const { isLoggedIn } = useAuth();
 
-
+  // Interrupt arbitration: when the Quick Vote entry pill is eligible for
+  // this visitor, it takes priority — suppress this drawer's auto toast so
+  // only one interrupt fires per session. The drawer still opens via ref /
+  // footer links for every cohort. The session-slot check matters on
+  // re-renders: once the pill fires it CONSUMES the slot, which flips
+  // eligibility to false — without the slot check the toast would un-suppress
+  // mid-session and both interrupts would show.
+  const quickVotePillEligible = isQuickVoteNudgeEligible(isLoggedIn);
 
   return (
 
@@ -79,7 +88,7 @@ export const WelcomeModal = forwardRef<OnboardingDrawerHandle>(function WelcomeM
 
       lastStepCta={isLoggedIn ? "Start Exploring" : "Get Started"}
 
-      disableAutoToast={isLoggedIn}
+      disableAutoToast={isLoggedIn || quickVotePillEligible || isSessionInterruptUsed()}
 
       onComplete={() => {
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, createContext, type ReactNode, type UIEvent, type CSSProperties } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, createContext, type MutableRefObject, type ReactNode, type UIEvent, type CSSProperties } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
@@ -65,6 +65,23 @@ interface VoteSnapScrollViewProps {
   initialCategoryAll?: boolean;
   /** Prefer parent handler so Vote can flatten snap history before /person. */
   onNavigateToPerson?: (personId: string) => void;
+  /**
+   * "minimal" — Quick Vote overlay chrome: glass shell instead of opaque
+   * background, X close (no back arrow), no CategoryTabStrip (single "All"
+   * column, no horizontal axis), no end card, elevated card wrapper.
+   */
+  variant?: "full" | "minimal";
+  /** Rendered in the minimal header, left of the X close (e.g. vote budget). */
+  headerSlot?: ReactNode;
+  /** Imperative controls (Quick Vote auto-advance). */
+  apiRef?: MutableRefObject<SnapViewApi | null>;
+  /** Fires when the visible card index in the active column changes. */
+  onVisibleIndexChange?: (index: number, item: SnapItem | null) => void;
+}
+
+export interface SnapViewApi {
+  /** Smooth-scroll the active column down one snap page (no-op at the end). */
+  advanceToNext: () => void;
 }
 
 const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
@@ -285,7 +302,12 @@ export function VoteSnapScrollView({
   voteHubActiveSection = "All",
   initialCategoryAll = false,
   onNavigateToPerson,
+  variant = "full",
+  headerSlot,
+  apiRef,
+  onVisibleIndexChange,
 }: VoteSnapScrollViewProps) {
+  const isMinimal = variant === "minimal";
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -339,6 +361,8 @@ export function VoteSnapScrollView({
 
   // ── Categories ────────────────────────────────────────────────────────
   const categories = useMemo(() => {
+    // Minimal variant: single curated column, no horizontal category axis.
+    if (isMinimal) return ["All"];
     const cats = new Set<string>();
     normalizedItems.forEach((item) => {
       cats.add(item.category);
@@ -348,7 +372,7 @@ export function VoteSnapScrollView({
       getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)),
     );
     return ["All", ...sorted];
-  }, [normalizedItems]);
+  }, [normalizedItems, isMinimal]);
 
   const initialCategoryIdx = useMemo(() => {
     if (initialCategoryAll) return 0;
@@ -502,6 +526,38 @@ export function VoteSnapScrollView({
     const idx = Math.round(scrollTop / frameHeight);
     return catItems[Math.min(idx, catItems.length - 1)] || null;
   }, [categoryItems, activeCategory]);
+
+  // ── Imperative API (Quick Vote auto-advance) ──────────────────────────
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = {
+      advanceToNext: () => {
+        const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
+        const el = columnScrollRefs.current[cat];
+        if (!el) return;
+        const h = el.clientHeight;
+        if (h === 0) return;
+        const idx = Math.round(el.scrollTop / h);
+        const target = (idx + 1) * h;
+        if (target >= el.scrollHeight) return;
+        el.scrollTo({ top: target, behavior: "smooth" });
+      },
+    };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [apiRef]);
+
+  // ── Visible-index change notification ─────────────────────────────────
+  useEffect(() => {
+    if (!onVisibleIndexChange) return;
+    const catItems = categoryItems.get(activeCategory) || [];
+    const idx = columnVisibleIndices[activeCategory] ?? 0;
+    onVisibleIndexChange(
+      idx,
+      catItems[Math.min(idx, Math.max(catItems.length - 1, 0))] ?? null,
+    );
+  }, [onVisibleIndexChange, columnVisibleIndices, activeCategory, categoryItems]);
 
   // ── Initial scroll on open (once per open — not on items refetch) ─────
   useLayoutEffect(() => {
@@ -977,25 +1033,43 @@ export function VoteSnapScrollView({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[60] bg-background flex flex-col"
+          className={`fixed inset-0 z-[60] flex flex-col ${
+            isMinimal ? "bg-black/40 backdrop-blur-md" : "bg-background"
+          }`}
         >
           {/* Header */}
-          <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md safe-top">
-            <button
-              onClick={onClose}
-              className="p-3 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              data-interactive="true"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div className="flex-1 overflow-hidden">
-              <CategoryTabStrip
-                categories={categories}
-                activeCategory={visualCategory}
-                onSelect={handleCategorySelect}
-              />
+          {isMinimal ? (
+            // Fixed 52px height so snapPageStyle()'s calc(100dvh - 52px)
+            // page height stays exact in both variants.
+            <div className="shrink-0 h-[52px] flex items-center safe-top px-1">
+              <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
+              <button
+                onClick={onClose}
+                className="p-3 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                data-interactive="true"
+                aria-label="Close quick vote"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          </div>
+          ) : (
+            <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md safe-top">
+              <button
+                onClick={onClose}
+                className="p-3 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                data-interactive="true"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="flex-1 overflow-hidden">
+                <CategoryTabStrip
+                  categories={categories}
+                  activeCategory={visualCategory}
+                  onSelect={handleCategorySelect}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Windowed horizontal columns */}
           <SnapDismissContext.Provider value={dismissCounter}>
@@ -1055,7 +1129,13 @@ export function VoteSnapScrollView({
                                     style={snapPageStyle()}
                                   >
                                     {inWindow ? (
-                                      <div className="w-full max-w-lg mx-auto">
+                                      <div
+                                        className={`w-full max-w-lg mx-auto ${
+                                          isMinimal
+                                            ? "rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
+                                            : ""
+                                        }`}
+                                      >
                                         {renderCard(item, renderCtx)}
                                       </div>
                                     ) : null}
@@ -1145,18 +1225,20 @@ export function VoteSnapScrollView({
                               );
                             });
                           })()}
-                          <SnapEndCard
-                            category={cat}
-                            sectionType={sectionType}
-                            categories={categories}
-                            onSelectCategory={handleCategorySelect}
-                            onSuggest={onSuggest}
-                            onBackToTop={() => {
-                              const el = columnScrollRefs.current[cat];
-                              if (el) el.scrollTo({ top: 0, behavior: "smooth" });
-                            }}
-                            onClose={onClose}
-                          />
+                          {!isMinimal && (
+                            <SnapEndCard
+                              category={cat}
+                              sectionType={sectionType}
+                              categories={categories}
+                              onSelectCategory={handleCategorySelect}
+                              onSuggest={onSuggest}
+                              onBackToTop={() => {
+                                const el = columnScrollRefs.current[cat];
+                                if (el) el.scrollTo({ top: 0, behavior: "smooth" });
+                              }}
+                              onClose={onClose}
+                            />
+                          )}
                         </div>
                       )}
                     </div>

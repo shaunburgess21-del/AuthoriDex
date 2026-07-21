@@ -22,6 +22,7 @@ import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import { RANK_UP_EVENT, type RankUpPayload } from "@/lib/rank-up-events";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
+import { trackPageLand } from "@/lib/funnelTelemetry";
 import {
   captureReferralFromUrl,
   captureShareClickFromUrl,
@@ -240,6 +241,8 @@ function AnalyticsWatcher() {
   useEffect(() => {
     initGoogleAnalytics();
     trackGooglePageView(location);
+    // Session landing page only — deduped internally per tab session.
+    trackPageLand(location);
   }, [location]);
 
   return null;

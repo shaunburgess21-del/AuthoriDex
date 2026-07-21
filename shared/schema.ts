@@ -2626,6 +2626,29 @@ export const insightsEvents = pgTable("insights_events", {
 export type InsightsEvent = typeof insightsEvents.$inferSelect;
 export type InsertInsightsEvent = typeof insightsEvents.$inferInsert;
 
+/**
+ * Product funnel telemetry (first-visit onboarding, Quick Vote overlay,
+ * signup attribution). Anon identity via fdx_sid cookie so pre-signup
+ * sessions can be joined to post-signup users through metadata.
+ */
+export const funnelEvents = pgTable("funnel_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** e.g. 'page_land' | 'vote_cast' | 'nudge_impression' | 'overlay_open' | 'signup_started' | 'signup_completed' */
+  eventType: text("event_type").notNull(),
+  /** Page or feature surface, e.g. 'home' | 'vote' | 'quick_vote' | 'login' */
+  surface: text("surface").notNull(),
+  fdxSid: varchar("fdx_sid"),
+  userId: varchar("user_id").references(() => profiles.id, { onDelete: "set null" }),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  typeCreatedIdx: index("funnel_events_type_created_idx").on(table.eventType, table.createdAt),
+  sidCreatedIdx: index("funnel_events_sid_created_idx").on(table.fdxSid, table.createdAt),
+}));
+
+export type FunnelEvent = typeof funnelEvents.$inferSelect;
+export type InsertFunnelEvent = typeof funnelEvents.$inferInsert;
+
 // ============================================================================
 // VOTE SCOUT IDEAS (admin Idea Scout for matchups / sentiment / opinion polls)
 // ============================================================================
