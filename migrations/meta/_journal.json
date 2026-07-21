@@ -673,6 +673,13 @@
       "when": 1783460100000,
       "tag": "0093_insights_merge_phase2_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1784659200000,
+      "tag": "0101_funnel_events",
+      "breakpoints": true
     }
   ]
 }
