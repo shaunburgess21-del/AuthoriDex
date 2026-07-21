@@ -30,6 +30,8 @@ export interface MarketWithEntries {
   category: string | null;
   personId: string | null;
   endAt: Date | null;
+  /** Stored trading cutoff; may be earlier than endAt (auto-lock). */
+  closeAt?: Date | null;
   createdAt?: Date | null;
   teaser?: string | null;
   resolutionCriteria?: string[] | null;

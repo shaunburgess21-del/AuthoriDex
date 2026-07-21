@@ -298,3 +298,236 @@ test("readSourceFairByEntryId still works when Other is reordered in entries", (
   assert.ok(fair!.fairByEntryId["e-alice"] > fair!.fairByEntryId["e-bob"]);
   assert.ok(fair!.fairByEntryId["e-bob"] > fair!.fairByEntryId["e-other"]);
 });
+
+test("readSourceFairByEntryId synthesizes orphan Other when entries = mapping + 1", () => {
+  const metadata = {
+    source: {
+      provider: "polymarket",
+      outcomeMapping: [
+        { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+        { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+      ],
+      pricesAtImport: [0.6, 0.3],
+      fetchedAt: "2026-07-13T00:00:00.000Z",
+    },
+  };
+  const entries = [
+    { id: "e1", label: "Alice" },
+    { id: "e2", label: "Bob" },
+    { id: "e3", label: "Other" },
+  ];
+  const fair = readSourceFairByEntryId(metadata, entries);
+  assert.ok(fair, "orphan Other should still produce an anchor");
+  assert.equal(fair!.anchor, "import");
+  const sum = fair!.fairByEntryId.e1 + fair!.fairByEntryId.e2 + fair!.fairByEntryId.e3;
+  assert.ok(Math.abs(sum - 1) < 1e-9);
+  assert.ok(fair!.fairByEntryId.e1 > fair!.fairByEntryId.e2);
+  assert.ok(fair!.fairByEntryId.e3 > 0);
+});
+
+test("readSourceFairByEntryId skips residual mapping when entry was removed", () => {
+  const metadata = {
+    source: {
+      provider: "polymarket",
+      outcomeMapping: [
+        { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+        { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+        {
+          entryLabel: "Other",
+          sourceLabel: "Other",
+          sourceMarketId: "",
+          sourceOutcomeIndex: 0,
+          isResidual: true,
+        },
+      ],
+      pricesAtImport: [0.5, 0.35, 0.15],
+      fetchedAt: "2026-07-13T00:00:00.000Z",
+    },
+  };
+  const entries = [
+    { id: "e1", label: "Alice" },
+    { id: "e2", label: "Bob" },
+  ];
+  const fair = readSourceFairByEntryId(metadata, entries);
+  assert.ok(fair, "removed Other entry should still produce an anchor");
+  assert.equal(Object.keys(fair!.fairByEntryId).sort().join(","), "e1,e2");
+  const sum = fair!.fairByEntryId.e1 + fair!.fairByEntryId.e2;
+  assert.ok(Math.abs(sum - 1) < 1e-9);
+});
+
+test("reconcileSourceMappingWithEntries appends residual Other on add", async () => {
+  const { reconcileSourceMappingWithEntries } = await import("../server/agents/sourceSync");
+  const source = {
+    provider: "polymarket",
+    outcomeMapping: [
+      { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+      { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+    ],
+    pricesAtImport: [0.55, 0.35],
+    livePrices: [0.6, 0.3],
+  };
+  const patched = reconcileSourceMappingWithEntries(source, [
+    { label: "Alice" },
+    { label: "Bob" },
+    { label: "Other" },
+  ]);
+  assert.ok(patched);
+  assert.equal((patched!.outcomeMapping as unknown[]).length, 3);
+  const residual = (patched!.outcomeMapping as Array<{ isResidual?: boolean }>).at(-1);
+  assert.equal(residual?.isResidual, true);
+  assert.equal((patched!.pricesAtImport as number[]).length, 3);
+  assert.equal((patched!.livePrices as number[]).length, 3);
+  assert.ok(Math.abs((patched!.pricesAtImport as number[])[2] - 0.1) < 1e-9);
+});
+
+test("reconcileSourceMappingWithEntries fails closed when prices cannot be extended", async () => {
+  const { reconcileSourceMappingWithEntries } = await import("../server/agents/sourceSync");
+  const source = {
+    provider: "polymarket",
+    outcomeMapping: [
+      { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+      { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+    ],
+    // Missing / wrong-length price vectors — must not patch mapping alone.
+    pricesAtImport: [0.5],
+  };
+  const patched = reconcileSourceMappingWithEntries(source, [
+    { label: "Alice" },
+    { label: "Bob" },
+    { label: "Other" },
+  ]);
+  assert.equal(patched, null);
+});
+
+test("reconcileSourceMappingWithEntries drops residual Other on remove", async () => {
+  const { reconcileSourceMappingWithEntries } = await import("../server/agents/sourceSync");
+  const source = {
+    provider: "polymarket",
+    outcomeMapping: [
+      { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+      { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+      {
+        entryLabel: "Other",
+        sourceLabel: "Other",
+        sourceMarketId: "",
+        sourceOutcomeIndex: 0,
+        isResidual: true,
+      },
+    ],
+    pricesAtImport: [0.5, 0.35, 0.15],
+    livePrices: [0.5, 0.4, 0.1],
+  };
+  const patched = reconcileSourceMappingWithEntries(source, [
+    { label: "Alice" },
+    { label: "Bob" },
+  ]);
+  assert.ok(patched);
+  assert.equal((patched!.outcomeMapping as unknown[]).length, 2);
+  assert.deepEqual(patched!.pricesAtImport, [0.5, 0.35]);
+  assert.deepEqual(patched!.livePrices, [0.5, 0.4]);
+});
+
+test("detectSourceAnchorDesync flags entry/mapping mismatch", async () => {
+  const { detectSourceAnchorDesync } = await import("../server/agents/sourceSync");
+  const rows = detectSourceAnchorDesync([
+    {
+      marketId: "m1",
+      title: "Broken Emmy",
+      entryCount: 9,
+      metadata: {
+        scoutedByMarketScout: true,
+        source: {
+          provider: "polymarket",
+          outcomeMapping: new Array(8).fill({ entryLabel: "x" }),
+          pricesAtImport: new Array(8).fill(0.1),
+          livePrices: new Array(8).fill(0.1),
+        },
+      },
+    },
+    {
+      marketId: "m2",
+      title: "Healthy",
+      entryCount: 3,
+      metadata: {
+        scoutedByMarketScout: true,
+        source: {
+          provider: "polymarket",
+          outcomeMapping: [{}, {}, {}],
+          livePrices: [0.3, 0.3, 0.4],
+        },
+      },
+    },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].marketId, "m1");
+  assert.equal(rows[0].reason, "entry_mapping_mismatch");
+  assert.equal(rows[0].anchorable, true); // ±1 length gap is healable without labels
+});
+
+test("detectSourceAnchorDesync marks healable orphan Other as anchorable", async () => {
+  const { detectSourceAnchorDesync } = await import("../server/agents/sourceSync");
+  const metadata = {
+    scoutedByMarketScout: true,
+    source: {
+      provider: "polymarket",
+      outcomeMapping: [
+        { entryLabel: "Alice", sourceLabel: "Alice", sourceMarketId: "m1", sourceOutcomeIndex: 0 },
+        { entryLabel: "Bob", sourceLabel: "Bob", sourceMarketId: "m2", sourceOutcomeIndex: 0 },
+      ],
+      pricesAtImport: [0.6, 0.3],
+      fetchedAt: "2026-07-13T00:00:00.000Z",
+    },
+  };
+  const entries = [
+    { id: "e1", label: "Alice" },
+    { id: "e2", label: "Bob" },
+    { id: "e3", label: "Other" },
+  ];
+  const rows = detectSourceAnchorDesync([
+    {
+      marketId: "m1",
+      title: "Orphan Other",
+      entryCount: 3,
+      metadata,
+      entries,
+    },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].reason, "entry_mapping_mismatch");
+  assert.equal(rows[0].anchorable, true);
+});
+
+test("getEffectiveBettingCutoff prefers earlier closeAt", async () => {
+  const { getEffectiveBettingCutoff } = await import("../server/native-markets/lifecycle");
+  const endAt = new Date("2026-07-22T00:00:00.000Z");
+  const earlyClose = new Date("2026-07-14T13:54:00.000Z");
+  const cutoff = getEffectiveBettingCutoff(endAt, "amm", "community", earlyClose);
+  assert.equal(cutoff.toISOString(), earlyClose.toISOString());
+
+  const lateClose = new Date("2026-12-01T00:00:00.000Z");
+  const derived = getEffectiveBettingCutoff(endAt, "amm", "community", lateClose);
+  assert.ok(derived < lateClose);
+
+  const fromString = getEffectiveBettingCutoff(
+    endAt,
+    "amm",
+    "community",
+    "2026-07-14T13:54:00.000Z",
+  );
+  assert.equal(fromString.toISOString(), earlyClose.toISOString());
+});
+
+test("sourceAnchorDesyncCheck softens healable mismatches", async () => {
+  const { sourceAnchorDesyncCheck } = await import("../server/services/amm-audit");
+  const healable = sourceAnchorDesyncCheck([
+    { marketId: "m1", anchorable: true, reason: "entry_mapping_mismatch" },
+  ]);
+  assert.equal(healable.severity, "warn");
+  assert.match(healable.message, /healable/i);
+
+  const broken = sourceAnchorDesyncCheck([
+    { marketId: "m1", anchorable: false, reason: "unanchorable" },
+  ]);
+  assert.equal(broken.severity, "warn");
+  assert.match(broken.message, /cannot source-anchor/i);
+});

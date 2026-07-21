@@ -35,7 +35,7 @@ import {
 } from "./constants";
 import type { PredictionDecision, SellDecision } from "./types";
 import { buildAgentActionStakeIdempotencyKey, buildAgentBetMetadata } from "./actionWorker-utils";
-import { getMarketBettingCutoff, getAmmTradingClosedMessage } from "../native-markets/lifecycle";
+import { getEffectiveBettingCutoff, getAmmTradingClosedMessage } from "../native-markets/lifecycle";
 import { isAgentsPaused } from "./runtime-state";
 import { executeBuy, executeSell, type TradeError } from "../services/amm-trades";
 import { fireAmmPlacementHooks } from "../services/amm-bet-hooks";
@@ -163,6 +163,7 @@ async function executeAction(action: {
         category: predictionMarkets.category,
         personId: predictionMarkets.personId,
         endAt: predictionMarkets.endAt,
+        closeAt: predictionMarkets.closeAt,
         engine: predictionMarkets.engine,
       })
       .from(predictionMarkets)
@@ -250,16 +251,38 @@ async function executeAction(action: {
     // UTC parimutuel wall is gone.
     const isWeeklyNative = ["updown", "h2h", "gainer"].includes(market.marketType ?? "");
     if (isWeeklyNative && market.endAt) {
-      const cutoff = getMarketBettingCutoff(
+      const cutoff = getEffectiveBettingCutoff(
         market.endAt,
         "amm",
         market.marketType ?? undefined,
+        market.closeAt,
       );
       if (new Date() > cutoff) {
         await db.update(scheduledAgentActions)
           .set({
             status: "skipped",
             errorMessage: getAmmTradingClosedMessage(market.marketType ?? undefined),
+            executedAt: new Date(),
+          })
+          .where(eq(scheduledAgentActions.id, action.id));
+        return;
+      }
+    }
+
+    // World Markets: honour early auto-lock closeAt before queuing a buy
+    // that executeBuy would reject as amm_market_closed.
+    if (market.marketType === "community" && market.endAt && action.actionType === "buy") {
+      const cutoff = getEffectiveBettingCutoff(
+        market.endAt,
+        "amm",
+        "community",
+        market.closeAt,
+      );
+      if (new Date() > cutoff) {
+        await db.update(scheduledAgentActions)
+          .set({
+            status: "skipped",
+            errorMessage: getAmmTradingClosedMessage("community"),
             executedAt: new Date(),
           })
           .where(eq(scheduledAgentActions.id, action.id));

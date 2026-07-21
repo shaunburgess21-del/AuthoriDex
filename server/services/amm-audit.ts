@@ -243,6 +243,35 @@ export function reconciliationCheck(rec: ReconciliationResult): AuditCheckResult
   };
 }
 
+export function sourceAnchorDesyncCheck(
+  rows: Array<Record<string, unknown>>,
+): AuditCheckResult {
+  const unanchorable = rows.filter((r) => r.anchorable === false);
+  if (rows.length === 0) {
+    return {
+      check: "source_anchor_desync",
+      severity: "ok",
+      message:
+        "All scouted World Markets have entry counts aligned with source outcomeMapping / livePrices.",
+      affected: [],
+    };
+  }
+  if (unanchorable.length > 0) {
+    return {
+      check: "source_anchor_desync",
+      severity: "warn",
+      message: `${unanchorable.length} scouted World Market(s) cannot source-anchor (plus ${rows.length - unanchorable.length} healable length mismatch(es)).`,
+      affected: rows,
+    };
+  }
+  return {
+    check: "source_anchor_desync",
+    severity: "warn",
+    message: `${rows.length} scouted World Market(s) have a healable entry/mapping length mismatch (agents can still source-anchor).`,
+    affected: rows,
+  };
+}
+
 export function summariseOverallSeverity(
   checks: AuditCheckResult[],
 ): AuditSeverity {

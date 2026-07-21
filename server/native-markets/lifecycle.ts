@@ -107,6 +107,29 @@ export function getMarketBettingCutoff(
   return engine === "amm" ? getAmmTradingCutoff(endAt) : getWeeklyBettingCutoff(endAt);
 }
 
+/**
+ * Effective trading cutoff for agent scheduling / UI.
+ *
+ * Prefer the earlier of the derived cutoff (`endAt − cooldown` / Friday)
+ * and a stored `closeAt` (e.g. World Market auto-lock). Without this,
+ * agents queue buys against `endAt` that `executeBuy` later rejects as
+ * `amm_market_closed`.
+ */
+export function getEffectiveBettingCutoff(
+  endAt: Date,
+  engine: MarketEngine = "amm",
+  marketType?: string,
+  closeAt?: Date | string | null,
+): Date {
+  const derived = getMarketBettingCutoff(endAt, engine, marketType);
+  if (closeAt == null) return derived;
+  const stored = closeAt instanceof Date ? closeAt : new Date(closeAt);
+  if (!Number.isNaN(stored.getTime()) && stored < derived) {
+    return stored;
+  }
+  return derived;
+}
+
 /** User-facing copy when a buy is rejected past cutoff. */
 export function getAmmTradingClosedMessage(marketType?: string): string {
   if (usesNativeFridayBettingCutoff(marketType, "amm")) {

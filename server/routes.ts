@@ -19126,6 +19126,44 @@ Target length: about 90-150 words.`;
         .where(eq(marketEntries.marketId, id))
         .orderBy(asc(marketEntries.displayOrder));
 
+      // Keep Polymarket source vectors length-aligned when Other is
+      // toggled in the edit modal. Without this, readSourceFairByEntryId
+      // rejects the anchor and agents go dark under assessments-off.
+      let responseMarket = updated;
+      const entryIdsInOrder = finalEntries
+        .slice()
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+        .map((e) => e.id);
+
+      if (entryList && Array.isArray(entryList)) {
+        const { reconcileSourceMappingWithEntries } = await import("./agents/sourceSync");
+        const meta =
+          updated.metadata && typeof updated.metadata === "object"
+            ? (updated.metadata as Record<string, unknown>)
+            : {};
+        const patchedSource = reconcileSourceMappingWithEntries(
+          meta.source,
+          finalEntries.map((e) => ({ label: e.label })),
+        );
+        if (patchedSource) {
+          const sourcePayload = { source: patchedSource };
+          const [synced] = await db
+            .update(predictionMarkets)
+            .set({
+              metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(sourcePayload)}::jsonb`,
+              updatedAt: new Date(),
+            })
+            .where(eq(predictionMarkets.id, id))
+            .returning();
+          if (synced) responseMarket = synced;
+        }
+
+        // Live markets already have AMM state — append/drop zero-share
+        // outcomes so agents don't try to buy an entry outside outcomeOrder.
+        const { syncAmmOutcomeOrderWithEntries } = await import("./services/amm-house");
+        await syncAmmOutcomeOrderWithEntries(id, entryIdsInOrder);
+      }
+
       const prevVisibility = existing.visibility;
       const nextVisibility =
         visibility !== undefined && ["draft", "live", "inactive", "archived"].includes(visibility)
@@ -19135,17 +19173,13 @@ Target length: about 90-150 words.`;
         prevVisibility === "draft" &&
         (nextVisibility === "live" || nextVisibility === "inactive")
       ) {
-        const entryIdsInOrder = finalEntries
-          .slice()
-          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-          .map((e) => e.id);
         const { ensureWorldMarketAmmSeeded } = await import("./services/amm-house");
         await ensureWorldMarketAmmSeeded(id, entryIdsInOrder);
       }
 
       const relatedMap = await getRelatedPeopleForCards("world_market", [id]);
       res.json({
-        ...updated,
+        ...responseMarket,
         entries: finalEntries,
         relatedPeople: relatedMap[id] || [],
         relatedPersonIds: (relatedMap[id] || []).map((rp) => rp.id),
@@ -23230,6 +23264,10 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         if (sum !== undefined && p.predictCredits !== sum) driftUserCount++;
       }
 
+      const { loadSourceAnchorDesync } = await import("./services/source-anchor-health");
+      const sourceAnchorDesync = await loadSourceAnchorDesync();
+      const unanchorableCount = sourceAnchorDesync.filter((r) => !r.anchorable).length;
+
       res.json({
         pendingCount,
         aiResolveNowCount,
@@ -23239,6 +23277,9 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         resolverAgeMinutes,
         resolverHealthy: resolverAgeMinutes !== null && resolverAgeMinutes <= 10,
         driftUserCount,
+        sourceAnchorDesyncCount: sourceAnchorDesync.length,
+        sourceAnchorUnanchorableCount: unanchorableCount,
+        sourceAnchorDesync: sourceAnchorDesync.slice(0, 20),
       });
     } catch (error: any) {
       console.error("Error fetching ops summary:", error.message);
@@ -26412,11 +26453,17 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         Number(ledgerSumRows[0]?.total ?? 0),
       );
 
+      const { loadSourceAnchorDesync } = await import("./services/source-anchor-health");
+      const sourceAnchorDesync = await loadSourceAnchorDesync();
+
       const checks = [
         audit.shareDriftCheck(shareDrift),
         audit.creditsDriftCheck(creditsDrift),
         audit.settlementIdempotencyCheck(settlementIssues, closedMarkets.length),
         audit.reconciliationCheck(recon),
+        audit.sourceAnchorDesyncCheck(
+          sourceAnchorDesync.map((r) => ({ ...r })),
+        ),
       ];
 
       res.json({

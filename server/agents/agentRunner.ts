@@ -36,7 +36,7 @@ import { computeWorldMarketPrediction } from "./worldMarketEngine";
 import { prefetchNativeAssessmentsForSweep } from "./nativeMarketEngine";
 import { JACKPOT_TICKET_COST } from "../config/constants";
 import { getWeeklyBettingCutoff } from "../jobs/market-generator";
-import { getMarketBettingCutoff } from "../native-markets/lifecycle";
+import { getEffectiveBettingCutoff } from "../native-markets/lifecycle";
 import type {
   AgentConfigData,
   MarketWithEntries,
@@ -293,6 +293,7 @@ async function runAgentBatchOnce(): Promise<{
       category: predictionMarkets.category,
       personId: predictionMarkets.personId,
       endAt: predictionMarkets.endAt,
+      closeAt: predictionMarkets.closeAt,
       teaser: predictionMarkets.teaser,
       resolutionCriteria: predictionMarkets.resolutionCriteria,
       metadata: predictionMarkets.metadata,
@@ -672,16 +673,18 @@ async function runAgentBatchOnce(): Promise<{
       // Parimutuel sunset: every non-jackpot market is AMM and trades
       // until `endAt - <pre-resolve cooldown>`. Jackpot is the only
       // remaining parimutuel market and still locks at Friday 23:59
-      // UTC. We always go through `getMarketBettingCutoff` so the
-      // jackpot branch picks up `market.engine === "parimutuel"`
+      // UTC. We always go through `getEffectiveBettingCutoff` so the
+      // jackpot branch picks up `market.engine === "parimutuel"` and
+      // any early stored closeAt (auto-lock) is honoured.
       // automatically.
       const isWeeklyNative = ["jackpot", "updown", "h2h", "gainer"].includes(market.marketType);
       if (isWeeklyNative && market.endAt) {
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
-        const cutoff = getMarketBettingCutoff(
+        const cutoff = getEffectiveBettingCutoff(
           market.endAt,
           market.engine === "parimutuel" ? "parimutuel" : "amm",
           market.marketType ?? undefined,
+          market.closeAt,
         );
         if (now.getTime() >= cutoff.getTime() - bufferMs) {
           // Near-close window: arb cohort is handled by runConvergenceSweep.
@@ -997,6 +1000,11 @@ async function runAgentBatchOnce(): Promise<{
         const ammSnap = ammStateByMarket.get(market.id);
         const ammEntryId = decision.entryId;
         if (ammSnap && ammEntryId) {
+          if (!ammSnap.outcomeOrder.includes(ammEntryId)) {
+            skipped++;
+            log(`[AgentRunner] AMM skip: entry ${ammEntryId.slice(0, 8)} not in outcomeOrder for ${market.id.slice(0, 8)} (orphan Other?)`);
+            continue;
+          }
           const cur = ammCurrentPrices(ammSnap)[ammEntryId] ?? 0;
           const conf = typeof decision.confidence === "number" ? decision.confidence : 0.5;
           // 0.02 buffer keeps tiny-edge bets out of the queue. The worker's
@@ -1238,6 +1246,7 @@ type UpdownMarketRow = {
   engine?: string | null;
   metadata?: unknown;
   endAt?: Date | null;
+  closeAt?: Date | null;
   createdAt?: Date | null;
 };
 
@@ -1421,7 +1430,12 @@ async function pickMidweekConvergenceMarketIds(
   const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
   const outsideNearClose = candidates.filter((m) => {
     if (!m.endAt) return false;
-    const cutoff = getMarketBettingCutoff(m.endAt, "amm", m.marketType ?? undefined);
+    const cutoff = getEffectiveBettingCutoff(
+      m.endAt,
+      "amm",
+      m.marketType ?? undefined,
+      m.closeAt,
+    );
     return now.getTime() < cutoff.getTime() - bufferMs;
   });
   if (!outsideNearClose.length || limit <= 0) return [];
@@ -1893,7 +1907,12 @@ async function runRepredictSweep(
       if (!wrongSide) continue;
 
       if (market.endAt) {
-        const cutoff = getMarketBettingCutoff(market.endAt, "amm", market.marketType ?? undefined);
+        const cutoff = getEffectiveBettingCutoff(
+          market.endAt,
+          "amm",
+          market.marketType ?? undefined,
+          market.closeAt,
+        );
         const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
         if (now.getTime() >= cutoff.getTime() - bufferMs) continue;
       }
@@ -2016,7 +2035,12 @@ async function runConvergenceSweep(
   const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
   const nearCloseMarkets = ammUpdown.filter((m) => {
     if (!m.endAt) return false;
-    const cutoff = getMarketBettingCutoff(m.endAt, "amm", m.marketType ?? undefined);
+    const cutoff = getEffectiveBettingCutoff(
+      m.endAt,
+      "amm",
+      m.marketType ?? undefined,
+      m.closeAt,
+    );
     const t = now.getTime();
     return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
   });
@@ -2437,16 +2461,27 @@ async function runConvergenceSweepCommunity(
     // Respect the trading cutoff with a small pad so a queued action
     // can't race the pre-resolve cooldown.
     if (market.endAt) {
-      const cutoff = getMarketBettingCutoff(market.endAt, "amm", "community");
+      const cutoff = getEffectiveBettingCutoff(
+        market.endAt,
+        "amm",
+        "community",
+        market.closeAt,
+      );
       if (now.getTime() >= cutoff.getTime() - 10 * 60 * 1000) continue;
     }
 
-    const entries = entriesByMarket.get(market.id) ?? [];
-    if (entries.length < 2) continue;
+    const allEntries = entriesByMarket.get(market.id) ?? [];
+    if (allEntries.length < 2) continue;
     const snap = ammStateByMarket.get(market.id);
     if (!snap) continue;
 
-    const sourceFair = readSourceFairByEntryId(market.metadata, entries);
+    // Only trade outcomes that exist in AMM state — an orphan Other entry
+    // (added via admin edit before source/AMM sync) is not buyable.
+    const tradableIds = new Set(snap.outcomeOrder ?? []);
+    const entries = allEntries.filter((e) => tradableIds.has(e.id));
+    if (entries.length < 2) continue;
+
+    const sourceFair = readSourceFairByEntryId(market.metadata, allEntries);
     if (!sourceFair) continue;
 
     const prices = ammCurrentPrices(snap);
@@ -2459,10 +2494,16 @@ async function runConvergenceSweepCommunity(
     }
     if (!Number.isFinite(bestEdge)) continue;
 
+    const fairByEntryId: Record<string, number> = {};
+    for (const entry of entries) {
+      const fair = sourceFair.fairByEntryId[entry.id];
+      if (fair != null) fairByEntryId[entry.id] = fair;
+    }
+
     candidates.push({
       market,
       entries,
-      fairByEntryId: sourceFair.fairByEntryId,
+      fairByEntryId,
       anchor: sourceFair.anchor,
       prices,
       bestEdge,
@@ -2683,7 +2724,7 @@ async function runConvergenceSweepH2H(
   const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
   const nearCloseMarkets = ammH2h.filter((m) => {
     if (!m.endAt) return false;
-    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "h2h");
+    const cutoff = getEffectiveBettingCutoff(m.endAt, "amm", "h2h", m.closeAt);
     const t = now.getTime();
     return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
   });
@@ -2933,7 +2974,7 @@ async function runConvergenceSweepGainer(
   const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
   const nearCloseMarkets = ammGainer.filter((m) => {
     if (!m.endAt) return false;
-    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "gainer");
+    const cutoff = getEffectiveBettingCutoff(m.endAt, "amm", "gainer", m.closeAt);
     const t = now.getTime();
     return t >= cutoff.getTime() - bufferMs && t <= cutoff.getTime();
   });
@@ -3111,7 +3152,7 @@ async function runMidweekGainerConvergenceSweep(
   const bufferMs = JACKPOT_AGENT_MIN_BUFFER_HOURS * 60 * 60 * 1000;
   const outsideNearClose = ammGainer.filter((m) => {
     if (!m.endAt) return false;
-    const cutoff = getMarketBettingCutoff(m.endAt, "amm", "gainer");
+    const cutoff = getEffectiveBettingCutoff(m.endAt, "amm", "gainer", m.closeAt);
     return now.getTime() < cutoff.getTime() - bufferMs;
   });
   if (!outsideNearClose.length) return 0;

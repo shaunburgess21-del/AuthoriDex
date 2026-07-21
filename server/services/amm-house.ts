@@ -411,6 +411,88 @@ export async function ensureWorldMarketAmmSeeded(
   );
 }
 
+/**
+ * Keep an already-seeded AMM state's outcomeOrder / shareQuantities in
+ * sync when an admin adds or removes a zero-share outcome (typically
+ * toggling "Other" on a live World Market).
+ *
+ * - Missing entry IDs are appended with q=0.
+ * - Extra entry IDs are dropped only when their share quantity is ~0
+ *   (never silently erase open positions).
+ *
+ * No-op when no AMM state row exists (still draft / unseeded).
+ */
+export async function syncAmmOutcomeOrderWithEntries(
+  marketId: string,
+  entryIdsInOrder: string[],
+  txOpt?: DbOrTx,
+): Promise<{ added: string[]; removed: string[]; skippedNonZero: string[] }> {
+  const conn = txOpt ?? db;
+  const [existing] = await conn
+    .select({
+      outcomeOrder: marketAmmState.outcomeOrder,
+      shareQuantities: marketAmmState.shareQuantities,
+    })
+    .from(marketAmmState)
+    .where(eq(marketAmmState.marketId, marketId))
+    .limit(1);
+
+  if (!existing) {
+    return { added: [], removed: [], skippedNonZero: [] };
+  }
+
+  const prevOrder = (existing.outcomeOrder as string[] | null) ?? [];
+  const shares = {
+    ...((existing.shareQuantities as Record<string, number> | null) ?? {}),
+  };
+  const desired = entryIdsInOrder.slice();
+  const desiredSet = new Set(desired);
+  const prevSet = new Set(prevOrder);
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  const skippedNonZero: string[] = [];
+
+  let nextOrder = prevOrder.filter((id) => {
+    if (desiredSet.has(id)) return true;
+    const q = Number(shares[id] ?? 0);
+    if (Math.abs(q) > 1e-9) {
+      skippedNonZero.push(id);
+      return true; // keep — caller must not delete the entry either
+    }
+    delete shares[id];
+    removed.push(id);
+    return false;
+  });
+
+  for (const id of desired) {
+    if (prevSet.has(id) || nextOrder.includes(id)) continue;
+    nextOrder.push(id);
+    shares[id] = 0;
+    added.push(id);
+  }
+
+  // Prefer the caller's display order for IDs we still hold.
+  const orderedDesired = desired.filter((id) => nextOrder.includes(id));
+  const leftovers = nextOrder.filter((id) => !desiredSet.has(id));
+  nextOrder = [...orderedDesired, ...leftovers];
+
+  if (added.length === 0 && removed.length === 0) {
+    return { added, removed, skippedNonZero };
+  }
+
+  await conn
+    .update(marketAmmState)
+    .set({
+      outcomeOrder: nextOrder,
+      shareQuantities: shares,
+      updatedAt: new Date(),
+    })
+    .where(eq(marketAmmState.marketId, marketId));
+
+  return { added, removed, skippedNonZero };
+}
+
 // ---------------------------------------------------------------------------
 // Settlement-time seed return
 // ---------------------------------------------------------------------------

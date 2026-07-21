@@ -353,6 +353,8 @@ export async function generateWeeklyUpDown(): Promise<number> {
       endAt: sunday,
       closeAt: getMarketBettingCutoff(sunday, engine, "updown"),
       weekNumber,
+      // Denormalized copy of metadata.openingScore.score for ops SQL / CMS.
+      baselineScore: openScore?.score ?? null,
       metadata: openScore
         ? {
             openingScore: {
@@ -500,6 +502,7 @@ export async function ensureUpDownMarketForInductee(person: {
     endAt: sunday,
     closeAt: getMarketBettingCutoff(sunday, engine),
     weekNumber,
+    baselineScore: openScore?.score ?? null,
     metadata: openScore
       ? {
           openingScore: {

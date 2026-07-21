@@ -20,13 +20,19 @@
  * the same length-aligned vectors; the watcher fills their live price as
  * max(0, 1 − Σ named). Manual (non-scouted) markets return null and keep
  * their existing LLM-driven agent behaviour.
+ *
+ * Tolerance: when an admin toggles Other without syncing the source
+ * vectors, we heal the common ±1 desync cases so agents stay live
+ * (see `reconcileSourceMappingWithEntries` for the write-path fix).
  */
 
+import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { LOCKIN_FAIR_MAX, LOCKIN_FAIR_MIN } from "./lockInFair";
 
 interface SourceOutcomeMappingRow {
   entryLabel?: unknown;
   sourceLabel?: unknown;
+  isResidual?: unknown;
 }
 
 export interface SourceFairResult {
@@ -52,6 +58,46 @@ function readPriceVector(value: unknown, expectedLength: number): number[] | nul
   return value as number[];
 }
 
+function isResidualMappingRow(row: SourceOutcomeMappingRow): boolean {
+  if (row.isResidual === true) return true;
+  return (
+    isOtherStyleOutcomeLabel(
+      typeof row.entryLabel === "string" ? row.entryLabel : null,
+    ) ||
+    isOtherStyleOutcomeLabel(
+      typeof row.sourceLabel === "string" ? row.sourceLabel : null,
+    )
+  );
+}
+
+function matchEntryForRow(
+  row: SourceOutcomeMappingRow,
+  entriesByLabel: Map<string, Array<{ id: string }>>,
+): { id: string } | null {
+  for (const candidate of [row.entryLabel, row.sourceLabel]) {
+    if (typeof candidate !== "string" || !candidate.trim()) continue;
+    const bucket = entriesByLabel.get(candidate.trim().toLowerCase());
+    if (bucket?.length === 1) return bucket[0];
+  }
+  return null;
+}
+
+function clampAndNormalize(
+  fairByEntryId: Record<string, number>,
+): Record<string, number> | null {
+  let sum = 0;
+  for (const id of Object.keys(fairByEntryId)) {
+    const clamped = Math.min(LOCKIN_FAIR_MAX, Math.max(LOCKIN_FAIR_MIN, fairByEntryId[id]));
+    fairByEntryId[id] = clamped;
+    sum += clamped;
+  }
+  if (!(sum > 0)) return null;
+  for (const id of Object.keys(fairByEntryId)) {
+    fairByEntryId[id] = fairByEntryId[id] / sum;
+  }
+  return fairByEntryId;
+}
+
 /**
  * Resolve the source fair-probability map for a scouted market. Returns
  * null when the market has no usable anchor (not scouted, malformed
@@ -70,15 +116,7 @@ export function readSourceFairByEntryId(
 
   const mapping = source.outcomeMapping;
   if (!Array.isArray(mapping) || mapping.length < 2) return null;
-  if (entries.length !== mapping.length) return null;
 
-  const live = readPriceVector(source.livePrices, mapping.length);
-  const imported = readPriceVector(source.pricesAtImport, mapping.length);
-  const prices = live ?? imported;
-  if (!prices) return null;
-
-  // Label-based entry <-> mapping resolution. Each mapping row must match
-  // exactly one entry (and vice versa) or the anchor is rejected.
   const entriesByLabel = new Map<string, Array<{ id: string }>>();
   for (const e of entries) {
     const key = (e.label ?? "").trim().toLowerCase();
@@ -88,43 +126,115 @@ export function readSourceFairByEntryId(
     entriesByLabel.set(key, bucket);
   }
 
-  const fairByEntryId: Record<string, number> = {};
-  const claimed = new Set<string>();
-  for (let i = 0; i < mapping.length; i++) {
-    const row = mapping[i] as SourceOutcomeMappingRow;
-    let matched: { id: string } | null = null;
-    for (const candidate of [row.entryLabel, row.sourceLabel]) {
-      if (typeof candidate !== "string" || !candidate.trim()) continue;
-      const bucket = entriesByLabel.get(candidate.trim().toLowerCase());
-      if (bucket?.length === 1) {
-        matched = bucket[0];
-        break;
-      }
+  // Prefer length-aligned price vectors. When Other was toggled without a
+  // source sync, prices stay at the pre-toggle length — heal those cases.
+  const exactLive = readPriceVector(source.livePrices, mapping.length);
+  const exactImport = readPriceVector(source.pricesAtImport, mapping.length);
+
+  // Case A: exact length match (happy path).
+  if (entries.length === mapping.length) {
+    const prices = exactLive ?? exactImport;
+    if (!prices) return null;
+
+    const fairByEntryId: Record<string, number> = {};
+    const claimed = new Set<string>();
+    for (let i = 0; i < mapping.length; i++) {
+      const row = mapping[i] as SourceOutcomeMappingRow;
+      const matched = matchEntryForRow(row, entriesByLabel);
+      if (!matched || claimed.has(matched.id)) return null;
+      claimed.add(matched.id);
+      fairByEntryId[matched.id] = prices[i];
     }
-    if (!matched || claimed.has(matched.id)) return null;
-    claimed.add(matched.id);
-    fairByEntryId[matched.id] = prices[i];
-  }
-  if (claimed.size !== entries.length) return null;
+    if (claimed.size !== entries.length) return null;
 
-  // Clamp away from 0/1 (keeps AMM buys quotable) and renormalize so the
-  // fair vector sums to 1 like LMSR prices do.
-  let sum = 0;
-  for (const id of Object.keys(fairByEntryId)) {
-    const clamped = Math.min(LOCKIN_FAIR_MAX, Math.max(LOCKIN_FAIR_MIN, fairByEntryId[id]));
-    fairByEntryId[id] = clamped;
-    sum += clamped;
-  }
-  if (!(sum > 0)) return null;
-  for (const id of Object.keys(fairByEntryId)) {
-    fairByEntryId[id] = fairByEntryId[id] / sum;
+    const normalized = clampAndNormalize(fairByEntryId);
+    if (!normalized) return null;
+    return {
+      fairByEntryId: normalized,
+      anchor: exactLive ? "live" : "import",
+      anchorAt: exactLive
+        ? (typeof source.livePricesAt === "string" ? source.livePricesAt : null)
+        : (typeof source.fetchedAt === "string" ? source.fetchedAt : null),
+    };
   }
 
-  return {
-    fairByEntryId,
-    anchor: live ? "live" : "import",
-    anchorAt: live
-      ? (typeof source.livePricesAt === "string" ? source.livePricesAt : null)
-      : (typeof source.fetchedAt === "string" ? source.fetchedAt : null),
-  };
+  // Case B: orphan Other entry (entries = mapping + 1). Synthesize residual.
+  if (entries.length === mapping.length + 1) {
+    const prices = exactLive ?? exactImport;
+    if (!prices) return null;
+
+    const otherEntries = entries.filter((e) => isOtherStyleOutcomeLabel(e.label));
+    if (otherEntries.length !== 1) return null;
+    const orphanOther = otherEntries[0];
+
+    // Mapping must not already include a residual/Other row — that would
+    // mean the length mismatch is a different kind of edit.
+    if ((mapping as SourceOutcomeMappingRow[]).some((row) => isResidualMappingRow(row))) {
+      return null;
+    }
+
+    const fairByEntryId: Record<string, number> = {};
+    const claimed = new Set<string>();
+    let namedSum = 0;
+    for (let i = 0; i < mapping.length; i++) {
+      const row = mapping[i] as SourceOutcomeMappingRow;
+      const matched = matchEntryForRow(row, entriesByLabel);
+      if (!matched || claimed.has(matched.id) || matched.id === orphanOther.id) return null;
+      claimed.add(matched.id);
+      fairByEntryId[matched.id] = prices[i];
+      namedSum += prices[i];
+    }
+    if (claimed.size !== mapping.length) return null;
+    fairByEntryId[orphanOther.id] = Math.max(0, 1 - namedSum);
+
+    const normalized = clampAndNormalize(fairByEntryId);
+    if (!normalized) return null;
+    return {
+      fairByEntryId: normalized,
+      anchor: exactLive ? "live" : "import",
+      anchorAt: exactLive
+        ? (typeof source.livePricesAt === "string" ? source.livePricesAt : null)
+        : (typeof source.fetchedAt === "string" ? source.fetchedAt : null),
+    };
+  }
+
+  // Case C: residual mapping row with no matching entry (entries = mapping - 1).
+  if (entries.length === mapping.length - 1) {
+    const prices = exactLive ?? exactImport;
+    if (!prices) return null;
+
+    const residualIndexes = (mapping as SourceOutcomeMappingRow[])
+      .map((row, i) => (isResidualMappingRow(row) ? i : -1))
+      .filter((i) => i >= 0);
+    if (residualIndexes.length !== 1) return null;
+    const skipIdx = residualIndexes[0];
+
+    // Confirm the residual row does not match any current entry.
+    const residualRow = mapping[skipIdx] as SourceOutcomeMappingRow;
+    if (matchEntryForRow(residualRow, entriesByLabel)) return null;
+
+    const fairByEntryId: Record<string, number> = {};
+    const claimed = new Set<string>();
+    for (let i = 0; i < mapping.length; i++) {
+      if (i === skipIdx) continue;
+      const row = mapping[i] as SourceOutcomeMappingRow;
+      const matched = matchEntryForRow(row, entriesByLabel);
+      if (!matched || claimed.has(matched.id)) return null;
+      claimed.add(matched.id);
+      fairByEntryId[matched.id] = prices[i];
+    }
+    if (claimed.size !== entries.length) return null;
+
+    const normalized = clampAndNormalize(fairByEntryId);
+    if (!normalized) return null;
+    return {
+      fairByEntryId: normalized,
+      anchor: exactLive ? "live" : "import",
+      anchorAt: exactLive
+        ? (typeof source.livePricesAt === "string" ? source.livePricesAt : null)
+        : (typeof source.fetchedAt === "string" ? source.fetchedAt : null),
+    };
+  }
+
+  return null;
 }
