@@ -57,7 +57,7 @@ export function TrendingNowFeed({ onOpenInsight, collapsed, onToggle }: Trending
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Hot Movers</h3>
-            <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Exceptional 24h movement</p>
+            <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Exceptional 24h movement (top 100)</p>
           </div>
           <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}>
             <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
