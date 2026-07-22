@@ -16,7 +16,9 @@ import { resolveUserGeoContext } from "../lib/geoVisibility";
  * Heuristic (no schema/curation table yet — see plan Phase 2): per type,
  * featured first, then admin-ordered (display_order > 0) ahead of unordered,
  * then recency. Interleaved matchup → sentiment → opinion so a new visitor
- * sees variety. Only anon-votable types are included by design.
+ * sees variety; the FULL live catalog is returned (ids only — cheap) so the
+ * overlay can be doomscrolled to the very last votable card. Only
+ * anon-votable types are included by design.
  */
 
 export type StarterMixItemType = "matchup" | "sentiment" | "opinion";
@@ -26,9 +28,6 @@ export interface StarterMixItem {
   id: string;
   slug: string | null;
 }
-
-const PER_TYPE_FETCH = 24;
-const PER_TYPE_TAKE = 4;
 
 /** featured DESC, explicitly ordered first, admin order ASC, newest first. */
 function heuristicOrder(table: {
@@ -56,8 +55,7 @@ export function registerStarterMixRoutes(app: Express): void {
           })
           .from(matchups)
           .where(and(eq(matchups.visibility, "live"), eq(matchups.isActive, true)))
-          .orderBy(...heuristicOrder(matchups))
-          .limit(PER_TYPE_FETCH),
+          .orderBy(...heuristicOrder(matchups)),
         db
           .select({
             id: trendingPolls.id,
@@ -66,8 +64,7 @@ export function registerStarterMixRoutes(app: Express): void {
           })
           .from(trendingPolls)
           .where(eq(trendingPolls.status, "live"))
-          .orderBy(...heuristicOrder(trendingPolls))
-          .limit(PER_TYPE_FETCH),
+          .orderBy(...heuristicOrder(trendingPolls)),
         db
           .select({
             id: opinionPolls.id,
@@ -76,8 +73,7 @@ export function registerStarterMixRoutes(app: Express): void {
           })
           .from(opinionPolls)
           .where(eq(opinionPolls.visibility, "live"))
-          .orderBy(...heuristicOrder(opinionPolls))
-          .limit(PER_TYPE_FETCH),
+          .orderBy(...heuristicOrder(opinionPolls)),
       ]);
 
       const geo = await resolveUserGeoContext(req);
@@ -87,14 +83,16 @@ export function registerStarterMixRoutes(app: Express): void {
           : rows.filter((r) => isCardVisibleToUser(r.visibleCountries, geo.residence));
 
       const pools: Array<{ type: StarterMixItemType; rows: Array<{ id: string; slug: string | null }> }> = [
-        { type: "matchup", rows: geoFilter(matchupRows).slice(0, PER_TYPE_TAKE) },
-        { type: "sentiment", rows: geoFilter(sentimentRows).slice(0, PER_TYPE_TAKE) },
-        { type: "opinion", rows: geoFilter(opinionRows).slice(0, PER_TYPE_TAKE) },
+        { type: "matchup", rows: geoFilter(matchupRows) },
+        { type: "sentiment", rows: geoFilter(sentimentRows) },
+        { type: "opinion", rows: geoFilter(opinionRows) },
       ];
 
-      // Fixed interleave recipe: matchup, sentiment, opinion, repeat.
+      // Fixed interleave recipe (matchup, sentiment, opinion, repeat) until
+      // every pool is exhausted — shorter pools simply drop out of the rotation.
       const data: StarterMixItem[] = [];
-      for (let round = 0; round < PER_TYPE_TAKE; round++) {
+      const maxRounds = Math.max(...pools.map((p) => p.rows.length));
+      for (let round = 0; round < maxRounds; round++) {
         for (const pool of pools) {
           const row = pool.rows[round];
           if (row) data.push({ type: pool.type, id: row.id, slug: row.slug ?? null });

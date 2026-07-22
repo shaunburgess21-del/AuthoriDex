@@ -66,7 +66,7 @@ import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
-import { checkVoteGate } from "@/lib/voteGate";
+import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
   getSentimentPollChoiceColor,
@@ -1228,7 +1228,7 @@ export default function PersonDetailPage() {
           pendingVote: { choice },
         },
       });
-      throw new Error("Vote gate redirect");
+      throw new VoteGateRedirectError();
     }
     const topic = trendingPolls.find((t) => t.id === topicId);
     if (!topic?.slug) {

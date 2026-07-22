@@ -156,9 +156,15 @@ const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
   "open-market": "open_market",
 };
 
-function snapPageStyle(): CSSProperties {
+function snapPageStyle(isMinimal = false): CSSProperties {
   return {
-    height: SNAP_PAGE_HEIGHT,
+    // Minimal variant: size pages off the scroll container itself (100% of
+    // its content box) rather than 100dvh math. On iOS Safari, dvh and the
+    // fixed-container layout height drift as the toolbar collapses, which
+    // desyncs page height from clientHeight — breaking the visible-index
+    // rounding, the ±1 render window, and snap targets (cards landing
+    // half-off / at the bottom).
+    height: isMinimal ? "100%" : SNAP_PAGE_HEIGHT,
     scrollSnapAlign: "start",
     paddingBottom: SNAP_PAGE_PADDING,
   };
@@ -528,25 +534,112 @@ export function VoteSnapScrollView({
   }, [categoryItems, activeCategory]);
 
   // ── Imperative API (Quick Vote auto-advance) ──────────────────────────
+  // rAF-tween with scroll-snap disabled for the duration: iOS Safari's
+  // scrollTo({behavior:"smooth"}) inside a snap-mandatory container is a
+  // known WebKit conflict that can strand the scroll between snap points.
+  const programmaticScrollActiveRef = useRef(false);
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
       advanceToNext: () => {
         const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
         const el = columnScrollRefs.current[cat];
-        if (!el) return;
+        if (!el || programmaticScrollActiveRef.current) return;
         const h = el.clientHeight;
         if (h === 0) return;
         const idx = Math.round(el.scrollTop / h);
         const target = (idx + 1) * h;
         if (target >= el.scrollHeight) return;
-        el.scrollTo({ top: target, behavior: "smooth" });
+
+        const startTop = el.scrollTop;
+        const dist = target - startTop;
+        const duration = 350;
+        const startTs = performance.now();
+        programmaticScrollActiveRef.current = true;
+        el.style.scrollSnapType = "none";
+
+        let rafId = 0;
+        const finish = (jumpToTarget: boolean) => {
+          cancelAnimationFrame(rafId);
+          el.removeEventListener("touchstart", onTouch);
+          if (jumpToTarget) el.scrollTop = target;
+          el.style.scrollSnapType = "y mandatory";
+          programmaticScrollActiveRef.current = false;
+        };
+        // User takes over mid-tween: stop where we are, snap re-engages on release.
+        const onTouch = () => finish(false);
+        el.addEventListener("touchstart", onTouch, { passive: true });
+
+        const step = (now: number) => {
+          const t = Math.min((now - startTs) / duration, 1);
+          const eased = 1 - Math.pow(1 - t, 3);
+          el.scrollTop = startTop + dist * eased;
+          if (t < 1) {
+            rafId = requestAnimationFrame(step);
+          } else {
+            finish(true);
+          }
+        };
+        rafId = requestAnimationFrame(step);
       },
     };
     return () => {
       apiRef.current = null;
     };
   }, [apiRef]);
+
+  // ── Settle guard (minimal): self-heal any stuck-halfway scroll state ───
+  // If the column rests misaligned (interrupted momentum, dvh shift, WebKit
+  // snap failure), snap instantly to the nearest page once scrolling idles.
+  useEffect(() => {
+    if (!isMinimal || !open) return;
+    const el = columnScrollRefs.current[activeCategory];
+    if (!el) return;
+
+    let touchActive = false;
+    let settleTimer: number | null = null;
+    const clearTimer = () => {
+      if (settleTimer != null) {
+        window.clearTimeout(settleTimer);
+        settleTimer = null;
+      }
+    };
+    const settle = () => {
+      settleTimer = null;
+      if (touchActive || programmaticScrollActiveRef.current) return;
+      const h = el.clientHeight;
+      if (h === 0) return;
+      const maxTop = Math.max(0, el.scrollHeight - h);
+      const nearest = Math.max(0, Math.min(Math.round(el.scrollTop / h) * h, maxTop));
+      if (Math.abs(el.scrollTop - nearest) > 4) {
+        el.scrollTop = nearest;
+      }
+    };
+    const onScroll = () => {
+      clearTimer();
+      settleTimer = window.setTimeout(settle, 160);
+    };
+    const onTouchStart = () => {
+      touchActive = true;
+      clearTimer();
+    };
+    const onTouchEnd = () => {
+      touchActive = false;
+      onScroll();
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    return () => {
+      clearTimer();
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [isMinimal, open, activeCategory]);
 
   // ── Visible-index change notification ─────────────────────────────────
   useEffect(() => {
@@ -750,13 +843,22 @@ export function VoteSnapScrollView({
       direction = dx > 0 ? -1 : 1;
     }
 
+    // Minimal variant has no horizontal category axis — a committed swipe
+    // in either direction dismisses the overlay instead.
+    if (isMinimal) {
+      // Reset the drag offset either way so the exit fade isn't skewed.
+      springBack();
+      if (direction !== 0) onClose();
+      return;
+    }
+
     const targetIdx = idx + (direction as number);
     if (direction !== 0 && targetIdx >= 0 && targetIdx < cats.length) {
       commitHorizontalSwipe(direction as -1 | 1);
     } else {
       springBack();
     }
-  }, [commitHorizontalSwipe, springBack]);
+  }, [commitHorizontalSwipe, springBack, isMinimal, onClose]);
 
   const handleHPanTouchCancel = useCallback(() => {
     hPanRef.current = null;
@@ -1039,8 +1141,8 @@ export function VoteSnapScrollView({
         >
           {/* Header */}
           {isMinimal ? (
-            // Fixed 52px height so snapPageStyle()'s calc(100dvh - 52px)
-            // page height stays exact in both variants.
+            // Fixed 52px header; minimal snap pages size off the scroll
+            // container (100%), so exact header height is not load-bearing.
             <div className="shrink-0 h-[52px] flex items-center safe-top px-1">
               <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
               <button
@@ -1126,7 +1228,7 @@ export function VoteSnapScrollView({
                                   <div
                                     key={item.id}
                                     className="snap-start flex flex-col items-center justify-center px-3 pt-3"
-                                    style={snapPageStyle()}
+                                    style={snapPageStyle(isMinimal)}
                                   >
                                     {inWindow ? (
                                       <div
@@ -1147,7 +1249,7 @@ export function VoteSnapScrollView({
                                 <div
                                   key={item.id}
                                   className="snap-start flex flex-col px-3 pt-3"
-                                  style={snapPageStyle()}
+                                  style={snapPageStyle(isMinimal)}
                                 >
                                   {inWindow ? (
                                     <SnapPageVisibility scrollRoot={scrollRoot}>

@@ -120,7 +120,7 @@ import {
   type VoteResumePayload,
 } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
-import { checkVoteGate } from "@/lib/voteGate";
+import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
 import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import {
@@ -2319,7 +2319,7 @@ export default function VotePage() {
           pendingVote: { choice },
         },
       });
-      throw new Error("Vote gate redirect");
+      throw new VoteGateRedirectError();
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);
     if (!topic?.slug) {

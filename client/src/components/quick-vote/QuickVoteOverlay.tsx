@@ -26,14 +26,13 @@ import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-
 import { useMatchupVotes } from "@/hooks/useMatchupVotes";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
-import { checkVoteGate } from "@/lib/voteGate";
+import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
 import { navigateToLogin, type VoteResumePayload } from "@/lib/authReturn";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { hapticSuccess } from "@/lib/haptic";
-import { showVoteToast } from "@/lib/vote-toast";
 import { logFunnelEvent, trackVoteCast } from "@/lib/funnelTelemetry";
 
 interface StarterMixItem {
@@ -53,22 +52,6 @@ export interface QuickVoteOverlayProps {
   initialCardId?: string;
   /** Telemetry: what opened the overlay (nudge_pill, reentry_pill, restore). */
   source?: string;
-}
-
-function BudgetChip() {
-  const budget = useAnonBudget();
-  if (!budget.isAnonymous) return null;
-  const lowBudget = budget.remaining > 0 && budget.remaining <= 2;
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-sm"
-      data-testid="quick-vote-budget"
-    >
-      {lowBudget
-        ? `${budget.remaining} free vote${budget.remaining === 1 ? "" : "s"} left`
-        : `${budget.used}/${budget.limit} free votes`}
-    </div>
-  );
 }
 
 export function QuickVoteOverlay({ open, onClose, initialCardId, source }: QuickVoteOverlayProps) {
@@ -254,13 +237,11 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   const handleMatchupVote = useCallback(
     (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
       const attempt = voteMatchup(matchupId, option, {
-        onProceed: (previousVote) => {
+        // No success toast in the overlay: the top-center toaster would sit
+        // over the header X for 4s. Card voted-state + auto-advance is the
+        // feedback; haptic gives click-time confirmation.
+        onProceed: () => {
           hapticSuccess();
-          showVoteToast("matchup", previousVote ? "Vote changed!" : "Vote recorded!", {
-            description: previousVote
-              ? "Your Matchup vote has been updated."
-              : "Your Matchup vote has been counted.",
-          });
         },
       });
       if (attempt.ok === false && attempt.reason === "redirected_to_signup") {
@@ -273,9 +254,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
 
   const handleMatchupRemoveVote = useCallback(
     (matchupId: string) => {
-      if (removeMatchupVote(matchupId)) {
-        showVoteToast("matchup", "Vote removed", { description: "Your Matchup vote has been removed." });
-      }
+      removeMatchupVote(matchupId);
     },
     [removeMatchupVote],
   );
@@ -324,14 +303,9 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           ...decision.resumeAction,
           pendingVote: { choice },
         });
-        throw new Error("Vote gate redirect");
+        throw new VoteGateRedirectError();
       }
       hapticSuccess();
-      showVoteToast("sentiment", topic.userVote ? "Vote changed!" : "Vote recorded!", {
-        description: topic.userVote
-          ? "Your Sentiment Poll vote has been updated."
-          : "Your Sentiment Poll vote has been counted.",
-      });
       await sentimentVoteMutation.mutateAsync({
         slug: topic.slug,
         choice,
@@ -356,7 +330,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
             ...decision.resumeAction,
             pendingVote: { optionId },
           });
-          throw new Error("Vote gate redirect");
+          throw new VoteGateRedirectError();
         }
       }
       await voteOnOpinionPoll(slug, optionId);
@@ -446,7 +420,6 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         items={snapItems}
         initialItemId={initialCardId}
         renderCard={renderCard}
-        headerSlot={<BudgetChip />}
         apiRef={snapApiRef}
         onVisibleIndexChange={handleVisibleIndexChange}
       />

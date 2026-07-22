@@ -39,6 +39,25 @@ import type { UseAnonBudgetReturn } from "@/hooks/useAnonBudget";
  * that the server would have blocked anyway.
  */
 
+/**
+ * Sentinel thrown by async vote handlers AFTER a gate failure has already
+ * kicked off the redirect-to-signup flow. Cards that catch onVote rejections
+ * to roll back optimistic state must swallow this one silently — it is not
+ * a vote failure, and surfacing it (e.g. "Could not record vote") double-
+ * messages a user who is already being redirected.
+ */
+export class VoteGateRedirectError extends Error {
+  constructor() {
+    super("Vote gate redirect");
+    this.name = "VoteGateRedirectError";
+  }
+}
+
+export function isVoteGateRedirectError(err: unknown): boolean {
+  return err instanceof VoteGateRedirectError ||
+    (err instanceof Error && err.name === "VoteGateRedirectError");
+}
+
 export type VoteGateDecision =
   | { proceed: true; redirectToSignup: false }
   | {

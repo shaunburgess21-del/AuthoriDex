@@ -15,6 +15,7 @@ import { CountdownDescription } from "@/components/CountdownDescription";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
+import { isVoteGateRedirectError } from "@/lib/voteGate";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
 import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
 import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
@@ -168,6 +169,9 @@ export function OpinionPollCard({
         await onVote(poll.slug, optionId);
       } catch (err) {
         setVoted(poll.userVote ?? previousVote);
+        // Gate failure: the caller already started the redirect-to-signup
+        // flow — surfacing an error toast here would double-message the user.
+        if (isVoteGateRedirectError(err)) return;
         if (isUnauthorizedApiError(err)) {
           toast(signInToVoteTitle, signInToVoteToastOptions(() => setLocation("/login")));
         } else if (isBudgetExhaustedVoteError(err)) {
