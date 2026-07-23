@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X, ArrowRight, type LucideIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 
 const RE_SHOW_DAYS = 21;
 const MS_PER_DAY = 86_400_000;
@@ -82,8 +84,24 @@ function OnboardingToast({
   onOpen: () => void;
   onDismiss: () => void;
 }) {
+  const isMobile = useIsMobile();
+  // Same positioning treatment as the Quick Vote pills (QuickVoteHost): the
+  // BottomNav's height grows by env(safe-area-inset-bottom) when the browser
+  // toolbar hides and it translates with the visual viewport, so this toast
+  // must ride both to keep a constant 16px gap above the nav.
+  const viewportOffset = useVisualViewportOffset();
+
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-3 md:bottom-6">
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-20 z-[55] flex justify-center px-3 md:bottom-6"
+      style={{
+        ...(isMobile
+          ? { bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" }
+          : {}),
+        transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
+        willChange: "transform",
+      }}
+    >
       <motion.div
         initial={{ y: 80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}

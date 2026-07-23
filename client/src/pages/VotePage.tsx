@@ -121,6 +121,8 @@ import {
 } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
+import { isQuickVoteNudgeEligible } from "@/lib/quickVoteNudge";
+import { isSessionInterruptUsed } from "@/lib/interruptArbiter";
 import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import {
@@ -3803,7 +3805,11 @@ export default function VotePage() {
         steps={VOTE_ONBOARDING_STEPS}
         toastLabel="New to voting?"
         lastStepCta="Cast Your First Vote"
-        disableAutoToast={!!user}
+        // Interrupt arbitration (same gate as WelcomeModal on Home): the Quick
+        // Vote "New here" pill outranks this toast. While the visitor is still
+        // a Quick Vote target — or once the pill has claimed the session's one
+        // interrupt slot — keep this toast suppressed so the two never stack.
+        disableAutoToast={!!user || isQuickVoteNudgeEligible(!!user) || isSessionInterruptUsed()}
       />
       <StepModal
         open={infoModalOpen === "governance"}
