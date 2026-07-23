@@ -14,6 +14,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickVoteOverlay } from "@/components/quick-vote/QuickVoteOverlay";
 import {
@@ -41,6 +42,11 @@ export interface QuickVoteHostProps {
 
 export function QuickVoteHost({ surface }: QuickVoteHostProps) {
   const isMobile = useIsMobile();
+  // BottomNav translates itself by this signed delta to stay glued to the
+  // visual viewport as the iOS toolbar shows/hides. The pills sit 16px above
+  // the nav, so they must ride the same offset or the nav slides underneath
+  // them on scroll-down (toolbar collapse) and they end up overlapping it.
+  const viewportOffset = useVisualViewportOffset();
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -192,59 +198,78 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
 
   return (
     <>
-      {/* Entry pill nudge — bottom, above BottomNav (h-16, z-50) */}
-      <AnimatePresence>
-        {nudgeVisible && !overlayOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="fixed inset-x-0 bottom-20 md:bottom-6 z-[55] flex justify-center px-4 pointer-events-none"
-          >
-            <div
-              className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/15 bg-slate-900/90 pl-4 pr-1.5 py-1.5 shadow-2xl shadow-black/40 backdrop-blur-md"
-              data-testid="quick-vote-nudge-pill"
+      {/* Entry pill nudge — bottom, above BottomNav (h-16, z-50). The outer
+          div owns fixed positioning + the visual-viewport translate (kept off
+          the motion element so it can't fight Framer's own y transform). */}
+      <div
+        className="fixed inset-x-0 bottom-20 md:bottom-6 z-[55] pointer-events-none"
+        style={{
+          transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
+          willChange: "transform",
+        }}
+      >
+        <AnimatePresence>
+          {nudgeVisible && !overlayOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="flex justify-center px-4 pointer-events-none"
             >
-              <span className="text-sm text-slate-200">New here?</span>
-              <button
-                onClick={acceptNudge}
-                className="ml-1 flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-transform active:scale-95"
-                data-testid="quick-vote-nudge-accept"
+              <div
+                className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/15 bg-white/10 pl-4 pr-1.5 py-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
+                data-testid="quick-vote-nudge-pill"
               >
-                <Zap className="h-3.5 w-3.5" />
-                Cast your first vote
-              </button>
-              <button
-                onClick={dismissNudge}
-                className="p-1.5 text-slate-400 transition-colors hover:text-slate-200"
-                aria-label="Dismiss"
-                data-testid="quick-vote-nudge-dismiss"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <span className="text-sm text-slate-200">New here?</span>
+                <button
+                  onClick={acceptNudge}
+                  className="ml-1 flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-transform active:scale-95"
+                  data-testid="quick-vote-nudge-accept"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Cast your first vote
+                </button>
+                <button
+                  onClick={dismissNudge}
+                  className="p-1.5 text-slate-400 transition-colors hover:text-slate-200"
+                  aria-label="Dismiss"
+                  data-testid="quick-vote-nudge-dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-      {/* Session re-entry pill after overlay close (mobile) */}
-      <AnimatePresence>
-        {showReentry && (
-          <motion.button
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            onClick={openFromReentry}
-            className="fixed bottom-20 right-4 z-[55] flex items-center gap-1.5 rounded-full border border-white/15 bg-slate-900/90 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-md transition-transform active:scale-95"
-            data-testid="quick-vote-reentry-pill"
-          >
-            <Zap className="h-4 w-4 text-primary" />
-            Quick Vote
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* Session re-entry pill after overlay close (mobile). Same fixed
+          wrapper pattern as the nudge pill so it tracks the nav. */}
+      <div
+        className="fixed bottom-20 right-4 z-[55] pointer-events-none"
+        style={{
+          transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
+          willChange: "transform",
+        }}
+      >
+        <AnimatePresence>
+          {showReentry && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              onClick={openFromReentry}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+              data-testid="quick-vote-reentry-pill"
+            >
+              <Zap className="h-4 w-4 text-primary" />
+              Quick Vote
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
 
       {isMobile && (
         <QuickVoteOverlay

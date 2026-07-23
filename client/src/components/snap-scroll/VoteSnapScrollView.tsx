@@ -347,6 +347,12 @@ export function VoteSnapScrollView({
   const columnScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const columnScrollRootRefs = useRef<Record<string, { current: HTMLDivElement | null }>>({});
   const [columnVisibleIndices, setColumnVisibleIndices] = useState<Record<string, number>>({});
+  /** Minimal variant: the live column DOM node, tracked in STATE (not the
+   * columnScrollRefs map — the open-init effect wipes that map after the
+   * settle-guard effect has already read it, leaving the guard detached for
+   * the whole session). State re-fires the guard effect whenever the real
+   * node mounts/remounts. */
+  const [minimalColumnEl, setMinimalColumnEl] = useState<HTMLDivElement | null>(null);
   const [dismissCounter, setDismissCounter] = useState(0);
   /** True after open-init runs; prevents vote refetch from resetting scroll/category. */
   const openInitializedRef = useRef(false);
@@ -591,10 +597,11 @@ export function VoteSnapScrollView({
   // ── Settle guard (minimal): self-heal any stuck-halfway scroll state ───
   // If the column rests misaligned (interrupted momentum, dvh shift, WebKit
   // snap failure), snap instantly to the nearest page once scrolling idles.
+  // Keyed on the STATE-tracked column node so it attaches whenever the node
+  // actually mounts (see minimalColumnEl declaration).
   useEffect(() => {
-    if (!isMinimal || !open) return;
-    const el = columnScrollRefs.current[activeCategory];
-    if (!el) return;
+    if (!isMinimal || !open || !minimalColumnEl) return;
+    const el = minimalColumnEl;
 
     let touchActive = false;
     let settleTimer: number | null = null;
@@ -628,18 +635,36 @@ export function VoteSnapScrollView({
       onScroll();
     };
 
+    // Height re-anchor: when the container resizes (iOS toolbar collapse,
+    // keyboard dismissal settling after a login return), every snap target
+    // moves. Keep the same card index anchored: compute the index against
+    // the PREVIOUS height, then re-derive scrollTop from the new height.
+    let lastHeight = el.clientHeight;
+    const resizeObserver = new ResizeObserver(() => {
+      const h = el.clientHeight;
+      if (h === 0 || h === lastHeight) return;
+      const prevHeight = lastHeight;
+      lastHeight = h;
+      if (touchActive || programmaticScrollActiveRef.current) return;
+      const idx = prevHeight > 0 ? Math.round(el.scrollTop / prevHeight) : 0;
+      const maxTop = Math.max(0, el.scrollHeight - h);
+      el.scrollTop = Math.max(0, Math.min(idx * h, maxTop));
+    });
+    resizeObserver.observe(el);
+
     el.addEventListener("scroll", onScroll, { passive: true });
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       clearTimer();
+      resizeObserver.disconnect();
       el.removeEventListener("scroll", onScroll);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [isMinimal, open, activeCategory]);
+  }, [isMinimal, open, minimalColumnEl]);
 
   // ── Visible-index change notification ─────────────────────────────────
   useEffect(() => {
@@ -675,9 +700,34 @@ export function VoteSnapScrollView({
       return true;
     };
 
+    // Verification pass: the jump above measures clientHeight while the
+    // viewport may still be settling (iOS address bar / keyboard right after
+    // a login return). Re-anchor against the settled height on the next
+    // frame and again shortly after — belt-and-braces for the window before
+    // the settle guard's ResizeObserver takes over.
+    let verifyRaf = 0;
+    let verifyTimer = 0;
+    const verifyAnchor = () => {
+      if (idx <= 0 || programmaticScrollActiveRef.current) return;
+      const el = columnScrollRefs.current[cat];
+      if (!el) return;
+      const h = el.clientHeight;
+      if (h === 0) return;
+      const target = Math.min(idx * h, Math.max(0, el.scrollHeight - h));
+      if (Math.abs(el.scrollTop - target) > 4) {
+        el.scrollTo({ top: target, behavior: "auto" });
+      }
+    };
+
     if (!scrollToInitial()) {
       requestAnimationFrame(scrollToInitial);
     }
+    verifyRaf = requestAnimationFrame(verifyAnchor);
+    verifyTimer = window.setTimeout(verifyAnchor, 300);
+    return () => {
+      cancelAnimationFrame(verifyRaf);
+      window.clearTimeout(verifyTimer);
+    };
   }, [open, initialItemId, initialCategoryAll, initialCategoryIdx, categories, categoryItems, warmImagesInColumn]);
 
   // ── Comment swipe native listener ─────────────────────────────────────
@@ -1203,6 +1253,7 @@ export function VoteSnapScrollView({
                           ref={(el) => {
                             columnScrollRefs.current[cat] = el;
                             getColumnScrollRoot(cat).current = el;
+                            if (isMinimal) setMinimalColumnEl(el);
                             if (el) {
                               restoreScrollPosition(cat, el);
                               requestAnimationFrame(() => warmImagesInColumn(el));
