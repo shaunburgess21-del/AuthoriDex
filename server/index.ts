@@ -646,6 +646,13 @@ app.use("/api/", (req, res, next) => {
   if (req.path.startsWith("/admin/")) {
     return next();
   }
+  // Funnel telemetry has its own funnelEventLimiter (120/min per IP). Each
+  // vote fires 1-2 telemetry POSTs alongside the vote POST — counting them
+  // against the shared write bucket let fast Quick Vote sessions 429 the
+  // vote endpoint itself. Telemetry must never starve real writes.
+  if (req.path.startsWith("/funnel/")) {
+    return next();
+  }
   const method = req.method.toUpperCase();
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
     return readLimiter(req, res, next);

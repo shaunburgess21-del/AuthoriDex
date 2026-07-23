@@ -32,6 +32,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
+import { useAuth } from "@/contexts/AuthContext";
 import { hapticSuccess } from "@/lib/haptic";
 import { logFunnelEvent, trackVoteCast } from "@/lib/funnelTelemetry";
 
@@ -42,6 +43,10 @@ interface StarterMixItem {
 }
 
 const AUTO_ADVANCE_HOLD_MS = 1000;
+/** Tap-time XP burst amount (same value as VotePage's optimistic feedback).
+ * Fired immediately for signed-in users on NEW votes so the reward doesn't
+ * wait on the server round-trip; the server-driven burst is suppressed. */
+const OPTIMISTIC_VOTE_XP = 20;
 const EMPTY_RACE_MAP = new Map<string, string>();
 const NOOP = () => {};
 
@@ -58,6 +63,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const { trigger: triggerXpBurst } = useXpBurst();
+  const { user } = useAuth();
   const budget = useAnonBudget();
 
   // ── Data: mix references + hydration lists (shared with Vote hub) ──────
@@ -239,9 +245,13 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       const attempt = voteMatchup(matchupId, option, {
         // No success toast in the overlay: the top-center toaster would sit
         // over the header X for 4s. Card voted-state + auto-advance is the
-        // feedback; haptic gives click-time confirmation.
-        onProceed: () => {
+        // feedback; haptic + tap-time XP burst give click-time confirmation.
+        onProceed: (previousVote) => {
           hapticSuccess();
+          if (user && !previousVote) {
+            triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");
+            return { optimisticFeedbackShown: true };
+          }
         },
       });
       if (attempt.ok === false && attempt.reason === "redirected_to_signup") {
@@ -249,7 +259,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         logFunnelEvent("signup_from_overlay", "quick_vote", { surfaceType: "matchup_poll" });
       }
     },
-    [voteMatchup],
+    [voteMatchup, user, triggerXpBurst],
   );
 
   const handleMatchupRemoveVote = useCallback(
@@ -261,7 +271,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
 
   // ── Sentiment: lean mirror of VotePage's discourse mutation ────────────
   const sentimentVoteMutation = useMutation({
-    mutationFn: async ({ slug, choice }: { slug: string; choice: string; topicId: string; hadPreviousVote: boolean }) => {
+    mutationFn: async ({ slug, choice }: { slug: string; choice: string; topicId: string; hadPreviousVote: boolean; suppressXpBurst: boolean }) => {
       const res = await apiRequest("POST", `/api/polls/${encodeURIComponent(slug)}/vote`, { choice });
       return res.json();
     },
@@ -274,7 +284,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       }
       queryClient.invalidateQueries({ queryKey: ["/api/trending-polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
-      if (data?.xp?.xpAwarded) {
+      if (data?.xp?.xpAwarded && !variables.suppressXpBurst) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
@@ -306,15 +316,20 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         throw new VoteGateRedirectError();
       }
       hapticSuccess();
+      const optimisticBurst = !!user && !topic.userVote;
+      if (optimisticBurst) {
+        triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");
+      }
       await sentimentVoteMutation.mutateAsync({
         slug: topic.slug,
         choice,
         topicId: topic.id,
         hadPreviousVote: !!topic.userVote,
+        suppressXpBurst: optimisticBurst,
       });
       recordVote("sentiment");
     },
-    [budget, redirectToSignup, sentimentVoteMutation, recordVote],
+    [budget, redirectToSignup, sentimentVoteMutation, recordVote, user, triggerXpBurst],
   );
 
   // ── Opinion: shared mutation hook (true cache mirror) ──────────────────
@@ -333,10 +348,14 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           throw new VoteGateRedirectError();
         }
       }
-      await voteOnOpinionPoll(slug, optionId);
+      const optimisticBurst = !!user && !!poll && !poll.userVote;
+      if (optimisticBurst) {
+        triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");
+      }
+      await voteOnOpinionPoll(slug, optionId, { suppressXpBurst: optimisticBurst });
       recordVote("opinion");
     },
-    [opinionPolls, budget, redirectToSignup, voteOnOpinionPoll, recordVote],
+    [opinionPolls, budget, redirectToSignup, voteOnOpinionPoll, recordVote, user, triggerXpBurst],
   );
 
   const handleOpinionRemoveVote = useCallback(

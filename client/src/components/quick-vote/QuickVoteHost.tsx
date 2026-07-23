@@ -194,7 +194,31 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     openOverlay("reentry_pill");
   }, [openOverlay]);
 
-  const showReentry = reentryVisible && isMobile && !overlayOpen && !nudgeVisible;
+  // Re-entry pill shows only during active scrolling: any scroll/touchmove
+  // reveals it, then it dissolves ~1.2s after the movement stops. Starts
+  // hidden on load until the first scroll.
+  const [scrollActivity, setScrollActivity] = useState(false);
+  useEffect(() => {
+    if (!reentryVisible || !isMobile) return;
+    let idleTimer: number | null = null;
+    const onMove = () => {
+      setScrollActivity(true);
+      if (idleTimer != null) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => {
+        idleTimer = null;
+        setScrollActivity(false);
+      }, 1200);
+    };
+    window.addEventListener("scroll", onMove, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    return () => {
+      if (idleTimer != null) window.clearTimeout(idleTimer);
+      window.removeEventListener("scroll", onMove);
+      window.removeEventListener("touchmove", onMove);
+    };
+  }, [reentryVisible, isMobile]);
+
+  const showReentry = reentryVisible && isMobile && !overlayOpen && !nudgeVisible && scrollActivity;
 
   return (
     <>
@@ -266,7 +290,8 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
+              // Snappy reveal on scroll; slow dissolve once scrolling stops.
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.45, ease: "easeOut" } }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               onClick={openFromReentry}
               className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
