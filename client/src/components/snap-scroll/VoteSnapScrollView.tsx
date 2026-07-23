@@ -605,26 +605,50 @@ export function VoteSnapScrollView({
 
     let touchActive = false;
     let settleTimer: number | null = null;
+    let lastScrollTs = 0;
+    /** scrollTop sampled when the settle timer last fired; NaN = no sample. */
+    let restSample = Number.NaN;
     const clearTimer = () => {
       if (settleTimer != null) {
         window.clearTimeout(settleTimer);
         settleTimer = null;
       }
+      restSample = Number.NaN;
+    };
+    const armTimer = () => {
+      settleTimer = window.setTimeout(settle, 160);
     };
     const settle = () => {
       settleTimer = null;
-      if (touchActive || programmaticScrollActiveRef.current) return;
+      if (touchActive || programmaticScrollActiveRef.current) {
+        restSample = Number.NaN;
+        return;
+      }
+      // Rest detection: iOS pauses scroll events mid-snap-animation, so
+      // event-quiet !== at-rest. Correcting during the momentum→snap handoff
+      // yanks the scroller back to the current card and kills the gesture.
+      // Only act once two consecutive samples (~160ms apart) match — a
+      // native snap animation never RESTS misaligned, so a stable-but-off
+      // position is genuinely stranded.
+      const top = el.scrollTop;
+      if (Number.isNaN(restSample) || restSample !== top) {
+        restSample = top;
+        armTimer();
+        return;
+      }
+      restSample = Number.NaN;
       const h = el.clientHeight;
       if (h === 0) return;
       const maxTop = Math.max(0, el.scrollHeight - h);
-      const nearest = Math.max(0, Math.min(Math.round(el.scrollTop / h) * h, maxTop));
-      if (Math.abs(el.scrollTop - nearest) > 4) {
+      const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
+      if (Math.abs(top - nearest) > 4) {
         el.scrollTop = nearest;
       }
     };
     const onScroll = () => {
+      lastScrollTs = performance.now();
       clearTimer();
-      settleTimer = window.setTimeout(settle, 160);
+      armTimer();
     };
     const onTouchStart = () => {
       touchActive = true;
@@ -632,13 +656,16 @@ export function VoteSnapScrollView({
     };
     const onTouchEnd = () => {
       touchActive = false;
-      onScroll();
+      clearTimer();
+      armTimer();
     };
 
     // Height re-anchor: when the container resizes (iOS toolbar collapse,
     // keyboard dismissal settling after a login return), every snap target
     // moves. Keep the same card index anchored: compute the index against
     // the PREVIOUS height, then re-derive scrollTop from the new height.
+    // Only applied while the scroller is idle — if it's mid-animation when
+    // the resize lands, skip and let the rest-based settle pass align it.
     let lastHeight = el.clientHeight;
     const resizeObserver = new ResizeObserver(() => {
       const h = el.clientHeight;
@@ -646,6 +673,7 @@ export function VoteSnapScrollView({
       const prevHeight = lastHeight;
       lastHeight = h;
       if (touchActive || programmaticScrollActiveRef.current) return;
+      if (performance.now() - lastScrollTs < 150) return;
       const idx = prevHeight > 0 ? Math.round(el.scrollTop / prevHeight) : 0;
       const maxTop = Math.max(0, el.scrollHeight - h);
       el.scrollTop = Math.max(0, Math.min(idx * h, maxTop));
@@ -704,7 +732,9 @@ export function VoteSnapScrollView({
     // viewport may still be settling (iOS address bar / keyboard right after
     // a login return). Re-anchor against the settled height on the next
     // frame and again shortly after — belt-and-braces for the window before
-    // the settle guard's ResizeObserver takes over.
+    // the settle guard's ResizeObserver takes over. Only corrects while the
+    // scroller still rounds to the restored index, so it fixes height drift
+    // on the same card without fighting a user who already swiped away.
     let verifyRaf = 0;
     let verifyTimer = 0;
     const verifyAnchor = () => {
@@ -713,6 +743,7 @@ export function VoteSnapScrollView({
       if (!el) return;
       const h = el.clientHeight;
       if (h === 0) return;
+      if (Math.round(el.scrollTop / h) !== idx) return;
       const target = Math.min(idx * h, Math.max(0, el.scrollHeight - h));
       if (Math.abs(el.scrollTop - target) > 4) {
         el.scrollTo({ top: target, behavior: "auto" });

@@ -200,10 +200,16 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     <>
       {/* Entry pill nudge — bottom, above BottomNav (h-16, z-50). The outer
           div owns fixed positioning + the visual-viewport translate (kept off
-          the motion element so it can't fight Framer's own y transform). */}
+          the motion element so it can't fight Framer's own y transform).
+          The nav's height grows by env(safe-area-inset-bottom) when the
+          browser toolbar hides (its top edge rises), so the pill's bottom
+          offset must ride the same inset to keep a constant 16px gap. */}
       <div
         className="fixed inset-x-0 bottom-20 md:bottom-6 z-[55] pointer-events-none"
         style={{
+          ...(isMobile
+            ? { bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" }
+            : {}),
           transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
           willChange: "transform",
         }}
@@ -218,7 +224,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
               className="flex justify-center px-4 pointer-events-none"
             >
               <div
-                className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/15 bg-white/10 pl-4 pr-1.5 py-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
+                className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/15 bg-black/30 pl-4 pr-1.5 py-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl"
                 data-testid="quick-vote-nudge-pill"
               >
                 <span className="text-sm text-slate-200">New here?</span>
@@ -245,10 +251,12 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
       </div>
 
       {/* Session re-entry pill after overlay close (mobile). Same fixed
-          wrapper pattern as the nudge pill so it tracks the nav. */}
+          wrapper pattern as the nudge pill so it tracks the nav — including
+          the safe-area inset the nav's height grows by. */}
       <div
-        className="fixed bottom-20 right-4 z-[55] pointer-events-none"
+        className="fixed right-4 z-[55] pointer-events-none"
         style={{
+          bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
           transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
           willChange: "transform",
         }}
@@ -261,7 +269,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               onClick={openFromReentry}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
               data-testid="quick-vote-reentry-pill"
             >
               <Zap className="h-4 w-4 text-primary" />
