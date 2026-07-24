@@ -15507,7 +15507,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/matchups", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const matchupList = await db.select().from(matchups).orderBy(matchups.displayOrder, desc(matchups.createdAt));
-      res.json(matchupList);
+      const relatedMap = await getRelatedPeopleForCards(
+        "matchup",
+        matchupList.map((m) => m.id),
+      );
+      res.json(
+        matchupList.map((m) => ({
+          ...m,
+          relatedPeople: relatedMap[m.id] || [],
+          relatedPersonIds: (relatedMap[m.id] || []).map((rp) => rp.id),
+        })),
+      );
     } catch (error: any) {
       console.error("Error fetching matchups:", error.message);
       res.status(500).json({ error: "Failed to fetch matchups" });
@@ -16271,7 +16281,17 @@ Target length: about 90-150 words.`;
         .select()
         .from(trendingPolls)
         .orderBy(asc(trendingPolls.displayOrder), desc(trendingPolls.createdAt));
-      res.json(pollList);
+      const relatedMap = await getRelatedPeopleForCards(
+        "sentiment_poll",
+        pollList.map((p) => p.id),
+      );
+      res.json(
+        pollList.map((p) => ({
+          ...p,
+          relatedPeople: relatedMap[p.id] || [],
+          relatedPersonIds: (relatedMap[p.id] || []).map((rp) => rp.id),
+        })),
+      );
     } catch (error: any) {
       console.error("Error fetching trending polls:", error.message);
       res.status(500).json({ error: "Failed to fetch trending polls" });
@@ -17709,6 +17729,10 @@ Target length: about 90-150 words.`;
         .select()
         .from(opinionPolls)
         .orderBy(asc(opinionPolls.displayOrder), desc(opinionPolls.createdAt));
+      const relatedMap = await getRelatedPeopleForCards(
+        "opinion_poll",
+        polls.map((p) => p.id),
+      );
       const result = await Promise.all(polls.map(async (poll) => {
         const options = await db
           .select({
@@ -17729,8 +17753,15 @@ Target length: about 90-150 words.`;
           .where(eq(opinionPollVotes.pollId, poll.id));
 
         const totalSeedVotes = options.reduce((sum, o) => sum + (o.seedCount || 0), 0);
+        const relatedPeople = relatedMap[poll.id] || [];
 
-        return { ...poll, options, totalVotes: Number(realVoteCount?.cnt || 0) + totalSeedVotes };
+        return {
+          ...poll,
+          options,
+          totalVotes: Number(realVoteCount?.cnt || 0) + totalSeedVotes,
+          relatedPeople,
+          relatedPersonIds: relatedPeople.map((rp) => rp.id),
+        };
       }));
       res.json(result);
     } catch (error: any) {
