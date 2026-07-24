@@ -11,6 +11,7 @@ import {
   entityKey,
   type VoicesEntity,
 } from "./entities";
+import type { ParentVoteLabel } from "../commentVoteLabels";
 
 export type VoicesFeedMode = "for-you" | "latest" | "top";
 export type VoicesFeedSource = "comment" | "insight";
@@ -25,6 +26,8 @@ export interface VoicesFeedItem {
     | "open_market"
     | "community_insight"
     | "voices_post";
+  /** Raw comments.parent_id — card/poll/market/person id ("" for timeline). */
+  parentId: string;
   body: string;
   author: {
     userId: string;
@@ -40,6 +43,8 @@ export interface VoicesFeedItem {
   badges: { topTake: boolean; rising: boolean };
   score: number;
   userVote?: "up" | null;
+  /** Author's own vote on the parent card (null for timeline posts). */
+  parentVoteLabel?: ParentVoteLabel;
 }
 
 export interface RankOptions {
@@ -76,6 +81,7 @@ interface Candidate {
   id: string;
   source: VoicesFeedSource;
   parentType: VoicesFeedItem["parentType"];
+  parentId: string;
   entityRefKey: string;
   body: string;
   author: VoicesFeedItem["author"];
@@ -149,6 +155,7 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
       id: r.id,
       source: isTopLevelProfilePost ? "insight" : "comment",
       parentType: r.parentType as VoicesFeedItem["parentType"],
+      parentId: r.parentId,
       entityRefKey: `${entity.refType}:${entity.refId}`,
       body: r.body,
       author: {
@@ -253,6 +260,7 @@ function toFeedItem(c: Candidate, score: number, topTake: boolean, rising: boole
     id: c.id,
     source: c.source,
     parentType: c.parentType,
+    parentId: c.parentId,
     body: c.body,
     author: c.author,
     upvotes: c.upvotes,

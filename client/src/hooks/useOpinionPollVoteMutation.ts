@@ -142,6 +142,8 @@ export function useOpinionPollVoteMutation() {
         });
         queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", serverPoll.slug] });
       }
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
       if (data?.xp?.xpAwarded && (action.kind !== "vote" || !action.suppressXpBurst)) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

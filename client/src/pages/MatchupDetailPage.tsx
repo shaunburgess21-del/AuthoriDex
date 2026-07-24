@@ -186,6 +186,8 @@ export default function MatchupDetailPage() {
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
+      // Voices feed shows the author's matchup vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
   });
 
@@ -238,6 +240,7 @@ export default function MatchupDetailPage() {
           neutralPercent: data.neutralPercent ?? m.neutralPercent,
         });
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
   });
 

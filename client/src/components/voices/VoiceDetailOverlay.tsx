@@ -87,7 +87,7 @@ function InsightOverlay({ item, onClose }: { item: VoicesFeedItem; onClose: () =
     createdAt: item.createdAt,
     upvotes: item.upvotes,
     downvotes: item.downvotes,
-    parentVoteLabel: null,
+    parentVoteLabel: item.parentVoteLabel ?? null,
   };
 
   // After the community_insights → comments merge, profile posts are comments

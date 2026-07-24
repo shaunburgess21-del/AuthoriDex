@@ -209,6 +209,8 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
       }
       queryClient.invalidateQueries({ queryKey: MATCHUPS_LIST_KEY });
       queryClient.invalidateQueries({ queryKey: MATCHUP_USER_VOTES_KEY });
+      // Voices feed shows the author's matchup vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
       if (data?.xp?.xpAwarded && !variables.optimisticFeedbackShown) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -243,6 +245,7 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: MATCHUPS_LIST_KEY });
       queryClient.invalidateQueries({ queryKey: MATCHUP_USER_VOTES_KEY });
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
     onError: (error, variables, context) => {
       rollback(context);

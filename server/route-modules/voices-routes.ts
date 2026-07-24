@@ -33,6 +33,10 @@ import {
 import { sanitizeMentions, notifyMentionedUsers } from "../services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { applyTextModeration } from "../services/moderation";
+import {
+  getVoteLabelsForItems,
+  type CommentParentType,
+} from "../services/commentVoteLabels";
 
 const VOICES_POST_MAX_LENGTH = 5000;
 const DELETED_USER = "[deleted user]";
@@ -181,6 +185,24 @@ async function enrichUserVotes(items: VoicesFeedItem[], userId: string | null): 
 
   for (const item of items) {
     item.userVote = voted.has(item.id) ? "up" : null;
+  }
+}
+
+/** Annotate a page of feed items with each author's own vote on the parent
+ *  card (the "voted" pill). Runs post-cache so a fresh page always reflects
+ *  the author's current vote. Timeline posts resolve to null. */
+async function enrichParentVoteLabels(items: VoicesFeedItem[]): Promise<void> {
+  if (items.length === 0) return;
+  const labels = await getVoteLabelsForItems(
+    items.map((item) => ({
+      id: item.id,
+      userId: item.author.userId,
+      parentType: item.parentType as CommentParentType,
+      parentId: item.parentId,
+    })),
+  );
+  for (const item of items) {
+    item.parentVoteLabel = labels.get(item.id) ?? null;
   }
 }
 
@@ -372,10 +394,19 @@ async function buildCommentFeedItem(
     row.parentType === "community_insight" && (row.parentCommentId ?? null) === null;
   const isHidden =
     Boolean(row.deletedAt) || row.moderationStatus === "hidden";
+  const labels = isHidden
+    ? null
+    : await getVoteLabelsForItems([{
+        id: row.id,
+        userId: row.userId,
+        parentType: row.parentType as CommentParentType,
+        parentId: row.parentId,
+      }]);
   return {
     id: row.id,
     source: isTopLevelProfilePost ? "insight" : "comment",
     parentType: row.parentType as VoicesFeedItem["parentType"],
+    parentId: row.parentId,
     body: isHidden ? "" : row.body,
     author: {
       userId: row.userId,
@@ -391,6 +422,7 @@ async function buildCommentFeedItem(
     badges: { topTake: false, rising: false },
     score: 0,
     userVote: null,
+    parentVoteLabel: labels?.get(row.id) ?? null,
   };
 }
 
@@ -421,6 +453,7 @@ export function registerVoicesRoutes(app: Express): void {
       const ranked = await getRankedList(opts);
       const page = ranked.slice(offset, offset + limit).map((item) => ({ ...item }));
       await enrichUserVotes(page, req.userId ?? null);
+      await enrichParentVoteLabels(page);
 
       const nextOffset = offset + limit;
       const nextCursor = nextOffset < ranked.length ? encodeCursor({ sig, off: nextOffset }) : null;
@@ -536,12 +569,23 @@ export function registerVoicesRoutes(app: Express): void {
           });
         }
 
+        const labelMap =
+          modStatus === "hidden"
+            ? null
+            : await getVoteLabelsForItems([{
+                id: newComment.id,
+                userId,
+                parentType: "community_insight",
+                parentId: person.id,
+              }]);
+
         return res.status(201).json({
           item: entity
             ? ({
                 id: newComment.id,
                 source: "insight",
                 parentType: "community_insight",
+                parentId: person.id,
                 body: publicBody,
                 author: {
                   userId,
@@ -557,6 +601,7 @@ export function registerVoicesRoutes(app: Express): void {
                 badges: { topTake: false, rising: false },
                 score: 0,
                 userVote: null,
+                parentVoteLabel: labelMap?.get(newComment.id) ?? null,
               } satisfies VoicesFeedItem)
             : null,
         });

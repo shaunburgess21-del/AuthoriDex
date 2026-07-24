@@ -284,6 +284,8 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       }
       queryClient.invalidateQueries({ queryKey: ["/api/trending-polls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/gamification/stats"] });
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
       if (data?.xp?.xpAwarded && !variables.suppressXpBurst) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

@@ -161,6 +161,8 @@ export default function OpinionPollDetailPage() {
         );
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
     onError: (error, optionId, ctx) => {
       if (ctx?.previousDetail !== undefined) {
@@ -216,6 +218,7 @@ export default function OpinionPollDetailPage() {
         );
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion-polls", slug] });
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
     onError: (error, _vars, ctx) => {
       if (ctx?.previousDetail !== undefined) {

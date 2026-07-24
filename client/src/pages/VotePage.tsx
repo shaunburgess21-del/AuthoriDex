@@ -2314,6 +2314,8 @@ export default function VotePage() {
       trackVoteCast("trending_poll");
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ['/api/voices/feed'] });
       if (data?.xp?.xpAwarded && !variables.optimisticFeedbackShown) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

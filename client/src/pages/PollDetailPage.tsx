@@ -212,6 +212,8 @@ export default function PollDetailPage() {
           current ? { ...current, ...data.poll } : data.poll,
         );
       }
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

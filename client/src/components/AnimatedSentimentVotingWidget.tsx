@@ -338,6 +338,8 @@ export function AnimatedSentimentVotingWidget({
       // Refresh the home leaderboard so per-row userApprovalRating mirrors
       // the just-submitted vote alongside the localStorage event.
       await queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      // Voices feed shows the author's approval rating as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
     },
     onError: (error: any, variables, context) => {
       if (context?.submitId === latestSubmitIdRef.current) {

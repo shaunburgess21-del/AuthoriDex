@@ -1068,6 +1068,8 @@ export default function PersonDetailPage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
+      // Voices feed shows the author's matchup vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ['/api/voices/feed'] });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -1114,6 +1116,7 @@ export default function PersonDetailPage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/matchups'] });
       queryClient.invalidateQueries({ queryKey: ['/api/matchups/user-votes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/voices/feed'] });
     },
     onError: (error: any, variables) => {
       setLocalMatchupVotes((prev) => {
@@ -1186,6 +1189,8 @@ export default function PersonDetailPage() {
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
+      // Voices feed shows the author's poll vote as a pill — keep it fresh.
+      queryClient.invalidateQueries({ queryKey: ['/api/voices/feed'] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

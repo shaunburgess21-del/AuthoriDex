@@ -101,6 +101,8 @@ export interface VoicesFeedItem {
   id: string;
   source: VoicesFeedSource;
   parentType: VoicesParentType;
+  /** Raw parent id (card/poll/market/person id; timeline sentinel for voices_post). */
+  parentId: string;
   body: string;
   author: VoicesAuthor;
   upvotes: number;
@@ -111,6 +113,8 @@ export interface VoicesFeedItem {
   badges: { topTake: boolean; rising: boolean };
   score: number;
   userVote?: "up" | null;
+  /** Author's own vote on the parent card (null for timeline posts). */
+  parentVoteLabel?: ParentVoteLabel | null;
 }
 
 export interface VoicesFeedResponse {

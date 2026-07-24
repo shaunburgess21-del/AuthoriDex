@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { VoteLabel } from "@/components/VoteLabel";
 import { CommentActionDrawer } from "@/components/comments/CommentActionDrawer";
 import { CommentComposer } from "@/components/comments/CommentComposer";
 import { CommentList } from "@/components/comments/CommentList";
@@ -215,6 +216,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                     {postDeleted ? "[deleted user]" : item.author.username || "Anonymous"}
                   </span>
                   <span className="text-sm text-muted-foreground">{formatTimeAgo(item.createdAt)}</span>
+                  {!postDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
                 </div>
                 {isOwner && !postDeleted && (
                   <button

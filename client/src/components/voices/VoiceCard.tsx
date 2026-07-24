@@ -4,6 +4,7 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { MentionText } from "@/components/comments/MentionText";
+import { VoteLabel } from "@/components/VoteLabel";
 import { cn } from "@/lib/utils";
 import type { VoicesFeedItem } from "./types";
 import { VoiceEntityPreview } from "./VoiceEntityPreview";
@@ -53,6 +54,7 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
             <span className="text-xs text-muted-foreground">
               {formatTimeAgo(item.createdAt)}
             </span>
+            {!isDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
             {item.badges.topTake && (
               <Badge
                 variant="outline"
