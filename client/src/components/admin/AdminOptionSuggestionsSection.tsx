@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UploadImageInput } from "@/components/ui/upload-image-input";
 import { RecencySortSelect } from "@/components/admin/RecencySortSelect";
 import { sortByRecency, type RecencySort } from "@/lib/recencySort";
 import {
@@ -251,12 +252,14 @@ export function AdminOptionSuggestionsSection() {
               />
             </div>
             <div>
-              <Label>Image URL (optional)</Label>
-              <Input
+              <Label>Image (optional)</Label>
+              <UploadImageInput
                 value={approveImageUrl}
-                onChange={(e) => setApproveImageUrl(e.target.value)}
-                placeholder="https://..."
-                data-testid="input-approve-image"
+                onChange={setApproveImageUrl}
+                moduleName="opinion-poll-options"
+                slugOrId={approveTarget?.id || "suggestion"}
+                placeholder="Upload or paste image URL"
+                buttonTestId="input-approve-image"
               />
             </div>
           </div>
