@@ -58,6 +58,10 @@ import {
   computeLockCloseAt,
   computeResyncedTimes,
   shouldApplyResync,
+  deriveResolutionBackstop,
+  deriveTradingCloseAt,
+  DEFAULT_RESOLUTION_BACKSTOP_DAYS,
+  DEFAULT_TRADING_EXTENSION_DAYS,
 } from "./market-time-sync-utils";
 import {
   fetchPolymarketEventResolutions,
@@ -136,14 +140,19 @@ function scoutEnabled(): boolean {
   return envFlag(process.env.MARKET_SCOUT_ENABLED);
 }
 
-/** Auto-lock trading (freeze closeAt) when an outcome becomes public. Default OFF. */
-function autoLockOnResolutionEnabled(): boolean {
-  return envFlag(process.env.AUTO_LOCK_ON_RESOLUTION_ENABLED);
-}
-
 /** Auto-apply endAt/closeAt when Polymarket reschedules a source event. Default OFF. */
 function sourceTimeResyncEnabled(): boolean {
   return envFlag(process.env.SOURCE_TIME_RESYNC_ENABLED);
+}
+
+function resolutionBackstopDays(): number {
+  const raw = Number(process.env.WORLD_MARKET_RESOLUTION_BACKSTOP_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_RESOLUTION_BACKSTOP_DAYS;
+}
+
+function tradingExtensionDays(): number {
+  const raw = Number(process.env.WORLD_MARKET_TRADING_EXTENSION_DAYS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TRADING_EXTENSION_DAYS;
 }
 
 function dailyBudgetUsd(): number {
@@ -874,20 +883,57 @@ async function insertScoutedDraft(
     nextCmsOrder: number;
   },
 ): Promise<{ marketId: string; slug: string } | null> {
-  const endAt = new Date(candidate.endDate);
-  if (isNaN(endAt.getTime()) || endAt <= new Date()) {
+  const nominalEndAt = new Date(candidate.endDate);
+  if (isNaN(nominalEndAt.getTime()) || nominalEndAt <= new Date()) {
     log(`[MarketScout] Skipping "${selection.title}" — invalid/past end date`);
     return null;
   }
 
-  // Betting cutoff: default to endAt − AMM pre-resolve cooldown, but for
-  // scheduled events (sports) the source exposes a kickoff time (gameStartTime)
-  // well before the padded endDate — the result is public knowledge by then.
-  // Close betting at the earlier of the two. Ignore a kickoff that is invalid
-  // or already in the past at import time.
-  const defaultCutoff = getMarketBettingCutoff(endAt, "amm", "community");
-  let closeAt = defaultCutoff;
-  if (candidate.gameStartTime) {
+  // Resolution backstop + trading window. Polymarket often sets endDate to
+  // the *event start* (album release) while data lands later (HDD, box
+  // office). We keep endAt as that backstop for the resolver gate, and
+  // extend closeAt through the measurement window for data-lags markets.
+  const rulesText = candidate.description?.slice(0, 8000) ?? null;
+  const contextText = [
+    selection.title,
+    selection.teaser,
+    selection.summary,
+    Array.isArray(selection.resolutionCriteria)
+      ? selection.resolutionCriteria.join("; ")
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const backstop = deriveResolutionBackstop({
+    endDate: nominalEndAt,
+    rulesText,
+    contextText,
+    bufferDays: resolutionBackstopDays(),
+  });
+  // Resolver uses endAt as the "past this, consider resolving" trigger.
+  // For data-lags markets, push endAt out to the backstop so the 5-min
+  // resolver doesn't queue them on release day. Instant/sports keep the
+  // nominal endDate (upstreamResolvedAt usually fires first).
+  const endAt =
+    backstop && backstop.isDataLags ? backstop.backstopAt : nominalEndAt;
+
+  const cooldownMs = getAmmCooldownMs();
+  const derivedClose =
+    backstop != null
+      ? deriveTradingCloseAt({
+          endDate: nominalEndAt,
+          backstopAt: backstop.backstopAt,
+          isDataLags: backstop.isDataLags,
+          cooldownMs,
+          extensionDays: tradingExtensionDays(),
+          gameStartTime: candidate.gameStartTime,
+        })
+      : null;
+  // Fallback to legacy cutoff on the *nominal* end date (never the pushed
+  // backstop) so a derivation miss can't leave trading open for weeks.
+  const defaultCutoff = getMarketBettingCutoff(nominalEndAt, "amm", "community");
+  let closeAt = derivedClose ?? defaultCutoff;
+  if (!derivedClose && candidate.gameStartTime) {
     const kickoff = new Date(candidate.gameStartTime);
     if (
       !isNaN(kickoff.getTime()) &&
@@ -1041,6 +1087,8 @@ async function insertScoutedDraft(
       // we "own" and can detect admin manual edits (currentEndAt ≠ synced).
       // Normalize to ISO so comparisons with the watcher's Gamma snapshot
       // (also ISO) don't depend on Gamma's mixed timestamp formats.
+      // Keep the *nominal* Polymarket endDate here (not our pushed-out
+      // backstop endAt) so resync still detects real source schedule moves.
       syncedEndDate: new Date(Date.parse(candidate.endDate)).toISOString(),
       syncedGameStartTime: candidate.gameStartTime,
       // Verbatim upstream rules prose (tie-breakers, "Other" clauses, etc.).
@@ -1068,6 +1116,11 @@ async function insertScoutedDraft(
     drawEligible,
     ...(drawEligible ? {} : { singleWinnerKnockout: true }),
   };
+  if (backstop) {
+    metadata.resolutionBackstopAt = backstop.backstopAt.toISOString();
+    metadata.nominalSourceEndAt = nominalEndAt.toISOString();
+    if (backstop.isDataLags) metadata.dataLagsMarket = true;
+  }
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
     // Cap length — this is user-facing "What to watch" as well as scout input.
@@ -1537,7 +1590,6 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     );
 
   const resyncEnabled = sourceTimeResyncEnabled();
-  const autoLockEnabled = autoLockOnResolutionEnabled();
   const cooldownMs = getAmmCooldownMs();
 
   for (const row of rows) {
@@ -1559,16 +1611,34 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     // ---- Time re-sync (flag-gated) ----------------------------------------
     // When Polymarket reschedules, update our endAt/closeAt using the same
     // formula as scout import. Skip if already auto-locked or admin-edited.
+    //
+    // Ownership check uses nominalSourceEndAt (the Polymarket endDate we last
+    // synced) — NOT row.endAt — because data-lags markets push endAt out to
+    // the resolution backstop, which would otherwise look like a manual edit
+    // and permanently disable resync.
     const alreadyLocked = !!readAutoLockedAt(row.metadata);
+    const metaObj =
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as Record<string, unknown>)
+        : {};
+    const nominalOwned =
+      typeof metaObj.nominalSourceEndAt === "string"
+        ? new Date(metaObj.nominalSourceEndAt)
+        : source.syncedEndDate
+          ? new Date(source.syncedEndDate)
+          : row.endAt
+            ? new Date(row.endAt)
+            : null;
     if (
       resyncEnabled &&
       !alreadyLocked &&
       row.status === "OPEN" &&
       sourceEndDate &&
-      row.endAt
+      nominalOwned &&
+      !isNaN(nominalOwned.getTime())
     ) {
       const decision = shouldApplyResync({
-        currentEndAt: new Date(row.endAt),
+        currentEndAt: nominalOwned,
         syncedEndDate: source.syncedEndDate ?? null,
         sourceEndDate,
         syncedGameStartTime: source.syncedGameStartTime ?? source.gameStartTime ?? null,
@@ -1604,11 +1674,41 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
           );
         }
       } else if (decision.apply) {
-        const times = computeResyncedTimes({
-          sourceEndDate,
-          sourceGameStartTime,
-          cooldownMs,
+        // Re-derive with the same backstop / data-lags formula as import so
+        // a Polymarket reschedule doesn't wipe an extended trading window.
+        const rulesText =
+          typeof source.resolutionRulesText === "string"
+            ? source.resolutionRulesText
+            : null;
+        const derived = deriveResolutionBackstop({
+          endDate: sourceEndDate,
+          rulesText,
+          contextText: row.title,
+          bufferDays: resolutionBackstopDays(),
         });
+        const nextEndAt =
+          derived && derived.isDataLags
+            ? derived.backstopAt
+            : new Date(sourceEndDate);
+        const nextCloseAt =
+          derived != null
+            ? deriveTradingCloseAt({
+                endDate: sourceEndDate,
+                backstopAt: derived.backstopAt,
+                isDataLags: derived.isDataLags,
+                cooldownMs,
+                extensionDays: tradingExtensionDays(),
+                gameStartTime: sourceGameStartTime,
+              })
+            : computeResyncedTimes({
+                sourceEndDate,
+                sourceGameStartTime,
+                cooldownMs,
+              })?.closeAt ?? null;
+        const times =
+          nextCloseAt && !isNaN(nextEndAt.getTime())
+            ? { endAt: nextEndAt, closeAt: nextCloseAt }
+            : null;
         if (times) {
           const prevEnd = row.endAt;
           const prevClose = row.closeAt;
@@ -1618,6 +1718,14 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
           const closeChanged =
             !prevClose ||
             Math.abs(times.closeAt.getTime() - new Date(prevClose).getTime()) > 60_000;
+
+          const backstopMeta = derived
+            ? {
+                resolutionBackstopAt: derived.backstopAt.toISOString(),
+                nominalSourceEndAt: new Date(sourceEndDate).toISOString(),
+                ...(derived.isDataLags ? { dataLagsMarket: true } : {}),
+              }
+            : { nominalSourceEndAt: new Date(sourceEndDate).toISOString() };
 
           // Kickoff can move without affecting our cutoff (e.g. still after
           // endAt − cooldown). Refresh the synced baseline so we don't
@@ -1633,6 +1741,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
                   syncedGameStartTime: sourceGameStartTime,
                   lastTimeSyncAt: new Date().toISOString(),
                 },
+                ...backstopMeta,
               };
               await db
                 .update(predictionMarkets)
@@ -1661,6 +1770,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
                 syncedGameStartTime: sourceGameStartTime,
                 lastTimeSyncAt: syncedAt,
               },
+              ...backstopMeta,
             };
             await db
               .update(predictionMarkets)
@@ -1826,9 +1936,12 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       }
     }
 
-    /** Freeze closeAt when the outcome is public knowledge (flag-gated). */
+    /** Freeze closeAt when the outcome is public knowledge.
+     *  Always-on for scouted community markets (exploit guard for extended
+     *  data-lags trading windows). The AUTO_LOCK_ON_RESOLUTION_ENABLED flag
+     *  is ignored here — once upstream has resolved, trading must stop. */
     const tryAutoLock = async (reason: string): Promise<boolean> => {
-      if (!autoLockEnabled || row.status !== "OPEN") return false;
+      if (row.status !== "OPEN") return false;
       if (readAutoLockedAt(row.metadata)) return false;
       const lockAt = computeLockCloseAt(row.closeAt);
       if (!lockAt) return false;
@@ -2418,8 +2531,10 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       // JSONB merge (same pattern as resolution-scout) so we never
       // clobber concurrent metadata writers. `source` is deep-merged
       // manually since `||` is a shallow merge at the top level.
+      // Always freeze closeAt for scouted community markets once upstream
+      // resolves (exploit guard for extended data-lags trading windows).
       const lockAt =
-        autoLockEnabled && row.status === "OPEN" && !readAutoLockedAt(row.metadata)
+        row.status === "OPEN" && !readAutoLockedAt(row.metadata)
           ? computeLockCloseAt(row.closeAt)
           : null;
       const payload: Record<string, unknown> = {

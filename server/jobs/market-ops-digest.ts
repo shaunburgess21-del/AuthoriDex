@@ -338,22 +338,30 @@ export async function sendMarketNeedsResolutionAlert(market: {
   title: string;
   slug: string;
   endAt: Date | string | null;
+  pendingReason?: string;
 }): Promise<void> {
   try {
     const endAtMs = market.endAt ? new Date(market.endAt).getTime() : null;
-    const detail =
-      endAtMs !== null
+    const isBackstop =
+      market.pendingReason === "backstop_reached_unresolved";
+    const detail = isBackstop
+      ? "Source hasn't resolved by the backstop — make a manual call or void"
+      : endAtMs !== null
         ? `Closed ${new Date(endAtMs).toISOString().slice(0, 16).replace("T", " ")} UTC — pick the winning outcome`
         : "Pick the winning outcome";
 
     await sendOpsAlert({
       kind: "market_needs_resolution",
-      severity: "warning",
-      title: "World Market needs resolution",
-      summary: `"${market.title}" has closed and is awaiting a manual winner.`,
+      severity: isBackstop ? "critical" : "warning",
+      title: isBackstop
+        ? "World Market backstop reached — still unresolved"
+        : "World Market needs resolution",
+      summary: isBackstop
+        ? `"${market.title}" hit its resolution backstop and the upstream source still hasn't settled. Make a manual call or void.`
+        : `"${market.title}" has closed and is awaiting a manual winner.`,
       sections: [
         {
-          heading: "Awaiting resolution",
+          heading: isBackstop ? "Backstop reached" : "Awaiting resolution",
           emoji: "\u{1F534}",
           items: [
             {

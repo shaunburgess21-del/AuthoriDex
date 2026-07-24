@@ -28,6 +28,11 @@ import {
   resolveNativeClosePair,
   type MedianCloseSnapshot,
 } from "./market-snapshot-resolution";
+import {
+  decideCommunityResolution,
+  readResolutionBackstopAt,
+  readSourceForResolutionGate,
+} from "./market-time-sync-utils";
 
 /**
  * Official hourly closes to median for native settlement (blunts weekend
@@ -1224,11 +1229,65 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
                 break;
               }
             }
+
+            // Scouted Polymarket markets: only queue for manual resolution
+            // when upstream has actually resolved OR the resolution backstop
+            // is reached. Otherwise defer endAt to the backstop and keep
+            // OPEN — the source watch will pre-fill the winner when ready.
+            const decision = decideCommunityResolution({
+              source: readSourceForResolutionGate(market.metadata),
+              endAt: ensureDate(market.endAt) ?? now,
+              backstopAt: readResolutionBackstopAt(market.metadata),
+              now,
+            });
+
+            if (decision.action === "defer") {
+              try {
+                const currentEndMs = ensureDate(market.endAt)?.getTime() ?? 0;
+                const alreadyDeferred =
+                  Math.abs(currentEndMs - decision.deferEndAt.getTime()) <= 60_000;
+                if (alreadyDeferred) {
+                  skipped++;
+                  log(
+                    `[MarketResolver] Community "${market.title}" already deferred to backstop — skipping ` +
+                      `(market=${market.id.slice(0, 8)})`,
+                  );
+                  break;
+                }
+                await db.update(predictionMarkets).set({
+                  endAt: decision.deferEndAt,
+                  // Keep closeAt as-is (may already be extended for data-lags).
+                  // Stamp a marker so ops can see why endAt moved.
+                  metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify({
+                    resolutionDeferredAt: now.toISOString(),
+                    resolutionDeferReason: decision.reason,
+                  })}::jsonb`,
+                  updatedAt: now,
+                }).where(eq(predictionMarkets.id, market.id));
+                skipped++;
+                log(
+                  `[MarketResolver] Deferred community "${market.title}" — awaiting upstream ` +
+                    `(endAt → ${decision.deferEndAt.toISOString()}, market=${market.id.slice(0, 8)})`,
+                );
+              } catch (deferErr: any) {
+                log(
+                  `[MarketResolver] Defer failed for ${market.id}: ${deferErr?.message ?? deferErr}`,
+                );
+                errors++;
+              }
+              break;
+            }
+
+            const pendingReason =
+              decision.reason === "backstop_reached_unresolved"
+                ? "backstop_reached_unresolved"
+                : "community_requires_manual_resolution";
+
             await db.update(predictionMarkets).set({
               status: "CLOSED_PENDING",
               resolutionNotes: JSON.stringify({
                 type: "community",
-                pendingReason: "community_requires_manual_resolution",
+                pendingReason,
               }),
               updatedAt: new Date(),
             }).where(eq(predictionMarkets.id, market.id));
@@ -1244,6 +1303,7 @@ async function resolveExpiredMarketsOnce(): Promise<void> {
                   title: market.title,
                   slug: market.slug,
                   endAt: market.endAt,
+                  pendingReason,
                 });
               } catch (alertErr: any) {
                 log(`[MarketResolver] needs-resolution alert failed for ${market.id}: ${alertErr?.message ?? alertErr}`);

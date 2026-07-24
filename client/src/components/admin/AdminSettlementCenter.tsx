@@ -381,7 +381,9 @@ export function AdminSettlementCenter() {
                         >
                           {isAiResolveNow
                             ? "AI: resolve now"
-                            : market.pendingReason.replace(/_/g, " ")}
+                            : market.pendingReason === "backstop_reached_unresolved"
+                              ? "Backstop — still unresolved"
+                              : market.pendingReason.replace(/_/g, " ")}
                         </Badge>
                       )}
                       {market.warnings.map(w => <WarningBadge key={w} warning={w} />)}

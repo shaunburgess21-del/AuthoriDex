@@ -47,6 +47,7 @@ import {
   XCircle,
   Sparkles,
   ExternalLink,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
@@ -208,6 +209,9 @@ function ScoutPanel({
   onUseProposed,
   suggestVoid,
   onSuggestVoid,
+  notReadyToResolve,
+  onExtendDeadline,
+  extendingDeadline,
 }: {
   scout: ScoutAssessmentView;
   /** Label of the proposed winner entry when it maps to a real outcome. */
@@ -217,6 +221,10 @@ function ScoutPanel({
   /** Upstream closed with no mappable winner — scout leans void. */
   suggestVoid?: boolean;
   onSuggestVoid?: () => void;
+  /** Scout says event is still ongoing — don't resolve yet. */
+  notReadyToResolve?: boolean;
+  onExtendDeadline?: () => void;
+  extendingDeadline?: boolean;
 }) {
   const conf =
     typeof scout.confidence === "number"
@@ -237,15 +245,24 @@ function ScoutPanel({
   return (
     <div
       className={`rounded-md border p-3 space-y-2 ${
-        urgent
+        notReadyToResolve
           ? "border-amber-500/40 bg-amber-500/10"
-          : "border-sky-500/30 bg-sky-500/10"
+          : urgent
+            ? "border-amber-500/40 bg-amber-500/10"
+            : "border-sky-500/30 bg-sky-500/10"
       }`}
     >
       <div className="flex items-center gap-2 flex-wrap">
         <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400" />
         <span className="text-sm font-medium">AI Scout assessment</span>
-        {actionLabel && (
+        {notReadyToResolve ? (
+          <Badge
+            variant="outline"
+            className="text-xs border-0 bg-amber-500/20 text-amber-700 dark:text-amber-300"
+          >
+            Not ready to resolve
+          </Badge>
+        ) : actionLabel ? (
           <Badge
             variant="outline"
             className={`text-xs border-0 ${
@@ -256,8 +273,15 @@ function ScoutPanel({
           >
             {actionLabel}
           </Badge>
-        )}
+        ) : null}
       </div>
+
+      {notReadyToResolve ? (
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          Underlying event still ongoing — scout has no confirmed winner yet.
+          Prefer extending the deadline over resolving.
+        </p>
+      ) : null}
 
       <div className="text-sm">
         <span className="text-muted-foreground">Suggests: </span>
@@ -292,7 +316,26 @@ function ScoutPanel({
         {assessedAt ? ` Assessed ${assessedAt}.` : ""}
       </p>
 
-      {proposedEntryLabel && onUseProposed ? (
+      {notReadyToResolve && onExtendDeadline ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full h-10 border-amber-500/40 text-amber-800 dark:text-amber-200"
+          onClick={onExtendDeadline}
+          disabled={extendingDeadline}
+          data-testid="button-extend-deadline"
+        >
+          {extendingDeadline ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Clock className="h-4 w-4 mr-2" />
+          )}
+          {extendingDeadline ? "Extending…" : "Extend deadline (+45 days) & reopen"}
+        </Button>
+      ) : null}
+
+      {proposedEntryLabel && onUseProposed && !notReadyToResolve ? (
         <Button
           type="button"
           size="sm"
@@ -382,6 +425,16 @@ export function AmmResolutionDialog({
     !scout.proposedWinnerEntryId &&
     !singleWinnerKnockout;
 
+  // Scout says event is still ongoing — surface "not ready" + extend deadline.
+  const notReadyToResolve =
+    market.marketType === "community" &&
+    !!scout &&
+    !scoutSuggestsVoid &&
+    !scoutProposedEntry &&
+    (scout.stage === "watch" || scout.stage === "likely") &&
+    scout.recommendedAction !== "resolve_now" &&
+    scout.recommendedAction !== "resolve_soon";
+
   // Pre-select the scout's proposed winner when the dialog opens, so a
   // confident assessment becomes a one-click confirm. The operator can
   // still change the selection before resolving. When the scout leans
@@ -434,6 +487,50 @@ export function AmmResolutionDialog({
       queryClient.invalidateQueries({ queryKey: [...k] });
     }
   };
+
+  const extendDeadlineMutation = useMutation({
+    mutationFn: async () => {
+      const days = 45;
+      // Prefer existing backstop / endAt when still in the future, then add buffer.
+      const meta =
+        market.metadata && typeof market.metadata === "object"
+          ? (market.metadata as Record<string, unknown>)
+          : {};
+      const existingBackstop =
+        typeof meta.resolutionBackstopAt === "string"
+          ? Date.parse(meta.resolutionBackstopAt)
+          : NaN;
+      const baseMs = Math.max(
+        Date.now(),
+        Number.isFinite(existingBackstop) ? existingBackstop : 0,
+      );
+      const nextEnd = new Date(baseMs + days * 24 * 60 * 60 * 1000);
+      // Keep trading open for most of the extended window (close 1 day before end).
+      const nextClose = new Date(nextEnd.getTime() - 24 * 60 * 60 * 1000);
+      const res = await fetchWithAuth(`/api/admin/open-markets/${market.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          reopen: true,
+          endAt: nextEnd.toISOString(),
+          closeAt: nextClose.toISOString(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to extend" }));
+        throw new Error(err.message || err.error || "Failed to extend deadline");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast("Deadline extended", {
+        description: "Market reopened — trading resumes until the new cutoff.",
+      });
+      invalidateAfter();
+      onOpenChange(false);
+    },
+    onError: (err: Error) =>
+      toast.error("Extend failed", { description: err.message }),
+  });
 
   const settleMutation = useMutation({
     mutationFn: async () => {
@@ -574,6 +671,13 @@ export function AmmResolutionDialog({
                     }
                   : undefined
               }
+              notReadyToResolve={notReadyToResolve}
+              onExtendDeadline={
+                notReadyToResolve
+                  ? () => extendDeadlineMutation.mutate()
+                  : undefined
+              }
+              extendingDeadline={extendDeadlineMutation.isPending}
             />
           )}
 

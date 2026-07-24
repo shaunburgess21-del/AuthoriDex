@@ -18998,8 +18998,10 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Market not found" });
       }
 
-      if (existing.status !== "OPEN") {
-        return res.status(400).json({ error: "Can only update markets with OPEN status" });
+      if (existing.status !== "OPEN" && existing.status !== "CLOSED_PENDING") {
+        return res.status(400).json({
+          error: "Can only update markets with OPEN or CLOSED_PENDING status",
+        });
       }
 
       const {
@@ -19010,9 +19012,39 @@ Target length: about 90-150 words.`;
         openMarketType, personId, isLive, visibility, inactiveMessage, entries: entryList,
         relatedPersonIds, scoutWatch, secondaryCategories,
         visibleCountries,
+        /** Controlled reopen: CLOSED_PENDING → OPEN (extend deadline). */
+        reopen,
       } = req.body;
 
+      const wantsReopen =
+        existing.status === "CLOSED_PENDING" &&
+        (reopen === true || endAt !== undefined);
+
+      if (existing.status === "CLOSED_PENDING" && !wantsReopen) {
+        return res.status(400).json({
+          error:
+            "CLOSED_PENDING markets can only be updated via reopen (pass reopen:true and a future endAt)",
+        });
+      }
+
+      // Reopening a prematurely queued market (e.g. data-lags endDate was
+      // the event start). Requires a future endAt so the resolver doesn't
+      // immediately re-queue it.
+      if (wantsReopen) {
+        const nextEndAt = endAt !== undefined ? new Date(endAt) : existing.endAt;
+        if (!nextEndAt || isNaN(new Date(nextEndAt).getTime()) || new Date(nextEndAt).getTime() <= Date.now()) {
+          return res.status(400).json({
+            error: "Reopening a CLOSED_PENDING market requires a future endAt",
+          });
+        }
+      }
+
       const updates: Record<string, any> = { updatedAt: new Date() };
+      if (wantsReopen) {
+        updates.status = "OPEN";
+        updates.resolutionNotes = null;
+        updates.resolvedAt = null;
+      }
       if (title !== undefined) updates.title = title;
       if (teaser !== undefined) updates.teaser = teaser;
       if (summary !== undefined) updates.summary = summary;
@@ -19067,6 +19099,17 @@ Target length: about 90-150 words.`;
         updates.metadata = trimmed
           ? sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify({ scoutWatch: trimmed })}::jsonb`
           : sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) - 'scoutWatch'`;
+      }
+
+      // Keep the resolver gate in sync on reopen — stamp the new endAt as the
+      // backstop so a premature re-queue can't fire until that date. Applied
+      // after scoutWatch so both metadata merges compose.
+      if (wantsReopen && endAt !== undefined) {
+        const backstopIso = new Date(endAt).toISOString();
+        const backstopPayload = { resolutionBackstopAt: backstopIso };
+        updates.metadata = updates.metadata
+          ? sql`(${updates.metadata}) || ${JSON.stringify(backstopPayload)}::jsonb`
+          : sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify(backstopPayload)}::jsonb`;
       }
 
       const [updated] = await db
