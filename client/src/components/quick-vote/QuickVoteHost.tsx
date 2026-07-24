@@ -194,20 +194,26 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     openOverlay("reentry_pill");
   }, [openOverlay]);
 
-  // Re-entry pill shows only during active scrolling: any scroll/touchmove
-  // reveals it, then it dissolves ~1.2s after the movement stops. Starts
-  // hidden on load until the first scroll.
-  const [scrollActivity, setScrollActivity] = useState(false);
+  // Recede-on-idle: the pill stays mounted and tappable at all times, but
+  // collapses to a dim icon-only circle when the user isn't scrolling —
+  // hiding it entirely proved wrong because the moment a user stops
+  // scrolling is exactly when they reach for it. On first reveal it holds
+  // the full labelled state for ~3s so the user registers what it is.
+  const [pillProminent, setPillProminent] = useState(true);
   useEffect(() => {
-    if (!reentryVisible || !isMobile) return;
-    let idleTimer: number | null = null;
+    if (!reentryVisible || !isMobile || overlayOpen) return;
+    setPillProminent(true);
+    let idleTimer: number | null = window.setTimeout(() => {
+      idleTimer = null;
+      setPillProminent(false);
+    }, 3000);
     const onMove = () => {
-      setScrollActivity(true);
+      setPillProminent(true);
       if (idleTimer != null) window.clearTimeout(idleTimer);
       idleTimer = window.setTimeout(() => {
         idleTimer = null;
-        setScrollActivity(false);
-      }, 1200);
+        setPillProminent(false);
+      }, 1500);
     };
     window.addEventListener("scroll", onMove, { passive: true });
     window.addEventListener("touchmove", onMove, { passive: true });
@@ -216,9 +222,9 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
       window.removeEventListener("scroll", onMove);
       window.removeEventListener("touchmove", onMove);
     };
-  }, [reentryVisible, isMobile]);
+  }, [reentryVisible, isMobile, overlayOpen]);
 
-  const showReentry = reentryVisible && isMobile && !overlayOpen && !nudgeVisible && scrollActivity;
+  const showReentry = reentryVisible && isMobile && !overlayOpen && !nudgeVisible;
 
   return (
     <>
@@ -289,16 +295,29 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
           {showReentry && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              // Snappy reveal on scroll; slow dissolve once scrolling stops.
-              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.45, ease: "easeOut" } }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              // Full pill while scrolling (snappy expand); soft slow recede to
+              // a dim icon circle on idle. Never unmounts — always tappable.
+              animate={{ opacity: pillProminent ? 1 : 0.5, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
               onClick={openFromReentry}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3.5 py-2 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+              className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+              aria-label="Quick Vote"
               data-testid="quick-vote-reentry-pill"
             >
-              <Zap className="h-4 w-4 text-primary" />
-              Quick Vote
+              <Zap className="h-4 w-4 shrink-0 text-primary" />
+              <motion.span
+                initial={false}
+                animate={
+                  pillProminent
+                    ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
+                    : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
+                }
+                transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                Quick Vote
+              </motion.span>
             </motion.button>
           )}
         </AnimatePresence>
