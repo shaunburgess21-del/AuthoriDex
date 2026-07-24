@@ -1485,6 +1485,8 @@ interface WatchableSource {
   syncedEndDate?: string | null;
   syncedGameStartTime?: string | null;
   lastTimeSyncAt?: string;
+  /** Verbatim upstream rules prose — used to re-derive resolution backstops. */
+  resolutionRulesText?: string | null;
   /** Set by the watcher after the upstream resolution is recorded, so
    *  future runs skip the API call. */
   upstreamResolvedAt?: string;
