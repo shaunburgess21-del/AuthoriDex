@@ -1,4 +1,7 @@
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import {
+  getCategoryBucketId,
+  getMarketCategoryLabel,
+} from "@shared/constants";
 
 export type SectionCategoryOption = {
   value: string;
@@ -15,6 +18,18 @@ type BuildOptions = {
   includeTrending?: boolean;
   selectedCategory?: string | null;
   preserveSelectedIfMissing?: boolean;
+  /**
+   * Resolve a stored category string to a canonical id for dedup.
+   * Defaults to `getCategoryBucketId` so renamed spellings (e.g. "Media" /
+   * "Media & Podcast" / `media-and-podcast`) collapse onto one chip.
+   * Pass `registry.resolveCanonicalId` to prefer the live registry id.
+   */
+  resolveId?: (raw: string | null | undefined) => string;
+  /**
+   * Display label for a resolved id. Defaults to `getMarketCategoryLabel`.
+   * Pass `registry.getDisplayLabel` to prefer the live registry label.
+   */
+  getLabel?: (id: string) => string;
 };
 
 const PINNED_LABELS: Record<string, string> = {
@@ -31,11 +46,13 @@ export function buildSectionCategoryOptions({
   includeTrending = true,
   selectedCategory,
   preserveSelectedIfMissing = false,
+  resolveId = (raw) => getCategoryBucketId(raw),
+  getLabel = (id) => getMarketCategoryLabel(id),
 }: BuildOptions): SectionCategoryOption[] {
   const ids = new Set<string>();
 
   const addId = (raw: string | null | undefined) => {
-    const normalized = normalizeMarketCategory(raw);
+    const normalized = resolveId(raw);
     if (!normalized || normalized === "all" || normalized === "favorites" || normalized === "trending") return;
     ids.add(normalized);
   };
@@ -44,10 +61,10 @@ export function buildSectionCategoryOptions({
   for (const raw of secondaryCategories ?? []) addId(raw);
 
   const dynamic = Array.from(ids)
-    .sort((a, b) => getMarketCategoryLabel(a).localeCompare(getMarketCategoryLabel(b)))
+    .sort((a, b) => getLabel(a).localeCompare(getLabel(b)))
     .map((id) => ({
       value: id,
-      label: getMarketCategoryLabel(id),
+      label: getLabel(id),
     }));
 
   const selected = selectedCategory?.toLowerCase();
@@ -59,7 +76,7 @@ export function buildSectionCategoryOptions({
     selected !== "trending" &&
     !dynamic.some((c) => c.value === selected)
   ) {
-    dynamic.unshift({ value: selected, label: getMarketCategoryLabel(selected) });
+    dynamic.unshift({ value: selected, label: getLabel(selected) });
   }
 
   const pinned: SectionCategoryOption[] = [];

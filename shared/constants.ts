@@ -231,7 +231,10 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
 
 /** Display labels for legacy person categories not in the canonical 12. */
 const PERSON_CATEGORY_LEGACY_LABELS: Record<string, string> = {
-  media: "Media",
+  // Registry id `media` was renamed to "Media & Podcast"; keep both slug forms
+  // pointing at the same display label so chip builders and canonicalizePersonCategory
+  // collapse the old "Media" spelling.
+  media: "Media & Podcast",
   streaming: "Streaming",
   "media-and-podcast": "Media & Podcast",
 };
@@ -320,11 +323,12 @@ export const MARKET_CATEGORY_OPTIONS = CANONICAL_CATEGORIES.map((c) => ({
 /**
  * True if `filter` matches the item's primary OR any of its secondary categories.
  *
- * Both sides are run through normalizeMarketCategory so it works regardless of
- * whether values are stored as Title Case labels (people) or kebab ids
- * (polls/markets). The UI-only "all"/"trending"/"favorites" filters are handled
- * by callers (favorites needs person ids), so this returns true for "all"/"trending"
- * and otherwise compares against the normalized category set.
+ * Both sides are run through getCategoryBucketId so renamed/aliased spellings
+ * (e.g. "Media" vs "Media & Podcast" / `media-and-podcast`) share one bucket.
+ * Values may be Title Case labels (people) or kebab ids (polls/markets).
+ * The UI-only "all"/"trending"/"favorites" filters are handled by callers
+ * (favorites needs person ids), so this returns true for "all"/"trending"
+ * and otherwise compares against the bucketed category set.
  */
 export function matchesCategoryFilter(
   primary: string | null | undefined,
@@ -332,9 +336,10 @@ export function matchesCategoryFilter(
   filter: string,
 ): boolean {
   if (filter === "all" || filter === "trending") return true;
-  if (normalizeMarketCategory(primary) === filter) return true;
+  const filterId = getCategoryBucketId(filter);
+  if (getCategoryBucketId(primary) === filterId) return true;
   if (!secondary || secondary.length === 0) return false;
-  return secondary.some((s) => normalizeMarketCategory(s) === filter);
+  return secondary.some((s) => getCategoryBucketId(s) === filterId);
 }
 
 /**

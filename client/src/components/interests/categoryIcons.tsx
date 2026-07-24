@@ -69,6 +69,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   // EXTRA_CATEGORY_STYLES in CategoryPill.tsx) or the slugified label.
   media: Mic,
   "media-podcast": Mic,
+  "media-and-podcast": Mic,
   streaming: Tv,
   science: Microscope,
 };

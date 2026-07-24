@@ -98,6 +98,10 @@ interface InteractiveCategoryPillProps {
   menuDisabled?: boolean;
   /** When set, adds a Share row that mirrors the card's detail-page share link. */
   share?: CardShareConfig;
+  /** Override display label (e.g. from category registry: "Media & Podcast"). */
+  displayLabel?: string;
+  /** Registry-resolved canonical id for colour (e.g. `media` for renamed labels). */
+  canonicalId?: string;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
   "data-testid"?: string;
@@ -242,6 +246,8 @@ export function InteractiveCategoryPill({
   onBrowseFullScreen,
   menuDisabled = false,
   share,
+  displayLabel,
+  canonicalId,
   size = "default",
   className = "",
   "data-testid": testId,
@@ -250,14 +256,16 @@ export function InteractiveCategoryPill({
   const pendingBrowseFullScreenRef = useRef(false);
   const isMobile = useIsMobile();
   const { user } = useAuth();
-  const style = getCategoryStyle(category);
+  const style = getCategoryStyle(category, canonicalId);
   const sizeClass = SIZE_CLASSES[size];
-  const label = getMarketCategoryLabel(category);
+  const label = displayLabel ?? getMarketCategoryLabel(category);
 
   if (menuDisabled) {
     return (
       <CategoryPill
         category={category}
+        canonicalIdOverride={canonicalId}
+        displayLabel={displayLabel}
         size={size}
         className={className}
         data-testid={testId}

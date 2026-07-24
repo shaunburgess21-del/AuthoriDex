@@ -86,8 +86,9 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
-import { getMarketCategoryLabel, normalizeMarketCategory, matchesCategoryFilter, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { getMarketCategoryLabel, type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions, involvesAnyFavorite } from "@/lib/sectionCategoryFilters";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
@@ -421,6 +422,8 @@ function InductionCandidateCard({
   onBrowseFullScreen,
   onVisitProfile,
   categoryMenuDisabled = false,
+  categoryDisplayLabel,
+  categoryCanonicalId,
 }: { 
   candidate: InductionCandidate;
   rank: number;
@@ -435,6 +438,8 @@ function InductionCandidateCard({
   /** When set, profile links stash Vote hub scroll before navigating. */
   onVisitProfile?: () => void;
   categoryMenuDisabled?: boolean;
+  categoryDisplayLabel?: string;
+  categoryCanonicalId?: string;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -484,6 +489,8 @@ function InductionCandidateCard({
       <div className="absolute top-3 right-3">
         <InteractiveCategoryPill
           category={candidate.category}
+          displayLabel={categoryDisplayLabel}
+          canonicalId={categoryCanonicalId}
           onFilter={() => onFilterCategory(candidate.category)}
           leaderboardCategories={leaderboardCategories}
           detailHref="/vote/induction"
@@ -943,7 +950,8 @@ function CarouselSection({
 
 
 function FilterChip({ 
-  category, 
+  category,
+  label,
   isActive, 
   onClick, 
   testIdPrefix,
@@ -951,7 +959,9 @@ function FilterChip({
   onAuthRequired,
   isCustomTopic = false,
 }: { 
-  category: string; 
+  category: string;
+  /** Registry / builder display label for non-pinned categories. */
+  label?: string;
   isActive: boolean; 
   onClick: () => void; 
   testIdPrefix: string;
@@ -981,7 +991,7 @@ function FilterChip({
     }
     if (category === "favorites") return "Favorites";
     if (category === "trending") return "Trending";
-    return getMarketCategoryLabel(category);
+    return label ?? getMarketCategoryLabel(category);
   };
 
   const getTestId = () => {
@@ -1042,6 +1052,24 @@ export default function VotePage() {
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
+  const registry = useCategoryRegistry();
+
+  /** Match primary/secondary categories via registry ids so renamed labels
+   *  (e.g. "Media" vs "Media & Podcast") collapse to one filter bucket. */
+  const matchesRegistryCategoryFilter = useCallback(
+    (
+      primary: string | null | undefined,
+      secondary: readonly string[] | null | undefined,
+      filter: string,
+    ): boolean => {
+      if (filter === "all" || filter === "trending") return true;
+      const filterId = registry.resolveCanonicalId(filter);
+      if (registry.resolveCanonicalId(primary) === filterId) return true;
+      if (!secondary || secondary.length === 0) return false;
+      return secondary.some((s) => registry.resolveCanonicalId(s) === filterId);
+    },
+    [registry],
+  );
 
   const [inductionSuggestOpen, setInductionSuggestOpen] = useState(false);
   const [matchupSuggestOpen, setMatchupSuggestOpen] = useState(false);
@@ -1235,8 +1263,8 @@ export default function VotePage() {
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
-    setGlobalCategoryFilter(normalizeMarketCategory(category) as FilterCategory);
-  }, []);
+    setGlobalCategoryFilter(registry.resolveCanonicalId(category) as FilterCategory);
+  }, [registry]);
   
   const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
   const prevValuePerceptionOverlayOpenRef = useRef(valuePerceptionOverlayOpen);
@@ -1309,7 +1337,7 @@ export default function VotePage() {
       inductionCategoryFilter === "all" ||
       inductionCategoryFilter === "trending" ||
       (inductionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
-      matchesCategoryFilter(c.category, (c as any).secondaryCategories, inductionCategoryFilter);
+      matchesRegistryCategoryFilter(c.category, (c as any).secondaryCategories, inductionCategoryFilter);
     const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => b.votes - a.votes);
@@ -1337,7 +1365,7 @@ export default function VotePage() {
       topicsCategoryFilter === "trending" ||
       (topicsCategoryFilter === "favorites" &&
         involvesAnyFavorite(favoriteIds, [t.personId, ...(t.relatedPersonIds || [])])) ||
-      matchesCategoryFilter(t.category, t.secondaryCategories, topicsCategoryFilter);
+      matchesRegistryCategoryFilter(t.category, t.secondaryCategories, topicsCategoryFilter);
     const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
                          (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -1352,7 +1380,7 @@ export default function VotePage() {
           ...(p.options || []).map((o: any) => o.personId),
           ...(p.relatedPersonIds || []),
         ])) ||
-      matchesCategoryFilter(p.category, p.secondaryCategories, opinionPollsCategoryFilter);
+      matchesRegistryCategoryFilter(p.category, p.secondaryCategories, opinionPollsCategoryFilter);
     const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
                          (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -1403,7 +1431,7 @@ export default function VotePage() {
       valuePerceptionCategoryFilter === "all" ||
       valuePerceptionCategoryFilter === "trending" ||
       (valuePerceptionCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
-      matchesCategoryFilter(c.category, (c as any).secondaryCategories, valuePerceptionCategoryFilter);
+      matchesRegistryCategoryFilter(c.category, (c as any).secondaryCategories, valuePerceptionCategoryFilter);
     const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => {
@@ -1570,7 +1598,7 @@ export default function VotePage() {
           f.personBId,
           ...(f.relatedPersonIds || []),
         ])) ||
-      matchesCategoryFilter(f.category, (f as any).secondaryCategories, matchupsCategoryFilter);
+      matchesRegistryCategoryFilter(f.category, (f as any).secondaryCategories, matchupsCategoryFilter);
     const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
                          (f.optionBText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase());
@@ -1838,11 +1866,11 @@ export default function VotePage() {
         curateCategoryFilter === "all" ||
         curateCategoryFilter === "trending" ||
         (curateCategoryFilter === "favorites" && favoriteIds.has(p.id)) ||
-        matchesCategoryFilter(p.category, p.secondaryCategories, curateCategoryFilter);
+        matchesRegistryCategoryFilter(p.category, p.secondaryCategories, curateCategoryFilter);
       const matchesSearch = !search || p.name.toLowerCase().includes(search);
       return matchesCategory && matchesSearch;
     });
-  }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery, favoriteIds]);
+  }, [curateTrendingCelebrities, curateCategoryFilter, curateSearchQuery, favoriteIds, matchesRegistryCategoryFilter]);
 
   const topicsCategoryOptions = useMemo(
     () =>
@@ -1852,8 +1880,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: topicsCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [dbPolls, topicsCategoryFilter],
+    [dbPolls, topicsCategoryFilter, registry],
   );
 
   const matchupsCategoryOptions = useMemo(
@@ -1864,8 +1894,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: matchupsCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [matchups, matchupsCategoryFilter],
+    [matchups, matchupsCategoryFilter, registry],
   );
 
   const opinionCategoryOptions = useMemo(
@@ -1876,8 +1908,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: opinionPollsCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [opinionPolls, opinionPollsCategoryFilter],
+    [opinionPolls, opinionPollsCategoryFilter, registry],
   );
 
   const valueCategoryOptions = useMemo(
@@ -1888,8 +1922,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: valuePerceptionCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [valueCelebrities, valuePerceptionCategoryFilter],
+    [valueCelebrities, valuePerceptionCategoryFilter, registry],
   );
 
   const inductionCategoryOptions = useMemo(
@@ -1900,8 +1936,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: inductionCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [enrichedCandidates, inductionCategoryFilter],
+    [enrichedCandidates, inductionCategoryFilter, registry],
   );
 
   const curateCategoryOptions = useMemo(
@@ -1912,8 +1950,10 @@ export default function VotePage() {
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: curateCategoryFilter,
+        resolveId: registry.resolveCanonicalId,
+        getLabel: registry.getDisplayLabel,
       }),
-    [curateTrendingCelebrities, curateCategoryFilter],
+    [curateTrendingCelebrities, curateCategoryFilter, registry],
   );
 
   useEffect(() => {
@@ -2762,6 +2802,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={topicsCategoryFilter === opt.value}
                   onClick={() => setTopicsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-topics"
@@ -2873,6 +2914,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={matchupsCategoryFilter === opt.value}
                   onClick={() => setMatchupsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-matchups"
@@ -2993,6 +3035,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={opinionPollsCategoryFilter === opt.value}
                   onClick={() => setOpinionPollsCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-opinion"
@@ -3102,6 +3145,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={valuePerceptionCategoryFilter === opt.value}
                   onClick={() => setValuePerceptionCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-value"
@@ -3207,6 +3251,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={inductionCategoryFilter === opt.value}
                   onClick={() => setInductionCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-induction"
@@ -3233,6 +3278,8 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    categoryDisplayLabel={registry.getDisplayLabel(candidate.category)}
+                    categoryCanonicalId={registry.resolveCanonicalId(candidate.category)}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
                     onVisitProfile={
                       candidate.personId
@@ -3321,6 +3368,7 @@ export default function VotePage() {
                 <FilterChip
                   key={opt.value}
                   category={opt.value}
+                  label={opt.label}
                   isActive={curateCategoryFilter === opt.value}
                   onClick={() => setCurateCategoryFilter(opt.value as FilterCategory)}
                   testIdPrefix="filter-curate"
@@ -3863,6 +3911,8 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
+                    categoryDisplayLabel={registry.getDisplayLabel(candidate.category)}
+                    categoryCanonicalId={registry.resolveCanonicalId(candidate.category)}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("induction", candidate.id, "browse-button") : undefined}
                     onVisitProfile={
                       candidate.personId
@@ -4259,6 +4309,8 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
+                  categoryDisplayLabel={registry.getDisplayLabel(candidate.category)}
+                  categoryCanonicalId={registry.resolveCanonicalId(candidate.category)}
                   categoryMenuDisabled
                   onVisitProfile={
                     candidate.personId

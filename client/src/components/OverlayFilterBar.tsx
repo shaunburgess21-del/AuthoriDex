@@ -80,7 +80,7 @@ export function OverlayFilterBar({
 
       {/* Desktop: pills + search */}
       <div className="hidden md:flex items-center gap-3">
-        <ScrollMaskedChipRow className="flex-1 min-w-0">
+        <ScrollMaskedChipRow className="flex-1 min-w-0" activeChipKey={value}>
           {categories.map((cat) => {
             const isFavorites = cat.value.toLowerCase() === "favorites";
             const IconComponent = getFilterCategoryIcon(cat.value);
@@ -90,6 +90,7 @@ export function OverlayFilterBar({
               <button
                 type="button"
                 key={cat.value}
+                data-scroll-chip={cat.value}
                 onClick={() => {
                   if (isFavorites && !user && onAuthRequired) {
                     onAuthRequired();
