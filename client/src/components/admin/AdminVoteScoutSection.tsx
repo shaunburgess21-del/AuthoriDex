@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { RecencySortSelect } from "@/components/admin/RecencySortSelect";
+import { sortByRecency, type RecencySort } from "@/lib/recencySort";
 import {
   Check,
   Copy,
@@ -178,6 +180,7 @@ async function copyText(label: string, text: string) {
 export function AdminVoteScoutSection() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<VoteScoutStatus | "all">("new");
+  const [sortOrder, setSortOrder] = useState<RecencySort>("default");
   const [pendingVerdict, setPendingVerdict] = useState<PendingVerdict | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   const [approveIdea, setApproveIdea] = useState<VoteScoutIdea | null>(null);
@@ -322,6 +325,7 @@ export function AdminVoteScoutSection() {
   const counts = data?.statusCounts ?? { new: 0, kept: 0, dismissed: 0, approved: 0 };
   const hitRate = data?.hitRate;
   const ideas = data?.ideas ?? [];
+  const sortedIdeas = sortByRecency(ideas, sortOrder, (idea) => idea.createdAt);
   const scanning = scanMutation.isPending;
 
   return (
@@ -416,19 +420,26 @@ export function AdminVoteScoutSection() {
             ) : null}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["new", "kept", "dismissed", "approved", "all"] as const).map((value) => (
-              <Button
-                key={value}
-                size="sm"
-                variant={statusFilter === value ? "default" : "outline"}
-                className="h-8 capitalize"
-                onClick={() => setStatusFilter(value)}
-                data-testid={`chip-vote-scout-filter-${value}`}
-              >
-                {value}
-              </Button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              {(["new", "kept", "dismissed", "approved", "all"] as const).map((value) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={statusFilter === value ? "default" : "outline"}
+                  className="h-8 capitalize"
+                  onClick={() => setStatusFilter(value)}
+                  data-testid={`chip-vote-scout-filter-${value}`}
+                >
+                  {value}
+                </Button>
+              ))}
+            </div>
+            <RecencySortSelect
+              value={sortOrder}
+              onValueChange={setSortOrder}
+              testId="select-idea-scout-sort"
+            />
           </div>
         </CardContent>
       </Card>
@@ -446,7 +457,7 @@ export function AdminVoteScoutSection() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {ideas.map((idea) => {
+          {sortedIdeas.map((idea) => {
             const title = ideaTitle(idea);
             const payload = idea.payload as Record<string, unknown>;
             const relatedNames = Array.isArray(payload.relatedNames)

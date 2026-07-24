@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RecencySortSelect } from "@/components/admin/RecencySortSelect";
+import { sortByRecency, type RecencySort } from "@/lib/recencySort";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +59,7 @@ function parseAdminError(err: unknown): string {
 
 export function AdminOptionSuggestionsSection() {
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [sortOrder, setSortOrder] = useState<RecencySort>("default");
   const [approveTarget, setApproveTarget] = useState<OptionSuggestionRow | null>(null);
   const [approveName, setApproveName] = useState("");
   const [approveImageUrl, setApproveImageUrl] = useState("");
@@ -115,6 +118,7 @@ export function AdminOptionSuggestionsSection() {
   };
 
   const rows = suggestions ?? [];
+  const sortedRows = sortByRecency(rows, sortOrder, (row) => row.createdAt);
 
   return (
     <>
@@ -128,17 +132,24 @@ export function AdminOptionSuggestionsSection() {
                 by community votes.
               </CardDescription>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px]" data-testid="select-suggestion-status-filter">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="all">All</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px]" data-testid="select-suggestion-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+              <RecencySortSelect
+                value={sortOrder}
+                onValueChange={setSortOrder}
+                testId="select-suggestion-sort"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -162,7 +173,7 @@ export function AdminOptionSuggestionsSection() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {sortedRows.map((row) => (
                     <tr key={row.id} className="border-b last:border-b-0 hover-elevate" data-testid={`row-suggestion-${row.id}`}>
                       <td className="p-3 font-medium">{row.name}</td>
                       <td className="p-3 text-muted-foreground max-w-[220px] truncate">{row.pollTitle || row.pollId}</td>

@@ -182,6 +182,8 @@ import { getAdminAccessBlock } from "@/pages/admin/AdminAccessGate";
 import { CountryFlag } from "@/components/ui/CountryFlag";
 import type { TrendingPoll } from "@shared/schema";
 import { normalizeMarketCategory, MARKET_CATEGORY_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { sortByRecency, type RecencySort } from "@/lib/recencySort";
+import { RecencySortSelect } from "@/components/admin/RecencySortSelect";
 import {
   EMPTY_CELEBRITY_FORM,
   DEFAULT_SEED_APPROVAL_COUNTS,
@@ -486,6 +488,7 @@ export default function AdminDashboard() {
   const [editingPoll, setEditingPoll] = useState<TrendingPoll | null>(null);
   const [pollFilter, setPollFilter] = useState<string>("all");
   const [pollCategoryFilter, setPollCategoryFilter] = useState<string>("all");
+  const [pollSortOrder, setPollSortOrder] = useState<RecencySort>("default");
   const [importingPollsCsv, setImportingPollsCsv] = useState(false);
   const pollCsvInputRef = useRef<HTMLInputElement>(null);
   const [pollForm, setPollForm] = useState({
@@ -545,6 +548,7 @@ export default function AdminDashboard() {
   const [pollSearchQuery, setPollSearchQuery] = useState("");
   const [matchupSearchQuery, setMatchupSearchQuery] = useState("");
   const [matchupVisFilter, setMatchupVisFilter] = useState("all");
+  const [matchupSortOrder, setMatchupSortOrder] = useState<RecencySort>("default");
   const [selectedNativeIds, setSelectedNativeIds] = useState<Set<string>>(new Set());
   const [h2hModalOpen, setH2hModalOpen] = useState(false);
   const [gainerModalOpen, setGainerModalOpen] = useState(false);
@@ -562,6 +566,7 @@ export default function AdminDashboard() {
   const [opinionPollFilter, setOpinionPollFilter] = useState<string>("all");
   const [opinionPollCategoryFilter, setOpinionPollCategoryFilter] = useState<string>("all");
   const [opinionPollSearchQuery, setOpinionPollSearchQuery] = useState("");
+  const [opinionPollSortOrder, setOpinionPollSortOrder] = useState<RecencySort>("default");
   const [opinionPollForm, setOpinionPollForm] = useState({
     title: "",
     slug: "",
@@ -2108,42 +2113,51 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  const filteredOpinionPolls = useMemo(() => (opinionPollsList || []).filter((poll: any) => {
-    if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
-    if (
-      opinionPollCategoryFilter !== "all" &&
-      normalizeMarketCategory(poll.category) !== opinionPollCategoryFilter
-    )
-      return false;
-    if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
-    return true;
-  }), [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery]);
+  const filteredOpinionPolls = useMemo(() => {
+    const filtered = (opinionPollsList || []).filter((poll: any) => {
+      if (opinionPollFilter !== "all" && poll.visibility !== opinionPollFilter) return false;
+      if (
+        opinionPollCategoryFilter !== "all" &&
+        normalizeMarketCategory(poll.category) !== opinionPollCategoryFilter
+      )
+        return false;
+      if (opinionPollSearchQuery && !poll.title?.toLowerCase().includes(opinionPollSearchQuery.toLowerCase())) return false;
+      return true;
+    });
+    return sortByRecency(filtered, opinionPollSortOrder, (poll: any) => poll.createdAt);
+  }, [opinionPollsList, opinionPollFilter, opinionPollCategoryFilter, opinionPollSearchQuery, opinionPollSortOrder]);
 
-  const filteredPolls = useMemo(() => trendingPollsList?.filter((poll) => {
-    if (pollFilter === "missing_image") {
-      return poll.status === "draft" && !poll.personId && !poll.imageUrl;
-    }
-    if (pollFilter !== "all" && poll.status !== pollFilter) return false;
-    if (pollCategoryFilter !== "all" && normalizeMarketCategory(poll.category) !== pollCategoryFilter)
-      return false;
-    if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
-    return true;
-  }) ?? [], [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery]);
+  const filteredPolls = useMemo(() => {
+    const filtered = trendingPollsList?.filter((poll) => {
+      if (pollFilter === "missing_image") {
+        return poll.status === "draft" && !poll.personId && !poll.imageUrl;
+      }
+      if (pollFilter !== "all" && poll.status !== pollFilter) return false;
+      if (pollCategoryFilter !== "all" && normalizeMarketCategory(poll.category) !== pollCategoryFilter)
+        return false;
+      if (pollSearchQuery && !poll.headline?.toLowerCase().includes(pollSearchQuery.toLowerCase()) && !poll.subjectText?.toLowerCase().includes(pollSearchQuery.toLowerCase())) return false;
+      return true;
+    }) ?? [];
+    return sortByRecency(filtered, pollSortOrder, (poll) => poll.createdAt);
+  }, [trendingPollsList, pollFilter, pollCategoryFilter, pollSearchQuery, pollSortOrder]);
 
-  const filteredMatchups = useMemo(() => (matchups || []).filter((matchup) => {
-    if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
-    if (matchupSearchQuery) {
-      const q = matchupSearchQuery.toLowerCase();
-      if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  }), [matchups, matchupVisFilter, matchupSearchQuery]);
+  const filteredMatchups = useMemo(() => {
+    const filtered = (matchups || []).filter((matchup) => {
+      if (matchupVisFilter !== "all" && matchup.visibility !== matchupVisFilter) return false;
+      if (matchupSearchQuery) {
+        const q = matchupSearchQuery.toLowerCase();
+        if (!matchup.title?.toLowerCase().includes(q) && !matchup.optionAText?.toLowerCase().includes(q) && !matchup.optionBText?.toLowerCase().includes(q) && !matchup.category?.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+    return sortByRecency(filtered, matchupSortOrder, (matchup: any) => matchup.createdAt);
+  }, [matchups, matchupVisFilter, matchupSearchQuery, matchupSortOrder]);
 
   const canReorderSentimentPolls =
-    pollFilter === "all" && pollCategoryFilter === "all" && !pollSearchQuery.trim();
+    pollFilter === "all" && pollCategoryFilter === "all" && !pollSearchQuery.trim() && pollSortOrder === "default";
   const canReorderOpinionPolls =
-    opinionPollFilter === "all" && opinionPollCategoryFilter === "all" && !opinionPollSearchQuery.trim();
-  const canReorderMatchups = matchupVisFilter === "all" && !matchupSearchQuery.trim();
+    opinionPollFilter === "all" && opinionPollCategoryFilter === "all" && !opinionPollSearchQuery.trim() && opinionPollSortOrder === "default";
+  const canReorderMatchups = matchupVisFilter === "all" && !matchupSearchQuery.trim() && matchupSortOrder === "default";
 
   const activeInductionNameKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -4006,6 +4020,12 @@ export default function AdminDashboard() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <RecencySortSelect
+                        value={pollSortOrder}
+                        onValueChange={setPollSortOrder}
+                        className="w-[140px]"
+                        testId="select-poll-sort"
+                      />
                       <Input
                         placeholder="Search..."
                         value={pollSearchQuery}
@@ -4164,7 +4184,7 @@ export default function AdminDashboard() {
                           disabled={!canReorderSentimentPolls}
                           disabledReason={
                             !canReorderSentimentPolls
-                              ? "Clear search and set status and category to \"All\" to drag rows into your preferred order."
+                              ? "Set sort to \"Default order\", clear search, and set status and category to \"All\" to drag rows into your preferred order."
                               : undefined
                           }
                           onReorder={async (orderedIds) => {
@@ -4353,6 +4373,12 @@ export default function AdminDashboard() {
                         className="w-[200px]"
                         data-testid="input-opinion-poll-search"
                       />
+                      <RecencySortSelect
+                        value={opinionPollSortOrder}
+                        onValueChange={setOpinionPollSortOrder}
+                        className="w-[140px]"
+                        testId="select-opinion-poll-sort"
+                      />
                       <div className="flex items-center border rounded-md overflow-hidden ml-auto">
                         <button
                           className={`p-1.5 transition-colors ${opinionViewMode === "cards" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
@@ -4473,7 +4499,7 @@ export default function AdminDashboard() {
                           disabled={!canReorderOpinionPolls}
                           disabledReason={
                             !canReorderOpinionPolls
-                              ? "Clear search and set status and category to \"All\" to drag rows into your preferred order."
+                              ? "Set sort to \"Default order\", clear search, and set status and category to \"All\" to drag rows into your preferred order."
                               : undefined
                           }
                           onReorder={async (orderedIds) => {
@@ -4619,6 +4645,12 @@ export default function AdminDashboard() {
                         className="w-[200px]"
                         data-testid="input-matchup-search"
                       />
+                      <RecencySortSelect
+                        value={matchupSortOrder}
+                        onValueChange={setMatchupSortOrder}
+                        className="w-[140px]"
+                        testId="select-matchup-sort"
+                      />
                       <span className="text-xs text-muted-foreground">{filteredMatchups.length} total</span>
                       <div className="flex items-center border rounded-md overflow-hidden ml-auto">
                         <button
@@ -4750,7 +4782,7 @@ export default function AdminDashboard() {
                           disabled={!canReorderMatchups}
                           disabledReason={
                             !canReorderMatchups
-                              ? "Clear search and set visibility to \"All\" to drag rows into your preferred order."
+                              ? "Set sort to \"Default order\", clear search, and set visibility to \"All\" to drag rows into your preferred order."
                               : undefined
                           }
                           onReorder={async (orderedIds) => {
