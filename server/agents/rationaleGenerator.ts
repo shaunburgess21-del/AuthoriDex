@@ -7,6 +7,7 @@ import OpenAI from "openai";
 import { getRecentMemory } from "./memoryManager";
 import type { AgentConfigData, MarketWithEntries, PredictionDecision } from "./types";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { recordLlmUsage } from "../config/ai-cost";
 
 // Lazy-init — see `sharpRanker.getOpenAIClient` for the rationale.
 // Importing this module from a key-less context (CI test workers etc.)
@@ -54,6 +55,12 @@ Write the rationale.`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+    });
+    recordLlmUsage({
+      feature: "agent_rationale",
+      model,
+      usage: response.usage,
+      detail: `agent=${agent.displayName} market=${market.id}`,
     });
 
     return response.choices[0]?.message?.content?.trim() || undefined;

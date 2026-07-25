@@ -9,6 +9,7 @@ import {
   consumeSerperDegradedProbe,
 } from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { recordLlmUsage } from "../config/ai-cost";
 import { isWithinWhyTrendingStaleGrace } from "./why-trending-stale";
 
 export {
@@ -476,6 +477,12 @@ Only return the JSON object.`;
       ],
       response_format: { type: "json_object" },
       ...getChatCompletionTokenLimit(whyTrendingModel, 200),
+    });
+    recordLlmUsage({
+      feature: "why_trending",
+      model: whyTrendingModel,
+      usage: response.usage,
+      detail: `person=${person.name}`,
     });
 
     const content = response.choices[0]?.message?.content;

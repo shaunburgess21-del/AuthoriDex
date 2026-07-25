@@ -12,6 +12,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { fetchNetWorthContext, fetchWebSearchContext, type NetWorthContext, type WebSearchContext } from "../providers/serper";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { recordLlmUsage } from "../config/ai-cost";
 import { classifyNetWorthVolatility } from "./net-worth-refresher";
 import {
   MONEY_RE,
@@ -383,6 +384,12 @@ async function generateValidatedProfile(
       response_format: { type: "json_object" },
       ...tokenLimit,
     });
+    recordLlmUsage({
+      feature: "profile_about",
+      model,
+      usage: response.usage,
+      detail: `person=${person.name} attempt=${attempt + 1}`,
+    });
 
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response from AI");
@@ -499,18 +506,33 @@ Output exactly this JSON shape:
 }`;
 }
 
+/**
+ * Rank cutoff for the missing-net-worth web_search trigger. Long-tail profiles
+ * without a Serper net-worth hit fall back to the Serper-only net-worth cron
+ * instead of burning a Responses+web_search call. Top-20 / high-risk /
+ * thin-sources / role-change triggers below are unchanged.
+ */
+const NETWORTH_WEBSEARCH_RANK_LIMIT = (() => {
+  const raw = Number(process.env.PROFILE_NETWORTH_WEBSEARCH_RANK_LIMIT);
+  return Number.isFinite(raw) && raw > 0 ? raw : 50;
+})();
+
 function shouldUseOpenAiWebSearch(person: TrendingPerson, context: ProfileContext): boolean {
   if (process.env.PROFILE_ABOUT_WEB_SEARCH === "off") return false;
   if (process.env.PROFILE_ABOUT_WEB_SEARCH === "always") return true;
   if ((person.rank ?? Number.MAX_SAFE_INTEGER) <= 20) return true;
   if (person.category && HIGH_RISK_CATEGORY_RE.test(person.category)) return true;
   if (!context.webContext || context.webContext.sources.length < 3) return true;
-  // Always augment when Serper alone didn't yield a person-attributed net-worth
-  // figure, regardless of category. This is what gives entertainers/athletes
-  // (Sydney Sweeney, etc.) a fair shot at a Celebrity Net Worth / Forbes-style
-  // ballpark instead of silently falling back to "Not available" because the
-  // Serper snippet was thin.
-  if (!context.extractedNetWorth) return true;
+  // Augment when Serper alone didn't yield a person-attributed net-worth
+  // figure, but only for reasonably-ranked profiles. Long-tail bios rely on
+  // the Serper-only net-worth cron (server/services/net-worth-refresher.ts)
+  // instead of an expensive Responses+web_search call.
+  if (
+    !context.extractedNetWorth
+    && (person.rank ?? Number.MAX_SAFE_INTEGER) <= NETWORTH_WEBSEARCH_RANK_LIMIT
+  ) {
+    return true;
+  }
   if (ROLE_CHANGE_RE.test(context.snippetsText)) return true;
   return false;
 }
@@ -540,6 +562,13 @@ ${context.snippetsText.slice(0, 4000)}
 If sources disagree, briefly note it. Cite source names or URLs in these notes only - they will not appear in the final bio.`,
     max_output_tokens: 700,
   } as any);
+  recordLlmUsage({
+    feature: "profile_about_websearch",
+    model,
+    usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+    webSearchCalls: 1,
+    detail: `person=${person.name}`,
+  });
 
   const text = extractResponseText(response).trim();
   if (!text) return null;

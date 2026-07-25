@@ -9,6 +9,7 @@ import { computeEarlyBirdMultiplier } from "./settlement-utils";
 // AMM resolver covers both manual admin settles and the cron path.
 import { resolveAmmMarket, type ResolveAmmMarketResult } from "../services/amm-resolver";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { recordLlmUsage } from "../config/ai-cost";
 import { gamificationService } from "../services/gamification";
 import { checkAndAwardPredictionWinBadges } from "../services/badges";
 import { notificationDayBucket } from "./notification-buckets";
@@ -295,6 +296,12 @@ Rules:
       ],
       ...getChatCompletionTokenLimit(model, 120),
       temperature: 0.4,
+    });
+    recordLlmUsage({
+      feature: "market_resolver",
+      model,
+      usage: response.usage,
+      detail: `market=${marketId}`,
     });
 
     const summary = response.choices[0]?.message?.content?.trim();

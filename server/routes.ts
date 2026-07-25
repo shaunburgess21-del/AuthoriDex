@@ -19,7 +19,7 @@ import {
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, moderationEvents, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, moderationEvents, llmDailySpend, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import {
   applyTextModeration,
   isAllowedAvatarsBucketUrl,
@@ -239,6 +239,7 @@ import { buildUnsubscribeUrl } from "./emails/unsubscribe";
 import * as React from "react";
 import { h2hModelProbability } from "@shared/h2hModel";
 import { getAiModel, getChatCompletionTokenLimit } from "./config/ai-models";
+import { recordLlmUsage } from "./config/ai-cost";
 
 const VIEW_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 const VIEW_IP_RATE_LIMIT = 30;
@@ -15572,14 +15573,22 @@ Target length: about 90-150 words.`;
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
+      const draftModel = getAiModel("aiDrafts");
       const response = await openai.responses.create({
-        model: getAiModel("aiDrafts"),
+        model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: 450,
         temperature: 0.7,
       } as any);
+      recordLlmUsage({
+        feature: "ai_drafts",
+        model: draftModel,
+        usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+        webSearchCalls: 1,
+        detail: `matchup=${id}`,
+      });
 
       const content = stripCitations(((response as any).output_text
         || ((response as any).output || [])
@@ -16335,14 +16344,22 @@ Target length: about 90-150 words.`;
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
+      const draftModel = getAiModel("aiDrafts");
       const response = await openai.responses.create({
-        model: getAiModel("aiDrafts"),
+        model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: maxTokens,
         temperature: 0.7,
       } as any);
+      recordLlmUsage({
+        feature: "ai_drafts",
+        model: draftModel,
+        usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+        webSearchCalls: 1,
+        detail: `sentiment_poll=${id} field=${field}`,
+      });
 
       const content = stripCitations(((response as any).output_text
         || ((response as any).output || [])
@@ -17792,14 +17809,22 @@ Target length: about 90-150 words.`;
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
+      const draftModel = getAiModel("aiDrafts");
       const response = await openai.responses.create({
-        model: getAiModel("aiDrafts"),
+        model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: maxTokens,
         temperature: 0.7,
       } as any);
+      recordLlmUsage({
+        feature: "ai_drafts",
+        model: draftModel,
+        usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+        webSearchCalls: 1,
+        detail: `opinion_poll=${id} field=${field}`,
+      });
 
       const content = stripCitations(((response as any).output_text
         || ((response as any).output || [])
@@ -19955,13 +19980,21 @@ Write the "What to watch" text.`;
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
+      const draftModel = getAiModel("aiDrafts");
       const response = await openai.responses.create({
-        model: getAiModel("aiDrafts"),
+        model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: 300,
       } as any);
+      recordLlmUsage({
+        feature: "ai_drafts",
+        model: draftModel,
+        usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+        webSearchCalls: 1,
+        detail: `world_market_watch title=${String(title).slice(0, 60)}`,
+      });
 
       const raw = ((response as any).output_text
         || ((response as any).output || [])
@@ -20029,14 +20062,22 @@ Write engaging background context so a casual reader instantly gets why this mar
         apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
       });
 
+      const summaryModel = getAiModel("worldMarkets");
       const response = await openai.responses.create({
-        model: getAiModel("worldMarkets"),
+        model: summaryModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: 1000,
         temperature: 0.7,
       } as any);
+      recordLlmUsage({
+        feature: "world_markets_admin",
+        model: summaryModel,
+        usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+        webSearchCalls: 1,
+        detail: `summary market=${id}`,
+      });
 
       const summary = stripCitations(((response as any).output_text
         || ((response as any).output || [])
@@ -20113,14 +20154,22 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       let teaser = "";
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const useWebSearch = attempt <= 2;
+        const teaserModel = getAiModel("worldMarkets");
         const response = await openai.responses.create({
-          model: getAiModel("worldMarkets"),
+          model: teaserModel,
           ...(useWebSearch ? { tools: [{ type: "web_search" as any }] } : {}),
           instructions: systemPrompt,
           input: userPrompt,
           max_output_tokens: 300,
           temperature: 0.85,
         } as any);
+        recordLlmUsage({
+          feature: "world_markets_admin",
+          model: teaserModel,
+          usage: (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage,
+          webSearchCalls: useWebSearch ? 1 : 0,
+          detail: `teaser market=${id} attempt=${attempt}`,
+        });
 
         teaser = extractTeaser(response);
         if (teaser) {
@@ -26353,6 +26402,97 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     } catch (err: any) {
       console.error("[AmmAdmin] world-market-budget fetch failed:", err);
       res.status(500).json({ ok: false, error: err?.message ?? "Unknown error" });
+    }
+  });
+
+  // ============================================================================
+  // LLM USAGE ROLLUPS (per-feature daily spend)
+  // ----------------------------------------------------------------------------
+  // Read-only view over `llm_daily_spend` for GPT paths that call
+  // recordLlmUsage() (why_trending, agent_rationale, agent_comments,
+  // market_resolver, profile_about, profile_about_websearch, sharp_ranker,
+  // ai_drafts, world_markets_admin) plus budget-rail features that already
+  // write the same table (world_markets, native_markets).
+  //
+  //   GET /api/admin/llm-usage?days=30
+  // ============================================================================
+
+  app.get("/api/admin/llm-usage", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const rawDays = Number(req.query.days);
+      const days = Number.isFinite(rawDays)
+        ? Math.min(90, Math.max(1, Math.floor(rawDays)))
+        : 30;
+
+      const since = new Date();
+      since.setUTCDate(since.getUTCDate() - (days - 1));
+      const sinceDay = since.toISOString().slice(0, 10);
+
+      const rows = await db
+        .select({
+          feature: llmDailySpend.feature,
+          day: llmDailySpend.day,
+          spendUsd: llmDailySpend.spendUsd,
+          calls: llmDailySpend.calls,
+        })
+        .from(llmDailySpend)
+        .where(gte(llmDailySpend.day, sinceDay))
+        .orderBy(asc(llmDailySpend.feature), asc(llmDailySpend.day));
+
+      const byFeature = new Map<
+        string,
+        {
+          feature: string;
+          totalUsd: number;
+          totalCalls: number;
+          daily: Array<{ day: string; spendUsd: number; calls: number }>;
+        }
+      >();
+
+      for (const row of rows) {
+        const spendUsd = Number(row.spendUsd) || 0;
+        const calls = Number(row.calls) || 0;
+        // drizzle `date` columns come back as YYYY-MM-DD strings.
+        const day = String(row.day);
+        let entry = byFeature.get(row.feature);
+        if (!entry) {
+          entry = { feature: row.feature, totalUsd: 0, totalCalls: 0, daily: [] };
+          byFeature.set(row.feature, entry);
+        }
+        entry.totalUsd += spendUsd;
+        entry.totalCalls += calls;
+        entry.daily.push({ day, spendUsd, calls });
+      }
+
+      const roundUsd = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+      const features = Array.from(byFeature.values())
+        .map((f) => ({
+          ...f,
+          totalUsd: roundUsd(f.totalUsd),
+          daily: f.daily.map((d) => ({ ...d, spendUsd: roundUsd(d.spendUsd) })),
+        }))
+        .sort((a, b) => b.totalUsd - a.totalUsd);
+      const totals = features.reduce(
+        (acc, f) => {
+          acc.spendUsd += f.totalUsd;
+          acc.calls += f.totalCalls;
+          return acc;
+        },
+        { spendUsd: 0, calls: 0 },
+      );
+      totals.spendUsd = roundUsd(totals.spendUsd);
+
+      res.json({
+        data: {
+          days,
+          sinceDay,
+          features,
+          totals,
+        },
+      });
+    } catch (err: any) {
+      console.error("[Admin] llm-usage fetch failed:", err);
+      res.status(500).json({ error: err?.message ?? "Unknown error" });
     }
   });
 

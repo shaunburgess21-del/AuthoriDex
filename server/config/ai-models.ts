@@ -17,9 +17,22 @@ const MODEL_ENV_BY_SCOPE = {
 
 export type AiModelScope = keyof typeof MODEL_ENV_BY_SCOPE;
 
+/**
+ * Cheaper defaults for short / near-extractive scopes. Override any of these
+ * via the matching env var (e.g. WHY_TRENDING_MODEL=gpt-5.4) without a redeploy
+ * of the code map. Scopes not listed here fall through to AI_DEFAULT_MODEL.
+ */
+const SCOPE_DEFAULT_MODEL: Partial<Record<AiModelScope, string>> = {
+  whyTrending: "gpt-5.4-mini",
+  agentRationale: "gpt-5.4-mini",
+  agentComments: "gpt-5.4-mini",
+  marketResolver: "gpt-5.4-mini",
+};
+
 export function getAiModel(scope: AiModelScope): string {
   const envKey = MODEL_ENV_BY_SCOPE[scope];
-  return process.env[envKey] || AI_DEFAULT_MODEL;
+  const fromEnv = process.env[envKey]?.trim();
+  return fromEnv || SCOPE_DEFAULT_MODEL[scope] || AI_DEFAULT_MODEL;
 }
 
 export function getChatCompletionTokenLimit(model: string, tokens: number): { max_completion_tokens: number } | { max_tokens: number } {

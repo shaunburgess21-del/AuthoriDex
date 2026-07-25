@@ -22,6 +22,7 @@
 import OpenAI from "openai";
 import { log } from "../log";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { estimateLlmCostUsd, recordLlmUsage } from "../config/ai-cost";
 import type { MarketWithEntries, TrendSignals } from "./types";
 
 /**
@@ -289,8 +290,17 @@ async function generateRanking(
 
   const usage = completion.usage;
   const costEstimateUsd = usage
-    ? estimateCost(usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0)
+    ? estimateLlmCostUsd(model, {
+        inputTokens: usage.prompt_tokens ?? 0,
+        outputTokens: usage.completion_tokens ?? 0,
+      })
     : null;
+  recordLlmUsage({
+    feature: "sharp_ranker",
+    model,
+    usage,
+    detail: `markets=${eligible.length} picks=${parsed.length}`,
+  });
 
   const snapshot: SharpRankerSnapshot = {
     picks: parsed,
@@ -576,12 +586,6 @@ function parseRankerResponse(
   }
 
   return out;
-}
-
-function estimateCost(promptTokens: number, completionTokens: number): number {
-  // GPT-5.4 chat-completion pricing (input ~$5/1M, output ~$15/1M).
-  // Adjust if pricing changes — used purely for admin observability.
-  return (promptTokens / 1_000_000) * 5 + (completionTokens / 1_000_000) * 15;
 }
 
 export function isSharpRankerEnabled(): boolean {

@@ -2,7 +2,8 @@
  * Persona-driven LLM comment generator.
  *
  * Replaces the old hard-coded template pool. Every agent comment now goes
- * through GPT (default `gpt-5.4`) with full surface context + the agent's own
+ * through GPT (default `gpt-5.4-mini` via agentComments scope) with full surface
+ * context + the agent's own
  * vote/bet on that parent, so comments stay consistent with their position
  * and read like a real opinionated user, not a generic bot.
  *
@@ -19,6 +20,7 @@
 
 import OpenAI from "openai";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { recordLlmUsage } from "../config/ai-cost";
 import type { AgentSimulationProfile, SimulationPersonaBand } from "./simulationProfile";
 import type {
   CommentContext,
@@ -831,6 +833,12 @@ export async function generateAgentComment(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+    });
+    recordLlmUsage({
+      feature: "agent_comments",
+      model,
+      usage: response.usage,
+      detail: `agent=${agent.displayName} surface=${ctx.surface}`,
     });
 
     const raw = response.choices[0]?.message?.content;
