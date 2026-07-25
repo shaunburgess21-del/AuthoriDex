@@ -83,20 +83,36 @@ export interface NetWorthCandidate {
   link: string;
 }
 
-/** Parse "$X billion/million/..." to a USD number for sanity bounds. */
+function unitMultiplier(unit: string): number {
+  const u = unit.toLowerCase();
+  if (u === "trillion" || u === "t") return 1e12;
+  if (u === "billion" || u === "b") return 1e9;
+  if (u === "million" || u === "m") return 1e6;
+  if (u === "thousand" || u === "k") return 1e3;
+  return 1;
+}
+
+/** Parse "$X billion/million/..." (or a same-unit range) to a USD number. */
 export function parseNetWorthToUsd(value: string): number | null {
+  // Inline range with a shared trailing unit: "$5-$18 million", "$5 to $18M".
+  // Without this, the first number is treated as raw dollars (usd≈5).
+  const range = value.match(
+    /\$?\s*([\d,.]+)\s*(?:-|to)\s*\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])\b/i,
+  );
+  if (range) {
+    const mult = unitMultiplier(range[3]);
+    const low = parseFloat(range[1].replace(/,/g, ""));
+    const high = parseFloat(range[2].replace(/,/g, ""));
+    if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+    // Midpoint for clustering / dedupe; the display value keeps the full range.
+    return ((low + high) / 2) * mult;
+  }
+
   const m = value.match(/\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])?\b/i);
   if (!m) return null;
   const num = parseFloat(m[1].replace(/,/g, ""));
   if (!Number.isFinite(num)) return null;
-  const unit = (m[2] ?? "").toLowerCase();
-  const mult =
-    unit === "trillion" || unit === "t" ? 1e12
-      : unit === "billion" || unit === "b" ? 1e9
-        : unit === "million" || unit === "m" ? 1e6
-          : unit === "thousand" || unit === "k" ? 1e3
-            : 1;
-  return num * mult;
+  return num * unitMultiplier(m[2] ?? "");
 }
 
 export function isImplausibleNetWorth(value: string): boolean {
@@ -117,43 +133,72 @@ export function isTrustedNetWorthSource(url: string): boolean {
   }
 }
 
-/** Expand $5M / $1.5B shorthand and tidy whitespace. */
+/** Expand $5M / $1.5B shorthand and tidy whitespace / inline ranges. */
 export function normalizeMoney(value: string): string {
-  return value
+  let next = value
     .replace(/\s+/g, " ")
     .replace(/\$ /g, "$")
-    .replace(/\$([\d,.]+)\s*([KMBT])\b/gi, (_full, num: string, unit: string) => {
-      const u = unit.toUpperCase();
-      const word = u === "T" ? "trillion" : u === "B" ? "billion" : u === "M" ? "million" : "thousand";
-      return `$${num} ${word}`;
-    })
     .trim();
+
+  // "$5-$18 million" / "$5 to $18M" → compact long-form range with shared unit.
+  const range = next.match(
+    /^\$?\s*([\d,.]+)\s*(?:-|to)\s*\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])\b$/i,
+  );
+  if (range) {
+    const mult = unitMultiplier(range[3]);
+    const low = parseFloat(range[1].replace(/,/g, "")) * mult;
+    const high = parseFloat(range[2].replace(/,/g, "")) * mult;
+    if (Number.isFinite(low) && Number.isFinite(high) && low > 0 && high > 0) {
+      return formatNetWorthRange(Math.min(low, high), Math.max(low, high));
+    }
+  }
+
+  return next.replace(/\$([\d,.]+)\s*([KMBT])\b/gi, (_full, num: string, unit: string) => {
+    const u = unit.toUpperCase();
+    const word = u === "T" ? "trillion" : u === "B" ? "billion" : u === "M" ? "million" : "thousand";
+    return `$${num} ${word}`;
+  });
 }
 
 /**
- * Name variants for attribution: "Mr Beast" ↔ "MrBeast", strip parenthetical
- * qualifiers like "Lisa (Blackpink)".
+ * Name variants for attribution: "Mr Beast" ↔ "MrBeast".
+ * Parenthetical qualifiers become disambiguators ("Lisa (Blackpink)" →
+ * "lisa blackpink") — never a bare single-token first name, which would
+ * match unrelated people (Lisa Su, Lisa Kudrow, etc.).
  */
 export function personNameVariants(personName: string): string[] {
   const trimmed = personName.trim();
   if (!trimmed) return [];
   const variants = new Set<string>();
   const add = (value: string) => {
-    const v = value.trim().toLowerCase();
+    const v = value.trim().toLowerCase().replace(/\s+/g, " ");
     if (v) variants.add(v);
   };
   add(trimmed);
   add(trimmed.replace(/\s+/g, ""));
   add(trimmed.replace(/\s+/g, "-"));
-  const withoutParen = trimmed.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
-  if (withoutParen !== trimmed) {
-    add(withoutParen);
-    add(withoutParen.replace(/\s+/g, ""));
+
+  const parenMatch = trimmed.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+  if (parenMatch) {
+    const base = parenMatch[1].trim();
+    const qualifier = parenMatch[2].trim();
+    const baseTokens = base.split(/\s+/).filter(Boolean);
+    // Multi-word bases are safe without the parenthetical.
+    if (baseTokens.length >= 2) {
+      add(base);
+      add(base.replace(/\s+/g, ""));
+    }
+    // Keep the qualifier attached so "Lisa (Blackpink)" cannot match "Lisa Su".
+    add(`${base} ${qualifier}`);
+    add(`${base}${qualifier}`);
+    add(`${base}-${qualifier}`);
   }
+
   return [...variants];
 }
 
-function textMentionsPerson(text: string, personName: string): boolean {
+/** True if text mentions the person via any safe name variant. */
+export function textMentionsPerson(text: string, personName: string): boolean {
   const lower = text.toLowerCase();
   return personNameVariants(personName).some((variant) => lower.includes(variant));
 }

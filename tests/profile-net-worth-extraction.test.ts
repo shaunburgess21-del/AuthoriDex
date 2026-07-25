@@ -6,7 +6,9 @@ import {
   extractNetWorthFromText,
   isImplausibleNetWorth,
   parseNetWorthToUsd,
+  personNameVariants,
   resolveNetWorthFromCandidates,
+  textMentionsPerson,
   type NetWorthSnippet,
 } from "../server/services/net-worth-extraction";
 
@@ -305,4 +307,37 @@ test("normalizeMoney expands shorthand units", async () => {
   const { normalizeMoney } = await import("../server/services/net-worth-extraction");
   assert.equal(normalizeMoney("$245m"), "$245 million");
   assert.equal(normalizeMoney("$1.5B"), "$1.5 billion");
+});
+
+test("parseNetWorthToUsd applies trailing unit to inline ranges", () => {
+  assert.equal(parseNetWorthToUsd("$5-$18 million"), 11_500_000);
+  assert.equal(parseNetWorthToUsd("$5 to $18M"), 11_500_000);
+});
+
+test("inline range snippets do not collapse to raw-dollar candidates", () => {
+  const result = extractNetWorthFromSnippets(
+    [{
+      title: "Kimi Antonelli net worth range",
+      snippet: "Kimi Antonelli has an estimated net worth of $5-$18 million according to recent roundups.",
+      link: "https://f1salaries.com/kimi-antonelli-net-worth/",
+    }],
+    "Kimi Antonelli",
+  );
+  assert.equal(result, "$5-$18 million");
+});
+
+test("parenthetical stage names do not match unrelated first names", () => {
+  const variants = personNameVariants("Lisa (Blackpink)");
+  assert.ok(variants.includes("lisa (blackpink)"));
+  assert.ok(variants.includes("lisa blackpink"));
+  assert.ok(!variants.includes("lisa"));
+
+  assert.equal(
+    textMentionsPerson("Lisa Su has a net worth of $1 billion as AMD CEO.", "Lisa (Blackpink)"),
+    false,
+  );
+  assert.equal(
+    textMentionsPerson("Lisa (Blackpink) has a net worth of $40 million.", "Lisa (Blackpink)"),
+    true,
+  );
 });

@@ -22,6 +22,7 @@ import {
   isTrustedNetWorthSource,
   normalizeMoney,
   parseNetWorthToUsd as parseNetWorthToUsdPure,
+  textMentionsPerson,
 } from "./net-worth-extraction";
 
 // Re-exports for backward compat with any external callers / tests that
@@ -771,13 +772,12 @@ function isNetWorthSourceBacked(
   }
 
   // Trusted hosts with net-worth language, or broader web results that name
-  // the person and use net-worth language (balanced policy — no invented figures).
-  const nameNeedle = (personName ?? "").trim().toLowerCase();
+  // the person (including stage-name variants like Mr Beast ↔ MrBeast).
   return (context.netWorthContext?.sources ?? []).some((source) => {
     const text = `${source.title} ${source.snippet}`;
     if (!isLikelyNetWorthSource(text)) return false;
     if (isTrustedNetWorthSource(source.link)) return true;
-    return !!nameNeedle && text.toLowerCase().includes(nameNeedle);
+    return !!personName && textMentionsPerson(text, personName);
   });
 }
 
@@ -789,22 +789,20 @@ function isUnsupportedBillionDollarNetWorth(person: TrendingPerson, value: strin
   if (!/\bbillion\b/i.test(value)) return false;
   if (isNotAvailable(value)) return false;
 
-  const personName = person.name.toLowerCase();
-
   // Accept the figure if any reputable Serper snippet mentions both the person and billion/billionaire/richest
   // language. We no longer require the literal dollar string in one snippet - that was dropping almost every
   // real billionaire because Serper's snippet is rarely the exact figure the model converged on.
   const reputableMention = (context.netWorthContext?.sources ?? []).some((source) => {
-    const text = `${source.title} ${source.snippet}`.toLowerCase();
+    const text = `${source.title} ${source.snippet}`;
     return isTrustedNetWorthSource(source.link)
-      && text.includes(personName)
+      && textMentionsPerson(text, person.name)
       && /\bbillion(aire)?s?\b|\brichest\b|\breal-time billionaires\b/i.test(text);
   });
 
   // Or if the OpenAI web-search augmentation itself mentions the person plus billion language.
   const openAiMention = !!context.openAiWebContext?.text
     && /\bbillion(aire)?s?\b/i.test(context.openAiWebContext.text)
-    && context.openAiWebContext.text.toLowerCase().includes(personName);
+    && textMentionsPerson(context.openAiWebContext.text, person.name);
 
   return !(reputableMention || openAiMention);
 }
