@@ -446,7 +446,9 @@ Grounding rules:
 Net-worth attribution (critical):
 - Only cite a money figure for estimatedNetWorth if the surrounding snippet names THIS specific person near the figure. A snippet that mentions another famous person (e.g. "Musk's $835 billion") is not evidence for the subject of this profile.
 - If snippets only mention this person's wealth in generic terms ("wealthy", "millionaire") with no figure attributed to them, return "Not available".
-- For actors, athletes, musicians, influencers and other entertainment figures whose exact wealth is not public, an estimated ballpark from Celebrity Net Worth, Forbes, or comparable reputable outlet is acceptable and preferred over "Not available". Express as a single figure (e.g. "$40 million") or a range (e.g. "$30-$50 million"). Reserve "Not available" for cases where no reputable source provides ANY estimate at all.
+- Prefer Forbes, Bloomberg, Celebrity Net Worth, and major news outlets when available. Other published web estimates are acceptable when they explicitly attribute a figure to THIS person (e.g. salary/net-worth articles, F1 salary roundups that state a net-worth estimate). Do NOT invent a figure from career stage, salary alone, endorsements, or assets when no source publishes a net-worth estimate.
+- When credible sources materially disagree, return an approximate range (e.g. "$5-$18 million") rather than picking one arbitrarily.
+- Express as a single figure (e.g. "$40 million") or a range (e.g. "$30-$50 million"). Reserve "Not available" ONLY when no published source provides ANY estimate attributed to this person.
 - Return only valid JSON.`;
 }
 
@@ -491,7 +493,7 @@ Output exactly this JSON shape:
   "fromCountryCode": "ISO 3166-1 alpha-2",
   "basedIn": "Current country where they live or primarily work",
   "basedInCountryCode": "ISO 3166-1 alpha-2",
-  "estimatedNetWorth": "Approximate ballpark in the form '$X billion', '$X million', or '$X thousand' (e.g. '$2.6 billion', '$250 million', '$500 thousand'). Match the magnitude to the actual figure - never round a sub-million amount up to '$1 million'. If sources show a range, you may write the range (e.g. '$800-$840 billion'). Use the most recent figure you can find in NET WORTH SOURCES or the OPENAI WEB SEARCH AUGMENTATION notes - prefer Forbes/Bloomberg, otherwise any reputable outlet (Reuters, CNBC, Fortune, Business Insider, Investopedia, Celebrity Net Worth, Wikipedia, etc.). CRITICAL: only cite a figure if a snippet attributes it to this specific person - do not borrow a figure mentioned for someone else in the same snippet. For entertainers/athletes/musicians a Celebrity Net Worth-style estimated ballpark is acceptable and preferred over 'Not available'. Use \"Not available\" only when NO reputable source provides any estimate attributed to this person.",
+  "estimatedNetWorth": "Approximate ballpark in the form '$X billion', '$X million', or '$X thousand' (e.g. '$2.6 billion', '$250 million', '$500 thousand'). Match the magnitude to the actual figure - never round a sub-million amount up to '$1 million'. If sources materially disagree, write a range (e.g. '$5-$18 million'). Use the most recent published figure in NET WORTH SOURCES or the OPENAI WEB SEARCH AUGMENTATION notes - prefer Forbes/Bloomberg/Celebrity Net Worth, otherwise any published outlet that attributes a net-worth estimate to this person. CRITICAL: only cite a figure if a snippet attributes it to this specific person - do not borrow a figure mentioned for someone else, and do not invent one from salary/career alone. Use \"Not available\" only when NO published source provides any estimate attributed to this person.",
   "confidence": 0.0
 }`;
 }
@@ -529,7 +531,7 @@ Return concise bullet notes covering:
 1. Current role, title, or status, and any recent change.
 2. Whether any role is future-dated, with effective date if applicable.
 3. Country of residence or where they primarily work.
-4. A current net-worth estimate or range from a reputable outlet (Forbes, Bloomberg, Celebrity Net Worth, Reuters, CNBC, Fortune, Business Insider, Investopedia, Wikipedia, etc.). A ballpark is fine.
+4. A current published net-worth estimate or range (Forbes, Bloomberg, Celebrity Net Worth, major news, or other outlets that explicitly state a net-worth figure for this person). A ballpark is fine. Do not invent one from salary or career stage alone.
 
 Existing snippets to cross-check:
 ${context.snippetsText.slice(0, 4000)}
@@ -601,11 +603,11 @@ function validateGeneratedProfile(person: TrendingPerson, profile: GeneratedProf
     notes.push("Sources use the current title Secretary of War; do not revert to the older Secretary of Defense title.");
   }
 
-  const sourceBackedNetWorth = isNetWorthSourceBacked(profile.estimatedNetWorth, context);
+  const sourceBackedNetWorth = isNetWorthSourceBacked(profile.estimatedNetWorth, context, person.name);
   if (!sourceBackedNetWorth && context.extractedNetWorth) {
     notes.push(`Net worth is not directly backed by source snippets; use extracted source value ${context.extractedNetWorth}.`);
   } else if (!sourceBackedNetWorth && !isNotAvailable(profile.estimatedNetWorth)) {
-    notes.push("Net worth is not directly backed by a reliable net-worth source; use Not available.");
+    notes.push("Net worth is not directly backed by a published net-worth estimate for this person; use Not available.");
   }
 
   if (isUnsupportedBillionDollarNetWorth(person, profile.estimatedNetWorth, context)) {
@@ -644,9 +646,9 @@ function applyValidationFallbacks(person: TrendingPerson, profile: GeneratedProf
     next.longBio = applySecretaryOfWarCorrection(next.longBio);
     next.knownFor = applySecretaryOfWarCorrection(next.knownFor);
   }
-  if (!isNetWorthSourceBacked(next.estimatedNetWorth, context) && context.extractedNetWorth) {
+  if (!isNetWorthSourceBacked(next.estimatedNetWorth, context, person.name) && context.extractedNetWorth) {
     next.estimatedNetWorth = context.extractedNetWorth;
-  } else if (!isNetWorthSourceBacked(next.estimatedNetWorth, context)) {
+  } else if (!isNetWorthSourceBacked(next.estimatedNetWorth, context, person.name)) {
     next.estimatedNetWorth = "Not available";
   }
   if (isUnsupportedBillionDollarNetWorth(person, next.estimatedNetWorth, context)) {
@@ -751,11 +753,15 @@ function extractNetWorthFromOpenAiWeb(
   return extractNetWorthFromText(context?.text ?? null, personName);
 }
 
-function isNetWorthSourceBacked(value: string, context: ProfileContext): boolean {
+function isNetWorthSourceBacked(
+  value: string,
+  context: ProfileContext,
+  personName?: string,
+): boolean {
   if (isNotAvailable(value)) return true;
   if (!normalizeMoney(value)) return false;
 
-  // Any reputable snippet that already yielded a money figure near net-worth language counts as backing.
+  // Deterministic extraction already passed attribution + plausibility gates.
   if (context.extractedNetWorth) return true;
 
   // OpenAI web search augmentation that mentions net worth/wealth/fortune is acceptable backing -
@@ -764,10 +770,14 @@ function isNetWorthSourceBacked(value: string, context: ProfileContext): boolean
     return true;
   }
 
-  // Otherwise require at least one reputable net-worth source snippet.
+  // Trusted hosts with net-worth language, or broader web results that name
+  // the person and use net-worth language (balanced policy — no invented figures).
+  const nameNeedle = (personName ?? "").trim().toLowerCase();
   return (context.netWorthContext?.sources ?? []).some((source) => {
     const text = `${source.title} ${source.snippet}`;
-    return isTrustedNetWorthSource(source.link) && isLikelyNetWorthSource(text);
+    if (!isLikelyNetWorthSource(text)) return false;
+    if (isTrustedNetWorthSource(source.link)) return true;
+    return !!nameNeedle && text.toLowerCase().includes(nameNeedle);
   });
 }
 

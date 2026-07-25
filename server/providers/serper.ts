@@ -1022,7 +1022,8 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
     return null;
   }
 
-  const cacheKey = `serper:networth:${name.replace(/\s+/g, "_").toLowerCase()}`;
+  // v2: broader Google-style query (not outlet-constrained) + more snippets.
+  const cacheKey = `serper:networth:v2:${name.replace(/\s+/g, "_").toLowerCase()}`;
   const CACHE_TTL_HOURS = 24;
 
   try {
@@ -1031,7 +1032,7 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
       return JSON.parse(cached.responseData) as NetWorthContext;
     }
 
-    // Search specifically for net worth with current year
+    // Normal Google-style current net-worth search; extraction decides trust.
     const currentYear = new Date().getFullYear();
     const response = await serperFetch(SERPER_BASE_URL, {
       method: "POST",
@@ -1040,8 +1041,8 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: `"${name}" net worth ${currentYear} Forbes Bloomberg Celebrity Net Worth`,
-        num: 8,
+        q: `${name} net worth ${currentYear}`,
+        num: 10,
         gl: "us",
         hl: "en",
       }),
@@ -1059,16 +1060,17 @@ export async function fetchNetWorthContext(name: string): Promise<NetWorthContex
       return { estimate: null, sources: [] };
     }
 
-    const sources = organic.slice(0, 5).map((item: any) => ({
+    const sources = organic.slice(0, 8).map((item: any) => ({
       title: item.title,
       snippet: item.snippet || "",
       link: item.link,
     }));
 
-    // Try to extract a net worth estimate from snippets
+    // Lightweight preview estimate for logging / callers; authoritative
+    // extraction lives in net-worth-extraction.ts (attribution + tiers).
     let estimate: string | null = null;
     for (const source of sources) {
-      const match = source.snippet.match(/\$[\d,.]+ (?:billion|million|trillion)/i);
+      const match = `${source.title} ${source.snippet}`.match(/\$[\d,.]+(?:\s*(?:-|to)\s*\$?[\d,.]+)?\s*(?:billion|million|trillion|thousand)/i);
       if (match) {
         estimate = match[0];
         break;

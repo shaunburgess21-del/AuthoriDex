@@ -60,37 +60,53 @@ export function getApprovalColor(ratingOrPct: number): string {
  * Format a net worth string to be more readable
  * Converts large numbers to B/M format and handles various input formats
  * @param value - The net worth value (number or string)
- * @returns Formatted net worth string (e.g., "$2.6B", "$450M")
+ * @returns Formatted net worth string (e.g., "$2.6B", "$450M", "$5-$18M")
  */
 export function formatNetWorth(value: string | number): string {
   if (typeof value === 'string') {
-    const lower = value.toLowerCase();
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
 
     if (lower.includes('not available') ||
         lower.includes('unavailable') ||
         lower.includes('unknown') ||
         lower.includes('n/a') ||
-        lower.includes('exact current figure')) {
-      return 'Not publicly disclosed';
+        lower.includes('exact current figure') ||
+        lower.includes('no reliable estimate')) {
+      return 'No reliable estimate found';
     }
 
-    if (lower.includes('billion') || lower.includes('million')) {
-      return value;
-    }
-
-    if (lower.includes('thousand')) {
-      const numMatch = value.match(/[\d.]+/);
-      if (numMatch) {
-        const num = parseFloat(numMatch[0]) * 1_000;
-        if (!isNaN(num)) return formatNetWorthNumber(num);
+    // Ranges: "$5-$18 million", "$5 million-$18 million", "$200 million-$6.5 billion"
+    const rangeMatch = trimmed.match(
+      /^\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])?\s*[-–—to]+\s*\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])?\s*$/i,
+    );
+    if (rangeMatch) {
+      const lowUnit = rangeMatch[2] || rangeMatch[4];
+      const highUnit = rangeMatch[4] || rangeMatch[2];
+      const low = parseUnitAmount(rangeMatch[1], lowUnit);
+      const high = parseUnitAmount(rangeMatch[3], highUnit);
+      if (low != null && high != null) {
+        return `${formatNetWorthNumber(low)}-${formatNetWorthNumber(high)}`;
       }
     }
 
-    if (value.includes('$') && /[BMTK]\b/i.test(value)) {
-      return value;
+    if (lower.includes('billion') || lower.includes('million') || lower.includes('thousand') || lower.includes('trillion')) {
+      const single = trimmed.match(
+        /^\$?\s*([\d,.]+)\s*(trillion|billion|million|thousand|[KMBT])\s*$/i,
+      );
+      if (single) {
+        const usd = parseUnitAmount(single[1], single[2]);
+        if (usd != null) return formatNetWorthNumber(usd);
+      }
+      // Already a readable long-form estimate we couldn't fully normalize — keep it.
+      return trimmed;
     }
 
-    const numMatch = value.replace(/[,$]/g, '').match(/[\d.]+/);
+    if (trimmed.includes('$') && /[BMTK]\b/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    const numMatch = trimmed.replace(/[,$]/g, '').match(/[\d.]+/);
     if (numMatch) {
       const num = parseFloat(numMatch[0]);
       if (!isNaN(num)) {
@@ -98,10 +114,21 @@ export function formatNetWorth(value: string | number): string {
       }
     }
 
-    return value;
+    return trimmed;
   }
 
   return formatNetWorthNumber(value);
+}
+
+function parseUnitAmount(rawNum: string, rawUnit: string | undefined): number | null {
+  const num = parseFloat(rawNum.replace(/,/g, ''));
+  if (!Number.isFinite(num)) return null;
+  const unit = (rawUnit ?? '').toLowerCase();
+  if (unit === 'trillion' || unit === 't') return num * 1e12;
+  if (unit === 'billion' || unit === 'b') return num * 1e9;
+  if (unit === 'million' || unit === 'm') return num * 1e6;
+  if (unit === 'thousand' || unit === 'k') return num * 1e3;
+  return num;
 }
 
 function formatNetWorthNumber(num: number): string {
