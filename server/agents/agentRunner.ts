@@ -30,6 +30,7 @@ import {
   computeArbPredictionGainer,
   computeArbPredictionCommunity,
   isArbAgent,
+  pickArbAgentIndexFromLocks,
 } from "./arbAgent";
 import { readSourceFairByEntryId } from "./sourceFair";
 import { computeWorldMarketPrediction } from "./worldMarketEngine";
@@ -63,6 +64,8 @@ import {
   ARB_CONVERGENCE_MARKETS_PER_SWEEP,
   ARB_MIN_EDGE_PP,
   isArbCohortEnabled,
+  isArbNearCloseDailyLockEnabled,
+  isArbNearCloseDailyLockShadow,
   isLockInFairH2HEnabled,
   isLockInFairGainerEnabled,
   LOCKIN_H2H_SIGMA_1D,
@@ -1389,6 +1392,69 @@ function startOfUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
+interface ArbAgentPick {
+  agent: (typeof agentConfigs.$inferSelect) | null;
+  /** Lifetime lock blocked the candidate but the action predates today. */
+  wouldUnlock: boolean;
+}
+
+/**
+ * Resolve which arb agent may act on `marketId` in a near-close convergence
+ * sweep, honouring ARB_NEARCLOSE_DAILY_LOCK_ENABLED. One grouped query pulls
+ * every cohort member's lock state, then the pure candidate walk
+ * (`pickArbAgentIndexFromLocks`) decides — flag off is byte-identical to the
+ * legacy lifetime lock, plus a `wouldUnlock` signal for shadow mode.
+ */
+async function pickUnblockedArbAgent(
+  arbAgents: (typeof agentConfigs.$inferSelect)[],
+  startIdx: number,
+  marketId: string,
+  now: Date,
+): Promise<ArbAgentPick> {
+  const dayScoped = isArbNearCloseDailyLockEnabled();
+  const dayStart = startOfUtcDay(now);
+
+  const lockRows = await db
+    .select({
+      agentId: scheduledAgentActions.agentId,
+      lockedToday: sql<boolean>`bool_or(${gte(scheduledAgentActions.createdAt, dayStart)})`,
+    })
+    .from(scheduledAgentActions)
+    .where(
+      and(
+        eq(scheduledAgentActions.marketId, marketId),
+        inArray(scheduledAgentActions.agentId, arbAgents.map((a) => a.id)),
+        sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
+      ),
+    )
+    .groupBy(scheduledAgentActions.agentId);
+
+  const lockedTodayByAgent = new Map<string, boolean>();
+  for (const row of lockRows) {
+    lockedTodayByAgent.set(row.agentId, Boolean(row.lockedToday));
+  }
+
+  const picked = pickArbAgentIndexFromLocks(
+    arbAgents.map((a) => a.id),
+    startIdx,
+    lockedTodayByAgent,
+    dayScoped,
+  );
+
+  return {
+    agent: picked.index != null ? arbAgents[picked.index] : null,
+    wouldUnlock: picked.wouldUnlock,
+  };
+}
+
+function logNearCloseLockShadow(label: string, wouldUnlock: number): void {
+  if (!wouldUnlock || !isArbNearCloseDailyLockShadow()) return;
+  log(
+    `[${label}][shadow] day-scoped lock would unlock ${wouldUnlock} action(s) ` +
+      `currently blocked by the lifetime per-agent lock`,
+  );
+}
+
 async function fetchTrailingFameSamplesByPerson(
   personIds: string[],
   sampleCount: number,
@@ -2091,6 +2157,7 @@ async function runConvergenceSweep(
 
   let scheduled = 0;
   let agentIdx = 0;
+  let wouldUnlock = 0;
 
   for (const market of nearCloseMarkets) {
     if (!targetIds.has(market.id)) continue;
@@ -2121,9 +2188,8 @@ async function runConvergenceSweep(
     if (!snap) continue;
     const prices = ammCurrentPrices(snap);
 
-    const agent = arbAgents[agentIdx % arbAgents.length];
+    const agentSlot = agentIdx;
     agentIdx++;
-    const agentData = toAgentData(agent);
 
     const marketData: MarketWithEntries = {
       id: market.id,
@@ -2146,18 +2212,11 @@ async function runConvergenceSweep(
     const decision = computeArbPrediction(marketData, signals, hoursRemaining, prices);
     if (decision.abstain || !decision.entryId) continue;
 
-    const existing = await db
-      .select({ id: scheduledAgentActions.id })
-      .from(scheduledAgentActions)
-      .where(
-        and(
-          eq(scheduledAgentActions.agentId, agent.id),
-          eq(scheduledAgentActions.marketId, market.id),
-          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) continue;
+    const picked = await pickUnblockedArbAgent(arbAgents, agentSlot, market.id, now);
+    if (picked.wouldUnlock) wouldUnlock++;
+    if (!picked.agent) continue;
+    const agent = picked.agent;
+    const agentData = toAgentData(agent);
 
     const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
     const executeAfter = new Date(now.getTime() + 60_000);
@@ -2178,6 +2237,7 @@ async function runConvergenceSweep(
     );
   }
 
+  logNearCloseLockShadow("Convergence", wouldUnlock);
   if (scheduled > 0) {
     log(`[AgentRunner] Convergence sweep scheduled ${scheduled} actions`);
   }
@@ -2784,6 +2844,7 @@ async function runConvergenceSweepH2H(
 
   let scheduled = 0;
   let agentIdx = 0;
+  let wouldUnlock = 0;
 
   for (const market of nearCloseMarkets) {
     if (!targetIds.has(market.id)) continue;
@@ -2814,9 +2875,8 @@ async function runConvergenceSweepH2H(
     if (!snap) continue;
     const prices = ammCurrentPrices(snap);
 
-    const agent = arbAgents[agentIdx % arbAgents.length];
+    const agentSlot = agentIdx;
     agentIdx++;
-    const agentData = toAgentData(agent);
 
     const marketEntriesData = entries.map((e) => ({
       id: e.id,
@@ -2834,18 +2894,11 @@ async function runConvergenceSweepH2H(
     );
     if (decision.abstain || !decision.entryId) continue;
 
-    const existing = await db
-      .select({ id: scheduledAgentActions.id })
-      .from(scheduledAgentActions)
-      .where(
-        and(
-          eq(scheduledAgentActions.agentId, agent.id),
-          eq(scheduledAgentActions.marketId, market.id),
-          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) continue;
+    const picked = await pickUnblockedArbAgent(arbAgents, agentSlot, market.id, now);
+    if (picked.wouldUnlock) wouldUnlock++;
+    if (!picked.agent) continue;
+    const agent = picked.agent;
+    const agentData = toAgentData(agent);
 
     const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
     const executeAfter = new Date(now.getTime() + 60_000);
@@ -2866,6 +2919,7 @@ async function runConvergenceSweepH2H(
     );
   }
 
+  logNearCloseLockShadow("H2HConvergence", wouldUnlock);
   if (scheduled > 0) {
     log(`[AgentRunner] H2H convergence sweep scheduled ${scheduled} actions`);
   }
@@ -3034,6 +3088,7 @@ async function runConvergenceSweepGainer(
 
   let scheduled = 0;
   let agentIdx = 0;
+  let wouldUnlock = 0;
 
   for (const market of nearCloseMarkets) {
     if (!targetIds.has(market.id)) continue;
@@ -3061,9 +3116,8 @@ async function runConvergenceSweepGainer(
     if (!snap) continue;
     const prices = ammCurrentPrices(snap);
 
-    const agent = arbAgents[agentIdx % arbAgents.length];
+    const agentSlot = agentIdx;
     agentIdx++;
-    const agentData = toAgentData(agent);
 
     const marketEntriesData = entries.map((e) => ({
       id: e.id,
@@ -3081,18 +3135,11 @@ async function runConvergenceSweepGainer(
     );
     if (decision.abstain || !decision.entryId) continue;
 
-    const existing = await db
-      .select({ id: scheduledAgentActions.id })
-      .from(scheduledAgentActions)
-      .where(
-        and(
-          eq(scheduledAgentActions.agentId, agent.id),
-          eq(scheduledAgentActions.marketId, market.id),
-          sql`${scheduledAgentActions.status} IN ('pending', 'in_progress', 'executed')`,
-        ),
-      )
-      .limit(1);
-    if (existing.length > 0) continue;
+    const picked = await pickUnblockedArbAgent(arbAgents, agentSlot, market.id, now);
+    if (picked.wouldUnlock) wouldUnlock++;
+    if (!picked.agent) continue;
+    const agent = picked.agent;
+    const agentData = toAgentData(agent);
 
     const stakeAmount = computeAgentStakeAmount(agentData, decision, null);
     const executeAfter = new Date(now.getTime() + 60_000);
@@ -3113,6 +3160,7 @@ async function runConvergenceSweepGainer(
     );
   }
 
+  logNearCloseLockShadow("GainerConvergence", wouldUnlock);
   if (scheduled > 0) {
     log(`[AgentRunner] Gainer convergence sweep scheduled ${scheduled} actions`);
   }

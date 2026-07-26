@@ -299,3 +299,51 @@ export function computeArbPredictionGainer(
     source: "deterministic",
   };
 }
+
+export interface ArbLockCandidatePick {
+  /** Index into the cohort array, or null when every candidate is blocked. */
+  index: number | null;
+  /** Lifetime lock blocked the candidate but its actions all predate today. */
+  wouldUnlock: boolean;
+}
+
+/**
+ * Candidate walk for the near-close convergence sweeps' per-agent-per-market
+ * lock (see pickUnblockedArbAgent in agentRunner). Pure so it can be unit
+ * tested without a database.
+ *
+ * `lockedTodayByAgent`: agentId → true when the agent already has a live
+ * action (pending/in_progress/executed) on the market today, false when all
+ * of its actions predate today, absent when it has none at all.
+ *
+ * Day scope off (legacy lifetime lock): only the round-robin candidate at
+ * `startIdx` is considered, and any existing action blocks it. `wouldUnlock`
+ * reports when a day-scoped lock would have let that candidate through, so
+ * ARB_NEARCLOSE_DAILY_LOCK_SHADOW can size the change before it goes live.
+ *
+ * Day scope on: walks the cohort from `startIdx` and returns the first agent
+ * without an action today — bounded at one action per agent per market per day.
+ */
+export function pickArbAgentIndexFromLocks(
+  agentIds: string[],
+  startIdx: number,
+  lockedTodayByAgent: ReadonlyMap<string, boolean>,
+  dayScoped: boolean,
+): ArbLockCandidatePick {
+  if (agentIds.length === 0) return { index: null, wouldUnlock: false };
+
+  const attempts = dayScoped ? agentIds.length : 1;
+  let wouldUnlock = false;
+
+  for (let i = 0; i < attempts; i++) {
+    const idx = (startIdx + i) % agentIds.length;
+    const lockedToday = lockedTodayByAgent.get(agentIds[idx]!);
+    if (lockedToday === undefined) return { index: idx, wouldUnlock: false };
+    if (!lockedToday) {
+      if (dayScoped) return { index: idx, wouldUnlock: false };
+      wouldUnlock = true;
+    }
+  }
+
+  return { index: null, wouldUnlock };
+}

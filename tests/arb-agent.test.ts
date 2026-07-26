@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { computeArbPrediction, computeArbPredictionH2H, computeArbPredictionGainer } from "../server/agents/arbAgent";
+import {
+  computeArbPrediction,
+  computeArbPredictionH2H,
+  computeArbPredictionGainer,
+  pickArbAgentIndexFromLocks,
+} from "../server/agents/arbAgent";
 import type { MarketWithEntries, TrendSignals } from "../server/agents/types";
 
 const entries = [
@@ -298,4 +303,74 @@ test("computeArbPredictionGainer allowUnfavoredSide buys the most underpriced en
     if (prev === undefined) delete process.env.LOCKIN_FAIR_GAINER_ENABLED;
     else process.env.LOCKIN_FAIR_GAINER_ENABLED = prev;
   }
+});
+
+// ---------------------------------------------------------------------------
+// pickArbAgentIndexFromLocks — near-close convergence lock candidate walk
+// (ARB_NEARCLOSE_DAILY_LOCK_ENABLED). Map semantics: absent = no actions on
+// the market, false = has actions but none today, true = has an action today.
+// ---------------------------------------------------------------------------
+
+const cohort = ["a1", "a2", "a3", "a4"];
+
+test("lock walk: empty cohort returns null", () => {
+  const pick = pickArbAgentIndexFromLocks([], 0, new Map(), true);
+  assert.deepEqual(pick, { index: null, wouldUnlock: false });
+});
+
+test("lock walk (lifetime scope): unlocked primary is picked", () => {
+  const pick = pickArbAgentIndexFromLocks(cohort, 1, new Map(), false);
+  assert.deepEqual(pick, { index: 1, wouldUnlock: false });
+});
+
+test("lock walk (lifetime scope): stale lock blocks but reports wouldUnlock", () => {
+  const locks = new Map([["a1", false]]);
+  const pick = pickArbAgentIndexFromLocks(cohort, 0, locks, false);
+  assert.deepEqual(pick, { index: null, wouldUnlock: true });
+});
+
+test("lock walk (lifetime scope): today's lock blocks without wouldUnlock", () => {
+  const locks = new Map([["a1", true]]);
+  const pick = pickArbAgentIndexFromLocks(cohort, 0, locks, false);
+  assert.deepEqual(pick, { index: null, wouldUnlock: false });
+});
+
+test("lock walk (lifetime scope): never falls through to other agents", () => {
+  // a1 blocked, a2 free — legacy scope must still block, not pick a2.
+  const locks = new Map([["a1", true]]);
+  const pick = pickArbAgentIndexFromLocks(cohort, 0, locks, false);
+  assert.equal(pick.index, null);
+});
+
+test("lock walk (day scope): stale lock no longer blocks the primary", () => {
+  const locks = new Map([["a1", false]]);
+  const pick = pickArbAgentIndexFromLocks(cohort, 0, locks, true);
+  assert.deepEqual(pick, { index: 0, wouldUnlock: false });
+});
+
+test("lock walk (day scope): falls through past agents locked today", () => {
+  const locks = new Map([
+    ["a1", true],
+    ["a2", true],
+  ]);
+  const pick = pickArbAgentIndexFromLocks(cohort, 0, locks, true);
+  assert.deepEqual(pick, { index: 2, wouldUnlock: false });
+});
+
+test("lock walk (day scope): whole cohort locked today returns null", () => {
+  const locks = new Map(cohort.map((id) => [id, true] as const));
+  const pick = pickArbAgentIndexFromLocks(cohort, 2, locks, true);
+  assert.deepEqual(pick, { index: null, wouldUnlock: false });
+});
+
+test("lock walk (day scope): startIdx wraps around the cohort", () => {
+  const locks = new Map([["a4", true]]);
+  // startIdx 3 → a4 locked today → wraps to a1.
+  const pick = pickArbAgentIndexFromLocks(cohort, 3, locks, true);
+  assert.deepEqual(pick, { index: 0, wouldUnlock: false });
+});
+
+test("lock walk (day scope): startIdx beyond cohort length is modulo'd", () => {
+  const pick = pickArbAgentIndexFromLocks(cohort, 9, new Map(), true);
+  assert.deepEqual(pick, { index: 1, wouldUnlock: false });
 });

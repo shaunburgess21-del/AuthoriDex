@@ -445,6 +445,31 @@ export const ARB_CONVERGENCE_MARKETS_PER_SWEEP = (() => {
   return Number.isInteger(raw) && raw > 0 ? raw : 10;
 })();
 
+/**
+ * Near-close convergence sweeps: scope the per-agent-per-market action lock to
+ * the current UTC day instead of the market's whole lifetime.
+ *
+ * The legacy lifetime lock is shared with the ordinary runner path, so an arb
+ * agent that touched a market once at week-open can never be re-used by the
+ * final-6h sweep — the window where lock-in fair is most reliable. With 8 arb
+ * agents that caps a market at 8 arb trades ever, and in practice the cohort is
+ * exhausted days before close (Jul 2026 audit: 8/9 open gainer markets at 8/8
+ * agents used, last arb trade >24h before cutoff).
+ *
+ * Day scope also lets a sweep fall through to the next arb agent when the
+ * primary is already locked; without that the rescoped lock would be inert,
+ * since the round-robin picks the same agent for the same market slot.
+ * Still bounded: one action per agent per market per day.
+ */
+export function isArbNearCloseDailyLockEnabled(): boolean {
+  return envFlag(process.env.ARB_NEARCLOSE_DAILY_LOCK_ENABLED);
+}
+
+/** Log how many near-close actions the day-scoped lock would unlock, without scheduling them. */
+export function isArbNearCloseDailyLockShadow(): boolean {
+  return envFlag(process.env.ARB_NEARCLOSE_DAILY_LOCK_SHADOW);
+}
+
 /** H2H lock-in: shadow logs only (no bet changes). */
 export const LOCKIN_FAIR_H2H_SHADOW = envFlag(process.env.LOCKIN_FAIR_H2H_SHADOW);
 /** H2H lock-in: confidence floor + force-pick + arb convergence. Default ON. */
