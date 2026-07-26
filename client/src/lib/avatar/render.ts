@@ -5,13 +5,28 @@
  * For server-side or Node rendering, see ./upload.ts for PNG encoding.
  */
 
-import { AVATAR_GRID_SIZE, generateAvatar, type AvatarResult } from './generator';
+import {
+  AVATAR_GRID_SIZE,
+  generateAvatar,
+  generateAvatarRoles,
+  paintRoleGrid,
+  type AvatarResult,
+} from './generator';
+import { applyAvatarEffects, type AvatarEffect } from './effects';
+import type { VariantTile } from './colorways';
 
 /**
  * Render an AvatarResult to an HTMLCanvasElement at a given pixel scale.
  * Scale 6 -> 144x144 canvas. Scale 12 -> 288x288 (retina / storage).
+ *
+ * `effects` is the rank-variant material layer; it defaults to empty, so
+ * every pre-variant caller renders exactly what it always did.
  */
-export function renderAvatarToCanvas(result: AvatarResult, scale: number): HTMLCanvasElement {
+export function renderAvatarToCanvas(
+  result: AvatarResult,
+  scale: number,
+  effects: readonly AvatarEffect[] = [],
+): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   const size = AVATAR_GRID_SIZE * scale;
   canvas.width = size;
@@ -33,7 +48,14 @@ export function renderAvatarToCanvas(result: AvatarResult, scale: number): HTMLC
     }
   }
 
-  // Step 2: trim the square of pixel art down to a mathematically
+  // Step 2: paint the variant material over the finished pixel field,
+  // before masking, so vignettes and motifs are clipped with everything
+  // else rather than bleeding past the circle.
+  if (effects.length > 0) {
+    applyAvatarEffects(ctx, size, effects);
+  }
+
+  // Step 3: trim the square of pixel art down to a mathematically
   // perfect, anti-aliased circle. `destination-in` keeps only pixels
   // covered by the next draw call; the arc is drawn with smoothing
   // enabled so the boundary is sub-pixel accurate.
@@ -133,7 +155,67 @@ export function generateAvatarDataURL(seed: string, renderScale = 14): string {
  */
 export async function renderAvatarToBlob(seed: string, renderScale = 30): Promise<Blob> {
   const result = generateAvatar(seed);
-  const canvas = renderAvatarToCanvas(result, renderScale);
+  return canvasToBlob(renderAvatarToCanvas(result, renderScale));
+}
+
+/** Clear the cache (e.g. on test teardown or when algorithm changes). */
+export function clearAvatarCache(): void {
+  dataUrlCache.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/* Rank variants                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Render a seed under a rank variant. The role grid comes from the seed
+ * alone, so every variant of a given seed shares an identical layout —
+ * only the paint and the material differ.
+ */
+export function renderVariantToCanvas(
+  seed: string,
+  scale: number,
+  tile: VariantTile,
+): HTMLCanvasElement {
+  const roles = generateAvatarRoles(seed);
+  const grid = paintRoleGrid(roles.roleGrid, tile.buildColors(roles));
+  return renderAvatarToCanvas(
+    { grid, seedHash: roles.seedHash, seedString: seed },
+    scale,
+    tile.effects,
+  );
+}
+
+/** Cached PNG data URL for a seed under a variant. */
+export function renderVariantDataURL(
+  seed: string,
+  tile: VariantTile,
+  renderScale = 14,
+): string {
+  if (!seed) return '';
+  const key = `${seed}:${renderScale}:${tile.cacheKey}`;
+  const cached = dataUrlCache.get(key);
+  if (cached) return cached;
+
+  const dataURL = renderVariantToCanvas(seed, renderScale, tile).toDataURL('image/png');
+  if (dataUrlCache.size >= MAX_CACHE_ENTRIES) {
+    const firstKey = dataUrlCache.keys().next().value;
+    if (firstKey) dataUrlCache.delete(firstKey);
+  }
+  dataUrlCache.set(key, dataURL);
+  return dataURL;
+}
+
+/** PNG bytes for a seed under a variant. */
+export function renderVariantToBlob(
+  seed: string,
+  tile: VariantTile,
+  renderScale = 30,
+): Promise<Blob> {
+  return canvasToBlob(renderVariantToCanvas(seed, renderScale, tile));
+}
+
+export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -143,9 +225,4 @@ export async function renderAvatarToBlob(seed: string, renderScale = 30): Promis
       'image/png',
     );
   });
-}
-
-/** Clear the cache (e.g. on test teardown or when algorithm changes). */
-export function clearAvatarCache(): void {
-  dataUrlCache.clear();
 }
