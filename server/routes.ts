@@ -12605,11 +12605,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Smart search: UUID → direct id lookup; contains "@" → Supabase
-      // auth email lookup (auth.users); otherwise username ILIKE.
-      // Exact-identifier lookups (UUID / email) bypass the kind/status/
-      // active list filters — the admin named a specific account, so
-      // hiding it behind the default "Humans" chip would look like the
-      // user doesn't exist.
+      // auth email lookup (auth.users); otherwise username ILIKE OR
+      // partial email match (local-part / domain without "@").
+      // Exact-identifier lookups (UUID / email-with-@) bypass the
+      // kind/status/active list filters — the admin named a specific
+      // account, so hiding it behind the default "Humans" chip would
+      // look like the user doesn't exist. Free-text keeps those chips.
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (rawSearch) {
         if (UUID_RE.test(rawSearch)) {
@@ -12625,7 +12626,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           conditions.push(inArray(profiles.id, matchedIds));
         } else {
           const sanitized = sanitizeAdminUserSearch(rawSearch);
-          if (sanitized) conditions.push(ilike(profiles.username, `%${sanitized}%`));
+          if (sanitized) {
+            const { getSupabaseUserIdsByEmail } = await import("./services/supabase-auth-email");
+            const matchedIds = await getSupabaseUserIdsByEmail(sanitized);
+            const usernameMatch = ilike(profiles.username, `%${sanitized}%`);
+            conditions.push(
+              matchedIds.length > 0
+                ? or(usernameMatch, inArray(profiles.id, matchedIds))
+                : usernameMatch,
+            );
+          }
         }
       }
 
