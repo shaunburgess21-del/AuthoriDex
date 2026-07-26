@@ -59,15 +59,14 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
 import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
+import { FilterChip } from "@/components/FilterChip";
+import { GlobalCategoryBar } from "@/components/GlobalCategoryBar";
+import { SectionSearchRow } from "@/components/SectionSearchRow";
+import { useScrollHideOffset } from "@/hooks/useScrollHideOffset";
 import {
-  FILTER_INACTIVE_PILL_PREDICT,
-  FILTER_INACTIVE_PILL_WEEKLY,
   FILTER_INACTIVE_SECTION_TOGGLE,
   FILTER_ACTIVE_PILL_WEEKLY,
   FILTER_ACTIVE_PILL_WORLD,
-  FILTER_ACTIVE_CHIP_WEEKLY,
-  FILTER_ACTIVE_CHIP_WORLD,
-  CATEGORY_CHIP_RADIUS,
 } from "@/lib/filterControlStyles";
 import { 
   TrendingUp, 
@@ -118,7 +117,6 @@ import {
   Maximize2,
   type LucideIcon
 } from "lucide-react";
-import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,7 +129,7 @@ import { CardSection } from "@/components/CardSection";
 import { UserSocialAvatar } from "@/components/UserSocialAvatar";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getMarketCategoryLabel, normalizeMarketCategory, matchesCategoryFilter, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
-import { buildSectionCategoryOptions } from "@/lib/sectionCategoryFilters";
+import { buildSectionCategoryOptions, isPinnedCategory } from "@/lib/sectionCategoryFilters";
 import {
   communityChipForMarket,
   communityTrendingCompare,
@@ -480,18 +478,6 @@ function SectionFilterBar({
   /** Weekly = VoxDex blue chips; World = violet chips. */
   accent?: "weekly" | "world";
 }) {
-  const handleCategoryClick = (catId: CategoryFilter) => {
-    if (catId === "favorites" && !user) {
-      onAuthRequired?.();
-      return;
-    }
-    onCategoryChange(catId);
-  };
-
-  const activeChip =
-    accent === "weekly" ? FILTER_ACTIVE_CHIP_WEEKLY : FILTER_ACTIVE_CHIP_WORLD;
-  const inactiveChip =
-    accent === "weekly" ? FILTER_INACTIVE_PILL_WEEKLY : FILTER_INACTIVE_PILL_PREDICT;
   const searchVariant = accent === "weekly" ? "predict-weekly" : "predict";
 
   return (
@@ -504,30 +490,20 @@ function SectionFilterBar({
         variant={searchVariant}
         activeCategory={categoryFilter}
       >
-        {filters.map((cat) => {
-          const IconComponent = getFilterCategoryIcon(cat.id);
-          return (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoryClick(cat.id)}
-              data-scroll-chip={cat.id}
-              className={`px-3 py-1.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                categoryFilter === cat.id ? activeChip : inactiveChip
-              }`}
-              data-testid={cat.id === "misc" ? `${testIdPrefix}-category-custom-topic` : `${testIdPrefix}-category-${cat.id}`}
-            >
-              <IconComponent className="h-3.5 w-3.5" />
-              {cat.id === "all" ? (
-                <>
-                  <span className="hidden md:inline">All Categories</span>
-                  <span className="md:hidden">All</span>
-                </>
-              ) : (
-                cat.label
-              )}
-            </button>
-          );
-        })}
+        {filters.map((cat) => (
+          <FilterChip
+            key={cat.id}
+            category={cat.id}
+            label={cat.label}
+            isActive={categoryFilter === cat.id}
+            onClick={() => onCategoryChange(cat.id as CategoryFilter)}
+            testIdPrefix={`${testIdPrefix}-category`}
+            user={user}
+            onAuthRequired={onAuthRequired}
+            accent={accent}
+            isCustomTopic={cat.id === "misc"}
+          />
+        ))}
       </CategoryRowWithSearch>
     </div>
   );
@@ -1263,11 +1239,10 @@ export default function PredictPage() {
   const [gainersOverlayCategoryFilter, setGainersOverlayCategoryFilter] = useState<CategoryFilter>("all");
   
   // Section-specific filters
-  const [updownCategory, setUpdownCategory] = useState<CategoryFilter>("all");
+  /** Single Weekly-wide category filter — drives Up/Down, H2H and Category Races. */
+  const [weeklyCategory, setWeeklyCategory] = useState<CategoryFilter>("all");
   const [updownSearch, setUpdownSearch] = useState("");
-  const [h2hCategory, setH2hCategory] = useState<CategoryFilter>("all");
   const [h2hSearch, setH2hSearch] = useState("");
-  const [gainerCategory, setGainerCategory] = useState<CategoryFilter>("all");
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
   const [communitySearch, setCommunitySearch] = useState("");
@@ -1279,6 +1254,21 @@ export default function PredictPage() {
   });
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
+
+  // Scroll-linked hide/reveal (tracks scroll 1:1, Voices-style; pure transform,
+  // no reflow jitter). The contextual bar (weekly type pills / world category
+  // chips) and, in Weekly, the countdown hero with its docked category chips
+  // all slide away on scroll down and return on swipe down.
+  const contextualBarRef = useRef<HTMLDivElement>(null);
+  const contextualBarOffset = useScrollHideOffset(
+    contextualBarRef,
+    `${predictView}|${selectedType}|${communityCategory}`,
+  );
+  const weeklyHeroRef = useRef<HTMLDivElement>(null);
+  const weeklyHeroOffset = useScrollHideOffset(
+    weeklyHeroRef,
+    `${selectedType}|${weeklyCategory}`,
+  );
 
   const isMobile = useIsMobile();
   const playInactivePredictionAdvance = useCallback(
@@ -1928,9 +1918,7 @@ export default function PredictPage() {
 
   // Sync global category filter to all section filters
   useEffect(() => {
-    setUpdownCategory(categoryFilter);
-    setH2hCategory(categoryFilter);
-    setGainerCategory(categoryFilter);
+    setWeeklyCategory(categoryFilter);
     setCommunityCategory(categoryFilter);
   }, [categoryFilter]);
 
@@ -1938,26 +1926,24 @@ export default function PredictPage() {
     switch (category) {
       case "weekly":
         setWeeklyOverlaySearchQuery(updownSearch);
-        setWeeklyOverlayCategoryFilter(updownCategory);
+        setWeeklyOverlayCategoryFilter(weeklyCategory);
         break;
       case "h2h":
         setH2hOverlaySearchQuery(h2hSearch);
-        setH2hOverlayCategoryFilter(h2hCategory);
+        setH2hOverlayCategoryFilter(weeklyCategory);
         break;
       case "gainers":
         setGainersOverlaySearchQuery(gainerSearch);
-        setGainersOverlayCategoryFilter(gainerCategory);
+        setGainersOverlayCategoryFilter(weeklyCategory);
         break;
     }
     window.history.pushState({ overlay: category }, "");
     setViewAllCategory(category);
   }, [
     updownSearch,
-    updownCategory,
     h2hSearch,
-    h2hCategory,
     gainerSearch,
-    gainerCategory,
+    weeklyCategory,
   ]);
 
   const closePredictOverlay = useCallback(() => {
@@ -2724,13 +2710,13 @@ export default function PredictPage() {
       hydratedMarkets
         .filter(
           (m) =>
-            matchesCategory(updownCategory, m.category, m.personId, (m as any).secondaryCategories) &&
+            matchesCategory(weeklyCategory, m.category, m.personId, (m as any).secondaryCategories) &&
             (!updownSearch ||
               m.personName.toLowerCase().includes(updownSearch.toLowerCase())) &&
             passesPredictSectionFilter(m.id, updownSearch),
         )
         .sort((a, b) =>
-          updownCategory === "trending"
+          weeklyCategory === "trending"
             ? trendingCompare(
                 a.totalBets,
                 b.totalBets,
@@ -2742,7 +2728,7 @@ export default function PredictPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- helper closures (matchesCategory, passesMyPositionsFilter, trendingCompare, updownFame) capture state already covered below; listing every helper would be noise
     [
       hydratedMarkets,
-      updownCategory,
+      weeklyCategory,
       updownSearch,
       myPositionsFilter,
       userBetsByMarket,
@@ -2755,12 +2741,12 @@ export default function PredictPage() {
       hydratedH2H
         .filter(
           (m) =>
-            (h2hCategory === "all" ||
-              h2hCategory === "trending" ||
-              (h2hCategory === "favorites"
+            (weeklyCategory === "all" ||
+              weeklyCategory === "trending" ||
+              (weeklyCategory === "favorites"
                 ? favoriteIds.has(m.person1Id || "") ||
                   favoriteIds.has(m.person2Id || "")
-                : matchesCategory(h2hCategory, m.category, undefined, (m as any).secondaryCategories))) &&
+                : matchesCategory(weeklyCategory, m.category, undefined, (m as any).secondaryCategories))) &&
             (!h2hSearch ||
               m.title.toLowerCase().includes(h2hSearch.toLowerCase()) ||
               m.person1.name.toLowerCase().includes(h2hSearch.toLowerCase()) ||
@@ -2768,14 +2754,14 @@ export default function PredictPage() {
             passesPredictSectionFilter(m.id, h2hSearch),
         )
         .sort((a, b) =>
-          h2hCategory === "trending"
+          weeklyCategory === "trending"
             ? trendingCompare(a.totalBets, b.totalBets, h2hFame(a), h2hFame(b))
             : 0,
         ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       hydratedH2H,
-      h2hCategory,
+      weeklyCategory,
       h2hSearch,
       myPositionsFilter,
       userBetsByMarket,
@@ -2788,11 +2774,11 @@ export default function PredictPage() {
       hydratedGainers
         .filter(
           (m) =>
-            (gainerCategory === "all" ||
-              gainerCategory === "trending" ||
-              (gainerCategory === "favorites"
+            (weeklyCategory === "all" ||
+              weeklyCategory === "trending" ||
+              (weeklyCategory === "favorites"
                 ? m.leaders.some((l) => l.personId && favoriteIds.has(l.personId))
-                : matchesCategory(gainerCategory, m.category, undefined, (m as any).secondaryCategories))) &&
+                : matchesCategory(weeklyCategory, m.category, undefined, (m as any).secondaryCategories))) &&
             (!gainerSearch ||
               getMarketCategoryLabel(m.category)
                 .toLowerCase()
@@ -2803,7 +2789,7 @@ export default function PredictPage() {
             passesPredictSectionFilter(m.id, gainerSearch),
         )
         .sort((a, b) =>
-          gainerCategory === "trending"
+          weeklyCategory === "trending"
             ? trendingCompare(
                 a.totalBets,
                 b.totalBets,
@@ -2815,7 +2801,7 @@ export default function PredictPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       hydratedGainers,
-      gainerCategory,
+      weeklyCategory,
       gainerSearch,
       myPositionsFilter,
       userBetsByMarket,
@@ -2893,40 +2879,40 @@ export default function PredictPage() {
 
   const showCommunityMobileStacks = isMobile;
 
-  const updownCategoryFilters = useMemo(
+  const updownFilterOptions = useMemo(
     () =>
       buildSectionCategoryOptions({
         categories: hydratedMarkets.map((m) => m.category),
         secondaryCategories: hydratedMarkets.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
-        selectedCategory: updownCategory,
+        selectedCategory: weeklyCategory,
       }).map((c) => ({ id: c.value, label: c.label })),
-    [hydratedMarkets, updownCategory],
+    [hydratedMarkets, weeklyCategory],
   );
 
-  const h2hCategoryFilters = useMemo(
+  const h2hFilterOptions = useMemo(
     () =>
       buildSectionCategoryOptions({
         categories: hydratedH2H.map((m) => m.category),
         secondaryCategories: hydratedH2H.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
-        selectedCategory: h2hCategory,
+        selectedCategory: weeklyCategory,
       }).map((c) => ({ id: c.value, label: c.label })),
-    [hydratedH2H, h2hCategory],
+    [hydratedH2H, weeklyCategory],
   );
 
-  const gainerCategoryFilters = useMemo(
+  const gainerFilterOptions = useMemo(
     () =>
       buildSectionCategoryOptions({
         categories: hydratedGainers.map((m) => m.category),
         secondaryCategories: hydratedGainers.flatMap((m) => (m as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
-        selectedCategory: gainerCategory,
+        selectedCategory: weeklyCategory,
       }).map((c) => ({ id: c.value, label: c.label })),
-    [hydratedGainers, gainerCategory],
+    [hydratedGainers, weeklyCategory],
   );
 
   const communityCategoryFilters = useMemo(
@@ -2941,39 +2927,55 @@ export default function PredictPage() {
     [openMarkets, communityCategory],
   );
 
-  useEffect(() => {
-    if (!updownCategoryFilters.some((c) => c.id === updownCategory)) setUpdownCategory("all");
-  }, [updownCategory, updownCategoryFilters]);
+  /** Weekly global chip row: union of categories across Up/Down, H2H and Gainer markets. */
+  const weeklyCategoryOptions = useMemo(
+    () =>
+      buildSectionCategoryOptions({
+        categories: [
+          ...hydratedMarkets.map((m) => m.category),
+          ...hydratedH2H.map((m) => m.category),
+          ...hydratedGainers.map((m) => m.category),
+        ],
+        secondaryCategories: [
+          ...hydratedMarkets.flatMap((m) => (m as any).secondaryCategories || []),
+          ...hydratedH2H.flatMap((m) => (m as any).secondaryCategories || []),
+          ...hydratedGainers.flatMap((m) => (m as any).secondaryCategories || []),
+        ],
+        includeFavorites: true,
+        includeTrending: true,
+        selectedCategory: weeklyCategory,
+      }),
+    [hydratedMarkets, hydratedH2H, hydratedGainers, weeklyCategory],
+  );
 
   useEffect(() => {
-    if (!h2hCategoryFilters.some((c) => c.id === h2hCategory)) setH2hCategory("all");
-  }, [h2hCategory, h2hCategoryFilters]);
-
-  useEffect(() => {
-    if (!gainerCategoryFilters.some((c) => c.id === gainerCategory)) setGainerCategory("all");
-  }, [gainerCategory, gainerCategoryFilters]);
+    // Skip while data is still loading (only pinned chips present) so the
+    // selection isn't clobbered before the market payloads arrive.
+    if (!weeklyCategoryOptions.some((c) => !isPinnedCategory(c.value))) return;
+    if (!weeklyCategoryOptions.some((c) => c.value === weeklyCategory)) setWeeklyCategory("all");
+  }, [weeklyCategory, weeklyCategoryOptions]);
 
   useEffect(() => {
     if (!communityCategoryFilters.some((c) => c.id === communityCategory)) setCommunityCategory("all");
   }, [communityCategory, communityCategoryFilters]);
 
   useEffect(() => {
-    if (!updownCategoryFilters.some((c) => c.id === weeklyOverlayCategoryFilter)) {
+    if (!updownFilterOptions.some((c) => c.id === weeklyOverlayCategoryFilter)) {
       setWeeklyOverlayCategoryFilter("all");
     }
-  }, [weeklyOverlayCategoryFilter, updownCategoryFilters]);
+  }, [weeklyOverlayCategoryFilter, updownFilterOptions]);
 
   useEffect(() => {
-    if (!h2hCategoryFilters.some((c) => c.id === h2hOverlayCategoryFilter)) {
+    if (!h2hFilterOptions.some((c) => c.id === h2hOverlayCategoryFilter)) {
       setH2hOverlayCategoryFilter("all");
     }
-  }, [h2hOverlayCategoryFilter, h2hCategoryFilters]);
+  }, [h2hOverlayCategoryFilter, h2hFilterOptions]);
 
   useEffect(() => {
-    if (!gainerCategoryFilters.some((c) => c.id === gainersOverlayCategoryFilter)) {
+    if (!gainerFilterOptions.some((c) => c.id === gainersOverlayCategoryFilter)) {
       setGainersOverlayCategoryFilter("all");
     }
-  }, [gainersOverlayCategoryFilter, gainerCategoryFilters]);
+  }, [gainersOverlayCategoryFilter, gainerFilterOptions]);
 
   // Weekly-mode section pills (World Markets is a top-level mode now).
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
@@ -3192,7 +3194,9 @@ export default function PredictPage() {
         />
       </div>
       <div
-        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b"
+        ref={contextualBarRef}
+        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform transition-transform duration-100 ease-out"
+        style={{ transform: `translateY(-${contextualBarOffset}px)` }}
         data-testid="predict-section-filter-bar"
       >
         <div
@@ -3537,7 +3541,27 @@ export default function PredictPage() {
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {showNativePredictScope && (
         <div data-testid="native-predict-sticky-scope">
-        <MarketCycleHero marketState={marketCycle} />
+        <MarketCycleHero
+          marketState={marketCycle}
+          rootRef={weeklyHeroRef}
+          hideOffset={weeklyHeroOffset}
+        >
+          {/* Weekly-wide category filter — docked under the countdown; the whole
+              bar (timer + chips) hides/reveals 1:1 with scroll. Chips hidden for
+              Jackpot (no category filtering). */}
+          {selectedType !== "jackpot" && (
+            <GlobalCategoryBar
+              options={weeklyCategoryOptions}
+              value={weeklyCategory}
+              onChange={(v) => setWeeklyCategory(v as CategoryFilter)}
+              accent="weekly"
+              user={user}
+              onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
+              testIdPrefix="filter-weekly-global"
+              className="px-2 pb-3 md:px-6"
+            />
+          )}
+        </MarketCycleHero>
 
         {showSection("jackpot") && (
           <section id="jackpot" data-hash-anchor className="mb-10 scroll-mt-16">
@@ -3606,17 +3630,11 @@ export default function PredictPage() {
                 </>
               }
             >
-              <SectionFilterBar
-                categoryFilter={updownCategory}
-                onCategoryChange={setUpdownCategory}
-                searchQuery={updownSearch}
-                onSearchChange={setUpdownSearch}
-                searchPlaceholder="Search celebrities..."
-                testIdPrefix="updown"
-                user={user}
-                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                filters={updownCategoryFilters}
-                accent="weekly"
+              <SectionSearchRow
+                value={updownSearch}
+                onChange={setUpdownSearch}
+                placeholder="Search celebrities..."
+                testId="updown-search"
               />
             </UnifiedSectionHeader>
             {updownError ? (
@@ -3652,14 +3670,14 @@ export default function PredictPage() {
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                {(updownCategory !== "all" || updownSearch.trim().length > 0) ? (
+                {(weeklyCategory !== "all" || updownSearch.trim().length > 0) ? (
                   <div className="space-y-3">
                     <p>No markets match your filters</p>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setUpdownCategory("all");
+                        setWeeklyCategory("all");
                         setUpdownSearch("");
                       }}
                       data-testid="button-reset-updown-filters"
@@ -3713,17 +3731,11 @@ export default function PredictPage() {
                 </Tooltip>
               }
             >
-              <SectionFilterBar
-                categoryFilter={h2hCategory}
-                onCategoryChange={setH2hCategory}
-                searchQuery={h2hSearch}
-                onSearchChange={setH2hSearch}
-                searchPlaceholder="Search matchups..."
-                testIdPrefix="h2h"
-                user={user}
-                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                filters={h2hCategoryFilters}
-                accent="weekly"
+              <SectionSearchRow
+                value={h2hSearch}
+                onChange={setH2hSearch}
+                placeholder="Search matchups..."
+                testId="h2h-search"
               />
             </UnifiedSectionHeader>
             {h2hError ? (
@@ -3761,14 +3773,14 @@ export default function PredictPage() {
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                {(h2hCategory !== "all" || h2hSearch.trim().length > 0) ? (
+                {(weeklyCategory !== "all" || h2hSearch.trim().length > 0) ? (
                   <div className="space-y-3">
                     <p>No matchups match your filters</p>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setH2hCategory("all");
+                        setWeeklyCategory("all");
                         setH2hSearch("");
                       }}
                       data-testid="button-reset-h2h-filters"
@@ -3822,17 +3834,11 @@ export default function PredictPage() {
                 </Tooltip>
               }
             >
-              <SectionFilterBar
-                categoryFilter={gainerCategory}
-                onCategoryChange={setGainerCategory}
-                searchQuery={gainerSearch}
-                onSearchChange={setGainerSearch}
-                searchPlaceholder="Search gainers..."
-                testIdPrefix="gainer"
-                user={user}
-                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                filters={gainerCategoryFilters}
-                accent="weekly"
+              <SectionSearchRow
+                value={gainerSearch}
+                onChange={setGainerSearch}
+                placeholder="Search gainers..."
+                testId="gainer-search"
               />
             </UnifiedSectionHeader>
             {gainerError ? (
@@ -4063,7 +4069,7 @@ export default function PredictPage() {
         onSearchChange={setWeeklyOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-        categories={updownCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
+        categories={updownFilterOptions.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedMarkets
           .filter(m => 
@@ -4103,7 +4109,7 @@ export default function PredictPage() {
         onSearchChange={setH2hOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-        categories={h2hCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
+        categories={h2hFilterOptions.map((c) => ({ value: c.id, label: c.label }))}
       >
         {hydratedH2H
           .filter(m => 
@@ -4153,7 +4159,7 @@ export default function PredictPage() {
         onSearchChange={setGainersOverlaySearchQuery}
         user={user}
         onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-        categories={gainerCategoryFilters.map((c) => ({ value: c.id, label: c.label }))}
+        categories={gainerFilterOptions.map((c) => ({ value: c.id, label: c.label }))}
       >
         {filteredOverlayGainers.length > 0 ? (
           filteredOverlayGainers.map((market) => (

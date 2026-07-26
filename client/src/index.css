@@ -1094,6 +1094,17 @@
     box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(148, 163, 184, 0.15);
   }
 
+  /* No-glow modifier: keep the hairline border, top lip and tint, but drop the
+     outer glow shadow (section headers sit directly above card grids and the
+     glow visually clashes with the first row). Placed after all pulse-card
+     variant rules so it wins by source order in both dark and light mode. */
+  .pulse-card-noglow,
+  .pulse-card-noglow:hover,
+  :root:not(.dark) .pulse-card-noglow,
+  :root:not(.dark) .pulse-card-noglow:hover {
+    box-shadow: none;
+  }
+
   :root:not(.dark) .lb-header-band {
     border-color: rgba(148, 163, 184, 0.25);
     border-bottom-color: transparent;

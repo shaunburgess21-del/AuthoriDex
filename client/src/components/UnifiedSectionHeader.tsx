@@ -11,24 +11,20 @@ interface UnifiedSectionHeaderProps {
   testId?: string;
 }
 
+/** Shell uses the shared pulse-card system (index.css): tinted hairline all
+ *  around + fading 3px top lip, same anatomy as Pulse widgets / leaderboard rows. */
 const accentMap = {
   cyan: {
-    borderTop: "border-t-cyan-500",
-    shellBg:
-      "bg-[linear-gradient(to_bottom,rgba(0,200,200,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(0,200,200,0.08)_0%,transparent_75%)]",
+    cardClass: "pulse-card-cyan",
     iconBg: "bg-cyan-500/15 dark:bg-cyan-500/10",
   },
   violet: {
-    borderTop: "border-t-violet-500",
-    shellBg:
-      "bg-[linear-gradient(to_bottom,rgba(139,92,246,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(139,92,246,0.08)_0%,transparent_75%)]",
+    cardClass: "pulse-card-purple",
     iconBg: "bg-violet-500/15 dark:bg-violet-500/10",
   },
   /** VoxDex leaderboard blue (#3B82F6) — Weekly Predict sections. */
   blue: {
-    borderTop: "border-t-blue-500",
-    shellBg:
-      "bg-[linear-gradient(to_bottom,rgba(59,130,246,0.12)_0%,transparent_75%)] dark:bg-[linear-gradient(to_bottom,rgba(59,130,246,0.08)_0%,transparent_75%)]",
+    cardClass: "pulse-card-voxdex",
     iconBg: "bg-blue-500/15 dark:bg-blue-500/10",
   },
 } as const;
@@ -50,7 +46,7 @@ export function UnifiedSectionHeader({
   return (
     <div className="px-1.5 md:px-0">
       <div
-        className={`mb-3 border-t-[3px] border-b-0 ${a.borderTop} rounded-t-lg ${a.shellBg}`}
+        className={`mb-3 rounded-xl pulse-card-flush pulse-card-noglow ${a.cardClass}`}
         data-testid={testId}
       >
         <div className="flex items-center justify-between px-3 py-3 md:px-5">
@@ -75,7 +71,7 @@ export function UnifiedSectionHeader({
         {meta && <div className="px-3 pb-2 md:px-5">{meta}</div>}
 
         {children && (
-          <div className="px-3 pb-1 md:pb-3 md:px-5">{children}</div>
+          <div className="px-3 pb-3 md:px-5">{children}</div>
         )}
       </div>
     </div>

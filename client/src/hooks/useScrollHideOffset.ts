@@ -4,11 +4,18 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  * Returns how many px to translate a top bar up, tied 1:1 to scroll delta and
  * clamped to the element's height. Always 0 near the top so it never hides on
  * load. Drives X-style scroll-linked hide/reveal.
+ *
+ * Optional `resetKey`: when it changes, the offset resets to 0 so the bar
+ * re-reveals (e.g. on section-toggle or filter changes).
  */
-export function useScrollHideOffset(ref: RefObject<HTMLElement>): number {
+export function useScrollHideOffset(ref: RefObject<HTMLElement>, resetKey?: unknown): number {
   const [offset, setOffset] = useState(0);
   const lastY = useRef(typeof window !== "undefined" ? window.scrollY : 0);
   const ticking = useRef(false);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [resetKey]);
 
   useEffect(() => {
     const onScroll = () => {

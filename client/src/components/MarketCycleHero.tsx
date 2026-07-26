@@ -1,3 +1,4 @@
+import type { ReactNode, RefObject } from "react";
 import { MarketCycleState } from "@/hooks/useMarketCycle";
 import { Badge } from "@/components/ui/badge";
 
@@ -7,6 +8,16 @@ interface MarketCycleHeroProps {
   constrainedWidth?: boolean;
   /** When false, bar renders in-flow without sticking (e.g. community-only predict filter) */
   sticky?: boolean;
+  /** Extra row docked under the timer inside the sticky surface (e.g. the Weekly global category bar). */
+  children?: ReactNode;
+  /**
+   * Scroll-linked hide/reveal: px to translate the whole bar (timer + children)
+   * up, from `useScrollHideOffset`. Applied to the sticky element itself —
+   * transforming an ancestor would break position: sticky.
+   */
+  hideOffset?: number;
+  /** Ref to the root element, for measuring the hide clamp height. */
+  rootRef?: RefObject<HTMLDivElement>;
 }
 
 function padZero(num: number): string {
@@ -29,7 +40,14 @@ function TimerSegment({ value, label, testId }: { value: string; label: string; 
   );
 }
 
-export function MarketCycleHero({ marketState, constrainedWidth = false, sticky = true }: MarketCycleHeroProps) {
+export function MarketCycleHero({
+  marketState,
+  constrainedWidth = false,
+  sticky = true,
+  children,
+  hideOffset,
+  rootRef,
+}: MarketCycleHeroProps) {
   const { status, timeRemaining, urgencyLevel } = marketState;
   
   const getStatusBadge = () => {
@@ -105,9 +123,15 @@ export function MarketCycleHero({ marketState, constrainedWidth = false, sticky 
   const showTimer = status !== "RESOLVED";
   
   return (
-    <div 
-      style={constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }}
-      className={`${sticky ? "sticky top-16" : ""} z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
+    <div
+      ref={rootRef}
+      style={{
+        ...(constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }),
+        ...(hideOffset !== undefined ? { transform: `translateY(-${hideOffset}px)` } : undefined),
+      }}
+      className={`${sticky ? "sticky top-16" : ""} ${
+        hideOffset !== undefined ? "will-change-transform transition-transform duration-100 ease-out" : ""
+      } z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
       data-testid="market-cycle-hero"
       {...(sticky ? { "data-sticky-predict-bar": true } : {})}
     >
@@ -152,6 +176,7 @@ export function MarketCycleHero({ marketState, constrainedWidth = false, sticky 
           <div className="flex shrink-0">{getStatusBadge()}</div>
         </div>
       </div>
+      {children}
     </div>
   );
 }

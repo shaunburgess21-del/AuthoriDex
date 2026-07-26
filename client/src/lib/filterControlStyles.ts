@@ -45,6 +45,9 @@ export const FILTER_ACTIVE_PILL_WORLD =
   "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20";
 
 /** Category chip active text (slightly stronger than section toggles). */
+export const FILTER_ACTIVE_CHIP_VOTE =
+  "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/50 dark:border-cyan-500/40";
+
 export const FILTER_ACTIVE_CHIP_WEEKLY =
   "bg-blue-500/25 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/50 dark:border-blue-400/40 shadow-sm shadow-blue-500/30 dark:shadow-blue-500/20";
 
