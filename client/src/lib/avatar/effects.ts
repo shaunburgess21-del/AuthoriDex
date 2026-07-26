@@ -6,10 +6,9 @@
  * a canvas. They are painted over the finished pixel field, before the
  * circular mask in ./render.ts is applied.
  *
- * Cell-based effects (bolt, streak, plasma) are laid out on a lattice
- * that is a multiple of the 10x10 pixel grid: lattice 1 keeps the chunky
- * native cells, higher multipliers subdivide them so a motif has more
- * fidelity while the avatar underneath stays coarse.
+ * Cell-based effects are laid out on a lattice that is a multiple of the
+ * 10x10 pixel grid, so a motif can carry more fidelity than the avatar
+ * underneath: lattice 2 halves the native cells, lattice 3 thirds them.
  */
 
 import { AVATAR_GRID_SIZE, makeRng } from './generator';
@@ -21,10 +20,17 @@ export type AvatarEffect =
   | { kind: 'specular'; strength: number }
   /** Straight sheen band across the top edge. */
   | { kind: 'sheen'; strength: number }
-  /** Lightning bolt struck through the middle of the disc. */
-  | { kind: 'bolt'; lattice: 1 | 2; fill: string; outline: string | null }
-  /** Diagonal band of metal across the disc. */
-  | { kind: 'streak'; lattice: 1 | 2; fill: string; widthCells: number }
+  /**
+   * Blooms whatever is already on the canvas. Highlights are isolated by
+   * multiplying the image by itself, so lit cells spread and mid-tones
+   * barely move.
+   */
+  | { kind: 'bloom'; strength: number; radius: number; passes: 1 | 2 }
+  /**
+   * Additive radial band. `peak` is where it is strongest as a fraction
+   * of the canvas edge, so 0 lights the centre and 0.5 lights the rim.
+   */
+  | { kind: 'glow'; color: string; strength: number; peak: number; spread: number }
   /** Plasma-globe arcs branching out of a hot core. */
   | {
       kind: 'plasma';
@@ -54,51 +60,8 @@ export type AvatarEffect =
     };
 
 /* ------------------------------------------------------------------ */
-/* Bolt geometry                                                       */
+/* Lattice cells                                                       */
 /* ------------------------------------------------------------------ */
-
-/**
- * The lucide `zap` outline, normalised out of its 24x24 viewBox. Reused
- * rather than hand-drawn so the motif matches the icon language already
- * used by rank badges.
- */
-const ZAP_POLYGON_24: ReadonlyArray<readonly [number, number]> = [
-  [13, 2], [3, 14], [12, 14], [11, 22], [21, 10], [12, 10],
-];
-
-/**
- * Shrink factor applied about the centre. At full size the bolt tips sit
- * at ~84% of the disc radius, which crowds the circular mask; 0.86 pulls
- * them back to ~72% so nothing is sheared and the motif has room.
- */
-const BOLT_SCALE = 0.86;
-
-/** Sub-samples per axis when deciding whether a lattice cell is inside. */
-const COVERAGE_SAMPLES = 4;
-const COVERAGE_THRESHOLD = 0.35;
-
-const BOLT_PATH: ReadonlyArray<readonly [number, number]> = ZAP_POLYGON_24.map(
-  ([x, y]) => [
-    0.5 + (x / 24 - 0.5) * BOLT_SCALE,
-    0.5 + (y / 24 - 0.5) * BOLT_SCALE,
-  ] as const,
-);
-
-function pointInPolygon(
-  px: number,
-  py: number,
-  poly: ReadonlyArray<readonly [number, number]>,
-): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i];
-    const [xj, yj] = poly[j];
-    const intersects =
-      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
 
 interface Cell {
   x: number;
@@ -110,74 +73,6 @@ function withinDisc(cell: Cell, latticeSize: number): boolean {
   const cx = (cell.x + 0.5) / latticeSize - 0.5;
   const cy = (cell.y + 0.5) / latticeSize - 0.5;
   return Math.hypot(cx, cy) <= 0.49;
-}
-
-/**
- * Rasterise the bolt onto a lattice using area coverage rather than a
- * single centre sample. On the coarse lattice a centre test drops enough
- * cells to break the bolt into disconnected blobs; coverage keeps it
- * continuous.
- */
-function boltCells(latticeSize: number): Cell[] {
-  const cells: Cell[] = [];
-  const step = 1 / (latticeSize * COVERAGE_SAMPLES);
-  const half = step / 2;
-
-  for (let y = 0; y < latticeSize; y++) {
-    for (let x = 0; x < latticeSize; x++) {
-      let hits = 0;
-      for (let sy = 0; sy < COVERAGE_SAMPLES; sy++) {
-        for (let sx = 0; sx < COVERAGE_SAMPLES; sx++) {
-          const px = x / latticeSize + sx * step + half;
-          const py = y / latticeSize + sy * step + half;
-          if (pointInPolygon(px, py, BOLT_PATH)) hits++;
-        }
-      }
-      const coverage = hits / (COVERAGE_SAMPLES * COVERAGE_SAMPLES);
-      if (coverage >= COVERAGE_THRESHOLD) {
-        const cell = { x, y };
-        if (withinDisc(cell, latticeSize)) cells.push(cell);
-      }
-    }
-  }
-  return cells;
-}
-
-/**
- * Drop-shadow cells one step down-right of the bolt. A full outline
- * closes the motif in and reads as a sticker; offsetting to one side
- * keeps it sitting in the pixel field while still separating it.
- */
-function boltShadowCells(cells: Cell[], latticeSize: number): Cell[] {
-  const occupied = new Set(cells.map((c) => `${c.x},${c.y}`));
-  const shadow: Cell[] = [];
-  for (const c of cells) {
-    const cell = { x: c.x + 1, y: c.y + 1 };
-    if (cell.x >= latticeSize || cell.y >= latticeSize) continue;
-    if (occupied.has(`${cell.x},${cell.y}`)) continue;
-    if (!withinDisc(cell, latticeSize)) continue;
-    shadow.push(cell);
-  }
-  return shadow;
-}
-
-/** Cells within `widthCells` of the leading diagonal, running up-right. */
-function streakCells(latticeSize: number, widthCells: number): Cell[] {
-  const cells: Cell[] = [];
-  const halfWidth = widthCells / 2;
-  for (let y = 0; y < latticeSize; y++) {
-    for (let x = 0; x < latticeSize; x++) {
-      const cx = x + 0.5;
-      const cy = y + 0.5;
-      // Distance from the line y = x (rotated 45deg through the centre).
-      const distance = Math.abs(cy - cx) / Math.SQRT2;
-      if (distance > halfWidth) continue;
-      const cell = { x, y };
-      if (!withinDisc(cell, latticeSize)) continue;
-      cells.push(cell);
-    }
-  }
-  return cells;
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +90,9 @@ const PLASMA_DEPTH = 4;
 
 /** Perpendicular wander of the first subdivision, as a share of segment length. */
 const PLASMA_JITTER = 0.32;
+
+/** How fast the wander decays per subdivision. Below 0.5 the arc goes straight. */
+const PLASMA_JITTER_DECAY = 0.62;
 
 /**
  * Arc lengths are dealt from a fixed spread rather than drawn
@@ -214,9 +112,6 @@ function dealLengths(count: number, rng: () => number): number[] {
   }
   return pool;
 }
-
-/** How fast the wander decays per subdivision. Below 0.5 the arc goes straight. */
-const PLASMA_JITTER_DECAY = 0.62;
 
 export interface PlasmaGeometry {
   /** Bright cells forming the arcs themselves. */
@@ -483,6 +378,63 @@ function paintSheen(ctx: CanvasRenderingContext2D, size: number, strength: numbe
   ctx.restore();
 }
 
+/**
+ * Squaring an image is a cheap highlight pass: a cell at 0.4 luminance
+ * falls to 0.16 while one at 0.95 barely moves, so blurring the result
+ * blooms the lit cells and leaves the mid-tones alone.
+ */
+function paintBloom(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  effect: Extract<AvatarEffect, { kind: 'bloom' }>,
+): void {
+  if (typeof ctx.filter !== 'string') return;
+  const layer = createLayer(ctx, size);
+  if (!layer) return;
+
+  layer.drawImage(ctx.canvas, 0, 0);
+  layer.globalCompositeOperation = 'multiply';
+  for (let pass = 0; pass < effect.passes; pass++) {
+    layer.drawImage(ctx.canvas, 0, 0);
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = effect.strength;
+  ctx.filter = `blur(${(size * effect.radius).toFixed(2)}px)`;
+  ctx.drawImage(layer.canvas, 0, 0);
+  ctx.restore();
+}
+
+/** Stops sampled along the radius; enough to read as smooth at any size. */
+const GLOW_STOPS = 14;
+
+function paintGlow(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  effect: Extract<AvatarEffect, { kind: 'glow' }>,
+): void {
+  const mid = size / 2;
+  const outer = size * Math.min(0.5, effect.peak + effect.spread);
+  if (outer <= 0 || effect.spread <= 0) return;
+
+  const gradient = ctx.createRadialGradient(mid, mid, 0, mid, mid, outer);
+  for (let i = 0; i <= GLOW_STOPS; i++) {
+    const t = i / GLOW_STOPS;
+    const distance = Math.abs((t * outer) / size - effect.peak);
+    const alpha = effect.strength * Math.max(0, 1 - distance / effect.spread);
+    gradient.addColorStop(t, withAlpha(effect.color, alpha));
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(mid, mid, outer, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function withAlpha(hex: string, alpha: number): string {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
@@ -560,13 +512,15 @@ function paintPlasma(
   size: number,
   effect: Extract<AvatarEffect, { kind: 'plasma' }>,
 ): void {
+  // Claimed before anything is painted: bailing after the field has been
+  // dimmed would leave a darkened avatar with no lightning on it.
+  const layer = createLayer(ctx, size);
+  if (!layer) return;
+
   const lattice = AVATAR_GRID_SIZE * effect.lattice;
   const geometry = cachedPlasmaGeometry(lattice, effect.seed, effect);
 
   paintPlasmaField(ctx, size, effect.dim);
-
-  const layer = createLayer(ctx, size);
-  if (!layer) return;
 
   // Halo first; the arcs overwrite it wherever the two meet. Kept faint
   // on purpose — at full strength it reads as arc rather than as glow,
@@ -610,26 +564,12 @@ export function applyAvatarEffects(
       case 'sheen':
         paintSheen(ctx, size, effect.strength);
         break;
-      case 'bolt': {
-        const lattice = AVATAR_GRID_SIZE * effect.lattice;
-        const cells = boltCells(lattice);
-        if (effect.outline) {
-          paintCells(ctx, boltShadowCells(cells, lattice), lattice, size, effect.outline);
-        }
-        paintCells(ctx, cells, lattice, size, effect.fill);
+      case 'bloom':
+        paintBloom(ctx, size, effect);
         break;
-      }
-      case 'streak': {
-        const lattice = AVATAR_GRID_SIZE * effect.lattice;
-        paintCells(
-          ctx,
-          streakCells(lattice, effect.widthCells),
-          lattice,
-          size,
-          effect.fill,
-        );
+      case 'glow':
+        paintGlow(ctx, size, effect);
         break;
-      }
       case 'plasma':
         paintPlasma(ctx, size, effect);
         break;
@@ -638,4 +578,4 @@ export function applyAvatarEffects(
 }
 
 /** Exposed for tests — geometry is pure and worth asserting without a DOM. */
-export const __geometry = { boltCells, boltShadowCells, streakCells, plasmaGeometry };
+export const __geometry = { plasmaGeometry };

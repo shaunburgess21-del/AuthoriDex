@@ -46,18 +46,21 @@ const BASE_RAMP: Ramp = {
 };
 
 /**
- * Deeper shadows and brighter highlights. Contrast is the one property
- * that survives being downscaled to a 24px feed avatar, so this is the
- * gloss candidate that leans on it rather than on added geometry.
+ * Saturation pinned to the ceiling for every family and the shadows
+ * crushed toward black. Neon is a contrast trick more than a hue trick:
+ * what sells it is lit cells sitting on something close to unlit.
  */
-const WIDE_RAMP: Ramp = {
-  shadow: { sat: 0.95, l: 0.12 },
-  dark: { sat: 1.0, l: 0.3 },
-  identity: { sat: 1.0, l: 0.52 },
-  bright: { sat: 0.9, l: 0.72 },
-  highlight: { sat: 0.5, l: 0.92 },
-  accentMid: { sat: 0.92, l: 0.56 },
-  accentLight: { sat: 0.7, l: 0.78 },
+const NEON_RAMP: Ramp = {
+  shadow: { sat: 1.3, l: 0.06 },
+  dark: { sat: 1.3, l: 0.16 },
+  // The mid roles sit lower than the base ramp on purpose. They cover
+  // most of the grid, so leaving them at mid lightness gives the bloom a
+  // bright majority to work on and the disc washes out to white.
+  identity: { sat: 1.35, l: 0.4 },
+  bright: { sat: 1.35, l: 0.62 },
+  highlight: { sat: 1.0, l: 0.93 },
+  accentMid: { sat: 1.35, l: 0.5 },
+  accentLight: { sat: 1.15, l: 0.78 },
 };
 
 export interface ColorwayOptions {
@@ -80,14 +83,19 @@ export function buildRoleColors(
   const secondSat = options.secondSatScale ?? 1;
   const pull = options.neutralPull ?? 0;
 
+  // A ramp may ask for more than the family's own saturation; clamping
+  // here lets the neon ramp pull every family up to the same ceiling
+  // without hslToHex clipping a channel and dragging the hue with it.
+  const sat = (scale: number) => Math.min(1, s * scale);
+
   return {
-    shadow: hslToHex(primaryHue, s * ramp.shadow.sat * (1 - pull), ramp.shadow.l),
-    dark: hslToHex(primaryHue, s * ramp.dark.sat * (1 - pull), ramp.dark.l),
-    identity: hslToHex(primaryHue, s * ramp.identity.sat, ramp.identity.l),
-    bright: hslToHex(primaryHue, s * ramp.bright.sat, ramp.bright.l),
-    highlight: hslToHex(primaryHue, s * ramp.highlight.sat, ramp.highlight.l),
-    accentMid: hslToHex(secondHue, s * ramp.accentMid.sat * secondSat, ramp.accentMid.l),
-    accentLight: hslToHex(secondHue, s * ramp.accentLight.sat * secondSat, ramp.accentLight.l),
+    shadow: hslToHex(primaryHue, sat(ramp.shadow.sat) * (1 - pull), ramp.shadow.l),
+    dark: hslToHex(primaryHue, sat(ramp.dark.sat) * (1 - pull), ramp.dark.l),
+    identity: hslToHex(primaryHue, sat(ramp.identity.sat), ramp.identity.l),
+    bright: hslToHex(primaryHue, sat(ramp.bright.sat), ramp.bright.l),
+    highlight: hslToHex(primaryHue, sat(ramp.highlight.sat), ramp.highlight.l),
+    accentMid: hslToHex(secondHue, sat(ramp.accentMid.sat) * secondSat, ramp.accentMid.l),
+    accentLight: hslToHex(secondHue, sat(ramp.accentLight.sat) * secondSat, ramp.accentLight.l),
     sparkle: '#FFFFFF',
   };
 }
@@ -156,114 +164,155 @@ export function getDuotone(id: DuotoneId): DuotoneSpec {
 }
 
 /* ------------------------------------------------------------------ */
-/* Level 3 — glass candidates                                          */
+/* Level 3 — surface candidates                                        */
 /* ------------------------------------------------------------------ */
 
-export type GlassId = 'glass-marble' | 'glass-gloss' | 'glass-chrome';
+/**
+ * Level 3 has to feel like a rank up, not a polish pass. Marble, gloss
+ * and chrome all differed only in how the light fell, which is invisible
+ * once an avatar is 40px in a comment row — measured across every hue
+ * family they landed within a couple of points of the level 2 tiles on
+ * both mean brightness and contrast. The two that replaced gloss and
+ * chrome each change the palette itself, not just the lighting.
+ */
+export type SurfaceId = 'surface-marble' | 'surface-neon' | 'surface-aurora';
 
-interface GlassSpec {
-  id: GlassId;
+interface SurfaceSpec {
+  id: SurfaceId;
   label: string;
   blurb: string;
   options: ColorwayOptions;
-  effects: AvatarEffect[];
+  buildEffects: (roles: AvatarRoleResult) => AvatarEffect[];
 }
 
-export const GLASSES: readonly GlassSpec[] = [
+export const SURFACES: readonly SurfaceSpec[] = [
   {
-    id: 'glass-marble',
+    id: 'surface-marble',
     label: 'Marble',
-    blurb: 'Rim vignette plus an upper-left specular, so the flat disc reads as a glass sphere.',
+    blurb: 'The incumbent. Rim vignette plus an upper-left specular, so the flat disc reads as a glass sphere.',
     options: {},
-    effects: [
+    buildEffects: () => [
       { kind: 'vignette', strength: 0.3 },
       { kind: 'specular', strength: 0.45 },
     ],
   },
   {
-    id: 'glass-gloss',
-    label: 'Gloss',
-    blurb: 'No vignette. Widens the lightness ramp so contrast survives a 24px feed, plus a top sheen.',
-    options: { ramp: WIDE_RAMP },
-    effects: [{ kind: 'sheen', strength: 0.28 }],
+    id: 'surface-neon',
+    label: 'Neon',
+    blurb: 'Every family pushed to full saturation with the shadows crushed, then the lit cells bloom and the rim catches the light.',
+    options: { ramp: NEON_RAMP },
+    buildEffects: (roles) => [
+      // Darken first: neon is lit cells against unlit ones, so without
+      // somewhere dark to sit the bloom just raises the whole disc.
+      { kind: 'vignette', strength: 0.3 },
+      // Two multiply passes rather than one: cubing the image leaves only
+      // the genuinely lit cells above the noise floor, so the bloom picks
+      // out highlights instead of raising the whole disc.
+      { kind: 'bloom', strength: 0.8, radius: 0.055, passes: 2 },
+      // A tight rim rather than a diffuse halo. Spread this out and it
+      // stops being a ring and becomes a general brightening, which is
+      // exactly the "looks like level 2" problem.
+      {
+        kind: 'glow',
+        color: hslToHex(roles.primaryHue, 1, 0.66),
+        strength: 0.95,
+        peak: 0.465,
+        spread: 0.055,
+      },
+    ],
   },
   {
-    id: 'glass-chrome',
-    label: 'Chrome',
-    blurb: 'Marble treatment with the darkest roles pulled toward neutral, for metal rather than candy.',
-    options: { neutralPull: 0.45 },
-    effects: [
-      { kind: 'vignette', strength: 0.34 },
-      { kind: 'specular', strength: 0.5 },
+    id: 'surface-aurora',
+    label: 'Aurora',
+    blurb: 'Lit from inside rather than above: a coloured core bleeds outward into a darkened rim. The quiet step before level 4 electrifies it.',
+    options: {},
+    buildEffects: (roles) => [
+      { kind: 'vignette', strength: 0.52 },
+      // Held at mid lightness: screen blending walks any bright colour
+      // toward white, and a white core loses the hue that makes this
+      // read as the avatar's own light rather than a lamp behind it.
+      {
+        kind: 'glow',
+        color: hslToHex(roles.accentHue, 1, 0.5),
+        strength: 0.58,
+        peak: 0.03,
+        spread: 0.32,
+      },
+      { kind: 'bloom', strength: 0.3, radius: 0.05, passes: 2 },
     ],
   },
 ] as const;
 
-export function getGlass(id: GlassId): GlassSpec {
-  return GLASSES.find((g) => g.id === id) ?? GLASSES[0];
+export function getSurface(id: SurfaceId): SurfaceSpec {
+  return SURFACES.find((s) => s.id === id) ?? SURFACES[0];
 }
 
 /* ------------------------------------------------------------------ */
 /* Level 4 — charged candidates                                        */
 /* ------------------------------------------------------------------ */
 
-export type MetalId = 'gold' | 'platinum';
+export type FinishId = 'gold' | 'spectrum' | 'platinum';
 
-interface Metal {
-  id: MetalId;
+interface Finish {
+  id: FinishId;
   label: string;
-  /** Rank whose colour this is, from shared/rank-config.ts. */
+  /** Rank this finish is proposed for, from shared/rank-config.ts. */
   rank: string;
-  fill: string;
-  shadow: string;
   /**
-   * Centre of an electrical arc. Held near-white on purpose: a fully
+   * Centre of an electrical arc. Held near-white on purpose: a
    * saturated arc stops reading as electricity and starts reading as a
-   * coloured line, so the metal has to identify itself through the glow.
+   * coloured line, so the finish has to identify itself by its glow.
    */
   arc: string;
   /** Halo and bloom around an arc. This is what makes gold look gold. */
-  glow: string;
+  glow: (roles: AvatarRoleResult) => string;
 }
 
 /**
- * Shadows are near-black rather than a darker shade of the metal. A
- * tinted shadow vanishes on the warm hue families — a gold bolt on a
- * yellow or orange avatar has almost no edge — so the contour has to be
- * dark enough to separate the motif from any background it lands on.
+ * Gold reads worst of the three on the warm hue families, where an amber
+ * glow lands on an amber avatar and the arcs stop separating. `spectrum`
+ * is the answer to that: it takes each family's curated contrast partner,
+ * so a blue avatar throws amber lightning and an orange one throws blue,
+ * and the glow always separates from the hue the body is painted in.
+ *
+ * It does not separate from the *accent* cells under the curated duotone,
+ * which draw from that same partner hue — but those are a fifth of the
+ * grid against four fifths of body, and the bloom spreads the glow over
+ * the whole disc rather than tracking individual cells. Reading it the
+ * other way round, the lightning ends up sharing the avatar's own second
+ * colour instead of importing a foreign one, which is the better trade.
  */
-export const METALS: readonly Metal[] = [
+export const FINISHES: readonly Finish[] = [
   {
     id: 'gold',
     label: 'Gold',
     rank: 'Hall of Famer',
-    fill: '#FFD700',
-    shadow: '#2B1F00',
-    arc: '#FFF6D5',
-    glow: '#FFC61A',
+    arc: '#FFFDF0',
+    glow: () => '#FFB300',
+  },
+  {
+    id: 'spectrum',
+    label: 'Spectrum',
+    rank: 'Hall of Famer (alt)',
+    arc: '#FFFFFF',
+    glow: (roles) => hslToHex(roles.family.partner, 1, 0.6),
   },
   {
     id: 'platinum',
     label: 'Platinum',
     rank: 'VoxMax Legend',
-    fill: '#E5E4E2',
-    shadow: '#1E1E22',
     arc: '#FFFFFF',
-    glow: '#9FD8FF',
+    glow: () => '#9FD8FF',
   },
 ] as const;
 
-export type ChargedId =
-  | 'charged-plasma'
-  | 'charged-plasma-bold'
-  | 'charged-bolt-fine'
-  | 'charged-streak';
+export type ChargedId = 'charged-plasma' | 'charged-plasma-bold';
 
 interface ChargedSpec {
   id: ChargedId;
   label: string;
   blurb: string;
-  effect: (metal: Metal, roles: AvatarRoleResult) => AvatarEffect;
+  effect: (finish: Finish, roles: AvatarRoleResult) => AvatarEffect;
 }
 
 export const CHARGED: readonly ChargedSpec[] = [
@@ -271,49 +320,37 @@ export const CHARGED: readonly ChargedSpec[] = [
     id: 'charged-plasma',
     label: 'Plasma globe',
     blurb: 'Branching arcs thrown from a hot core, seeded per user so no two patterns match. Best at profile size.',
-    effect: (metal, roles) => ({
+    effect: (finish, roles) => ({
       kind: 'plasma',
       lattice: 3,
       seed: roles.seedHash,
       arcs: 6,
       branch: 0.7,
       thickness: 1,
-      dim: 0.45,
+      dim: 0.24,
       core: 0.09,
       bloom: 0.035,
-      arc: metal.arc,
-      glow: metal.glow,
+      arc: finish.arc,
+      glow: finish.glow(roles),
     }),
   },
   {
     id: 'charged-plasma-bold',
     label: 'Plasma, heavy',
     blurb: 'Fewer, thicker arcs on the 2x lattice. Trades filigree for something that still reads in a feed row.',
-    effect: (metal, roles) => ({
+    effect: (finish, roles) => ({
       kind: 'plasma',
       lattice: 2,
       seed: roles.seedHash,
       arcs: 5,
       branch: 0.4,
       thickness: 1,
-      dim: 0.4,
+      dim: 0.22,
       core: 0.11,
       bloom: 0.045,
-      arc: metal.arc,
-      glow: metal.glow,
+      arc: finish.arc,
+      glow: finish.glow(roles),
     }),
-  },
-  {
-    id: 'charged-bolt-fine',
-    label: 'Bolt, 2x lattice',
-    blurb: 'The single struck bolt, kept as the comparison. One fixed motif for everyone rather than a per-user pattern.',
-    effect: (metal) => ({ kind: 'bolt', lattice: 2, fill: metal.fill, outline: metal.shadow }),
-  },
-  {
-    id: 'charged-streak',
-    label: 'Diagonal streak',
-    blurb: 'A clean two-cell metal band instead of lightning. The hedge if the electrical motifs read as stickers.',
-    effect: (metal) => ({ kind: 'streak', lattice: 1, fill: metal.fill, widthCells: 2 }),
   },
 ] as const;
 
@@ -339,8 +376,9 @@ export interface VariantTile {
   blurb: string;
   buildColors: (roles: AvatarRoleResult) => RoleColors;
   /**
-   * Built per avatar rather than fixed, because the plasma arcs are
-   * drawn from the seed hash — every user gets their own lightning.
+   * Built per avatar rather than fixed: the plasma arcs are drawn from
+   * the seed hash and the level 3 glows are tinted from the avatar's own
+   * hue, so both need the roles that a fixed effect list cannot see.
    */
   buildEffects: (roles: AvatarRoleResult) => readonly AvatarEffect[];
 }
@@ -355,25 +393,25 @@ export const LEVEL_RANKS: Record<VariantLevel, string> = {
 export interface TileOptions {
   /** Colourway that levels 3 and 4 inherit. */
   duotoneBase: DuotoneId;
-  /** Material that level 4 stacks its motif on. */
-  glassBase: GlassId;
+  /** Surface that level 4 stacks its arcs on. */
+  surfaceBase: SurfaceId;
 }
 
 export const DEFAULT_TILE_OPTIONS: TileOptions = {
   duotoneBase: 'duotone-curated',
-  glassBase: 'glass-marble',
+  surfaceBase: 'surface-marble',
 };
 
 /**
- * The 15 review tiles: 1 base, 3 duotones, 3 glasses, and 4 charged
- * motifs rendered in both rank metals.
+ * The 13 review tiles: 1 base, 3 duotones, 3 surfaces, and 2 plasma
+ * densities in each of the 3 finishes.
  *
  * Levels 3 and 4 inherit the chosen duotone so the ladder can be judged
  * as a progression rather than as four unrelated looks.
  */
 export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): VariantTile[] {
   const duotone = getDuotone(options.duotoneBase);
-  const glass = getGlass(options.glassBase);
+  const surface = getSurface(options.surfaceBase);
   const tiles: VariantTile[] = [];
 
   for (const spec of DUOTONES) {
@@ -391,7 +429,7 @@ export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): 
     });
   }
 
-  for (const spec of GLASSES) {
+  for (const spec of SURFACES) {
     const merged: ColorwayOptions = { ...duotone.options, ...spec.options };
     tiles.push({
       id: spec.id,
@@ -401,22 +439,22 @@ export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): 
       ranks: LEVEL_RANKS[3],
       blurb: spec.blurb,
       buildColors: (roles) => buildRoleColors(roles, merged),
-      buildEffects: () => spec.effects,
+      buildEffects: spec.buildEffects,
     });
   }
 
-  const chargedColors: ColorwayOptions = { ...duotone.options, ...glass.options };
+  const chargedColors: ColorwayOptions = { ...duotone.options, ...surface.options };
   for (const spec of CHARGED) {
-    for (const metal of METALS) {
+    for (const finish of FINISHES) {
       tiles.push({
-        id: `${spec.id}-${metal.id}`,
-        cacheKey: `${spec.id}-${metal.id}@${duotone.id}/${glass.id}`,
-        label: `${spec.label} \u00B7 ${metal.label}`,
+        id: `${spec.id}-${finish.id}`,
+        cacheKey: `${spec.id}-${finish.id}@${duotone.id}/${surface.id}`,
+        label: `${spec.label} \u00B7 ${finish.label}`,
         level: 4,
-        ranks: metal.rank,
+        ranks: finish.rank,
         blurb: spec.blurb,
         buildColors: (roles) => buildRoleColors(roles, chargedColors),
-        buildEffects: (roles) => [...glass.effects, spec.effect(metal, roles)],
+        buildEffects: (roles) => [...surface.buildEffects(roles), spec.effect(finish, roles)],
       });
     }
   }

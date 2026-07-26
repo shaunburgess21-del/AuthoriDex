@@ -26,10 +26,10 @@ import {
   buildVariantTiles,
   DEFAULT_TILE_OPTIONS,
   DUOTONES,
-  GLASSES,
   LEVEL_RANKS,
+  SURFACES,
   type DuotoneId,
-  type GlassId,
+  type SurfaceId,
   type VariantLevel,
   type VariantTile,
 } from "@/lib/avatar/colorways";
@@ -99,12 +99,14 @@ export function AdminAvatarLabCard() {
   const [duotoneBase, setDuotoneBase] = useState<DuotoneId>(
     DEFAULT_TILE_OPTIONS.duotoneBase,
   );
-  const [glassBase, setGlassBase] = useState<GlassId>(DEFAULT_TILE_OPTIONS.glassBase);
+  const [surfaceBase, setSurfaceBase] = useState<SurfaceId>(
+    DEFAULT_TILE_OPTIONS.surfaceBase,
+  );
   const [busy, setBusy] = useState(false);
 
   const tiles = useMemo(
-    () => buildVariantTiles({ duotoneBase, glassBase }),
-    [duotoneBase, glassBase],
+    () => buildVariantTiles({ duotoneBase, surfaceBase }),
+    [duotoneBase, surfaceBase],
   );
 
   const familySamples = useMemo(() => buildFamilySampleSeeds(), []);
@@ -281,14 +283,17 @@ export function AdminAvatarLabCard() {
             </div>
             <div className="space-y-2">
               <Label>Level 4 stacks on</Label>
-              <Select value={glassBase} onValueChange={(v) => setGlassBase(v as GlassId)}>
-                <SelectTrigger data-testid="select-avatar-lab-glass">
+              <Select
+                value={surfaceBase}
+                onValueChange={(v) => setSurfaceBase(v as SurfaceId)}
+              >
+                <SelectTrigger data-testid="select-avatar-lab-surface">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {GLASSES.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.label}
+                  {SURFACES.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -330,14 +335,22 @@ export function AdminAvatarLabCard() {
                 {MOCK_FEED_NAMES.map((name, i) => {
                   const tile = levelTiles[i % levelTiles.length];
                   return (
-                    <div key={name} className="flex items-center gap-2">
-                      <img
-                        src={renderVariantDataURL(`${seed}:feed:${i}`, tile, FEED_SCALE)}
-                        alt={name}
-                        className="h-10 w-10 rounded-full"
-                        draggable={false}
-                      />
-                      <span className="text-sm text-muted-foreground">{name}</span>
+                    <div key={name} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={renderVariantDataURL(`${seed}:feed:${i}`, tile, FEED_SCALE)}
+                          alt={name}
+                          className="h-10 w-10 rounded-full"
+                          draggable={false}
+                        />
+                        <span className="text-sm text-muted-foreground">{name}</span>
+                      </div>
+                      {/* Each row cycles the level's candidates, so without
+                          this the strip looks like six variations of one
+                          treatment rather than a comparison between them. */}
+                      <span className="text-[10px] text-muted-foreground/70">
+                        {tile.label}
+                      </span>
                     </div>
                   );
                 })}
