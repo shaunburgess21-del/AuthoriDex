@@ -182,7 +182,7 @@ export function renderVariantToCanvas(
   return renderAvatarToCanvas(
     { grid, seedHash: roles.seedHash, seedString: seed },
     scale,
-    tile.effects,
+    tile.buildEffects(roles),
   );
 }
 

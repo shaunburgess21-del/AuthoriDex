@@ -216,6 +216,14 @@ interface Metal {
   rank: string;
   fill: string;
   shadow: string;
+  /**
+   * Centre of an electrical arc. Held near-white on purpose: a fully
+   * saturated arc stops reading as electricity and starts reading as a
+   * coloured line, so the metal has to identify itself through the glow.
+   */
+  arc: string;
+  /** Halo and bloom around an arc. This is what makes gold look gold. */
+  glow: string;
 }
 
 /**
@@ -225,36 +233,86 @@ interface Metal {
  * dark enough to separate the motif from any background it lands on.
  */
 export const METALS: readonly Metal[] = [
-  { id: 'gold', label: 'Gold', rank: 'Hall of Famer', fill: '#FFD700', shadow: '#2B1F00' },
-  { id: 'platinum', label: 'Platinum', rank: 'VoxMax Legend', fill: '#E5E4E2', shadow: '#1E1E22' },
+  {
+    id: 'gold',
+    label: 'Gold',
+    rank: 'Hall of Famer',
+    fill: '#FFD700',
+    shadow: '#2B1F00',
+    arc: '#FFF6D5',
+    glow: '#FFC61A',
+  },
+  {
+    id: 'platinum',
+    label: 'Platinum',
+    rank: 'VoxMax Legend',
+    fill: '#E5E4E2',
+    shadow: '#1E1E22',
+    arc: '#FFFFFF',
+    glow: '#9FD8FF',
+  },
 ] as const;
 
-export type ChargedId = 'charged-bolt-coarse' | 'charged-bolt-fine' | 'charged-streak';
+export type ChargedId =
+  | 'charged-plasma'
+  | 'charged-plasma-bold'
+  | 'charged-bolt-fine'
+  | 'charged-streak';
 
 interface ChargedSpec {
   id: ChargedId;
   label: string;
   blurb: string;
-  effect: (metal: Metal) => AvatarEffect;
+  effect: (metal: Metal, roles: AvatarRoleResult) => AvatarEffect;
 }
 
 export const CHARGED: readonly ChargedSpec[] = [
   {
-    id: 'charged-bolt-coarse',
-    label: 'Bolt, native grid',
-    blurb: 'Zigzag on the native 10x10 cells with a drop shadow. The honest test of whether a bolt reads.',
-    effect: (metal) => ({ kind: 'bolt', lattice: 1, fill: metal.fill, outline: metal.shadow }),
+    id: 'charged-plasma',
+    label: 'Plasma globe',
+    blurb: 'Branching arcs thrown from a hot core, seeded per user so no two patterns match. Best at profile size.',
+    effect: (metal, roles) => ({
+      kind: 'plasma',
+      lattice: 3,
+      seed: roles.seedHash,
+      arcs: 6,
+      branch: 0.7,
+      thickness: 1,
+      dim: 0.45,
+      core: 0.09,
+      bloom: 0.035,
+      arc: metal.arc,
+      glow: metal.glow,
+    }),
+  },
+  {
+    id: 'charged-plasma-bold',
+    label: 'Plasma, heavy',
+    blurb: 'Fewer, thicker arcs on the 2x lattice. Trades filigree for something that still reads in a feed row.',
+    effect: (metal, roles) => ({
+      kind: 'plasma',
+      lattice: 2,
+      seed: roles.seedHash,
+      arcs: 5,
+      branch: 0.4,
+      thickness: 1,
+      dim: 0.4,
+      core: 0.11,
+      bloom: 0.045,
+      arc: metal.arc,
+      glow: metal.glow,
+    }),
   },
   {
     id: 'charged-bolt-fine',
     label: 'Bolt, 2x lattice',
-    blurb: 'Same bolt at double fidelity while the avatar underneath stays chunky.',
+    blurb: 'The single struck bolt, kept as the comparison. One fixed motif for everyone rather than a per-user pattern.',
     effect: (metal) => ({ kind: 'bolt', lattice: 2, fill: metal.fill, outline: metal.shadow }),
   },
   {
     id: 'charged-streak',
     label: 'Diagonal streak',
-    blurb: 'A clean two-cell metal band instead of a bolt. The hedge if the zigzag reads as a sticker.',
+    blurb: 'A clean two-cell metal band instead of lightning. The hedge if the electrical motifs read as stickers.',
     effect: (metal) => ({ kind: 'streak', lattice: 1, fill: metal.fill, widthCells: 2 }),
   },
 ] as const;
@@ -280,7 +338,11 @@ export interface VariantTile {
   ranks: string;
   blurb: string;
   buildColors: (roles: AvatarRoleResult) => RoleColors;
-  effects: AvatarEffect[];
+  /**
+   * Built per avatar rather than fixed, because the plasma arcs are
+   * drawn from the seed hash — every user gets their own lightning.
+   */
+  buildEffects: (roles: AvatarRoleResult) => readonly AvatarEffect[];
 }
 
 export const LEVEL_RANKS: Record<VariantLevel, string> = {
@@ -303,7 +365,7 @@ export const DEFAULT_TILE_OPTIONS: TileOptions = {
 };
 
 /**
- * The 13 review tiles: 1 base, 3 duotones, 3 glasses, and 3 charged
+ * The 15 review tiles: 1 base, 3 duotones, 3 glasses, and 4 charged
  * motifs rendered in both rank metals.
  *
  * Levels 3 and 4 inherit the chosen duotone so the ladder can be judged
@@ -325,7 +387,7 @@ export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): 
       ranks: spec.id === 'base' ? LEVEL_RANKS[1] : LEVEL_RANKS[2],
       blurb: spec.blurb,
       buildColors: (roles) => buildRoleColors(roles, spec.options),
-      effects: [],
+      buildEffects: () => [],
     });
   }
 
@@ -339,7 +401,7 @@ export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): 
       ranks: LEVEL_RANKS[3],
       blurb: spec.blurb,
       buildColors: (roles) => buildRoleColors(roles, merged),
-      effects: spec.effects,
+      buildEffects: () => spec.effects,
     });
   }
 
@@ -354,7 +416,7 @@ export function buildVariantTiles(options: TileOptions = DEFAULT_TILE_OPTIONS): 
         ranks: metal.rank,
         blurb: spec.blurb,
         buildColors: (roles) => buildRoleColors(roles, chargedColors),
-        effects: [...glass.effects, spec.effect(metal)],
+        buildEffects: (roles) => [...glass.effects, spec.effect(metal, roles)],
       });
     }
   }

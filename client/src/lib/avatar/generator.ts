@@ -75,7 +75,12 @@ function hashSeed(input: string): number {
   return h >>> 0;
 }
 
-function makeRng(seed: number): () => number {
+/**
+ * Exported so effects can open their own stream off the same seed hash.
+ * Anything drawing from this must salt the seed, or it replays the exact
+ * sequence the role grid used and the result visibly tracks the pixels.
+ */
+export function makeRng(seed: number): () => number {
   let state = seed || 1;
   return () => {
     state ^= state << 13; state >>>= 0;

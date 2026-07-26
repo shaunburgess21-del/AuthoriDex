@@ -16,6 +16,7 @@ import {
 import {
   buildRoleColors,
   buildVariantTiles,
+  CHARGED,
   DEFAULT_TILE_OPTIONS,
   DUOTONES,
   GLASSES,
@@ -101,7 +102,7 @@ function layoutSignature(grid: string[][]): string {
 
 test("every variant paints the identical layout for a given seed", () => {
   const tiles = buildVariantTiles(DEFAULT_TILE_OPTIONS);
-  assert.equal(tiles.length, 13, "expected 13 review tiles");
+  assert.equal(tiles.length, 15, "expected 15 review tiles");
 
   for (const seed of SEEDS) {
     const roles = generateAvatarRoles(seed);
@@ -178,8 +179,8 @@ test("tile ids are unique and cover all four levels", () => {
   }
   assert.deepEqual(
     [byLevel.get(1), byLevel.get(2), byLevel.get(3), byLevel.get(4)],
-    [1, 3, 3, 6],
-    "expected 1 base, 3 duotones, 3 glasses, 3 charged in 2 metals",
+    [1, 3, 3, 8],
+    "expected 1 base, 3 duotones, 3 glasses, 4 charged in 2 metals",
   );
 });
 
@@ -244,14 +245,38 @@ test("cacheKeys are unique within a configuration", () => {
   }
 });
 
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+}
+
 test("bolt shadows are dark enough to separate from a light avatar", () => {
   for (const metal of METALS) {
-    const channels = [1, 3, 5].map((i) => parseInt(metal.shadow.slice(i, i + 2), 16));
-    const luminance = (channels[0] * 0.299 + channels[1] * 0.587 + channels[2] * 0.114) / 255;
     assert.ok(
-      luminance < 0.2,
-      `${metal.id} shadow is too light (${luminance.toFixed(2)}) to contour against yellow or orange`,
+      luminance(metal.shadow) < 0.2,
+      `${metal.id} shadow is too light (${luminance(metal.shadow).toFixed(2)}) to contour against yellow or orange`,
     );
+  }
+});
+
+/**
+ * Electricity reads as white with a coloured halo. Let the arc itself
+ * carry the metal and it stops looking like an arc, so the arc stays
+ * near-white and the glow does the identifying.
+ */
+test("arc cores stay near-white while the glow carries the metal", () => {
+  for (const metal of METALS) {
+    assert.ok(
+      luminance(metal.arc) > 0.9,
+      `${metal.id} arc is too dark (${luminance(metal.arc).toFixed(2)}) to read as electricity`,
+    );
+
+    const channels = [1, 3, 5].map((i) => parseInt(metal.arc.slice(i, i + 2), 16));
+    assert.ok(
+      Math.max(...channels) - Math.min(...channels) <= 48,
+      `${metal.id} arc is too saturated to read as electricity`,
+    );
+    assert.notEqual(metal.glow, metal.arc, `${metal.id} glow must be tinted, not white`);
   }
 });
 
@@ -337,7 +362,7 @@ test("the finer lattice resolves the bolt in more detail", () => {
 });
 
 test("bolt drop shadow sits beside the bolt, never on it", () => {
-  const lattice = AVATAR_GRID_SIZE;
+  const lattice = AVATAR_GRID_SIZE * 2;
   const cells = __geometry.boltCells(lattice);
   const occupied = new Set(cells.map((c) => `${c.x},${c.y}`));
   const shadow = __geometry.boltShadowCells(cells, lattice);
@@ -357,5 +382,151 @@ test("streak spans the disc without escaping it", () => {
     const dx = (cell.x + 0.5) / lattice - 0.5;
     const dy = (cell.y + 0.5) / lattice - 0.5;
     assert.ok(Math.hypot(dx, dy) <= 0.49, "streak cell escapes the disc");
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Plasma geometry                                                     */
+/* ------------------------------------------------------------------ */
+
+const PLASMA_SPEC = { arcs: 6, branch: 0.75, thickness: 1 } as const;
+const PLASMA_LATTICES = [AVATAR_GRID_SIZE * 2, AVATAR_GRID_SIZE * 3] as const;
+
+function plasmaSeeds(): number[] {
+  return SEEDS.map((seed) => generateAvatarRoles(seed).seedHash);
+}
+
+test("plasma arcs stay inside the disc at every shipped lattice", () => {
+  for (const lattice of PLASMA_LATTICES) {
+    for (const seed of plasmaSeeds()) {
+      const { arc, halo } = __geometry.plasmaGeometry(lattice, seed, PLASMA_SPEC);
+      assert.ok(arc.length > 0, `no arc cells at lattice ${lattice}`);
+
+      for (const cell of [...arc, ...halo]) {
+        const dx = (cell.x + 0.5) / lattice - 0.5;
+        const dy = (cell.y + 0.5) / lattice - 0.5;
+        assert.ok(
+          Math.hypot(dx, dy) <= 0.49,
+          `plasma cell (${cell.x},${cell.y}) escapes the disc at lattice ${lattice}`,
+        );
+      }
+    }
+  }
+});
+
+/**
+ * A user's avatar has to be the same every time it is drawn, and the
+ * arcs are now part of that. They also have to differ between users, or
+ * the effect is a decal rather than a generated pattern.
+ */
+test("plasma arcs are deterministic per seed and differ between seeds", () => {
+  const lattice = AVATAR_GRID_SIZE * 3;
+  const signature = (seed: number) =>
+    __geometry
+      .plasmaGeometry(lattice, seed, PLASMA_SPEC)
+      .arc.map((c) => `${c.x},${c.y}`)
+      .sort()
+      .join("|");
+
+  const seeds = plasmaSeeds();
+  for (const seed of seeds) {
+    assert.equal(signature(seed), signature(seed), `arcs drift for seed hash ${seed}`);
+  }
+  assert.equal(
+    new Set(seeds.map(signature)).size,
+    seeds.length,
+    "two seeds produced identical lightning",
+  );
+});
+
+test("plasma arcs radiate from the core rather than floating free", () => {
+  const lattice = AVATAR_GRID_SIZE * 3;
+  const mid = lattice / 2;
+
+  for (const seed of plasmaSeeds()) {
+    const { arc } = __geometry.plasmaGeometry(lattice, seed, PLASMA_SPEC);
+    const nearCore = arc.filter((c) => Math.hypot(c.x + 0.5 - mid, c.y + 0.5 - mid) < 2);
+    assert.ok(nearCore.length > 0, `seed hash ${seed} left the core disconnected`);
+
+    // Every arc runs centre-outward, so something has to reach the rim.
+    const furthest = Math.max(
+      ...arc.map((c) => Math.hypot(c.x + 0.5 - mid, c.y + 0.5 - mid)),
+    );
+    assert.ok(
+      furthest > lattice * 0.28,
+      `seed hash ${seed} only reached ${furthest.toFixed(1)} cells from the core`,
+    );
+  }
+});
+
+test("the plasma halo never sits on an arc cell", () => {
+  const lattice = AVATAR_GRID_SIZE * 3;
+  for (const seed of plasmaSeeds().slice(0, 4)) {
+    const { arc, halo } = __geometry.plasmaGeometry(lattice, seed, PLASMA_SPEC);
+    const struck = new Set(arc.map((c) => `${c.x},${c.y}`));
+    assert.ok(halo.length > 0, "expected a halo around the arcs");
+    for (const cell of halo) {
+      assert.ok(!struck.has(`${cell.x},${cell.y}`), "halo overlaps an arc");
+    }
+  }
+});
+
+test("plasma arcs cover more ground than a single bolt at the same lattice", () => {
+  const lattice = AVATAR_GRID_SIZE * 2;
+  const seed = plasmaSeeds()[0];
+  const { arc } = __geometry.plasmaGeometry(lattice, seed, PLASMA_SPEC);
+  assert.ok(
+    arc.length > lattice,
+    `only ${arc.length} arc cells at lattice ${lattice} — the pattern would look sparse`,
+  );
+});
+
+test("thickening dilates the arcs without moving them", () => {
+  const lattice = AVATAR_GRID_SIZE * 2;
+  const seed = plasmaSeeds()[0];
+  const thin = __geometry.plasmaGeometry(lattice, seed, { ...PLASMA_SPEC, thickness: 1 });
+  const thick = __geometry.plasmaGeometry(lattice, seed, { ...PLASMA_SPEC, thickness: 2 });
+
+  assert.ok(thick.arc.length > thin.arc.length, "thickness 2 should add cells");
+  const thickSet = new Set(thick.arc.map((c) => `${c.x},${c.y}`));
+  for (const cell of thin.arc) {
+    assert.ok(thickSet.has(`${cell.x},${cell.y}`), "dilation dropped an original arc cell");
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* Seed-dependent effects                                              */
+/* ------------------------------------------------------------------ */
+
+test("only the plasma tiles vary their effects with the seed", () => {
+  const tiles = buildVariantTiles(DEFAULT_TILE_OPTIONS);
+  const [first, second] = SEEDS.map(generateAvatarRoles);
+
+  for (const tile of tiles) {
+    const a = JSON.stringify(tile.buildEffects(first));
+    const b = JSON.stringify(tile.buildEffects(second));
+    if (tile.id.startsWith("charged-plasma")) {
+      assert.notEqual(a, b, `"${tile.id}" should carry the seed into its arcs`);
+    } else {
+      assert.equal(a, b, `"${tile.id}" should not depend on the seed`);
+    }
+  }
+});
+
+test("charged catalogue exposes stable ids and well-formed effects", () => {
+  assert.deepEqual(
+    CHARGED.map((c) => c.id),
+    ["charged-plasma", "charged-plasma-bold", "charged-bolt-fine", "charged-streak"],
+  );
+
+  const roles = generateAvatarRoles(SEEDS[0]);
+  for (const spec of CHARGED) {
+    for (const metal of METALS) {
+      const effect = spec.effect(metal, roles);
+      if (effect.kind !== "plasma") continue;
+      assert.equal(effect.seed, roles.seedHash, `${spec.id} lost the seed`);
+      assert.ok(effect.arcs >= 4, `${spec.id} has too few arcs to fill the disc`);
+      assert.ok(effect.bloom > 0, `${spec.id} has no bloom, so it will not glow`);
+    }
   }
 });
