@@ -22,15 +22,21 @@ export interface ModelPricing {
 }
 
 /**
- * Per-model rates used for cost estimates (OpenAI list prices, short context).
- * Source: https://developers.openai.com/api/docs/pricing
- *   gpt-5.4      — $2.50 / 1M input, $15.00 / 1M output
- *   gpt-5.4-mini — $0.75 / 1M input,  $4.50 / 1M output
+ * Per-model rates used for cost estimates (list prices, short context).
+ * Sources:
+ *   OpenAI — https://developers.openai.com/api/docs/pricing
+ *     gpt-5.4      — $2.50 / 1M input, $15.00 / 1M output
+ *     gpt-5.4-mini — $0.75 / 1M input,  $4.50 / 1M output
+ *   xAI — https://docs.x.ai/developers/pricing
+ *     grok-4.5 — $2.00 / 1M input, $6.00 / 1M output (<200k prompt)
+ *     grok-4.3 — $1.25 / 1M input, $2.50 / 1M output (<200k prompt)
  * Accuracy of the admin rollup depends on these; product behaviour does not.
  */
 export const AI_MODEL_PRICING: Record<string, ModelPricing> = {
   "gpt-5.4": { inputPer1M: 2.5, outputPer1M: 15 },
   "gpt-5.4-mini": { inputPer1M: 0.75, outputPer1M: 4.5 },
+  "grok-4.5": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.3": { inputPer1M: 1.25, outputPer1M: 2.5 },
 };
 
 const FALLBACK_PRICING: ModelPricing = AI_MODEL_PRICING["gpt-5.4"];

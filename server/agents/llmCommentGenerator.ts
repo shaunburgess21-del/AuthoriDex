@@ -2,8 +2,8 @@
  * Persona-driven LLM comment generator.
  *
  * Replaces the old hard-coded template pool. Every agent comment now goes
- * through GPT (default `gpt-5.4-mini` via agentComments scope) with full surface
- * context + the agent's own
+ * through the scoped AI client (OpenAI by default; set AGENT_COMMENTS_PROVIDER=xai
+ * to use Grok) with full surface context + the agent's own
  * vote/bet on that parent, so comments stay consistent with their position
  * and read like a real opinionated user, not a generic bot.
  *
@@ -18,8 +18,8 @@
  *    reject obvious AI-tells.
  */
 
-import OpenAI from "openai";
-import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
+import { getAiClient } from "../config/ai-client";
+import { getAiModel, getAiProvider, getChatCompletionTokenLimit } from "../config/ai-models";
 import { recordLlmUsage } from "../config/ai-cost";
 import type { AgentSimulationProfile, SimulationPersonaBand } from "./simulationProfile";
 import type {
@@ -31,18 +31,6 @@ import type {
   PersonInsightContext,
   CommentSurface,
 } from "./commentContext";
-
-// Lazy-init — see `sharpRanker.getOpenAIClient` for the rationale.
-// Importing this module from a key-less context (CI test workers etc.)
-// must not crash; only throw if/when an LLM call is actually fired.
-let _openaiClient: OpenAI | null = null;
-function getOpenAIClient(): OpenAI {
-  if (_openaiClient) return _openaiClient;
-  _openaiClient = new OpenAI({
-    apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-  });
-  return _openaiClient;
-}
 
 export interface AgentForComment {
   displayName: string;
@@ -822,7 +810,8 @@ export async function generateAgentComment(
 
   try {
     const model = getAiModel("agentComments");
-    const response = await getOpenAIClient().chat.completions.create({
+    const provider = getAiProvider("agentComments");
+    const response = await getAiClient("agentComments").chat.completions.create({
       model,
       ...getChatCompletionTokenLimit(model, length.outputTokens),
       // 0.9 produces more variety across 56 agents and avoids the model
@@ -838,7 +827,7 @@ export async function generateAgentComment(
       feature: "agent_comments",
       model,
       usage: response.usage,
-      detail: `agent=${agent.displayName} surface=${ctx.surface}`,
+      detail: `provider=${provider} agent=${agent.displayName} surface=${ctx.surface}`,
     });
 
     const raw = response.choices[0]?.message?.content;
