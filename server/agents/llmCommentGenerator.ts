@@ -97,17 +97,18 @@ const LENGTH_TARGETS: Record<LengthTier, LengthTarget> = {
  *  samples (B2Stealth + DavidAndrew) — their actual mix is dominated by
  *  tiny ("Spicy food is my favourite.", "Definitely not!", "Blue and
  *  grey for me") with occasional medium/long when there's substance.
- *  These weights now match that observed distribution. */
+ *  Matchups and celebrity profiles also get a meaningful medium/long
+ *  share so agents can land the occasional punchier reasoned take, not
+ *  only one-liners. */
 const SURFACE_LENGTH_WEIGHTS: Record<CommentSurface, Record<LengthTier, number>> = {
-  matchup:            { tiny: 60, short: 30, medium: 9,  long: 1 },
+  // Was 60/30/9/1 — too one-liner-heavy for H2H topics people actually argue about.
+  matchup:            { tiny: 40, short: 35, medium: 20, long: 5 },
   trending_poll:      { tiny: 45, short: 35, medium: 16, long: 4 },
   opinion_poll:       { tiny: 45, short: 35, medium: 16, long: 4 },
   open_market:        { tiny: 35, short: 35, medium: 23, long: 7 },
-  // Profile insights skew slightly longer than matchups (people warrant
-  // more of an opinion than a binary vote) but stay well short of open
-  // markets — most "I think Ronaldo is the GOAT" comments are one or two
-  // sentences, not paragraphs.
-  community_insight:  { tiny: 35, short: 40, medium: 20, long: 5 },
+  // Profile insights: people warrant a real opinion. Slightly more medium/long
+  // than polls/matchups so "thoughtful take" shows up without flooding profiles.
+  community_insight:  { tiny: 28, short: 35, medium: 27, long: 10 },
 };
 
 /** Reply distribution — replies are almost always shorter than top-level
