@@ -1697,6 +1697,55 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
   }
 }
 
+/* StreakToast — iOS-style frosted glass (mirrors Sonner data-styled toasts) */
+.streak-toast-surface {
+  background: hsl(var(--background) / 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-color: hsl(var(--border) / 0.55);
+  box-shadow:
+    0 12px 32px -8px rgb(0 0 0 / 0.16),
+    0 2px 8px rgb(0 0 0 / 0.06);
+}
+
+html [data-sonner-theme="dark"] .streak-toast-surface {
+  background: hsl(var(--background) / 0.66);
+  border-color: hsl(var(--border) / 0.7);
+  box-shadow:
+    0 12px 32px -8px rgb(0 0 0 / 0.55),
+    0 2px 8px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06);
+}
+
+.streak-toast-surface--milestone {
+  background:
+    linear-gradient(hsl(217 91% 60% / 0.1), hsl(217 91% 60% / 0.1)),
+    hsl(var(--background) / 0.72);
+  border-color: hsl(217 91% 60% / 0.35);
+}
+
+html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
+  background:
+    linear-gradient(hsl(217 91% 60% / 0.12), hsl(217 91% 60% / 0.12)),
+    hsl(var(--background) / 0.66);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .streak-toast-surface {
+    background: hsl(var(--background) / 0.92);
+  }
+
+  html [data-sonner-theme="dark"] .streak-toast-surface {
+    background: hsl(var(--background) / 0.92);
+  }
+
+  .streak-toast-surface--milestone {
+    background:
+      linear-gradient(hsl(217 91% 60% / 0.1), hsl(217 91% 60% / 0.1)),
+      hsl(var(--background) / 0.92);
+  }
+}
+
 /* StreakToast — slot width must match STREAK_TOAST_WIDTH_CSS in streak-config.ts */
 [data-sonner-toast].streak-toast-host {
   width: min(384px, calc(100vw - 1rem)) !important;

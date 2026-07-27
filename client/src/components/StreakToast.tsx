@@ -85,12 +85,11 @@ export function StreakToast({
   const iconPillClasses =
     "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3C83F6]/15 text-[#3C83F6] dark:bg-[#3C83F6]/20 dark:text-[#93C5FD]";
 
-  // Milestone variant gets a stronger border and sparkle accent so it
-  // stands out from the routine daily check-in toast. bg-card keeps the
-  // panel opaque; the gradient tints on top (see BadgeToast).
+  // Milestone variant gets a stronger border and sparkle accent on frosted glass.
+  const containerBase = `${toastWidth} streak-toast-surface rounded-2xl p-4 relative`;
   const containerClasses = isMilestone
-    ? `${toastWidth} rounded-2xl border-2 border-[#3C83F6]/60 bg-card bg-gradient-to-br from-[#3C83F6]/15 to-[#3C83F6]/10 shadow-[0_0_24px_rgba(60,131,246,0.25)] p-4 relative`
-    : `${toastWidth} rounded-2xl border border-[#3C83F6]/30 bg-card shadow-lg p-4 relative`;
+    ? `${containerBase} streak-toast-surface--milestone border-2 border-[#3C83F6]/60 shadow-[0_0_24px_rgba(60,131,246,0.25)]`
+    : `${containerBase} border border-[#3C83F6]/30`;
 
   return (
     <div

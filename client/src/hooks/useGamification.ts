@@ -8,6 +8,7 @@ import {
   STREAK_TOAST_DELAY_MS,
   STREAK_TOAST_DURATION_MS,
   STREAK_TOAST_WIDTH_CSS,
+  shouldShowStreakCelebrationToast,
 } from "@/lib/streak-config";
 
 export type Capability = 
@@ -280,29 +281,31 @@ export function useDailyCheckin(enabled: boolean = true) {
 
           triggerXpBurst(data.xpAwarded, undefined, reason);
 
-          // Slight delay so the burst lands first, then the toast.
-          setTimeout(() => {
-            toast.custom(
-              (id) =>
-                createElement(StreakToast, {
-                  currentStreak: data.streak,
-                  longestStreak: data.longestStreak,
-                  xpAwarded: data.xpAwarded,
-                  reason,
-                  isMilestone: data.isMilestone,
-                  milestoneDay: data.milestoneDay,
-                  onClose: () => toast.dismiss(id),
-                }),
-              {
-                duration: STREAK_TOAST_DURATION_MS,
-                className:
-                  "streak-toast-host box-border p-0 bg-transparent border-0 shadow-none overflow-visible",
-                style: {
-                  "--width": STREAK_TOAST_WIDTH_CSS,
-                } as CSSProperties,
-              },
-            );
-          }, STREAK_TOAST_DELAY_MS);
+          if (shouldShowStreakCelebrationToast(data)) {
+            // Slight delay so the burst lands first, then the toast.
+            setTimeout(() => {
+              toast.custom(
+                (id) =>
+                  createElement(StreakToast, {
+                    currentStreak: data.streak,
+                    longestStreak: data.longestStreak,
+                    xpAwarded: data.xpAwarded,
+                    reason,
+                    isMilestone: data.isMilestone,
+                    milestoneDay: data.milestoneDay,
+                    onClose: () => toast.dismiss(id),
+                  }),
+                {
+                  duration: STREAK_TOAST_DURATION_MS,
+                  className:
+                    "streak-toast-host box-border p-0 bg-transparent border-0 shadow-none overflow-visible",
+                  style: {
+                    "--width": STREAK_TOAST_WIDTH_CSS,
+                  } as CSSProperties,
+                },
+              );
+            }, STREAK_TOAST_DELAY_MS);
+          }
         }
       } catch (err) {
         // Daily check-in is non-critical — swallow so a transient

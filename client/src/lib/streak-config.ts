@@ -44,3 +44,19 @@ export const STREAK_TOAST_WIDTH_CSS = "min(384px, calc(100vw - 1rem))";
  * the context, instead of both elements competing for attention at t=0.
  */
 export const STREAK_TOAST_DELAY_MS = 400;
+
+/**
+ * Whether the full StreakToast card should appear after daily check-in.
+ * Routine consecutive days only get the XP burst; milestones, Day 1 /
+ * reset, and new personal bests still get the celebration toast.
+ */
+export function shouldShowStreakCelebrationToast(data: {
+  streak: number;
+  longestStreak: number;
+  isMilestone: boolean;
+}): boolean {
+  if (data.isMilestone) return true;
+  if (data.streak <= 1) return true;
+  if (data.streak > 1 && data.streak >= data.longestStreak) return true;
+  return false;
+}
