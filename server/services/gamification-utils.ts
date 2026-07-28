@@ -50,7 +50,7 @@ export function scaleEarnedValue(baseValue: number, multiplier: number): number 
  * user per market. Resolvers MUST use this (via
  * `gamificationService.awardPredictionWinXp`) rather than embedding
  * bet ids — historical per-bet keys let DCA / multi-buy winners
- * multiply the uncapped 100 XP bonus.
+ * multiply the uncapped win XP bonus.
  */
 export function predictionWinIdempotencyKey(
   marketId: string,

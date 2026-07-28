@@ -107,7 +107,7 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "insight_upvoted", displayName: "Your Post Gets Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxxer", category: "Engagement" },
 
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
-  { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour (once per market)", category: "Prediction" },
+  { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 50, dailyCap: null, description: "Bonus XP when a prediction settles in your favour (once per market)", category: "Prediction" },
 
   { actionKey: "community_member", displayName: "Community Member", xpValue: 25, dailyCap: null, description: "One-time XP for adding age, gender, and country of residence", category: "Special" },
 

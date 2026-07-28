@@ -1803,7 +1803,7 @@ function PredictSection({
   onJumpToTab: (tab: KnowledgeTabId) => void;
 }) {
   const accent = accentFor("predict");
-  // Live values (DB overlay). predictionWinXp drives the "+100 XP"
+  // Live values (DB overlay). predictionWinXp drives the "+N XP"
   // bullet copy below so admin rebalances flow through automatically.
   const xpActions = useLiveXpActionRows();
   const creditActions = useLiveCreditActionList();
@@ -1887,7 +1887,7 @@ function PredictSection({
           <ConceptTile icon={Coins} label="Stake & settle" accent={accent}>
             Your stake is debited when you place it. Wins return Vox plus{" "}
             <span className="font-mono" style={{ color: accent }}>
-              +{predictionWinXp?.xpValue ?? 100} XP
+              +{predictionWinXp?.xpValue ?? 50} XP
             </span>
             .
           </ConceptTile>

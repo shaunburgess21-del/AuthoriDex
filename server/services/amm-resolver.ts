@@ -545,7 +545,7 @@ async function emitResolutionSideEffects(
     // — NOT per winning buy row. A user who holds multiple winning buys
     // on the same market won a single market and gets a single win
     // reward; awarding per row let anyone (esp. simulation agents that
-    // DCA into a market) multiply the uncapped 100 XP win bonus.
+    // DCA into a market) multiply the uncapped prediction_win XP bonus.
     // `awardPredictionWinXp` owns the (marketId, userId) idempotency
     // key. Badge checks run in the same loop, once per unique winner.
     const winningUserIds = new Set<string>();
