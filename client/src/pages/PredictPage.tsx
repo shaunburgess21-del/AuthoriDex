@@ -2318,15 +2318,17 @@ export default function PredictPage() {
     //   - multi:  per entry, only one direction. Same direction = top-up,
     //             opposite direction on same entry = blocked. Other entries
     //             remain independent.
-    //   - binary: only one entry per market. Same entry = top-up,
+    //   - binary / updown: only one entry per market. Same entry = top-up,
     //             different entry = blocked.
     // Server enforces this too (POST /api/open-markets/:slug/bet); the
     // client guard is purely UX so the user sees a toast instead of a
     // 409 round-trip.
     const isBinary = market.openMarketType === "binary";
+    const isDualOutcome =
+      isBinary || market.openMarketType === "updown";
     const marketBets = userBetsPerEntry.get(String(market.id));
 
-    if (isBinary && marketBets) {
+    if (isDualOutcome && marketBets) {
       for (const [eId, bets] of marketBets) {
         if (eId !== String(entry.id) && (bets.yesStake > 0 || bets.noStake > 0)) {
           hapticError();
@@ -2352,6 +2354,11 @@ export default function PredictPage() {
 
     const isTopUp = sameDirStake > 0;
 
+    const oppositeEntry =
+      isDualOutcome
+        ? (market.entries ?? []).find((e: any) => String(e.id) !== String(entry.id))
+        : null;
+
     setPendingSelection({
       type: "community",
       choice: entry.label,
@@ -2362,6 +2369,7 @@ export default function PredictPage() {
       bettingCutoff: market.closeAt ?? market.endAt ?? null,
       direction,
       openMarketType: market.openMarketType ?? null,
+      opponentName: oppositeEntry?.label,
       isTopUp,
       existingStake: isTopUp ? sameDirStake : undefined,
       engine: "amm",
@@ -4250,11 +4258,36 @@ export default function PredictPage() {
 
           if (pendingSelection.type === "community" && (dir === "yes" || dir === "no")) {
             const market = openMarkets.find((m: any) => String(m.id) === String(pendingSelection.marketId));
+            if (!market) return;
+
+            // World binary / Above-Below: hero-tile flip swaps to the other
+            // entry (each side is its own LMSR outcome). Multi keeps
+            // direction-only and leaves choice as the raw option label.
+            if (
+              pendingSelection.openMarketType === "binary" ||
+              pendingSelection.openMarketType === "updown"
+            ) {
+              const other = (market.entries ?? []).find(
+                (e: any) => String(e.id) !== String(pendingSelection.entryId),
+              );
+              if (!other) return;
+              setPendingSelection({
+                ...pendingSelection,
+                choice: other.label,
+                entryId: other.id,
+                direction: "yes",
+                opponentName: pendingSelection.choice,
+                engine: "amm",
+                ammState: market.ammState ?? null,
+              });
+              return;
+            }
+
             const entry = market?.entries?.find((e: any) => String(e.id) === String(pendingSelection.entryId));
-            if (!market || !entry) return;
+            if (!entry) return;
             setPendingSelection({
               ...pendingSelection,
-              choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+              choice: entry.label,
               direction: dir,
             });
           }

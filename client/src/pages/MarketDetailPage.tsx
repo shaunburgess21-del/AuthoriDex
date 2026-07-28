@@ -1182,24 +1182,34 @@ export default function MarketDetailPage() {
     const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
     const netSharesForEntry =
       ammPositionData?.positions?.find((p) => p.entryId === entry.id)?.netShares ?? 0;
+    const netCreditsIn =
+      ammPositionData?.positions?.find((p) => p.entryId === entry.id)?.netCreditsIn ?? 0;
+    const isTopUp = netSharesForEntry > 1e-6;
+    const isDualOutcome =
+      effectiveOpenMarketType === "binary" ||
+      effectiveOpenMarketType === "updown";
+    const oppositeEntry = isDualOutcome
+      ? market.entries?.find((e) => e.id !== entry.id)
+      : undefined;
     setPendingSelection({
       type: "community",
       marketId: market.id,
       entryId: entry.id,
-      choice:
-        effectiveOpenMarketType === "binary"
-          ? entry.label
-          : `${direction === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+      // Always the raw option label — Yes/No lives on `direction` + badge.
+      choice: entry.label,
       marketName: market.title,
       personName: market.linkedPersonName ?? undefined,
+      opponentName: oppositeEntry?.label,
       crowdSentiment,
       bettingCutoff: market.closeAt || market.endAt || null,
       endAt: market.endAt || undefined,
       direction:
-        effectiveOpenMarketType === "binary"
-          ? undefined
+        isDualOutcome
+          ? "yes"
           : direction,
       openMarketType: effectiveOpenMarketType,
+      isTopUp,
+      existingStake: isTopUp ? netCreditsIn : undefined,
       engine: "amm",
       ammState: market.ammState ?? null,
       ammNetShares: netSharesForEntry,
@@ -2431,15 +2441,36 @@ export default function MarketDetailPage() {
         onDirectionChange={(dir) => {
           if (!pendingSelection) return;
           if (pendingSelection.type !== "community") return;
-          if (effectiveOpenMarketType === "binary") return;
           if (dir !== "yes" && dir !== "no") return;
+          if (!market) return;
+
+          // World binary / Above-Below: hero-tile flip swaps to the other entry.
+          if (
+            effectiveOpenMarketType === "binary" ||
+            effectiveOpenMarketType === "updown"
+          ) {
+            const other = market.entries?.find((e) => e.id !== pendingSelection.entryId);
+            if (!other) return;
+            const livePrice = ammPriceMap ? Number(ammPriceMap[other.id] ?? 0) : 0;
+            const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
+            setPendingSelection({
+              ...pendingSelection,
+              choice: other.label,
+              entryId: other.id,
+              opponentName: pendingSelection.choice,
+              crowdSentiment,
+              ammState: market.ammState ?? null,
+            });
+            return;
+          }
+
           const entry = market?.entries?.find((e) => e.id === pendingSelection.entryId);
           if (!entry) return;
           const livePrice = ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
           const crowdSentiment = Math.round(Math.max(0, Math.min(1, livePrice)) * 100);
           setPendingSelection({
             ...pendingSelection,
-            choice: `${dir === "no" ? "No" : "Yes"} \u00b7 ${entry.label}`,
+            choice: entry.label,
             direction: dir,
             crowdSentiment,
           });

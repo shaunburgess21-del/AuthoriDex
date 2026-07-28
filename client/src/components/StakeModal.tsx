@@ -208,13 +208,9 @@ export function StakeModal({
       ? ammPriceMap[selection.entryId] ?? null
       : null;
   /**
-   * Polymarket pass: AMM binary-market helpers used by the hero tiles
-   * at the top of the modal. The picked-side price is `ammEntryPrice`
-   * (already defined above); the opposite side is derived from the
-   * snapshot's outcomeOrder so call sites don't need to thread both
-   * entry IDs. For multi-outcome AMM markets this picks whichever
-   * non-selected entry comes first, which is fine because the hero
-   * tiles only render for binary types (updown / h2h).
+   * Opposite outcome for binary hero tiles (Up/Down, H2H, World binary).
+   * For multi-outcome markets (Race / World multi) this is unused — those
+   * render a single selected-outcome tile instead.
    */
   const oppositeEntryId =
     ammSnapshot && selection.entryId
@@ -224,6 +220,11 @@ export function StakeModal({
     ammPriceMap && oppositeEntryId
       ? ammPriceMap[oppositeEntryId] ?? null
       : null;
+  /** World binary + Above/Below — two LMSR outcomes, dual hero tiles. */
+  const isCommunityDual =
+    isCommunity &&
+    (selection.openMarketType === "binary" ||
+      selection.openMarketType === "updown");
   const ammBuyQuote = parsedAmount >= MIN_STAKE && selection.entryId
     ? deriveBuyQuote(effectiveAmmState, selection.entryId, parsedAmount)
     : null;
@@ -383,40 +384,73 @@ export function StakeModal({
         )}
 
         <div className="py-2 space-y-4">
-          {/* Polymarket pass: hero "Live Market" tiles for binary AMM
-              markets (updown + h2h). Puts the live price front-and-centre
-              so the user can confirm what they're paying per share before
-              their eye even reaches the pick card.
+          {/* Hero price tiles for all AMM market types. Puts % + Ꝟ/share
+              front-and-centre before the user types a stake — same anatomy
+              as Up/Down / H2H, now also World binary, World multi, and Race.
 
-              For Up/Down the tiles also act as the in-modal Up/Down
-              toggle — clicking the opposite tile flips the selection
-              without closing the modal. This conflates "show prices"
-              and "switch sides" into one control, mirroring how
-              Polymarket's YES/NO buttons work, and removes the
-              redundant chip-on-toggle below. Top-up bets keep the
-              tiles passive (no hedging — same rule as the legacy
-              toggle).
+              Dual tiles (binary): Up/Down, H2H, World Yes/No. Clickable
+              flip on Up/Down + World binary when onDirectionChange is set
+              and this isn't a top-up (no hedging).
 
-              H2H tiles stay passive because H2H markets don't carry
-              an `onDirectionChange` handler at the call sites yet. */}
-          {(isUpDown || isH2H) && ammPriceMap && (() => {
+              Single tile (multi-outcome): Race candidate or World multi
+              option — one selected outcome with live price. */}
+          {ammPriceMap && selection.entryId && ammEntryPrice != null && (() => {
             const pickPrice = ammEntryPrice;
-            const oppositePrice = ammOppositePrice;
-            if (pickPrice == null || oppositePrice == null) return null;
+            const showDual =
+              (isUpDown || isH2H || isCommunityDual) &&
+              ammOppositePrice != null;
+            // Multi / Race, or binary with a missing opposite price — still
+            // show the selected outcome so price-per-share isn't blank.
+            const showSingle =
+              !showDual &&
+              (isGainer ||
+                isCommunity ||
+                ((isUpDown || isH2H || isCommunityDual) && ammOppositePrice == null));
 
+            if (!showDual && !showSingle) return null;
+
+            const priceBody = (label: string, price: number) => (
+              <>
+                <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
+                  {label}
+                </p>
+                <p className="text-2xl font-bold leading-tight font-mono">
+                  {priceToPercent(price, 0)}
+                </p>
+                <p className="text-[11px] font-mono font-semibold">
+                  {formatVoxPrice(price, 3)}/share
+                </p>
+              </>
+            );
+
+            if (showSingle) {
+              const singleLabel = isGainer
+                ? (selection.personName ?? selection.choice)
+                : isUpDown
+                  ? (isUp ? "UP" : isDown ? "DOWN" : selection.choice)
+                  : selection.choice.replace(/^(Yes|No)\s*·\s*/i, "");
+              return (
+                <div className="grid grid-cols-1 gap-2" data-testid="amm-hero-tiles">
+                  <div
+                    className="rounded-lg border-2 px-3 py-2.5 text-left border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                    data-testid="amm-hero-tile-pick"
+                  >
+                    {priceBody(singleLabel, pickPrice)}
+                  </div>
+                </div>
+              );
+            }
+
+            const oppositePrice = ammOppositePrice!;
             const canFlip =
-              isUpDown && !!onDirectionChange && !isTopUp;
+              (isUpDown || isCommunityDual) && !!onDirectionChange && !isTopUp;
 
             let pickLabel: string;
             let oppositeLabel: string;
             let pickClass: string;
             let oppositeClass: string;
-            // Hover tone for the muted (opposite) tile when it's
-            // clickable. Brightens the tone so the affordance reads
-            // even though it's the "not picked" side. Empty string
-            // for the passive (H2H / top-up) case so we don't apply
-            // a phantom hover effect on a non-button.
             let oppositeHoverClass = "";
+
             if (isUpDown) {
               pickLabel = isUp ? "UP" : "DOWN";
               oppositeLabel = isUp ? "DOWN" : "UP";
@@ -431,6 +465,47 @@ export function StakeModal({
                   ? "hover:border-[#FF0000]/60 hover:bg-[#FF0000]/10 hover:text-[#FF0000]"
                   : "hover:border-[#00C853]/60 hover:bg-[#00C853]/10 hover:text-[#00C853]";
               }
+            } else if (isCommunityDual) {
+              pickLabel = selection.choice;
+              oppositeLabel =
+                selection.opponentName ??
+                (/^yes$/i.test(selection.choice.trim())
+                  ? "No"
+                  : /^no$/i.test(selection.choice.trim())
+                    ? "Yes"
+                    : /^above$/i.test(selection.choice.trim())
+                      ? "Below"
+                      : /^below$/i.test(selection.choice.trim())
+                        ? "Above"
+                        : "Other side");
+              const pickIsYesish =
+                /^yes$/i.test(pickLabel.trim()) || /^above$/i.test(pickLabel.trim());
+              const pickIsNoish =
+                /^no$/i.test(pickLabel.trim()) || /^below$/i.test(pickLabel.trim());
+              const yesTone = "border-[#00C853]/60 bg-[#00C853]/15 text-[#00C853]";
+              const noTone = "border-[#FF0000]/60 bg-[#FF0000]/15 text-[#FF0000]";
+              const yesMuted = "border-[#00C853]/25 bg-[#00C853]/5 text-[#00C853]/70";
+              const noMuted = "border-[#FF0000]/25 bg-[#FF0000]/5 text-[#FF0000]/70";
+              const violetTone =
+                "border-violet-500/60 bg-violet-500/15 text-violet-700 dark:text-violet-300";
+              const mutedTone =
+                "border-border/40 bg-muted/30 text-muted-foreground";
+              if (pickIsYesish || pickIsNoish) {
+                pickClass = pickIsYesish ? yesTone : noTone;
+                oppositeClass = pickIsYesish ? noMuted : yesMuted;
+                if (canFlip) {
+                  oppositeHoverClass = pickIsYesish
+                    ? "hover:border-[#FF0000]/60 hover:bg-[#FF0000]/10 hover:text-[#FF0000]"
+                    : "hover:border-[#00C853]/60 hover:bg-[#00C853]/10 hover:text-[#00C853]";
+                }
+              } else {
+                pickClass = violetTone;
+                oppositeClass = mutedTone;
+                if (canFlip) {
+                  oppositeHoverClass =
+                    "hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-700 dark:hover:text-violet-300";
+                }
+              }
             } else {
               pickLabel = selection.personName ?? "Your pick";
               oppositeLabel = selection.opponentName ?? "Opponent";
@@ -440,70 +515,47 @@ export function StakeModal({
                 "border-border/40 bg-muted/30 text-muted-foreground";
             }
 
-            // Shared classes between button & div variants so the
-            // visual is identical for clickable / passive renderings.
             const pickTileClass = `rounded-lg border-2 px-3 py-2.5 text-left ${pickClass}`;
             const oppositeTileClass = `rounded-lg border px-3 py-2.5 text-left transition-colors ${oppositeClass} ${oppositeHoverClass}`;
 
-            // Inlined markup (rather than an inner component) so React
-            // doesn't see a fresh component type on every parent render,
-            // which would otherwise force the tile DOM to remount.
-            // Round-2 polish: dropped the `opacity-70` on the Ꝟ/share
-            // line because the muted-side tile already paints text at
-            // `text-[<color>]/70`, and stacking opacities (0.7 × 0.7 =
-            // 0.49) made the red DOWN price almost unreadable. Bumped
-            // to `font-semibold` so the Ꝟ/share reads as a real datum
-            // rather than a footnote.
-            const pickBody = (
-              <>
-                <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
-                  {pickLabel}
-                </p>
-                <p className="text-2xl font-bold leading-tight font-mono">
-                  {priceToPercent(pickPrice, 0)}
-                </p>
-                <p className="text-[11px] font-mono font-semibold">
-                  {formatVoxPrice(pickPrice, 3)}/share
-                </p>
-              </>
-            );
-            const oppositeBody = (
-              <>
-                <p className="text-[10px] font-semibold uppercase tracking-wide truncate">
-                  {oppositeLabel}
-                </p>
-                <p className="text-2xl font-bold leading-tight font-mono">
-                  {priceToPercent(oppositePrice, 0)}
-                </p>
-                <p className="text-[11px] font-mono font-semibold">
-                  {formatVoxPrice(oppositePrice, 3)}/share
-                </p>
-              </>
-            );
+            const flipToOpposite = () => {
+              if (isUpDown) {
+                onDirectionChange?.(isUp ? "down" : "up");
+                return;
+              }
+              if (isCommunityDual) {
+                // Parent swaps entryId to the other dual outcome.
+                // Dir is a hint; parents ignore it for binary/updown flips.
+                const oppIsYesish =
+                  /^yes$/i.test(oppositeLabel.trim()) ||
+                  /^above$/i.test(oppositeLabel.trim());
+                onDirectionChange?.(oppIsYesish ? "yes" : "no");
+              }
+            };
 
-            // .blur() after tap clears the :focus ring (some browsers
-            // still paint a faint focus shadow on `<button>` after touch
-            // even with `:hover` gated by hoverOnlyWhenSupported), so the
-            // tile snaps cleanly back to muted styling on the new
-            // opposite side.
+            // Up/Down: both tiles are buttons (re-assert pick / flip).
+            // World dual: only the opposite tile flips — selected side is
+            // a passive div so we don't paint a dead click target.
+            const pickIsButton = canFlip && isUpDown;
+
             return (
               <div className="grid grid-cols-2 gap-2" data-testid="amm-hero-tiles">
-                {canFlip ? (
+                {pickIsButton ? (
                   <button
                     type="button"
                     aria-pressed
                     className={pickTileClass}
                     onClick={(e) => {
                       e.currentTarget.blur();
-                      onDirectionChange(isUp ? "up" : "down");
+                      onDirectionChange?.(isUp ? "up" : "down");
                     }}
                     data-testid="amm-hero-tile-pick"
                   >
-                    {pickBody}
+                    {priceBody(pickLabel, pickPrice)}
                   </button>
                 ) : (
                   <div className={pickTileClass} data-testid="amm-hero-tile-pick">
-                    {pickBody}
+                    {priceBody(pickLabel, pickPrice)}
                   </div>
                 )}
                 {canFlip ? (
@@ -513,15 +565,15 @@ export function StakeModal({
                     className={oppositeTileClass}
                     onClick={(e) => {
                       e.currentTarget.blur();
-                      onDirectionChange(isUp ? "down" : "up");
+                      flipToOpposite();
                     }}
                     data-testid="amm-hero-tile-opposite"
                   >
-                    {oppositeBody}
+                    {priceBody(oppositeLabel, oppositePrice)}
                   </button>
                 ) : (
                   <div className={oppositeTileClass} data-testid="amm-hero-tile-opposite">
-                    {oppositeBody}
+                    {priceBody(oppositeLabel, oppositePrice)}
                   </div>
                 )}
               </div>
@@ -551,7 +603,9 @@ export function StakeModal({
                     {selection.direction === "no" ? "No" : "Yes"}
                   </span>
                 )}
-                <span className="text-foreground">{selection.choice}</span>
+                <span className="text-foreground">
+                  {selection.choice.replace(/^(Yes|No)\s*·\s*/i, "")}
+                </span>
               </p>
             ) : (
               <p className="text-lg font-bold">
@@ -596,14 +650,19 @@ export function StakeModal({
                 <button
                   type="button"
                   onClick={() => onDirectionChange("yes")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
+                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-md text-xs font-medium border transition-all ${
                     selection.direction !== "no"
                       ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
                       : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
                   }`}
                   data-testid="stake-modal-toggle-yes"
                 >
-                  Yes
+                  <span>Yes</span>
+                  {ammEntryPrice != null && (
+                    <span className="font-mono text-[10px] font-semibold opacity-90">
+                      {priceToPercent(ammEntryPrice, 0)} · {formatVoxPrice(ammEntryPrice, 3)}/share
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -922,7 +981,39 @@ export function StakeModal({
                   </p>
                 )}
 
-                {!hasBuyQuote && (
+                {!hasBuyQuote && ammEntryPrice > 0 && (() => {
+                  const illustrativeStake = 100;
+                  const rawShares = illustrativeStake / ammEntryPrice;
+                  // Cap display so near-zero prices don't dump absurd figures.
+                  const approxShares =
+                    rawShares > 10_000
+                      ? 10_000
+                      : Math.floor(rawShares);
+                  const sharesLabel =
+                    rawShares > 10_000
+                      ? "10,000+"
+                      : approxShares.toLocaleString("en-US");
+                  const payoutLabel =
+                    rawShares > 10_000
+                      ? `${CURRENCY.symbol}10,000+`
+                      : formatVox(approxShares);
+                  return (
+                    <p
+                      className="text-[11px] text-muted-foreground border-t border-violet-500/15 pt-1.5"
+                      data-testid="amm-receipt-illustrative"
+                    >
+                      At {formatVoxPrice(ammEntryPrice, 3)}/share,{" "}
+                      {formatVox(illustrativeStake)} buys about{" "}
+                      {sharesLabel} shares
+                      {" → "}~{payoutLabel} if this wins.
+                      <span className="block mt-0.5 text-muted-foreground/70 italic">
+                        Enter at least {formatVox(MIN_STAKE)} for an exact quote. Winning shares pay {CURRENCY.symbol}1 each.
+                      </span>
+                    </p>
+                  );
+                })()}
+
+                {!hasBuyQuote && !(ammEntryPrice > 0) && (
                   <p className="text-[11px] text-muted-foreground/70 italic border-t border-violet-500/15 pt-1.5">
                     Enter at least {formatVox(MIN_STAKE)} to see your potential payout.
                   </p>
