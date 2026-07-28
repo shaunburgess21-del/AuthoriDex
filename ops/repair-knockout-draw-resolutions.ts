@@ -12,7 +12,9 @@
  * This script (idempotent, transactional per market):
  *   1. Reverses prior amm_payout / amm_warmstart_payout / amm_settle_credit
  *      ledger rows and restores wallets.
- *   2. Reverses prediction_win XP for the prior settlement.
+ *   2. Reverses prediction_win XP for the prior settlement
+ *      (matches both legacy per-bet keys and the canonical
+ *      prediction_win_<marketId>_<userId> key via LIKE prefix).
  *   3. Resets market_bets / market_entries / market status to CLOSED_PENDING.
  *   4. Calls resolveAmmMarket with the correct winner.
  *   5. Stamps resolution evidence + admin_audit_log.

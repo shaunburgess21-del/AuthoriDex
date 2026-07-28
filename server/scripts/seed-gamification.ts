@@ -61,7 +61,7 @@ async function seedXpActions() {
 
     // Prediction Actions
     { actionKey: 'place_prediction', displayName: 'Place Prediction', xpValue: 20, dailyCap: 10, description: 'Place a prediction on a market' },
-    { actionKey: 'prediction_win', displayName: 'Prediction Win', xpValue: 100, dailyCap: null, description: 'Win a prediction (bonus XP)' },
+    { actionKey: 'prediction_win', displayName: 'Prediction Win', xpValue: 100, dailyCap: null, description: 'Bonus XP when a prediction settles in your favour (once per market)' },
 
     // Profile Completion Actions — lifetime-once via idempotency key
     // (`xp_profile_<key>_<userId>`). dailyCap stays null for the same

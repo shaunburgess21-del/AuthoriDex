@@ -5,6 +5,7 @@ import {
   canAccessCapability,
   computeCreditBalance,
   scaleEarnedValue,
+  predictionWinIdempotencyKey,
 } from "../server/services/gamification-utils";
 import { RANKS, getRankByName } from "../shared/rank-config";
 
@@ -57,4 +58,28 @@ test("scaleEarnedValue rounds half-up and matches the canonical examples", () =>
   // 50 XP post_insight — half-up rounding (50 * 1.05 = 52.5 -> 53).
   assert.equal(scaleEarnedValue(50, mult("Aspirant")), 53);
   assert.equal(scaleEarnedValue(50, mult("VoxMax Legend")), 75);
+});
+
+test("predictionWinIdempotencyKey is one award per user per market", () => {
+  const marketId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const userId = "11111111-2222-3333-4444-555555555555";
+  const betId = "99999999-8888-7777-6666-555555555555";
+
+  const key = predictionWinIdempotencyKey(marketId, userId);
+  assert.equal(key, `prediction_win_${marketId}_${userId}`);
+
+  // Must NOT embed a bet id — that was the historical overcount path.
+  assert.equal(key.includes(betId), false);
+
+  // Same user + market always collapses to the same key.
+  assert.equal(
+    predictionWinIdempotencyKey(marketId, userId),
+    predictionWinIdempotencyKey(marketId, userId),
+  );
+
+  // Different users on the same market stay distinct.
+  assert.notEqual(
+    predictionWinIdempotencyKey(marketId, userId),
+    predictionWinIdempotencyKey(marketId, "00000000-0000-0000-0000-000000000001"),
+  );
 });

@@ -44,3 +44,17 @@ export function computeCreditBalance(currentBalance: number, amount: number): nu
 export function scaleEarnedValue(baseValue: number, multiplier: number): number {
   return Math.round(baseValue * multiplier);
 }
+
+/**
+ * Canonical idempotency key for `prediction_win` XP: one award per
+ * user per market. Resolvers MUST use this (via
+ * `gamificationService.awardPredictionWinXp`) rather than embedding
+ * bet ids — historical per-bet keys let DCA / multi-buy winners
+ * multiply the uncapped 100 XP bonus.
+ */
+export function predictionWinIdempotencyKey(
+  marketId: string,
+  userId: string,
+): string {
+  return `prediction_win_${marketId}_${userId}`;
+}

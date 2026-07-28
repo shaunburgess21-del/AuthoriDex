@@ -541,25 +541,23 @@ async function emitResolutionSideEffects(
       });
     }
 
-    // Award `prediction_win` XP per winning buy row (idempotent via
-    // gamificationService key). Badge checks run once per unique winner
-    // to avoid redundant work when one user holds multiple winning bets.
-    const winningBuys = settledBuys.filter((b) => b.status === "won");
+    // Award `prediction_win` XP once per unique winning user per market
+    // — NOT per winning buy row. A user who holds multiple winning buys
+    // on the same market won a single market and gets a single win
+    // reward; awarding per row let anyone (esp. simulation agents that
+    // DCA into a market) multiply the uncapped 100 XP win bonus.
+    // `awardPredictionWinXp` owns the (marketId, userId) idempotency
+    // key. Badge checks run in the same loop, once per unique winner.
     const winningUserIds = new Set<string>();
-    for (const bet of winningBuys) {
-      winningUserIds.add(bet.userId);
-      try {
-        await gamificationService.awardXp(
-          bet.userId,
-          "prediction_win",
-          `prediction_win_${marketId}_${bet.id}`,
-          { marketId, betId: bet.id },
-        );
-      } catch (err) {
-        log(`[AmmResolver] XP award failed for ${marketId}/${bet.id}: ${(err as Error)?.message ?? err}`);
-      }
+    for (const bet of settledBuys) {
+      if (bet.status === "won") winningUserIds.add(bet.userId);
     }
     for (const userId of winningUserIds) {
+      try {
+        await gamificationService.awardPredictionWinXp(userId, marketId);
+      } catch (err) {
+        log(`[AmmResolver] XP award failed for ${marketId}/${userId}: ${(err as Error)?.message ?? err}`);
+      }
       try {
         await checkAndAwardPredictionWinBadges(userId);
       } catch (err) {

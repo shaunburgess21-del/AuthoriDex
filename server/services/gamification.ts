@@ -12,7 +12,7 @@ import {
   type Rank
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
-import { canAccessCapability, computeCreditBalance, scaleEarnedValue, type Capability } from "./gamification-utils";
+import { canAccessCapability, computeCreditBalance, scaleEarnedValue, predictionWinIdempotencyKey, type Capability } from "./gamification-utils";
 import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
@@ -22,6 +22,8 @@ import {
   enrichCreditHistoryRows,
   type EnrichedCreditLedgerRow,
 } from "./credit-history-display";
+
+export { predictionWinIdempotencyKey };
 
 interface AwardXpResult {
   success: boolean;
@@ -163,6 +165,23 @@ class GamificationService {
     const seed = CREDIT_ACTIONS.find((a) => a.key === actionKey);
     if (seed) return { source: "seed", row: seed };
     return null;
+  }
+
+  /**
+   * Award the uncapped `prediction_win` bonus once per unique winner
+   * per market. Prefer this over raw `awardXp('prediction_win', …)` so
+   * AMM and jackpot resolvers cannot drift back to per-bet keys.
+   */
+  async awardPredictionWinXp(
+    userId: string,
+    marketId: string,
+  ): Promise<AwardXpResult> {
+    return this.awardXp(
+      userId,
+      "prediction_win",
+      predictionWinIdempotencyKey(marketId, userId),
+      { marketId },
+    );
   }
 
   async awardXp(

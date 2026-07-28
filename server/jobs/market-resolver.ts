@@ -1015,16 +1015,21 @@ export async function resolveJackpot(
     }).where(eq(predictionMarkets.id, market.id));
   });
 
+  // prediction_win XP is awarded once per unique winning user per
+  // market, not per winning jackpot bet. A user with multiple tied
+  // winning guesses on the same jackpot won a single market and gets a
+  // single win reward (`awardPredictionWinXp` owns the key). Credit
+  // payouts above stay per-bet.
+  const jackpotWinnerUserIds = new Set<string>();
   for (const w of winners) {
+    jackpotWinnerUserIds.add(w.userId);
+  }
+  for (const userId of jackpotWinnerUserIds) {
     try {
-      await gamificationService.awardXp(
-        w.userId, 'prediction_win',
-        `prediction_win_${market.id}_${w.id}`,
-        { marketId: market.id, betId: w.id }
-      );
+      await gamificationService.awardPredictionWinXp(userId, market.id);
     } catch (e) { console.error("XP award for jackpot win failed:", e); }
     try {
-      await checkAndAwardPredictionWinBadges(w.userId);
+      await checkAndAwardPredictionWinBadges(userId);
     } catch (e) { console.error("Jackpot win badge check failed:", e); }
   }
 

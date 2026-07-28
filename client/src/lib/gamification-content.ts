@@ -107,7 +107,7 @@ export const XP_ACTIONS: XpActionRow[] = [
   { actionKey: "insight_upvoted", displayName: "Your Post Gets Upvoted", xpValue: 20, dailyCap: 10, description: "Earned when your insight or comment receives an upvote from another VoxMaxxer", category: "Engagement" },
 
   { actionKey: "place_prediction", displayName: "Place Prediction", xpValue: 20, dailyCap: 10, description: "Place a prediction on a market", category: "Prediction" },
-  { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour", category: "Prediction" },
+  { actionKey: "prediction_win", displayName: "Prediction Win", xpValue: 100, dailyCap: null, description: "Bonus XP when a prediction settles in your favour (once per market)", category: "Prediction" },
 
   { actionKey: "community_member", displayName: "Community Member", xpValue: 25, dailyCap: null, description: "One-time XP for adding age, gender, and country of residence", category: "Special" },
 
@@ -218,7 +218,7 @@ export interface PredictSurfaceRow {
 
 export const PREDICT_SURFACES: PredictSurfaceRow[] = [
   { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Vox to stake" },
-  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Winning stake + share of pool returned to balance" },
+  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Once per market; winning stake + share of pool returned to balance" },
   { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion", notes: "Admin-reviewed before publish" },
   { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "market_suggestion_approved", notes: "+Ꝟ100 paid alongside" },
 ];
