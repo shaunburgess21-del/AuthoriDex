@@ -9,12 +9,13 @@ import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/pr
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { cn } from "@/lib/utils";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
-import { Activity, Check, ChevronRight, Plus } from "lucide-react";
+import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import { formatVoxCompact, formatVoxPrice } from "@/lib/currency";
 import { h2hShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
+import { PositionSummaryRow } from "@/components/predict/PositionSummaryRow";
 
 type CategoryFilter = FilterCategory;
 
@@ -126,23 +127,6 @@ export function HeadToHeadCard({
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
   const volumeLabel = formatVoxCompact(market.volume ?? 0);
-
-  /**
-   * AMM P&L delta + sub-cent zero clamp. `-0.0001` rounds to a
-   * misleading "−Ꝟ0.00"; `formatVoxDelta` clamps anything inside half
-   * a cent of zero to a neutral "Ꝟ0.00" with no sign prefix. The
-   * tint still needs the raw value so we compute the colour class
-   * locally rather than from the formatted string.
-   */
-  const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
-  const pnlClass = !hasPnl || pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-400"
-      : "text-red-700 dark:text-red-400";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   const pickAccentShell =
     userPick === 1
@@ -355,56 +339,20 @@ export function HeadToHeadCard({
 
         <div className="mt-auto">
           {hasPicked ? (
-            <div className="flex items-stretch gap-2">
-              <Link
-                href={`/predict/h2h/${market.id}`}
-                onClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
-                className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                data-testid={`link-h2h-your-pick-${market.id}`}
-                aria-label={`View head-to-head details: your pick ${smartName(pickedName)}`}
-              >
-                <div
-                  className={cn(
-                    "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors",
-                    pickAccentShell
-                  )}
-                >
-                  <Check className={cn("h-4 w-4 shrink-0", pickAccentIconClass)} />
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                    <p className="truncate text-sm font-semibold leading-tight text-foreground">{smartName(pickedName)}</p>
-                  </div>
-                  {pnlText && (
-                    <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                      {pnlText}
-                    </span>
-                  )}
-                  {userStake != null && (
-                    <div className="flex shrink-0 flex-col items-end tabular-nums">
-                      <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                      <span className="text-xs font-semibold leading-tight text-foreground">
-                        {formatVox(userStake)}
-                      </span>
-                    </div>
-                  )}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                </div>
-              </Link>
-              {onSelect && !isMarketClosed && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onSelect(userPick as 1 | 2)}
-                  data-testid={`button-h2h-add-${market.id}`}
-                  className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
-                  aria-label={`Add to your ${smartName(pickedName)} stake`}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span className="hidden min-[360px]:inline">Add</span>
-                </Button>
-              )}
-            </div>
+            <PositionSummaryRow
+              pickLabel={smartName(pickedName)}
+              stakeAmount={userStake ?? null}
+              unrealisedPnl={unrealisedPnl}
+              href={`/predict/h2h/${market.id}`}
+              onLinkClick={() => setPredictReturnAnchor(`card-h2h-${market.id}`)}
+              onAdd={onSelect && !isMarketClosed ? () => onSelect(userPick as 1 | 2) : undefined}
+              addAriaLabel={`Add to your ${smartName(pickedName)} stake`}
+              linkAriaLabel={`View head-to-head details: your pick ${smartName(pickedName)}`}
+              accentShellClassName={pickAccentShell}
+              iconClassName={pickAccentIconClass}
+              testId={`link-h2h-your-pick-${market.id}`}
+              addTestId={`button-h2h-add-${market.id}`}
+            />
           ) : (
             <>
               <div className="grid grid-cols-2 gap-2">

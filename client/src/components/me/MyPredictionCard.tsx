@@ -25,6 +25,7 @@ import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
 import { formatVox } from "@/lib/currency";
+import { formatCountdown } from "@/lib/marketCountdown";
 
 export interface MyPredictionCardData {
   betId: string;
@@ -88,21 +89,6 @@ function formatDate(ts: string): string {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function formatCountdown(iso: string): string {
-  if (!iso) return "";
-  const end = new Date(iso).getTime();
-  if (Number.isNaN(end)) return "";
-  const now = Date.now();
-  const diff = end - now;
-  if (diff <= 0) return "Closed";
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 60) return `${minutes}m left`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h left`;
-  const days = Math.floor(hours / 24);
-  return `${days}d left`;
 }
 
 function getStatusBadge(

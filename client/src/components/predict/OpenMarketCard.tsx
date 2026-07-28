@@ -7,15 +7,18 @@ import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { PredictCard } from "@/components/predict/PredictCard";
 import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarStack";
-import { Link, useLocation } from "wouter";
-import { Check, ChevronRight, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink, Plus } from "lucide-react";
+import { useLocation } from "wouter";
+import { Check, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink, Plus } from "lucide-react";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { worldMarketShare } from "@/lib/share";
-import { formatVox, formatVoxCompact, formatVoxDelta, voxWord } from "@/lib/currency";
+import { formatVox, formatVoxCompact, voxWord } from "@/lib/currency";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { formatMarketCountdown } from "@/lib/marketCountdown";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
+import { PositionSummaryRow, formatPickLabel } from "@/components/predict/PositionSummaryRow";
+import { cn } from "@/lib/utils";
 
 /**
  * Sprint 5 / Phase 0: build the predict-page return anchor key for a
@@ -197,96 +200,56 @@ function resolvePendingTopUpTarget(
   return resolved;
 }
 
-function PendingBetLinkRow({ entryLabel, stakeAmount, href, onTopUp, onLinkClick, unrealisedPnl, accentColor }: { entryLabel: string; stakeAmount: number; href: string; /** When provided, the row becomes a button that triggers an in-place top-up modal instead of navigating to the detail page. Mirrors the native pattern (WeeklyUpDownYourPositionPanel). */ onTopUp?: () => void; /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */ onLinkClick?: () => void; /** AMM unrealised P&L (`buy.netShares × livePrice − costBasis`). Shown next to Stake. */ unrealisedPnl?: number | null; /** Override accent when the pick isn't a classic Yes/No (e.g. England vs Argentina). */ accentColor?: string }) {
+function PendingBetLinkRow({
+  entryLabel,
+  stakeAmount,
+  href,
+  onTopUp,
+  onLinkClick,
+  unrealisedPnl,
+  accentColor,
+}: {
+  entryLabel: string;
+  stakeAmount: number;
+  href: string;
+  /** When provided, shows + Add for in-place top-up (StakeModal). */
+  onTopUp?: () => void;
+  /** Fired right before wouter navigates so the parent can stash a predict-return anchor. */
+  onLinkClick?: () => void;
+  /** AMM unrealised P&L. Shown next to Stake. */
+  unrealisedPnl?: number | null;
+  /** Override accent when the pick isn't a classic Yes/No (e.g. England vs Argentina). */
+  accentColor?: string;
+}) {
   const yesLike = isYesLikeLabel(entryLabel);
   const accent = accentColor || (yesLike ? "#00C853" : "#FF0000");
 
-  // P&L delta with the same sub-cent zero clamp we apply on Up/Down +
-  // H2H + Race cards. Hidden when `unrealisedPnl` is unavailable.
-  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = Math.abs(pnlValue) < 0.005;
-  const pnlClass = pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-500"
-      : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
-
-  const inner = (
-    <div
-      className="flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-3 md:py-2 text-left w-full transition-colors"
-      style={{
+  return (
+    <PositionSummaryRow
+      pickLabel={formatPickLabel(entryLabel)}
+      stakeAmount={stakeAmount}
+      unrealisedPnl={unrealisedPnl ?? null}
+      href={href}
+      onLinkClick={onLinkClick}
+      onAdd={onTopUp}
+      addAriaLabel={`Add to your ${entryLabel} pick`}
+      linkAriaLabel={`View your prediction: ${entryLabel}`}
+      accentShellClassName="hover:brightness-110"
+      shellStyle={{
         backgroundColor: `${accent}10`,
         borderColor: `${accent}80`,
       }}
-      data-testid="pending-bet-link"
-    >
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      icon={
         <div
           className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border"
           style={{ backgroundColor: `${accent}1A`, borderColor: `${accent}80` }}
         >
           <Check className="h-2.5 w-2.5" style={{ color: accent }} />
         </div>
-        <div className="min-w-0 flex flex-row flex-wrap items-center gap-1.5">
-          <span className="text-xs font-semibold uppercase tracking-wide leading-none text-foreground">Your pick</span>
-          <span className="text-xs font-semibold leading-none" style={{ color: accent }}>
-            {entryLabel.toUpperCase()}
-          </span>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {pnlText && (
-          <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`} data-testid="pending-bet-pnl">
-            {pnlText}
-          </span>
-        )}
-        <div className="flex items-baseline gap-1 tabular-nums">
-          <span className="text-[10px] text-muted-foreground">Stake</span>
-          <span className="text-xs font-semibold text-foreground">{formatVox(stakeAmount)}</span>
-        </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-      </div>
-    </div>
-  );
-
-  if (onTopUp) {
-    return (
-      <div className="flex items-stretch gap-2 w-full">
-        <Link
-          href={href}
-          onClick={onLinkClick}
-          className="flex-1 block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          aria-label={`View your prediction: ${entryLabel}`}
-        >
-          {inner}
-        </Link>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onTopUp}
-          className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
-          data-testid="pending-bet-add"
-          aria-label={`Add to your ${entryLabel} pick`}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span className="hidden min-[360px]:inline">Add</span>
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      onClick={onLinkClick}
-      className="block w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      aria-label={`View your prediction: ${entryLabel}`}
-    >
-      {inner}
-    </Link>
+      }
+      testId="pending-bet-link"
+      addTestId="pending-bet-add"
+    />
   );
 }
 
@@ -305,15 +268,97 @@ function openMarketPredictCardProps(
   };
 }
 
-function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, categoryMenuDisabled = false, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, tapping the "Your pick" pin opens the StakeModal in topUp mode instead of routing to the detail page. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; categoryMenuDisabled?: boolean; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
+/** Prefer AMM net cost basis over gross buy stakes (matches Weekly cards). */
+function resolveDisplayStake(
+  grossStake: number | undefined,
+  netCreditsIn: number | null | undefined,
+): number {
+  if (typeof netCreditsIn === "number" && Number.isFinite(netCreditsIn) && netCreditsIn >= 0) {
+    return Math.round(netCreditsIn);
+  }
+  return grossStake ?? 0;
+}
+
+function WorldMarketViewDetailsLink({
+  slug,
+  isInactive,
+  onNavigate,
+}: {
+  slug: string;
+  isInactive: boolean;
+  onNavigate: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!isInactive) onNavigate();
+      }}
+      disabled={isInactive}
+      className={`mt-2.5 inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+        isInactive
+          ? "text-muted-foreground cursor-default"
+          : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"
+      }`}
+      data-testid={`link-view-details-${slug}`}
+      aria-label="View market details"
+    >
+      View details →
+    </button>
+  );
+}
+
+type OpenMarketCardSharedProps = {
+  market: any;
+  entries: any[];
+  participants: number;
+  timeLabel: string;
+  timeUrgent?: boolean;
+  onNavigate: (slug: string, pick?: string, direction?: string) => void;
+  onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void;
+  isMarketClosed: boolean;
+  isInactive?: boolean;
+  inactiveMessage?: string;
+  userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number };
+  userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>;
+  onFilterCategory?: (cat: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
+  onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
+  unrealisedPnl?: number | null;
+  /** AMM net cost basis — preferred stake display when present. */
+  netCreditsIn?: number | null;
+  /** Open-leg count for multi rollup ("Multiple picks"). */
+  positionCount?: number;
+};
+
+function BinaryMarketCard({
+  market,
+  entries,
+  participants,
+  timeLabel,
+  timeUrgent = false,
+  onNavigate,
+  onPickEntry,
+  isMarketClosed,
+  isInactive = false,
+  inactiveMessage,
+  userBetResult,
+  userBetsPerEntry,
+  onFilterCategory,
+  leaderboardCategories,
+  onBrowseFullScreen,
+  categoryMenuDisabled = false,
+  unrealisedPnl,
+  netCreditsIn,
+}: OpenMarketCardSharedProps) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
     rememberAnchor();
     onNavigate(slug, pick, direction);
   };
-  // Parimutuel sunset: every community market is AMM. Volume chip
-  // mirrors H2H / Race using `market.volume` (projected by the
-  // /api/open-markets feed from `ammState.totalUserCreditsIn`).
   const volumeRaw = Number((market as any)?.volume ?? 0);
   const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
@@ -323,21 +368,9 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
   const rightLabel = normalizeEntryLabel(rightEntry?.label) || "No";
   const isYesNoMarket = isClassicYesNoLabels(leftLabel, rightLabel);
   const sideStyles = binarySideStyles(isYesNoMarket);
-  // AMM markets price each share class via LMSR. We map prices to %
-  // for the bar and the button label.
   const leftPrice = ammPrices && leftEntry?.id ? Number(ammPrices[leftEntry.id] ?? 0) : 0;
   const leftPercent = Math.max(0, Math.min(100, Math.round(leftPrice * 100)));
-  // Complementary fill so the dual/single bar never overflows from rounding.
   const rightPercent = Math.max(0, 100 - leftPercent);
-  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = Math.abs(pnlValue) < 0.005;
-  const pnlClass = pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-500"
-      : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
   const pendingAccent = (() => {
     if (!userBetResult?.entryLabel) return undefined;
     const pick = userBetResult.entryLabel.trim().toLowerCase();
@@ -349,6 +382,7 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
     const raw = entry?.id || normalizeEntryLabel(entry?.label) || legacyPick;
     navigateWithAnchor(market.slug, encodeURIComponent(String(raw)));
   };
+  const displayStake = resolveDisplayStake(userBetResult?.stakeAmount, netCreditsIn);
 
   return (
     <PredictCard
@@ -356,7 +390,13 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
     >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-xs">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs",
+              timeUrgent && "text-amber-700 dark:text-amber-400 border-amber-500/50",
+            )}
+          >
             <Clock className="h-3 w-3 mr-1" />
             {timeLabel}
           </Badge>
@@ -395,7 +435,7 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? "hover:text-violet-600 dark:hover:text-violet-400" : ""} transition-colors`}>{market.teaser}</p>
         </a>
       )}
 
@@ -440,20 +480,6 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
           </div>
         </div>
 
-        {hasPnl && pnlText && (
-          <div
-            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-            data-testid={`community-card-pnl-${market.slug}`}
-          >
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Your position
-            </span>
-            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-              {pnlText}
-            </span>
-          </div>
-        )}
-
         <div>
           {isMarketClosed ? (
             <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
@@ -462,14 +488,14 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
             </Button>
           ) : userBetResult?.result === "pending" ? (
             (() => {
-                const topUpTarget =
-                  onPickEntry
-                    ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
-                    : null;
+              const topUpTarget =
+                onPickEntry
+                  ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
+                  : null;
               return (
                 <PendingBetLinkRow
                   entryLabel={userBetResult.entryLabel}
-                  stakeAmount={userBetResult.stakeAmount}
+                  stakeAmount={displayStake}
                   href={`/markets/${market.slug}`}
                   onLinkClick={rememberAnchor}
                   onTopUp={
@@ -515,6 +541,13 @@ function BinaryMarketCard({ market, entries, participants, timeLabel, onNavigate
                 {rightLabel} {rightPercent}%
               </Button>
             </div>
+          )}
+          {userBetResult?.result !== "pending" && (
+            <WorldMarketViewDetailsLink
+              slug={market.slug}
+              isInactive={!!isInactive}
+              onNavigate={() => navigateWithAnchor(market.slug)}
+            />
           )}
           <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
         </div>
@@ -573,7 +606,6 @@ function MultiMarketEntryRow({
     userDirection === "yes" ? userBet?.yesStake ?? 0
     : userDirection === "no" ? userBet?.noStake ?? 0
     : 0;
-  const betAccent = userDirection === "no" ? "#FF0000" : "#00C853";
   const entryPool =
     Number(entry.totalStake || 0) + Number(entry.noStake || 0);
 
@@ -610,7 +642,12 @@ function MultiMarketEntryRow({
     "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex items-center justify-center";
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-md px-1 -mx-1 py-0.5",
+        hasPendingBet && userDirection && "bg-violet-500/8 dark:bg-violet-500/5",
+      )}
+    >
       <div className="flex-1 min-w-0">
         <div
           className={`truncate text-[13px] md:text-[14px] font-medium ${
@@ -622,75 +659,40 @@ function MultiMarketEntryRow({
         {showEntryPool && (
           <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
             {voxWord(entryPool)} in pool
+            {hasPendingBet && userStake > 0 ? ` · Your stake ${formatVox(userStake)}` : ""}
           </div>
         )}
       </div>
       {hasPendingBet && userBet && userDirection ? (
-        // Pin doubles as the top-up trigger. When onPickEntry is wired
-        // (PredictPage / PredictTab) we open the StakeModal directly with
-        // the user's existing direction so the modal lands in topUp mode
-        // — matches the native pattern (e.g. WeeklyUpDownYourPositionPanel).
-        // Falls back to the detail-page link when no callback is wired
-        // (e.g. SSR or list views that haven't been migrated yet).
-        // The leading pct span keeps current market price visible even
-        // when the row's button is replaced by the pin — multi cards
-        // don't have a per-row progress bar like binary cards do, and the
-        // market-level P&L banner only shows the user's TOP position, so
-        // without this span users with multiple open picks lose all per-
-        // outcome price visibility.
+        // Card preview: lightweight check + pct marker (stake lives in
+        // the footer PositionSummaryRow / drawer). Drawer keeps Add.
         <>
           <span className="text-[11px] md:text-[12px] font-mono font-semibold text-muted-foreground tabular-nums shrink-0">
             {entry.pct}%
           </span>
-          {onPickEntry && !isMarketClosed ? (
-            <div className="flex items-stretch gap-1 shrink-0">
-              <Link
-                href={`/markets/${market.slug}`}
-                onClick={() => rememberCommunityCardAnchor(market?.id)}
-                className="flex items-center gap-1.5 rounded-md border px-2 py-1.5 transition-colors hover:brightness-110"
-                style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-                data-testid={`pending-entry-${entry.id}`}
-                aria-label={`View your ${userDirection.toUpperCase()} pick`}
-              >
-                <Check className="h-3 w-3" style={{ color: betAccent }} />
-                <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-                <span className="text-[10px] text-muted-foreground tabular-nums">{formatVox(userStake)}</span>
-              </Link>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={(e) => handlePick(e, userDirection)}
-                className="h-auto gap-0.5 min-h-10 px-2 py-1.5"
-                data-testid={`pending-entry-add-${entry.id}`}
-                aria-label={`Add to your ${userDirection.toUpperCase()} pick`}
-              >
-                <Plus className="h-3 w-3" />
-                <span className="hidden min-[360px]:inline text-[10px]">Add</span>
-              </Button>
-            </div>
-          ) : (
-            <Link
-              href={`/markets/${market.slug}`}
-              onClick={() => rememberCommunityCardAnchor(market?.id)}
-              className="flex items-center gap-1.5 shrink-0 rounded-md border px-2 py-1.5 transition-colors"
-              style={{ backgroundColor: `${betAccent}10`, borderColor: `${betAccent}80` }}
-              data-testid={`pending-entry-${entry.id}`}
+          <div
+            className="h-5 w-5 rounded-full flex items-center justify-center shrink-0 border border-violet-500/50 bg-violet-500/15"
+            data-testid={`pending-entry-${entry.id}`}
+            aria-label={`Your pick on ${entry.label}`}
+          >
+            <Check className="h-2.5 w-2.5 text-violet-600 dark:text-violet-400" />
+          </div>
+          {showEntryPool && onPickEntry && !isMarketClosed && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={(e) => handlePick(e, userDirection)}
+              className="h-auto gap-0.5 min-h-10 px-2 py-1.5"
+              data-testid={`pending-entry-add-${entry.id}`}
+              aria-label={`Add to your ${userDirection.toUpperCase()} pick`}
             >
-              <Check className="h-3 w-3" style={{ color: betAccent }} />
-              <span className="text-[10px] font-semibold" style={{ color: betAccent }}>Your pick</span>
-              <span className="text-[10px] text-muted-foreground tabular-nums">{formatVox(userStake)}</span>
-            </Link>
+              <Plus className="h-3 w-3" />
+              <span className="hidden min-[360px]:inline text-[10px]">Add</span>
+            </Button>
           )}
         </>
       ) : !isMarketClosed ? (
-        // Parimutuel sunset: every community market is AMM. Each
-        // outcome is its own share class, so the row gets a single
-        // YES-only Buy button (Buy NO on multi is deferred pending an
-        // engine extension — LMSR has no native NO shares). Wording +
-        // colour intentionally mirror the binary Yes button so the
-        // three card variants read consistently: "Yes {pct}%", identical
-        // in both the card preview and the drawer view.
         <div className="flex shrink-0">
           <button
             className={`${buttonClass} bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20`}
@@ -709,7 +711,27 @@ function MultiMarketEntryRow({
 
 const MULTI_MARKET_PREVIEW_COUNT = 3;
 
-function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, categoryMenuDisabled = false, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; categoryMenuDisabled?: boolean; /** AMM unrealised P&L for the user's top position on this market. */ unrealisedPnl?: number | null }) {
+function MultiMarketCard({
+  market,
+  entries,
+  participants,
+  timeLabel,
+  timeUrgent = false,
+  onNavigate,
+  onPickEntry,
+  isMarketClosed,
+  isInactive = false,
+  inactiveMessage,
+  userBetResult,
+  userBetsPerEntry,
+  onFilterCategory,
+  leaderboardCategories,
+  onBrowseFullScreen,
+  categoryMenuDisabled = false,
+  unrealisedPnl,
+  netCreditsIn,
+  positionCount = 0,
+}: OpenMarketCardSharedProps) {
   const [, setLocation] = useLocation();
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
@@ -718,27 +740,23 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     onNavigate(slug, pick, direction);
   };
 
-  // Parimutuel sunset: every community market is AMM. Volume chip
-  // mirrors H2H / Race using `market.volume`.
   const volumeRaw = Number((market as any)?.volume ?? 0);
   const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
-  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = Math.abs(pnlValue) < 0.005;
-  const pnlClass = pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-500"
-      : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
 
   const hasPendingResult = userBetResult?.result === "pending";
+  const displayStake = resolveDisplayStake(userBetResult?.stakeAmount, netCreditsIn);
+  const multiPickLabel = formatPickLabel(
+    positionCount > 1 ? "Multiple positions" : userBetResult?.entryLabel,
+  );
 
-  // AMM markets price each outcome as its own share class. `pct` is
-  // the LMSR marginal price so the bars + sort order match the live
-  // market.
+  // Single-outcome top-up target for the footer + Add button.
+  const singleTopUpTarget =
+    hasPendingResult && onPickEntry && positionCount <= 1 && userBetResult
+      ? resolvePendingTopUpTarget(entries, userBetResult, userBetsPerEntry)
+      : null;
+
   const enriched = entries.map((e: any) => {
     const ammPrice = ammPrices ? Number(ammPrices[e.id] ?? 0) : 0;
     return {
@@ -748,16 +766,10 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     };
   });
 
-  // Sort: entries the user has an active pending bet on get pinned to the
-  // top (sub-sorted by pct desc), then the rest by pct desc. This mirrors the
-  // opinion-poll drawer pattern so a user's pick is always immediately
-  // visible without scrolling, but adapts to the prediction-market reality
-  // that a single user may have several pending bets across entries.
   const rankedEntries = [...enriched].sort((a: any, b: any) => {
     const aPinned = hasPendingResult && userBetsPerEntry?.has(String(a.id)) ? 1 : 0;
     const bPinned = hasPendingResult && userBetsPerEntry?.has(String(b.id)) ? 1 : 0;
     if (aPinned !== bPinned) return bPinned - aPinned;
-    // Catch-all "Other" stays at the bottom unless the user has a pick on it.
     const aOther = isOtherStyleOutcomeLabel(a.label) ? 1 : 0;
     const bOther = isOtherStyleOutcomeLabel(b.label) ? 1 : 0;
     if (aOther !== bOther) return aOther - bOther;
@@ -778,13 +790,16 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
     >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-xs">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs",
+              timeUrgent && "text-amber-700 dark:text-amber-400 border-amber-500/50",
+            )}
+          >
             <Clock className="h-3 w-3 mr-1" />
             {timeLabel}
           </Badge>
-          {/* Volume chip mirrors H2H + Race + Up/Down.
-              `formatVoxCompact` returns the Ꝟ-prefixed value, so the
-              suffix is just " vol" — no duplicate currency token. */}
           {volumeLabel && (
             <Badge
               variant="outline"
@@ -818,32 +833,17 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
           titleClassName={`!font-semibold ${isInactive ? "" : "hover:!text-violet-600 dark:hover:!text-violet-400"}`}
         />
       </a>
+      {market.teaser && (
+        <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? "hover:text-violet-600 dark:hover:text-violet-400" : ""} transition-colors`}>{market.teaser}</p>
+        </a>
+      )}
 
       <div className="mb-2">
         <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
       </div>
 
       <div className="mt-auto">
-        {/* AMM unrealised P&L banner for community markets where the
-            user holds a position. Multi-outcome markets can have
-            positions on several entries, but a single market-level P&L
-            still has signal value — we show the TOP position P&L
-            (PredictPage's `ammPositionByMarket` already picks the
-            largest currentValue), which mirrors the Race pattern. */}
-        {hasPnl && pnlText && (
-          <div
-            className="mb-3 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-            data-testid={`community-card-pnl-${market.slug}`}
-          >
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Your position
-            </span>
-            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-              {pnlText}
-            </span>
-          </div>
-        )}
-
         <div className="space-y-1.5">
           {visibleEntries.map((entry: any) => {
             const entryBet = userBetsPerEntry?.get(String(entry.id));
@@ -862,52 +862,108 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
           })}
         </div>
 
-        {/* Three-column footer: +N more (left), View details (center), options pill (right). */}
-        <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
-          <div className="min-w-0">
-            {remainingCount > 0 && (
+        {/* When the user has an open pick, the PositionSummaryRow below
+            is the primary CTA — keep only a compact "+N more / options"
+            strip so mobile doesn't stack three chrome rows. */}
+        {hasPendingResult ? (
+          remainingCount > 0 ? (
+            <div className="mt-2 flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={openOptionsDrawer}
-                className="text-left w-full min-h-10 md:min-h-0 flex items-center max-md:-ml-1 max-md:pl-1"
+                className="text-left min-h-10 md:min-h-0 flex items-center"
                 data-testid={`link-more-options-${market.slug}`}
                 aria-label={`Show ${remainingCount} more options`}
               >
-                <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline truncate">
+                <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline">
                   +{remainingCount} more
                 </span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={openOptionsDrawer}
+                className="min-h-10 md:min-h-0 flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30"
+                data-testid={`button-options-count-${market.slug}`}
+                aria-label={`Show all ${entries.length} options`}
+              >
+                <Badge variant="outline" className="text-[10px] shrink-0 pointer-events-none">
+                  {entries.length} options
+                </Badge>
+              </button>
+            </div>
+          ) : null
+        ) : (
+          <div className="mt-2.5 grid grid-cols-3 items-center gap-1 max-md:gap-0.5 md:gap-2">
+            <div className="min-w-0">
+              {remainingCount > 0 && (
+                <button
+                  type="button"
+                  onClick={openOptionsDrawer}
+                  className="text-left w-full min-h-10 md:min-h-0 flex items-center max-md:-ml-1 max-md:pl-1"
+                  data-testid={`link-more-options-${market.slug}`}
+                  aria-label={`Show ${remainingCount} more options`}
+                >
+                  <span className="text-xs text-violet-600 dark:text-violet-400 hover:underline truncate">
+                    +{remainingCount} more
+                  </span>
+                </button>
+              )}
+            </div>
+            <div className="min-w-0 text-center">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isInactive) navigateWithAnchor(market.slug);
+                }}
+                disabled={isInactive}
+                className={`inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${isInactive ? "text-muted-foreground cursor-default" : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"}`}
+                data-testid={`link-view-details-${market.slug}`}
+                aria-label="View market details"
+              >
+                View details →
+              </button>
+            </div>
+            <div className="min-w-0 flex justify-end">
+              <button
+                type="button"
+                onClick={openOptionsDrawer}
+                className="min-h-10 md:min-h-0 flex items-center justify-end rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                data-testid={`button-options-count-${market.slug}`}
+                aria-label={`Show all ${entries.length} options`}
+              >
+                <Badge variant="outline" className="text-[10px] shrink-0 max-w-full truncate pointer-events-none">
+                  {entries.length} options
+                </Badge>
+              </button>
+            </div>
           </div>
-          <div className="min-w-0 text-center">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isInactive) navigateWithAnchor(market.slug);
-              }}
-              disabled={isInactive}
-              className={`inline-flex items-center justify-center w-full min-h-10 md:min-h-0 px-0.5 text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${isInactive ? "text-muted-foreground cursor-default" : "text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300 cursor-pointer"}`}
-              data-testid={`link-view-details-${market.slug}`}
-              aria-label="View market details"
-            >
-              View details →
-            </button>
+        )}
+
+        {hasPendingResult && userBetResult && (
+          <div className="mt-2.5">
+            <PositionSummaryRow
+              pickLabel={multiPickLabel}
+              stakeAmount={displayStake}
+              unrealisedPnl={unrealisedPnl ?? null}
+              href={`/markets/${market.slug}`}
+              onLinkClick={rememberAnchor}
+              onAdd={
+                singleTopUpTarget && onPickEntry
+                  ? () => onPickEntry(market, singleTopUpTarget.entry, singleTopUpTarget.direction)
+                  : undefined
+              }
+              addAriaLabel={
+                singleTopUpTarget
+                  ? `Add to your ${singleTopUpTarget.entry.label} pick`
+                  : undefined
+              }
+              linkAriaLabel={`View your pick: ${multiPickLabel}`}
+              testId={`community-card-position-${market.slug}`}
+              addTestId={`community-card-add-${market.slug}`}
+            />
           </div>
-          <div className="min-w-0 flex justify-end">
-            <button
-              type="button"
-              onClick={openOptionsDrawer}
-              className="min-h-10 md:min-h-0 flex items-center justify-end rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              data-testid={`button-options-count-${market.slug}`}
-              aria-label={`Show all ${entries.length} options`}
-            >
-              <Badge variant="outline" className="text-[10px] shrink-0 max-w-full truncate pointer-events-none">
-                {entries.length} options
-              </Badge>
-            </button>
-          </div>
-        </div>
+        )}
 
         <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
       </div>
@@ -977,15 +1033,31 @@ function MultiMarketCard({ market, entries, participants, timeLabel, onNavigate,
   );
 }
 
-function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate, onPickEntry, isMarketClosed, isInactive = false, inactiveMessage, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, categoryMenuDisabled = false, unrealisedPnl }: { market: any; entries: any[]; participants: number; timeLabel: string; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, Above/Below clicks open the StakeModal in-place via PredictPage's handleCommunityPickEntry. Falls back to onNavigate (full route push to /markets/:slug) when not wired. Mirrors the binary/multi pattern. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed: boolean; isInactive?: boolean; inactiveMessage?: string; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; categoryMenuDisabled?: boolean; /** AMM unrealised P&L for the user's position on this market. */ unrealisedPnl?: number | null }) {
+function UpDownMarketCard({
+  market,
+  entries,
+  participants,
+  timeLabel,
+  timeUrgent = false,
+  onNavigate,
+  onPickEntry,
+  isMarketClosed,
+  isInactive = false,
+  inactiveMessage,
+  userBetResult,
+  userBetsPerEntry,
+  onFilterCategory,
+  leaderboardCategories,
+  onBrowseFullScreen,
+  categoryMenuDisabled = false,
+  unrealisedPnl,
+  netCreditsIn,
+}: OpenMarketCardSharedProps) {
   const rememberAnchor = () => rememberCommunityCardAnchor(market?.id);
   const navigateWithAnchor = (slug: string, pick?: string, direction?: string) => {
     rememberAnchor();
     onNavigate(slug, pick, direction);
   };
-  // Parimutuel sunset: every community market is AMM, including the
-  // community-built Above/Below up-down format. Prices come from the
-  // AMM snapshot, volume from `market.volume`.
   const aboveEntry = entries.find((e: any) => e.label === "Above") || entries[0];
   const belowEntry = entries.find((e: any) => e.label === "Below") || entries[1];
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
@@ -996,15 +1068,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
   const belowPercent = Math.max(0, Math.min(100, Math.round(belowPrice * 100)));
   const volumeRaw = Number((market as any)?.volume ?? 0);
   const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
-  const hasPnl = typeof unrealisedPnl === "number" && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = Math.abs(pnlValue) < 0.005;
-  const pnlClass = pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-500"
-      : "text-red-700 dark:text-red-500";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
+  const displayStake = resolveDisplayStake(userBetResult?.stakeAmount, netCreditsIn);
 
   return (
     <PredictCard
@@ -1012,7 +1076,13 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
     >
       <div className="flex items-center justify-between mb-3 flex-wrap gap-1">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-xs">
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-xs",
+              timeUrgent && "text-amber-700 dark:text-amber-400 border-amber-500/50",
+            )}
+          >
             <Clock className="h-3 w-3 mr-1" />
             {timeLabel}
           </Badge>
@@ -1051,7 +1121,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
       </a>
       {market.teaser && (
         <a href={`/markets/${market.slug}`} onClick={(e) => { e.preventDefault(); if (!isInactive) navigateWithAnchor(market.slug); }} className={isInactive ? "cursor-default" : "cursor-pointer"}>
-          <p className={`text-sm text-muted-foreground mb-3 line-clamp-3 leading-[1.4] ${!isInactive ? 'hover:text-violet-600 dark:hover:text-violet-400' : ''} transition-colors`}>{market.teaser}</p>
+          <p className={`text-sm text-muted-foreground mb-3 line-clamp-2 leading-[1.4] ${!isInactive ? "hover:text-violet-600 dark:hover:text-violet-400" : ""} transition-colors`}>{market.teaser}</p>
         </a>
       )}
 
@@ -1070,20 +1140,6 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
           </div>
         </div>
 
-        {hasPnl && pnlText && (
-          <div
-            className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border/40 bg-muted/30 px-3 py-2"
-            data-testid={`community-card-pnl-${market.slug}`}
-          >
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Your position
-            </span>
-            <span className={`text-xs font-semibold font-mono tabular-nums ${pnlClass}`}>
-              {pnlText}
-            </span>
-          </div>
-        )}
-
         <div>
           {isMarketClosed ? (
             <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
@@ -1099,7 +1155,7 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
               return (
                 <PendingBetLinkRow
                   entryLabel={userBetResult.entryLabel}
-                  stakeAmount={userBetResult.stakeAmount}
+                  stakeAmount={displayStake}
                   href={`/markets/${market.slug}`}
                   onLinkClick={rememberAnchor}
                   onTopUp={
@@ -1141,6 +1197,13 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
               </Button>
             </div>
           )}
+          {userBetResult?.result !== "pending" && (
+            <WorldMarketViewDetailsLink
+              slug={market.slug}
+              isInactive={!!isInactive}
+              onNavigate={() => navigateWithAnchor(market.slug)}
+            />
+          )}
           <UserBetResult betResult={userBetResult} isMarketClosed={isMarketClosed} />
         </div>
       </div>
@@ -1148,28 +1211,80 @@ function UpDownMarketCard({ market, entries, participants, timeLabel, onNavigate
   );
 }
 
-export function OpenMarketCard({ market, onNavigate, onPickEntry, isMarketClosed = false, userBetResult, userBetsPerEntry, onFilterCategory, categoryRaceMap, leaderboardCategories, onBrowseFullScreen, categoryMenuDisabled = false, unrealisedPnl }: { market: any; onNavigate: (slug: string, pick?: string, direction?: string) => void; /** When provided, Buy clicks on any card variant (binary / multi / up-down) open the StakeModal in-place via PredictPage's handleCommunityPickEntry instead of routing to /markets/:slug. Each sub-card falls back to onNavigate when onPickEntry isn't wired so SSR / list views without the modal still work. */ onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void; isMarketClosed?: boolean; userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number }; userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>; onFilterCategory?: (cat: string) => void; categoryRaceMap?: Map<string, string>; leaderboardCategories?: Set<string>; onBrowseFullScreen?: () => void; categoryMenuDisabled?: boolean; /** AMM unrealised P&L for the user's top position. Threaded through to Binary + Multi + UpDown sub-cards. */ unrealisedPnl?: number | null }) {
+export function OpenMarketCard({
+  market,
+  onNavigate,
+  onPickEntry,
+  isMarketClosed = false,
+  userBetResult,
+  userBetsPerEntry,
+  onFilterCategory,
+  categoryRaceMap,
+  leaderboardCategories,
+  onBrowseFullScreen,
+  categoryMenuDisabled = false,
+  unrealisedPnl,
+  netCreditsIn = null,
+  positionCount = 0,
+}: {
+  market: any;
+  onNavigate: (slug: string, pick?: string, direction?: string) => void;
+  onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void;
+  isMarketClosed?: boolean;
+  userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number };
+  userBetsPerEntry?: Map<string, { yesStake: number; noStake: number }>;
+  onFilterCategory?: (cat: string) => void;
+  categoryRaceMap?: Map<string, string>;
+  leaderboardCategories?: Set<string>;
+  onBrowseFullScreen?: () => void;
+  categoryMenuDisabled?: boolean;
+  unrealisedPnl?: number | null;
+  /** AMM net cost basis for stake display (preferred over gross buy stakes). */
+  netCreditsIn?: number | null;
+  /** Number of open AMM legs (multi rollup → "Multiple picks"). */
+  positionCount?: number;
+}) {
   const entries = market.entries || [];
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
-
-  // Honor stored closeAt (auto-lock / kickoff cutoff) even while status is
-  // still OPEN — matches the server trade gate in amm-trades.
   const tradingClosed = isMarketClosed || isCommunityTradingClosed(market);
 
-  // Time badge counts down to the actual trading cutoff (closeAt =
-  // endAt − pre-resolve cooldown) rather than endAt, so "Nd left" means
-  // "days you can still trade" — matching the native MarketCycleStrip.
-  const endDate = market.closeAt ? new Date(market.closeAt) : market.endAt ? new Date(market.endAt) : null;
-  const now = new Date();
-  const daysLeft = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-  const timeLabel = daysLeft > 1 ? `${daysLeft}d left` : daysLeft === 1 ? "1d left" : "Closing soon";
+  // Countdown to trading cutoff (closeAt), falling back to endAt.
+  const cutoff = market.closeAt || market.endAt || null;
+  const countdown = tradingClosed
+    ? { label: "Closed", isUrgent: false }
+    : formatMarketCountdown(cutoff);
+  const timeLabel = countdown.label || "Closing soon";
+  const timeUrgent = countdown.isUrgent;
+
+  const shared: OpenMarketCardSharedProps = {
+    market,
+    entries,
+    participants,
+    timeLabel,
+    timeUrgent,
+    onNavigate,
+    onPickEntry,
+    isMarketClosed: tradingClosed || isInactive,
+    isInactive,
+    inactiveMessage: market.inactiveMessage,
+    userBetResult,
+    userBetsPerEntry,
+    onFilterCategory,
+    categoryRaceMap,
+    leaderboardCategories,
+    onBrowseFullScreen,
+    categoryMenuDisabled,
+    unrealisedPnl,
+    netCreditsIn,
+    positionCount,
+  };
 
   if (market.openMarketType === "updown") {
-    return <UpDownMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+    return <UpDownMarketCard {...shared} />;
   }
   if (market.openMarketType === "multi") {
-    return <MultiMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+    return <MultiMarketCard {...shared} />;
   }
-  return <BinaryMarketCard market={market} entries={entries} participants={participants} timeLabel={timeLabel} onNavigate={onNavigate} onPickEntry={onPickEntry} isMarketClosed={tradingClosed || isInactive} isInactive={isInactive} inactiveMessage={market.inactiveMessage} userBetResult={userBetResult} userBetsPerEntry={userBetsPerEntry} onFilterCategory={onFilterCategory} categoryRaceMap={categoryRaceMap} leaderboardCategories={leaderboardCategories} onBrowseFullScreen={onBrowseFullScreen} categoryMenuDisabled={categoryMenuDisabled} unrealisedPnl={unrealisedPnl} />;
+  return <BinaryMarketCard {...shared} />;
 }

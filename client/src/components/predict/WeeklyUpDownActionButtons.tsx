@@ -51,6 +51,26 @@ export function WeeklyUpDownActionButtons({
         currentScore={currentScore}
         stakeAmount={pendingPosition.stakeAmount}
         unrealisedPnl={unrealisedPnl ?? null}
+        marketId={marketId}
+      />
+    );
+  }
+
+  // Keep the position row visible after cutoff so stake / P&L remain
+  // scannable (matches H2H + Race). Only hide the Add top-up.
+  if (pendingPosition) {
+    return (
+      <WeeklyUpDownYourPositionPanel
+        variant="cardLink"
+        href={`/predict/updown/${marketId}`}
+        onLinkClick={() => setPredictReturnAnchor(`card-weekly-${marketId}`)}
+        pick={pendingPosition.pick}
+        personName={personName}
+        baselineScore={baselineScore}
+        currentScore={currentScore}
+        stakeAmount={pendingPosition.stakeAmount}
+        unrealisedPnl={unrealisedPnl ?? null}
+        marketId={marketId}
       />
     );
   }

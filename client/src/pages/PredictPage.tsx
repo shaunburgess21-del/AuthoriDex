@@ -173,6 +173,8 @@ import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { WorldMarketsStickyHeader } from "@/components/predict/WorldMarketsStickyHeader";
 import { WorldMarketsCategoryStacks } from "@/components/predict/WorldMarketsCategoryStacks";
 import { WorldMarketsTeaserRail } from "@/components/predict/WorldMarketsTeaserRail";
+import { topPositionByMarket, positionTotalsByMarket } from "@/lib/ammPositionMaps";
+import type { AmmOpenPositionLike } from "@/lib/ammPositionMaps";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -304,15 +306,11 @@ function readInitialPredictView(): PredictView {
  * compute P&L. (The full canonical type lives next to the server
  * service in `server/services/amm-positions.ts`.)
  */
-interface PredictPageAmmOpenPosition {
-  marketId: string;
+interface PredictPageAmmOpenPosition extends AmmOpenPositionLike {
   entryId: string;
   entryLabel: string;
   netShares: number;
-  netCreditsIn: number;
   currentPrice: number;
-  currentValue: number;
-  unrealisedPnl: number;
 }
 
 interface RecentPredictionActivity {
@@ -1418,34 +1416,14 @@ export default function PredictPage() {
     enabled: !!user,
     refetchInterval: () => (typeof document !== "undefined" && document.hidden ? false : 60_000),
   });
-  const ammPositionByMarket = useMemo(() => {
-    const map = new Map<string, PredictPageAmmOpenPosition>();
-    for (const p of ammPositionsData?.positions ?? []) {
-      // Up/Down markets only ever have one open side per user (the
-      // server blocks opposite-side hedges) so the first hit is the
-      // canonical one. We still pick the larger currentValue if the
-      // server ever stops enforcing that — keeps the banner P&L
-      // sensible if both sides slip through.
-      const existing = map.get(p.marketId);
-      if (!existing || p.currentValue > existing.currentValue) {
-        map.set(p.marketId, p);
-      }
-    }
-    return map;
-  }, [ammPositionsData]);
-
-  /**
-   * Sprint 5 / Phase 3.6: race-specific top-position lookup.
-   *
-   * Race markets natively support multi-candidate positions (a user
-   * can back two or three candidates in the same race), so the card
-   * banner needs an opinion about WHICH position to surface. We pick
-   * the one with the largest `currentValue` — the same algorithm
-   * `ammPositionByMarket` uses, but called out separately so the
-   * semantics are obvious at the call site. Mechanically a wrapper
-   * around the same memo; kept as its own export for readability.
-   */
-  const raceTopPositionByMarket = useMemo(() => ammPositionByMarket, [ammPositionByMarket]);
+  const ammPositionByMarket = useMemo(
+    () => topPositionByMarket(ammPositionsData?.positions ?? []),
+    [ammPositionsData],
+  );
+  const ammPositionTotalsByMarket = useMemo(
+    () => positionTotalsByMarket(ammPositionsData?.positions ?? []),
+    [ammPositionsData],
+  );
 
   const { data: nativeJackpotData, error: jackpotError, refetch: refetchJackpot } = useQuery<any[]>({
     queryKey: ['/api/native-markets/jackpot'],
@@ -3043,7 +3021,11 @@ export default function PredictPage() {
   );
 
   const renderCommunityMarketCard = useCallback(
-    (market: any) => (
+    (market: any) => {
+      const marketId = String(market.id);
+      const totals = ammPositionTotalsByMarket.get(marketId);
+      const top = ammPositionByMarket.get(marketId);
+      return (
         <div
           key={market.id}
           className="max-md:h-auto max-md:self-start w-full"
@@ -3058,20 +3040,24 @@ export default function PredictPage() {
             }
             onPickEntry={handleCommunityPickEntry}
             isMarketClosed={market.status !== "OPEN"}
-            userBetResult={userBetsByMarket.get(String(market.id))}
-            userBetsPerEntry={userBetsPerEntry.get(String(market.id))}
+            userBetResult={userBetsByMarket.get(marketId)}
+            userBetsPerEntry={userBetsPerEntry.get(marketId)}
             onFilterCategory={handleCategoryPillFilter}
             categoryRaceMap={raceMap}
             leaderboardCategories={leaderboardCats}
             onBrowseFullScreen={
-              isMobile ? () => openSnapScroll("world-markets", String(market.id), "browse-button") : undefined
+              isMobile ? () => openSnapScroll("world-markets", marketId, "browse-button") : undefined
             }
-            unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+            unrealisedPnl={totals?.unrealisedPnl ?? top?.unrealisedPnl ?? null}
+            netCreditsIn={totals?.netCreditsIn ?? top?.netCreditsIn ?? null}
+            positionCount={totals?.count ?? (top ? 1 : 0)}
           />
         </div>
-    ),
+      );
+    },
     [
       ammPositionByMarket,
+      ammPositionTotalsByMarket,
       handleCategoryPillFilter,
       handleCommunityPickEntry,
       isMobile,
@@ -3750,10 +3736,15 @@ export default function PredictPage() {
               <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-blue-500" mobileSlideMinHeight="min-h-[420px]">
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
+                  const ammPos = ammPositionByMarket.get(String(market.id));
                   const h2hUserPick = h2hUserPickFromBet(
                     market,
                     bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
                   );
+                  const h2hStake =
+                    ammPos && Number.isFinite(ammPos.netCreditsIn) && ammPos.netCreditsIn >= 0
+                      ? Math.round(ammPos.netCreditsIn)
+                      : bet?.stakeAmount;
                   return (
                     <HeadToHeadCard 
                       key={market.id}
@@ -3762,8 +3753,8 @@ export default function PredictPage() {
                       closedMessage={closedMarketMessage}
                       onSelect={(person) => handleH2HSelect(market, person)}
                       userPick={h2hUserPick}
-                      userStake={bet?.stakeAmount}
-                      unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                      userStake={h2hStake}
+                      unrealisedPnl={ammPos?.unrealisedPnl ?? null}
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
@@ -3851,24 +3842,38 @@ export default function PredictPage() {
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
               <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-blue-500" autoHeight>
-                {filteredGainers.map((market) => (
+                {filteredGainers.map((market) => {
+                  const marketId = String(market.id);
+                  const totals = ammPositionTotalsByMarket.get(marketId);
+                  const top = ammPositionByMarket.get(marketId);
+                  const summary = categoryRacePredictionSummaryFromBet(
+                    userBetsByMarket.get(marketId),
+                    totals?.netCreditsIn ?? top?.netCreditsIn,
+                  );
+                  const isMultiPick = summary?.pickLabel === "Multiple picks";
+                  return (
                   <TopGainerCard 
                     key={market.id}
                     market={market} 
                     isMarketClosed={isMarketClosed}
                     closedMessage={closedMarketMessage}
                     onSelectCandidate={handleGainerSelect}
-                    highlightedEntryId={gainerHighlightedEntryId(String(market.id))}
-                    entryStakes={userBetsPerEntry.get(String(market.id))}
+                    highlightedEntryId={gainerHighlightedEntryId(marketId)}
+                    entryStakes={userBetsPerEntry.get(marketId)}
                     isPredicted={predictedMarkets.has(market.id)}
-                    predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
+                    predictionSummary={summary}
                     isShimmering={false}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    unrealisedPnl={raceTopPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                    unrealisedPnl={
+                      isMultiPick
+                        ? (totals?.unrealisedPnl ?? null)
+                        : (top?.unrealisedPnl ?? null)
+                    }
                   />
-                ))}
+                  );
+                })}
               </CardSection>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
@@ -4127,10 +4132,15 @@ export default function PredictPage() {
             : 0)
           .map((market) => {
             const bet = userBetsByMarket.get(String(market.id));
+            const ammPos = ammPositionByMarket.get(String(market.id));
             const h2hUserPick = h2hUserPickFromBet(
               market,
               bet ? { entryLabel: bet.entryLabel, entryId: bet.entryId } : undefined
             );
+            const h2hStake =
+              ammPos && Number.isFinite(ammPos.netCreditsIn) && ammPos.netCreditsIn >= 0
+                ? Math.round(ammPos.netCreditsIn)
+                : bet?.stakeAmount;
             return (
               <HeadToHeadCard 
                 key={market.id} 
@@ -4139,8 +4149,8 @@ export default function PredictPage() {
                 closedMessage={closedMarketMessage}
                 onSelect={(person) => handleH2HSelect(market, person)}
                 userPick={h2hUserPick}
-                userStake={bet?.stakeAmount}
-                unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                userStake={h2hStake}
+                unrealisedPnl={ammPos?.unrealisedPnl ?? null}
                 onFilterCategory={(cat) => setH2hOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
                 categoryRaceMap={raceMap}
                 leaderboardCategories={leaderboardCats}
@@ -4162,24 +4172,38 @@ export default function PredictPage() {
         categories={gainerFilterOptions.map((c) => ({ value: c.id, label: c.label }))}
       >
         {filteredOverlayGainers.length > 0 ? (
-          filteredOverlayGainers.map((market) => (
+          filteredOverlayGainers.map((market) => {
+            const marketId = String(market.id);
+            const totals = ammPositionTotalsByMarket.get(marketId);
+            const top = ammPositionByMarket.get(marketId);
+            const summary = categoryRacePredictionSummaryFromBet(
+              userBetsByMarket.get(marketId),
+              totals?.netCreditsIn ?? top?.netCreditsIn,
+            );
+            const isMultiPick = summary?.pickLabel === "Multiple picks";
+            return (
             <TopGainerCard 
               key={market.id} 
               market={market} 
               isMarketClosed={isMarketClosed}
               closedMessage={closedMarketMessage}
               onSelectCandidate={handleGainerSelect}
-              highlightedEntryId={gainerHighlightedEntryId(String(market.id))}
-              entryStakes={userBetsPerEntry.get(String(market.id))}
+              highlightedEntryId={gainerHighlightedEntryId(marketId)}
+              entryStakes={userBetsPerEntry.get(marketId)}
               isPredicted={predictedMarkets.has(market.id)}
-              predictionSummary={categoryRacePredictionSummaryFromBet(userBetsByMarket.get(String(market.id)))}
+              predictionSummary={summary}
               isShimmering={false}
               onFilterCategory={(cat) => setGainersOverlayCategoryFilter(normalizeMarketCategory(cat) as CategoryFilter)}
               categoryRaceMap={raceMap}
               leaderboardCategories={leaderboardCats}
-              unrealisedPnl={raceTopPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+              unrealisedPnl={
+                isMultiPick
+                  ? (totals?.unrealisedPnl ?? null)
+                  : (top?.unrealisedPnl ?? null)
+              }
             />
-          ))
+            );
+          })
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             {gainerEmptyMessage}
@@ -4292,7 +4316,20 @@ export default function PredictPage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
-                  unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                  unrealisedPnl={
+                    ammPositionTotalsByMarket.get(String(market.id))?.unrealisedPnl
+                    ?? ammPositionByMarket.get(String(market.id))?.unrealisedPnl
+                    ?? null
+                  }
+                  netCreditsIn={
+                    ammPositionTotalsByMarket.get(String(market.id))?.netCreditsIn
+                    ?? ammPositionByMarket.get(String(market.id))?.netCreditsIn
+                    ?? null
+                  }
+                  positionCount={
+                    ammPositionTotalsByMarket.get(String(market.id))?.count
+                    ?? (ammPositionByMarket.has(String(market.id)) ? 1 : 0)
+                  }
                   categoryMenuDisabled
                 />
               );

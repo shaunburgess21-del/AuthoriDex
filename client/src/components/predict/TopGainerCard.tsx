@@ -9,10 +9,13 @@ import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } 
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
-import { formatVox, formatVoxCompact, formatVoxDelta } from "@/lib/currency";
+import { formatVoxCompact } from "@/lib/currency";
 import { cn } from "@/lib/utils";
-import { Check, ChevronRight, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronRight } from "lucide-react";
+import {
+  PositionSummaryRow,
+  POSITION_SUMMARY_SHELL_CLASS,
+} from "@/components/predict/PositionSummaryRow";
 
 export type CategoryRaceEntryStakes = Map<string, { yesStake: number; noStake: number }>;
 
@@ -58,19 +61,25 @@ export interface TopGainerMarket {
 
 export type CategoryRacePredictionSummary = { pickLabel: string; stakeAmount: number };
 
-/** Build card footer copy from aggregated `/api/me/predictions` row for this market. */
+/** Build card footer copy from aggregated `/api/me/predictions` row for this market.
+ *  Prefer AMM `netCreditsIn` when provided so partial sells don't inflate Stake. */
 export function categoryRacePredictionSummaryFromBet(
-  bet: { entryLabel: string; stakeAmount: number } | undefined
+  bet: { entryLabel: string; stakeAmount: number } | undefined,
+  netCreditsIn?: number | null,
 ): CategoryRacePredictionSummary | null {
   if (!bet) return null;
+  const stake =
+    typeof netCreditsIn === "number" && Number.isFinite(netCreditsIn) && netCreditsIn >= 0
+      ? Math.round(netCreditsIn)
+      : bet.stakeAmount;
   return {
     pickLabel: bet.entryLabel === "Multiple positions" ? "Multiple picks" : bet.entryLabel,
-    stakeAmount: bet.stakeAmount,
+    stakeAmount: stake,
   };
 }
 
-const FOOTER_SHELL_CLASS =
-  "flex min-h-10 items-center gap-2 rounded-lg border px-3 py-3 md:py-2 transition-colors w-full";
+/** Re-export shared shell class for any local callers / tests. */
+export const FOOTER_SHELL_CLASS = POSITION_SUMMARY_SHELL_CLASS;
 
 export function TopGainerCard({
   market,
@@ -97,12 +106,9 @@ export function TopGainerCard({
   isPredicted?: boolean;
   predictionSummary?: CategoryRacePredictionSummary | null;
   /**
-   * Live unrealised P&L for the user's largest AMM position on this
-   * race. Race users can hold positions on multiple candidates at
-   * once — we surface the top-position P&L here for the banner
-   * readout. Null for "Multiple picks" pending state where one P&L
-   * number would be misleading, and for cards whose AMM position
-   * summary hasn't loaded yet.
+   * Live unrealised P&L for the user's open position(s) on this race.
+   * Single-pick: top-leg P&L. Multiple picks: pass the summed totals
+   * from `positionTotalsByMarket` so the footer matches the stake rollup.
    */
   unrealisedPnl?: number | null;
   isShimmering?: boolean;
@@ -117,16 +123,6 @@ export function TopGainerCard({
   const navigateToRaceDetail = () => {
     setPredictReturnAnchor(`card-gainer-${market.id}`);
   };
-
-  const hasPnl = unrealisedPnl != null && Number.isFinite(unrealisedPnl);
-  const pnlValue = hasPnl ? (unrealisedPnl as number) : 0;
-  const pnlIsZero = hasPnl && Math.abs(pnlValue) < 0.005;
-  const pnlClass = !hasPnl || pnlIsZero
-    ? "text-muted-foreground"
-    : pnlValue >= 0
-      ? "text-green-700 dark:text-green-400"
-      : "text-red-700 dark:text-red-400";
-  const pnlText = !hasPnl ? null : formatVoxDelta(pnlValue);
 
   const backedCandidate = (() => {
     if (predictionSummary?.pickLabel === "Multiple picks") return null;
@@ -244,62 +240,24 @@ export function TopGainerCard({
 
       <div className="mt-auto pt-1">
         {isPredicted ? (
-          <div className="flex items-stretch gap-2">
-            <Link
-              href={raceDetailHref}
-              onClick={navigateToRaceDetail}
-              className="flex-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              data-testid={`button-gainer-your-pick-${market.id}`}
-              aria-label={
-                predictionSummary?.pickLabel
-                  ? `View your pick: ${predictionSummary.pickLabel}`
-                  : "View your race pick"
-              }
-            >
-              <div
-                className={cn(
-                  FOOTER_SHELL_CLASS,
-                  "border-violet-500/40 dark:border-violet-500/30 bg-violet-500/8 dark:bg-violet-500/5 hover:bg-violet-500/12 dark:hover:bg-violet-500/10",
-                )}
-              >
-                <Check className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="text-[11px] leading-none text-muted-foreground">Your pick</p>
-                  <p className="truncate text-sm font-semibold leading-tight text-foreground">
-                    {predictionSummary?.pickLabel ?? "View position"}
-                  </p>
-                </div>
-                {pnlText && (
-                  <span className={cn("text-xs font-semibold font-mono tabular-nums shrink-0", pnlClass)}>
-                    {pnlText}
-                  </span>
-                )}
-                {predictionSummary != null && (
-                  <div className="flex shrink-0 flex-col items-end tabular-nums">
-                    <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
-                    <span className="text-xs font-semibold leading-tight text-foreground">
-                      {formatVox(predictionSummary.stakeAmount)}
-                    </span>
-                  </div>
-                )}
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              </div>
-            </Link>
-            {showAddButton && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => onSelectCandidate!(market, backedCandidate!)}
-                data-testid={`button-gainer-add-${market.id}`}
-                className="shrink-0 gap-1 self-stretch min-h-10 px-2 md:px-2.5"
-                aria-label={`Add to your ${backedCandidate!.name} stake`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden min-[360px]:inline">Add</span>
-              </Button>
-            )}
-          </div>
+          <PositionSummaryRow
+            pickLabel={predictionSummary?.pickLabel ?? "View position"}
+            stakeAmount={predictionSummary?.stakeAmount ?? null}
+            unrealisedPnl={unrealisedPnl}
+            href={raceDetailHref}
+            onLinkClick={navigateToRaceDetail}
+            onAdd={showAddButton ? () => onSelectCandidate!(market, backedCandidate!) : undefined}
+            addAriaLabel={
+              backedCandidate ? `Add to your ${backedCandidate.name} stake` : undefined
+            }
+            linkAriaLabel={
+              predictionSummary?.pickLabel
+                ? `View your pick: ${predictionSummary.pickLabel}`
+                : "View your race pick"
+            }
+            testId={`button-gainer-your-pick-${market.id}`}
+            addTestId={`button-gainer-add-${market.id}`}
+          />
         ) : (
           <Link
             href={raceDetailHref}

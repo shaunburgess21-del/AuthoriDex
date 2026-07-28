@@ -36,6 +36,7 @@ import {
 } from "@/components/predict/TopGainerCard";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
+import { topPositionByMarket, positionTotalsByMarket, type AmmOpenPositionLike } from "@/lib/ammPositionMaps";
 import { StepModal } from "@/components/StepModal";
 import { PREDICT_RULES_STEPS } from "@/components/rulesStepData";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
@@ -65,22 +66,11 @@ interface PredictTabProps {
 }
 
 /**
- * Minimal shape of `/api/me/amm-positions` for the profile predict
- * tab card banners. Just the fields we render on UpDown / H2H / race
- * cards — `unrealisedPnl` (current $ swing) plus `currentValue`
- * (used as the tie-breaker when a market has multiple entries open
- * for the same user, e.g. multi-pick races). Mirrors the type in
- * `client/src/pages/PredictPage.tsx` (kept local rather than shared
- * because both files only need the same handful of fields and a
- * shared client type would pull in the heavier server-side
- * AmmOpenPosition).
+ * Minimal shape of `/api/me/amm-positions` for profile Predict-tab cards.
+ * Shared aggregators live in `ammPositionMaps.ts`.
  */
-interface PredictTabAmmOpenPosition {
-  marketId: string;
+interface PredictTabAmmOpenPosition extends AmmOpenPositionLike {
   entryId: string;
-  netCreditsIn: number;
-  currentValue: number;
-  unrealisedPnl: number;
 }
 
 /** Center 1–2 cards; use 3-column grid when there are 3+ cards. */
@@ -416,21 +406,14 @@ export function PredictTab({
     enabled: !!user,
     refetchInterval: () => (typeof document !== "undefined" && document.hidden ? false : 60_000),
   });
-  const ammPositionByMarket = useMemo(() => {
-    const map = new Map<string, PredictTabAmmOpenPosition>();
-    for (const p of ammPositionsData?.positions ?? []) {
-      // Pick the largest `currentValue` per market when a user has
-      // multiple entries open (multi-pick races). UpDown / H2H only
-      // ever have one open side per user (server-enforced), so the
-      // first hit is canonical there. Same algorithm as
-      // `PredictPage.ammPositionByMarket` for consistent banner P&L.
-      const existing = map.get(p.marketId);
-      if (!existing || p.currentValue > existing.currentValue) {
-        map.set(p.marketId, p);
-      }
-    }
-    return map;
-  }, [ammPositionsData]);
+  const ammPositionByMarket = useMemo(
+    () => topPositionByMarket(ammPositionsData?.positions ?? []),
+    [ammPositionsData],
+  );
+  const ammPositionTotalsByMarket = useMemo(
+    () => positionTotalsByMarket(ammPositionsData?.positions ?? []),
+    [ammPositionsData],
+  );
 
   const openMarketBets = useMemo(() => {
     const map = new Map<
@@ -1152,7 +1135,20 @@ export function PredictTab({
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
-                  unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
+                  unrealisedPnl={
+                    ammPositionTotalsByMarket.get(String(market.id))?.unrealisedPnl
+                    ?? ammPositionByMarket.get(String(market.id))?.unrealisedPnl
+                    ?? null
+                  }
+                  netCreditsIn={
+                    ammPositionTotalsByMarket.get(String(market.id))?.netCreditsIn
+                    ?? ammPositionByMarket.get(String(market.id))?.netCreditsIn
+                    ?? null
+                  }
+                  positionCount={
+                    ammPositionTotalsByMarket.get(String(market.id))?.count
+                    ?? (ammPositionByMarket.has(String(market.id)) ? 1 : 0)
+                  }
                 />
               </div>
             ))}
@@ -1246,7 +1242,15 @@ export function PredictTab({
             onFilterCategory={handleCategoryFilter}
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}
-            pendingPosition={pendingWeeklyUpDownPositionFromBet(openMarketBets.get(String(weeklyMarket.id)))}
+            pendingPosition={(() => {
+              const pending = pendingWeeklyUpDownPositionFromBet(openMarketBets.get(String(weeklyMarket.id)));
+              if (!pending) return null;
+              const ammPos = ammPositionByMarket.get(String(weeklyMarket.id));
+              if (ammPos && Number.isFinite(ammPos.netCreditsIn) && ammPos.netCreditsIn >= 0) {
+                return { ...pending, stakeAmount: Math.round(ammPos.netCreditsIn) };
+              }
+              return pending;
+            })()}
             unrealisedPnl={ammPositionByMarket.get(String(weeklyMarket.id))?.unrealisedPnl ?? null}
           />
         ) : (
@@ -1269,10 +1273,15 @@ export function PredictTab({
           <div className={h2hGrid.container}>
             {h2hBattles.map((battle) => {
               const aggregated = openMarketBets.get(String(battle.id));
+              const ammPos = ammPositionByMarket.get(String(battle.id));
               const h2hUserPick = h2hUserPickFromBet(
                 battle,
                 aggregated ? { entryLabel: aggregated.entryLabel, entryId: aggregated.entryId } : undefined
               );
+              const h2hStake =
+                ammPos && Number.isFinite(ammPos.netCreditsIn) && ammPos.netCreditsIn >= 0
+                  ? Math.round(ammPos.netCreditsIn)
+                  : aggregated?.stakeAmount;
               return (
                 <div key={battle.id} className={h2hGrid.item}>
                   <HeadToHeadCard
@@ -1281,8 +1290,8 @@ export function PredictTab({
                     closedMessage={closedMarketMessage}
                     onSelect={(person) => handleH2HSelect(battle, person)}
                     userPick={h2hUserPick}
-                    userStake={aggregated?.stakeAmount}
-                    unrealisedPnl={ammPositionByMarket.get(String(battle.id))?.unrealisedPnl ?? null}
+                    userStake={h2hStake}
+                    unrealisedPnl={ammPos?.unrealisedPnl ?? null}
                     onFilterCategory={handleCategoryFilter}
                     categoryRaceMap={categoryRaceMap}
                     leaderboardCategories={leaderboardCategories}
@@ -1309,7 +1318,15 @@ export function PredictTab({
         {gainerMarkets.length > 0 ? (
           <div className={gainerGrid.container}>
             {gainerMarkets.map((gainer) => {
-              const gainerBet = openMarketBets.get(String(gainer.id));
+              const marketId = String(gainer.id);
+              const gainerBet = openMarketBets.get(marketId);
+              const totals = ammPositionTotalsByMarket.get(marketId);
+              const top = ammPositionByMarket.get(marketId);
+              const summary = categoryRacePredictionSummaryFromBet(
+                gainerBet,
+                totals?.netCreditsIn ?? top?.netCreditsIn,
+              );
+              const isMultiPick = summary?.pickLabel === "Multiple picks";
               return (
               <div key={gainer.id} className={gainerGrid.item}>
                 <TopGainerCard
@@ -1317,14 +1334,18 @@ export function PredictTab({
                   isMarketClosed={isMarketClosed}
                   closedMessage={closedMarketMessage}
                   onSelectCandidate={handleGainerSelect}
-                  highlightedEntryId={gainerHighlightedEntryId(String(gainer.id))}
-                  entryStakes={userBetsPerEntry.get(String(gainer.id))}
-                  isPredicted={openMarketBets.has(String(gainer.id))}
-                  predictionSummary={categoryRacePredictionSummaryFromBet(gainerBet)}
+                  highlightedEntryId={gainerHighlightedEntryId(marketId)}
+                  entryStakes={userBetsPerEntry.get(marketId)}
+                  isPredicted={openMarketBets.has(marketId)}
+                  predictionSummary={summary}
                   onFilterCategory={handleCategoryFilter}
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
-                  unrealisedPnl={ammPositionByMarket.get(String(gainer.id))?.unrealisedPnl ?? null}
+                  unrealisedPnl={
+                    isMultiPick
+                      ? (totals?.unrealisedPnl ?? null)
+                      : (top?.unrealisedPnl ?? null)
+                  }
                 />
               </div>
               );
