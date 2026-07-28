@@ -45,7 +45,7 @@ const MISSION_HEADERS: Record<string, string> = {
   gainer:
     "Buy shares of the candidate you think will gain the most. Each winning share pays Ꝟ1 at close — cheaper underdog shares pay bigger multiples.",
   community:
-    "Buy Yes or No shares. Each winning share pays Ꝟ1 on resolution — cheaper shares pay bigger multiples. Sell anytime before close.",
+    "Buy shares on an outcome. Each winning share pays Ꝟ1 on resolution — cheaper shares pay bigger multiples. Sell anytime before close.",
 };
 
 export interface StakeSelection {
@@ -78,17 +78,14 @@ export interface StakeSelection {
   candidatePercentGain?: number;
   candidatePointsAdded?: number;
   bettingCutoff?: string | null;
-  /** Yes/No side for community-market multi-option entries.
-   *  Other market types (updown/h2h/gainer/jackpot) ignore this. */
+  /** Yes/No side for legacy community-multi callers. AMM community buys
+   *  always record as yes shares of the selected entry — prefer "yes". */
   direction?: "yes" | "no";
   /**
    * Sub-type for community markets: "binary" | "multi" | "updown".
-   * The Yes/No badge + direction toggle are only shown for "multi" —
-   * binary community markets already encode the side in the entry
-   * label ("Yes" / "No") so the badge would double-print it. When
-   * omitted on a community market we render the legacy badge to
-   * preserve current behaviour for callers that haven't been
-   * updated yet.
+   * Dual types (binary / updown) get two hero tiles and in-modal flip.
+   * Multi gets a single outcome tile — no Yes/No toggle (AMM has no
+   * native No shares on a multi option).
    */
   openMarketType?: "binary" | "multi" | "updown" | null;
   /**
@@ -137,9 +134,10 @@ interface StakeModalProps {
     meta?: { maxPricePerShare?: number },
   ) => void | Promise<void>;
   walletBalance: number;
-  /** Up/Down for `updown` markets, Yes/No for `community` markets.
-   *  When provided, the modal renders an in-place toggle so a misclick on
-   *  the card doesn't require closing + reopening the modal. */
+  /** Up/Down for `updown` markets, Yes/No (or Above/Below) for World dual
+   *  markets. When provided, hero tiles flip the selection in-place so a
+   *  misclick on the card doesn't require closing + reopening. World multi
+   *  no longer uses this — AMM only buys shares of the selected outcome. */
   onDirectionChange?: (direction: "up" | "down" | "yes" | "no") => void;
   onChangePick?: () => void;
   /**
@@ -228,15 +226,6 @@ export function StakeModal({
   const ammBuyQuote = parsedAmount >= MIN_STAKE && selection.entryId
     ? deriveBuyQuote(effectiveAmmState, selection.entryId, parsedAmount)
     : null;
-  const isCommunityNo = isCommunity && selection.direction === "no";
-  // Yes/No badge + toggle is only meaningful for community-multi
-  // markets. Binary community markets bake the side into the entry
-  // label itself, so showing "(YES) Yes" or "(NO) No" would be
-  // redundant. We default to true when openMarketType is missing so
-  // legacy callers keep their current rendering.
-  const isCommunityMultiSide =
-    isCommunity &&
-    (selection.openMarketType == null || selection.openMarketType === "multi");
   const isUp = selection.choice.includes("UP");
   const isDown = selection.choice.includes("DOWN");
 
@@ -255,7 +244,7 @@ export function StakeModal({
     if (isH2H) return `Add to your ${selection.personName ?? selection.choice} stake`;
     if (isGainer) return `Add to your ${selection.choice} stake`;
     if (isCommunity) {
-      return `Add to your ${selection.direction === "no" ? "No" : "Yes"} stake`;
+      return `Add to your ${selection.choice.replace(/^(Yes|No)\s*·\s*/i, "")} stake`;
     }
     return "Add to your stake";
   })();
@@ -544,6 +533,7 @@ export function StakeModal({
                   <button
                     type="button"
                     aria-pressed
+                    aria-label={`Selected: ${pickLabel}, ${priceToPercent(pickPrice, 0)}, ${formatVoxPrice(pickPrice, 3)} per share`}
                     className={pickTileClass}
                     onClick={(e) => {
                       e.currentTarget.blur();
@@ -554,7 +544,11 @@ export function StakeModal({
                     {priceBody(pickLabel, pickPrice)}
                   </button>
                 ) : (
-                  <div className={pickTileClass} data-testid="amm-hero-tile-pick">
+                  <div
+                    className={pickTileClass}
+                    aria-label={`Selected: ${pickLabel}, ${priceToPercent(pickPrice, 0)}, ${formatVoxPrice(pickPrice, 3)} per share`}
+                    data-testid="amm-hero-tile-pick"
+                  >
                     {priceBody(pickLabel, pickPrice)}
                   </div>
                 )}
@@ -562,6 +556,7 @@ export function StakeModal({
                   <button
                     type="button"
                     aria-pressed={false}
+                    aria-label={`Switch to ${oppositeLabel}, ${priceToPercent(oppositePrice, 0)}, ${formatVoxPrice(oppositePrice, 3)} per share`}
                     className={oppositeTileClass}
                     onClick={(e) => {
                       e.currentTarget.blur();
@@ -572,7 +567,11 @@ export function StakeModal({
                     {priceBody(oppositeLabel, oppositePrice)}
                   </button>
                 ) : (
-                  <div className={oppositeTileClass} data-testid="amm-hero-tile-opposite">
+                  <div
+                    className={oppositeTileClass}
+                    aria-label={`${oppositeLabel}, ${priceToPercent(oppositePrice, 0)}, ${formatVoxPrice(oppositePrice, 3)} per share`}
+                    data-testid="amm-hero-tile-opposite"
+                  >
                     {priceBody(oppositeLabel, oppositePrice)}
                   </div>
                 )}
@@ -592,17 +591,6 @@ export function StakeModal({
             ) : isCommunity ? (
               <p className="text-lg font-bold text-balance">
                 <span className="text-muted-foreground text-sm font-medium mr-1.5">Your pick:</span>
-                {isCommunityMultiSide && (
-                  <span
-                    className={`mr-1.5 px-1.5 py-0.5 rounded text-xs font-mono uppercase align-middle ${
-                      isCommunityNo
-                        ? "bg-red-500/15 text-[#FF0000]"
-                        : "bg-green-500/15 text-[#00C853]"
-                    }`}
-                  >
-                    {selection.direction === "no" ? "No" : "Yes"}
-                  </span>
-                )}
                 <span className="text-foreground">
                   {selection.choice.replace(/^(Yes|No)\s*·\s*/i, "")}
                 </span>
@@ -634,50 +622,10 @@ export function StakeModal({
               </button>
             )}
 
-            {/* Up/Down toggle for AMM Up/Down markets is rendered via the
-                clickable hero tiles above this card — no separate row
-                needed. Yes/No toggle for community-multi markets stays
-                below. */}
-
-            {/* Community-market direction toggle — mirrors the upDown one
-                so a user who tapped the wrong side on the card can flip
-                without closing + reopening the modal. Only relevant on
-                multi-option community markets; binary community markets
-                pick the side via the entry label itself. Hidden when
-                isTopUp for the same no-hedging reason as native above. */}
-            {isCommunity && isCommunityMultiSide && onDirectionChange && !isTopUp && (
-              <div className="flex gap-2 mt-2" role="group" aria-label="Yes / No toggle">
-                <button
-                  type="button"
-                  onClick={() => onDirectionChange("yes")}
-                  className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-md text-xs font-medium border transition-all ${
-                    selection.direction !== "no"
-                      ? "bg-[#00C853]/20 border-[#00C853]/60 text-[#00C853]"
-                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#00C853]/40 hover:text-[#00C853]/60"
-                  }`}
-                  data-testid="stake-modal-toggle-yes"
-                >
-                  <span>Yes</span>
-                  {ammEntryPrice != null && (
-                    <span className="font-mono text-[10px] font-semibold opacity-90">
-                      {priceToPercent(ammEntryPrice, 0)} · {formatVoxPrice(ammEntryPrice, 3)}/share
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDirectionChange("no")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium border transition-all ${
-                    selection.direction === "no"
-                      ? "bg-[#FF0000]/20 border-[#FF0000]/60 text-[#FF0000]"
-                      : "bg-transparent border-slate-700 text-slate-600 dark:text-slate-400 hover:border-[#FF0000]/40 hover:text-[#FF0000]/60"
-                  }`}
-                  data-testid="stake-modal-toggle-no"
-                >
-                  No
-                </button>
-              </div>
-            )}
+            {/* Side flips for Up/Down + World binary/Above-Below live on the
+                hero tiles above. World multi has no Yes/No toggle — AMM
+                buys shares of the selected outcome only (server ignores
+                direction and always records yes). */}
           </Card>
 
           {isUpDown && (selection.startScore != null || selection.currentScore != null) && (

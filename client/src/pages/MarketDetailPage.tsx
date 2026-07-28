@@ -1188,6 +1188,21 @@ export default function MarketDetailPage() {
     const isDualOutcome =
       effectiveOpenMarketType === "binary" ||
       effectiveOpenMarketType === "updown";
+
+    // Match PredictPage / PredictTab no-hedge UX: can't open the other
+    // dual side while holding a position on its pair.
+    if (isDualOutcome && ammPositionData?.positions) {
+      const otherHold = ammPositionData.positions.find(
+        (p) => p.entryId !== entry.id && p.netShares > 1e-6,
+      );
+      if (otherHold) {
+        toast("Stick with your pick", {
+          description: "You've already backed the other side. Top up your existing pick instead.",
+        });
+        return;
+      }
+    }
+
     const oppositeEntry = isDualOutcome
       ? market.entries?.find((e) => e.id !== entry.id)
       : undefined;
@@ -1195,7 +1210,7 @@ export default function MarketDetailPage() {
       type: "community",
       marketId: market.id,
       entryId: entry.id,
-      // Always the raw option label — Yes/No lives on `direction` + badge.
+      // Raw option label — AMM buys shares of this entry only.
       choice: entry.label,
       marketName: market.title,
       personName: market.linkedPersonName ?? undefined,
@@ -1203,10 +1218,7 @@ export default function MarketDetailPage() {
       crowdSentiment,
       bettingCutoff: market.closeAt || market.endAt || null,
       endAt: market.endAt || undefined,
-      direction:
-        isDualOutcome
-          ? "yes"
-          : direction,
+      direction: "yes",
       openMarketType: effectiveOpenMarketType,
       isTopUp,
       existingStake: isTopUp ? netCreditsIn : undefined,
@@ -2457,6 +2469,7 @@ export default function MarketDetailPage() {
               ...pendingSelection,
               choice: other.label,
               entryId: other.id,
+              direction: "yes",
               opponentName: pendingSelection.choice,
               crowdSentiment,
               ammState: market.ammState ?? null,
@@ -2464,6 +2477,8 @@ export default function MarketDetailPage() {
             return;
           }
 
+          // Multi no longer flips Yes/No in-modal (AMM buys the outcome
+          // only). Keep a no-op-safe branch so stale callers don't crash.
           const entry = market?.entries?.find((e) => e.id === pendingSelection.entryId);
           if (!entry) return;
           const livePrice = ammPriceMap ? Number(ammPriceMap[entry.id] ?? 0) : 0;
@@ -2471,7 +2486,7 @@ export default function MarketDetailPage() {
           setPendingSelection({
             ...pendingSelection,
             choice: entry.label,
-            direction: dir,
+            direction: "yes",
             crowdSentiment,
           });
         }}

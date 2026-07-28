@@ -806,7 +806,7 @@ export function PredictTab({
       entryId: entry.id,
       endAt: market.endAt,
       bettingCutoff: market.closeAt ?? market.endAt ?? null,
-      direction,
+      direction: "yes",
       openMarketType: market.openMarketType ?? null,
       opponentName: oppositeEntry?.label,
       isTopUp,
@@ -1427,10 +1427,11 @@ export function PredictTab({
               (e: any) => String(e.id) === String(pendingSelection.entryId),
             );
             if (!entry) return;
+            // Multi: AMM buys the outcome only — ignore Yes/No flips.
             setPendingSelection({
               ...pendingSelection,
               choice: entry.label,
-              direction: dir,
+              direction: "yes",
             });
             return;
           }
