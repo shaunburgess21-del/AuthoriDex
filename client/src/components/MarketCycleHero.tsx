@@ -11,12 +11,11 @@ interface MarketCycleHeroProps {
   /** Extra row docked under the timer inside the sticky surface (e.g. the Weekly global category bar). */
   children?: ReactNode;
   /**
-   * Scroll-linked hide/reveal: px to translate the whole bar (timer + children)
-   * up, from `useScrollHideOffset`. Applied to the sticky element itself —
-   * transforming an ancestor would break position: sticky.
+   * Ref to the root element. Callers pass it to `useScrollHideTransform`,
+   * which drives the scroll-linked hide/reveal by writing transform/opacity
+   * directly onto this element (transforming an ancestor would break
+   * position: sticky).
    */
-  hideOffset?: number;
-  /** Ref to the root element, for measuring the hide clamp height. */
   rootRef?: RefObject<HTMLDivElement>;
 }
 
@@ -45,7 +44,6 @@ export function MarketCycleHero({
   constrainedWidth = false,
   sticky = true,
   children,
-  hideOffset,
   rootRef,
 }: MarketCycleHeroProps) {
   const { status, timeRemaining, urgencyLevel } = marketState;
@@ -125,13 +123,12 @@ export function MarketCycleHero({
   return (
     <div
       ref={rootRef}
-      style={{
-        ...(constrainedWidth ? undefined : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }),
-        ...(hideOffset !== undefined ? { transform: `translateY(-${hideOffset}px)` } : undefined),
-      }}
-      className={`${sticky ? "sticky top-16" : ""} ${
-        hideOffset !== undefined ? "will-change-transform transition-transform duration-100 ease-out" : ""
-      } z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
+      style={
+        constrainedWidth
+          ? undefined
+          : { marginLeft: 'calc(-50vw + 50%)', marginRight: 'calc(-50vw + 50%)', paddingLeft: 'calc(50vw - 50%)', paddingRight: 'calc(50vw - 50%)' }
+      }
+      className={`${sticky ? "sticky top-16 will-change-transform" : ""} z-[41] relative mb-6 min-h-16 border-y border-white/10 bg-background backdrop-blur-sm`}
       data-testid="market-cycle-hero"
       {...(sticky ? { "data-sticky-predict-bar": true } : {})}
     >

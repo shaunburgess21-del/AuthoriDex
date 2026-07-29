@@ -102,7 +102,7 @@ import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } fr
 import { StepModal } from "@/components/StepModal";
 import { VOTE_RULES_STEPS } from "@/components/rulesStepData";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useScrollHideOffset } from "@/hooks/useScrollHideOffset";
+import { useScrollHideTransform } from "@/hooks/useScrollHideOffset";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
@@ -1163,10 +1163,11 @@ export default function VotePage() {
   
   const [activeSection, setActiveSection] = useState<SectionToggle>("All");
 
-  // Scroll-linked hide/reveal of the whole sticky filter stack (section toggles
-  // + global category chips move as one unit, tracking scroll 1:1). Pure
-  // transform — no height changes, so there's no reflow jitter while scrolling.
-  const filterStackRef = useRef<HTMLDivElement>(null);
+  // Scroll-linked hide/reveal of the category chip bar only — the section
+  // toggles row is a normal in-flow block that scrolls away with the page.
+  // The chip bar pins below the site header and is driven imperatively
+  // (direct style writes, no per-frame React re-renders) for smooth tracking.
+  const chipBarRef = useRef<HTMLDivElement>(null);
   const [myVotesFilter, setMyVotesFilterState] = useState<HubActivityFilter>(() =>
     readHubActivityFilter("vote", user?.id),
   );
@@ -1198,12 +1199,9 @@ export default function VotePage() {
   /** Single page-wide category filter — drives every Vote section + overlays. */
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
-  // Re-reveal the filter stack when the user switches sections or a category
+  // Re-reveal the chip bar when the user switches sections or a category
   // is set (e.g. via a card's category pill) so the change is visible.
-  const filterStackOffset = useScrollHideOffset(
-    filterStackRef,
-    `${activeSection}|${globalCategoryFilter}`,
-  );
+  useScrollHideTransform(chipBarRef, `${activeSection}|${globalCategoryFilter}`);
 
   const handleCategoryPillFilter = useCallback((category: string) => {
     setGlobalCategoryFilter(registry.resolveCanonicalId(category) as FilterCategory);
@@ -2640,13 +2638,9 @@ export default function VotePage() {
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <SiteHeader active="vote" logoVariant="vote" />
-      <div
-        ref={filterStackRef}
-        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform transition-transform duration-100 ease-out"
-        style={{ transform: `translateY(-${filterStackOffset}px)` }}
-        data-testid="section-toggles-container"
-      >
-        <div className="container mx-auto px-2 sm:px-4 pt-3 pb-2 max-w-7xl">
+      {/* Section toggles — in normal flow, scrolls away with the page. */}
+      <div data-testid="section-toggles-container">
+        <div className="container mx-auto px-2 sm:px-4 pt-3 max-w-7xl">
           <div className="flex items-center gap-3">
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
@@ -2701,7 +2695,17 @@ export default function VotePage() {
             ))}
           </ScrollMaskedChipRow>
           </div>
-          {/* Page-wide category filter — hides/reveals with the whole sticky stack. */}
+        </div>
+      </div>
+      {/* Page-wide category filter — sticky below the site header; slides up
+          underneath it (translate + fade, driven imperatively by
+          useScrollHideTransform) on scroll down and re-reveals on scroll up. */}
+      <div
+        ref={chipBarRef}
+        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform"
+        data-testid="category-filter-bar"
+      >
+        <div className="container mx-auto px-2 sm:px-4 pt-2 pb-2 max-w-7xl">
           <GlobalCategoryBar
             options={globalCategoryOptions}
             value={globalCategoryFilter}
@@ -2710,7 +2714,6 @@ export default function VotePage() {
             user={user}
             onAuthRequired={handleAuthRequired}
             testIdPrefix="filter-global"
-            className="pt-2"
           />
         </div>
       </div>

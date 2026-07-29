@@ -62,7 +62,7 @@ import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
 import { FilterChip } from "@/components/FilterChip";
 import { GlobalCategoryBar } from "@/components/GlobalCategoryBar";
 import { SectionSearchRow } from "@/components/SectionSearchRow";
-import { useScrollHideOffset } from "@/hooks/useScrollHideOffset";
+import { useScrollHideTransform } from "@/hooks/useScrollHideOffset";
 import {
   FILTER_INACTIVE_SECTION_TOGGLE,
   FILTER_ACTIVE_PILL_WEEKLY,
@@ -1258,15 +1258,12 @@ export default function PredictPage() {
   // chips) and, in Weekly, the countdown hero with its docked category chips
   // all slide away on scroll down and return on swipe down.
   const contextualBarRef = useRef<HTMLDivElement>(null);
-  const contextualBarOffset = useScrollHideOffset(
+  useScrollHideTransform(
     contextualBarRef,
     `${predictView}|${selectedType}|${communityCategory}`,
   );
   const weeklyHeroRef = useRef<HTMLDivElement>(null);
-  const weeklyHeroOffset = useScrollHideOffset(
-    weeklyHeroRef,
-    `${selectedType}|${weeklyCategory}`,
-  );
+  useScrollHideTransform(weeklyHeroRef, `${selectedType}|${weeklyCategory}`);
 
   const isMobile = useIsMobile();
   const playInactivePredictionAdvance = useCallback(
@@ -3174,7 +3171,15 @@ export default function PredictPage() {
           </div>
         )}
       />
-      <div data-testid="pre-timer-sticky-scope">
+      {/* In World mode the wrapper becomes display:contents so the contextual
+          bar's sticky containing block is the full-height page root (it sticks
+          for the whole page, like Vote). In Weekly the wrapper's short box is
+          deliberate: the bar un-sticks early and the countdown hero takes over
+          the sticky slot. */}
+      <div
+        data-testid="pre-timer-sticky-scope"
+        className={predictView === "world" ? "contents" : undefined}
+      >
       {/* Weekly / World mode toggle. Deliberately NOT sticky: the weekly
           countdown hero and world chips own the scrolled sticky slot, so the
           toggle adds zero permanent chrome. It sits full-width at the top
@@ -3189,8 +3194,7 @@ export default function PredictPage() {
       </div>
       <div
         ref={contextualBarRef}
-        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform transition-transform duration-100 ease-out"
-        style={{ transform: `translateY(-${contextualBarOffset}px)` }}
+        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform"
         data-testid="predict-section-filter-bar"
       >
         <div
@@ -3538,7 +3542,6 @@ export default function PredictPage() {
         <MarketCycleHero
           marketState={marketCycle}
           rootRef={weeklyHeroRef}
-          hideOffset={weeklyHeroOffset}
         >
           {/* Weekly-wide category filter — docked under the countdown; the whole
               bar (timer + chips) hides/reveals 1:1 with scroll. Chips hidden for
