@@ -148,6 +148,9 @@ const VERTICAL_BUFFER = 1;
 
 const SNAP_PAGE_HEIGHT = "calc(100dvh - 52px)";
 const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
+/** Symmetric vertical inset for minimal pages so justify-center is true-center
+ * (pt-only + bottom-only safe-area previously left topGap > bottomGap). */
+const SNAP_PAGE_INSET_MINIMAL = "max(0.75rem, env(safe-area-inset-bottom, 0px))";
 
 const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
   matchup: "matchup",
@@ -157,14 +160,22 @@ const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
 };
 
 function snapPageStyle(isMinimal = false): CSSProperties {
+  if (isMinimal) {
+    return {
+      // Size pages off the scroll container itself (100% of its content box)
+      // rather than 100dvh math. On iOS Safari, dvh and the fixed-container
+      // layout height drift as the toolbar collapses, which desyncs page
+      // height from clientHeight — breaking visible-index rounding, the ±1
+      // render window, and snap targets (cards landing half-off / at bottom).
+      height: "100%",
+      boxSizing: "border-box",
+      scrollSnapAlign: "start",
+      paddingTop: SNAP_PAGE_INSET_MINIMAL,
+      paddingBottom: SNAP_PAGE_INSET_MINIMAL,
+    };
+  }
   return {
-    // Minimal variant: size pages off the scroll container itself (100% of
-    // its content box) rather than 100dvh math. On iOS Safari, dvh and the
-    // fixed-container layout height drift as the toolbar collapses, which
-    // desyncs page height from clientHeight — breaking the visible-index
-    // rounding, the ±1 render window, and snap targets (cards landing
-    // half-off / at the bottom).
-    height: isMinimal ? "100%" : SNAP_PAGE_HEIGHT,
+    height: SNAP_PAGE_HEIGHT,
     scrollSnapAlign: "start",
     paddingBottom: SNAP_PAGE_PADDING,
   };
@@ -347,12 +358,13 @@ export function VoteSnapScrollView({
   const columnScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const columnScrollRootRefs = useRef<Record<string, { current: HTMLDivElement | null }>>({});
   const [columnVisibleIndices, setColumnVisibleIndices] = useState<Record<string, number>>({});
-  /** Minimal variant: the live column DOM node, tracked in STATE (not the
-   * columnScrollRefs map — the open-init effect wipes that map after the
-   * settle-guard effect has already read it, leaving the guard detached for
-   * the whole session). State re-fires the guard effect whenever the real
-   * node mounts/remounts. */
-  const [minimalColumnEl, setMinimalColumnEl] = useState<HTMLDivElement | null>(null);
+  /** Minimal variant: live column DOM node in a REF (not state). State-from-ref
+   * remounted the settle effect on every visible-index re-render mid-swipe,
+   * resetting touchActive and letting settle yank scrollTop back to the
+   * previous card. Ref identity stays stable across those updates. */
+  const minimalColumnRef = useRef<HTMLDivElement | null>(null);
+  const columnVisibleIndicesRef = useRef(columnVisibleIndices);
+  columnVisibleIndicesRef.current = columnVisibleIndices;
   const [dismissCounter, setDismissCounter] = useState(0);
   /** True after open-init runs; prevents vote refetch from resetting scroll/category. */
   const openInitializedRef = useRef(false);
@@ -424,6 +436,7 @@ export function VoteSnapScrollView({
   useEffect(() => {
     if (!open) {
       openInitializedRef.current = false;
+      minimalColumnRef.current = null;
       return;
     }
     if (openInitializedRef.current) return;
@@ -594,105 +607,162 @@ export function VoteSnapScrollView({
     };
   }, [apiRef]);
 
-  // ── Settle guard (minimal): self-heal any stuck-halfway scroll state ───
-  // If the column rests misaligned (interrupted momentum, dvh shift, WebKit
-  // snap failure), snap instantly to the nearest page once scrolling idles.
-  // Keyed on the STATE-tracked column node so it attaches whenever the node
-  // actually mounts (see minimalColumnEl declaration).
+  // ── Settle guard (minimal): self-heal stranded mid-page scroll ─────────
+  // Attaches once per open (deps: isMinimal, open) via a stable ref — NOT
+  // React state — so visible-index re-renders mid-swipe cannot remount the
+  // listeners and reset touchActive. Softened so it cannot kill an iOS
+  // native snap fling: post-gesture grace + long rest stability before any
+  // scrollTop write. ResizeObserver re-anchors from the committed visible
+  // index, never round(scrollTop) during unsettled motion.
   useEffect(() => {
-    if (!isMinimal || !open || !minimalColumnEl) return;
-    const el = minimalColumnEl;
+    if (!isMinimal || !open) return;
 
-    let touchActive = false;
-    let settleTimer: number | null = null;
-    let lastScrollTs = 0;
-    /** scrollTop sampled when the settle timer last fired; NaN = no sample. */
-    let restSample = Number.NaN;
-    const clearTimer = () => {
-      if (settleTimer != null) {
-        window.clearTimeout(settleTimer);
-        settleTimer = null;
-      }
-      restSample = Number.NaN;
-    };
-    const armTimer = () => {
-      settleTimer = window.setTimeout(settle, 160);
-    };
-    const settle = () => {
-      settleTimer = null;
-      if (touchActive || programmaticScrollActiveRef.current) {
+    let cancelled = false;
+    let detach: (() => void) | null = null;
+    let pollRaf = 0;
+
+    const attach = (el: HTMLDivElement) => {
+      let touchActive = false;
+      let settleTimer: number | null = null;
+      let lastScrollTs = 0;
+      let gestureGraceUntil = 0;
+      /** scrollTop of the current rest candidate; NaN = none. */
+      let restSample = Number.NaN;
+      /** When restSample was first observed unchanged. */
+      let restSince = 0;
+
+      const POST_GESTURE_GRACE_MS = 700;
+      const SETTLE_TICK_MS = 250;
+      const REST_STABLE_MS = 500;
+      const RESIZE_IDLE_MS = 400;
+
+      const clearTimer = () => {
+        if (settleTimer != null) {
+          window.clearTimeout(settleTimer);
+          settleTimer = null;
+        }
         restSample = Number.NaN;
-        return;
-      }
-      // Rest detection: iOS pauses scroll events mid-snap-animation, so
-      // event-quiet !== at-rest. Correcting during the momentum→snap handoff
-      // yanks the scroller back to the current card and kills the gesture.
-      // Only act once two consecutive samples (~160ms apart) match — a
-      // native snap animation never RESTS misaligned, so a stable-but-off
-      // position is genuinely stranded.
-      const top = el.scrollTop;
-      if (Number.isNaN(restSample) || restSample !== top) {
-        restSample = top;
+        restSince = 0;
+      };
+      const armTimer = () => {
+        settleTimer = window.setTimeout(settle, SETTLE_TICK_MS);
+      };
+      const settle = () => {
+        settleTimer = null;
+        if (touchActive || programmaticScrollActiveRef.current) {
+          restSample = Number.NaN;
+          restSince = 0;
+          return;
+        }
+        const now = performance.now();
+        // Never write during the post-fling window — iOS pauses scroll events
+        // mid-snap with a stable scrollTop; correcting then yanks back to the
+        // previous card (the restore→swipe bounce).
+        if (now < gestureGraceUntil) {
+          armTimer();
+          return;
+        }
+        if (!el.isConnected) return;
+        const top = el.scrollTop;
+        if (Number.isNaN(restSample) || restSample !== top) {
+          restSample = top;
+          restSince = now;
+          armTimer();
+          return;
+        }
+        if (now - restSince < REST_STABLE_MS) {
+          armTimer();
+          return;
+        }
+        restSample = Number.NaN;
+        restSince = 0;
+        const h = el.clientHeight;
+        if (h === 0) return;
+        const maxTop = Math.max(0, el.scrollHeight - h);
+        const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
+        if (Math.abs(top - nearest) > 4) {
+          el.scrollTop = nearest;
+        }
+      };
+      const onScroll = () => {
+        lastScrollTs = performance.now();
+        clearTimer();
         armTimer();
-        return;
-      }
-      restSample = Number.NaN;
-      const h = el.clientHeight;
-      if (h === 0) return;
-      const maxTop = Math.max(0, el.scrollHeight - h);
-      const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
-      if (Math.abs(top - nearest) > 4) {
-        el.scrollTop = nearest;
-      }
-    };
-    const onScroll = () => {
-      lastScrollTs = performance.now();
-      clearTimer();
-      armTimer();
-    };
-    const onTouchStart = () => {
-      touchActive = true;
-      clearTimer();
-    };
-    const onTouchEnd = () => {
-      touchActive = false;
-      clearTimer();
-      armTimer();
+      };
+      const onTouchStart = () => {
+        touchActive = true;
+        clearTimer();
+      };
+      const onTouchEnd = () => {
+        touchActive = false;
+        gestureGraceUntil = performance.now() + POST_GESTURE_GRACE_MS;
+        clearTimer();
+        armTimer();
+      };
+
+      let lastHeight = el.clientHeight;
+      const resizeObserver = new ResizeObserver(() => {
+        const h = el.clientHeight;
+        if (h === 0 || h === lastHeight) return;
+        const prevHeight = lastHeight;
+        lastHeight = h;
+        if (touchActive || programmaticScrollActiveRef.current) return;
+        const now = performance.now();
+        if (now < gestureGraceUntil) return;
+        if (now - lastScrollTs < RESIZE_IDLE_MS) return;
+        // Prefer the committed visible index over round(scrollTop) so a
+        // mid-snap pause during viewport churn cannot re-anchor to the old
+        // page after a login return.
+        const committed = columnVisibleIndicesRef.current["All"];
+        const idx =
+          typeof committed === "number"
+            ? committed
+            : prevHeight > 0
+              ? Math.round(el.scrollTop / prevHeight)
+              : 0;
+        const maxTop = Math.max(0, el.scrollHeight - h);
+        el.scrollTop = Math.max(0, Math.min(idx * h, maxTop));
+      });
+      resizeObserver.observe(el);
+
+      el.addEventListener("scroll", onScroll, { passive: true });
+      el.addEventListener("touchstart", onTouchStart, { passive: true });
+      el.addEventListener("touchend", onTouchEnd, { passive: true });
+      el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+      return () => {
+        clearTimer();
+        resizeObserver.disconnect();
+        el.removeEventListener("scroll", onScroll);
+        el.removeEventListener("touchstart", onTouchStart);
+        el.removeEventListener("touchend", onTouchEnd);
+        el.removeEventListener("touchcancel", onTouchEnd);
+      };
     };
 
-    // Height re-anchor: when the container resizes (iOS toolbar collapse,
-    // keyboard dismissal settling after a login return), every snap target
-    // moves. Keep the same card index anchored: compute the index against
-    // the PREVIOUS height, then re-derive scrollTop from the new height.
-    // Only applied while the scroller is idle — if it's mid-animation when
-    // the resize lands, skip and let the rest-based settle pass align it.
-    let lastHeight = el.clientHeight;
-    const resizeObserver = new ResizeObserver(() => {
-      const h = el.clientHeight;
-      if (h === 0 || h === lastHeight) return;
-      const prevHeight = lastHeight;
-      lastHeight = h;
-      if (touchActive || programmaticScrollActiveRef.current) return;
-      if (performance.now() - lastScrollTs < 150) return;
-      const idx = prevHeight > 0 ? Math.round(el.scrollTop / prevHeight) : 0;
-      const maxTop = Math.max(0, el.scrollHeight - h);
-      el.scrollTop = Math.max(0, Math.min(idx * h, maxTop));
-    });
-    resizeObserver.observe(el);
+    const tryAttach = () => {
+      if (cancelled || detach) return true;
+      const el = minimalColumnRef.current ?? columnScrollRefs.current["All"] ?? null;
+      if (!el) return false;
+      detach = attach(el);
+      return true;
+    };
 
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    if (!tryAttach()) {
+      const poll = () => {
+        if (cancelled) return;
+        if (!tryAttach()) pollRaf = requestAnimationFrame(poll);
+      };
+      pollRaf = requestAnimationFrame(poll);
+    }
+
     return () => {
-      clearTimer();
-      resizeObserver.disconnect();
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
+      cancelled = true;
+      cancelAnimationFrame(pollRaf);
+      detach?.();
+      detach = null;
     };
-  }, [isMinimal, open, minimalColumnEl]);
+  }, [isMinimal, open]);
 
   // ── Visible-index change notification ─────────────────────────────────
   useEffect(() => {
@@ -1222,9 +1292,10 @@ export function VoteSnapScrollView({
         >
           {/* Header */}
           {isMinimal ? (
-            // Fixed 52px header; minimal snap pages size off the scroll
-            // container (100%), so exact header height is not load-bearing.
-            <div className="shrink-0 h-[52px] flex items-center safe-top px-1">
+            // Absolute so the scroll column is full-bleed under it —
+            // justify-center then centers cards in the visible glass, not
+            // in the region below a 52px flex header (which always looked low).
+            <div className="absolute inset-x-0 top-0 z-10 h-[52px] flex items-center px-1">
               <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
               <button
                 onClick={onClose}
@@ -1284,7 +1355,11 @@ export function VoteSnapScrollView({
                           ref={(el) => {
                             columnScrollRefs.current[cat] = el;
                             getColumnScrollRoot(cat).current = el;
-                            if (isMinimal) setMinimalColumnEl(el);
+                            // Only assign when the node is present — never
+                            // clear on React's routine ref(null) refresh, which
+                            // would leave settle reading a stale detached node
+                            // mid-swipe. Cleared on overlay close instead.
+                            if (isMinimal && el) minimalColumnRef.current = el;
                             if (el) {
                               restoreScrollPosition(cat, el);
                               requestAnimationFrame(() => warmImagesInColumn(el));
@@ -1309,14 +1384,16 @@ export function VoteSnapScrollView({
                                 return (
                                   <div
                                     key={item.id}
-                                    className="snap-start flex flex-col items-center justify-center px-3 pt-3"
+                                    className={`snap-start flex flex-col items-center justify-center px-3 ${
+                                      isMinimal ? "" : "pt-3"
+                                    }`}
                                     style={snapPageStyle(isMinimal)}
                                   >
                                     {inWindow ? (
                                       <div
                                         className={`w-full max-w-lg mx-auto ${
                                           isMinimal
-                                            ? "rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
+                                            ? "max-h-full overflow-y-auto rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
                                             : ""
                                         }`}
                                       >
