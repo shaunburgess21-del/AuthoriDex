@@ -575,7 +575,7 @@ function UpDownOutcomes({
 export default function MarketDetailPage() {
   const params = useParams<{ slug: string }>();
   const [, setLocation] = useLocation();
-  const { user, profile, isLoggedIn, refreshProfile } = useAuth();
+  const { user, profile, isLoggedIn, refreshProfile, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
   const { openShareCard } = useShareCard();
@@ -626,14 +626,20 @@ export default function MarketDetailPage() {
   const jackpotInputRef = useRef<HTMLInputElement | null>(null);
   const placePredictionSectionRef = useRef<HTMLDivElement | null>(null);
 
+  // Auth-scoped key: wait for session hydrate so geo-restricted markets
+  // (e.g. US-only Michigan) don't 404 on a bare anonymous first fetch.
+  const marketQueryKey = ["/api/open-markets", params.slug, user?.id ?? "anon"] as const;
+
   const { data: market, isLoading, error } = useQuery<MarketData>({
-    queryKey: ["/api/open-markets", params.slug],
+    queryKey: marketQueryKey,
     queryFn: async () => {
-      const res = await fetch(`/api/open-markets/${params.slug}`);
-      if (!res.ok) throw new Error("Market not found");
+      const res = await apiRequest(
+        "GET",
+        `/api/open-markets/${encodeURIComponent(params.slug!)}`,
+      );
       return res.json();
     },
-    enabled: !!params.slug,
+    enabled: !!params.slug && !authLoading,
   });
 
   // Tier 1.1: live price push. Opens a single SSE connection to
@@ -644,7 +650,7 @@ export default function MarketDetailPage() {
   // browse + native-market redirects don't pay for a stream they
   // can't render.
   useAmmPriceStream(market?.id ?? null, {
-    queryKey: ["/api/open-markets", params.slug],
+    queryKey: marketQueryKey,
   });
 
   // Native market types have dedicated detail pages with the live chart,
@@ -1334,7 +1340,7 @@ export default function MarketDetailPage() {
       : null,
   });
 
-  if (isLoading && !market) {
+  if ((authLoading || isLoading) && !market) {
     return <MarketDetailSkeleton />;
   }
 

@@ -89,7 +89,7 @@ export default function MatchupDetailPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, loading: authLoading } = useAuth();
   const budget = useAnonBudget();
 
   const matchupCommentCount = useCommentCount("matchup", slug || "");
@@ -102,21 +102,25 @@ export default function MatchupDetailPage() {
     else setLocation("/vote");
   }, [hasVoteListContext, goBackToVoteHub, setLocation]);
 
+  const matchupQueryKey = ["/api/matchups/by-slug", slug, user?.id ?? "anon"] as const;
+
   const { data: matchup, isLoading, error } = useQuery<MatchupDetail>({
-    queryKey: ["/api/matchups/by-slug", slug],
+    queryKey: matchupQueryKey,
     queryFn: async () => {
-      const res = await fetch(`/api/matchups/by-slug/${encodeURIComponent(slug)}`);
-      if (!res.ok) throw new Error("Matchup not found");
+      const res = await apiRequest(
+        "GET",
+        `/api/matchups/by-slug/${encodeURIComponent(slug)}`,
+      );
       return res.json();
     },
-    enabled: !!slug,
+    enabled: !!slug && !authLoading,
   });
 
   const { data: userVotes } = useQuery<Record<string, string>>({
     queryKey: ["/api/matchups/user-votes"],
   });
 
-  const slugQueryKey = ["/api/matchups/by-slug", slug] as const;
+  const slugQueryKey = matchupQueryKey;
   const userVotesQueryKey = ["/api/matchups/user-votes"] as const;
 
   const voteMutation = useMutation({
@@ -297,7 +301,7 @@ export default function MatchupDetailPage() {
     url: canonicalShareUrl ?? null,
   });
 
-  if (isLoading && !matchup) {
+  if ((authLoading || isLoading) && !matchup) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
