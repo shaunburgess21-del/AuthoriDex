@@ -11,7 +11,7 @@ export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProp
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-end pt-1">
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {preview.topOptions.map((option, idx) => {
           const isLeading = idx === 0 && option.percent > 0;
           return (
@@ -28,7 +28,7 @@ export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProp
                   {option.percent}%
                 </span>
               </div>
-              <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-slate-700/50">
+              <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-slate-700/50">
                 <div
                   className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
                   style={{ width: `${option.percent}%` }}

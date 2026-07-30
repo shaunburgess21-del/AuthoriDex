@@ -3,7 +3,7 @@ import { db } from "../db";
 import { marketAmmState, marketEntries, predictionMarkets } from "@shared/schema";
 import { currentPrices } from "@shared/lib/amm/positions";
 
-const TOP_MULTI_COUNT = 2;
+const TOP_MULTI_COUNT = 3;
 
 export type VoicesWorldMarketPreview =
   | {

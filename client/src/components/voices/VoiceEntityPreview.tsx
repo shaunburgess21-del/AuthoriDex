@@ -152,11 +152,11 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
         ) : isSentimentPoll ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
             {entity.subtitle && (
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {entity.subtitle}
               </span>
             )}
-            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+            <span className="mt-0.5 shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
               {entity.title}
             </span>
             {entity.sentimentResults ? (

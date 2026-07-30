@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
-import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react";
+import { Heart, Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo } from "@/lib/formatDate";
@@ -276,15 +276,15 @@ function PostOverlayModalContent({
                       onClick={() => onVote(insight.id, "up")}
                       onPointerUp={(event) => event.currentTarget.blur()}
                       disabled={!user}
-                      className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                      className={`flex items-center gap-1 text-xs transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F91880]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                         hasUpvoted
-                          ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                          : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+                          ? "text-[#F91880] hover:text-[#F91880]/90"
+                          : "text-muted-foreground hover:text-[#F91880]"
                       } ${!user ? "opacity-50 cursor-not-allowed" : ""}`}
-                      aria-label="Upvote"
+                      aria-label="Like"
                       data-testid="button-overlay-upvote"
                     >
-                      <ThumbsUp className="h-3.5 w-3.5" />
+                      <Heart className={`h-3.5 w-3.5 ${hasUpvoted ? "fill-current" : ""}`} />
                       {(insight.upvotes || 0) > 0 && <span>{insight.upvotes}</span>}
                     </button>
                   </>

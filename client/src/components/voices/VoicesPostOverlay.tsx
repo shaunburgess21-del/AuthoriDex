@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Loader2, MessageCircle, MoreVertical, ThumbsUp, X } from "lucide-react";
+import { Heart, Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { VoteLabel } from "@/components/VoteLabel";
@@ -242,12 +242,12 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                     onClick={handleVotePost}
                     className={`flex items-center gap-1 text-xs transition-colors ${
                       postUserVote === "up"
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-muted-foreground hover:text-amber-600 dark:hover:text-amber-400"
+                        ? "text-[#F91880] hover:text-[#F91880]/90"
+                        : "text-muted-foreground hover:text-[#F91880]"
                     }`}
-                    aria-label="Upvote"
+                    aria-label="Like"
                   >
-                    <ThumbsUp className={`h-3.5 w-3.5 ${postUserVote === "up" ? "fill-current" : ""}`} />
+                    <Heart className={`h-3.5 w-3.5 ${postUserVote === "up" ? "fill-current" : ""}`} />
                     {postUpvotes > 0 && <span>{postUpvotes}</span>}
                   </button>
                 )}

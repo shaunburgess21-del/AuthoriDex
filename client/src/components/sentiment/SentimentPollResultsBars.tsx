@@ -18,7 +18,7 @@ export function SentimentPollResultsBars({
   className,
   testId = "bar-results",
 }: SentimentPollResultsBarsProps) {
-  const barHeight = compact ? "h-5" : "h-9";
+  const barHeight = compact ? "h-5 sm:h-6" : "h-9";
   const gap = compact ? "gap-1" : "gap-2";
   const textSize = compact ? "text-[10px]" : "text-xs";
   const minWidth = 15;

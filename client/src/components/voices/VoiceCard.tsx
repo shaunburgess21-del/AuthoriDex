@@ -1,4 +1,4 @@
-import { Crown, Flame, MessageCircle, ThumbsUp } from "lucide-react";
+import { Crown, Flame, Heart, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
@@ -96,13 +96,15 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
                 onVote(item);
               }}
               className={cn(
-                "flex items-center gap-1 text-xs transition-colors hover:text-amber-600 dark:hover:text-amber-400",
-                hasUpvoted && "text-amber-600 dark:text-amber-400",
+                "flex items-center gap-1 text-xs transition-colors",
+                hasUpvoted
+                  ? "text-[#F91880] hover:text-[#F91880]/90"
+                  : "text-muted-foreground hover:text-[#F91880]",
               )}
-              aria-label="Upvote"
+              aria-label="Like"
               data-testid={`voice-card-upvote-${item.id}`}
             >
-              <ThumbsUp className={cn("h-4 w-4", hasUpvoted && "fill-current")} />
+              <Heart className={cn("h-4 w-4", hasUpvoted && "fill-current")} />
               {item.upvotes > 0 && <span>{item.upvotes}</span>}
             </button>
 

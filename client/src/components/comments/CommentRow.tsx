@@ -1,4 +1,4 @@
-import { ThumbsUp, Reply, MoreVertical } from "lucide-react";
+import { Heart, Reply, MoreVertical } from "lucide-react";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { VoteLabel } from "@/components/VoteLabel";
@@ -133,14 +133,14 @@ export function CommentRow({
                 onPointerUp={(event) => event.currentTarget.blur()}
                 aria-pressed={hasUpvoted}
                 aria-label={`${hasUpvoted ? "Liked" : "Like"}, ${comment.upvotes || 0} ${(comment.upvotes || 0) === 1 ? "like" : "likes"}`}
-                className={`flex items-center gap-1 -m-1 p-1 text-xs rounded transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                className={`flex items-center gap-1 -m-1 p-1 text-xs rounded transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F91880]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   hasUpvoted
-                    ? "text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300"
-                    : "text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400"
+                    ? "text-[#F91880] hover:text-[#F91880]/90"
+                    : "text-muted-foreground hover:text-[#F91880]"
                 }`}
                 data-testid={testIds?.upvote ?? `button-upvote-${comment.id}`}
               >
-                <ThumbsUp className="h-3.5 w-3.5" />
+                <Heart className={`h-3.5 w-3.5 ${hasUpvoted ? "fill-current" : ""}`} />
                 {(comment.upvotes || 0) > 0 && <span>{comment.upvotes}</span>}
               </button>
               {showReplyButton && onReply && (

@@ -47,7 +47,7 @@ function MultiRows({ preview }: { preview: Extract<WorldMarketPreview, { layout:
 
   return (
     <>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {preview.topOutcomes.map((outcome, idx) => {
           const isLeading = idx === 0 && outcome.percent > 0;
           return (
@@ -64,7 +64,7 @@ function MultiRows({ preview }: { preview: Extract<WorldMarketPreview, { layout:
                   {outcome.percent}%
                 </span>
               </div>
-              <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-slate-700/50">
+              <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-slate-700/50">
                 <div
                   className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
                   style={{ width: `${outcome.percent}%` }}
