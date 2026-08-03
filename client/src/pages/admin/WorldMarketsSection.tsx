@@ -36,6 +36,14 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -186,6 +194,8 @@ export function WorldMarketsSection({
   const [opsPreset, setOpsPreset] = useState<OpsPreset>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchPublishing, setBatchPublishing] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [scoutRunning, setScoutRunning] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -362,6 +372,46 @@ export function WorldMarketsSection({
       setBatchPublishing(false);
     }
   };
+
+  const runBatchDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const resp = await apiRequest("POST", "/api/admin/open-markets/batch-delete", {
+        marketIds: ids,
+      });
+      const data = await resp.json() as {
+        deleted?: number;
+        failed?: number;
+        failures?: { id: string; error: string; message?: string }[];
+      };
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] });
+      setConfirmBulkDelete(false);
+
+      const deleted = data.deleted ?? 0;
+      const failed = data.failed ?? 0;
+      if (failed > 0) {
+        const failedIds = new Set((data.failures ?? []).map((f) => f.id));
+        setSelectedIds(failedIds);
+        toast.error("Partial delete", {
+          description: `Deleted ${deleted}, failed ${failed}. Failed rows stay selected.`,
+        });
+      } else {
+        setSelectedIds(new Set());
+        toast("Markets deleted", {
+          description: `${deleted} world market${deleted === 1 ? "" : "s"} permanently removed.`,
+        });
+      }
+    } catch {
+      toast.error("Error", { description: "Failed to delete selected markets." });
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const bulkBusy = batchPublishing || batchDeleting;
 
   const runScout = async () => {
     setScoutRunning(true);
@@ -562,6 +612,7 @@ export function WorldMarketsSection({
   ];
 
   return (
+    <>
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
@@ -574,7 +625,7 @@ export function WorldMarketsSection({
               size="sm"
               variant="default"
               className="hidden md:inline-flex"
-              disabled={batchPublishing}
+              disabled={bulkBusy}
               onClick={() => runBatchVisibility("live")}
               data-testid="button-batch-publish"
             >
@@ -587,11 +638,24 @@ export function WorldMarketsSection({
               size="sm"
               variant="outline"
               className="hidden md:inline-flex"
-              disabled={batchPublishing}
+              disabled={bulkBusy}
               onClick={() => runBatchVisibility("archived")}
               data-testid="button-batch-archive"
             >
               Archive {selectedIds.size}
+            </Button>
+          )}
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="hidden md:inline-flex text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              disabled={bulkBusy}
+              onClick={() => setConfirmBulkDelete(true)}
+              data-testid="button-batch-delete"
+            >
+              {batchDeleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Delete {selectedIds.size}
             </Button>
           )}
           <Button
@@ -995,7 +1059,7 @@ export function WorldMarketsSection({
 
         {/* Sticky bulk-action bar (mobile) — sits above the admin bottom nav.
             The spacer keeps the last row's buttons reachable under the bar. */}
-        {selectedIds.size > 0 && <div className="h-16 md:hidden" aria-hidden="true" />}
+        {selectedIds.size > 0 && <div className="h-20 md:hidden" aria-hidden="true" />}
         {selectedIds.size > 0 && (
           <div
             className="md:hidden fixed inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-xl px-3 py-2"
@@ -1010,7 +1074,7 @@ export function WorldMarketsSection({
               <Button
                 size="sm"
                 className="flex-1 h-10"
-                disabled={batchPublishing}
+                disabled={bulkBusy}
                 onClick={() => runBatchVisibility("live")}
                 data-testid="button-bulk-publish-mobile"
               >
@@ -1021,12 +1085,23 @@ export function WorldMarketsSection({
                 size="sm"
                 variant="outline"
                 className="flex-1 h-10"
-                disabled={batchPublishing}
+                disabled={bulkBusy}
                 onClick={() => runBatchVisibility("archived")}
                 data-testid="button-bulk-archive-mobile"
               >
                 <Archive className="h-4 w-4 mr-1" />
                 Archive
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 h-10 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                disabled={bulkBusy}
+                onClick={() => setConfirmBulkDelete(true)}
+                data-testid="button-bulk-delete-mobile"
+              >
+                {batchDeleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                Delete
               </Button>
               <Button
                 size="sm"
@@ -1043,5 +1118,52 @@ export function WorldMarketsSection({
         )}
       </CardContent>
     </Card>
+
+    <Dialog
+      open={confirmBulkDelete}
+      onOpenChange={(open) => {
+        if (!batchDeleting) setConfirmBulkDelete(open);
+      }}
+    >
+      <DialogContent className="max-w-md" data-testid="dialog-batch-delete-world-markets">
+        <DialogHeader>
+          <DialogTitle>
+            Delete {selectedIds.size} world market{selectedIds.size === 1 ? "" : "s"} permanently?
+          </DialogTitle>
+          <DialogDescription className="space-y-2">
+            <span className="block">
+              This removes the selected markets from the database and admin list.
+            </span>
+            <span className="block text-destructive/90">
+              If any market is still open, active stakes are refunded first (same as void). Resolved
+              history for those markets will be removed. This cannot be undone.
+            </span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={batchDeleting}
+            onClick={() => setConfirmBulkDelete(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={batchDeleting || selectedIds.size === 0}
+            onClick={runBatchDelete}
+            data-testid="button-confirm-batch-delete-world-markets"
+          >
+            {batchDeleting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4 mr-2" />
+            )}
+            Delete forever
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

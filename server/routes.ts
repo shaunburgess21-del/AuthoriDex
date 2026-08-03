@@ -19334,73 +19334,98 @@ Target length: about 90-150 words.`;
     }
   });
 
-  app.delete("/api/admin/open-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
-    try {
-      const { id } = req.params;
-      const [market] = await db
-        .select()
-        .from(predictionMarkets)
-        .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
-        .limit(1);
+  /**
+   * Hard-delete one World Market (community). Returns AMM seed / voids open
+   * bets first so ledger rows are not orphaned. Shared by single + batch delete.
+   */
+  async function hardDeleteWorldMarket(
+    id: string,
+    adminId: string | null,
+  ): Promise<
+    | { ok: true; title: string }
+    | { ok: false; status: number; error: string; message?: string }
+  > {
+    const [market] = await db
+      .select()
+      .from(predictionMarkets)
+      .where(and(eq(predictionMarkets.id, id), eq(predictionMarkets.marketType, "community")))
+      .limit(1);
 
-      if (!market) {
-        return res.status(404).json({ error: "World market not found" });
-      }
+    if (!market) {
+      return { ok: false, status: 404, error: "World market not found" };
+    }
 
-      // Return AMM seed before hard-delete when state exists but settle row
-      // does not (avoids orphaning amm_seed_debit on credit_ledger).
-      const [ammState] = await db
-        .select({ marketId: marketAmmState.marketId })
-        .from(marketAmmState)
-        .where(eq(marketAmmState.marketId, id))
+    // Return AMM seed before hard-delete when state exists but settle row
+    // does not (avoids orphaning amm_seed_debit on credit_ledger).
+    const [ammState] = await db
+      .select({ marketId: marketAmmState.marketId })
+      .from(marketAmmState)
+      .where(eq(marketAmmState.marketId, id))
+      .limit(1);
+    if (ammState) {
+      const [settled] = await db
+        .select({ id: creditLedger.id })
+        .from(creditLedger)
+        .where(
+          and(
+            eq(creditLedger.userId, "00000000-0000-0000-0000-0000000000aa"),
+            eq(creditLedger.idempotencyKey, `amm_settle_${id}`),
+          ),
+        )
         .limit(1);
-      if (ammState) {
-        const [settled] = await db
-          .select({ id: creditLedger.id })
-          .from(creditLedger)
-          .where(
-            and(
-              eq(creditLedger.userId, "00000000-0000-0000-0000-0000000000aa"),
-              eq(creditLedger.idempotencyKey, `amm_settle_${id}`),
-            ),
-          )
-          .limit(1);
-        if (!settled) {
-          const { resolveAmmMarket } = await import("./services/amm-resolver");
-          const ammResult = await resolveAmmMarket({
-            marketId: id,
-            winnerEntryId: null,
-            voidMarket: true,
-            voidReason: "admin_delete",
-            settledBy: req.userId ?? null,
-          });
-          if ("error" in ammResult) {
-            const status = ammResult.error === "market_not_found" ? 404 : 400;
-            return res.status(status).json({
-              error: ammResult.error,
-              message: ammResult.message,
-            });
-          }
+      if (!settled) {
+        const { resolveAmmMarket } = await import("./services/amm-resolver");
+        const ammResult = await resolveAmmMarket({
+          marketId: id,
+          winnerEntryId: null,
+          voidMarket: true,
+          voidReason: "admin_delete",
+          settledBy: adminId,
+        });
+        if ("error" in ammResult) {
+          const status = ammResult.error === "market_not_found" ? 404 : 400;
+          return {
+            ok: false,
+            status,
+            error: ammResult.error,
+            message: ammResult.message,
+          };
         }
       }
+    }
 
-      const { voidMarketBets } = await import("./jobs/market-resolver");
-      if (market.status !== "VOID" && market.status !== "RESOLVED") {
-        await voidMarketBets(id);
-      }
+    const { voidMarketBets } = await import("./jobs/market-resolver");
+    if (market.status !== "VOID" && market.status !== "RESOLVED") {
+      await voidMarketBets(id);
+    }
 
-      await syncRelatedPeople("world_market", id, []);
-      await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
+    await syncRelatedPeople("world_market", id, []);
+    await db.delete(predictionMarkets).where(eq(predictionMarkets.id, id));
 
+    if (adminId) {
       await db.insert(adminAuditLog).values({
-        adminId: req.userId!,
+        adminId,
         adminEmail: null,
         actionType: "delete",
         targetTable: "prediction_markets",
         targetId: id,
         metadata: { marketType: "community", title: market.title, slug: market.slug },
       });
+    }
 
+    return { ok: true, title: market.title };
+  }
+
+  app.delete("/api/admin/open-markets/:id", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const result = await hardDeleteWorldMarket(id, req.userId ?? null);
+      if (!result.ok) {
+        return res.status(result.status).json({
+          error: result.error,
+          ...(result.message ? { message: result.message } : {}),
+        });
+      }
       res.json({ success: true });
     } catch (error: any) {
       console.error("[Open Markets] Delete error:", error);
@@ -19708,6 +19733,74 @@ Target length: about 90-150 words.`;
     } catch (error) {
       console.error("[Open Markets] Import error:", error);
       res.status(500).json({ error: "Failed to import markets" });
+    }
+  });
+
+  // ── Batch hard-delete World Markets ────────────────────────────────
+  app.post("/api/admin/open-markets/batch-delete", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { marketIds } = req.body;
+
+      if (!Array.isArray(marketIds) || marketIds.length === 0) {
+        return res.status(400).json({ error: "marketIds array is required" });
+      }
+      if (marketIds.length > 100) {
+        return res.status(400).json({ error: "Cannot delete more than 100 markets at once" });
+      }
+      if (!marketIds.every((id: unknown) => typeof id === "string" && id.length > 0)) {
+        return res.status(400).json({ error: "marketIds must be an array of non-empty strings" });
+      }
+
+      const uniqueIds = Array.from(new Set(marketIds as string[]));
+      const deleted: string[] = [];
+      const failed: { id: string; error: string; message?: string }[] = [];
+
+      for (const id of uniqueIds) {
+        try {
+          const result = await hardDeleteWorldMarket(id, req.userId ?? null);
+          if (result.ok) {
+            deleted.push(id);
+          } else {
+            failed.push({
+              id,
+              error: result.error,
+              ...(result.message ? { message: result.message } : {}),
+            });
+          }
+        } catch (err: any) {
+          failed.push({
+            id,
+            error: "delete_failed",
+            message: err?.message || "Failed to delete market",
+          });
+        }
+      }
+
+      if (deleted.length > 0) {
+        await db.insert(adminAuditLog).values({
+          adminId: req.userId!,
+          adminEmail: null,
+          actionType: "batch_delete",
+          targetTable: "prediction_markets",
+          targetId: "bulk",
+          metadata: {
+            marketType: "community",
+            deletedCount: deleted.length,
+            failedCount: failed.length,
+            deletedIds: deleted,
+          },
+        });
+      }
+
+      res.json({
+        deleted: deleted.length,
+        failed: failed.length,
+        deletedIds: deleted,
+        failures: failed,
+      });
+    } catch (error) {
+      console.error("[Open Markets] Batch delete error:", error);
+      res.status(500).json({ error: "Failed to delete markets" });
     }
   });
 
