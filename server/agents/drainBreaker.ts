@@ -26,6 +26,11 @@
  * un-pause, an operator uses POST /api/admin/agents/pause with
  * { paused: false } — same surface as a manual pause. The breaker
  * never auto-resumes; a human must investigate the loss source first.
+ *
+ * Because of that, a trip notifies three ways: the admin audit log, Sentry,
+ * and a critical ops alert to OPS_ALERT_EMAILS. The alert matters most — a
+ * latched pause is invisible from the outside (the site just stops moving),
+ * so without it the simulation can sit dead until someone happens to look.
  */
 
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -237,6 +242,79 @@ export async function checkAndTripDrainBreaker(): Promise<DrainBreakerCheckResul
     thresholdApplied,
     thresholds,
   });
+
+  // Page a human. A trip is latching by design (see the module header): every
+  // agent — top-ups, trade scheduling, the action worker — stays halted until
+  // someone flips the switch back. The failure mode is also invisible from the
+  // outside, since the site just quietly stops moving, so Sentry alone is too
+  // easy to miss.
+  //
+  // Imported dynamically so the agent runtime doesn't carry the React Email
+  // template graph unless a trip actually happens (same pattern as
+  // market-scout.ts). Best-effort: the pause is already committed, and
+  // `sendOpsAlert` swallows its own delivery failures.
+  try {
+    const { sendOpsAlert, adminAgentsUrl } = await import("../services/ops-alerts");
+    await sendOpsAlert({
+      kind: "drain_breaker_trip",
+      severity: "critical",
+      title: "Agents auto-paused — drain breaker tripped",
+      summary:
+        `The house is down ${Math.round(-houseDelta24h).toLocaleString()} credits over 24h ` +
+        `against a threshold of ${Math.round(thresholdApplied).toLocaleString()}. All agent ` +
+        `activity is paused and will NOT resume on its own.`,
+      sections: [
+        {
+          emoji: "📉",
+          heading: "Breaker reading",
+          items: [
+            { text: "24h house P&L", detail: `${houseDelta24h.toLocaleString()} credits` },
+            {
+              text: "Threshold applied",
+              detail: `${Math.round(thresholdApplied).toLocaleString()} credits (the tighter of the two caps below)`,
+            },
+            { text: "House balance", detail: `${houseBalance.toLocaleString()} credits` },
+            {
+              text: "Absolute cap",
+              detail: `${thresholds.absoluteLossCapCredits.toLocaleString()} credits — DRAIN_BREAKER_LOSS_CAP_CREDITS`,
+            },
+            {
+              text: "Percent cap",
+              detail: `${(thresholds.pctLossCap * 100).toFixed(0)}% of house balance — DRAIN_BREAKER_LOSS_CAP_PCT`,
+            },
+          ],
+        },
+        {
+          emoji: "🔍",
+          heading: "Check before resuming",
+          items: [
+            {
+              text: "Was this real drain, or just a batch of markets being seeded?",
+              detail:
+                "amm_seed_debit counts toward this breaker but is recoverable liquidity — it comes back as amm_settle_credit when those markets settle. Publishing many markets at once can trip the breaker without anything being wrong.",
+            },
+            {
+              text: "If it was real drain, look at agent sizing and the sharp ranker before resuming.",
+              detail: "Resuming without a fix means tripping again within the day.",
+            },
+            {
+              text: "Resume from the Agents section of the admin dashboard.",
+              detail: "Nothing auto-resumes; agents stay silent until you do this.",
+            },
+          ],
+        },
+      ],
+      ctaUrl: adminAgentsUrl(),
+      ctaLabel: "Open Agents admin",
+      // Minute-scoped: two replicas racing the same trip dedupe into one
+      // email, but a genuine re-trip after an operator resumes still pages.
+      idempotencyKeyBase: `drain_breaker_trip:${new Date().toISOString().slice(0, 16)}`,
+    });
+  } catch (alertErr) {
+    log(
+      `[DrainBreaker] Ops alert dispatch failed (trip still committed): ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+    );
+  }
 
   log(`[DrainBreaker] TRIPPED — ${reasonText}`);
 

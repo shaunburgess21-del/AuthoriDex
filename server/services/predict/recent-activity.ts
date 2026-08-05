@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { marketBets, predictionMarkets, marketEntries, profiles } from "@shared/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { isGloballyVisible } from "@shared/geoVisibility";
 import { memoizeAsync } from "../insights/request-memo";
 
 /** Short TTL — feed is polled every 60–90s on /predict and Town Square. */
@@ -64,6 +65,7 @@ export async function loadRecentPredictionActivity(limit: number): Promise<unkno
           marketType: predictionMarkets.marketType,
           status: predictionMarkets.status,
           visibility: predictionMarkets.visibility,
+          visibleCountries: predictionMarkets.visibleCountries,
         })
         .from(predictionMarkets)
         .where(inArray(predictionMarkets.id, marketIds)),
@@ -101,6 +103,22 @@ export async function loadRecentPredictionActivity(limit: number): Promise<unkno
         if (!profile || !market || !entry) return null;
         if (market.status !== "OPEN") return null;
         if (!["live", "inactive"].includes(market.visibility || "")) return null;
+        // Geo-restricted markets never appear in this feed, for anyone.
+        //
+        // The route is unauthenticated and the result is memoized under a key
+        // with no viewer component, so there is no residence to filter on and
+        // one cached payload is served to everybody — a restricted market's
+        // title and slug would leak to every region. Excluding them outright
+        // keeps the single shared cache entry, which is the whole point of the
+        // memo on a feed polled every 60–90s.
+        //
+        // The cost is that eligible viewers don't see their own region's
+        // markets in the global ticker either. That's the right trade for a
+        // supplementary feed — the market lists and detail pages are properly
+        // residence-aware. If geo-restricted markets ever become common enough
+        // that this omission is noticeable, the fix is `optionalAuth` on the
+        // route plus a residence-keyed memo, not loosening this check.
+        if (!isGloballyVisible(market.visibleCountries)) return null;
 
         const meta =
           bet.betMetadata && typeof bet.betMetadata === "object"

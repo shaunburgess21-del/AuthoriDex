@@ -12,6 +12,7 @@
  *   - server/jobs/market-resolver.ts    (instant "needs resolution" ping)
  *   - server/jobs/resolution-scout.ts   (AI early-resolution proposals)
  *   - server/services/ingest-provider-alert-runner.ts (news API outage alerts)
+ *   - server/agents/drainBreaker.ts     (agents auto-paused, needs a human)
  *
  * Recipients come from OPS_ALERT_EMAILS (comma-separated). If unset, the
  * dispatcher logs a warning and no-ops — alerts must never throw into the
@@ -91,6 +92,11 @@ export function adminDashboardUrl(): string {
 /** Deep link to the World Markets tab of the Prediction CMS. */
 export function adminWorldMarketsUrl(): string {
   return `${getAdminBaseUrl()}/admin?section=predictions&tab=real-world`;
+}
+
+/** Deep link to the admin Agents section — where a paused simulation is resumed. */
+export function adminAgentsUrl(): string {
+  return `${getAdminBaseUrl()}/admin?section=agents`;
 }
 
 /** Deep link to the admin Moderation section (optional sub-tab). */
