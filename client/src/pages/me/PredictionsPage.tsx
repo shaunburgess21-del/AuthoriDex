@@ -1491,11 +1491,18 @@ function AmmOpenPositionCard({
 }) {
   const projectedPnl = position.netShares - position.netCreditsIn;
   const directionLabel = position.entryLabel?.toUpperCase?.() ?? position.entryLabel;
+  // `/api/me/amm-positions` returns CLOSED_PENDING markets alongside OPEN ones
+  // so a position stays visible while it waits for settlement. Trading is
+  // already over though — `loadAndLockTradeContext` requires status='OPEN' — so
+  // the card must not offer a cash out the server will reject as
+  // `market_closed`. World Markets can sit in this state for days.
+  const isAwaitingResolution = position.marketStatus === "CLOSED_PENDING";
   return (
     <Card
       className={cn(
         "group relative overflow-hidden cursor-pointer border-white/5 bg-card/60 backdrop-blur-sm",
-        "transition-all duration-150 border-l-2 border-l-emerald-500/60",
+        "transition-all duration-150 border-l-2",
+        isAwaitingResolution ? "border-l-amber-500/60" : "border-l-emerald-500/60",
         "hover:border-white/10 hover:-translate-y-0.5 hover:shadow-md hover:bg-accent/5",
       )}
       onClick={onView}
@@ -1516,8 +1523,15 @@ function AmmOpenPositionCard({
               <span className="text-foreground font-medium">{directionLabel}</span>
             </p>
           </div>
-          <Badge className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-500/30 text-[10px] shrink-0">
-            LIVE
+          <Badge
+            className={cn(
+              "text-[10px] shrink-0",
+              isAwaitingResolution
+                ? "bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 dark:border-amber-500/30"
+                : "bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40 dark:border-emerald-500/30",
+            )}
+          >
+            {isAwaitingResolution ? "AWAITING RESULT" : "LIVE"}
           </Badge>
         </div>
 
@@ -1559,15 +1573,31 @@ function AmmOpenPositionCard({
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            className="flex-1 gap-1 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+            disabled={isAwaitingResolution}
+            className={cn(
+              "flex-1 gap-1 text-white",
+              isAwaitingResolution
+                ? "bg-muted text-muted-foreground"
+                : "bg-gradient-to-r from-violet-600 to-fuchsia-600",
+            )}
             onClick={(e) => {
               e.stopPropagation();
+              if (isAwaitingResolution) return;
               onCashOut();
             }}
             data-testid={`amm-open-cashout-${position.marketId}-${position.entryId}`}
           >
-            <Banknote className="h-3.5 w-3.5" />
-            Cash out ~{formatVox(Math.round(position.currentValue))}
+            {isAwaitingResolution ? (
+              <>
+                <Clock className="h-3.5 w-3.5" />
+                Awaiting settlement
+              </>
+            ) : (
+              <>
+                <Banknote className="h-3.5 w-3.5" />
+                Cash out ~{formatVox(Math.round(position.currentValue))}
+              </>
+            )}
           </Button>
           <Button
             size="sm"

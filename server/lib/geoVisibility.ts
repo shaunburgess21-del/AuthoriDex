@@ -1,7 +1,7 @@
 import { eq, sql, type SQL, type AnyColumn } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
-import { isCardVisibleToUser } from "@shared/geoVisibility";
+import { isCardVisibleToUser, isGloballyVisible } from "@shared/geoVisibility";
 import type { AuthRequest } from "../auth-middleware";
 import { isStaffRole } from "../utils/authz";
 
@@ -97,4 +97,27 @@ export function assertCardVisibleForAction(
   if (!isCardVisibleToUser(visibleCountries, residence)) {
     throw new GeoNotEligibleError();
   }
+}
+
+/**
+ * Geo guard for the by-id market routes (`/api/markets/:id*`), which are
+ * reached by UUID rather than slug and therefore can't rely on the
+ * `geoVisibilitySql` filter applied to the `/api/open-markets` list.
+ *
+ * Returns true when the caller must NOT see this market. Callers choose the
+ * response themselves: 404 on reads (don't confirm the market exists), 403
+ * `geo_not_eligible` on trades (parity with `/api/open-markets/:slug/bet`).
+ *
+ * Short-circuits before `resolveUserGeoContext` for globally-visible cards so
+ * the overwhelmingly common case costs nothing — important on hot read paths
+ * like price-history and recent-trades.
+ */
+export async function isMarketGeoHidden(
+  req: AuthRequest,
+  visibleCountries: string[] | null | undefined,
+): Promise<boolean> {
+  if (isGloballyVisible(visibleCountries)) return false;
+  const geo = await resolveUserGeoContext(req);
+  if (geo.bypass) return false;
+  return !isCardVisibleToUser(visibleCountries, geo.residence);
 }

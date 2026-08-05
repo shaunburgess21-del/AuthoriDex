@@ -23,6 +23,10 @@ import OpenAI from "openai";
 import { log } from "../log";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { estimateLlmCostUsd, recordLlmUsage } from "../config/ai-cost";
+import {
+  isFeatureOverDailyCap,
+  resolveFeatureCapUsd,
+} from "../config/ai-budget-guard";
 import type { MarketWithEntries, TrendSignals } from "./types";
 
 /**
@@ -46,6 +50,17 @@ function getOpenAIClient(): OpenAI {
 }
 
 const SHARP_RANKER_LLM_ENABLED = process.env.SHARP_RANKER_LLM_ENABLED !== "false";
+/**
+ * Optional daily USD ceiling, via `SHARP_RANKER_DAILY_BUDGET_USD`. Unset =
+ * no ceiling (previous behaviour). The ranker runs on every agent sweep and
+ * had no cap at all, which made it the largest uncapped LLM cost on the
+ * platform; this is a runaway-loop brake, so size it several times above
+ * normal daily spend. See `server/config/ai-budget-guard.ts` for why it is
+ * soft rather than a strict reserve/release rail.
+ */
+const SHARP_RANKER_DAILY_CAP_USD = resolveFeatureCapUsd(
+  process.env.SHARP_RANKER_DAILY_BUDGET_USD,
+);
 const SHARP_RANKER_TTL_MS = 25 * 60 * 1000;
 const SHARP_RANKER_TIMEOUT_MS = 25_000;
 // Bumped from 700 in Agent v2: each pick now carries 6 fields (edgeProb,
@@ -94,7 +109,7 @@ export interface SharpRankerSnapshot {
   picks: SharpRankerPick[];
   generatedAt: number;
   marketsConsidered: number;
-  source: "llm" | "fallback" | "disabled" | "cache";
+  source: "llm" | "fallback" | "disabled" | "cache" | "budget_exhausted";
   costEstimateUsd: number | null;
   /**
    * Stable hash of the sorted market-IDs that produced this snapshot.
@@ -169,6 +184,25 @@ export async function getSharpRanking(
   }
 
   if (inflight && inflightKey === inputKey) return inflight;
+
+  // Checked AFTER the cache/in-flight short-circuits above: those paths cost
+  // nothing, so an exhausted budget should still hand back a warm snapshot
+  // rather than degrade agents that could have been served for free. Only a
+  // genuinely new LLM call is refused.
+  if (await isFeatureOverDailyCap("sharp_ranker", SHARP_RANKER_DAILY_CAP_USD)) {
+    const exhausted: SharpRankerSnapshot = {
+      picks: [],
+      generatedAt: Date.now(),
+      marketsConsidered: rankable.length,
+      source: "budget_exhausted",
+      costEstimateUsd: 0,
+      inputKey,
+    };
+    // Deliberately NOT written to `lastSnapshot`: keep the last real ranking
+    // as the cache so agents fall back to slightly stale picks instead of no
+    // picks at all. Empty picks degrade to the deterministic trait engine.
+    return exhausted;
+  }
 
   // Two different keys can be in flight simultaneously (e.g. sweep
   // N+1 starts with a slightly different market set while sweep N's

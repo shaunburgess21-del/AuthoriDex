@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getAuthHeaders } from "@/lib/queryClient";
 
 interface MarketsByIdResponse {
   nativeDetail?: Record<string, unknown> | null;
@@ -42,7 +43,15 @@ export function useNativeMarketDetail(
   } = useQuery<MarketsByIdResponse>({
     queryKey: ["/api/markets", marketId, "detail"],
     queryFn: async () => {
-      const res = await fetch(`/api/markets/${marketId}`);
+      // Bare `fetch` with auth headers rather than `apiRequest`: this hook
+      // needs the raw 404 status to drive its NOT_FOUND state, and
+      // `apiRequest` throws a generic error instead. The token matters because
+      // /api/markets/:id is geo-gated — no native market is region-restricted
+      // today, but sending auth keeps this correct if one ever is.
+      const res = await fetch(`/api/markets/${marketId}`, {
+        headers: await getAuthHeaders(),
+        credentials: "include",
+      });
       if (!res.ok) {
         throw new Error(res.status === 404 ? "NOT_FOUND" : "FETCH_FAILED");
       }

@@ -930,7 +930,61 @@ export async function resolveJackpot(
 
   const now = new Date();
 
-  await db.transaction(async (tx) => {
+  // The transaction RETURNS its outcome rather than assigning to a captured
+  // variable, so the post-transaction branches below type-narrow correctly.
+  //   "claimed"           — we own this settlement and paid out.
+  //   "already_settled"   — a concurrent resolve beat us (benign).
+  //   "unexpected_status" — the row is in a state no current caller should
+  //                         produce; must NOT be reported as success.
+  const claimOutcome = await db.transaction(async (tx) => {
+    // Atomically claim the market before moving any credits. Both callers
+    // (the 5-minute cron and the admin force-resolve endpoint) only ever
+    // pass an OPEN market, so flipping OPEN -> RESOLVED here is the claim.
+    //
+    // Without this, two concurrent resolves could both read `status='OPEN'`
+    // and both run the payout loop: the ledger insert below dedupes on
+    // `jackpot_payout_${market.id}_${bet.id}` via onConflictDoNothing, but
+    // the `profiles.predictCredits` increment does NOT — so wallets would be
+    // credited twice while the ledger recorded one payout, producing exactly
+    // the wallet/ledger drift the credit audit is meant to catch. A second
+    // caller now blocks on this row lock, then sees 0 rows and bails.
+    const claimed = await tx
+      .update(predictionMarkets)
+      .set({ status: "RESOLVED", resolvedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(predictionMarkets.id, market.id),
+          eq(predictionMarkets.status, "OPEN"),
+        ),
+      )
+      .returning({ id: predictionMarkets.id });
+
+    if (claimed.length === 0) {
+      // Losing the claim is only safe if the market is genuinely settled. Any
+      // other status means our OPEN assumption is wrong (a new caller, a
+      // manual DB edit, a status we don't know about) — and this market still
+      // has `active` bets holding user credits. Reporting "resolved" there
+      // would strand the pool while the resolver summary claimed success, so
+      // surface it as blocked instead: visible in the run counters, and the
+      // cron retries every 5 minutes.
+      const [current] = await tx
+        .select({ status: predictionMarkets.status })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, market.id))
+        .limit(1);
+      const currentStatus = current?.status ?? "MISSING";
+      if (currentStatus === "RESOLVED" || currentStatus === "VOID") {
+        log(
+          `[MarketResolver] jackpot ${market.id}: already ${currentStatus} (concurrent resolve won the claim), skipping payout`,
+        );
+        return "already_settled" as const;
+      }
+      log(
+        `[MarketResolver] jackpot ${market.id}: BLOCKED — expected status OPEN but found ${currentStatus}; ${allBets.length} active bet(s) left untouched. Investigate before settling manually.`,
+      );
+      return "unexpected_status" as const;
+    }
+
     const winnersWithWeight = winners.map(w => ({
       ...w,
       weight: w.stakeAmount * computeEarlyBirdMultiplier(w.createdAt, market.startAt, market.closeAt),
@@ -992,7 +1046,11 @@ export async function resolveJackpot(
       .set({ resolutionStatus: "winner" })
       .where(eq(marketEntries.marketId, market.id));
 
-    const winner = winners[0];
+    // `winners` is empty when every bet had an unusable `predictedScore`
+    // (all of them are in `losers`, marked lost above). The market still has
+    // to resolve — leaving it OPEN would strand the pool and make the cron
+    // throw on this market every 5 minutes forever.
+    const winner = winners[0] ?? null;
     await tx.update(predictionMarkets).set({
       status: "RESOLVED",
       resolvedAt: now,
@@ -1000,9 +1058,19 @@ export async function resolveJackpot(
       resolutionNotes: JSON.stringify({
         type: "jackpot",
         actualScore,
-        winningPrediction: winner.predictedScore,
-        winnerUserId: winners.length === 1 ? winner.userId : winners.map(w => w.userId),
-        margin: winner.diff,
+        ...(winner
+          ? {
+              winningPrediction: winner.predictedScore,
+              winnerUserId:
+                winners.length === 1 ? winner.userId : winners.map(w => w.userId),
+              margin: winner.diff,
+            }
+          : {
+              winningPrediction: null,
+              winnerUserId: null,
+              margin: null,
+              outcome: "no_valid_predictions",
+            }),
         totalPool,
         // Equal to totalPool now that the platform fee was removed
         // (Apr 2026). Field retained so older readers / admin dashboards
@@ -1013,7 +1081,14 @@ export async function resolveJackpot(
         closeSnapshotAt: closeSnap?.capturedAt?.toISOString?.() ?? null,
       }),
     }).where(eq(predictionMarkets.id, market.id));
+
+    return "claimed" as const;
   });
+
+  // Claim lost. In both cases our `winners` / `losers` snapshot is stale, so
+  // stop before the XP / notification fanout re-runs against it.
+  if (claimOutcome === "unexpected_status") return "blocked";
+  if (claimOutcome === "already_settled") return "resolved";
 
   // prediction_win XP is awarded once per unique winning user per
   // market, not per winning jackpot bet. A user with multiple tied
@@ -1100,8 +1175,12 @@ export async function resolveJackpot(
     log(`[ResolutionSummary] fire-and-forget failed for jackpot ${market.id}: ${err?.message ?? err}`)
   );
 
-  const w = winners[0];
-  log(`[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, entries=${allBets.length}, tied=${winners.length}`);
+  const w = winners[0] ?? null;
+  log(
+    w
+      ? `[MarketResolver] jackpot ${market.id}: resolved. actual=${actualScore}, winner predicted ${w.predictedScore} (off by ${w.diff}), pool=${totalPool}, entries=${allBets.length}, tied=${winners.length}`
+      : `[MarketResolver] jackpot ${market.id}: resolved with no valid predictions. actual=${actualScore}, pool=${totalPool} retained, entries=${allBets.length} all marked lost`,
+  );
   return "resolved";
 }
 

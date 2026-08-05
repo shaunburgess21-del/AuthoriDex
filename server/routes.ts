@@ -209,10 +209,15 @@ import {
   geoVisibilitySql,
   assertCardVisibleForRead,
   assertCardVisibleForAction,
+  isMarketGeoHidden,
   GeoNotEligibleError,
   GeoNotFoundError,
 } from "./lib/geoVisibility";
-import { isCardVisibleToUser, sanitizeVisibleCountries } from "@shared/geoVisibility";
+import {
+  isCardVisibleToUser,
+  isGloballyVisible,
+  sanitizeVisibleCountries,
+} from "@shared/geoVisibility";
 import { getMarketEngagementPreview } from "./services/predict/market-engagement";
 import { loadNativeMarkets, updownOrderingKey, type OrderTerm } from "./services/predict/native-markets";
 import {
@@ -9952,6 +9957,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (market.visibility === "draft" && !isAdmin) {
         return res.status(404).json({ error: "Market not found" });
       }
+      // This route is reached by UUID, so it bypasses the geo filter the
+      // /api/open-markets list applies in SQL. 404 (not 403) matches
+      // /api/open-markets/:slug — we don't confirm the market exists.
+      if (await isMarketGeoHidden(req, market.visibleCountries)) {
+        return res.status(404).json({ error: "Market not found" });
+      }
 
       const entries = await db
         .select()
@@ -10182,11 +10193,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           engine: predictionMarkets.engine,
           status: predictionMarkets.status,
           visibility: predictionMarkets.visibility,
+          visibleCountries: predictionMarkets.visibleCountries,
         })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.id, id))
         .limit(1);
       if (!market) return res.status(404).json({ error: "Market not found" });
+      if (await isMarketGeoHidden(req, market.visibleCountries)) {
+        return res.status(404).json({ error: "Market not found" });
+      }
       if (market.engine !== "amm") {
         return res.json({ engine: market.engine, positions: [] });
       }
@@ -10294,6 +10309,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public (no auth) — prices are not sensitive and the alternative
   // is forcing every market-detail visitor to authenticate before
   // they see live updates, which would break logged-out browse.
+  //
+  // NOT geo-gated, unlike every other `/api/markets/:id*` route. The
+  // client uses the browser's native `EventSource`
+  // (`client/src/hooks/useAmmPriceStream.ts`), which cannot send an
+  // `Authorization` header — so this route can never resolve the viewer's
+  // country of residence, and a geo check here would 404 the stream for
+  // ELIGIBLE users, not just restricted ones. The exposure is limited and
+  // deliberate: the payload is prices/quantities only (no title, criteria,
+  // entries, or trader identities), the market must already be
+  // `visibility='live'`, and the caller must already know its UUID. The
+  // revealing payloads — detail, recent-trades, price-history — are gated.
+  // If this ever needs gating, move the client to `fetch()` streaming so it
+  // can carry a Bearer token; do not put the token in the query string.
   //
   // Wire protocol:
   //   - Initial event on connect: the current price snapshot. Sent
@@ -10466,7 +10494,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // array — caller should fall back to "current price as flat line".
   // Public (no auth) because price history is non-PII and used on
   // cards before login.
-  app.get("/api/markets/:id/price-history", async (req, res) => {
+  app.get("/api/markets/:id/price-history", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const bucket = (req.query.bucket as string) || "1h";
@@ -10495,11 +10523,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({
           id: predictionMarkets.id,
           engine: predictionMarkets.engine,
+          visibleCountries: predictionMarkets.visibleCountries,
         })
         .from(predictionMarkets)
         .where(eq(predictionMarkets.id, id))
         .limit(1);
       if (!market) {
+        return res.status(404).json({ error: "Market not found" });
+      }
+      // Price history reveals the same information as the market itself, so
+      // it honours the geo allowlist. Restricted markets also drop out of the
+      // shared cache below — a CDN must never serve one region's copy to
+      // another. Globally-visible markets are unaffected.
+      const geoRestricted = !isGloballyVisible(market.visibleCountries);
+      if (geoRestricted && (await isMarketGeoHidden(req, market.visibleCountries))) {
         return res.status(404).json({ error: "Market not found" });
       }
       if (market.engine !== "amm") {
@@ -10548,7 +10585,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // request loops from flooding the DB (see May 2026 incident). The
       // payload is non-PII; safe to share across users. 30s is well
       // under the smallest bucket (5m) so freshness is unaffected.
-      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      // Geo-restricted markets go `private`: the response now varies by
+      // viewer residence, so it must not sit in a shared cache.
+      res.setHeader(
+        "Cache-Control",
+        geoRestricted
+          ? "private, max-age=30"
+          : "public, max-age=30, stale-while-revalidate=60",
+      );
       res.json({ engine: "amm", bucket, points });
     } catch (err: any) {
       console.error("[GET /api/markets/:id/price-history] failed:", err);
@@ -10575,7 +10619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Caching: short HTTP cache (15s, matches the client poll interval)
   // mirrors the price-history endpoint hardening so a hot market
   // doesn't get flood-routed to the DB.
-  app.get("/api/markets/:id/recent-trades", async (req, res) => {
+  app.get("/api/markets/:id/recent-trades", optionalAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const limit = Math.min(
@@ -10589,6 +10633,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res
           .status(400)
           .json({ error: "cursor must be a valid ISO timestamp" });
+      }
+
+      // The trade tape exposes who is betting what on this market, so it
+      // honours the geo allowlist like the market itself. Only geo-restricted
+      // markets pay for the lookup; everything else keeps the shared cache.
+      const [market] = await db
+        .select({ visibleCountries: predictionMarkets.visibleCountries })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+      const geoRestricted =
+        !!market && !isGloballyVisible(market.visibleCountries);
+      if (geoRestricted && (await isMarketGeoHidden(req, market.visibleCountries))) {
+        return res.status(404).json({ error: "Market not found" });
       }
 
       const conditions = [
@@ -10657,9 +10715,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // 15s cache aligns with the client poll cadence; protects the DB
       // from accidental fetch loops the same way price-history does.
+      // Geo-restricted markets go `private` — the response varies by viewer.
       res.setHeader(
         "Cache-Control",
-        "public, max-age=15, stale-while-revalidate=30",
+        geoRestricted
+          ? "private, max-age=15"
+          : "public, max-age=15, stale-while-revalidate=30",
       );
       res.json({
         trades,
@@ -10777,6 +10838,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!clientRequestId && !checkBetRateLimit(req.userId!)) {
         return res.status(429).json({ error: "You're moving fast! Try again in a moment" });
       }
+      // Single pre-trade read serving two purposes: the geo gate below, and
+      // `category` for the post-trade placement hooks. This route trades by
+      // market UUID, so it bypasses the geo filter the /api/open-markets list
+      // applies in SQL — mirror the 403 from /api/open-markets/:slug/bet so a
+      // restricted region can't trade by id.
+      const [marketRow] = await db
+        .select({
+          category: predictionMarkets.category,
+          visibleCountries: predictionMarkets.visibleCountries,
+        })
+        .from(predictionMarkets)
+        .where(eq(predictionMarkets.id, id))
+        .limit(1);
+      if (marketRow && (await isMarketGeoHidden(req, marketRow.visibleCountries))) {
+        return res.status(403).json({ error: "geo_not_eligible" });
+      }
       const result = await executeBuy({
         marketId: id,
         userId: req.userId!,
@@ -10792,14 +10869,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Post-trade hooks (XP / referral / placement badges / engagement
       // signal). Run after the trade transaction commits so a hook
-      // failure can never roll back the buy. The market's category is
-      // fetched separately here because this route doesn't pre-load the
-      // market row — one cheap select per successful buy.
-      const [marketRow] = await db
-        .select({ category: predictionMarkets.category })
-        .from(predictionMarkets)
-        .where(eq(predictionMarkets.id, id))
-        .limit(1);
+      // failure can never roll back the buy. `marketRow.category` comes from
+      // the pre-trade read above (shared with the geo gate).
       const hooks = await fireAmmPlacementHooks({
         userId: req.userId!,
         marketId: id,
@@ -10859,6 +10930,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const minPricePerShare = parseSlippageBound(
         (req.body as { minPricePerShare?: unknown })?.minPricePerShare,
       );
+      // Deliberately NOT geo-gated (unlike the buy route). Geo restricts who
+      // may take a position, not who may close one. If an allowlist changes or
+      // a user's residence changes, blocking the exit would strand their
+      // credits in a market they can no longer reach — a worse outcome than
+      // letting them cash out.
       const result = await executeSell({
         marketId: id,
         userId: req.userId!,

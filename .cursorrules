@@ -25,7 +25,7 @@ VoxDex is a live influence index and prediction platform. It ranks over 150 publ
 - `server/agents/` — Simulation agents (runner, decision engine, world markets LLM, seeder)
 - `server/emails/` — Resend dispatch, auth hook, React Email templates
 - `server/services/` — AMM house/trades/resolver, badges, gamification, etc.
-- `server/providers/` — External API integrations (SerpApi Trends, Serper, Mediastack, Wiki, etc.)
+- `server/providers/` — External API integrations (DataForSEO Trends, Serper, Currents, Mediastack, Wiki, Polymarket, etc.)
 - `shared/lib/amm/` — LMSR math shared by server and client (single source of truth)
 
 ## Critical Rules — Read Before Every Change
@@ -125,6 +125,22 @@ VoxDex offers five market types, all settled in virtual credits:
 - **Weekly Jackpot** (`marketType: jackpot`) — Weekly themed exact-score market with a pooled prize. **Stays parimutuel** (intentionally not migrated to AMM).
 - **World Markets** (`marketType: community` in DB) — Real-world events (politics, sports, entertainment, etc.). Outcomes depend on external reality, not trend scores.
 
+### World Market resolution is MANUAL — auto-resolve does not exist yet
+
+Native markets (Up/Down, H2H, Gainer, Jackpot) settle automatically off trend snapshots via the 5-minute resolver cron. **World Markets do not.** A World Market past `endAt` moves to `CLOSED_PENDING` and waits for an admin to settle it in the AMM resolution dialog.
+
+Three things propose but never settle — do not mistake any of them for automation:
+
+- **Source watch** (`market-scout.ts`) — LLM-free Polymarket poll; pre-fills a proposed winner in `metadata.scoutAssessment` and can auto-lock trading (`AUTO_LOCK_ON_RESOLUTION_ENABLED`).
+- **Resolution scout** (`resolution-scout.ts`, `RESOLUTION_SCOUT_LLM_ENABLED`) — daily GPT + web-search scan; advisory only, and always held by the auto-resolve gate (`llm_only_signal`).
+- **`AUTO_RESOLVE_SHADOW_ENABLED`** — logs what auto-resolve *would* have done (`[AutoResolveShadow]`) next to what a human actually did (`[AutoResolveActual]`). **Zero side effects.** `AUTO_RESOLVE_MIN_CONFIDENCE` only tunes that log. Shipping real auto-resolve is a future task justified by this shadow data.
+
+There is no production "un-resolve" endpoint: `resolveAmmMarket` is idempotent, so a wrong winner needs a targeted ops repair (see `ops/repair-knockout-draw-resolutions.ts`) or a void. Void refunds at net cost basis and is credit-safe.
+
+### Scout drafts expire if not reviewed
+
+`market-scout.ts` runs ~07:00 UTC and inserts World Markets as **`visibility: 'draft'`** — invisible to users *and* to agents, with no AMM seed until an admin publishes them. A draft whose `end_at` passes with no AMM state and no bets is auto-VOIDed and archived (`"Draft expired unpublished"`), so an unreviewed queue silently discards the scout's output. Zero agent activity on a World Market almost always means it is still a draft, not a liquidity bug.
+
 ### Market Engine: AMM/LMSR (native + World Markets only)
 
 Up/Down, H2H, Top Gainer, and World Markets use **AMM with LMSR** pricing. Weekly Jackpot remains **parimutuel** — `generateWeeklyJackpot` sets `engine: 'parimutuel'` explicitly (`server/jobs/market-generator.ts`).
@@ -150,7 +166,14 @@ Persona bands: sharp, casual, noisy, liquidity, whale. World-market bets are sch
 
 Key files: `agentRunner.ts` (orchestration), `decisionEngine.ts` (native picks), `worldMarketEngine.ts` (LLM + web search), `actionWorker.ts` (executes queued bets). Jackpot agents use exact-score `jackpot_bet`, not AMM shares.
 
-**Rule:** Do not modify agent personas, dispatch logic, or settlement code without being explicitly asked. World Market LLM spend is gated by `WORLD_MARKETS_LLM_ENABLED` (must be literal `true`/`1`/`yes`/`on` — Railway `TRUE` broke once) plus `WORLD_MARKETS_DAILY_BUDGET_USD`. Phase 5 admin dashboard (`AdminAmmSection`) is for AMM ops/reconciliation only.
+**Rule:** Do not modify agent personas, dispatch logic, or settlement code without being explicitly asked. Phase 5 admin dashboard (`AdminAmmSection`) is for AMM ops/reconciliation only.
+
+World Market LLM spend has **two** gates, and production currently runs with the second one off:
+
+- `WORLD_MARKETS_LLM_ENABLED` — master switch for the world-market agent path (must be literal `true`/`1`/`yes`/`on` — Railway `TRUE` broke once).
+- `WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED` — **`false` in production.** With it off, agents bet on scouted markets using the zero-cost Polymarket `source_anchor` and simply abstain on unanchored/manual markets. `WORLD_MARKETS_DAILY_BUDGET_USD` is therefore largely inert today. Turning assessments back on will start real per-call spend against that budget — raise it first (the per-call reserve estimate is $0.40, so a $0.50 budget allows one call per day).
+
+Flag-reading note: `envFlag` accepts `true`/`1`/`yes`/`on` case-insensitively, so Railway `TRUE` is safe now. For the convergence features, `*_SHADOW=true` **does not** mean "log only" when the matching `*_ENABLED` is also true — it adds extra logging on top of live behaviour. `MIDWEEK_CONVERGENCE`, `LATCH_REVERT`, and `COMMUNITY_CONVERGENCE` are all live in production despite their shadow flags being set.
 
 ---
 
@@ -188,7 +211,11 @@ Until domain ready, all categories use Resend sandbox (`onboarding@resend.dev`).
 
 ### Signal sources (in score today)
 
-Velocity composite (60% of fameIndex): wiki pageview delta **35%**, news article delta **45%**, news **momentum** slot (24h vs 7d article ratio) **20%**. Mass composite (40%): wiki 7d pageviews + IG/YT followers when present.
+Velocity composite (60% of fameIndex): wiki pageview delta **35%**, news article delta **45%**, news **momentum** slot (24h vs 7d article ratio) **20%**. Mass composite (40%): wiki 50% / IG 25% / YT 25% when followers are present; absence of IG/YT is **not** a penalty (mass falls back to the attention slot alone).
+
+Within the wiki/attention mass slot, DataForSEO monthly **search volume** blends in at **30%** when a person has a nonzero normalised signal (`SEARCH_VOLUME_MASS_WEIGHT_DEFAULT`, env-overridable). This is live and in the score whenever DataForSEO data exists.
+
+**NEWS_SOV (Share of Voice)** is active in production (`NEWS_SOV_ENABLED=true`, `NEWS_SOV_ENABLE_FROM=2026-07-13`). It rescales the news counts *fed to scoring* by a cohort supply factor clamped to `[0.5, 2.5]` — persisted `news_count` is untouched. The factor is uniform per tick, so within-tick ordering is preserved while absolute levels shift with cohort news supply.
 
 ### Display-only momentum cards (persisted, not in score yet)
 
@@ -196,17 +223,23 @@ UI signal cards share Low / Medium / High thresholds (ratio <1.0, 1.0–2.0, ≥
 
 - **News Momentum** — 24h vs 7d article-count ratio (distinct from the news *delta* and *momentum slot* that already affect the score).
 - **Wiki Momentum** — 24h vs 7d Wikipedia pageview ratio (`normalizeWikiMomentum` in `server/scoring/normalize.ts`).
-- **Google Trends momentum** — latest interest vs 7d average from SerpApi (`normalizeTrendsMomentum`).
+- **Google Trends momentum** — latest interest vs 7d average from DataForSEO (`normalizeTrendsMomentum`). Uses its own interest-level thresholds (30 / 60 on the 0–100 scale), not the ratio bands above.
 
 ### Google Trends ingestion
 
-Fetched via **SerpApi using Topic IDs** (`googleTrendsTopicId` on people) — not raw search terms. Gated to ~12h cadence in ingest.
+Hourly ingest fetches trends via **DataForSEO** (~$11/mo vs SerpApi's ~$150), keyed off the person's name or `searchQueryOverride`, gated to ~12h cadence.
+
+**SerpApi is no longer in the ingest path.** `SERPAPI_API_KEY` is still required, but only for admin topic-ID suggestion tooling and the `backfill:trends-topic-ids` script. `googleTrendsTopicId` is likewise admin-tooling only — a missing topic ID does not affect scoring.
 
 ### Aggregation pattern
 
 - **Mass (stock)** — baseline fame (wiki 7d avg, followers).
 - **Velocity (flow)** — deltas + news momentum ratio.
-- **EMA smoothing** — cross-snapshot fameIndex blend (0.7 current / 0.3 previous tick when prior exists).
+- **EMA smoothing** — cross-snapshot fameIndex blend, **asymmetric** (not a single 0.7/0.3 blend). When a usable prior tick exists, the weight on the current raw value is:
+  - **rising** (`raw >= prev`): `FAME_INDEX_EMA_ALPHA_UP` = **0.85** — breakouts register almost immediately.
+  - **falling** (`raw < prev`): `getFameIndexEmaAlphaDown()` — code default **0.60**, but production runs `FAME_INDEX_EMA_ALPHA_DOWN=0.68` so declines propagate faster (for gainer % moves + lock-in convergence). `SCORE_EMA_MORE_RAW_ENABLED` overrides to 0.75.
+  - No prior tick → alpha 1 (raw passes straight through), so new entrants aren't dragged toward a stale baseline.
+  Never co-deploy an EMA alpha change with a sigma (`LOCKIN_SIGMA_1D`) change.
 
 ### Monitoring
 

@@ -14,6 +14,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   type AmmStateSnapshot,
   type AmmTradeRow,
@@ -232,10 +233,14 @@ export function usePriceHistory(
       const params = new URLSearchParams();
       params.set("bucket", bucket);
       if (fromAligned) params.set("from", fromAligned);
-      const res = await fetch(`/api/markets/${marketId}/price-history?${params}`);
-      if (!res.ok) {
-        throw new Error(`price-history ${res.status}`);
-      }
+      // `apiRequest` (not bare fetch) so the Supabase Bearer token travels
+      // with the request. The endpoint is geo-gated, and geo eligibility is
+      // derived from the authenticated user's country of residence — an
+      // unauthenticated read of a region-restricted market 404s.
+      const res = await apiRequest(
+        "GET",
+        `/api/markets/${marketId}/price-history?${params}`,
+      );
       return res.json();
     },
   });

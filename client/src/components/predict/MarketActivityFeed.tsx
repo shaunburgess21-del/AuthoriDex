@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { PredictDetailSectionHeader } from "@/components/predict/PredictDetailSectionHeader";
 import { Activity } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
+import { apiRequest } from "@/lib/queryClient";
 import { voxWord } from "@/lib/currency";
 
 interface MarketTrade {
@@ -62,11 +63,14 @@ export function MarketActivityFeed({
   const { data, isLoading, error } = useQuery<RecentTradesResponse>({
     queryKey: ["/api/markets", marketId, "recent-trades", limit],
     queryFn: async () => {
-      const res = await fetch(
+      // `apiRequest` (not bare fetch with cookies) so the Supabase Bearer
+      // token travels with the request — API auth is JWT-based, so
+      // `credentials: "include"` alone left this call anonymous. The endpoint
+      // is geo-gated on the authenticated user's country of residence.
+      const res = await apiRequest(
+        "GET",
         `/api/markets/${marketId}/recent-trades?limit=${limit}`,
-        { credentials: "include" },
       );
-      if (!res.ok) throw new Error("Failed to fetch recent trades");
       return res.json();
     },
     enabled: !!marketId,

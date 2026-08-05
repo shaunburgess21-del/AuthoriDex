@@ -39,6 +39,7 @@ import {
   countAgentVotesThisWeek,
 } from "./voteWorker";
 import { isAgentCommentsPaused, isAgentsPaused } from "./runtime-state";
+import { applyTextModeration } from "../services/moderation/apply";
 import {
   fetchMatchupParentPool,
   fetchOpenMarketParentPool,
@@ -933,6 +934,39 @@ export async function runCommentSweep(): Promise<{
           .where(eq(profiles.id, agent.userId));
         return newComment.id;
       });
+
+      // Same allow-and-queue moderation the human comment route runs. Agent
+      // text is LLM-generated and almost always about a real, named public
+      // figure, so it needs at least the guardrails a human post gets: the
+      // prompt asks for no hit pieces, but a prompt is not an enforcement
+      // mechanism. High-confidence hits flip moderation_status -> hidden;
+      // borderline ones land in the admin moderation queue.
+      //
+      // Fail-open, matching the human path — a moderation outage must not
+      // stop the simulation, and the comment is already persisted.
+      try {
+        const applied = await applyTextModeration({
+          contentType: "comment",
+          contentId: newCommentId,
+          authorId: agent.userId,
+          text: body,
+          metadata: {
+            parentType: parent.parentType,
+            parentId: parent.parentId,
+            source: "agent",
+            agentId: agent.id,
+          },
+        });
+        if (applied.hidden) {
+          log(
+            `[CommentWorker] moderation auto-hid comment ${newCommentId} by ${agent.displayName} (${applied.result.matchedCategories.join(", ") || "no categories"})`,
+          );
+        }
+      } catch (modErr) {
+        log(
+          `[CommentWorker] moderation scan failed (fail-open) for ${newCommentId}: ${modErr instanceof Error ? modErr.message : modErr}`,
+        );
+      }
 
       if (shouldAwardXp) {
         if (isTopLevelProfilePost) {
