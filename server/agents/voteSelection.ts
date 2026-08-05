@@ -42,11 +42,19 @@ export function attachVoteCounts<T extends { id: string }>(
  * populated. Total vote volume is unchanged — this only redistributes where
  * votes land, so the pacing the simulation profiles set is untouched.
  *
- * Callers must pass a non-empty list.
+ * Throws on an empty list rather than returning `undefined` behind a `T`
+ * signature. Every caller already guards with `if (!eligible.length) continue`,
+ * so this only fires if a future one forgets — and an explicit error beats a
+ * `Cannot read properties of undefined` surfacing later inside a vote
+ * transaction. The vote sweep catches per agent, so a throw here costs that
+ * agent's turn, not the sweep.
  */
 export function pickLeastVotedFirst<T extends { voteCount: number }>(
   candidates: T[],
 ): T {
+  if (!candidates.length) {
+    throw new Error("pickLeastVotedFirst called with no candidates");
+  }
   const weights = candidates.map((c) => 1 / (Math.max(0, c.voteCount) + 1));
   const total = weights.reduce((sum, w) => sum + w, 0);
   let roll = Math.random() * total;
@@ -54,7 +62,8 @@ export function pickLeastVotedFirst<T extends { voteCount: number }>(
     roll -= weights[i];
     if (roll <= 0) return candidates[i];
   }
-  // Floating-point drift can leave `roll` a hair above zero after the loop.
+  // Every weight is > 0, so the loop always returns for a non-empty list. This
+  // is only reachable via floating-point drift leaving `roll` a hair above 0.
   return candidates[candidates.length - 1];
 }
 

@@ -63,6 +63,26 @@ describe("pickLeastVotedFirst", () => {
     assert.equal(pickLeastVotedFirst([{ voteCount: 42 }]).voteCount, 42);
   });
 
+  it("throws on an empty list instead of returning undefined", () => {
+    // The signature promises T; silently handing back undefined would surface
+    // as an unrelated crash further into the vote transaction.
+    assert.throws(() => pickLeastVotedFirst([]), /no candidates/);
+  });
+
+  it("treats a card with a negative count as empty, not as highest priority", () => {
+    // Guards against a bad count read inverting the weighting.
+    const pool = [{ voteCount: -3, tag: "bad" }, { voteCount: 0, tag: "fresh" }];
+    let bad = 0;
+    for (let i = 0; i < 2000; i++) {
+      if (pickLeastVotedFirst(pool).tag === "bad") bad += 1;
+    }
+    // Both clamp to weight 1, so this should be a coin flip.
+    assert.ok(
+      bad > 800 && bad < 1200,
+      `expected a ~50/50 split between clamped-equal cards, got ${bad}/2000`,
+    );
+  });
+
   it("always returns a member of the input", () => {
     const pool = [{ voteCount: 0 }, { voteCount: 5 }, { voteCount: 20 }];
     for (let i = 0; i < 200; i++) {
