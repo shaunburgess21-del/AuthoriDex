@@ -28,6 +28,7 @@ import { checkAndAwardVoteBadges } from "../services/badges";
 import { getSimulationProfile, type AgentSimulationProfile } from "./simulationProfile";
 import { recomputeCelebrityMetrics } from "../services/celebrity-metrics-recompute";
 import { isAgentsPaused } from "./runtime-state";
+import { attachVoteCounts, pickLeastVotedFirst } from "./voteSelection";
 
 const BOOT_DELAY_MS = 180_000; // 3 minutes after boot
 
@@ -187,7 +188,24 @@ async function getEligibleMatchups(userId: string) {
     );
 
   const votedSet = new Set(alreadyVoted.map((v) => v.targetId));
-  return active.filter((m) => !votedSet.has(m.id));
+  const eligible = active.filter((m) => !votedSet.has(m.id));
+  if (!eligible.length) return [];
+
+  const crowdCounts = await db
+    .select({ id: votes.targetId, c: count() })
+    .from(votes)
+    .where(
+      and(
+        eq(votes.voteType, "face_off"),
+        inArray(
+          votes.targetId,
+          eligible.map((m) => m.id),
+        ),
+      ),
+    )
+    .groupBy(votes.targetId);
+
+  return attachVoteCounts(eligible, crowdCounts);
 }
 
 async function getMatchupCrowdSplit(matchupId: string) {
@@ -256,13 +274,27 @@ async function getEligibleOpinionPolls(userId: string) {
     .from(opinionPollOptions)
     .where(inArray(opinionPollOptions.pollId, pollIds));
 
-  return active
+  const eligible = active
     .filter((poll) => !votedSet.has(poll.id))
     .map((poll) => ({
       ...poll,
       options: options.filter((option) => option.pollId === poll.id),
     }))
     .filter((poll) => poll.options.length > 0);
+  if (!eligible.length) return [];
+
+  const crowdCounts = await db
+    .select({ id: opinionPollVotes.pollId, c: count() })
+    .from(opinionPollVotes)
+    .where(
+      inArray(
+        opinionPollVotes.pollId,
+        eligible.map((poll) => poll.id),
+      ),
+    )
+    .groupBy(opinionPollVotes.pollId);
+
+  return attachVoteCounts(eligible, crowdCounts);
 }
 
 function decideOpinionPoll(
@@ -304,7 +336,21 @@ async function getEligibleSentimentPolls(userId: string) {
     .where(eq(trendingPollVotes.userId, userId));
 
   const votedSet = new Set(alreadyVoted.map((v) => v.pollId));
-  return active.filter((p) => !votedSet.has(p.id));
+  const eligible = active.filter((p) => !votedSet.has(p.id));
+  if (!eligible.length) return [];
+
+  const crowdCounts = await db
+    .select({ id: trendingPollVotes.pollId, c: count() })
+    .from(trendingPollVotes)
+    .where(
+      inArray(
+        trendingPollVotes.pollId,
+        eligible.map((p) => p.id),
+      ),
+    )
+    .groupBy(trendingPollVotes.pollId);
+
+  return attachVoteCounts(eligible, crowdCounts);
 }
 
 async function getPollCrowdSplit(pollId: string) {
@@ -865,7 +911,7 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
           const eligible = await getEligibleMatchups(agent.userId);
           if (!eligible.length) continue;
 
-          const matchup = eligible[Math.floor(Math.random() * eligible.length)];
+          const matchup = pickLeastVotedFirst(eligible);
           const crowd = await getMatchupCrowdSplit(matchup.id);
           const choice = decideMatchup(
             { contrarianism, specialties },
@@ -922,7 +968,7 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
           const eligible = await getEligibleSentimentPolls(agent.userId);
           if (!eligible.length) continue;
 
-          const poll = eligible[Math.floor(Math.random() * eligible.length)];
+          const poll = pickLeastVotedFirst(eligible);
           const crowd = await getPollCrowdSplit(poll.id);
           const choice = decideSentimentPoll({ contrarianism }, poll, crowd);
 
@@ -971,7 +1017,7 @@ export async function runVoteSweep(): Promise<AgentVoteResult[]> {
           const eligible = await getEligibleOpinionPolls(agent.userId);
           if (!eligible.length) continue;
 
-          const poll = eligible[Math.floor(Math.random() * eligible.length)];
+          const poll = pickLeastVotedFirst(eligible);
           const choice = decideOpinionPoll({ contrarianism }, poll.options);
 
           const inserted = await db.transaction(async (tx) => {
