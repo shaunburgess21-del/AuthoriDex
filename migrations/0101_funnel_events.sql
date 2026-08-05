@@ -17,3 +17,7 @@ CREATE INDEX IF NOT EXISTS "funnel_events_type_created_idx"
 
 CREATE INDEX IF NOT EXISTS "funnel_events_sid_created_idx"
   ON "funnel_events" ("fdx_sid", "created_at");
+
+-- Deny-by-default via Data API; service role (Express) bypasses RLS.
+-- (Also applied by 0102 for environments that already ran 0101 without this.)
+ALTER TABLE public.funnel_events ENABLE ROW LEVEL SECURITY;
