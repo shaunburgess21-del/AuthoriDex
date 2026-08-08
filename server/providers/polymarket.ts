@@ -13,8 +13,11 @@
 import {
   OTHER_OUTCOME_LABEL,
   OTHER_OUTCOME_RESIDUAL_THRESHOLD,
+  detectCumulativeLadder,
   isOtherStyleOutcomeLabel,
   isPlaceholderOutcomeLabel,
+  type CumulativeLadderDetection,
+  type LadderSignal,
 } from "@shared/lib/other-outcome";
 import { log } from "../log";
 
@@ -73,6 +76,25 @@ export function maybeAppendOtherOutcome(
 }
 
 /**
+ * Import gate for cumulative ladders. A ladder has no rung for "never / below
+ * the lowest threshold", and that is usually the likeliest result — so without
+ * a catch-all (Polymarket's own, or the residual appended by
+ * `maybeAppendOtherOutcome`) the imported market can end with NO winning
+ * outcome and can only be voided.
+ *
+ * `maybeAppendOtherOutcome` declines exactly the cases that matter here: an
+ * over-subscribed book (Σ > 1.05 — the ladder signature) or a residual too
+ * small to look meaningful. Exported for tests.
+ */
+export function isUnsettleableLadder(
+  outcomes: PolymarketOutcome[],
+  ladder: CumulativeLadderDetection | null,
+): boolean {
+  if (!ladder?.isLadder) return false;
+  return !outcomes.some((o) => isOtherStyleOutcomeLabel(o.label));
+}
+
+/**
  * Detect Polymarket "augmented negRisk": an open/evolving field that carries
  * an explicit "Other" and/or reserved placeholder slots ("Movie B", "Person
  * A"). Those markets are frequently dormant (`active=false`) on the source,
@@ -124,6 +146,12 @@ export interface PolymarketOutcome {
    * specially (propose Other when no named upstream winner).
    */
   isResidual?: boolean;
+  /**
+   * The sub-market's own `endDate` (ISO). On a cumulative ladder every rung
+   * carries a different one ("by Jul 17" vs "by Aug 15"), which is how ladder
+   * detection orders the rungs; a genuine exclusive field shares one date.
+   */
+  sourceEndDate?: string | null;
 }
 
 /** A normalized candidate event suitable for import as a VoxDex World Market. */
@@ -162,6 +190,17 @@ export interface PolymarketCandidate {
   hasExplicitOther?: boolean;
   /** Σ of named (non-Other) outcome prices at import, for Other advice. */
   namedPriceSum?: number;
+  /**
+   * True when the source is a cumulative "by date / reaches threshold" ladder
+   * of independent Yes/No markets rather than a mutually-exclusive field. Such
+   * candidates only survive normalization when a catch-all outcome exists, so
+   * this is persisted for traceability: their prices are cumulative, which
+   * skews the AMM seed toward the named rungs.
+   */
+  cumulativeLadder?: boolean;
+  ladderSignals?: LadderSignal[];
+  /** Polymarket negRisk — the source's own declaration of mutual exclusivity. */
+  mutuallyExclusiveSource?: boolean;
 }
 
 interface GammaMarket {
@@ -314,7 +353,7 @@ function normalizeEvent(
     // its "Yes" price is the outcome's probability.
     structure = "multi";
     outcomes = markets
-      .map((m) => {
+      .map((m): PolymarketOutcome | null => {
         const prices = parseJsonArray(m.outcomePrices).map((p) => toNumber(p));
         const label = (m.groupItemTitle || m.question || "").trim();
         if (!label) return null;
@@ -323,11 +362,25 @@ function normalizeEvent(
           price: Math.max(0, Math.min(1, prices[0] ?? 0)),
           sourceMarketId: String(m.id),
           sourceOutcomeIndex: 0,
-        } satisfies PolymarketOutcome;
+          sourceEndDate: parseGammaTimestamp(m.endDate),
+        };
       })
       .filter((o): o is PolymarketOutcome => o !== null)
       .sort((a, b) => b.price - a.price);
   }
+
+  // Classify BEFORE the Other append, so the signals describe the source book
+  // as Polymarket published it rather than our patched vector.
+  const mutuallyExclusiveSource = ev.negRisk === true || ev.enableNegRisk === true;
+  const ladder =
+    structure === "multi"
+      ? detectCumulativeLadder({
+          labels: outcomes.map((o) => o.label),
+          prices: outcomes.map((o) => o.price),
+          sourceEndDates: outcomes.map((o) => o.sourceEndDate ?? null),
+          mutuallyExclusiveSource,
+        })
+      : null;
 
   // Append a residual "Other" when the named set is non-exhaustive, so the
   // exhaustiveness guard below sees a complete probability vector and
@@ -337,6 +390,14 @@ function normalizeEvent(
   outcomes = maybeAppendOtherOutcome(outcomes, structure, opts.maxOutcomes, {
     force: aug.augmented,
   });
+
+  if (ladder && isUnsettleableLadder(outcomes, ladder)) {
+    log(
+      `[Polymarket] Skipping "${title}" — cumulative ladder with no catch-all ` +
+        `outcome (signals: ${ladder.signals.join(", ")})`,
+    );
+    return null;
+  }
 
   if (outcomes.length < opts.minOutcomes || outcomes.length > opts.maxOutcomes) {
     return null;
@@ -369,6 +430,9 @@ function normalizeEvent(
     placeholderCount: aug.placeholderCount,
     hasExplicitOther: aug.hasExplicitOther,
     namedPriceSum,
+    cumulativeLadder: ladder?.isLadder ?? false,
+    ladderSignals: ladder?.signals,
+    mutuallyExclusiveSource,
   };
 }
 

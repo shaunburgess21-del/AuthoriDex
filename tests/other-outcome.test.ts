@@ -11,10 +11,10 @@ const {
   isOtherStyleOutcomeLabel,
   isPlaceholderOutcomeLabel,
   computeOtherOutcomeAdvice,
+  detectCumulativeLadder,
 } = await import("../shared/lib/other-outcome");
-const { maybeAppendOtherOutcome, detectAugmentedNegRisk } = await import(
-  "../server/providers/polymarket"
-);
+const { maybeAppendOtherOutcome, detectAugmentedNegRisk, isUnsettleableLadder } =
+  await import("../server/providers/polymarket");
 const { readSourceFairByEntryId } = await import("../server/agents/sourceFair");
 
 test("isOtherStyleOutcomeLabel matches catch-all variants", () => {
@@ -238,6 +238,270 @@ test("computeOtherOutcomeAdvice stays quiet on closed / binary fields", () => {
     title: "Will the biggest thing happen?",
   });
   assert.equal(binary.recommended, false);
+});
+
+// ---------------------------------------------------------------------------
+// Cumulative ladder detection. Fixtures are the real Polymarket shapes that
+// produced unsettleable VoxDex markets (Iran withdrawal, Alito retirement,
+// Bieber listeners) plus the exclusive fields that must NOT be flagged.
+// ---------------------------------------------------------------------------
+
+test("detectCumulativeLadder flags a date ladder of independent binaries", () => {
+  const res = detectCumulativeLadder({
+    labels: ["August 15", "July 31", "July 24", "July 17"],
+    prices: [0.395, 0.305, 0.255, 0.17],
+    sourceEndDates: [
+      "2026-08-15T23:59:00.000Z",
+      "2026-07-31T23:59:00.000Z",
+      "2026-07-24T23:59:00.000Z",
+      "2026-07-17T23:59:00.000Z",
+    ],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(res.isLadder, true);
+  assert.ok(res.signals.includes("independent_binaries"));
+  assert.ok(res.signals.includes("distinct_end_dates"));
+  assert.ok(res.signals.includes("oversubscribed"));
+  // Ordered earliest rung first, regardless of the price-desc input order.
+  assert.deepEqual(res.order, [3, 2, 1, 0]);
+});
+
+test("detectCumulativeLadder flags a threshold ladder that is not over-subscribed", () => {
+  // Bieber: Σ = 0.994, so the residual guard saw nothing wrong. Only the
+  // monotone threshold rungs give it away.
+  const res = detectCumulativeLadder({
+    labels: ["↑ 130m", "↑ 140m", "↑ 150m", "↑ 160m"],
+    prices: [0.53, 0.33, 0.085, 0.049],
+    sourceEndDates: new Array(4).fill("2026-08-31T23:59:00.000Z"),
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(res.isLadder, true);
+  assert.ok(res.signals.includes("cumulative_labels"));
+  assert.ok(res.signals.includes("monotone_prices"));
+  assert.ok(!res.signals.includes("oversubscribed"));
+});
+
+test("detectCumulativeLadder flags a date ladder with mixed explicit years", () => {
+  // Alito: "June 30, 2027" sorts before "December 31" on label text alone, so
+  // no order is established — the verdict must still come from the structural
+  // and over-subscription signals.
+  const res = detectCumulativeLadder({
+    labels: ["June 30, 2027", "December 31", "September 30", "July 15"],
+    prices: [0.535, 0.315, 0.2, 0.0895],
+    sourceEndDates: [
+      "2027-06-30T23:59:00.000Z",
+      "2026-12-31T23:59:00.000Z",
+      "2026-12-31T23:59:00.000Z",
+      "2026-12-31T23:59:00.000Z",
+    ],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(res.isLadder, true);
+  assert.ok(res.signals.includes("oversubscribed"));
+  // Shared end dates cannot order the rungs.
+  assert.ok(!res.signals.includes("distinct_end_dates"));
+  assert.equal(res.order, null);
+});
+
+test("detectCumulativeLadder flags a two-rung ladder", () => {
+  const res = detectCumulativeLadder({
+    labels: ["September Meeting", "October Meeting"],
+    prices: [0.63, 0.51],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(res.isLadder, true);
+});
+
+test("detectCumulativeLadder ignores an over-subscribed exclusive field", () => {
+  // Emmy nominees at Σ = 1.125 from bid/ask mid — exclusive, needs no
+  // catch-all. Price sum alone must never drive the verdict.
+  const res = detectCumulativeLadder({
+    labels: ["Hacks", "Widow's Bay", "Shrinking", "The Bear", "Abbott Elementary"],
+    prices: [0.36, 0.3, 0.2, 0.15, 0.115],
+    sourceEndDates: new Array(5).fill("2026-09-14T20:00:00.000Z"),
+    mutuallyExclusiveSource: true,
+  });
+  assert.equal(res.isLadder, false);
+});
+
+test("detectCumulativeLadder ignores exhaustive band partitions", () => {
+  // Ranges and a "<15m" lower tail mean the set already covers every case.
+  const res = detectCumulativeLadder({
+    labels: ["<15m", "15-20m", "20-25m", "25-30m", "30m+"],
+    prices: [0.1, 0.35, 0.28, 0.17, 0.1],
+    mutuallyExclusiveSource: true,
+  });
+  assert.equal(res.isLadder, false);
+  assert.match(res.reason, /band partition/i);
+});
+
+test("detectCumulativeLadder ignores point-value outcomes without direction markers", () => {
+  const res = detectCumulativeLadder({
+    labels: ["No change", "25 bps increase", "25 bps decrease", "50+ bps decrease"],
+    prices: [0.6, 0.15, 0.2, 0.06],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(res.isLadder, false);
+});
+
+test("detectCumulativeLadder ignores name fields and existing catch-alls", () => {
+  const names = detectCumulativeLadder({
+    labels: ["Sofia", "Burgas", "Varna", "Plovdiv"],
+    prices: [0.6, 0.2, 0.12, 0.09],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(names.isLadder, false);
+
+  // The catch-all itself must not be read as a rung.
+  const laddered = detectCumulativeLadder({
+    labels: ["August 31", "October 31", "December 31", "Other"],
+    prices: [0.2, 0.15, 0.1, 0.55],
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(laddered.isLadder, true);
+  assert.deepEqual(laddered.order, [0, 1, 2]);
+});
+
+test("computeOtherOutcomeAdvice recommends Other for a cumulative ladder", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["August 15", "July 31", "July 24", "July 17"],
+    namedPriceSum: 1.125,
+    prices: [0.395, 0.305, 0.255, 0.17],
+    sourceEndDates: [
+      "2026-08-15T23:59:00.000Z",
+      "2026-07-31T23:59:00.000Z",
+      "2026-07-24T23:59:00.000Z",
+      "2026-07-17T23:59:00.000Z",
+    ],
+    mutuallyExclusiveSource: false,
+    title: "When will Iran announce it is quitting the current U.S. talks?",
+  });
+  assert.equal(advice.recommended, true);
+  assert.equal(advice.signal, "cumulative_ladder");
+  // The clamped residual is still 0 — but it must no longer read as complete.
+  assert.equal(advice.residual, 0);
+  assert.equal(advice.oversubscribed, true);
+  assert.equal(advice.namedPriceSum, 1.125);
+});
+
+test("computeOtherOutcomeAdvice never calls an over-subscribed book complete", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["Alpha", "Beta", "Gamma", "Delta"],
+    namedPriceSum: 1.09,
+    mutuallyExclusiveSource: false,
+    title: "Some field",
+  });
+  assert.equal(advice.recommended, false);
+  assert.equal(advice.oversubscribed, true);
+  assert.doesNotMatch(advice.reason, /look complete/i);
+  assert.match(advice.reason, /not mutually exclusive/i);
+});
+
+test("computeOtherOutcomeAdvice advises on a hand-built date ladder with no prices", () => {
+  const advice = computeOtherOutcomeAdvice({
+    structure: "multi",
+    entryLabels: ["July 15", "September 30", "December 31"],
+    title: "When will the thing happen?",
+  });
+  assert.equal(advice.recommended, true);
+  assert.equal(advice.signal, "cumulative_ladder");
+});
+
+test("import gate skips the ladders that produced unsettleable markets", () => {
+  process.env.SCOUT_OTHER_OUTCOME_ENABLED = "true";
+
+  // Price vectors are the real `metadata.source.pricesAtImport` from each
+  // market, i.e. what the scout saw on the day it created them.
+  const fixtures: Array<{
+    name: string;
+    labels: string[];
+    prices: number[];
+    endDates?: Array<string | null>;
+    negRisk: boolean;
+    expectSkip: boolean;
+  }> = [
+    {
+      name: "Iran quitting talks",
+      labels: ["August 15", "July 31", "July 24", "July 17"],
+      prices: [0.395, 0.305, 0.255, 0.17],
+      endDates: [
+        "2026-08-15T23:59:00.000Z",
+        "2026-07-31T23:59:00.000Z",
+        "2026-07-24T23:59:00.000Z",
+        "2026-07-17T23:59:00.000Z",
+      ],
+      negRisk: false,
+      expectSkip: true,
+    },
+    {
+      name: "Alito retirement",
+      labels: ["June 30, 2027", "December 31", "September 30", "July 15"],
+      prices: [0.535, 0.315, 0.2, 0.0895],
+      negRisk: false,
+      expectSkip: true,
+    },
+    {
+      // Σ = 0.994 — the residual guard saw nothing wrong here.
+      name: "Bieber listeners",
+      labels: ["↑ 130m", "↑ 140m", "↑ 150m", "↑ 160m"],
+      prices: [0.53, 0.33, 0.085, 0.049],
+      negRisk: false,
+      expectSkip: true,
+    },
+    {
+      name: "Rotten Tomatoes score",
+      labels: ["50+", "55+", "60+", "70+", "80+", "90+"],
+      prices: [0.34, 0.26, 0.2, 0.14, 0.09, 0.045],
+      negRisk: false,
+      expectSkip: true,
+    },
+    {
+      // Exclusive nominee field at the same Σ = 1.125 as the Iran ladder.
+      name: "Emmy Outstanding Comedy Series",
+      labels: ["Hacks", "Widow's Bay", "Shrinking", "The Bear", "Abbott Elementary"],
+      prices: [0.36, 0.3, 0.2, 0.15, 0.115],
+      negRisk: true,
+      expectSkip: false,
+    },
+    {
+      // Ladder whose source book left room for a residual catch-all.
+      name: "Hormuz fees",
+      labels: ["August 31", "October 31", "December 31", "September 30"],
+      prices: [0.2, 0.15, 0.1, 0.12],
+      negRisk: false,
+      expectSkip: false,
+    },
+  ];
+
+  for (const f of fixtures) {
+    const named = f.labels
+      .map((label, i) => ({
+        label,
+        price: f.prices[i],
+        sourceMarketId: `m${i}`,
+        sourceOutcomeIndex: 0,
+        sourceEndDate: f.endDates?.[i] ?? null,
+      }))
+      .sort((a, b) => b.price - a.price);
+
+    const ladder = detectCumulativeLadder({
+      labels: named.map((o) => o.label),
+      prices: named.map((o) => o.price),
+      sourceEndDates: named.map((o) => o.sourceEndDate),
+      mutuallyExclusiveSource: f.negRisk,
+    });
+    const withOther = maybeAppendOtherOutcome(named, "multi", 12);
+
+    assert.equal(
+      isUnsettleableLadder(withOther, ladder),
+      f.expectSkip,
+      `${f.name}: expected skip=${f.expectSkip}`,
+    );
+  }
+
+  delete process.env.SCOUT_OTHER_OUTCOME_ENABLED;
 });
 
 test("readSourceFairByEntryId anchors markets that include residual Other", () => {

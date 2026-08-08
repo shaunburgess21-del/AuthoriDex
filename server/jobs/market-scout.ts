@@ -1109,6 +1109,10 @@ async function insertScoutedDraft(
       pricesAtImport: sourceOutcomes.map((o) => Number(o.price.toFixed(4))),
       volume24hrAtImport: Math.round(candidate.volume24hr),
       fetchedAt: new Date().toISOString(),
+      // Cumulative "by date / reaches threshold" source. Only importable
+      // because a catch-all is present; flagged so ops can tell that the
+      // rung prices are cumulative rather than exclusive.
+      ...(candidate.cumulativeLadder ? { cumulativeLadder: true } : {}),
     },
     scoutedByMarketScout: true,
     seriesKey: normalizeSeriesKey(selection.seriesKey, selection.title),
@@ -1143,6 +1147,9 @@ async function insertScoutedDraft(
       hasExplicitOther: candidate.hasExplicitOther,
       placeholderCount: candidate.placeholderCount,
       title: selection.title,
+      prices: sourceOutcomes.map((o) => o.price),
+      sourceEndDates: sourceOutcomes.map((o) => o.sourceEndDate ?? null),
+      mutuallyExclusiveSource: candidate.mutuallyExclusiveSource,
     });
   }
   // Traceability: canonical names of everyone the scout auto-linked
