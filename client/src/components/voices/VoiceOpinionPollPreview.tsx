@@ -10,7 +10,7 @@ export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProp
   const remainingCount = Math.max(0, preview.totalOptions - preview.topOptions.length);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-end pt-1">
+    <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden pt-1">
       <div className="space-y-1.5">
         {preview.topOptions.map((option, idx) => {
           const isLeading = idx === 0 && option.percent > 0;

@@ -58,10 +58,10 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
         className="group/preview relative mt-2.5 block overflow-hidden rounded-lg border border-white/[0.08] transition-colors hover:border-amber-500/40"
         data-testid={`voice-card-entity-${itemId}`}
       >
-        <div className="flex h-36">
+        <div className="flex h-32 sm:h-44">
           <div className="relative w-1/2 overflow-hidden">
             <CardImage src={optionAImage ?? ""} alt={optionAText} width={320} />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-5">
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-center">
               <span className="block truncate text-xs font-semibold text-white">
                 {optionAText}
               </span>
@@ -69,7 +69,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           </div>
           <div className="relative w-1/2 overflow-hidden border-l border-white/[0.08]">
             <CardImage src={optionBImage ?? ""} alt={optionBText} width={320} />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-5 text-right">
+            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-center">
               <span className="block truncate text-xs font-semibold text-white">
                 {optionBText}
               </span>
@@ -104,25 +104,30 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
       <Link
         href={entity.href}
         onClick={(e) => e.stopPropagation()}
-        className="group/preview mt-2.5 flex h-32 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.04] transition-colors hover:border-amber-500/40 sm:h-36"
+        className="group/preview mt-2.5 flex h-32 overflow-hidden rounded-lg border border-white/[0.08] bg-muted/60 transition-colors hover:border-amber-500/40 dark:bg-[#090B11] sm:h-44"
         data-testid={`voice-card-entity-${itemId}`}
       >
-        <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg sm:h-36 sm:w-36">
-          <CardImage
-            src={entity.imageUrl}
-            alt={entity.title}
-            width={288}
-            fallbackSrc={entity.fallbackImageUrl}
-          />
+        {/* Left column: image-width section label + square image below */}
+        <div className="flex w-24 shrink-0 flex-col sm:w-36">
+          {entity.subtitle && (
+            <div className="flex h-8 shrink-0 items-center justify-center border-b border-r border-white/[0.08] bg-black/40 px-1">
+              <span className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
+                {entity.subtitle}
+              </span>
+            </div>
+          )}
+          <div className="relative h-24 w-full overflow-hidden sm:h-36">
+            <CardImage
+              src={entity.imageUrl}
+              alt={entity.title}
+              width={288}
+              fallbackSrc={entity.fallbackImageUrl}
+            />
+          </div>
         </div>
         {isProfile ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            {entity.subtitle && (
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {entity.subtitle}
-              </span>
-            )}
-            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <span className="line-clamp-1 shrink text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
                 {entity.title}
               </span>
@@ -151,12 +156,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           </div>
         ) : isSentimentPoll ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            {entity.subtitle && (
-              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {entity.subtitle}
-              </span>
-            )}
-            <span className="mt-0.5 shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
               {entity.title}
             </span>
             {entity.sentimentResults ? (
@@ -167,12 +167,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           </div>
         ) : isOpinionPoll ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            {entity.subtitle && (
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {entity.subtitle}
-              </span>
-            )}
-            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
               {entity.title}
             </span>
             {entity.opinionPreview ? (
@@ -183,12 +178,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           </div>
         ) : isOpenMarket ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            {entity.subtitle && (
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {entity.subtitle}
-              </span>
-            )}
-            <span className="mt-0.5 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
               {entity.title}
             </span>
             {entity.worldMarketPreview ? (
@@ -199,11 +189,6 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-2.5 py-2 sm:px-3">
-            {entity.subtitle && (
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {entity.subtitle}
-              </span>
-            )}
             <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
               {entity.title}
             </span>
