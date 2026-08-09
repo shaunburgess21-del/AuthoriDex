@@ -41,7 +41,7 @@ import {
   type ScoutFinding,
   type ScoutStage,
 } from "./resolution-scout";
-import { draftReviewDeadline } from "./market-scout";
+import { draftReviewDeadlineIfActive } from "./market-scout";
 
 const MARKET_OPS_DIGEST_LOCK_KEY = 5_210;
 
@@ -290,9 +290,11 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     const settled = sourceAlreadyResolved(r.metadata);
     // A draft dies at whichever comes first: its own resolution date, or the
     // review window closing. The review deadline is usually far sooner, and
-    // it's the one the operator can still act on.
+    // it's the one the operator can still act on — but only counts when the
+    // policy is actually on, otherwise nothing expires on that clock.
     const endsMs = new Date(r.endAt).getTime();
-    const reviewMs = draftReviewDeadline(r.createdAt).getTime();
+    const reviewAt = draftReviewDeadlineIfActive(r.createdAt);
+    const reviewMs = reviewAt ? reviewAt.getTime() : Number.POSITIVE_INFINITY;
     const deadlineMs = Math.min(endsMs, reviewMs);
     return {
       row: r,

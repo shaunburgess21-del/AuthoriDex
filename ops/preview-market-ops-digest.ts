@@ -17,6 +17,12 @@ if (existsSync(envPath)) {
 
 // Must be set before the email modules read it.
 process.env.EMAIL_DRY_RUN = "true";
+// The dispatcher drops the alert before rendering when no recipient is
+// configured, which would make this preview show counts but no copy. A
+// placeholder keeps rendering on the path; EMAIL_DRY_RUN stops any send.
+if (!process.env.OPS_ALERT_EMAILS?.trim()) {
+  process.env.OPS_ALERT_EMAILS = "digest-preview@example.com";
+}
 // The digest runs the resolution scout inline; keep it off so a preview
 // never spends LLM budget.
 process.env.RESOLUTION_SCOUT_LLM_ENABLED = "false";

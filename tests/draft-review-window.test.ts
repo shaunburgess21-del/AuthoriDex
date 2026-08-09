@@ -7,6 +7,7 @@ if (!process.env.DATABASE_URL) {
 
 const {
   draftReviewDeadline,
+  draftReviewDeadlineIfActive,
   sourceEventReofferable,
   DRAFT_UNREVIEWED_VOID_REASON,
   DRAFT_SOURCE_RESOLVED_VOID_REASON,
@@ -40,6 +41,33 @@ test("drafts predating the policy get a full window from its start date", () => 
     draftReviewDeadline(later, policyStart).toISOString(),
     "2026-08-18T09:00:00.000Z",
   );
+});
+
+test("no deadline is reported while the policy is off", () => {
+  // Display surfaces must not infer a countdown from createdAt. With the
+  // policy off, createdAt + window is already in the past for most of the
+  // queue, which made the digest drop every older draft out of its "ready to
+  // publish" list and the admin list claim they were clearing out.
+  const original = process.env.SCOUT_DRAFT_REVIEW_FROM;
+  delete process.env.SCOUT_DRAFT_REVIEW_FROM;
+  try {
+    assert.equal(draftReviewDeadlineIfActive("2026-07-01T00:00:00.000Z"), null);
+  } finally {
+    if (original === undefined) delete process.env.SCOUT_DRAFT_REVIEW_FROM;
+    else process.env.SCOUT_DRAFT_REVIEW_FROM = original;
+  }
+});
+
+test("the deadline appears once the policy start date is set", () => {
+  const original = process.env.SCOUT_DRAFT_REVIEW_FROM;
+  process.env.SCOUT_DRAFT_REVIEW_FROM = "2026-08-09T00:00:00.000Z";
+  try {
+    const deadline = draftReviewDeadlineIfActive("2026-07-01T00:00:00.000Z");
+    assert.equal(deadline?.toISOString(), "2026-08-12T00:00:00.000Z");
+  } finally {
+    if (original === undefined) delete process.env.SCOUT_DRAFT_REVIEW_FROM;
+    else process.env.SCOUT_DRAFT_REVIEW_FROM = original;
+  }
 });
 
 test("only an unreviewed expiry becomes re-offerable, and only after the cooldown", () => {

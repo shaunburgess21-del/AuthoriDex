@@ -81,11 +81,6 @@ type RwSortBy = "manual" | "created" | "endAt" | "fit";
 type OpsPreset = "needs_resolution" | "closing_soon" | null;
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
-/**
- * Mirrors SCOUT_DRAFT_REVIEW_HOURS on the server. Display only — the server
- * owns the actual expiry, this just shows the operator the same clock.
- */
-const DRAFT_REVIEW_WINDOW_HOURS = 72;
 
 /** OPEN live/inactive World Market the AI scout has marked as resolvable now. */
 function isAiResolveNow(market: PredictionMarket): boolean {
@@ -893,7 +888,7 @@ export function WorldMarketsSection({
                         upstreamResolvedAt?: string;
                       };
                       fitScore?: number;
-                      draftHealth?: { flags?: string[] };
+                      draftHealth?: { flags?: string[]; reviewExpiresAt?: string | null };
                     }
                   | null
                   | undefined;
@@ -905,16 +900,21 @@ export function WorldMarketsSection({
                   ? meta!.draftHealth!.flags!
                   : [];
                 // Unreviewed drafts clear themselves out after the review
-                // window, so show the clock the operator is actually racing.
-                const reviewHoursLeft =
-                  market.visibility === "draft" && market.createdAt
-                    ? Math.ceil(
-                        (new Date(market.createdAt).getTime() +
-                          DRAFT_REVIEW_WINDOW_HOURS * 3600_000 -
-                          Date.now()) /
-                          3600_000,
-                      )
+                // window. The server stamps the deadline only while the
+                // policy is switched on, so an absent value means nothing
+                // expires — never infer a countdown from createdAt here.
+                // Still gated on draft: the stamp is written while a market is
+                // a draft and isn't cleared on publish, so a live row would
+                // otherwise keep claiming it was about to clear itself out.
+                const reviewExpiresAt =
+                  market.visibility === "draft"
+                    ? (meta?.draftHealth?.reviewExpiresAt ?? null)
                     : null;
+                const reviewHoursLeft = reviewExpiresAt
+                  ? Math.ceil(
+                      (new Date(reviewExpiresAt).getTime() - Date.now()) / 3600_000,
+                    )
+                  : null;
                 const staleLabel = healthFlags.includes("book_oversubscribed")
                   ? "Odds broken"
                   : healthFlags.includes("book_short")

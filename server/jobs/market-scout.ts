@@ -1339,9 +1339,9 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
     else importedEventIds.add(id);
   }
   // A source event can have several rows (an old expiry plus a live market).
-  // Any row that still blocks wins — only offer again when nothing does.
+  // Any row that still blocks wins, so a re-offer only survives when no other
+  // row for that event blocks it.
   for (const id of importedEventIds) reofferable.delete(id);
-  for (const id of reofferable) importedEventIds.delete(id);
   const existingSlugs = new Set(communityRows.map((r) => r.slug));
   // Unresolved = OPEN (live or draft) or CLOSED_PENDING; archived never
   // occupies a series slot. RESOLVED/VOID free the slot for the next rung.
@@ -1624,6 +1624,20 @@ export function draftReviewDeadline(
 }
 
 /**
+ * The deadline only when the policy is actually switched on, else null.
+ *
+ * Callers that *display* a countdown must use this rather than
+ * `draftReviewDeadline`, which always returns a date. With the policy off,
+ * that date is createdAt + window — already in the past for most of the
+ * queue — so surfaces would claim drafts were about to clear when nothing
+ * expires at all.
+ */
+export function draftReviewDeadlineIfActive(createdAt: Date | string): Date | null {
+  const policyStart = draftReviewPolicyStart();
+  return policyStart ? draftReviewDeadline(createdAt, policyStart) : null;
+}
+
+/**
  * How long an expired-unreviewed source event stays blocked before the scout
  * may offer it again. Long enough that the same card doesn't reappear the
  * next morning, short enough that a busy week doesn't permanently shrink the
@@ -1771,6 +1785,12 @@ export interface DraftHealth {
   flags: DraftHealthFlag[];
   /** Σ of open source legs' Yes prices — 1.0 on a healthy exclusive book. */
   bookSum: number | null;
+  /**
+   * When this draft clears itself out, or null when the review policy is off.
+   * Written here so the admin list can show the countdown without duplicating
+   * the window length and policy-start rules on the client.
+   */
+  reviewExpiresAt?: string | null;
 }
 
 /**
@@ -1834,7 +1854,12 @@ export function computeDraftHealth(args: {
 
 /** Persist draft health, skipping the write when nothing material changed. */
 async function recordDraftHealth(
-  row: { id: string; endAt: Date | string | null; metadata: unknown },
+  row: {
+    id: string;
+    endAt: Date | string | null;
+    createdAt?: Date | string | null;
+    metadata: unknown;
+  },
   resolutions: Map<string, { closed: boolean; prices: number[] }>,
   sourceEndDate: string | null,
   hasCatchAll: boolean,
@@ -1859,13 +1884,18 @@ async function recordDraftHealth(
     openLegPrices,
     hasCatchAll,
   });
+  health.reviewExpiresAt = row.createdAt
+    ? (draftReviewDeadlineIfActive(row.createdAt)?.toISOString() ?? null)
+    : null;
+
   const prior = meta.draftHealth as DraftHealth | undefined;
-  const sameFlags =
+  const unchanged =
     prior &&
     Array.isArray(prior.flags) &&
     prior.flags.length === health.flags.length &&
-    prior.flags.every((f, i) => f === health.flags[i]);
-  if (sameFlags) return;
+    prior.flags.every((f, i) => f === health.flags[i]) &&
+    (prior.reviewExpiresAt ?? null) === health.reviewExpiresAt;
+  if (unchanged) return;
 
   try {
     await db
@@ -2032,6 +2062,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       openMarketType: predictionMarkets.openMarketType,
       closeAt: predictionMarkets.closeAt,
       endAt: predictionMarkets.endAt,
+      createdAt: predictionMarkets.createdAt,
       metadata: predictionMarkets.metadata,
     })
     .from(predictionMarkets)
