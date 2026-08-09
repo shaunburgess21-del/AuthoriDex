@@ -39,6 +39,8 @@ import {
   cardRelatedPeople,
   contentCategories,
   inductionCandidates,
+  marketAmmState,
+  marketBets,
   marketEntries,
   predictionMarkets,
   trackedPeople,
@@ -1515,6 +1517,8 @@ export interface SourceWatchResult {
   timesResynced: number;
   /** Markets whose closeAt was frozen because the outcome became public. */
   autoLocked: number;
+  /** Drafts auto-retired because their source settled before publish. */
+  draftsRetired: number;
   errors: number;
   findings: Array<{
     marketId: string;
@@ -1539,6 +1543,56 @@ function readAutoLockedAt(metadata: unknown): string | null {
   return typeof v === "string" && v.trim() ? v : null;
 }
 
+/** Void reason stamped on drafts retired because the source settled first. */
+export const DRAFT_SOURCE_RESOLVED_VOID_REASON = "Source resolved before publish";
+
+/**
+ * Retire a draft whose upstream source has already settled.
+ *
+ * Only touches drafts with zero financial state (no AMM seed, no bets) — the
+ * same safety check the resolver uses before archiving an expired draft.
+ * Anything already seeded is left for a human, because unwinding a seeded
+ * book is a settlement decision, not a cleanup.
+ *
+ * Returns true when the draft was retired.
+ */
+async function retireResolvedDraft(marketId: string, title: string): Promise<boolean> {
+  const [ammRow] = await db
+    .select({ marketId: marketAmmState.marketId })
+    .from(marketAmmState)
+    .where(eq(marketAmmState.marketId, marketId))
+    .limit(1);
+  if (ammRow) return false;
+
+  const [betRow] = await db
+    .select({ id: marketBets.id })
+    .from(marketBets)
+    .where(eq(marketBets.marketId, marketId))
+    .limit(1);
+  if (betRow) return false;
+
+  await db
+    .update(predictionMarkets)
+    .set({
+      status: "VOID",
+      visibility: "archived",
+      resolveMethod: "auto",
+      voidReason: DRAFT_SOURCE_RESOLVED_VOID_REASON,
+      resolutionNotes: JSON.stringify({
+        type: "community",
+        pendingReason: "draft_source_resolved_auto_archived",
+      }),
+      updatedAt: new Date(),
+    })
+    .where(eq(predictionMarkets.id, marketId));
+
+  log(
+    `[MarketScout] Retired draft "${title}" — source already resolved upstream ` +
+      `(market=${marketId.slice(0, 8)})`,
+  );
+  return true;
+}
+
 /**
  * True when a market carries an upstream-resolved stamp but still owes the
  * operator a settle recommendation.
@@ -1561,6 +1615,25 @@ export function awaitingPostPublishAssessment(row: {
 }
 
 /**
+ * True when an already-stamped market still owes the watcher an action, so
+ * `upstreamResolvedAt` must not short-circuit the poll loop.
+ *
+ * Two cases, and both are states a market can only reach after the stamp:
+ *  - it is still a draft, so it can be retired outright; and
+ *  - it was published since, so it owes a settle recommendation.
+ *
+ * Without this, a draft stamped before the retirement logic existed would be
+ * skipped forever and sit in the review queue indefinitely.
+ */
+export function stampedMarketNeedsRecheck(row: {
+  visibility?: string | null;
+  metadata?: unknown;
+}): boolean {
+  if (row.visibility === "draft") return true;
+  return awaitingPostPublishAssessment(row);
+}
+
+/**
  * Poll upstream resolutions for scouted markets that are still OPEN or
  * CLOSED_PENDING. Advisory-locked; safe to trigger concurrently with the
  * daily scheduler.
@@ -1573,6 +1646,7 @@ export async function runSourceResolutionWatch(): Promise<SourceWatchResult> {
     livePricesRefreshed: 0,
     timesResynced: 0,
     autoLocked: 0,
+    draftsRetired: 0,
     errors: 0,
     findings: [],
   };
@@ -1598,6 +1672,7 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     livePricesRefreshed: 0,
     timesResynced: 0,
     autoLocked: 0,
+    draftsRetired: 0,
     errors: 0,
     findings: [],
   };
@@ -1631,9 +1706,10 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     // upstreamResolvedAt normally means "settled and recorded, stop polling".
     // But a market that resolved upstream while it was still a draft got the
     // stamp WITHOUT a settle recommendation, because drafts are not
-    // settlement-eligible. Publishing it later must not inherit that silence:
-    // keep checking until an eligible market actually has an assessment.
-    if (source.upstreamResolvedAt && !awaitingPostPublishAssessment(row)) continue;
+    // settlement-eligible. Such a draft still needs retiring, and if it is
+    // published later it needs the recommendation it never got — so the stamp
+    // alone must not end the watch.
+    if (source.upstreamResolvedAt && !stampedMarketNeedsRecheck(row)) continue;
     const mapping = Array.isArray(source.outcomeMapping) ? source.outcomeMapping : [];
     if (mapping.length === 0) continue;
 
@@ -2025,6 +2101,21 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       winners.length === 1 && !unmappedWinner ? true : allClosed;
     if (wouldRecommendSettlement && !settlementEligible) {
       const assessedAt = new Date().toISOString();
+
+      // A draft whose source has already settled can never be published: its
+      // winner is public knowledge, and publishing it would seed an AMM off
+      // the resolved price vector. Retire it here so it leaves the review
+      // queue on its own, mirroring the resolver's expired-draft path (VOID +
+      // archived, row retained so metadata.source.externalId keeps blocking a
+      // re-import of the same event).
+      if (row.visibility === "draft") {
+        const retired = await retireResolvedDraft(row.id, row.title ?? "");
+        if (retired) {
+          result.draftsRetired += 1;
+          continue;
+        }
+      }
+
       try {
         const payload = {
           source: { ...source, upstreamResolvedAt: assessedAt },
@@ -2662,7 +2753,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     log(
       `[MarketScout] Source watch — checked=${result.checked} resolvedUpstream=${result.resolvedUpstream} ` +
         `unmappable=${result.unmappable} livePricesRefreshed=${result.livePricesRefreshed} ` +
-        `timesResynced=${result.timesResynced} autoLocked=${result.autoLocked} errors=${result.errors}`,
+        `timesResynced=${result.timesResynced} autoLocked=${result.autoLocked} ` +
+        `draftsRetired=${result.draftsRetired} errors=${result.errors}`,
     );
   }
 

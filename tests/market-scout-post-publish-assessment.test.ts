@@ -7,7 +7,9 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgres://localhost:5432/test";
 }
 
-const { awaitingPostPublishAssessment } = await import("../server/jobs/market-scout");
+const { awaitingPostPublishAssessment, stampedMarketNeedsRecheck } = await import(
+  "../server/jobs/market-scout"
+);
 
 const assessment = { stage: "met", recommendedAction: "resolve_now" };
 
@@ -51,6 +53,27 @@ test("the watch closes again once an assessment exists", () => {
     }),
     false,
   );
+});
+
+test("a stamped draft stays in the watch so it can be retired", () => {
+  // Six drafts were stamped before retirement existed. If the stamp alone
+  // ended the watch they would sit in the review queue forever.
+  assert.equal(
+    stampedMarketNeedsRecheck({
+      visibility: "draft",
+      metadata: { source: { upstreamResolvedAt: "2026-07-27T15:23:52.790Z" } },
+    }),
+    true,
+  );
+  // Published-and-assessed is genuinely finished; archived is already retired.
+  assert.equal(
+    stampedMarketNeedsRecheck({
+      visibility: "live",
+      metadata: { scoutAssessment: assessment },
+    }),
+    false,
+  );
+  assert.equal(stampedMarketNeedsRecheck({ visibility: "archived", metadata: {} }), false);
 });
 
 test("missing or malformed metadata does not crash the guard", () => {
