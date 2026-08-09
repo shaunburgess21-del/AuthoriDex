@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { useInsightsOverview } from "@/lib/insights-hooks";
 import { VoxDexPulse } from "@/components/VoxDexPulse";
-import { TrendingNowFeed, type HotMover } from "@/components/TrendingNowFeed";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { PersonInsightModal, type InsightPerson } from "@/components/PersonInsightModal";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -510,23 +509,6 @@ export function OverviewTab() {
   const [moversWindow, setMoversWindow] = useState<InsightsWindow>("24h");
   const [selectedMover, setSelectedMover] = useState<InsightPerson | null>(null);
 
-  const [trendingNowCollapsed, setTrendingNowCollapsed] = useState(() => {
-    try {
-      const saved = localStorage.getItem("trending_now_collapsed");
-      return saved !== null ? saved === "true" : true;
-    } catch {
-      return true;
-    }
-  });
-
-  const handleTrendingNowToggle = () => {
-    const next = !trendingNowCollapsed;
-    setTrendingNowCollapsed(next);
-    try {
-      localStorage.setItem("trending_now_collapsed", String(next));
-    } catch {}
-  };
-
   const [pulseCollapsed, setPulseCollapsed] = useState(() => {
     try {
       const saved = localStorage.getItem("voxdex_pulse_collapsed");
@@ -544,27 +526,9 @@ export function OverviewTab() {
     } catch {}
   };
 
-  const openInsightFromHotMover = (person: HotMover) => {
-    setSelectedMover({
-      id: person.id,
-      name: person.name,
-      avatar: person.avatar,
-      category: person.category,
-      rank: person.rank ?? null,
-      change24h: person.change24h ?? null,
-      rankChange: person.rankChange ?? null,
-      hotMover: true,
-    });
-  };
-
   return (
     <div className="space-y-6 md:space-y-8">
       <VoxDexPulse collapsed={pulseCollapsed} onToggle={handlePulseToggle} />
-      <TrendingNowFeed
-        onOpenInsight={openInsightFromHotMover}
-        collapsed={trendingNowCollapsed}
-        onToggle={handleTrendingNowToggle}
-      />
 
       {isLoading ? (
         <div className="space-y-4 md:space-y-6">
