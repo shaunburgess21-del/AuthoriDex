@@ -1584,6 +1584,14 @@ export interface DraftHealth {
 export function computeDraftHealth(args: {
   endAt: Date | string | null | undefined;
   sourceEndDate: string | null | undefined;
+  /**
+   * The source endDate we last synced. Drift must be measured against this,
+   * not against endAt: data-lags markets deliberately push endAt out to the
+   * resolution backstop, so comparing endAt to the source would report drift
+   * on every one of them forever. Same reasoning as the resync ownership
+   * check in shouldApplyResync.
+   */
+  nominalSourceEndAt?: string | null;
   /** Yes price per open source leg; closed legs excluded by the caller. */
   openLegPrices: number[];
   /**
@@ -1606,7 +1614,11 @@ export function computeDraftHealth(args: {
       flags.push("ends_soon");
     }
     const srcMs = args.sourceEndDate ? Date.parse(args.sourceEndDate) : NaN;
-    if (Number.isFinite(srcMs) && Math.abs(srcMs - endMs) > DRAFT_DRIFT_MS) {
+    const ownedMs = args.nominalSourceEndAt
+      ? Date.parse(args.nominalSourceEndAt)
+      : endMs;
+    const baselineMs = Number.isFinite(ownedMs) ? ownedMs : endMs;
+    if (Number.isFinite(srcMs) && Math.abs(srcMs - baselineMs) > DRAFT_DRIFT_MS) {
       flags.push("schedule_drift");
     }
   }
@@ -1638,17 +1650,19 @@ async function recordDraftHealth(
     if (typeof yes === "number" && Number.isFinite(yes)) openLegPrices.push(yes);
   }
 
-  const health = computeDraftHealth({
-    endAt: row.endAt,
-    sourceEndDate,
-    openLegPrices,
-    hasCatchAll,
-  });
-
   const meta =
     row.metadata && typeof row.metadata === "object"
       ? (row.metadata as Record<string, unknown>)
       : {};
+
+  const health = computeDraftHealth({
+    endAt: row.endAt,
+    sourceEndDate,
+    nominalSourceEndAt:
+      typeof meta.nominalSourceEndAt === "string" ? meta.nominalSourceEndAt : null,
+    openLegPrices,
+    hasCatchAll,
+  });
   const prior = meta.draftHealth as DraftHealth | undefined;
   const sameFlags =
     prior &&

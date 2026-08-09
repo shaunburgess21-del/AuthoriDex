@@ -58,6 +58,28 @@ test("schedule drift is measured against the live source date", () => {
     now: NOW,
   });
   assert.ok(!jitter.flags.includes("schedule_drift"));
+
+  // A data-lags market pushes endAt out to the resolution backstop on
+  // purpose. Measuring drift against endAt would flag every one of them
+  // forever, so the comparison uses the synced source date instead.
+  const dataLags = computeDraftHealth({
+    endAt: inHours(45 * 24),
+    nominalSourceEndAt: inHours(20 * 24),
+    sourceEndDate: inHours(20 * 24),
+    openLegPrices: [],
+    now: NOW,
+  });
+  assert.deepEqual(dataLags.flags, []);
+
+  // Real drift is still caught once the source moves off that baseline.
+  const realDrift = computeDraftHealth({
+    endAt: inHours(45 * 24),
+    nominalSourceEndAt: inHours(20 * 24),
+    sourceEndDate: inHours(30 * 24),
+    openLegPrices: [],
+    now: NOW,
+  });
+  assert.ok(realDrift.flags.includes("schedule_drift"));
 });
 
 test("book flags catch the illiquid mid-price blowout", () => {
