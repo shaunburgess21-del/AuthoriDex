@@ -18,6 +18,7 @@ import {
   isPlaceholderOutcomeLabel,
   type CumulativeLadderDetection,
 } from "@shared/lib/other-outcome";
+import { orderOutcomesForDisplay } from "@shared/lib/outcome-ordering";
 import { log } from "../log";
 
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
@@ -366,8 +367,8 @@ function normalizeEvent(
           sourceEndDate: parseGammaTimestamp(m.endDate),
         };
       })
-      .filter((o): o is PolymarketOutcome => o !== null)
-      .sort((a, b) => b.price - a.price);
+      .filter((o): o is PolymarketOutcome => o !== null);
+    outcomes = orderOutcomesForDisplay(outcomes);
   }
 
   // Classify BEFORE the Other append, so the signals describe the source book

@@ -83,6 +83,7 @@ import { createNotification, createNotificationsBulk } from "./services/notifica
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
+import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
 import {
   getSentimentPollChoiceLabel,
   normalizeSentimentChoice,
@@ -18913,7 +18914,39 @@ Target length: about 90-150 words.`;
         visibleCountries,
         /** Controlled reopen: CLOSED_PENDING → OPEN (extend deadline). */
         reopen,
+        /** Explicit override for the already-resolved publish guard below. */
+        allowResolvedPublish,
       } = req.body;
+
+      // Publish guard. The source watcher stamps `upstreamResolvedAt` on a
+      // draft whose Polymarket event has already settled, but deliberately
+      // writes no settle recommendation for drafts. Publishing such a market
+      // strands it: the winner is public knowledge, the AMM seeds off the
+      // resolved price vector (handing agents a near-certain payout against
+      // the house), and the watcher never revisits it.
+      const becomingPublic =
+        (visibility === "live" || visibility === "inactive") &&
+        !isSettlementEligibleVisibility(existing.visibility);
+      if (becomingPublic && allowResolvedPublish !== true) {
+        const meta =
+          existing.metadata && typeof existing.metadata === "object"
+            ? (existing.metadata as Record<string, unknown>)
+            : {};
+        const src =
+          meta.source && typeof meta.source === "object"
+            ? (meta.source as Record<string, unknown>)
+            : {};
+        const upstreamResolvedAt =
+          typeof src.upstreamResolvedAt === "string" ? src.upstreamResolvedAt : null;
+        if (upstreamResolvedAt) {
+          return res.status(409).json({
+            error:
+              "This market's source has already resolved upstream — its outcome is public knowledge. Publishing it would let agents trade a known winner against the house. Resolve or archive it instead.",
+            code: "SOURCE_ALREADY_RESOLVED",
+            upstreamResolvedAt,
+          });
+        }
+      }
 
       const wantsReopen =
         existing.status === "CLOSED_PENDING" &&

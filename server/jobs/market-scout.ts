@@ -1540,6 +1540,27 @@ function readAutoLockedAt(metadata: unknown): string | null {
 }
 
 /**
+ * True when a market carries an upstream-resolved stamp but still owes the
+ * operator a settle recommendation.
+ *
+ * The watcher stamps `upstreamResolvedAt` on drafts so it stops re-polling a
+ * source it has already seen settle, but deliberately writes no assessment
+ * for them. Publishing such a draft would otherwise strand it: live, with a
+ * publicly known winner, and permanently skipped by the poll loop.
+ */
+export function awaitingPostPublishAssessment(row: {
+  visibility?: string | null;
+  metadata?: unknown;
+}): boolean {
+  if (!isSettlementEligibleVisibility(row.visibility)) return false;
+  const meta =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  return !meta.scoutAssessment;
+}
+
+/**
  * Poll upstream resolutions for scouted markets that are still OPEN or
  * CLOSED_PENDING. Advisory-locked; safe to trigger concurrently with the
  * daily scheduler.
@@ -1606,7 +1627,13 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
 
   for (const row of rows) {
     const source = readWatchableSource(row.metadata);
-    if (!source || source.upstreamResolvedAt) continue;
+    if (!source) continue;
+    // upstreamResolvedAt normally means "settled and recorded, stop polling".
+    // But a market that resolved upstream while it was still a draft got the
+    // stamp WITHOUT a settle recommendation, because drafts are not
+    // settlement-eligible. Publishing it later must not inherit that silence:
+    // keep checking until an eligible market actually has an assessment.
+    if (source.upstreamResolvedAt && !awaitingPostPublishAssessment(row)) continue;
     const mapping = Array.isArray(source.outcomeMapping) ? source.outcomeMapping : [];
     if (mapping.length === 0) continue;
 

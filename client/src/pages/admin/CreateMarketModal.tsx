@@ -376,6 +376,14 @@ export function CreateMarketModal({
     }
   };
 
+  // Source-health notices. Both come from the scout's import metadata, and
+  // both matter most at the moment an admin is deciding whether to publish.
+  const sourceAlreadyResolvedAt: string | null =
+    typeof editMarket?.metadata?.source?.upstreamResolvedAt === "string"
+      ? editMarket.metadata.source.upstreamResolvedAt
+      : null;
+  const cumulativeLadderSource = editMarket?.metadata?.source?.cumulativeLadder === true;
+
   const hasOtherOutcome = entries.some((e) => isOtherStyleOutcomeLabel(e.label));
   // Advisory: recommend an "Other" catch-all when the scout flagged the source
   // as an open field, or the current title/outcomes read open-ended. Prefer the
@@ -869,6 +877,39 @@ export function CreateMarketModal({
             onSelectedCodesChange={setGeoCountries}
             testIdPrefix="market"
           />
+
+          {sourceAlreadyResolvedAt && (
+            <div
+              className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2"
+              data-testid="notice-source-already-resolved"
+            >
+              <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                Source already resolved upstream
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Polymarket settled this event on{" "}
+                {new Date(sourceAlreadyResolvedAt).toLocaleDateString()} — the outcome is
+                public knowledge. Publishing it lets agents trade a known winner against
+                the house. Resolve or archive it instead.
+              </p>
+            </div>
+          )}
+
+          {cumulativeLadderSource && (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+              data-testid="notice-cumulative-ladder"
+            >
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                Cumulative source prices
+              </p>
+              <p className="text-xs text-muted-foreground">
+                The source runs these as &quot;by date / reaches threshold&quot; legs, so each
+                rung already contains the ones before it. Opening odds are approximate —
+                the catch-all is seeded lower than its true chance.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
