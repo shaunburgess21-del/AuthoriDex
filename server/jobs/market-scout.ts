@@ -1586,6 +1586,13 @@ export function computeDraftHealth(args: {
   sourceEndDate: string | null | undefined;
   /** Yes price per open source leg; closed legs excluded by the caller. */
   openLegPrices: number[];
+  /**
+   * Whether the market carries an "Other" leg. A short book is only a problem
+   * without one — absorbing the remainder is exactly what a catch-all is for,
+   * and cumulative ladders sit well under 1 by nature. Mirrors the importer's
+   * exhaustiveness gate so the sweep never flags what the gate would accept.
+   */
+  hasCatchAll?: boolean;
   now?: Date;
 }): DraftHealth {
   const now = args.now ?? new Date();
@@ -1609,9 +1616,9 @@ export function computeDraftHealth(args: {
     bookSum = args.openLegPrices.reduce((s, p) => s + p, 0);
     // Same band the importer applies. Above the ceiling the legs are either
     // not exclusive or not real prices; below the floor the field has gone
-    // non-exhaustive since import.
+    // non-exhaustive since import — but only when nothing absorbs the gap.
     if (bookSum > 1.15) flags.push("book_oversubscribed");
-    else if (bookSum < 0.85) flags.push("book_short");
+    else if (bookSum < 0.85 && !args.hasCatchAll) flags.push("book_short");
   }
 
   return { checkedAt: now.toISOString(), flags, bookSum };
@@ -1622,6 +1629,7 @@ async function recordDraftHealth(
   row: { id: string; endAt: Date | string | null; metadata: unknown },
   resolutions: Map<string, { closed: boolean; prices: number[] }>,
   sourceEndDate: string | null,
+  hasCatchAll: boolean,
 ): Promise<void> {
   const openLegPrices: number[] = [];
   for (const r of resolutions.values()) {
@@ -1634,6 +1642,7 @@ async function recordDraftHealth(
     endAt: row.endAt,
     sourceEndDate,
     openLegPrices,
+    hasCatchAll,
   });
 
   const meta =
@@ -2122,7 +2131,12 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     // a sane range, schedules move, deadlines pass. Record that on the row so
     // the admin sees it before publishing rather than after.
     if (row.visibility === "draft") {
-      await recordDraftHealth(row, resolutions, sourceEndDate);
+      await recordDraftHealth(
+        row,
+        resolutions,
+        sourceEndDate,
+        entryLabels.some((e) => isOtherStyleOutcomeLabel(e.label)),
+      );
     }
 
     // Residual "Other" rows have no upstream market — they don't participate

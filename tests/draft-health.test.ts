@@ -79,6 +79,28 @@ test("book flags catch the illiquid mid-price blowout", () => {
   });
   assert.ok(short.flags.includes("book_short"));
 
+  // Same short book with a catch-all is exactly what the importer accepts:
+  // the "Other" leg absorbs the remainder, and cumulative ladders sit well
+  // under 1 by nature. Flagging it would contradict the import gate.
+  const absorbed = computeDraftHealth({
+    endAt: inHours(200 * 24),
+    sourceEndDate: inHours(200 * 24),
+    openLegPrices: [0.2, 0.15, 0.1],
+    hasCatchAll: true,
+    now: NOW,
+  });
+  assert.deepEqual(absorbed.flags, []);
+
+  // The ceiling is unconditional — a catch-all cannot excuse odds over 100%.
+  const blownWithOther = computeDraftHealth({
+    endAt: inHours(200 * 24),
+    sourceEndDate: inHours(200 * 24),
+    openLegPrices: [0.615, 0.175, 0.45, 0.45, 0.45],
+    hasCatchAll: true,
+    now: NOW,
+  });
+  assert.ok(blownWithOther.flags.includes("book_oversubscribed"));
+
   // Ordinary vig must not trip either flag.
   const vig = computeDraftHealth({
     endAt: inHours(200 * 24),
