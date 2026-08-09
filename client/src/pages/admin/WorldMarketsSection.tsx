@@ -81,6 +81,11 @@ type RwSortBy = "manual" | "created" | "endAt" | "fit";
 type OpsPreset = "needs_resolution" | "closing_soon" | null;
 
 const HOURS_48 = 48 * 60 * 60 * 1000;
+/**
+ * Mirrors SCOUT_DRAFT_REVIEW_HOURS on the server. Display only — the server
+ * owns the actual expiry, this just shows the operator the same clock.
+ */
+const DRAFT_REVIEW_WINDOW_HOURS = 72;
 
 /** OPEN live/inactive World Market the AI scout has marked as resolvable now. */
 function isAiResolveNow(market: PredictionMarket): boolean {
@@ -899,6 +904,17 @@ export function WorldMarketsSection({
                 const healthFlags = Array.isArray(meta?.draftHealth?.flags)
                   ? meta!.draftHealth!.flags!
                   : [];
+                // Unreviewed drafts clear themselves out after the review
+                // window, so show the clock the operator is actually racing.
+                const reviewHoursLeft =
+                  market.visibility === "draft" && market.createdAt
+                    ? Math.ceil(
+                        (new Date(market.createdAt).getTime() +
+                          DRAFT_REVIEW_WINDOW_HOURS * 3600_000 -
+                          Date.now()) /
+                          3600_000,
+                      )
+                    : null;
                 const staleLabel = healthFlags.includes("book_oversubscribed")
                   ? "Odds broken"
                   : healthFlags.includes("book_short")
@@ -1017,6 +1033,21 @@ export function WorldMarketsSection({
                             ? `Resolves in ${daysUntilEnd}d`
                             : `Ended ${Math.abs(daysUntilEnd)}d ago`}
                           {" · "}{new Date(market.endAt).toLocaleDateString()}
+                          {reviewHoursLeft !== null && (
+                            <span
+                              className={
+                                reviewHoursLeft <= 24
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : undefined
+                              }
+                              data-testid={`text-review-window-${market.id}`}
+                            >
+                              {" · "}
+                              {reviewHoursLeft > 0
+                                ? `clears in ${reviewHoursLeft}h if not published`
+                                : "clearing out"}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

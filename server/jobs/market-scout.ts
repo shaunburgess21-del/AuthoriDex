@@ -32,7 +32,7 @@
  */
 
 import OpenAI from "openai";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { db, withDbAdvisoryLock } from "../db";
 import {
@@ -1311,24 +1311,37 @@ async function runMarketScoutOnce(): Promise<MarketScoutResult> {
   result.fetched = candidates.length;
   if (candidates.length === 0) return result;
 
-  // 2. Dedupe against already-imported source events (any status/visibility —
-  //    a previously imported market must never come back, even after resolve).
+  // 2. Dedupe against already-imported source events. A previously imported
+  //    market must never come back, even after it resolves — with one
+  //    exception: a draft that aged out unreviewed was never judged, so once
+  //    the cooldown passes the event becomes offerable again. Pressing
+  //    Archive remains the permanent "not a fit" signal.
   const communityRows = await db
     .select({
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       status: predictionMarkets.status,
       visibility: predictionMarkets.visibility,
+      voidReason: predictionMarkets.voidReason,
+      updatedAt: predictionMarkets.updatedAt,
       metadata: predictionMarkets.metadata,
     })
     .from(predictionMarkets)
     .where(eq(predictionMarkets.marketType, "community"));
 
-  const importedEventIds = new Set(
-    communityRows
-      .map((r) => readSourceExternalId(r.metadata))
-      .filter((id): id is string => !!id),
-  );
+  const now = new Date();
+  const importedEventIds = new Set<string>();
+  const reofferable = new Set<string>();
+  for (const r of communityRows) {
+    const id = readSourceExternalId(r.metadata);
+    if (!id) continue;
+    if (sourceEventReofferable(r, now)) reofferable.add(id);
+    else importedEventIds.add(id);
+  }
+  // A source event can have several rows (an old expiry plus a live market).
+  // Any row that still blocks wins — only offer again when nothing does.
+  for (const id of importedEventIds) reofferable.delete(id);
+  for (const id of reofferable) importedEventIds.delete(id);
   const existingSlugs = new Set(communityRows.map((r) => r.slug));
   // Unresolved = OPEN (live or draft) or CLOSED_PENDING; archived never
   // occupies a series slot. RESOLVED/VOID free the slot for the next rung.
@@ -1531,6 +1544,8 @@ export interface SourceWatchResult {
   autoLocked: number;
   /** Drafts auto-retired because their source settled before publish. */
   draftsRetired: number;
+  /** Drafts cleared out because nobody reviewed them inside the window. */
+  draftsExpired: number;
   errors: number;
   findings: Array<{
     marketId: string;
@@ -1557,6 +1572,187 @@ function readAutoLockedAt(metadata: unknown): string | null {
 
 /** Void reason stamped on drafts retired because the source settled first. */
 export const DRAFT_SOURCE_RESOLVED_VOID_REASON = "Source resolved before publish";
+
+/**
+ * Void reason for a draft that simply aged out of the review queue.
+ *
+ * Deliberately distinct from the reasons above, and from an admin pressing
+ * Archive. Those are judgements — this one only means nobody looked in time,
+ * so the event stays eligible for a later re-offer (see
+ * `draftReofferCooldownMs`). Everything else blocks re-import forever.
+ */
+export const DRAFT_UNREVIEWED_VOID_REASON = "Draft expired unreviewed";
+
+/** Hours a draft may sit unreviewed before it clears itself out. */
+function draftReviewWindowMs(): number {
+  const hours = Number(process.env.SCOUT_DRAFT_REVIEW_HOURS);
+  const safe = Number.isFinite(hours) && hours > 0 ? hours : 72;
+  return safe * 60 * 60 * 1000;
+}
+
+/**
+ * Date the review policy starts counting, from SCOUT_DRAFT_REVIEW_FROM.
+ *
+ * Required: without it the sweep is inert. Expiry deletes work, and the
+ * queue predates the policy — switching it on with no start date would clear
+ * every draft older than the window on the first run, including ones nobody
+ * has had a chance to review under the new rule. Same shape as
+ * NEWS_SOV_ENABLE_FROM.
+ */
+function draftReviewPolicyStart(): Date | null {
+  const raw = process.env.SCOUT_DRAFT_REVIEW_FROM;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const parsed = new Date(raw.trim());
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * When a draft will clear itself out if nobody reviews it. Shared with the
+ * digest and the admin list so every surface quotes the same deadline.
+ *
+ * The clock starts at whichever is later: the draft's creation, or the policy
+ * start date — so drafts that predate the policy get a full window from the
+ * day it switches on rather than expiring immediately.
+ */
+export function draftReviewDeadline(
+  createdAt: Date | string,
+  policyStart: Date | null = draftReviewPolicyStart(),
+): Date {
+  const created = new Date(createdAt).getTime();
+  const start = policyStart ? Math.max(created, policyStart.getTime()) : created;
+  return new Date(start + draftReviewWindowMs());
+}
+
+/**
+ * How long an expired-unreviewed source event stays blocked before the scout
+ * may offer it again. Long enough that the same card doesn't reappear the
+ * next morning, short enough that a busy week doesn't permanently shrink the
+ * catalogue.
+ */
+function draftReofferCooldownMs(): number {
+  const days = Number(process.env.SCOUT_DRAFT_REOFFER_DAYS);
+  const safe = Number.isFinite(days) && days > 0 ? days : 14;
+  return safe * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * True when a previously imported row should stop blocking a re-import.
+ *
+ * Only ever true for drafts that aged out unreviewed, and only once the
+ * cooldown has passed. An admin-archived market, a resolved one, or a draft
+ * retired because its source settled all stay blocked permanently.
+ */
+export function sourceEventReofferable(
+  row: { status?: string | null; voidReason?: string | null; updatedAt?: Date | string | null },
+  now: Date = new Date(),
+  cooldownMs: number = draftReofferCooldownMs(),
+): boolean {
+  if (row.status !== "VOID") return false;
+  if (row.voidReason !== DRAFT_UNREVIEWED_VOID_REASON) return false;
+  const retiredAt = row.updatedAt ? new Date(row.updatedAt).getTime() : NaN;
+  if (!Number.isFinite(retiredAt)) return false;
+  return now.getTime() - retiredAt >= cooldownMs;
+}
+
+export interface ExpireStaleDraftsResult {
+  expired: number;
+  skipped: number;
+}
+
+/**
+ * Clear drafts nobody reviewed inside the review window.
+ *
+ * Age is measured from createdAt, never updatedAt: the source watcher writes
+ * live prices and draft health onto every draft daily, so updatedAt tracks
+ * our own background jobs rather than human attention and would keep
+ * resetting the clock.
+ *
+ * Skips anything with an AMM seed or bets, matching the other retirement
+ * paths — a draft that has somehow been traded is not ours to discard.
+ */
+export async function expireStaleDrafts(now: Date = new Date()): Promise<ExpireStaleDraftsResult> {
+  const result: ExpireStaleDraftsResult = { expired: 0, skipped: 0 };
+
+  const policyStart = draftReviewPolicyStart();
+  if (!policyStart) {
+    log(
+      "[MarketScout] Draft review window inactive — set SCOUT_DRAFT_REVIEW_FROM " +
+        "(ISO date) to start clearing unreviewed drafts.",
+    );
+    return result;
+  }
+
+  const candidates = await db
+    .select({
+      id: predictionMarkets.id,
+      title: predictionMarkets.title,
+      createdAt: predictionMarkets.createdAt,
+    })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.marketType, "community"),
+        eq(predictionMarkets.visibility, "draft"),
+        eq(predictionMarkets.status, "OPEN"),
+      ),
+    );
+
+  const stale = candidates.filter(
+    (r) => draftReviewDeadline(r.createdAt, policyStart).getTime() <= now.getTime(),
+  );
+
+  for (const row of stale) {
+    const [ammRow] = await db
+      .select({ marketId: marketAmmState.marketId })
+      .from(marketAmmState)
+      .where(eq(marketAmmState.marketId, row.id))
+      .limit(1);
+    if (ammRow) {
+      result.skipped += 1;
+      continue;
+    }
+    const [betRow] = await db
+      .select({ id: marketBets.id })
+      .from(marketBets)
+      .where(eq(marketBets.marketId, row.id))
+      .limit(1);
+    if (betRow) {
+      result.skipped += 1;
+      continue;
+    }
+
+    try {
+      await db
+        .update(predictionMarkets)
+        .set({
+          status: "VOID",
+          visibility: "archived",
+          resolveMethod: "auto",
+          voidReason: DRAFT_UNREVIEWED_VOID_REASON,
+          resolutionNotes: JSON.stringify({
+            type: "community",
+            pendingReason: "draft_expired_unreviewed",
+          }),
+          updatedAt: new Date(),
+        })
+        .where(eq(predictionMarkets.id, row.id));
+      result.expired += 1;
+    } catch (err) {
+      result.skipped += 1;
+      log(
+        `[MarketScout] Draft expiry failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  if (result.expired > 0 || result.skipped > 0) {
+    log(
+      `[MarketScout] Draft review window — expired=${result.expired} ` +
+        `skipped=${result.skipped} (policy start ${policyStart.toISOString()})`,
+    );
+  }
+  return result;
+}
 
 /** A draft is "ending soon" once it can no longer survive a review cycle. */
 const DRAFT_ENDS_SOON_HOURS = 48;
@@ -1787,6 +1983,7 @@ export async function runSourceResolutionWatch(): Promise<SourceWatchResult> {
     timesResynced: 0,
     autoLocked: 0,
     draftsRetired: 0,
+    draftsExpired: 0,
     errors: 0,
     findings: [],
   };
@@ -1813,9 +2010,17 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
     timesResynced: 0,
     autoLocked: 0,
     draftsRetired: 0,
+    draftsExpired: 0,
     errors: 0,
     findings: [],
   };
+
+  // Clear drafts nobody reviewed in time first, so the rest of the pass
+  // doesn't poll sources for markets that are about to be retired. Lives here
+  // rather than in the scout run because this watcher costs no LLM budget and
+  // runs regardless of MARKET_SCOUT_ENABLED.
+  const expiredDrafts = await expireStaleDrafts();
+  result.draftsExpired = expiredDrafts.expired;
 
   const rows = await db
     .select({
@@ -2906,7 +3111,8 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
       `[MarketScout] Source watch — checked=${result.checked} resolvedUpstream=${result.resolvedUpstream} ` +
         `unmappable=${result.unmappable} livePricesRefreshed=${result.livePricesRefreshed} ` +
         `timesResynced=${result.timesResynced} autoLocked=${result.autoLocked} ` +
-        `draftsRetired=${result.draftsRetired} errors=${result.errors}`,
+        `draftsRetired=${result.draftsRetired} draftsExpired=${result.draftsExpired} ` +
+        `errors=${result.errors}`,
     );
   }
 

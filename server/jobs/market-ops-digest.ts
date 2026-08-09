@@ -41,6 +41,7 @@ import {
   type ScoutFinding,
   type ScoutStage,
 } from "./resolution-scout";
+import { draftReviewDeadline } from "./market-scout";
 
 const MARKET_OPS_DIGEST_LOCK_KEY = 5_210;
 
@@ -212,6 +213,7 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
       title: predictionMarkets.title,
       slug: predictionMarkets.slug,
       endAt: predictionMarkets.endAt,
+      createdAt: predictionMarkets.createdAt,
       metadata: predictionMarkets.metadata,
     })
     .from(predictionMarkets)
@@ -286,8 +288,19 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
   const draftsAnnotated = draftRows.map((r) => {
     const flags = draftHealthFlags(r.metadata);
     const settled = sourceAlreadyResolved(r.metadata);
-    const msLeft = new Date(r.endAt).getTime() - now.getTime();
-    return { row: r, flags, settled, msLeft };
+    // A draft dies at whichever comes first: its own resolution date, or the
+    // review window closing. The review deadline is usually far sooner, and
+    // it's the one the operator can still act on.
+    const endsMs = new Date(r.endAt).getTime();
+    const reviewMs = draftReviewDeadline(r.createdAt).getTime();
+    const deadlineMs = Math.min(endsMs, reviewMs);
+    return {
+      row: r,
+      flags,
+      settled,
+      msLeft: deadlineMs - now.getTime(),
+      byReview: reviewMs <= endsMs,
+    };
   });
   const draftsReady = draftsAnnotated.filter(
     (d) => !d.settled && d.flags.length === 0,
@@ -304,7 +317,8 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     ...draftsExpiringSoon.map((d) => ({
       text: d.row.title,
       detail:
-        `EXPIRES IN ${formatDuration(d.msLeft)} — publish or it auto-voids` +
+        `EXPIRES IN ${formatDuration(d.msLeft)} — ` +
+        (d.byReview ? "review window closes" : "resolution date passes") +
         (d.settled
           ? " · source already settled, can't publish"
           : d.flags.length > 0
