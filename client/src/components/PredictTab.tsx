@@ -21,6 +21,7 @@ import { getClosedMarketMessage, isCommunityTradingClosed } from "@/lib/marketCl
 import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
+import { appendOptimisticPrediction } from "@/lib/optimisticPrediction";
 import { formatVox } from "@/lib/currency";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -534,49 +535,20 @@ export function PredictTab({
       setStakeModalOpen(false);
       setPendingSelection(null);
 
-      const seededStats = {
-        total: 1,
-        won: 0,
-        lost: 0,
-        refunded: 0,
-        pending: 1,
-        netCredits: 0,
-        winRate: 0,
-        bestCategory: null,
-        currentStreak: 0,
-      };
-
-      queryClient.setQueryData(["/api/me/predictions"], (old: any) => {
-        const mid = String(variables.marketId);
-        const newBet = {
-          betId: `optimistic-${Date.now()}`,
-          marketId: mid,
-          entryId: variables.entryId,
-          entryLabel,
-          stakeAmount: variables.stakeAmount,
-          result: "pending" as const,
-          payout: 0,
-          direction: null,
-        };
-        if (old == null) {
-          return { predictions: [newBet], stats: seededStats };
-        }
-        if (Array.isArray(old)) {
-          const already = old.some((b: any) => String(b.marketId) === mid);
-          return already ? old : [...old, newBet];
-        }
-        const preds = old.predictions ?? [];
-        const already = preds.some((b: any) => String(b.marketId) === mid);
-        if (already) return old;
-        return { ...old, predictions: [...preds, newBet] };
+      appendOptimisticPrediction(queryClient, {
+        marketId: String(variables.marketId),
+        entryId: variables.entryId,
+        entryLabel,
+        stakeAmount: variables.stakeAmount,
       });
 
-      await Promise.all([
+      void Promise.all([
         refreshProfile?.(),
         queryClient.invalidateQueries({ queryKey: ["/api/native-markets/updown"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
+      ]).catch(() => {});
     },
     onError: (err: Error, _variables, context) => {
       dismissVoteToast(context?.toastId);
@@ -661,12 +633,21 @@ export function PredictTab({
       }
       setStakeModalOpen(false);
       setPendingSelection(null);
-      await Promise.all([
+
+      appendOptimisticPrediction(queryClient, {
+        marketId: String(variables.marketId),
+        entryId: variables.entryId,
+        entryLabel: variables.toastMeta?.entryLabel ?? "Your pick",
+        stakeAmount: variables.stakeAmount,
+      });
+
+      void Promise.all([
         refreshProfile?.(),
         queryClient.invalidateQueries({ queryKey: [`/api/native-markets/${variables.marketType}`] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
+      ]).catch(() => {});
     },
     onError: (err: Error, _variables, context) => {
       dismissVoteToast(context?.toastId);
@@ -740,13 +721,24 @@ export function PredictTab({
       });
       setStakeModalOpen(false);
       setPendingSelection(null);
-      await Promise.all([
+
+      if (market?.id) {
+        appendOptimisticPrediction(queryClient, {
+          marketId: String(market.id),
+          entryId: variables.entryId,
+          entryLabel: String(entryLabel),
+          stakeAmount: variables.stakeAmount,
+          direction: variables.direction,
+        });
+      }
+
+      void Promise.all([
         refreshProfile?.(),
         queryClient.invalidateQueries({ queryKey: ["/api/open-markets"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/predictions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/me/amm-positions"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] }),
-      ]);
+      ]).catch(() => {});
     },
     onError: (err: Error, _variables, context) => {
       dismissVoteToast(context?.toastId);
