@@ -384,6 +384,22 @@ export function CreateMarketModal({
       : null;
   const cumulativeLadderSource = editMarket?.metadata?.source?.cumulativeLadder === true;
 
+  // Staleness picked up by the daily draft health sweep.
+  const draftHealthFlags: string[] = Array.isArray(editMarket?.metadata?.draftHealth?.flags)
+    ? editMarket.metadata.draftHealth.flags
+    : [];
+  const DRAFT_HEALTH_COPY: Record<string, string> = {
+    already_expired: "its resolution date has already passed",
+    ends_soon: "it resolves within 48 hours",
+    schedule_drift: "the source has rescheduled since this was drafted",
+    book_oversubscribed:
+      "the source odds now add up to well over 100%, so they are no longer real prices",
+    book_short: "the source odds no longer cover the full field",
+  };
+  const draftHealthReasons = draftHealthFlags
+    .map((f) => DRAFT_HEALTH_COPY[f])
+    .filter(Boolean);
+
   const hasOtherOutcome = entries.some((e) => isOtherStyleOutcomeLabel(e.label));
   // Advisory: recommend an "Other" catch-all when the scout flagged the source
   // as an open field, or the current title/outcomes read open-ended. Prefer the
@@ -891,6 +907,21 @@ export function CreateMarketModal({
                 {new Date(sourceAlreadyResolvedAt).toLocaleDateString()} — the outcome is
                 public knowledge. Publishing it lets agents trade a known winner against
                 the house. Resolve or archive it instead.
+              </p>
+            </div>
+          )}
+
+          {draftHealthReasons.length > 0 && (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+              data-testid="notice-draft-health"
+            >
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                This draft has gone stale
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Since it was drafted, {draftHealthReasons.join("; and ")}. Re-check
+                the source before publishing.
               </p>
             </div>
           )}

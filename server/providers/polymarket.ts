@@ -437,6 +437,38 @@ function normalizeEvent(
   };
 }
 
+function envNumber(value: string | undefined, fallback: number): number {
+  if (typeof value !== "string" || value.trim() === "") return fallback;
+  const n = Number(value.trim());
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
+ * Minimum 24h source volume (USD) for an importable event. Tunable via
+ * SCOUT_MIN_SOURCE_VOLUME_24H_USD.
+ *
+ * Calibrated against live tag-scoped pulls, which is where thin sources enter
+ * — the global feed is volume-ranked so its head is liquid by construction.
+ * Movies went 20 → 7 → 5 → 3 candidates at floors of $0 / $100 / $250 / $500,
+ * music 28 → 5 → 4 → 4, politics 43 throughout. $250 clears the dead books
+ * (the 37-candidate Oscars field ran on $68/day) while leaving entertainment
+ * enough daily variety. The book-sum ceiling remains the precise instrument;
+ * this is the backstop for sources too quiet to price at all.
+ */
+function scoutMinSourceVolume(): number {
+  return envNumber(process.env.SCOUT_MIN_SOURCE_VOLUME_24H_USD, 250);
+}
+
+/** Horizon cap for multi-outcome fields (days). */
+function scoutMaxDaysToEndMulti(): number {
+  return envNumber(process.env.SCOUT_MAX_DAYS_TO_END_MULTI, 180);
+}
+
+/** Field-size cap for multi-outcome events, including any catch-all. */
+function scoutMaxOutcomesMulti(): number {
+  return envNumber(process.env.SCOUT_MAX_OUTCOMES_MULTI, 8);
+}
+
 export interface FetchTrendingOptions {
   /** How many raw events to pull from Gamma (max 500). */
   limit?: number;
@@ -447,6 +479,27 @@ export interface FetchTrendingOptions {
   /** Outcome-count bounds (VoxDex supports 2 for binary, 3–30 for multi). */
   minOutcomes?: number;
   maxOutcomes?: number;
+  /**
+   * Skip events whose 24h source volume is below this (USD).
+   *
+   * On an illiquid book Gamma's `outcomePrices` is the midpoint of a very wide
+   * spread, not a probability: a leg quoted 0 bid / 0.9 ask reports ~0.45. A
+   * 37-candidate Oscars field on $68 of daily volume priced to a book sum of
+   * 14.5 that way. Those prices seed the AMM, so importing them manufactures a
+   * mispriced market no amount of downstream logic can repair.
+   */
+  minVolume24hr?: number;
+  /**
+   * Tighter horizon for multi-outcome fields. A binary a year out is still a
+   * clean question; a large field that far out is neither liquid nor stable —
+   * candidates get added and prices drift long before it resolves.
+   */
+  maxDaysToEndMulti?: number;
+  /**
+   * Tighter field-size cap than `maxOutcomes`. Small fields are easier to
+   * price, read on a card, and settle unambiguously.
+   */
+  maxOutcomesMulti?: number;
   /**
    * Optional Gamma tag id to scope the feed (e.g. Movies=53, Music=100).
    * When set, appends `tag_id` so the scout can pull category-stratified
@@ -485,6 +538,9 @@ export async function fetchTrendingPolymarketEvents(
     maxDaysToEnd = 365,
     minOutcomes = 2,
     maxOutcomes = 12,
+    minVolume24hr = scoutMinSourceVolume(),
+    maxDaysToEndMulti = scoutMaxDaysToEndMulti(),
+    maxOutcomesMulti = scoutMaxOutcomesMulti(),
     tagId,
   } = options;
 
@@ -496,25 +552,62 @@ export async function fetchTrendingPolymarketEvents(
   const now = Date.now();
   const minEndMs = now + minHoursToEnd * 60 * 60 * 1000;
   const maxEndMs = now + maxDaysToEnd * 24 * 60 * 60 * 1000;
+  const maxEndMsMulti = now + maxDaysToEndMulti * 24 * 60 * 60 * 1000;
 
+  const dropped = { window: 0, thin: 0, bigField: 0, book: 0 };
   const candidates: PolymarketCandidate[] = [];
   for (const ev of raw as GammaEvent[]) {
     const candidate = normalizeEvent(ev, { minOutcomes, maxOutcomes });
     if (!candidate) continue;
+
+    const isMulti = candidate.structure === "multi";
     const endMs = Date.parse(candidate.endDate);
-    if (endMs < minEndMs || endMs > maxEndMs) continue;
-    // Exhaustiveness guard: outcome prices must sum to ~1. Non-exhaustive
-    // events (e.g. "closure by when?" with no "never" bucket) can end with
-    // NO listed outcome winning, which a VoxDex market can't settle.
-    const priceSum = candidate.outcomes.reduce((s, o) => s + o.price, 0);
-    if (priceSum < 0.85 || priceSum > 1.15) continue;
+    const horizon = isMulti ? Math.min(maxEndMs, maxEndMsMulti) : maxEndMs;
+    if (endMs < minEndMs || endMs > horizon) {
+      dropped.window += 1;
+      continue;
+    }
+
+    // Liquidity floor. Below this, Gamma's mid prices are spread artefacts
+    // rather than probabilities, and they are what seeds our AMM.
+    if (candidate.volume24hr < minVolume24hr) {
+      dropped.thin += 1;
+      continue;
+    }
+
+    // Keep multi fields small enough to price, read, and settle cleanly.
+    if (isMulti && candidate.outcomes.length > maxOutcomesMulti) {
+      dropped.bigField += 1;
+      continue;
+    }
+
+    // Exhaustiveness guard, measured on the SOURCE book (named legs only).
+    // The full vector includes any residual "Other" we just synthesised at
+    // 1 − Σ named, which forces the total to exactly 1 and would make this
+    // check pass unconditionally.
+    //
+    // The ceiling always applies: legs that price above 1 in total are either
+    // not mutually exclusive or not real prices. The floor only applies
+    // without a catch-all — absorbing a short book is precisely what the
+    // "Other" leg is for, so an open field priced at 0.75 is fine with one.
+    const bookSum = candidate.namedPriceSum ?? 1;
+    const hasCatchAll = candidate.outcomes.some((o) =>
+      isOtherStyleOutcomeLabel(o.label),
+    );
+    if (bookSum > 1.15 || (!hasCatchAll && bookSum < 0.85)) {
+      dropped.book += 1;
+      continue;
+    }
+
     candidates.push(candidate);
   }
 
   log(
     `[Polymarket] Fetched ${raw.length} trending events` +
       (tagId ? ` (tag_id=${tagId})` : "") +
-      `, ${candidates.length} importable candidates`,
+      `, ${candidates.length} importable candidates ` +
+      `(dropped: window=${dropped.window} thinLiquidity=${dropped.thin} ` +
+      `bigField=${dropped.bigField} book=${dropped.book})`,
   );
   return candidates;
 }

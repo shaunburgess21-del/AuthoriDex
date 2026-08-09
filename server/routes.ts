@@ -18946,6 +18946,38 @@ Target length: about 90-150 words.`;
             upstreamResolvedAt,
           });
         }
+
+        // The stamp only exists if the daily watcher has run since the source
+        // settled. Drafts sit for days, so re-check the source live at the
+        // moment of publish rather than trusting the last sweep. Fails open:
+        // a Gamma outage must not block publishing.
+        const externalId =
+          src.provider === "polymarket" && typeof src.externalId === "string"
+            ? src.externalId
+            : null;
+        if (externalId) {
+          try {
+            const { fetchPolymarketEventResolutions } = await import(
+              "./providers/polymarket"
+            );
+            const snapshot = await fetchPolymarketEventResolutions(externalId);
+            const resolutions = snapshot ? [...snapshot.resolutions.values()] : [];
+            const allClosed =
+              resolutions.length > 0 && resolutions.every((r) => r.closed === true);
+            if (allClosed) {
+              return res.status(409).json({
+                error:
+                  "This market's source has closed on Polymarket since it was drafted — its outcome is already decided. Resolve or archive it instead of publishing.",
+                code: "SOURCE_CLOSED_SINCE_DRAFT",
+              });
+            }
+          } catch (err) {
+            console.warn(
+              `[AdminMarkets] Publish freshness check failed for ${id}:`,
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
       }
 
       const wantsReopen =

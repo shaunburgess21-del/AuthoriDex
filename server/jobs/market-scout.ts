@@ -107,6 +107,19 @@ function envFlag(value: string | undefined): boolean {
   return v === "true" || v === "1" || v === "yes" || v === "on";
 }
 
+/** Default-ON flag: unset / empty → true, explicit false/0/no/off → false. */
+function envFlagDefaultOn(value: string | undefined): boolean {
+  if (typeof value !== "string" || value.trim() === "") return true;
+  const v = value.trim().toLowerCase();
+  return !(v === "false" || v === "0" || v === "no" || v === "off");
+}
+
+function envNumber(value: string | undefined, fallback: number): number {
+  if (typeof value !== "string" || value.trim() === "") return fallback;
+  const n = Number(value.trim());
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 const API_TIMEOUT_MS = 90_000;
 /** Longer summaries + resolutionSources across a multi-draft run. */
 const MAX_OUTPUT_TOKENS = 6_000;
@@ -143,8 +156,13 @@ function scoutEnabled(): boolean {
 }
 
 /** Auto-apply endAt/closeAt when Polymarket reschedules a source event. Default OFF. */
+/**
+ * Default ON. Left as an opt-in flag it sat silently unset, so scouted
+ * markets kept drifting off their source schedule with nothing to correct
+ * them. Set SOURCE_TIME_RESYNC_ENABLED=false to disable.
+ */
 function sourceTimeResyncEnabled(): boolean {
-  return envFlag(process.env.SOURCE_TIME_RESYNC_ENABLED);
+  return envFlagDefaultOn(process.env.SOURCE_TIME_RESYNC_ENABLED);
 }
 
 function resolutionBackstopDays(): number {
@@ -1546,6 +1564,111 @@ function readAutoLockedAt(metadata: unknown): string | null {
 /** Void reason stamped on drafts retired because the source settled first. */
 export const DRAFT_SOURCE_RESOLVED_VOID_REASON = "Source resolved before publish";
 
+/** A draft is "ending soon" once it can no longer survive a review cycle. */
+const DRAFT_ENDS_SOON_HOURS = 48;
+/** endAt vs source endDate gap that counts as schedule drift. */
+const DRAFT_DRIFT_MS = 60 * 60 * 1000;
+
+export type DraftHealthFlag =
+  | "ends_soon"
+  | "already_expired"
+  | "schedule_drift"
+  | "book_oversubscribed"
+  | "book_short";
+
+export interface DraftHealth {
+  checkedAt: string;
+  flags: DraftHealthFlag[];
+  /** Σ of open source legs' Yes prices — 1.0 on a healthy exclusive book. */
+  bookSum: number | null;
+}
+
+/**
+ * Classify how stale a draft has become relative to its live source. Pure so
+ * it can be unit-tested without a Gamma round trip.
+ */
+export function computeDraftHealth(args: {
+  endAt: Date | string | null | undefined;
+  sourceEndDate: string | null | undefined;
+  /** Yes price per open source leg; closed legs excluded by the caller. */
+  openLegPrices: number[];
+  now?: Date;
+}): DraftHealth {
+  const now = args.now ?? new Date();
+  const flags: DraftHealthFlag[] = [];
+
+  const endMs = args.endAt ? new Date(args.endAt).getTime() : NaN;
+  if (Number.isFinite(endMs)) {
+    if (endMs <= now.getTime()) {
+      flags.push("already_expired");
+    } else if (endMs - now.getTime() < DRAFT_ENDS_SOON_HOURS * 3600_000) {
+      flags.push("ends_soon");
+    }
+    const srcMs = args.sourceEndDate ? Date.parse(args.sourceEndDate) : NaN;
+    if (Number.isFinite(srcMs) && Math.abs(srcMs - endMs) > DRAFT_DRIFT_MS) {
+      flags.push("schedule_drift");
+    }
+  }
+
+  let bookSum: number | null = null;
+  if (args.openLegPrices.length >= 2) {
+    bookSum = args.openLegPrices.reduce((s, p) => s + p, 0);
+    // Same band the importer applies. Above the ceiling the legs are either
+    // not exclusive or not real prices; below the floor the field has gone
+    // non-exhaustive since import.
+    if (bookSum > 1.15) flags.push("book_oversubscribed");
+    else if (bookSum < 0.85) flags.push("book_short");
+  }
+
+  return { checkedAt: now.toISOString(), flags, bookSum };
+}
+
+/** Persist draft health, skipping the write when nothing material changed. */
+async function recordDraftHealth(
+  row: { id: string; endAt: Date | string | null; metadata: unknown },
+  resolutions: Map<string, { closed: boolean; prices: number[] }>,
+  sourceEndDate: string | null,
+): Promise<void> {
+  const openLegPrices: number[] = [];
+  for (const r of resolutions.values()) {
+    if (r.closed) continue;
+    const yes = r.prices?.[0];
+    if (typeof yes === "number" && Number.isFinite(yes)) openLegPrices.push(yes);
+  }
+
+  const health = computeDraftHealth({
+    endAt: row.endAt,
+    sourceEndDate,
+    openLegPrices,
+  });
+
+  const meta =
+    row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const prior = meta.draftHealth as DraftHealth | undefined;
+  const sameFlags =
+    prior &&
+    Array.isArray(prior.flags) &&
+    prior.flags.length === health.flags.length &&
+    prior.flags.every((f, i) => f === health.flags[i]);
+  if (sameFlags) return;
+
+  try {
+    await db
+      .update(predictionMarkets)
+      .set({
+        metadata: sql`COALESCE(${predictionMarkets.metadata}, '{}'::jsonb) || ${JSON.stringify({ draftHealth: health })}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(eq(predictionMarkets.id, row.id));
+  } catch (err) {
+    log(
+      `[MarketScout] Draft health write failed for ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 /**
  * Retire a draft whose upstream source has already settled.
  *
@@ -2000,6 +2123,13 @@ async function runSourceResolutionWatchOnce(): Promise<SourceWatchResult> {
         ...partial,
       });
     };
+
+    // Drafts rot between import and review: sources settle, books drift out of
+    // a sane range, schedules move, deadlines pass. Record that on the row so
+    // the admin sees it before publishing rather than after.
+    if (row.visibility === "draft") {
+      await recordDraftHealth(row, resolutions, sourceEndDate);
+    }
 
     // Residual "Other" rows have no upstream market — they don't participate
     // in the closed check. Require every named source market to be closed.
