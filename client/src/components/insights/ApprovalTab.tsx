@@ -362,7 +362,10 @@ export function ApprovalTab() {
 
       <VotingModal
         open={votingModalOpen}
-        onOpenChange={setVotingModalOpen}
+        onOpenChange={(nextOpen) => {
+          setVotingModalOpen(nextOpen);
+          if (!nextOpen) setVotingPersonId(null);
+        }}
         initialPersonId={votingPersonId}
         peopleList={allPeople}
       />

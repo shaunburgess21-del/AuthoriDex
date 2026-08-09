@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { RankBadge } from "@/components/RankBadge";
@@ -22,23 +22,46 @@ interface VotingModalProps {
 export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }: VotingModalProps) {
   const [, setLocation] = useLocation();
   const [selectedPerson, setSelectedPerson] = useState<TrendingPerson | null>(null);
+  /** Stable people order for Vote Next — frozen when the modal opens so leaderboard refetches cannot fight navigation. */
+  const [sessionQueue, setSessionQueue] = useState<TrendingPerson[]>([]);
+  /** True after we've seeded selection + queue for this open cycle (survives delayed people load). */
+  const seededRef = useRef(false);
 
   const { data: fetchedResponse, isLoading } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending'],
     enabled: open && !peopleList,
   });
 
-  // Use provided list or fetched list
+  // Live list (may reorder after approval votes); session queue is the Vote Next source of truth.
   const people = peopleList || fetchedResponse?.data || [];
 
-  // When modal opens with initialPersonId, auto-select that person
+  // Seed selection + snapshot queue once per open; never re-apply initialPersonId on people refetch.
   useEffect(() => {
-    if (open && initialPersonId && people.length > 0) {
-      const person = people.find(p => p.id === initialPersonId);
-      if (person) {
-        setSelectedPerson(person);
-      }
+    if (!open) {
+      seededRef.current = false;
+      setSelectedPerson(null);
+      setSessionQueue([]);
+      return;
     }
+
+    if (people.length === 0) return;
+
+    if (!seededRef.current) {
+      seededRef.current = true;
+      setSessionQueue(people);
+      if (initialPersonId) {
+        setSelectedPerson(people.find((p) => p.id === initialPersonId) ?? null);
+      } else {
+        setSelectedPerson(null);
+      }
+      return;
+    }
+
+    // While open after seed: refresh selected person's object by id only. Never reset to opener.
+    setSelectedPerson((prev) => {
+      if (!prev) return prev;
+      return people.find((p) => p.id === prev.id) ?? prev;
+    });
   }, [open, initialPersonId, people]);
 
   const handlePersonClick = (person: TrendingPerson) => {
@@ -58,21 +81,22 @@ export function VotingModal({ open, onOpenChange, initialPersonId, peopleList }:
   };
 
   const handleVoteNext = () => {
-    if (selectedPerson && people.length > 0) {
-      const currentIndex = people.findIndex(p => p.id === selectedPerson.id);
-      if (currentIndex !== -1 && currentIndex < people.length - 1) {
-        const nextPerson = people[currentIndex + 1];
-        setSelectedPerson(nextPerson);
-      } else {
-        // At end of list, go back to first person or close modal
-        setSelectedPerson(people[0]);
-      }
+    const queue = sessionQueue.length > 0 ? sessionQueue : people;
+    if (!selectedPerson || queue.length === 0) return;
+
+    const currentIndex = queue.findIndex((p) => p.id === selectedPerson.id);
+    if (currentIndex !== -1 && currentIndex < queue.length - 1) {
+      setSelectedPerson(queue[currentIndex + 1]);
+    } else {
+      setSelectedPerson(queue[0]);
     }
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
+      seededRef.current = false;
       setSelectedPerson(null);
+      setSessionQueue([]);
     }
     onOpenChange(newOpen);
   };
