@@ -5,6 +5,47 @@ export const DEFAULT_HUB_ACTIVITY_FILTER: HubActivityFilter = "all";
 
 const VALID_FILTERS = new Set<HubActivityFilter>(["all", "show-mine", "hide-mine"]);
 
+export const HUB_ACTIVITY_FILTER_VALUES: HubActivityFilter[] = [
+  "all",
+  "show-mine",
+  "hide-mine",
+];
+
+/** Short pill label for the active filter (count shown for mine / hide modes). */
+export function hubActivityFilterPillLabel(
+  scope: HubActivityFilterScope,
+  value: HubActivityFilter,
+  count: number,
+): string {
+  if (scope === "vote") {
+    if (value === "show-mine") return `My votes (${count})`;
+    if (value === "hide-mine") return `Hide voted (${count})`;
+    return "All votes";
+  }
+  if (value === "show-mine") return `My positions (${count})`;
+  if (value === "hide-mine") return `Hide mine (${count})`;
+  return "All positions";
+}
+
+/** One-line menu option copy for the activity filter picker. */
+export function hubActivityFilterMenuLabel(
+  scope: HubActivityFilterScope,
+  value: HubActivityFilter,
+): string {
+  if (scope === "vote") {
+    if (value === "show-mine") return "Show only votes I've cast";
+    if (value === "hide-mine") return "Hide votes I've cast";
+    return "Show all — voted and not yet voted";
+  }
+  if (value === "show-mine") return "Show only my active positions";
+  if (value === "hide-mine") return "Hide markets I've predicted on";
+  return "Show all — predicted and not yet predicted";
+}
+
+export function hubActivityFilterMenuTitle(scope: HubActivityFilterScope): string {
+  return scope === "vote" ? "Filter votes" : "Filter positions";
+}
+
 function storageKey(scope: HubActivityFilterScope, userId: string): string {
   return `voxdex_${scope}_activity_filter_${userId}`;
 }

@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
+import { HubActivityFilterControl } from "@/components/HubActivityFilterControl";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -76,10 +77,7 @@ import {
   Users, 
   Trophy, 
   Wallet, 
-  ListChecks,
-  EyeOff,
   HelpCircle,
-  ScrollText,
   Check,
   ChevronRight,
   ChevronLeft,
@@ -170,7 +168,6 @@ import {
 } from "@/components/predict/TopGainerCard";
 import { WeeklyJackpotHero } from "@/components/predict/WeeklyJackpotHero";
 import { OpenMarketCard } from "@/components/predict/OpenMarketCard";
-import { WorldMarketsStickyHeader } from "@/components/predict/WorldMarketsStickyHeader";
 import { WorldMarketsCategoryStacks } from "@/components/predict/WorldMarketsCategoryStacks";
 import { WorldMarketsTeaserRail } from "@/components/predict/WorldMarketsTeaserRail";
 import { topPositionByMarket, positionTotalsByMarket } from "@/lib/ammPositionMaps";
@@ -405,53 +402,7 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
   );
 }
 
-/** Cycling Positions filter pill (all → show-mine → hide-mine), rendered in
- * the contextual filter row of both Weekly and World modes. */
-function MyPositionsPill({
-  filter,
-  activeCount,
-  onClick,
-  shrink,
-  accent = "world",
-}: {
-  filter: HubActivityFilter;
-  activeCount: number;
-  onClick: () => void;
-  /** Set when the pill sits in a plain flex row (not a scroll container). */
-  shrink?: boolean;
-  /** Mode chrome: Weekly = VoxDex blue, World = violet. */
-  accent?: "weekly" | "world";
-}) {
-  const activePill =
-    accent === "weekly" ? FILTER_ACTIVE_PILL_WEEKLY : FILTER_ACTIVE_PILL_WORLD;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit ${
-        shrink ? "shrink-0 " : ""
-      }focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-        filter === "show-mine"
-          ? activePill
-          : filter === "hide-mine"
-            ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-            : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
-      }`}
-      data-testid="toggle-my-positions-pill"
-    >
-      {filter === "hide-mine" ? (
-        <EyeOff className="h-4 w-4 shrink-0" />
-      ) : (
-        <ListChecks className="h-4 w-4 shrink-0" />
-      )}
-      {filter === "hide-mine"
-        ? `Hidden (${activeCount})`
-        : `Positions (${activeCount})`}
-    </button>
-  );
-}
-
+/** Shared sticky section filter bar (categories + search) for Weekly/World sections. */
 function SectionFilterBar({
   categoryFilter,
   onCategoryChange,
@@ -1121,11 +1072,6 @@ export default function PredictPage() {
     [user?.id],
   );
 
-  const cycleMyPositionsFilter = useCallback(() => {
-    setMyPositionsFilter((prev) =>
-      prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
-    );
-  }, [setMyPositionsFilter]);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   const handleCategoryPillFilter = useCallback((category: string) => {
@@ -3165,9 +3111,6 @@ export default function PredictPage() {
                 <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
               </button>
             )}
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
-              <ScrollText className="h-4 w-4 text-muted-foreground" />
-            </Button>
           </div>
         )}
       />
@@ -3202,10 +3145,11 @@ export default function PredictPage() {
           data-testid="predict-contextual-filter-row"
         >
           {user && !userBetsError && predictView === "world" && (
-            <MyPositionsPill
-              filter={myPositionsFilter}
-              activeCount={activePredictions}
-              onClick={cycleMyPositionsFilter}
+            <HubActivityFilterControl
+              scope="predict"
+              value={myPositionsFilter}
+              count={activePredictions}
+              onChange={(next) => setMyPositionsFilter(next)}
               shrink
               accent="world"
             />
@@ -3213,10 +3157,11 @@ export default function PredictPage() {
           {predictView === "weekly" ? (
             <HorizontalScroll className="pb-1 flex-1 min-w-0">
               {user && !userBetsError && (
-                <MyPositionsPill
-                  filter={myPositionsFilter}
-                  activeCount={activePredictions}
-                  onClick={cycleMyPositionsFilter}
+                <HubActivityFilterControl
+                  scope="predict"
+                  value={myPositionsFilter}
+                  count={activePredictions}
+                  onChange={(next) => setMyPositionsFilter(next)}
                   accent="weekly"
                 />
               )}
@@ -3254,14 +3199,6 @@ export default function PredictPage() {
             </div>
           )}
           <div className="hidden md:flex items-center gap-2 shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hidden md:inline-flex" onClick={() => setRulesModalOpen("predictions")} aria-label="View predictions rules">
-                  <ScrollText className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Predictions rules</TooltipContent>
-            </Tooltip>
             {user && (
               <button
                 type="button"
@@ -3310,7 +3247,7 @@ export default function PredictPage() {
           Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
         </p>
       </div>
-      {predictView === "weekly" && selectedType === "all" && (
+      {((predictView === "weekly" && selectedType === "all") || predictView === "world") && (
         <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
           <div className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
@@ -3921,46 +3858,6 @@ export default function PredictPage() {
 
         {showWorldPredictScope && (
           <div data-testid="world-markets-sticky-scope">
-            <WorldMarketsStickyHeader
-              liveMarketCount={filteredCommunity.length}
-              sticky={false}
-              actions={
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => setRulesModalOpen("community")}
-                        className="text-violet-600 dark:text-violet-400 hover:text-violet-500 dark:hover:text-violet-300"
-                        aria-label="How it works"
-                        data-testid="button-rules-real-world-markets"
-                      >
-                        <HelpCircle className="h-5 w-5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">How it works</TooltipContent>
-                  </Tooltip>
-                  <Button 
-                    onClick={() => openSuggestModal(() => setCreateModalOpen(true))}
-                    className="rounded-full bg-violet-500/15 dark:bg-violet-500/10 border border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 dark:hover:bg-violet-500/20 hidden md:flex"
-                    data-testid="button-start-prediction"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Suggest
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => openSnapScroll("world-markets", filteredCommunity[0]?.id ? String(filteredCommunity[0].id) : undefined, "header-icon")}
-                    className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-violet-600 dark:text-violet-400 transition-colors hover:text-violet-500 dark:hover:text-violet-300 hover:bg-muted/40 active:opacity-80"
-                    aria-label="Open immersive browse"
-                    data-testid="button-snap-world-markets"
-                  >
-                    <Maximize2 className="h-5 w-5" aria-hidden />
-                  </button>
-                </>
-              }
-            />
             <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
               {openMarketsError ? (
                 <Card className="p-8 text-center">
@@ -4301,7 +4198,7 @@ export default function PredictPage() {
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
       />
-      {(["predictions", "community", "jackpot", "updown", "h2h", "gainer"] as const).map((key) => {
+      {(["community", "jackpot", "updown", "h2h", "gainer"] as const).map((key) => {
         const cfg = PREDICT_RULES_STEPS[key];
         return (
           <StepModal

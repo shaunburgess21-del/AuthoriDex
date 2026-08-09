@@ -17,6 +17,7 @@ import {
 } from "@/components/InteractiveCategoryPill";
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
+import { HubActivityFilterControl } from "@/components/HubActivityFilterControl";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -52,7 +53,6 @@ import {
   ImageIcon,
   BarChart3,
   ListChecks,
-  EyeOff,
   Upload,
   Cpu,
   Landmark,
@@ -1188,11 +1188,6 @@ export default function VotePage() {
     [user?.id],
   );
 
-  const cycleMyVotesFilter = useCallback(() => {
-    setMyVotesFilter((prev) =>
-      prev === "all" ? "show-mine" : prev === "show-mine" ? "hide-mine" : "all",
-    );
-  }, [setMyVotesFilter]);
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
   const [curateSearchQuery, setCurateSearchQuery] = useState("");
@@ -2638,32 +2633,29 @@ export default function VotePage() {
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <SiteHeader active="vote" logoVariant="vote" />
-      {/* Section toggles — in normal flow, scrolls away with the page. */}
-      <div data-testid="section-toggles-container">
-        <div className="container mx-auto px-2 sm:px-4 pt-3 max-w-7xl">
+      {/* Section toggles — in normal flow, scrolls away with the page. Darker
+          band + bottom divider to visually separate it from the category chip
+          row below. */}
+      <div
+        className="bg-slate-200/50 dark:bg-black/40 border-b border-border/60"
+        data-testid="section-toggles-container"
+      >
+        <div className="container mx-auto px-2 sm:px-4 pt-3 pb-2 max-w-7xl">
           <div className="flex items-center gap-3">
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
-              <motion.button
-                type="button"
+              <motion.div
                 animate={hideTogglePulse}
-                onClick={cycleMyVotesFilter}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                  myVotesFilter === "show-mine"
-                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
-                    : myVotesFilter === "hide-mine"
-                      ? "bg-amber-500/15 dark:bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/50 dark:border-amber-500/40"
-                      : "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60"
-                }`}
-                data-testid="toggle-my-votes-pill"
+                className="min-w-fit rounded-lg"
               >
-                {myVotesFilter === "hide-mine" ? (
-                  <EyeOff className="h-4 w-4 shrink-0" />
-                ) : (
-                  <Vote className="h-4 w-4 shrink-0" />
-                )}
-                {myVotesFilter === "hide-mine" ? `Hidden (${myVotesCount})` : `Votes (${myVotesCount})`}
-              </motion.button>
+                <HubActivityFilterControl
+                  scope="vote"
+                  value={myVotesFilter}
+                  count={myVotesCount}
+                  onChange={(next) => setMyVotesFilter(next)}
+                  accent="vote"
+                />
+              </motion.div>
             )}
             {SECTION_TOGGLES.map((section) => (
               <button
