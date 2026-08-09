@@ -10,6 +10,8 @@
  *   - Resolves within 48h : status OPEN, endAt in the next 48h
  *   - Needs resolution     : status CLOSED_PENDING (awaiting a manual winner)
  *   - Stuck                : CLOSED_PENDING whose endAt was >24h ago
+ *   - Drafts to review     : unpublished scout output, flagged by health and
+ *                            by how long it has left before auto-expiry
  *
  * Also exports `sendMarketNeedsResolutionAlert()` — the instant ping fired
  * by the resolver cron the moment a market flips to CLOSED_PENDING.
@@ -59,7 +61,41 @@ export interface MarketOpsDigestResult {
   stuck: number;
   scoutFindings: number;
   scoutResolveNow: number;
+  /** Unpublished drafts sitting in the review queue. */
+  draftsAwaitingReview: number;
+  /** Of those, drafts with no health flags — safe to publish as-is. */
+  draftsReady: number;
+  /** Drafts that will auto-void within the window unless reviewed. */
+  draftsExpiringSoon: number;
   alert: { delivered: number; skipped: number; failed: number };
+}
+
+/**
+ * Human-readable reason a draft shouldn't be published as-is. Mirrors the
+ * copy in the admin edit modal so the email and the CMS agree.
+ */
+const DRAFT_HEALTH_LABEL: Record<string, string> = {
+  already_expired: "past its resolution date",
+  ends_soon: "resolves within 48h",
+  schedule_drift: "source rescheduled",
+  book_oversubscribed: "source odds over 100%",
+  book_short: "source odds don't cover the field",
+};
+
+function draftHealthFlags(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== "object") return [];
+  const health = (metadata as Record<string, unknown>).draftHealth;
+  if (!health || typeof health !== "object") return [];
+  const flags = (health as Record<string, unknown>).flags;
+  return Array.isArray(flags) ? (flags as string[]) : [];
+}
+
+function sourceAlreadyResolved(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const source = (metadata as Record<string, unknown>).source;
+  if (!source || typeof source !== "object") return false;
+  const stamped = (source as Record<string, unknown>).upstreamResolvedAt;
+  return typeof stamped === "string" && stamped.length > 0;
 }
 
 const SCOUT_ACTION_LABEL: Record<ScoutAction, string> = {
@@ -166,6 +202,28 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
       .orderBy(asc(predictionMarkets.endAt)),
   ]);
 
+  // Unpublished scout output. A draft whose endAt passes is auto-voided as
+  // "Draft expired unpublished", so an unreviewed queue silently throws away
+  // the scout's work — 17 went that way in the 11 days before this section
+  // existed, with nothing telling the operator to look.
+  const draftRows = await db
+    .select({
+      id: predictionMarkets.id,
+      title: predictionMarkets.title,
+      slug: predictionMarkets.slug,
+      endAt: predictionMarkets.endAt,
+      metadata: predictionMarkets.metadata,
+    })
+    .from(predictionMarkets)
+    .where(
+      and(
+        eq(predictionMarkets.marketType, "community"),
+        eq(predictionMarkets.visibility, "draft"),
+        eq(predictionMarkets.status, "OPEN"),
+      ),
+    )
+    .orderBy(asc(predictionMarkets.endAt));
+
   const allIds = [
     ...closingSoonRows.map((r) => r.id),
     ...pendingRows.map((r) => r.id),
@@ -225,6 +283,47 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
 
   const scoutItems = scout.findings.map(scoutFindingToItem);
 
+  const draftsAnnotated = draftRows.map((r) => {
+    const flags = draftHealthFlags(r.metadata);
+    const settled = sourceAlreadyResolved(r.metadata);
+    const msLeft = new Date(r.endAt).getTime() - now.getTime();
+    return { row: r, flags, settled, msLeft };
+  });
+  const draftsReady = draftsAnnotated.filter(
+    (d) => !d.settled && d.flags.length === 0,
+  );
+  const draftsExpiringSoon = draftsAnnotated.filter(
+    (d) => d.msLeft > 0 && d.msLeft <= CLOSING_SOON_WINDOW_MS,
+  );
+
+  // Lead with what is about to be lost, then what is publishable as-is.
+  // Flagged drafts that aren't urgent stay out of the email — they're visible
+  // in the CMS with badges, and listing 50 of them daily would train the
+  // operator to ignore the digest.
+  const draftItems: OpsAlertItem[] = [
+    ...draftsExpiringSoon.map((d) => ({
+      text: d.row.title,
+      detail:
+        `EXPIRES IN ${formatDuration(d.msLeft)} — publish or it auto-voids` +
+        (d.settled
+          ? " · source already settled, can't publish"
+          : d.flags.length > 0
+            ? ` · ${d.flags.map((f) => DRAFT_HEALTH_LABEL[f] ?? f).join(", ")}`
+            : ""),
+      url: adminWorldMarketsUrl(),
+    })),
+    ...draftsReady
+      .filter((d) => d.msLeft > CLOSING_SOON_WINDOW_MS)
+      .slice(0, 10)
+      .map((d) => ({
+        text: d.row.title,
+        detail: `ready to publish · resolves in ${formatDuration(d.msLeft)}`,
+        url: adminWorldMarketsUrl(),
+      })),
+  ];
+
+  const flaggedCount = draftsAnnotated.length - draftsReady.length;
+
   const sections: OpsAlertSection[] = [
     {
       heading: "Needs resolution",
@@ -246,12 +345,25 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
       items: closingItems,
       emptyText: "Nothing closing in the next 48 hours.",
     },
+    {
+      heading: `Drafts to review (${draftsReady.length} ready, ${flaggedCount} flagged)`,
+      emoji: "\u{1F4DD}",
+      items: draftItems,
+      emptyText:
+        draftsAnnotated.length > 0
+          ? `${draftsAnnotated.length} drafts queued, none urgent or unflagged.`
+          : "No drafts waiting.",
+    },
   ];
 
   const severity =
     stuckRows.length > 0 || scoutResolveNow > 0
       ? "critical"
-      : pendingRows.length > 0 || scout.findings.length > 0
+      : pendingRows.length > 0 ||
+          scout.findings.length > 0 ||
+          // A draft expiring today is a same-day decision: after that the
+          // resolver voids it and the scout's work is gone.
+          draftsExpiringSoon.length > 0
         ? "warning"
         : "info";
 
@@ -265,6 +377,10 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     summaryParts.push(`${scout.findings.length} scout signal${scout.findings.length === 1 ? "" : "s"}`);
   if (closingSoonRows.length > 0)
     summaryParts.push(`${closingSoonRows.length} closing within 48h`);
+  if (draftsExpiringSoon.length > 0)
+    summaryParts.push(`${draftsExpiringSoon.length} draft${draftsExpiringSoon.length === 1 ? "" : "s"} expiring unreviewed`);
+  else if (draftsReady.length > 0)
+    summaryParts.push(`${draftsReady.length} draft${draftsReady.length === 1 ? "" : "s"} ready to publish`);
   const summary =
     summaryParts.length > 0
       ? `World Markets: ${summaryParts.join(" · ")}.`
@@ -288,6 +404,8 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     `[MarketOpsDigest] closingSoon=${closingSoonRows.length} ` +
       `needsResolution=${totalPending} stuck=${stuckRows.length} ` +
       `scoutFindings=${scout.findings.length} scoutResolveNow=${scoutResolveNow} ` +
+      `draftsAwaitingReview=${draftsAnnotated.length} draftsReady=${draftsReady.length} ` +
+      `draftsExpiringSoon=${draftsExpiringSoon.length} ` +
       `delivered=${dispatch.delivered} skipped=${dispatch.skipped} failed=${dispatch.failed}`,
   );
 
@@ -297,6 +415,9 @@ async function runMarketOpsDigestOnce(): Promise<MarketOpsDigestResult> {
     stuck: stuckRows.length,
     scoutFindings: scout.findings.length,
     scoutResolveNow,
+    draftsAwaitingReview: draftsAnnotated.length,
+    draftsReady: draftsReady.length,
+    draftsExpiringSoon: draftsExpiringSoon.length,
     alert: {
       delivered: dispatch.delivered,
       skipped: dispatch.skipped,
@@ -321,6 +442,9 @@ export async function runMarketOpsDigest(): Promise<MarketOpsDigestResult> {
       stuck: 0,
       scoutFindings: 0,
       scoutResolveNow: 0,
+      draftsAwaitingReview: 0,
+      draftsReady: 0,
+      draftsExpiringSoon: 0,
       alert: { delivered: 0, skipped: 1, failed: 0 },
     };
   }
