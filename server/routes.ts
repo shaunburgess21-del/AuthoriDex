@@ -18960,7 +18960,8 @@ Target length: about 90-150 words.`;
             const { fetchPolymarketEventResolutions } = await import(
               "./providers/polymarket"
             );
-            const snapshot = await fetchPolymarketEventResolutions(externalId);
+            // Short timeout: this runs while the founder waits on Update.
+            const snapshot = await fetchPolymarketEventResolutions(externalId, 4000);
             const resolutions = snapshot ? [...snapshot.resolutions.values()] : [];
             const allClosed =
               resolutions.length > 0 && resolutions.every((r) => r.closed === true);
@@ -19958,7 +19959,12 @@ Target length: about 90-150 words.`;
       }
 
       const marketsBefore = await db
-        .select({ id: predictionMarkets.id, visibility: predictionMarkets.visibility })
+        .select({
+          id: predictionMarkets.id,
+          title: predictionMarkets.title,
+          visibility: predictionMarkets.visibility,
+          metadata: predictionMarkets.metadata,
+        })
         .from(predictionMarkets)
         .where(
           and(
@@ -19966,6 +19972,43 @@ Target length: about 90-150 words.`;
             eq(predictionMarkets.marketType, "community"),
           ),
         );
+
+      // Same publish guard as PATCH /api/admin/open-markets/:id. Clearing a
+      // review queue in bulk is the likeliest way to publish a market whose
+      // source has already settled, and going live seeds an AMM off the
+      // resolved price vector. Skip those rather than failing the whole batch.
+      //
+      // Stamp-based rather than a live source re-check: a bulk of 50 would
+      // mean 50 Gamma calls in one request. The stamp is refreshed by the
+      // daily watcher, which also retires these drafts outright.
+      const skipped: Array<{ id: string; title: string; reason: string }> = [];
+      let publishIds = marketIds as string[];
+      if (visibility === "live" || visibility === "inactive") {
+        const blocked = new Set<string>();
+        for (const m of marketsBefore) {
+          if (isSettlementEligibleVisibility(m.visibility)) continue;
+          const meta =
+            m.metadata && typeof m.metadata === "object"
+              ? (m.metadata as Record<string, unknown>)
+              : {};
+          const src =
+            meta.source && typeof meta.source === "object"
+              ? (meta.source as Record<string, unknown>)
+              : {};
+          if (typeof src.upstreamResolvedAt === "string" && src.upstreamResolvedAt) {
+            blocked.add(m.id);
+            skipped.push({
+              id: m.id,
+              title: m.title ?? "",
+              reason: "source_already_resolved",
+            });
+          }
+        }
+        publishIds = publishIds.filter((id) => !blocked.has(id));
+        if (publishIds.length === 0) {
+          return res.json({ updated: 0, markets: [], skipped });
+        }
+      }
 
       const updated = await db.update(predictionMarkets)
         .set({
@@ -19975,7 +20018,7 @@ Target length: about 90-150 words.`;
         })
         .where(
           and(
-            inArray(predictionMarkets.id, marketIds),
+            inArray(predictionMarkets.id, publishIds),
             eq(predictionMarkets.marketType, "community")
           )
         )
@@ -19983,7 +20026,10 @@ Target length: about 90-150 words.`;
 
       if (visibility === "live" || visibility === "inactive") {
         const { ensureWorldMarketAmmSeeded } = await import("./services/amm-house");
-        const draftToLive = marketsBefore.filter((m) => m.visibility === "draft");
+        const published = new Set(publishIds);
+        const draftToLive = marketsBefore.filter(
+          (m) => m.visibility === "draft" && published.has(m.id),
+        );
         for (const m of draftToLive) {
           const entries = await db
             .select({ id: marketEntries.id, displayOrder: marketEntries.displayOrder })
@@ -19997,7 +20043,7 @@ Target length: about 90-150 words.`;
         }
       }
 
-      res.json({ updated: updated.length, markets: updated });
+      res.json({ updated: updated.length, markets: updated, skipped });
     } catch (error) {
       console.error("[Open Markets] Batch visibility error:", error);
       res.status(500).json({ error: "Failed to update visibility" });

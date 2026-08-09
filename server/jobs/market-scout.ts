@@ -114,12 +114,6 @@ function envFlagDefaultOn(value: string | undefined): boolean {
   return !(v === "false" || v === "0" || v === "no" || v === "off");
 }
 
-function envNumber(value: string | undefined, fallback: number): number {
-  if (typeof value !== "string" || value.trim() === "") return fallback;
-  const n = Number(value.trim());
-  return Number.isFinite(n) && n >= 0 ? n : fallback;
-}
-
 const API_TIMEOUT_MS = 90_000;
 /** Longer summaries + resolutionSources across a multi-draft run. */
 const MAX_OUTPUT_TOKENS = 6_000;

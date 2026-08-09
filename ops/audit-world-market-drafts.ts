@@ -36,8 +36,12 @@ const AS_JSON = process.argv.slice(2).includes("--json");
 
 /** endAt closer than this is unlikely to survive a daily review cycle. */
 const ENDS_SOON_HOURS = 48;
-/** Source 24h volume below this rarely supports a meaningful price. */
-const THIN_VOLUME_USD = 1000;
+/**
+ * Source 24h volume below this rarely supports a meaningful price. Mirrors
+ * the scout's import floor (SCOUT_MIN_SOURCE_VOLUME_24H_USD) so the audit
+ * flags exactly what the importer would now reject.
+ */
+const THIN_VOLUME_USD = Number(process.env.SCOUT_MIN_SOURCE_VOLUME_24H_USD ?? 250);
 /** endAt vs source endDate gap that counts as drift. */
 const DRIFT_MS = 60 * 60 * 1000;
 

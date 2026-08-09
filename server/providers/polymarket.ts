@@ -298,9 +298,9 @@ function parseJsonArray(v: unknown): string[] {
   }
 }
 
-async function gammaGet(path: string): Promise<unknown> {
+async function gammaGet(path: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<unknown> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${GAMMA_BASE}${path}`, {
       signal: controller.signal,
@@ -689,12 +689,20 @@ export interface PolymarketEventSnapshot {
  * Also returns event-level endDate / kickoff so the source watch can
  * re-sync VoxDex times when Polymarket reschedules — at zero extra cost.
  * Returns null on fetch failure.
+ *
+ * `timeoutMs` exists for interactive callers: the admin publish check runs
+ * inside a request, where the 20s background default would leave the founder
+ * staring at a spinner before the check gives up and lets the publish through.
  */
 export async function fetchPolymarketEventResolutions(
   eventId: string,
+  timeoutMs?: number,
 ): Promise<PolymarketEventSnapshot | null> {
   try {
-    const raw = (await gammaGet(`/events/${encodeURIComponent(eventId)}`)) as GammaEvent;
+    const raw = (await gammaGet(
+      `/events/${encodeURIComponent(eventId)}`,
+      timeoutMs,
+    )) as GammaEvent;
     if (!raw || raw.id == null) return null;
     const resolutions = new Map<string, PolymarketMarketResolution>();
     for (const m of raw.markets ?? []) {

@@ -359,8 +359,21 @@ export function WorldMarketsSection({
       const data = await resp.json();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/markets"] });
       setSelectedIds(new Set());
+      const skipped: Array<{ title: string }> = Array.isArray(data.skipped)
+        ? data.skipped
+        : [];
       if (visibility === "live") {
-        toast("Markets Published", { description: `${data.updated} markets set to live.` });
+        if (skipped.length > 0) {
+          // Publishing a settled source would hand agents a known winner, so
+          // the server drops those from the batch instead of failing it.
+          toast.warning(`${data.updated} published, ${skipped.length} skipped`, {
+            description: `Source already settled: ${skipped
+              .map((s) => s.title)
+              .join(", ")}`,
+          });
+        } else {
+          toast("Markets Published", { description: `${data.updated} markets set to live.` });
+        }
       } else {
         toast("Markets Archived", { description: `${data.updated} markets archived.` });
       }
@@ -868,10 +881,31 @@ export function WorldMarketsSection({
                 const overdue = daysUntilEnd < 0 && (market.status === "OPEN" || market.status === "CLOSED_PENDING");
                 const canResolve = market.status === "OPEN" || market.status === "CLOSED_PENDING";
                 const meta = market.metadata as
-                  | { source?: { provider?: string; url?: string }; fitScore?: number }
+                  | {
+                      source?: {
+                        provider?: string;
+                        url?: string;
+                        upstreamResolvedAt?: string;
+                      };
+                      fitScore?: number;
+                      draftHealth?: { flags?: string[] };
+                    }
                   | null
                   | undefined;
                 const sourceUrl = meta?.source?.url;
+                // Triage at a glance: a draft whose source already settled can
+                // never be published, and a stale one needs a second look.
+                const sourceResolved = !!meta?.source?.upstreamResolvedAt;
+                const healthFlags = Array.isArray(meta?.draftHealth?.flags)
+                  ? meta!.draftHealth!.flags!
+                  : [];
+                const staleLabel = healthFlags.includes("book_oversubscribed")
+                  ? "Odds broken"
+                  : healthFlags.includes("book_short")
+                    ? "Odds short"
+                    : healthFlags.includes("schedule_drift")
+                      ? "Rescheduled"
+                      : null;
                 return (
                   <div
                     className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 p-3 rounded-lg border"
@@ -933,6 +967,26 @@ export function WorldMarketsSection({
                           {market.personId && (
                             <Badge variant="outline" className="text-xs border-purple-500/40 dark:border-purple-500/30 text-purple-600 dark:text-purple-400">
                               Linked
+                            </Badge>
+                          )}
+                          {sourceResolved && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-red-500/40 dark:border-red-500/30 text-red-600 dark:text-red-400"
+                              title="Polymarket has already settled this event — it can't be published"
+                              data-testid={`badge-source-resolved-${market.id}`}
+                            >
+                              <AlertTriangle className="h-3 w-3 mr-1" />Source settled
+                            </Badge>
+                          )}
+                          {!sourceResolved && staleLabel && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-amber-500/40 dark:border-amber-500/30 text-amber-600 dark:text-amber-400"
+                              title="The source has changed since this was drafted — re-check before publishing"
+                              data-testid={`badge-draft-stale-${market.id}`}
+                            >
+                              {staleLabel}
                             </Badge>
                           )}
                           {meta?.source?.provider && (() => {
