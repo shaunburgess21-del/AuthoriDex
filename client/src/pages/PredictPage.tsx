@@ -415,6 +415,7 @@ function SectionFilterBar({
   onAuthRequired,
   filters,
   accent = "world",
+  reserveStartPadding = true,
 }: {
   categoryFilter: CategoryFilter;
   onCategoryChange: (cat: CategoryFilter) => void;
@@ -427,6 +428,8 @@ function SectionFilterBar({
   filters: Array<{ id: string; label: string }>;
   /** Weekly = VoxDex blue chips; World = violet chips. */
   accent?: "weekly" | "world";
+  /** When false, category chips sit flush after an external leading control. */
+  reserveStartPadding?: boolean;
 }) {
   const searchVariant = accent === "weekly" ? "predict-weekly" : "predict";
 
@@ -439,6 +442,7 @@ function SectionFilterBar({
         testId={`${testIdPrefix}-search`}
         variant={searchVariant}
         activeCategory={categoryFilter}
+        reserveStartPadding={reserveStartPadding}
       >
         {filters.map((cat) => (
           <FilterChip
@@ -3140,16 +3144,6 @@ export default function PredictPage() {
           className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3"
           data-testid="predict-contextual-filter-row"
         >
-          {user && !userBetsError && predictView === "world" && (
-            <HubActivityFilterControl
-              scope="predict"
-              value={myPositionsFilter}
-              count={activePredictions}
-              onChange={(next) => setMyPositionsFilter(next)}
-              shrink
-              accent="world"
-            />
-          )}
           {predictView === "weekly" ? (
             <HorizontalScroll className="pb-1 flex-1 min-w-0">
               {user && !userBetsError && (
@@ -3179,19 +3173,34 @@ export default function PredictPage() {
               ))}
             </HorizontalScroll>
           ) : (
-            <div className="flex-1 min-w-0" data-testid="world-mode-filter-bar">
-              <SectionFilterBar
-                categoryFilter={communityCategory}
-                onCategoryChange={setCommunityCategory}
-                searchQuery={communitySearch}
-                onSearchChange={setCommunitySearch}
-                searchPlaceholder="Search predictions..."
-                testIdPrefix="community"
-                user={user}
-                onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                filters={communityCategoryFilters}
-                accent="world"
-              />
+            <div className="flex flex-1 min-w-0 items-center gap-2" data-testid="world-mode-filter-bar">
+              {user && !userBetsError && (
+                <div className="shrink-0">
+                  <HubActivityFilterControl
+                    scope="predict"
+                    value={myPositionsFilter}
+                    count={activePredictions}
+                    onChange={(next) => setMyPositionsFilter(next)}
+                    shrink
+                    accent="world"
+                  />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <SectionFilterBar
+                  categoryFilter={communityCategory}
+                  onCategoryChange={setCommunityCategory}
+                  searchQuery={communitySearch}
+                  onSearchChange={setCommunitySearch}
+                  searchPlaceholder="Search predictions..."
+                  testIdPrefix="community"
+                  user={user}
+                  onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
+                  filters={communityCategoryFilters}
+                  accent="world"
+                  reserveStartPadding={false}
+                />
+              </div>
             </div>
           )}
           <div className="hidden md:flex items-center gap-2 shrink-0">

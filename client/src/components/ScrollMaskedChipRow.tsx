@@ -10,10 +10,17 @@ export function ScrollMaskedChipRow({
   children,
   className = "",
   activeChipKey,
+  reserveStartPadding = true,
 }: {
   children: ReactNode;
   className?: string;
   activeChipKey?: string;
+  /**
+   * When false, only reserve right-side space for the overflow chevron
+   * (md:pr-9). Used when a control sits immediately left of this row
+   * so chips aren't pushed away by left padding.
+   */
+  reserveStartPadding?: boolean;
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
   useScrollHint(dragScrollRef);
@@ -109,7 +116,8 @@ export function ScrollMaskedChipRow({
           "flex items-center gap-2 overflow-x-auto scrollbar-hide",
           // Reserve space for desktop affordance buttons whenever the row overflows,
           // so chip positions don't jump as scroll state changes.
-          scrollState !== "none" && "md:px-9",
+          scrollState !== "none" &&
+            (reserveStartPadding ? "md:px-9" : "md:pr-9"),
           maskClass,
         )}
       >
