@@ -17,7 +17,6 @@ import {
   isOtherStyleOutcomeLabel,
   isPlaceholderOutcomeLabel,
   type CumulativeLadderDetection,
-  type LadderSignal,
 } from "@shared/lib/other-outcome";
 import { log } from "../log";
 
@@ -191,14 +190,16 @@ export interface PolymarketCandidate {
   /** Σ of named (non-Other) outcome prices at import, for Other advice. */
   namedPriceSum?: number;
   /**
-   * True when the source is a cumulative "by date / reaches threshold" ladder
-   * of independent Yes/No markets rather than a mutually-exclusive field. Such
-   * candidates only survive normalization when a catch-all outcome exists, so
-   * this is persisted for traceability: their prices are cumulative, which
-   * skews the AMM seed toward the named rungs.
+   * Ladder verdict for the source book as Polymarket published it, before any
+   * label polishing. Carried on the candidate so the scout's Other-outcome
+   * advice reuses the exact detection the import gate ran, instead of
+   * re-deriving it from GPT-rewritten labels and possibly disagreeing.
+   *
+   * A ladder only survives normalization when a catch-all outcome exists, so
+   * this is also traceability: its prices are cumulative, which skews the AMM
+   * seed toward the named rungs.
    */
-  cumulativeLadder?: boolean;
-  ladderSignals?: LadderSignal[];
+  ladderDetection?: CumulativeLadderDetection | null;
   /** Polymarket negRisk — the source's own declaration of mutual exclusivity. */
   mutuallyExclusiveSource?: boolean;
 }
@@ -430,8 +431,7 @@ function normalizeEvent(
     placeholderCount: aug.placeholderCount,
     hasExplicitOther: aug.hasExplicitOther,
     namedPriceSum,
-    cumulativeLadder: ladder?.isLadder ?? false,
-    ladderSignals: ladder?.signals,
+    ladderDetection: ladder,
     mutuallyExclusiveSource,
   };
 }

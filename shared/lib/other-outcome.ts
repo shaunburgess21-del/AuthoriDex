@@ -229,9 +229,11 @@ function isMonotone(values: number[]): boolean {
  * advisory, and the admin modal all agree.
  *
  * `mutuallyExclusiveSource` is Polymarket's negRisk flag — the authoritative
- * structural signal. The admin modal has no such flag and passes labels only,
- * where a parsed monotone rung set is enough to advise a catch-all: a
- * hand-built date ladder without one is unresolvable regardless of prices.
+ * structural signal, in both directions: `false` is the strongest ladder
+ * evidence, and `true` vetoes a ladder verdict outright. The admin modal has
+ * no such flag and passes labels only (leaving it undefined), where a parsed
+ * monotone rung set is enough to advise a catch-all: a hand-built date ladder
+ * without one is unresolvable regardless of prices.
  */
 export function detectCumulativeLadder(args: {
   labels: Array<string | null | undefined>;
@@ -327,6 +329,21 @@ export function detectCumulativeLadder(args: {
         signals.push("monotone_prices");
       }
     }
+  }
+
+  // negRisk is authoritative: such an event resolves exactly one winner
+  // upstream, so it can always settle and is by definition not a cumulative
+  // ladder. Shape + price evidence must never override it — an exclusive date
+  // partition ("September 30 | October 31 | November 30") parses as monotone
+  // rungs and routinely sums past 1 on mid prices, which would otherwise drop
+  // a perfectly importable market at the gate.
+  if (args.mutuallyExclusiveSource === true) {
+    return {
+      ...none,
+      signals,
+      order,
+      reason: "Source declares the outcomes mutually exclusive (negRisk) — not a ladder.",
+    };
   }
 
   const structural = signals.includes("independent_binaries");

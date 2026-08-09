@@ -324,6 +324,29 @@ test("detectCumulativeLadder ignores an over-subscribed exclusive field", () => 
   assert.equal(res.isLadder, false);
 });
 
+test("detectCumulativeLadder lets negRisk veto date labels plus vig", () => {
+  // An exclusive month partition parses as monotone date rungs and sums past
+  // 1 on mid prices. Without the negRisk veto both shape and price evidence
+  // fire and the import gate would drop a market that settles fine upstream.
+  const res = detectCumulativeLadder({
+    labels: ["September 30", "October 31", "November 30"],
+    prices: [0.5, 0.35, 0.25],
+    sourceEndDates: new Array(3).fill("2026-11-30T23:59:00.000Z"),
+    mutuallyExclusiveSource: true,
+  });
+  assert.equal(res.isLadder, false);
+  assert.match(res.reason, /mutually exclusive/i);
+
+  // Same book, but the source says the legs are independent binaries.
+  const independent = detectCumulativeLadder({
+    labels: ["September 30", "October 31", "November 30"],
+    prices: [0.5, 0.35, 0.25],
+    sourceEndDates: new Array(3).fill("2026-11-30T23:59:00.000Z"),
+    mutuallyExclusiveSource: false,
+  });
+  assert.equal(independent.isLadder, true);
+});
+
 test("detectCumulativeLadder ignores exhaustive band partitions", () => {
   // Ranges and a "<15m" lower tail mean the set already covers every case.
   const res = detectCumulativeLadder({

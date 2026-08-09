@@ -81,8 +81,7 @@ async function main(): Promise<void> {
 
   const { db, pool } = await import("../server/db");
   const { predictionMarkets, adminAuditLog } = await import("../shared/schema");
-  const { eq } = await import("drizzle-orm");
-  const { sql } = await import("drizzle-orm");
+  const { eq, sql } = await import("drizzle-orm");
   const {
     deriveResolutionBackstop,
     deriveTradingCloseAt,

@@ -1112,7 +1112,7 @@ async function insertScoutedDraft(
       // Cumulative "by date / reaches threshold" source. Only importable
       // because a catch-all is present; flagged so ops can tell that the
       // rung prices are cumulative rather than exclusive.
-      ...(candidate.cumulativeLadder ? { cumulativeLadder: true } : {}),
+      ...(candidate.ladderDetection?.isLadder ? { cumulativeLadder: true } : {}),
     },
     scoutedByMarketScout: true,
     seriesKey: normalizeSeriesKey(selection.seriesKey, selection.title),
@@ -1150,6 +1150,9 @@ async function insertScoutedDraft(
       prices: sourceOutcomes.map((o) => o.price),
       sourceEndDates: sourceOutcomes.map((o) => o.sourceEndDate ?? null),
       mutuallyExclusiveSource: candidate.mutuallyExclusiveSource,
+      // Reuse the import-time verdict so the advice can never contradict the
+      // gate that already let this candidate through.
+      ladder: candidate.ladderDetection,
     });
   }
   // Traceability: canonical names of everyone the scout auto-linked
