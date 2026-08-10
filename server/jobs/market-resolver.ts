@@ -118,6 +118,7 @@ function buildAmmResolutionNotes(
     engine: "amm",
     creditedToHouse: ammResult.creditedToHouse,
     payoutLiability: ammResult.payoutLiability,
+    warmStartCost: ammResult.warmStartCost,
     settledUserCount: ammResult.settledUserCount,
   };
 }

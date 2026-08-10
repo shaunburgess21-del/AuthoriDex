@@ -216,6 +216,7 @@ import { NativeMarketRow } from "@/pages/admin/NativeMarketRow";
  * One-shot deep-link params so ops emails can land the founder directly on
  * the right admin surface from a phone:
  *   /admin?section=predictions&tab=real-world&resolve=<marketId>
+ *   /admin?section=amm&tab=operations
  * `vis` presets the World Markets visibility filter (e.g. vis=draft),
  * `resolve` opens the settle dialog, `edit` opens the edit modal.
  * Params are consumed on mount and stripped from the URL immediately after.
@@ -338,7 +339,9 @@ export default function AdminDashboard() {
   const [savingRowIds, setSavingRowIds] = useState<Set<string>>(new Set());
 
   const [predictionSubTab, setPredictionSubTabRaw] = useState(() => {
-    if (deepLink.tab) {
+    // Only consume ?tab= for the predictions section — otherwise an AMM
+    // deep-link like ?section=amm&tab=operations would pollute this store.
+    if (deepLink.section === "predictions" && deepLink.tab) {
       sessionStorage.setItem("admin_prediction_tab", deepLink.tab);
       return deepLink.tab;
     }

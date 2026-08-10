@@ -4,8 +4,8 @@
  * `resolveAmmMarket` is the single entry point that takes an AMM
  * market from CLOSED_PENDING (or OPEN, for tests) to RESOLVED, paying
  * out winning shares, marking buy rows as won/lost, and returning
- * the seed (plus net user credits in, minus payout liability) to the
- * house via Phase 2's `returnAmmSeedAtSettlement`.
+ * the seed (plus warm-start cost + net user credits in, minus payout
+ * liability) to the house via Phase 2's `returnAmmSeedAtSettlement`.
  *
  * Two paths:
  *   - Winner path: `winnerEntryId` set, `voidMarket=false`. Each user
@@ -15,8 +15,11 @@
  *     status='settled'.
  *   - Void path: `voidMarket=true`. Every user gets refunded their
  *     net credits in (sum of buys' stakeAmount + sum of sells'
- *     stakeAmount, since sells store stakeAmount as negative). House
- *     gets back exactly the seed.
+ *     stakeAmount, since sells store stakeAmount as negative). The
+ *     house warm-start stake is refunded here too (it is a normal
+ *     `market_bets` row). House then gets seed back via settle — the
+ *     warm-start term cancels against the void refund inside the pot
+ *     residual, it does not double-credit.
  *
  * Idempotent end-to-end: each user's payout uses an idempotency key
  * `amm_payout_${marketId}_${userId}` (or `amm_void_refund_...`).
@@ -41,6 +44,7 @@ import { log } from "../log";
 import { notificationDayBucket } from "../jobs/notification-buckets";
 import { resolvePickContextLabel } from "../jobs/notification-market-labels";
 import { HOUSE_PROFILE_ID, returnAmmSeedAtSettlement } from "./amm-house";
+import { getWarmStartCostForMarket } from "./amm-warmstart";
 import { createNotification } from "./notifications";
 import {
   buildAmmResolutionNotification,
@@ -86,6 +90,11 @@ export interface ResolveAmmMarketResult {
   winnerEntryId: string | null;
   payoutLiability: number;
   creditedToHouse: number;
+  /**
+   * Absolute warm-start debit for this market (0 when none). Stamped into
+   * resolution_notes so ops can see the term without re-querying the ledger.
+   */
+  warmStartCost: number;
   settledUserCount: number;
   /** Already-resolved markets short-circuit and return their existing
    *  result. `idempotentSkip=true` means no rows changed this call. */
@@ -218,24 +227,44 @@ export async function resolveAmmMarket(
 
       const totalIn = state ? Number(state.totalUserCreditsIn) : 0;
       const seed = state?.houseSeedAmount ?? 0;
-      // We don't recompute payoutLiability on the idempotent path —
-      // just report the existing house P&L as creditedToHouse from
-      // the credit_ledger settle row.
+      const warmStartCost = await getWarmStartCostForMarket(marketId, tx);
+      // Prefer the settle row; if an ops reconciliation later restored a
+      // pre-fix warm-start leak, fold that credit in so the reported
+      // residual matches the audit formula (and resolution_notes after
+      // reconcile-warmstart-settle-drift.ts).
       const [settleRow] = await tx
         .select({ amount: creditLedger.amount })
         .from(creditLedger)
         .where(
-          sql`${creditLedger.userId} = '00000000-0000-0000-0000-0000000000aa' AND ${creditLedger.idempotencyKey} = ${`amm_settle_${marketId}`}`,
+          sql`${creditLedger.userId} = ${HOUSE_PROFILE_ID} AND ${creditLedger.idempotencyKey} = ${`amm_settle_${marketId}`}`,
         )
         .limit(1);
+      const [reconRow] = await tx
+        .select({ amount: creditLedger.amount })
+        .from(creditLedger)
+        .where(
+          sql`${creditLedger.userId} = ${HOUSE_PROFILE_ID} AND ${creditLedger.idempotencyKey} = ${`amm_warmstart_settle_recon_${marketId}`}`,
+        )
+        .limit(1);
+
+      const settleAmount = settleRow?.amount ?? 0;
+      const reconAmount = reconRow?.amount ?? 0;
+      const creditedToHouse = settleRow ? settleAmount + reconAmount : 0;
 
       const outcome: "resolved" | "voided" = market.status === "RESOLVED" ? "resolved" : "voided";
       return {
         marketId,
         outcome,
         winnerEntryId: winner?.id ?? null,
-        payoutLiability: settleRow ? seed + totalIn - settleRow.amount : 0,
-        creditedToHouse: settleRow?.amount ?? 0,
+        // Invert the settle residual (seed + warmStart + totalIn − credited)
+        // to recover liability. After a warm-start reconcile credit, this
+        // matches the original payoutLiability; without it, pre-fix
+        // settles would overstate liability by warmStartCost.
+        payoutLiability: settleRow
+          ? seed + warmStartCost + totalIn - creditedToHouse
+          : 0,
+        creditedToHouse,
+        warmStartCost,
         settledUserCount: 0,
         idempotentSkip: true,
       };
@@ -806,8 +835,11 @@ async function runWinnerPath(
       ),
     );
 
+  // Warm-start cost is house money that never entered totalUserCreditsIn.
+  // Pass it so the settle residual matches the health-check audit formula.
+  const warmStartCost = await getWarmStartCostForMarket(marketId, tx);
   const seedReturn = await returnAmmSeedAtSettlement(
-    { marketId, payoutLiability: totalPayoutLiability },
+    { marketId, payoutLiability: totalPayoutLiability, warmStartCost },
     tx,
   );
 
@@ -827,6 +859,7 @@ async function runWinnerPath(
     winnerEntryId,
     payoutLiability: totalPayoutLiability,
     creditedToHouse: seedReturn.creditedToHouse,
+    warmStartCost,
     settledUserCount,
     idempotentSkip: false,
   };
@@ -919,12 +952,16 @@ async function runVoidPath(
       ),
     );
 
-  // House gets back exactly the seed (refunds equal totalUserCreditsIn).
-  // Use returnAmmSeedAtSettlement with payoutLiability = totalRefund —
-  // the helper computes seed + totalIn - payoutLiability and we expect
-  // this to equal seed since totalRefund ≈ totalIn.
+  // House gets seed back. totalRefund includes the house warm-start stake
+  // when present (void refunds every market_bets owner, including HOUSE).
+  // Pass warmStartCost so it cancels against that refund inside the
+  // residual — omitting it under-credits the house by exactly the
+  // warm-start cost (the historical leak). Including it does NOT
+  // double-credit: pot = seed + warmStart + totalIn; outflows =
+  // totalRefund(= totalIn + warmStart) + credited(= seed).
+  const warmStartCost = await getWarmStartCostForMarket(marketId, tx);
   const seedReturn = await returnAmmSeedAtSettlement(
-    { marketId, payoutLiability: totalRefund },
+    { marketId, payoutLiability: totalRefund, warmStartCost },
     tx,
   );
 
@@ -945,6 +982,7 @@ async function runVoidPath(
     winnerEntryId: null,
     payoutLiability: totalRefund,
     creditedToHouse: seedReturn.creditedToHouse,
+    warmStartCost,
     settledUserCount,
     idempotentSkip: false,
   };

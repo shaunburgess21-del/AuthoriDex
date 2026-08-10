@@ -1,7 +1,7 @@
 /**
  * Phase 5 AMM admin dashboard.
  *
- * Four sub-tabs:
+ * Five sub-tabs:
  *   - Overview: house wallet stats + cooldown settings panel
  *   - Markets: paginated table of every AMM market with expandable
  *              per-entry inspector + Resolve/Void action
@@ -9,10 +9,10 @@
  *              badges
  *   - Health:  on-demand audit runner that surfaces drift between
  *              market_amm_state, market_bets, and credit_ledger
+ *   - Operations: historical `amm_health_check_runs` + live trend tiles
  *
- * All five `/api/admin/amm/*` GET endpoints are read-only; the only
- * mutations are the cooldown setter (existing) and the Resolve/Void
- * paths reused via the shared `AmmResolutionDialog`.
+ * Deep-link: `/admin?section=amm&tab=operations` (tab persisted in
+ * sessionStorage as `admin_amm_tab`).
  */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -1174,17 +1174,45 @@ function HealthTab() {
 // Section shell
 // ---------------------------------------------------------------------------
 
+const AMM_TAB_IDS = ["overview", "markets", "trades", "health", "operations"] as const;
+type AmmTabId = (typeof AMM_TAB_IDS)[number];
+
+function readAmmTab(): AmmTabId {
+  // Prefer a live deep-link (?section=amm&tab=operations) before it is
+  // stripped by AdminDashboard's mount effect.
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("tab");
+    if (
+      params.get("section") === "amm" &&
+      fromUrl &&
+      (AMM_TAB_IDS as readonly string[]).includes(fromUrl)
+    ) {
+      sessionStorage.setItem("admin_amm_tab", fromUrl);
+      return fromUrl as AmmTabId;
+    }
+  } catch {
+    // sessionStorage / location unavailable — fall through
+  }
+  const stored = sessionStorage.getItem("admin_amm_tab");
+  if (stored && (AMM_TAB_IDS as readonly string[]).includes(stored)) {
+    return stored as AmmTabId;
+  }
+  return "overview";
+}
+
 export function AdminAmmSection() {
   const tabs = useMemo(
     () => [
-      { id: "overview", label: "Overview", icon: Activity },
-      { id: "markets", label: "Markets", icon: Coins },
-      { id: "trades", label: "Trades", icon: TrendingUp },
-      { id: "health", label: "Health", icon: ShieldCheck },
-      { id: "operations", label: "Operations", icon: Gauge },
+      { id: "overview" as const, label: "Overview", icon: Activity },
+      { id: "markets" as const, label: "Markets", icon: Coins },
+      { id: "trades" as const, label: "Trades", icon: TrendingUp },
+      { id: "health" as const, label: "Health", icon: ShieldCheck },
+      { id: "operations" as const, label: "Operations", icon: Gauge },
     ],
     [],
   );
+  const [activeTab, setActiveTab] = useState<AmmTabId>(readAmmTab);
 
   return (
     <div className="space-y-6">
@@ -1198,7 +1226,16 @@ export function AdminAmmSection() {
         </p>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          if ((AMM_TAB_IDS as readonly string[]).includes(v)) {
+            sessionStorage.setItem("admin_amm_tab", v);
+            setActiveTab(v as AmmTabId);
+          }
+        }}
+        className="space-y-4"
+      >
         <div className="-mx-1 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <TabsList className="inline-flex w-max">
             {tabs.map((t) => (

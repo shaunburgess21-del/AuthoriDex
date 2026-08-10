@@ -4,7 +4,7 @@
  */
 
 import { db } from "../db";
-import { marketBets, agentConfigs, agentPerformance, predictionMarkets } from "@shared/schema";
+import { marketBets, agentPerformance, predictionMarkets } from "@shared/schema";
 import { eq, and, isNotNull, ne, sql } from "drizzle-orm";
 import { addMemory } from "./memoryManager";
 import { log } from "../log";
@@ -13,6 +13,29 @@ export interface ScoreResolvedMarketResult {
   total: number;
   scored: number;
   failed: number;
+}
+
+/**
+ * Predicted probability used for Brier scoring.
+ *
+ * Prefer the agent's own belief (`confidence`). Fall back to LMSR
+ * `pricePerShare` for legacy rows that lack confidence, then 0.5.
+ * Clamped to [0, 1] so numeric(6,4) inserts never see NaN.
+ *
+ * Phase 1 (Aug 2026) flipped the preference order — older
+ * agent_performance rows are price-based; newer ones are belief-based.
+ */
+export function resolvePredictedProbability(input: {
+  confidence?: string | number | null;
+  pricePerShare?: string | number | null;
+}): number {
+  const rawProb =
+    input.confidence != null
+      ? parseFloat(String(input.confidence))
+      : input.pricePerShare != null
+        ? parseFloat(String(input.pricePerShare))
+        : 0.5;
+  return Number.isFinite(rawProb) ? Math.min(1, Math.max(0, rawProb)) : 0.5;
 }
 
 export async function scoreResolvedMarket(
@@ -71,20 +94,13 @@ export async function scoreResolvedMarket(
       try {
         const isCorrect = bet.entryId === winnerEntryId;
         const outcome = isCorrect ? 1.0 : 0.0;
-        // Predicted probability the entry wins. AMM trades store this as
-        // price_per_share (the LMSR implied probability at trade time);
-        // legacy/parimutuel rows use `confidence`. Fall back to the 0.5 prior
-        // only if neither is present. != null so an exact 0 isn't treated as
-        // missing.
-        const rawProb =
-          bet.pricePerShare != null
-            ? parseFloat(String(bet.pricePerShare))
-            : bet.confidence != null
-              ? parseFloat(String(bet.confidence))
-              : 0.5;
-        // Clamp to [0,1]; a non-finite value would yield a NaN Brier score,
-        // which numeric(6,4) rejects on insert.
-        const conf = Number.isFinite(rawProb) ? Math.min(1, Math.max(0, rawProb)) : 0.5;
+        // Score the AGENT's belief, not the LMSR price at trade time.
+        // Discontinuity note (Phase 1, Aug 2026): rows before this change
+        // are price-based; rows after are belief-based.
+        const conf = resolvePredictedProbability({
+          confidence: bet.confidence,
+          pricePerShare: bet.pricePerShare,
+        });
 
         // Brier score: (predicted probability - outcome)^2
         const brierScore = Math.pow(conf - outcome, 2);

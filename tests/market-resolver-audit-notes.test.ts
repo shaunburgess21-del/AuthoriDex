@@ -32,6 +32,7 @@ function ammSettlement(overrides: Partial<ResolveAmmMarketResult> = {}): Resolve
     winnerEntryId: "e-1",
     payoutLiability: 1234,
     creditedToHouse: 567,
+    warmStartCost: 0,
     settledUserCount: 12,
     idempotentSkip: false,
     ...overrides,
@@ -43,6 +44,11 @@ test("includes creditedToHouse and payoutLiability — the audit-required keys",
   const notes = buildAmmResolutionNotes(evidence, "Up", ammSettlement());
   assert.equal(notes.creditedToHouse, 567);
   assert.equal(notes.payoutLiability, 1234);
+});
+
+test("includes warmStartCost so ops can see the settle residual term without a ledger join", () => {
+  const notes = buildAmmResolutionNotes({}, "Up", ammSettlement({ warmStartCost: 644 }));
+  assert.equal(notes.warmStartCost, 644);
 });
 
 test("preserves the evidence payload (so resolution-summary cards keep working)", () => {
@@ -96,10 +102,12 @@ test("evidence keys do not override the audit keys (defence-in-depth)", () => {
     type: "updown",
     creditedToHouse: 9999, // bogus
     payoutLiability: 9999, // bogus
+    warmStartCost: 9999, // bogus
   };
-  const notes = buildAmmResolutionNotes(evidence, "Up", ammSettlement());
+  const notes = buildAmmResolutionNotes(evidence, "Up", ammSettlement({ warmStartCost: 644 }));
   assert.equal(notes.creditedToHouse, 567);
   assert.equal(notes.payoutLiability, 1234);
+  assert.equal(notes.warmStartCost, 644);
 });
 
 test("output is JSON-serialisable (we round-trip through JSON.stringify in the resolver)", () => {

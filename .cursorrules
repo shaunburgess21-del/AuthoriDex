@@ -122,8 +122,20 @@ VoxDex offers five market types, all settled in virtual credits:
 - **Up/Down** — Will [person]'s trend score go up or down by [date]? Binary outcome.
 - **H2H (Head-to-Head)** — Which of two people will have the higher trend score by [date]? Binary outcome.
 - **Top Gainer** (`marketType: gainer`) — Which person from a category will have the largest trend score increase over the market window? Multi-outcome.
-- **Weekly Jackpot** (`marketType: jackpot`) — Weekly themed exact-score market with a pooled prize. **Stays parimutuel** (intentionally not migrated to AMM).
+- **Weekly Jackpot** (`marketType: jackpot`) — Per-person exact-score markets with a pooled prize. **Stays parimutuel** (intentionally not migrated to AMM).
 - **World Markets** (`marketType: community` in DB) — Real-world events (politics, sports, entertainment, etc.). Outcomes depend on external reality, not trend scores.
+
+### Native weekly field (Up/Down + Jackpot)
+
+Both Up/Down and Jackpot run a **curated 20-card anchored field** each week (deliberate reduction from the full roster to concentrate agent liquidity — not a bug). Selection at Monday ~00:05 UTC via `selectAnchoredWeeklyIds`:
+
+- **10 anchors** — fame ranks 1–10
+- **6 movers** — momentum-weighted from ranks 11–40
+- **4 wildcards** — from ranks 41–100
+
+Jackpot and Up/Down use **different PRNG seeds** (`weekNumber:jackpot` vs `weekNumber:updown`), so the 10 anchors are shared but movers/wildcards differ between the two. H2H and Top Gainer have their own selection paths (category pairing / gainer field).
+
+Agent lock-in / arb thresholds that look env-like but are **compile-time constants** (not Railway vars): `LOCKIN_DECISIVE_PCT` = 0.10 and `ARB_MIN_EDGE_PP` = 0.04 in `server/agents/lockInFair.ts` / `constants.ts`. Tuning them requires a code change + deploy.
 
 ### World Market resolution is MANUAL — auto-resolve does not exist yet
 

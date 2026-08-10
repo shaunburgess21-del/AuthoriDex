@@ -1045,7 +1045,7 @@ const AMM_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 async function runScheduledAmmHealthCheck(): Promise<void> {
   try {
-    const { runAndPersistAmmHealthCheck } = await import("./jobs/amm-health");
+    const { runAndPersistAmmHealthCheck, alertAmmHealthFailure } = await import("./jobs/amm-health");
     // Persists into amm_health_check_runs so the admin Operations sub-tab
     // can render the 24h trend strip without re-running the audit on every
     // page load. Persist failures are swallowed inside the wrapper.
@@ -1057,6 +1057,9 @@ async function runScheduledAmmHealthCheck(): Promise<void> {
     if (!result.ok) {
       const failedNames = result.checks.filter((c) => c.status === "fail").map((c) => c.name);
       log(`[AmmHealthCheck] FAIL — ${result.failed} failed check(s): ${failedNames.join(", ")}`);
+      // Ops email — idempotent once per day per failing-set fingerprint so
+      // a persistent FAIL does not spam OPS_ALERT_EMAILS every 15 minutes.
+      await alertAmmHealthFailure(result);
     } else if (result.warned > 0) {
       const warnedNames = result.checks.filter((c) => c.status === "warn").map((c) => c.name);
       log(`[AmmHealthCheck] PASS with ${result.warned} warning(s): ${warnedNames.join(", ")}`);

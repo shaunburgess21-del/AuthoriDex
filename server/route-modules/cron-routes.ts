@@ -318,7 +318,7 @@ export function registerCronRoutes(app: Express): void {
   app.post("/api/cron/amm-health-check", verifyCronSecret, async (req, res) => {
     const startTime = Date.now();
     try {
-      const { runAndPersistAmmHealthCheck } = await import("../jobs/amm-health");
+      const { runAndPersistAmmHealthCheck, alertAmmHealthFailure } = await import("../jobs/amm-health");
       const lookbackDaysRaw = req.query.days ?? req.body?.days;
       const lookbackDays =
         lookbackDaysRaw !== undefined && lookbackDaysRaw !== null && lookbackDaysRaw !== ""
@@ -340,6 +340,9 @@ export function registerCronRoutes(app: Express): void {
         console.warn(
           `[Cron][amm-health-check] FAIL — ${result.failed} failed check(s): ${failedNames.join(", ")}`,
         );
+        // Same ops-alert path as the in-process scheduler (idempotent once
+        // per day per failing-set fingerprint).
+        await alertAmmHealthFailure(result);
       } else if (result.warned > 0) {
         const warnedNames = result.checks.filter((c) => c.status === "warn").map((c) => c.name);
         console.log(

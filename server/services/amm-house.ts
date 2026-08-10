@@ -500,10 +500,23 @@ export async function syncAmmOutcomeOrderWithEntries(
 export interface ReturnAmmSeedInput {
   marketId: string;
   /**
-   * Total credits paid out to user share-holders at settlement
-   * (= q[winnerIdx] in LMSR, ceiled per share at the route boundary).
+   * Total credits paid out to share-holders at settlement
+   * (winner path: floor(netShares) per user including any house
+   * warm-start payout; void path: sum of net stake refunds including
+   * the house warm-start stake when present).
    */
   payoutLiability: number;
+  /**
+   * Absolute credits the house paid at open via `amm_warmstart_debit`.
+   * Warm-start deliberately does NOT increment `totalUserCreditsIn`
+   * (see `amm-warmstart.ts`), so the settle residual must add this
+   * term explicitly or the warm-start money leaves circulation.
+   * Defaults to 0 for markets that never warm-started.
+   *
+   * Caller (`amm-resolver.ts`) loads this via `getWarmStartCostForMarket`
+   * — we do not import the warm-start module here to avoid a cycle.
+   */
+  warmStartCost?: number;
 }
 
 export interface ReturnAmmSeedResult {
@@ -516,12 +529,35 @@ export interface ReturnAmmSeedResult {
 }
 
 /**
+ * Pure pot residual for an AMM market at settlement. Matches the
+ * seed-return drift audit in `server/jobs/amm-health.ts`:
+ *
+ *   creditedToHouse = round(houseSeed + warmStartCost + totalUserCreditsIn − payoutLiability)
+ *
+ * Exported so unit tests can pin the arithmetic without a DB.
+ */
+export function computeCreditedToHouse(input: {
+  houseSeedAmount: number;
+  warmStartCost?: number;
+  totalUserCreditsIn: number;
+  payoutLiability: number;
+}): number {
+  const warmStart =
+    input.warmStartCost != null && Number.isFinite(input.warmStartCost)
+      ? Math.max(0, input.warmStartCost)
+      : 0;
+  return Math.round(
+    input.houseSeedAmount + warmStart + input.totalUserCreditsIn - input.payoutLiability,
+  );
+}
+
+/**
  * Settle the house wallet for an AMM market. Called once per market
  * from `amm-resolver.ts::resolveAmmMarket` (both the winner-payout
  * path and the void/refund path). Live and exercised in production.
  *
  * Behaviour:
- *   - Computes `creditedToHouse = round(houseSeed + totalUserCreditsIn − payoutLiability)`.
+ *   - Computes `creditedToHouse = round(houseSeed + warmStartCost + totalUserCreditsIn − payoutLiability)`.
  *   - Credits `HOUSE_PROFILE_ID`'s `predictCredits` and writes a
  *     `credit_ledger` row with `txnType='amm_settle_credit'` and
  *     `idempotencyKey='amm_settle_${marketId}'`.
@@ -530,6 +566,12 @@ export interface ReturnAmmSeedResult {
  *
  * The returned amount can be negative (house took an LMSR loss bounded
  * by `b · ln(N)`); the credit_ledger always stores the signed amount.
+ *
+ * Void-path note: `runVoidPath` refunds the house warm-start stake via
+ * `amm_void_refund_${marketId}_${HOUSE}` (the warm-start bet is a normal
+ * `market_bets` row). That refund is already inside `payoutLiability`, so
+ * including `warmStartCost` here cancels correctly — it does NOT
+ * double-credit. Omitting it under-credits by exactly the warm-start cost.
  *
  * The same audit fields (`creditedToHouse`, `payoutLiability`) are also
  * stamped into `prediction_markets.resolution_notes` by the auto-resolver
@@ -547,6 +589,18 @@ export async function returnAmmSeedAtSettlement(
       `[ammHouse] payoutLiability must be a non-negative finite number, got ${payoutLiability}`,
     );
   }
+  if (
+    input.warmStartCost != null &&
+    (!Number.isFinite(input.warmStartCost) || input.warmStartCost < 0)
+  ) {
+    throw new Error(
+      `[ammHouse] warmStartCost must be a non-negative finite number when provided, got ${input.warmStartCost}`,
+    );
+  }
+  const warmStartCost =
+    input.warmStartCost != null && Number.isFinite(input.warmStartCost)
+      ? input.warmStartCost
+      : 0;
 
   const idempotencyKey = `amm_settle_${marketId}`;
 
@@ -599,8 +653,15 @@ export async function returnAmmSeedAtSettlement(
         `[ammHouse] market_amm_state.total_user_credits_in is not a finite number for ${marketId}: ${state.totalUserCreditsIn}`,
       );
     }
-    // Net credited back: AMM holding (seed + creditsIn) minus payout.
-    const creditedToHouse = Math.round(state.houseSeedAmount + totalIn - payoutLiability);
+    // Net credited back: AMM holding (seed + warm-start + creditsIn) minus payout.
+    // warmStartCost is required because applyWarmStartPrior deliberately
+    // leaves totalUserCreditsIn untouched (house money, tracked on the ledger).
+    const creditedToHouse = computeCreditedToHouse({
+      houseSeedAmount: state.houseSeedAmount,
+      warmStartCost,
+      totalUserCreditsIn: totalIn,
+      payoutLiability,
+    });
 
     const [updatedHouse] = await tx
       .update(profiles)
@@ -625,6 +686,7 @@ export async function returnAmmSeedAtSettlement(
       metadata: {
         marketId,
         houseSeedAmount: state.houseSeedAmount,
+        warmStartCost,
         totalUserCreditsIn: totalIn,
         payoutLiability,
       },

@@ -50,6 +50,11 @@
  *                              the house was net debited or credited;
  *                              `SUM(amount)` handles both signs).
  *   - `amm_settle_credit`      POSITIVE — seed-return at settlement.
+ *   - `amm_warmstart_settle_reconciliation`
+ *                              POSITIVE — one-shot ops credit that restores
+ *                              warm-start costs destroyed by the pre-fix
+ *                              settle residual (see
+ *                              `ops/reconcile-warmstart-settle-drift.ts`).
  *
  * `SUM(amount)` over these rows for the house user gives the net delta
  * directly — no sign-flipping at the call site needed.
@@ -61,6 +66,7 @@ export const HOUSE_PNL_TXN_TYPES = [
   "amm_warmstart_payout",
   "amm_void_refund",
   "amm_settle_credit",
+  "amm_warmstart_settle_reconciliation",
 ] as const;
 
 export type HousePnlTxnType = (typeof HOUSE_PNL_TXN_TYPES)[number];

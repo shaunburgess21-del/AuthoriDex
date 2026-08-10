@@ -89,6 +89,17 @@ test("HOUSE_PNL_TXN_TYPES: covers warm-start lifecycle (debit at open, payout at
   assert.ok((HOUSE_PNL_TXN_TYPES as readonly string[]).includes("amm_warmstart_payout"));
 });
 
+test("HOUSE_PNL_TXN_TYPES: covers warm-start settle reconciliation", () => {
+  // One-shot ops credit restoring warm-start costs destroyed by the
+  // pre-fix settle residual. Must stay in the P&L set so the drain
+  // breaker and admin house dashboard see the restored credits.
+  assert.ok(
+    (HOUSE_PNL_TXN_TYPES as readonly string[]).includes(
+      "amm_warmstart_settle_reconciliation",
+    ),
+  );
+});
+
 test("HOUSE_PNL_TXN_TYPES: covers user payout + void refund", () => {
   // `amm_payout` is included in case the house ever ends up holding
   // shares outside the warm-start path; today it's a safety net only.

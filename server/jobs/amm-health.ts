@@ -12,8 +12,8 @@
  *      that no longer exists.
  *   2. AMM seed-return drift — for RESOLVED amm markets in the last
  *      `lookbackDays` days, creditedToHouse should equal
- *      houseSeedAmount + totalUserCreditsIn − payoutLiability
- *      (within 1 credit rounding tolerance).
+ *      houseSeedAmount + warmStartCost + totalUserCreditsIn − payoutLiability
+ *      (within 1 credit rounding tolerance; warmStartCost is 0 when absent).
  *   3. Stuck markets — CLOSED_PENDING for > 24h.
  *   4. Negative credits — any profile with predict_credits < 0.
  *   5. Duplicate idempotency keys in credit_ledger in the last 24h.
@@ -813,4 +813,95 @@ export async function runAndPersistAmmHealthCheck(
     );
   }
   return result;
+}
+
+/**
+ * Build a stable idempotency base for ops alerts on health-check failures.
+ *
+ * At most one email per UTC day per distinct set of failing check names —
+ * so a persistent FAIL (e.g. the warm-start settle leak) does not spam
+ * OPS_ALERT_EMAILS 96 times a day, but a new failing check still pings
+ * immediately. Pure helper — exported for unit tests.
+ */
+export function buildAmmHealthFailIdempotencyKey(
+  failedCheckNames: string[],
+  now: Date = new Date(),
+): string {
+  const day = now.toISOString().slice(0, 10);
+  const fingerprint = [...failedCheckNames].sort().join("|") || "unknown";
+  // Stable short digests — truncating the raw name list could collide
+  // two different failing sets that share a long common prefix.
+  let hash = 0;
+  for (let i = 0; i < fingerprint.length; i++) {
+    hash = (hash * 31 + fingerprint.charCodeAt(i)) | 0;
+  }
+  const digest = (hash >>> 0).toString(16).padStart(8, "0");
+  return `amm_health_fail:${day}:${digest}`;
+}
+
+/**
+ * Fire an ops alert when the AMM health check returns a hard FAIL.
+ * Best-effort: swallows delivery errors so a flaky Resend never takes
+ * down the scheduler / cron. Idempotent via `buildAmmHealthFailIdempotencyKey`.
+ */
+export async function alertAmmHealthFailure(
+  result: HealthCheckResult,
+): Promise<void> {
+  if (result.ok || result.failed === 0) return;
+
+  const failed = result.checks.filter((c) => c.status === "fail");
+  const failedNames = failed.map((c) => c.name);
+  const warned = result.checks.filter((c) => c.status === "warn");
+
+  try {
+    const { sendOpsAlert, adminDashboardUrl } = await import(
+      "../services/ops-alerts"
+    );
+    await sendOpsAlert({
+      kind: "amm_health_fail",
+      severity: "critical",
+      title: `AMM health check FAIL — ${result.failed} check(s)`,
+      summary:
+        `${result.failed} failed, ${result.warned} warned, ${result.passed} passed ` +
+        `(lookback ${result.lookbackDays}d, ${result.durationMs}ms).`,
+      sections: [
+        {
+          heading: "Failed checks",
+          items: failed.map((c) => ({
+            text: c.name,
+            detail: `${c.details}${c.rowCount != null ? ` (rows=${c.rowCount})` : ""}`,
+          })),
+        },
+        ...(warned.length > 0
+          ? [
+              {
+                heading: "Warnings",
+                items: warned.map((c) => ({
+                  text: c.name,
+                  detail: c.details,
+                })),
+              },
+            ]
+          : []),
+      ],
+      // Deep-link into the AMM section's Operations tab (not a top-level
+      // admin section — "operations" alone would fall through to overview).
+      ctaUrl: `${adminDashboardUrl()}?section=amm&tab=operations`,
+      ctaLabel: "Open AMM Operations",
+      idempotencyKeyBase: buildAmmHealthFailIdempotencyKey(failedNames),
+    });
+  } catch (err) {
+    // Prefer the shared logger so Railway saved-searches that already
+    // watch `[AmmHealth]` catch delivery failures too.
+    try {
+      const { log } = await import("../log");
+      log(
+        `[AmmHealth] Ops alert failed (continuing): ${err instanceof Error ? err.message : err}`,
+      );
+    } catch {
+      console.warn(
+        `[AmmHealth] Ops alert failed (continuing): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 }
