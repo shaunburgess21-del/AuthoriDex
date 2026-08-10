@@ -26,7 +26,7 @@ export function PredictCard({
   const heightClass = autoSize ? "max-md:h-auto md:h-full" : "h-full";
   const cardContent = (
     <div
-      className={`relative overflow-visible ${heightClass} ${onClick && !inactive ? "cursor-pointer" : ""} ${inactive ? "cursor-default" : ""}`}
+      className={`hub-card-slot relative overflow-visible ${heightClass} ${onClick && !inactive ? "cursor-pointer" : ""} ${inactive ? "cursor-default" : ""}`}
       onClick={inactive ? undefined : onClick}
       data-testid={testId}
     >

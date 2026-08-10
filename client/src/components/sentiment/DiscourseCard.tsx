@@ -85,7 +85,7 @@ export function DiscourseCard({
   };
 
   return (
-    <div className="relative h-full">
+    <div className="hub-card-slot relative h-full">
     <Card 
       className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
       data-testid={`card-discourse-${topic.id}`}

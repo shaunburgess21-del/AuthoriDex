@@ -1376,7 +1376,7 @@
     left: 0;
     right: 0;
     height: 3px;
-    z-index: 0;
+    z-index: 1;
     opacity: 0;
     transition: opacity 0.2s ease-out;
     background: linear-gradient(90deg, transparent 0%, var(--lb-row-bar) 50%, transparent 100%);
@@ -1392,7 +1392,10 @@
     pointer-events: none;
     background: radial-gradient(ellipse at top left, var(--lb-row-glow) 0%, transparent 60%);
   }
-  .hub-card-hover > * {
+  .hub-card-hover > .hub-card-surface {
+    z-index: 0;
+  }
+  .hub-card-hover > *:not(.hub-card-surface) {
     z-index: 1;
   }
   @media (hover: hover) {
@@ -1420,6 +1423,17 @@
   @media (prefers-reduced-motion: reduce) {
     .hub-card-hover:hover {
       transform: none;
+    }
+  }
+
+  /* Grid slot wrapper — elevate hovered card above neighbors (mirrors BattleCard). */
+  .hub-card-slot {
+    position: relative;
+    z-index: 0;
+  }
+  @media (hover: hover) {
+    .hub-card-slot:hover {
+      z-index: 10;
     }
   }
 

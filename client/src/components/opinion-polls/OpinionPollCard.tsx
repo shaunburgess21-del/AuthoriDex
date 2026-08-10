@@ -275,7 +275,7 @@ export function OpinionPollCard({
   );
 
   return (
-    <div className="relative h-full overflow-visible">
+    <div className="hub-card-slot relative h-full overflow-visible">
       <Card
         className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
         data-testid={`opinion-poll-card-${poll.id}`}

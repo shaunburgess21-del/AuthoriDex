@@ -208,7 +208,7 @@ export function CurateProfileCard({
   const hasVoted = selectedPhoto !== null;
 
   return (
-    <div className="relative h-full w-full overflow-visible">
+    <div className="hub-card-slot relative h-full w-full overflow-visible">
       <Card 
         className="hub-card-hover lb-row-neutral relative bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90 dark:bg-none dark:bg-[#11151D] shadow-none md:shadow-sm rounded-[12px] md:rounded-xl h-full flex flex-col min-h-[390px] md:min-h-0"
         data-testid={`card-curate-${person.id}`}
