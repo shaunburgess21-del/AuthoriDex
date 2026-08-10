@@ -47,6 +47,7 @@ import {
   computeOtherOutcomeAdvice,
   type OtherOutcomeAdvice,
 } from "@shared/lib/other-outcome";
+import { computeBaselineQualifierAdvice } from "@shared/lib/baseline-qualifier";
 import { type MarketEntryForm, createMarketEntry } from "@/pages/admin/adminTypes";
 import { fetchWithAuth } from "@/pages/admin/adminAuth";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
@@ -383,6 +384,13 @@ export function CreateMarketModal({
       ? editMarket.metadata.source.upstreamResolvedAt
       : null;
   const cumulativeLadderSource = editMarket?.metadata?.source?.cumulativeLadder === true;
+
+  // Computed live rather than read from import metadata, so the warning
+  // disappears the moment the criteria are corrected in this dialog.
+  const baselineAdvice = computeBaselineQualifierAdvice({
+    title,
+    criteria: resolutionCriteria,
+  });
 
   // Staleness picked up by the daily draft health sweep.
   const draftHealthFlags: string[] = Array.isArray(editMarket?.metadata?.draftHealth?.flags)
@@ -908,6 +916,18 @@ export function CreateMarketModal({
                 public knowledge. Publishing it lets agents trade a known winner against
                 the house. Resolve or archive it instead.
               </p>
+            </div>
+          )}
+
+          {baselineAdvice.flagged && (
+            <div
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+              data-testid="notice-baseline-qualifier"
+            >
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                Criteria don&apos;t exclude what already happened
+              </p>
+              <p className="text-xs text-muted-foreground">{baselineAdvice.reason}</p>
             </div>
           )}
 

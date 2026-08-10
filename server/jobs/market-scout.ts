@@ -76,6 +76,7 @@ import {
   isOtherStyleOutcomeLabel,
 } from "@shared/lib/other-outcome";
 import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
+import { computeBaselineQualifierAdvice } from "@shared/lib/baseline-qualifier";
 import {
   isDrawStyleOutcomeLabel,
   isSingleWinnerKnockoutMarket,
@@ -766,7 +767,7 @@ For each selected market, produce:
 - "summary": 3-5 sentences (~60-110 words) of engaging BACKGROUND CONTEXT so a casual reader instantly gets why this market is interesting. Cover: what's happening, who the key players are, why it matters / what's at stake, and the current state of play or key date. Write it self-contained, neutral, and in your own words. Do NOT restate how the market resolves, outcome labels, "Other" catch-alls, or resolution mechanics — that belongs in resolutionCriteria only.
 - "category": exactly one of: ${allowedCategories.join(", ")}. Use film-tv (not "entertainment") for movies/TV/awards.
 - "secondaryCategories": 0-2 additional ids from the same list.
-- "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text. For knockout / single-elimination sports (drawEligible=false), criteria MUST say the market resolves to the team/player that wins the tie and advances (including extra time and penalties) — never "draw wins if level after regulation".
+- "resolutionCriteria": 1-3 short bullet strings, IN YOUR OWN WORDS, stating precisely how the market resolves (source of truth, deadline, edge cases). Do not copy the source rules text. For knockout / single-elimination sports (drawEligible=false), criteria MUST say the market resolves to the team/player that wins the tie and advances (including extra time and penalties) — never "draw wins if level after regulation". When the question is relative to something that ALREADY EXISTS — "another", "again", "a second", "the next", "additional" — the criteria MUST keep that qualifier AND name the existing baseline so it cannot be mistaken for the answer (e.g. "the film they are already cast in together does not count; a new, separately announced project is required"). Dropping the qualifier turns the question into one the baseline already satisfies.
 - "resolutionSources": 1-3 objects { "label": "...", "url"?: "..." } naming the AUTHORITATIVE real-world source(s) of truth a human would check to settle the market (e.g. "Official UK Parliament by-election result", "FIFA match report", "Box Office Mojo opening weekend"). Prefer a public URL when you know a stable one; omit url when unsure. NEVER include Polymarket, Kalshi, PredictIt, or other prediction-market platforms as sources.
 - "scoutWatch": 1-2 sentences of leading indicators a user (and our resolution scout) should watch to know the outcome early. This is shown to users as "What to watch" — write it for a casual reader, not as internal ops notes.
 - "relatedPeople": ALL names from the LINKABLE PEOPLE list genuinely relevant to this market — the subject of the question, anyone named in an outcome, or known key participants (use your own world knowledge: e.g. a country's star players for a scheduled national-team match, a company's famous CEO for a company question). For markets about a named work, release, album, tour, show, franchise, or event — even when the source text does not name people — include every linkable person you know is a principal participant (headline cast, billed artists, hosts, recurring leads). Do not stop at one marquee name when multiple linkable people are clearly attached to the same work. Exact names from the list only. Max 6. [] when none apply.
@@ -1139,6 +1140,22 @@ async function insertScoutedDraft(
     metadata.nominalSourceEndAt = nominalEndAt.toISOString();
     if (backstop.isDataLags) metadata.dataLagsMarket = true;
   }
+  // Backstop for the "another / again" instruction in the curation prompt.
+  // When the criteria don't exclude the thing that already exists, the market
+  // is satisfiable by its own premise — flag it for the admin rather than
+  // discarding an otherwise good question over wording.
+  const baselineAdvice = computeBaselineQualifierAdvice({
+    title: selection.title,
+    criteria: resolutionCriteria,
+  });
+  if (baselineAdvice.flagged) {
+    metadata.baselineQualifierAdvice = baselineAdvice;
+    log(
+      `[MarketScout] "${selection.title}" — criteria don't exclude the ` +
+        `pre-existing case for "${baselineAdvice.qualifier}"`,
+    );
+  }
+
   if (fitScore !== null) metadata.fitScore = fitScore;
   if (typeof selection.scoutWatch === "string" && selection.scoutWatch.trim()) {
     // Cap length — this is user-facing "What to watch" as well as scout input.

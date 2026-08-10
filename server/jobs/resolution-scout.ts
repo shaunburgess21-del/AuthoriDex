@@ -308,6 +308,13 @@ Some markets ask how far a competitor advances, the furthest stage they reach, o
 Example: a team that has reached the quarterfinals but has NOT been eliminated is NOT "met" for the "Quarterfinals" outcome — they could still reach the semifinals or beyond, so the market is unresolved.
 Only use stage "met" for such a market when the final position is locked: the competitor has been eliminated at exactly that stage, has clinched that exact outcome, or every higher outcome is now mathematically impossible. While the competitor is still alive and could progress, use stage "likely" (or "watch"), set the leaning to the furthest stage confirmed so far, and recommend "watch" — never "resolve_now".
 
+BASELINE-RELATIVE / "ANOTHER" MARKETS — read carefully before choosing "met":
+Some questions ask whether something happens AGAIN: "another", "a second", "a new", "the next", "additional", "once more". These are relative to a baseline that ALREADY EXISTED when the market opened, and the baseline is usually the very reason the question is interesting.
+Evidence of the pre-existing thing NEVER satisfies these markets. The qualifying event must be genuinely NEW: announced or occurring inside the market's window, and distinct from what already existed.
+Example: "Will A and B be announced for another film together in 2026?" is NOT met by the film they were already cast in before 2026, no matter how many official pages now list it — that film is the baseline, not the answer.
+The title governs. If the resolution criteria omit the qualifier and read as though any instance counts, treat that as a drafting slip and still apply the "another" requirement from the title.
+Before choosing "met", state in whatChanged which specific NEW instance you found and why it is distinct from the pre-existing one. If you cannot establish that — or you cannot tell whether the evidence describes the existing thing or a new one — stay at stage "watch" and recommend "watch".
+
 LEADERBOARD / AGGREGATE / "MOST X" MARKETS — read carefully before choosing "met":
 Some markets ask who will finish with the most goals, points, assists, wins, or a named award (Golden Boot, top scorer, Cy Young, etc.). Outcomes are people/teams plus often an "Other" catch-all. A provisional lead is NOT a final result while remaining fixtures, games, or counting periods can still change the standings.
 Rules:
