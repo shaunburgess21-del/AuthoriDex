@@ -213,7 +213,9 @@ type AnchoredPoolContext = {
 /** Reused when jackpot + updown generate in the same tick (Monday cron). */
 let anchoredPoolContextCache: AnchoredPoolContext | null = null;
 
-async function applyWeeklyNativeMarketEligibility<T extends { id: string }>(
+// Exported so read-only ops previews (ops/preview-h2h-opening-prices.ts)
+// can rehearse a generation run through the real eligibility filter.
+export async function applyWeeklyNativeMarketEligibility<T extends { id: string }>(
   people: T[],
   monday: Date,
   logLabel: string,
@@ -740,7 +742,8 @@ type H2HCandidate = {
  *   - every category that has ≥ 2 people gets at least one card.
  *   - card count grows linearly with categories (today ≈ 20).
  */
-function buildTop4PerCategoryPairings(
+// Exported for the read-only H2H opening-price preview (see ops/).
+export function buildTop4PerCategoryPairings(
   allPeople: H2HCandidate[],
 ): [H2HCandidate, H2HCandidate][] {
   const byCategory = new Map<string, H2HCandidate[]>();

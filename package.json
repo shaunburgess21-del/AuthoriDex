@@ -47,6 +47,7 @@
     "amm:reconcile-orphans": "tsx ops/reconcile-orphan-amm-seeds.ts",
     "amm:mark-settled-orphans": "tsx ops/mark-settled-orphan-markets.ts",
     "amm:reconcile-house-ledger": "tsx ops/reconcile-house-ledger-drift.ts",
+    "h2h:preview": "tsx --env-file=.env ops/preview-h2h-opening-prices.ts",
     "repair:knockout-draw": "tsx --env-file=.env ops/repair-knockout-draw-resolutions.ts",
     "world:calibrate": "tsx scripts/world-market-calibration.ts",
     "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts",
