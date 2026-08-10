@@ -240,11 +240,38 @@ import {
   blendedRecencyOrder,
   blendedSeedVotesScore,
   blendedInterestBucket,
+  preferredCategorySet,
 } from "./blendedRank";
+import { getCategoryBucketId } from "@shared/constants";
+
+/**
+ * The user's preferred category buckets (stated ∪ decayed behavioural),
+ * normalised through `getCategoryBucketId` — or null when this request
+ * should keep the cold-start admin-curated order.
+ *
+ * The Vote list routes pair this with `sortByInterestThenVotes` to
+ * bucket interests above everything else and rank by vote count inside
+ * each bucket. Needed as a JS pass because vote totals only exist after
+ * the query. Reuses the per-request memoised blend state, so calling it
+ * next to one of the order helpers below costs nothing extra.
+ */
+export async function resolvePreferredCategoriesForUser(
+  req: AuthRequest,
+): Promise<Set<string> | null> {
+  const state = await resolveBlendState(req);
+  if (!hasBlendSignal(state)) return null;
+  const preferred = preferredCategorySet(state);
+  if (preferred.size === 0) return null;
+  return new Set(Array.from(preferred, (id) => getCategoryBucketId(id)));
+}
 
 /**
  * Recency-ranked "All" feed (createdAt DESC).
  * Used by trending-polls, matchups, opinion-polls.
+ *
+ * For signed-in users with a blend signal those three Vote routes then
+ * re-sort in JS via `sortByInterestThenVotes` (interest bucket → votes).
+ * The SQL order here is kept as the equal-vote tiebreak.
  */
 export async function orderRecencyForUser(
   req: AuthRequest,

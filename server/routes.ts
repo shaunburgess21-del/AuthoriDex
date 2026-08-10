@@ -194,7 +194,9 @@ import {
   orderSeedVotesForUser,
   orderFeaturedCategoryForUser,
   isColdStartUser,
+  resolvePreferredCategoriesForUser,
 } from "./lib/coldStartOrder";
+import { sortByInterestThenVotes } from "./lib/interestVoteSort";
 import { upsertEngagement } from "./lib/engagementWriter";
 import {
   getWorldMarketsSortMode,
@@ -6349,8 +6351,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           commentCount: commentCountMap.get(matchup.id) || 0,
         };
       });
-      
-      res.json(matchupsWithVotes);
+
+      // Signed-in default: interests first, most-voted first inside each
+      // bucket. No-op for cold-start users, who keep the manual order.
+      const preferredCategories = await resolvePreferredCategoriesForUser(req);
+      res.json(sortByInterestThenVotes(
+        matchupsWithVotes,
+        preferredCategories,
+        (m) => m.category,
+        (m) => m.totalVotes,
+        (m) => m.secondaryCategories,
+      ));
     } catch (error: any) {
       console.error("Error fetching matchups:", error.message);
       res.status(500).json({ error: "Failed to fetch matchups" });
@@ -15853,7 +15864,16 @@ Target length: about 90-150 words.`;
         };
       });
 
-      res.json(result);
+      // Signed-in default: interests first, most-voted first inside each
+      // bucket. No-op for cold-start users, who keep the manual order.
+      const preferredCategories = await resolvePreferredCategoriesForUser(req as AuthRequest);
+      res.json(sortByInterestThenVotes(
+        result,
+        preferredCategories,
+        (p) => p.category,
+        (p) => p.totalVotes,
+        (p) => p.secondaryCategories,
+      ));
     } catch (error: any) {
       console.error("Error fetching public trending polls:", error.message);
       res.status(500).json({ error: "Failed to fetch trending polls" });
@@ -17026,7 +17046,16 @@ Target length: about 90-150 words.`;
         };
       });
 
-      res.json(result);
+      // Signed-in default: interests first, most-voted first inside each
+      // bucket. No-op for cold-start users, who keep the manual order.
+      const preferredCategories = await resolvePreferredCategoriesForUser(req as AuthRequest);
+      res.json(sortByInterestThenVotes(
+        result,
+        preferredCategories,
+        (p) => p.category,
+        (p) => p.totalVotes,
+        (p) => p.secondaryCategories,
+      ));
     } catch (error: any) {
       console.error("Error fetching opinion polls:", error.message);
       res.status(500).json({ error: "Failed to fetch opinion polls" });
