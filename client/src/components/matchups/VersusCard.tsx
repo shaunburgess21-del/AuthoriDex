@@ -64,6 +64,7 @@ export function VersusCard({
   priority = false,
   enableNeutralNudge = true,
   enableVsShimmer = true,
+  enableHoverNudge = false,
   categoryMenuDisabled = false,
 }: {
   matchup: VersusCardMatchup;
@@ -82,6 +83,8 @@ export function VersusCard({
   enableNeutralNudge?: boolean;
   /** VS button shimmer pulse; enabled on View All even when morph/label are off. */
   enableVsShimmer?: boolean;
+  /** Desktop hover Tie/bubble without scroll-based morph/hesitation (View All overlay). */
+  enableHoverNudge?: boolean;
   /** Static category chip in snap view (no drawer menu). */
   categoryMenuDisabled?: boolean;
 }) {
@@ -92,10 +95,12 @@ export function VersusCard({
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!matchup.slug;
   const isMobile = useIsMobile();
+  const neutralEducationUi = enableNeutralNudge || enableHoverNudge;
   const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted, {
     morph: enableNeutralNudge,
     hesitation: enableNeutralNudge,
     shimmer: enableVsShimmer,
+    hoverNudge: enableHoverNudge,
     isMobile,
   });
   const footerBarClass = enableNeutralNudge
@@ -113,9 +118,9 @@ export function VersusCard({
   };
 
   return (
-    <div ref={neutralNudge.cardRef} className="relative h-full">
+    <div ref={neutralNudge.cardRef} className="hub-card-slot relative h-full">
       <Card className="hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
+        <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
         <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>
           <div className="absolute top-3 right-3 z-10">
@@ -214,9 +219,9 @@ export function VersusCard({
             </button>
 
             <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
-              {enableVsShimmer || enableNeutralNudge ? (
+              {enableVsShimmer || neutralEducationUi ? (
                 <>
-                  {enableNeutralNudge && (
+                  {neutralEducationUi && (
                     <AnimatePresence>
                       {neutralNudge.showHesitationLabel && !hasVoted && (
                         <motion.div
@@ -265,7 +270,7 @@ export function VersusCard({
                       )}
                     </AnimatePresence>
                     <span className={`relative z-10 inline-flex min-w-8 items-center justify-center text-sm md:text-base font-bold ${votedNeutral ? "text-white" : "text-foreground dark:text-slate-200"}`}>
-                      {enableNeutralNudge ? (
+                      {neutralEducationUi ? (
                         <AnimatePresence mode="wait" initial={false}>
                           {neutralNudge.showMorph ? (
                             <motion.span

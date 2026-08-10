@@ -3906,7 +3906,7 @@ export default function VotePage() {
             <div ref={matchupsScrollRef} onScroll={(e) => saveOverlayScroll("matchups", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto overscroll-y-contain p-4 premium-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
                 {displayMatchups.map((matchup, index) => (
-                  <div key={matchup.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_420px]">
+                  <div key={matchup.id}>
                     <VersusCard
                       matchup={matchup}
                       userVote={matchupUserVotes[matchup.id] || null}
@@ -3918,7 +3918,8 @@ export default function VotePage() {
                       onNavigateToDetail={matchup.slug ? () => goMatchupDetail(matchup.slug!) : undefined}
                       onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
                       enableDiscussion
-                      enableNeutralNudge={false}
+                      enableNeutralNudge={isMobile}
+                      enableHoverNudge={!isMobile}
                       priority={index < 6}
                     />
                   </div>

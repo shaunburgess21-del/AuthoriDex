@@ -37,6 +37,7 @@ export interface MatchupNeutralNudgeOptions {
   morph?: boolean;
   hesitation?: boolean;
   shimmer?: boolean;
+  hoverNudge?: boolean;
   isMobile?: boolean;
 }
 
@@ -44,6 +45,7 @@ const DEFAULT_NUDGE_OPTIONS: Required<MatchupNeutralNudgeOptions> = {
   morph: true,
   hesitation: true,
   shimmer: true,
+  hoverNudge: false,
   isMobile: false,
 };
 
@@ -143,7 +145,7 @@ export function useMatchupNeutralNudge(
   hasVoted: boolean,
   options: MatchupNeutralNudgeOptions = DEFAULT_NUDGE_OPTIONS,
 ) {
-  const { morph, hesitation, shimmer, isMobile } = { ...DEFAULT_NUDGE_OPTIONS, ...options };
+  const { morph, hesitation, shimmer, hoverNudge, isMobile } = { ...DEFAULT_NUDGE_OPTIONS, ...options };
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [showMorph, setShowMorph] = useState(false);
   const [showVsShimmer, setShowVsShimmer] = useState(false);
@@ -154,7 +156,7 @@ export function useMatchupNeutralNudge(
     const node = cardRef.current;
     const useScrollMorph = isMobile && morph;
     const useScrollHesitation = isMobile && hesitation;
-    const useDesktopHover = !isMobile && !hasVoted && (morph || hesitation);
+    const useDesktopHover = !isMobile && !hasVoted && (hoverNudge || morph || hesitation);
     const morphEligible =
       useScrollMorph && !prefersReducedMotion && !hasVoted && isMorphPossible(matchupId, isMobile);
     const hesitationEligible =
@@ -395,7 +397,7 @@ export function useMatchupNeutralNudge(
       hoverMorphDelayTimeout = window.setTimeout(() => {
         hoverMorphDelayTimeout = null;
         if (!isHovered) return;
-        if (morph) flashMorph(MORPH_FLASH_MS);
+        if (hoverNudge || morph) flashMorph(MORPH_FLASH_MS);
         if (shimmerEligible) {
           setShowVsShimmer(true);
           hoverShimmerHideTimeout = window.setTimeout(() => {
@@ -405,7 +407,7 @@ export function useMatchupNeutralNudge(
         }
       }, DESKTOP_HOVER_MORPH_DELAY_MS);
 
-      if (hesitation) {
+      if (hoverNudge || hesitation) {
         hoverBubbleDelayTimeout = window.setTimeout(() => {
           hoverBubbleDelayTimeout = null;
           if (!isHovered) return;
@@ -482,7 +484,7 @@ export function useMatchupNeutralNudge(
       cancelDesktopHover();
       setShowMorph(false);
     };
-  }, [hasVoted, hesitation, isMobile, matchupId, morph, prefersReducedMotion, shimmer]);
+  }, [hasVoted, hesitation, hoverNudge, isMobile, matchupId, morph, prefersReducedMotion, shimmer]);
 
   return {
     cardRef,
