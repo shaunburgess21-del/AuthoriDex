@@ -23,8 +23,6 @@ export function getInsightsTabAccentHex(tab: InsightsTab): string {
 export const QUADRANT_MIN_VOTES = 20;
 
 export const INSIGHTS_SOURCE_LABELS: Record<InsightsSource, string> = {
-  news_momentum: "News momentum",
-  wiki_momentum: "Wiki momentum",
   fame: "Movers",
   news: "News",
   wiki: "Wikipedia",

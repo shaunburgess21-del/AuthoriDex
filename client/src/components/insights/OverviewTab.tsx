@@ -253,8 +253,8 @@ const DRIVER_BAR_GRADIENT: Record<InsightsPrimaryDriver, string> = {
 
 /** Drivers that map cleanly to a ranking source (MIXED has no single source). */
 const DRIVER_TO_SOURCE: Partial<Record<InsightsPrimaryDriver, InsightsSource>> = {
-  NEWS: "news_momentum",
-  WIKI: "wiki_momentum",
+  NEWS: "news",
+  WIKI: "wiki",
   SEARCH: "search_volume",
 };
 

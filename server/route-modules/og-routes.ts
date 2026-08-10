@@ -79,7 +79,6 @@ import {
 import { loadInsightsRankings } from "../services/insights/rankings";
 import { loadDivergence, loadSingleSourceSurge } from "../services/insights/discover";
 import { parseFilters } from "@shared/insights/filters";
-import { INSIGHTS_SOURCE_LABELS } from "@shared/insights/constants";
 import type { InsightsDivergenceType } from "@shared/insights/types";
 import type { AmmPriceChip } from "../services/og-page-payload";
 
@@ -1616,25 +1615,12 @@ ${xmlEntries.join("\n")}
       const { title, subtitle } = buildInsightsRankingsOgCopy(search);
 
       const ranking = await loadInsightsRankings(filters).catch(() => null);
-      const sourceLabel = INSIGHTS_SOURCE_LABELS[filters.source];
-      const rows: InsightsOgRow[] = (ranking?.rows ?? []).slice(0, 3).map((row) => {
-        const ratio =
-          filters.source === "news_momentum"
-            ? row.newsMomentum?.ratio
-            : filters.source === "wiki_momentum"
-              ? row.wikiMomentum?.ratio
-              : null;
-        const meta =
-          ratio != null
-            ? `${ratio.toFixed(2)}× ${sourceLabel.toLowerCase()}`
-            : row.category ?? undefined;
-        return {
-          rank: row.rank,
-          name: row.name,
-          avatarUrl: row.avatar,
-          meta,
-        };
-      });
+      const rows: InsightsOgRow[] = (ranking?.rows ?? []).slice(0, 3).map((row) => ({
+        rank: row.rank,
+        name: row.name,
+        avatarUrl: row.avatar,
+        meta: row.category ?? undefined,
+      }));
 
       const png = await renderInsightsOgImage({
         title,
