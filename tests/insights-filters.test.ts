@@ -34,24 +34,31 @@ describe("parseTab", () => {
   });
 
   it("lands on rankings when filter params are present", () => {
-    assert.equal(parseTab("?source=news_momentum"), "rankings");
+    assert.equal(parseTab("?source=news"), "rankings");
     assert.equal(parseTab("?category=politics"), "rankings");
     assert.equal(parseTab("?fav=1"), "rankings");
   });
 
   it("prefers explicit tab over filter-only routing", () => {
-    assert.equal(parseTab("?tab=rankings&source=news_momentum"), "rankings");
+    assert.equal(parseTab("?tab=rankings&source=news"), "rankings");
   });
 
   it("explicit today tab wins even with stale rankings filters present", () => {
     // Regression: the header now clears filters on tab switch, but if any
     // leak through, an explicit ?tab=today must still resolve to today
     // (not fall back to rankings via the filter-param heuristic).
-    assert.equal(parseTab("?tab=today&source=news_momentum&window=7d"), "today");
+    assert.equal(parseTab("?tab=today&source=news&window=7d"), "today");
   });
 
   it("lands on rankings when sortDir=asc is present", () => {
     assert.equal(parseTab("?sortDir=asc"), "rankings");
+  });
+});
+
+describe("parseFilters source", () => {
+  it("maps removed momentum sources to news / wiki", () => {
+    assert.equal(parseFilters("?source=news_momentum").source, "news");
+    assert.equal(parseFilters("?source=wiki_momentum").source, "wiki");
   });
 });
 

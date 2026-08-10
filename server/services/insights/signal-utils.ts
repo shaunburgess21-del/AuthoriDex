@@ -122,7 +122,6 @@ export interface SourceSortInputs {
  *   24h rolling count and can't be summed cleanly).
  * - `wiki` 7d → uses true 7d pageview SUM.
  * - `search_volume` ignores window (DataForSEO is monthly only).
- * - Momentum ratios are inherently 7d-normalised; window has no effect.
  * - `fame` is the Movers board: it sorts by the windowed Trend Score % change
  *   (24h default, 7d when toggled) so the board reorders. The Trend Score
  *   itself is kept as a context column on the row. People with an unknown
@@ -136,10 +135,6 @@ export function sortValueForSource(
   window: "24h" | "7d" = "24h",
 ): number {
   switch (source) {
-    case "news_momentum":
-      return row.newsMomentumRatio;
-    case "wiki_momentum":
-      return row.wikiMomentumRatio;
     case "fame": {
       const change = window === "7d" ? row.change7d : row.change24h;
       return change != null && Number.isFinite(change) ? change : UNKNOWN_CHANGE_SENTINEL;

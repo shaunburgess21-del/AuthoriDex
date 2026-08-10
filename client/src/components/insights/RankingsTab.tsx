@@ -40,8 +40,6 @@ import type { InsightsRankingRow } from "@shared/insights/types";
 
 const PILL_HINTS: Record<InsightsSource, string> = {
   fame: "Biggest Trend Score change",
-  news_momentum: "News coverage is higher than their typical day",
-  wiki_momentum: "Wikipedia page views are higher than their typical day",
   news: "Most news coverage",
   wiki: "Most Wikipedia page views",
   search_volume: "Most-searched on Google",
@@ -92,14 +90,6 @@ function rankingsRankSlot(displayRank: number): ReactNode | undefined {
 }
 
 function formatSortValue(source: InsightsSource, row: InsightsRankingRow): string {
-  if (source === "news_momentum") {
-    const r = row.newsMomentum.ratio;
-    return r != null ? `${r.toFixed(2)}×` : "—";
-  }
-  if (source === "wiki_momentum") {
-    const r = row.wikiMomentum.ratio;
-    return r != null ? `${r.toFixed(2)}×` : "—";
-  }
   if (source === "fame") return row.fameIndex.toLocaleString();
   if (source === "search_volume") {
     return row.sortValue > 0 ? `${formatCompact(row.sortValue)}/mo` : "—";
@@ -124,7 +114,6 @@ function metricSuffix(row: InsightsRankingRow): { suffix: string; tooltip?: stri
 }
 
 function metricColumnLabel(source: InsightsSource, window: InsightsWindow): string {
-  if (source === "news_momentum" || source === "wiki_momentum") return "Momentum";
   if (source === "search_volume") return "Searches";
   if (source === "news") return window === "7d" ? "Articles 7d" : "Articles 24h";
   if (source === "wiki") return window === "7d" ? "Views 7d" : "Views 24h";
@@ -276,12 +265,7 @@ export function RankingsTab() {
   const activePill = PILL_SOURCES.find((p) => p.id === filters.source);
 
   // Search interest is monthly-only; the 24h / 7d window doesn't apply there.
-  // For momentum tabs the ratio is inherently 7d-normalised, so the window
-  // toggle would mislead.
-  const showWindowControl =
-    filters.source !== "search_volume" &&
-    filters.source !== "news_momentum" &&
-    filters.source !== "wiki_momentum";
+  const showWindowControl = filters.source !== "search_volume";
   const windowToggleAriaLabel =
     filters.source === "fame" ? "Movers time window" : "Time window";
 
@@ -488,13 +472,7 @@ export function RankingsTab() {
                     <span className="font-medium text-foreground">
                       {SOURCE_DISPLAY[filters.source]}
                     </span>
-                    {activePill
-                      ? ` ${
-                          filters.source === "news_momentum" || filters.source === "wiki_momentum"
-                            ? "="
-                            : "—"
-                        } ${activePill.hint}`
-                      : ""}
+                    {activePill ? ` — ${activePill.hint}` : ""}
                   </p>
                   <div
                     className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60"

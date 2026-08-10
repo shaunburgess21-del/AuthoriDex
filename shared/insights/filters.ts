@@ -9,17 +9,23 @@ export const INSIGHTS_SOURCE_VALUES = [
   "fame",
   "news",
   "wiki",
-  "news_momentum",
-  "wiki_momentum",
   // Absolute monthly Google searches (DataForSEO) — the "Most Searched" ranking.
   // (Google Trends `trends` source was removed; old ?source=trends links fall
   // back to the default ranking via parseSource.)
+  // news_momentum / wiki_momentum Rankings tabs were removed; old links map to
+  // news / wiki via LEGACY_INSIGHTS_SOURCE_URL.
   // velocity / mass sources were removed; old ?source=velocity|mass links fall
   // back to the default ranking via parseSource.
   "search_volume",
 ] as const;
 
 export type InsightsSource = (typeof INSIGHTS_SOURCE_VALUES)[number];
+
+/** Legacy `?source=` values remapped after Rankings tab removals. */
+const LEGACY_INSIGHTS_SOURCE_URL: Record<string, InsightsSource> = {
+  news_momentum: "news",
+  wiki_momentum: "wiki",
+};
 
 export const INSIGHTS_WINDOW_VALUES = ["24h", "7d"] as const;
 export type InsightsWindow = (typeof INSIGHTS_WINDOW_VALUES)[number];
@@ -72,6 +78,9 @@ const FILTER_PARAM_ORDER = [
 function parseSource(raw: string | null): InsightsSource {
   if (raw && (INSIGHTS_SOURCE_VALUES as readonly string[]).includes(raw)) {
     return raw as InsightsSource;
+  }
+  if (raw && raw in LEGACY_INSIGHTS_SOURCE_URL) {
+    return LEGACY_INSIGHTS_SOURCE_URL[raw]!;
   }
   return DEFAULT_INSIGHTS_FILTERS.source;
 }
@@ -191,32 +200,48 @@ const LEGACY_INSIGHTS_TAB_URL: Record<string, InsightsTab> = {
   discover: "today",
 };
 
-/** Rewrites legacy `?tab=` values in the address bar to the current IA. */
+/**
+ * Rewrites legacy Insights URL params in the address bar:
+ *  - `?tab=` aliases (see LEGACY_INSIGHTS_TAB_URL)
+ *  - removed Rankings `?source=` values (see LEGACY_INSIGHTS_SOURCE_URL)
+ */
 export function canonicalizeInsightsTabUrl(): boolean {
   if (typeof window === "undefined") return false;
 
   const url = new URL(window.location.href);
-  const raw = url.searchParams.get("tab");
-  if (!raw) return false;
+  let changed = false;
 
-  const mapped = LEGACY_INSIGHTS_TAB_URL[raw];
-  if (mapped !== undefined) {
-    if (mapped === "today") {
+  const rawTab = url.searchParams.get("tab");
+  if (rawTab) {
+    const mappedTab = LEGACY_INSIGHTS_TAB_URL[rawTab];
+    if (mappedTab !== undefined) {
+      if (mappedTab === "today") {
+        url.searchParams.delete("tab");
+      } else {
+        url.searchParams.set("tab", mappedTab);
+      }
+      changed = true;
+    } else if (!(INSIGHTS_TAB_VALUES as readonly string[]).includes(rawTab)) {
       url.searchParams.delete("tab");
-    } else {
-      url.searchParams.set("tab", mapped);
+      changed = true;
     }
+  }
+
+  const rawSource = url.searchParams.get("source");
+  if (rawSource && rawSource in LEGACY_INSIGHTS_SOURCE_URL) {
+    const mappedSource = LEGACY_INSIGHTS_SOURCE_URL[rawSource]!;
+    if (mappedSource === DEFAULT_INSIGHTS_FILTERS.source) {
+      url.searchParams.delete("source");
+    } else {
+      url.searchParams.set("source", mappedSource);
+    }
+    changed = true;
+  }
+
+  if (changed) {
     window.history.replaceState({}, "", url.toString());
-    return true;
   }
-
-  if ((INSIGHTS_TAB_VALUES as readonly string[]).includes(raw)) {
-    return false;
-  }
-
-  url.searchParams.delete("tab");
-  window.history.replaceState({}, "", url.toString());
-  return true;
+  return changed;
 }
 
 export function parseTab(search: string | URLSearchParams): InsightsTab {

@@ -17,9 +17,9 @@ export interface InsightsCacheCronResult {
 }
 
 const WARM_TASKS: Array<{ name: string; run: () => Promise<unknown> }> = [
-  // Movers board (default) plus its 7d toggle and the two momentum tabs users
-  // hit most — warming them avoids the cold ~160-person signal compute on the
-  // request path.
+  // Movers board (default) plus its 7d toggle and the News / Wikipedia boards
+  // users hit most — warming them avoids the cold ~160-person signal compute
+  // on the request path.
   { name: "rankings", run: () => loadInsightsRankings(DEFAULT_INSIGHTS_FILTERS, null) },
   {
     name: "rankings:movers-7d",
@@ -27,14 +27,14 @@ const WARM_TASKS: Array<{ name: string; run: () => Promise<unknown> }> = [
       loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, window: "7d" }, null),
   },
   {
-    name: "rankings:news_momentum",
+    name: "rankings:news",
     run: () =>
-      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "news_momentum" }, null),
+      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "news" }, null),
   },
   {
-    name: "rankings:wiki_momentum",
+    name: "rankings:wiki",
     run: () =>
-      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "wiki_momentum" }, null),
+      loadInsightsRankings({ ...DEFAULT_INSIGHTS_FILTERS, source: "wiki" }, null),
   },
   { name: "markets", run: () => loadMarketsAnalytics() },
   { name: "volatility", run: () => withDiscoverCache("volatility", loadVolatility) },
