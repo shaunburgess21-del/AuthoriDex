@@ -447,15 +447,14 @@ export default function InductionQueuePage() {
                 <motion.div
                   key={candidate.id}
                   id={`induction-card-${candidate.id}`}
-                  className="group relative scroll-mt-24 rounded-xl transition-shadow"
+                  className="relative scroll-mt-24 rounded-xl"
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ delay: idx * 0.02 }}
                 >
-                  <div data-hover-border className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-                  <Card className={`relative overflow-hidden border-slate-700/40 bg-gradient-to-br ${getRankBg(globalRank)} from-slate-900/80 via-slate-800/80 to-slate-900/80 transition-all group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)]`}>
+                  <Card className={`hub-card-hover lb-row-neutral relative bg-gradient-to-br ${getRankBg(globalRank)} from-slate-900/80 via-slate-800/80 to-slate-900/80`}>
                     <AnimatePresence>
                       {showVoteAnim === candidate.id && (
                         <motion.div

@@ -139,10 +139,12 @@ function LeaderboardYourVoteCell({
   showVotePulse: boolean;
   onVoteClick?: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="w-[88px] shrink-0 flex justify-end">
       {hasVoted && sentimentScore != null ? (
-        <Popover modal>
+        <Popover modal open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -204,6 +206,7 @@ function LeaderboardYourVoteCell({
               className="w-full text-xs"
               onClick={(e) => {
                 e.stopPropagation();
+                setOpen(false);
                 onVoteClick?.();
               }}
               data-testid={`button-change-vote-${person.id}`}

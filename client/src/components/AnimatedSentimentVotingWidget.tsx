@@ -23,6 +23,18 @@ interface AnimatedSentimentVotingWidgetProps {
 
 const ZONE_LABELS = ['Hate', 'Dislike', 'Neutral', 'Like', 'Love'];
 
+/** Near-black panel fill (dark) so rating colors pop; light mode keeps card tokens. */
+const VOTE_PANEL_BG = "bg-card dark:bg-[#050a14]";
+/** Pulse/lb-row hairline + clip for top-lip; fill stays on VOTE_PANEL_BG (not pulse-card-voxdex bg). */
+const VOTE_PANEL_SHELL =
+  `${VOTE_PANEL_BG} relative overflow-hidden border border-border dark:border-[rgba(59,130,246,0.25)]`;
+const VOTE_PANEL_TOP_LIP_STYLE = {
+  background: "linear-gradient(90deg, transparent 0%, rgb(59, 130, 246) 50%, transparent 100%)",
+} as const;
+const VOTE_RESULTS_TILE =
+  "bg-muted/50 dark:bg-white/[0.04] dark:border dark:border-white/10 rounded-xl p-4 text-center";
+const VOTE_DISTRIBUTION_TRACK = "h-3 bg-muted dark:bg-white/10 rounded-full overflow-hidden";
+
 const SEGMENT_COLORS = [1, 2, 3, 4, 5].map((rating) => {
   const color = getRatingTileColor(rating);
   return { bg: color, glow: color };
@@ -134,7 +146,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-muted/50 rounded-xl p-4 text-center">
+        <div className={VOTE_RESULTS_TILE}>
           <div className="flex items-center justify-center gap-2 mb-1">
             <Users className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">Total Votes</span>
@@ -143,7 +155,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
             {displayStats.totalVotes.toLocaleString('en-US')}
           </p>
         </div>
-        <div className="bg-muted/50 rounded-xl p-4 text-center">
+        <div className={VOTE_RESULTS_TILE}>
           <div className="text-sm text-muted-foreground mb-1">Average Rating</div>
           <p 
             className="text-2xl font-bold"
@@ -180,7 +192,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
                 </span>
                 <span className="font-mono text-muted-foreground">{percent}%</span>
               </div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
+              <div className={VOTE_DISTRIBUTION_TRACK}>
                 <motion.div
                   className="h-full rounded-full"
                   style={{ 
@@ -435,9 +447,14 @@ export function AnimatedSentimentVotingWidget({
 
   return (
     <div 
-      className="w-full bg-card border border-border rounded-2xl p-4 sm:p-6 md:p-8"
+      className={`w-full rounded-2xl p-4 sm:p-6 md:p-8 ${VOTE_PANEL_SHELL}`}
       data-testid="sentiment-voting-widget"
     >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[3px]"
+        style={VOTE_PANEL_TOP_LIP_STYLE}
+        aria-hidden
+      />
       <AnimatePresence mode="wait">
         {showingResults && currentValue ? (
           <CommunityResultsView
@@ -484,7 +501,7 @@ export function AnimatedSentimentVotingWidget({
                       relative py-1.5 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium
                       transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/50
                       ${isActive 
-                        ? 'bg-card text-foreground scale-[1.05]' 
+                        ? `${VOTE_PANEL_BG} text-foreground scale-[1.05]` 
                         : 'bg-transparent text-muted-foreground border-border/40 hover:border-border/70'
                       }
                     `}
@@ -496,7 +513,7 @@ export function AnimatedSentimentVotingWidget({
                     {label}
                     {isActive && (
                       <span
-                        className="absolute left-1/2 -translate-x-1/2 -bottom-[5px] w-2.5 h-2.5 rotate-45 bg-card"
+                        className={`absolute left-1/2 -translate-x-1/2 -bottom-[5px] w-2.5 h-2.5 rotate-45 ${VOTE_PANEL_BG}`}
                         style={{ borderRight: `1px solid ${color.bg}80`, borderBottom: `1px solid ${color.bg}80` }}
                       />
                     )}

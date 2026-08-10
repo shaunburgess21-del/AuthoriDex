@@ -464,10 +464,9 @@ function InductionCandidateCard({
   };
 
   return (
-    <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+    <div className="relative h-full">
     <Card 
-      className="relative p-4 sm:p-5 transition-all duration-200 h-full min-h-[390px] md:min-h-[300px] flex flex-col overflow-hidden border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+      className="hub-card-hover lb-row-neutral relative p-4 sm:p-5 h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl"
       data-testid={`card-induction-${candidate.id}`}
     >
       <AnimatePresence>
@@ -695,10 +694,9 @@ function CurateProfileCard({
       animate={{ opacity: isExiting ? 0 : 1, x: isExiting ? -100 : 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="relative group">
-        <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100" />
+      <div className="relative">
       <Card 
-        className="relative p-4 transition-all duration-200 overflow-hidden border-slate-700/50 group-hover:shadow-lg group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl"
+        className="hub-card-hover lb-row-neutral relative p-4 rounded-[12px] md:rounded-xl"
         data-testid={`card-curate-${poll.id}`}
       >
         <AnimatePresence>

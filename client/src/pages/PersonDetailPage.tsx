@@ -257,8 +257,7 @@ function CurateProfileCardProfile({
       transition={{ duration: 0.3 }}
     >
       <Card 
-        className="p-4 transition-all duration-200 hover:shadow-[0_0_20px_rgba(148,163,184,0.08)] relative overflow-hidden"
-        style={{ border: '1px solid rgba(148,163,184,0.18)' }}
+        className="hub-card-hover lb-row-neutral p-4 relative"
         data-testid={`card-curate-profile-${poll.id}`}
       >
         <AnimatePresence>
@@ -473,10 +472,9 @@ function FeaturedPollCard({
   );
 
   return (
-    <div className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
+    <div className="relative h-full">
       <Card
-        className={`relative pt-6 px-5 pb-5 ${voted ? "max-md:pb-3" : ""} transition-all duration-200 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col border-0 md:border md:border-transparent shadow-none md:shadow-sm group-hover:shadow-lg md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] rounded-[12px] md:rounded-xl`}
+        className={`hub-card-hover lb-row-neutral relative pt-6 px-5 pb-5 ${voted ? "max-md:pb-3" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
         data-testid={`card-featured-poll-${poll.id}`}
       >
         <div className="absolute top-3 right-3">

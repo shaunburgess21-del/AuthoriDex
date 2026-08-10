@@ -2414,23 +2414,12 @@ export default function MarketDetailPage() {
       </div>
 
       {isCommunityMarket && (
-        <>
-          <button
-            type="button"
-            onClick={() => setCommentsSheetOpen(true)}
-            className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-1.5 rounded-full bg-violet-600 text-white px-4 py-2.5 shadow-lg focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span className="text-xs font-semibold">{marketCommentCount}</span>
-          </button>
-
-          <CommentsBottomSheet
-            open={commentsSheetOpen}
-            onOpenChange={setCommentsSheetOpen}
-            entityType="open-market"
-            slug={params.slug || ""}
-          />
-        </>
+        <CommentsBottomSheet
+          open={commentsSheetOpen}
+          onOpenChange={setCommentsSheetOpen}
+          entityType="open-market"
+          slug={params.slug || ""}
+        />
       )}
 
       <ImageLightbox

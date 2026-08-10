@@ -12,6 +12,7 @@ import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { DiscussionButton } from "@/components/comments/DiscussionButton";
 import { toast } from "sonner";
 import { useMatchupNeutralNudge } from "@/hooks/useMatchupNeutralNudge";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   removeTrackedMatchupNeutralVote,
   trackMatchupNeutralVote,
@@ -90,10 +91,12 @@ export function VersusCard({
   const votedNeutral = userVote === "neutral";
   const [discussionOpen, setDiscussionOpen] = useState(false);
   const showDiscussion = enableDiscussion && !!matchup.slug;
+  const isMobile = useIsMobile();
   const neutralNudge = useMatchupNeutralNudge(matchup.id, hasVoted, {
     morph: enableNeutralNudge,
     hesitation: enableNeutralNudge,
     shimmer: enableVsShimmer,
+    isMobile,
   });
   const footerBarClass = enableNeutralNudge
     ? "bg-muted/60 dark:bg-[#090B11] backdrop-blur-sm"
@@ -110,9 +113,8 @@ export function VersusCard({
   };
 
   return (
-    <div ref={neutralNudge.cardRef} className="relative group h-full">
-      <div className="absolute -inset-[1px] rounded-xl border border-[#EFEFEF]/50 transition-opacity pointer-events-none opacity-0 group-hover:opacity-100 hidden md:block" />
-      <Card className="relative overflow-visible bg-card dark:bg-[#11151D] border border-border/40 dark:border-0 md:border md:border-border/40 dark:md:border-transparent shadow-sm dark:shadow-none md:shadow-sm group-hover:shadow-lg dark:md:group-hover:shadow-[0_8px_32px_rgba(239,239,239,0.1)] md:group-hover:shadow-[0_8px_32px_rgba(0,0,0,0.08)] transition-all h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
+    <div ref={neutralNudge.cardRef} className="relative h-full">
+      <Card className="hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
         <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>

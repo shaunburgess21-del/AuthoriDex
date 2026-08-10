@@ -21,6 +21,23 @@ const REMINDER_MORPH_LIMIT = 2;
 const HESITATION_NUDGE_LIMIT = 2;
 const BEHAVIORAL_REMINDER_MIN_VOTES = 15;
 
+/** Relaxed caps for mobile where scroll/dwell education needs higher frequency. */
+const MOBILE_LIFETIME_MORPH_LIMIT = 20;
+const MOBILE_SESSION_MORPH_LIMIT = 10;
+const MOBILE_HESITATION_NUDGE_LIMIT = 10;
+
+function getLifetimeMorphLimit(isMobile = false): number {
+  return isMobile ? MOBILE_LIFETIME_MORPH_LIMIT : LIFETIME_MORPH_LIMIT;
+}
+
+function getSessionMorphLimit(isMobile = false): number {
+  return isMobile ? MOBILE_SESSION_MORPH_LIMIT : SESSION_MORPH_LIMIT;
+}
+
+function getHesitationNudgeLimit(isMobile = false): number {
+  return isMobile ? MOBILE_HESITATION_NUDGE_LIMIT : HESITATION_NUDGE_LIMIT;
+}
+
 /**
  * Single-morph lock: while one card's VS button is morphing, other visible
  * cards must not consume budget (they may morph on a later view entry).
@@ -200,10 +217,12 @@ export function removeTrackedMatchupNeutralVote(matchupId: string): void {
  * on a later view entry). Lets the hook skip all observer/timer work for
  * cards that can never morph this session.
  */
-export function isMorphPossible(matchupId: string): boolean {
+export function isMorphPossible(matchupId: string, isMobile = false): boolean {
   const state = getCache();
   if (state.sessionMorphIds.has(matchupId)) return false;
-  if (state.lifetimeMorphCount < LIFETIME_MORPH_LIMIT && state.sessionMorphCount < SESSION_MORPH_LIMIT) {
+  const lifetimeLimit = getLifetimeMorphLimit(isMobile);
+  const sessionLimit = getSessionMorphLimit(isMobile);
+  if (state.lifetimeMorphCount < lifetimeLimit && state.sessionMorphCount < sessionLimit) {
     return true;
   }
   return (
@@ -213,9 +232,9 @@ export function isMorphPossible(matchupId: string): boolean {
 }
 
 /** Pure in-memory eligibility check — hesitation counterpart of isMorphPossible. */
-export function isHesitationPossible(matchupId: string): boolean {
+export function isHesitationPossible(matchupId: string, isMobile = false): boolean {
   const state = getCache();
-  return !state.hesitationIds.has(matchupId) && state.hesitationCount < HESITATION_NUDGE_LIMIT;
+  return !state.hesitationIds.has(matchupId) && state.hesitationCount < getHesitationNudgeLimit(isMobile);
 }
 
 /** Whether this card has received its guaranteed-once shimmer this session. */
@@ -228,7 +247,7 @@ export function markGuaranteedShimmer(matchupId: string): void {
   getCache().sessionGuaranteedShimmerIds.add(matchupId);
 }
 
-export function consumeMatchupNeutralMorph(matchupId: string): boolean {
+export function consumeMatchupNeutralMorph(matchupId: string, isMobile = false): boolean {
   // Another card is mid-morph: skip WITHOUT consuming budget or marking this
   // card as seen, so it may still morph on a later view entry.
   if (Date.now() < morphLockUntil) return false;
@@ -237,8 +256,10 @@ export function consumeMatchupNeutralMorph(matchupId: string): boolean {
   if (state.sessionMorphIds.has(matchupId)) return false;
 
   const session = getSessionStorage();
+  const lifetimeLimit = getLifetimeMorphLimit(isMobile);
+  const sessionLimit = getSessionMorphLimit(isMobile);
 
-  if (state.lifetimeMorphCount < LIFETIME_MORPH_LIMIT && state.sessionMorphCount < SESSION_MORPH_LIMIT) {
+  if (state.lifetimeMorphCount < lifetimeLimit && state.sessionMorphCount < sessionLimit) {
     state.lifetimeMorphCount += 1;
     state.sessionMorphCount += 1;
     state.sessionMorphIds.add(matchupId);
@@ -270,10 +291,10 @@ export function consumeMatchupNeutralMorph(matchupId: string): boolean {
   return false;
 }
 
-export function consumeMatchupNeutralHesitation(matchupId: string): boolean {
+export function consumeMatchupNeutralHesitation(matchupId: string, isMobile = false): boolean {
   const state = getCache();
   if (state.hesitationIds.has(matchupId)) return false;
-  if (state.hesitationCount >= HESITATION_NUDGE_LIMIT) return false;
+  if (state.hesitationCount >= getHesitationNudgeLimit(isMobile)) return false;
 
   const session = getSessionStorage();
   state.hesitationCount += 1;

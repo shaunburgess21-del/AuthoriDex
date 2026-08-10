@@ -90,7 +90,7 @@ function CelebCard({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: rank * 0.02 }}
-      className="bg-muted/30 rounded-lg border border-border hover:border-slate-400/40 transition-all cursor-pointer overflow-hidden hover-elevate"
+      className="hub-card-hover lb-row-neutral bg-muted/30 rounded-lg cursor-pointer"
       onClick={onClick}
       data-testid={`view-all-card-${person.id}`}
     >

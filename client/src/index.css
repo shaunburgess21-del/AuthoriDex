@@ -1356,6 +1356,73 @@
     --lb-row-glow-soft: rgba(255, 255, 255, 0.06);
     --lb-row-tint: rgba(255, 255, 255, 0.04);
   }
+
+  /* Vote/Predict hub cards — leaderboard lip + expand on hover only (no resting border). */
+  .hub-card-hover {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid transparent;
+    border-color: transparent;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      transform 0.2s ease-out,
+      border-color 0.2s ease-out,
+      box-shadow 0.2s ease-out;
+  }
+  .hub-card-hover::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+    background: linear-gradient(90deg, transparent 0%, var(--lb-row-bar) 50%, transparent 100%);
+  }
+  .hub-card-hover::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+    pointer-events: none;
+    background: radial-gradient(ellipse at top left, var(--lb-row-glow) 0%, transparent 60%);
+  }
+  .hub-card-hover > * {
+    z-index: 1;
+  }
+  @media (hover: hover) {
+    .hub-card-hover:hover {
+      transform: translateY(-2px) scale(1.015);
+      border-color: var(--lb-row-border-hover);
+      box-shadow:
+        0 8px 30px -4px var(--lb-row-glow),
+        0 0 50px -10px var(--lb-row-glow-soft);
+    }
+    .hub-card-hover:hover::before,
+    .hub-card-hover:hover::after {
+      opacity: 1;
+    }
+  }
+  .hub-card-hover.hub-card-selected {
+    border-color: var(--lb-row-border-hover);
+    box-shadow:
+      0 8px 30px -4px var(--lb-row-glow),
+      0 0 50px -10px var(--lb-row-glow-soft);
+  }
+  .hub-card-hover.hub-card-selected::before {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hub-card-hover:hover {
+      transform: none;
+    }
+  }
+
   .lb-row-gold {
     --lb-row-border: rgba(251, 191, 36, 0.28);
     --lb-row-border-hover: rgba(251, 191, 36, 0.45);
