@@ -1393,7 +1393,7 @@ export function VoteSnapScrollView({
                                       <div
                                         className={`w-full max-w-lg mx-auto ${
                                           isMinimal
-                                            ? "max-h-full overflow-y-auto rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
+                                            ? "max-h-full overflow-hidden rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
                                             : ""
                                         }`}
                                       >

@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useCallback, useRef, type MouseEvent, type PointerEvent } from "react";
 import { CheckCircle2, Maximize2 } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,92 @@ export type OpinionPollOptionRowOption = {
 
 export type OpinionPollOptionRowMode = "vote" | "result-selected" | "result-other";
 export type OpinionPollOptionImageInteraction = "lightbox" | "gallery";
+
+/** Movement beyond this (px) marks the gesture as a swipe, not a tap —
+ * mirrors SWIPE_CLICK_GUARD_PX used by notification rows. */
+const TAP_SLOP_PX = 10;
+
+export const OPTION_ROW_HOVER_CLASSES =
+  "touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20";
+
+function collectScrollSnapshots(el: HTMLElement): Array<{ node: HTMLElement; top: number }> {
+  const snaps: Array<{ node: HTMLElement; top: number }> = [];
+  let node: HTMLElement | null = el;
+  while (node) {
+    const { overflowY } = window.getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+      node.scrollHeight > node.clientHeight + 1
+    ) {
+      snaps.push({ node, top: node.scrollTop });
+    }
+    node = node.parentElement;
+  }
+  return snaps;
+}
+
+/**
+ * Distinguishes a genuine tap from a scroll/swipe that started on a button.
+ * Without this, vertical swipes over Opinion Poll options in snap/Quick Vote
+ * fire onClick and register as votes instead of advancing to the next card.
+ *
+ * Uses two signals: pointer travel past TAP_SLOP_PX, and any scroll-parent
+ * scrollTop change (browsers often stop delivering pointermove once a
+ * parent scroller takes the gesture).
+ */
+function useTapClickGuard() {
+  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
+  const scrollSnapsRef = useRef<Array<{ node: HTMLElement; top: number }>>([]);
+
+  const onPointerDown = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    startRef.current = { x: e.clientX, y: e.clientY };
+    draggedRef.current = false;
+    scrollSnapsRef.current = collectScrollSnapshots(e.currentTarget);
+  }, []);
+
+  const onPointerMove = useCallback((e: PointerEvent<HTMLButtonElement>) => {
+    const start = startRef.current;
+    if (!start || draggedRef.current) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (dx * dx + dy * dy > TAP_SLOP_PX * TAP_SLOP_PX) {
+      draggedRef.current = true;
+    }
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    startRef.current = null;
+  }, []);
+
+  const onPointerCancel = useCallback(() => {
+    startRef.current = null;
+    draggedRef.current = false;
+    scrollSnapsRef.current = [];
+  }, []);
+
+  const guardClick = useCallback((e: MouseEvent<HTMLButtonElement>, action?: (e: MouseEvent) => void) => {
+    const scrolled = scrollSnapsRef.current.some(({ node, top }) => node.scrollTop !== top);
+    if (draggedRef.current || scrolled) {
+      e.preventDefault();
+      e.stopPropagation();
+      draggedRef.current = false;
+      scrollSnapsRef.current = [];
+      return;
+    }
+    action?.(e);
+  }, []);
+
+  return {
+    pointerProps: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel,
+    },
+    guardClick,
+  };
+}
 
 export function OpinionPollOptionRow({
   pollId,
@@ -41,13 +127,15 @@ export function OpinionPollOptionRow({
   disabled?: boolean;
   imageInteraction?: OpinionPollOptionImageInteraction;
 }) {
+  const { pointerProps, guardClick } = useTapClickGuard();
   const opensGallery = imageInteraction === "gallery";
   const imageColumn = option.imageUrl ? (
     <button
       type="button"
       aria-label={opensGallery ? "Open image review" : "View larger image"}
       disabled={disabled}
-      onClick={() => onExpandImage(option.imageUrl!, option.name)}
+      {...pointerProps}
+      onClick={(e) => guardClick(e, () => onExpandImage(option.imageUrl!, option.name))}
       className={cn(
         "group/thumb relative shrink-0 w-14 self-stretch min-h-[2.75rem] overflow-hidden border-0 p-0 disabled:cursor-not-allowed",
         opensGallery ? "cursor-pointer" : "cursor-zoom-in",
@@ -72,13 +160,18 @@ export function OpinionPollOptionRow({
   if (mode === "vote") {
     return (
       <div
-        className={`w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200 touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:border-[#EFEFEF]/50 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:border-white/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:bg-white/5 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/40 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/25 active:border-[#EFEFEF]/40 active:bg-muted/45 dark:active:border-white/35 dark:active:bg-white/[0.07] active:ring-1 active:ring-inset active:ring-[#EFEFEF]/30 dark:active:ring-white/20 ${disabled ? "opacity-60" : ""}`}
+        className={cn(
+          "w-full flex items-stretch overflow-hidden rounded-lg border border-border/50 bg-muted/30 p-0 text-left transition-all duration-200",
+          OPTION_ROW_HOVER_CLASSES,
+          disabled && "opacity-60",
+        )}
         data-testid={`${testIdPrefix}-${pollId}-${option.id}`}
       >
         {imageColumn}
         <button
           type="button"
-          onClick={onVote}
+          {...pointerProps}
+          onClick={(e) => guardClick(e, onVote)}
           disabled={disabled}
           className={`flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99] ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
@@ -134,13 +227,25 @@ export function OpinionPollOptionRow({
   }
 
   return (
-    <div className={`${rowClass} w-full`} data-testid={`${testIdPrefix}-${pollId}-${option.id}`}>
+    <div
+      className={cn(
+        rowClass,
+        "w-full",
+        !disabled && OPTION_ROW_HOVER_CLASSES,
+        disabled && "opacity-60",
+      )}
+      data-testid={`${testIdPrefix}-${pollId}-${option.id}`}
+    >
       {imageColumn}
       <button
         type="button"
         disabled={disabled}
-        className={`min-w-0 flex-1 text-left cursor-pointer rounded-r-md touch-manipulation [@media(hover:hover)_and_(pointer:fine)]:hover:ring-1 [@media(hover:hover)_and_(pointer:fine)]:hover:ring-inset [@media(hover:hover)_and_(pointer:fine)]:hover:ring-[#EFEFEF]/50 dark:[@media(hover:hover)_and_(pointer:fine)]:hover:ring-white/35 active:ring-1 active:ring-inset active:ring-[#EFEFEF]/45 dark:active:ring-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30 border-0 bg-transparent p-0 ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
-        onClick={onChangeVote}
+        className={cn(
+          "min-w-0 flex-1 text-left rounded-r-md border-0 bg-transparent p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFEFEF]/40 dark:focus-visible:ring-white/30",
+          disabled ? "cursor-not-allowed" : "cursor-pointer",
+        )}
+        {...pointerProps}
+        onClick={(e) => guardClick(e, onChangeVote)}
       >
         {contentColumn}
       </button>

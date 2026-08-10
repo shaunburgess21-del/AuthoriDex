@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useRef, useCallback, type KeyboardEvent, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
-import { Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
+import { ChevronDown, Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Drawer } from "vaul";
 import { Card } from "@/components/ui/card";
@@ -17,7 +17,8 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { isVoteGateRedirectError } from "@/lib/voteGate";
 import { SnapDismissContext } from "@/components/snap-scroll/VoteSnapScrollView";
-import { OpinionPollOptionRow, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { OpinionPollOptionRow, OPTION_ROW_HOVER_CLASSES, type OpinionPollOptionRowMode } from "@/components/opinion-polls/OpinionPollOptionRow";
+import { cn } from "@/lib/utils";
 import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { sortOpinionPollOptionsForCard } from "@/lib/opinionPollOptions";
@@ -402,8 +403,30 @@ export function OpinionPollCard({
           </div>
         )}
 
-        {(hasVoted || remainingCount > 0) && (
-          <div className={`${hasVoted ? "mt-auto pt-2.5" : "mt-2.5"} flex items-center gap-2`}>
+        {!hasVoted && remainingCount > 0 && (
+          <div className="mt-1.5 flex-1 flex flex-col min-h-0">
+            <button
+              type="button"
+              onClick={() => {
+                setOptionsViewMode("list");
+                setOptionsDrawerOpen(true);
+              }}
+              className={cn(
+                "flex-1 min-h-[30px] w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/60 bg-muted/20 py-1.5 transition-all duration-200 cursor-pointer",
+                OPTION_ROW_HOVER_CLASSES,
+              )}
+              data-testid={`link-more-options-${poll.id}`}
+            >
+              <ChevronDown className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+              <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">
+                View all {options.length} options
+              </span>
+            </button>
+          </div>
+        )}
+
+        {hasVoted && (
+          <div className="mt-auto pt-2.5 flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center">
               {hasVoted && showDiscussion ? (
                 <DiscussionButton
