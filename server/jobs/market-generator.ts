@@ -1160,7 +1160,11 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
 
     log(
       `[MarketGenerator:Gainer] ${cat}: field=${selection.personIds.join(", ")} ` +
-      `(anchor=${selection.anchorId})`,
+      `(anchor=${selection.anchorId}` +
+      (selection.bandApplied
+        ? `, band=tier${selection.bandTier} poolRatio=${selection.bandRatio} fieldRatio=${selection.fieldRatio} pool=${selection.poolSize}`
+        : `, band=off fieldRatio=${selection.fieldRatio} pool=${selection.poolSize}`) +
+      `)`,
     );
 
     if (existingCategories.has(cat)) {
@@ -1224,7 +1228,22 @@ export async function generateWeeklyGainer(): Promise<{ created: number; updated
       continue;
     }
     const openingScores = buildOpeningScores(fieldPeople.map(p => p.id), snapMap);
-    const gainerMeta = openingScores.length > 0 ? { openingScores } : undefined;
+    const gainerMeta =
+      openingScores.length > 0 || selection.bandApplied || selection.fieldRatio != null
+        ? {
+            ...(openingScores.length > 0 ? { openingScores } : {}),
+            // Persisted so a later audit can answer "did banding flatten the
+            // small-denominator bias?" without refitting from snapshots.
+            bandSelection: {
+              applied: selection.bandApplied,
+              tier: selection.bandTier,
+              poolRatio: selection.bandRatio,
+              fieldRatio: selection.fieldRatio,
+              poolSize: selection.poolSize,
+              anchorId: selection.anchorId,
+            },
+          }
+        : undefined;
 
     const title = `Category Race: ${getMarketCategoryLabel(cat)}`;
     let slug = `gainer-${cat}-week-${weekNumber}`;

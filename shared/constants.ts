@@ -395,6 +395,17 @@ export const GAINER_SCORE_WEIGHT_VOLATILITY = 0.45;
 export const GAINER_SCORE_WEIGHT_MOMENTUM = 0.4;
 export const GAINER_SCORE_WEIGHT_LOWER_BASE = 0.15;
 
+/**
+ * Opening-score band tiers for Gainer field selection (tried in order).
+ * Compresses the field so raw % change stops favouring the smallest base.
+ * Thin categories that never hit a tier fall back to whole-category selection.
+ */
+export const GAINER_BAND_TIERS = [
+  { maxRatio: 1.5, minPool: 7 },
+  { maxRatio: 1.75, minPool: 7 },
+  { maxRatio: 2.0, minPool: 6 },
+] as const;
+
 /** Weekly jackpot / updown anchored field — fixed anchors + rotating movers + wildcards. */
 export const ANCHORED_ANCHOR_COUNT = 10;
 export const ANCHORED_MOVER_COUNT = 6;
