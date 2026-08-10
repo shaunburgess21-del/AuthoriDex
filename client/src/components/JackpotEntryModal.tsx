@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,14 @@ interface JackpotEntryModalProps {
 
 const JACKPOT_TICKET_COST = 100;
 
+// Recharts is a heavy dependency and the panel is only reachable once this
+// modal is open, so keep it out of the Predict page's initial bundle.
+const JackpotScoreHistory = lazy(() =>
+  import("@/components/predict/JackpotScoreHistory").then((m) => ({
+    default: m.JackpotScoreHistory,
+  })),
+);
+
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
@@ -81,6 +89,14 @@ export function JackpotEntryModal({
     const num = parseInt(cleaned, 10);
     return isNaN(num) || num <= 0 ? null : num;
   }, [scoreInput]);
+
+  // Settlement reads `fameIndex` off the closing snapshot (see
+  // `getCloseSnapshot`), so show that rather than `trendScore` — the two track
+  // each other to within a point, but this is the number being graded.
+  const displayScore = useMemo(() => {
+    const fame = person.fameIndex;
+    return typeof fame === "number" && fame > 0 ? fame : Math.round(person.trendScore);
+  }, [person.fameIndex, person.trendScore]);
 
   // One key per (market, score) intent: a network-failure retry with the
   // same score replays server-side instead of double-charging; changing
@@ -251,7 +267,10 @@ export function JackpotEntryModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="max-w-md">
+      {/* DialogContent is a fixed centred grid with no height cap, so the
+          score-history panel can push the form past a short viewport. Scope the
+          scroll to this modal rather than changing the shared primitive. */}
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Crown className="h-5 w-5 text-amber-500" />
@@ -284,7 +303,7 @@ export function JackpotEntryModal({
             </Popover>
           </DialogTitle>
           <DialogDescription>
-            Predict {person.name}'s exact closing Trend Score
+            Closest guess to {person.name}'s closing Trend Score wins
           </DialogDescription>
         </DialogHeader>
 
@@ -361,7 +380,7 @@ export function JackpotEntryModal({
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Current Score</p>
                 <p className="text-lg font-bold font-mono text-amber-500">
-                  {formatNumber(Math.round(person.trendScore))}
+                  {formatNumber(displayScore)}
                 </p>
               </div>
             </div>
@@ -391,9 +410,25 @@ export function JackpotEntryModal({
             )}
 
             <p className="text-xs text-muted-foreground text-center">
-              Closest exact score at{" "}
-              <span className="font-medium text-foreground">Sunday 23:59 UTC</span> wins the pot. Ties split.
+              Closest guess to the score at{" "}
+              <span className="font-medium text-foreground">Sunday 23:59 UTC</span> wins the pot.
+              Ties split. Entries close Friday, so you&apos;re predicting 48 hours ahead.
             </p>
+
+            <Suspense
+              fallback={
+                <div className="h-[168px] rounded-lg border bg-muted/30 flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              }
+            >
+              <JackpotScoreHistory
+                personId={person.id}
+                personName={person.name}
+                currentScore={displayScore}
+                onPickScore={(score) => handleScoreChange(String(score))}
+              />
+            </Suspense>
 
             {/* Score input */}
             <div>
@@ -404,7 +439,7 @@ export function JackpotEntryModal({
                 <Input
                   type="text"
                   inputMode="numeric"
-                  placeholder="e.g. 600,421"
+                  placeholder="Enter a score"
                   value={scoreInput}
                   onChange={(e) => handleScoreChange(e.target.value)}
                   className={`bg-background/50 pr-10 text-lg font-mono ${

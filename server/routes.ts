@@ -2046,7 +2046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/trending/:id/history", async (req, res) => {
     try {
       const { id } = req.params;
-      const { days = '7' } = req.query; // Default to 7 days
+      const { days = '7', interval, slim } = req.query; // Default to 7 days
       
       const daysNum = parseInt(days as string);
       
@@ -2054,6 +2054,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(daysNum) || daysNum < 1 || daysNum > 3650) {
         return res.status(400).json({ error: "Invalid days parameter. Must be between 1 and 3650." });
       }
+
+      // Both response-shaping params are opt-in and default to the legacy
+      // hourly/full payload, so the profile chart and home overlay are
+      // untouched. The jackpot modal asks for `interval=day&slim=1` because a
+      // 30-day hourly response is ~720 rows of ~15 fields for a chart that
+      // only plots fameIndex.
+      const dailyInterval = interval === 'day';
+      const slimFields = slim === '1' || slim === 'true';
       
       const cutoffDate = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000);
       
@@ -2084,8 +2092,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .orderBy(desc(trendSnapshots.timestamp), desc(trendSnapshots.id))
         .limit(daysNum * 24); // Max one per hour for requested days
       
+      const ascending = snapshots.reverse();
+
+      // One point per UTC day: the last on-the-hour snapshot of that day, so a
+      // daily point represents the same end-of-day read the weekly jackpot
+      // settles against. Rows arrive ascending so the final `set` per key wins,
+      // and today's newest row is by definition the last of its own day — the
+      // series already ends at "now" without a special case.
+      const sampled = dailyInterval
+        ? (() => {
+            const byDay = new Map<string, typeof ascending[number]>();
+            for (const snapshot of ascending) {
+              if (snapshot.fameIndex == null || snapshot.fameIndex <= 0) continue;
+              byDay.set(snapshot.timestamp.toISOString().slice(0, 10), snapshot);
+            }
+            return Array.from(byDay.values());
+          })()
+        : ascending;
+
       // Transform for graph display
-      const historyData = snapshots.reverse().map(snapshot => {
+      const historyData = sampled.map(snapshot => {
         const diag = snapshot.diagnostics as Record<string, unknown> | null;
         const raw = diag?.raw as Record<string, unknown> | undefined;
         const newsRatio = Number(raw?.newsMomentumRatio ?? 0);
@@ -2117,7 +2143,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      res.json(historyData);
+      res.json(
+        slimFields
+          ? historyData.map(point => ({ timestamp: point.timestamp, fameIndex: point.fameIndex }))
+          : historyData,
+      );
     } catch (error) {
       console.error("Error fetching history:", error);
       res.status(500).json({ error: "Failed to fetch historical data" });
