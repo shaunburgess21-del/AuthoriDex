@@ -296,6 +296,7 @@ export function OpinionPollCard({
             detailLabel="View Poll Details"
             onBrowseFullScreen={onBrowseFullScreen}
             share={poll.slug ? opinionPollShare(poll.slug, poll.title) : undefined}
+            reactionTarget={{ surfaceType: "opinion_poll", targetId: String(poll.id) }}
             menuDisabled={categoryMenuDisabled}
             size="pollCard"
             data-testid={`badge-opinion-category-${poll.id}`}

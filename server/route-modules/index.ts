@@ -13,3 +13,4 @@ export { registerVoicesRoutes } from "./voices-routes";
 export { registerMeCommentsRoutes } from "./me-comments-routes";
 export { registerFunnelRoutes } from "./funnel-routes";
 export { registerStarterMixRoutes } from "./starter-mix-routes";
+export { registerCardReactionsRoutes } from "./card-reactions-routes";

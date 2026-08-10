@@ -43,6 +43,30 @@ export const VOICES_SURFACE_LABELS: Record<VoicesSurface, string> = {
 };
 
 /**
+ * Card reaction "surfaces" — the Vote/Predict card types a user can Like or
+ * Dislike from the category-pill menu. Stored in `card_reactions.surface_type`
+ * and shared by the client hook, the pill menu, and the API route so the
+ * wire values can never drift.
+ */
+export const CARD_REACTION_SURFACES = [
+  "sentiment_poll",
+  "matchup",
+  "opinion_poll",
+  "value_person",
+  "induction_candidate",
+  "curate_person",
+  "market_updown",
+  "market_h2h",
+  "market_gainer",
+  "market_world",
+] as const;
+
+export type CardReactionSurface = (typeof CARD_REACTION_SURFACES)[number];
+
+export const CARD_REACTION_TYPES = ["like", "dislike"] as const;
+export type CardReactionType = (typeof CARD_REACTION_TYPES)[number];
+
+/**
  * CANONICAL_CATEGORIES — default seed set and normalization baseline (not the full admin registry).
  *
  * The **authoritative** list of category ids an operator can add/remove lives in Postgres

@@ -185,6 +185,7 @@ export function TopGainerCard({
                 ? categoryRaceShare(market.id, getMarketCategoryLabel(market.category))
                 : undefined
             }
+            reactionTarget={{ surfaceType: "market_gainer", targetId: String(market.id) }}
           />
         </div>
       </div>

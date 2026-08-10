@@ -138,6 +138,7 @@ export function VersusCard({
                   ? matchupShare(matchup.slug, matchup.promptText?.trim() || matchup.title)
                   : undefined
               }
+              reactionTarget={{ surfaceType: "matchup", targetId: String(matchup.id) }}
               menuDisabled={categoryMenuDisabled}
               size="pollCard"
               data-testid={`badge-matchup-${matchup.id}`}

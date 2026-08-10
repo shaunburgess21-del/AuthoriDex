@@ -1,12 +1,20 @@
 import { useCallback, useRef, useState } from "react";
-import { Link } from "wouter";
-import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown, Share2 } from "lucide-react";
-import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
+import { Link, useLocation } from "wouter";
+import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown, Share2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { toast } from "sonner";
+import { getMarketCategoryLabel, normalizeMarketCategory, type CardReactionType } from "@shared/constants";
 import { getCategoryStyle, CategoryPill } from "@/components/CategoryPill";
 import { CATEGORY_CHIP_RADIUS, POLL_CARD_PILL_SIZE_CLASSES } from "@/lib/filterControlStyles";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
+import { signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import {
+  cardReactionKey,
+  useCardReactionMutation,
+  useCardReactionsMap,
+  type CardReactionTarget,
+} from "@/hooks/useCardReactions";
 import {
   sharePage,
   resolveShareUrl,
@@ -98,6 +106,11 @@ interface InteractiveCategoryPillProps {
   menuDisabled?: boolean;
   /** When set, adds a Share row that mirrors the card's detail-page share link. */
   share?: CardShareConfig;
+  /**
+   * When set, adds a Like/Dislike ("More/Less like this") row to the menu.
+   * Reactions personalize card ordering and feed card-type analytics.
+   */
+  reactionTarget?: CardReactionTarget;
   /** Override display label (e.g. from category registry: "Media & Podcast"). */
   displayLabel?: string;
   /** Registry-resolved canonical id for colour (e.g. `media` for renamed labels). */
@@ -120,6 +133,8 @@ function MenuItems({
   onBrowseIntentStart,
   share,
   sharerUserId,
+  reaction,
+  onReact,
   CloseWrapper,
 }: {
   label: string;
@@ -134,6 +149,10 @@ function MenuItems({
   onBrowseIntentStart?: () => void;
   share?: CardShareConfig;
   sharerUserId?: string | null;
+  /** Current Like/Dislike state for this card (null = none). */
+  reaction?: CardReactionType | null;
+  /** When set, renders the "More/Less like this" row. */
+  onReact?: (reaction: CardReactionType) => void;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
   const showLeaderboard = !leaderboardCategories || leaderboardCategories.has(normalizeMarketCategory(category));
@@ -143,7 +162,7 @@ function MenuItems({
       <CloseWrapper asChild>
         <button
           type="button"
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors"
+          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors"
           onClick={onFilter}
         >
           <Filter className="h-4 w-4 opacity-60 shrink-0" />
@@ -155,7 +174,7 @@ function MenuItems({
         <CloseWrapper asChild>
           <Link
             href={`/predict/race/${raceMarketId}`}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/80 transition-colors no-underline text-foreground"
           >
             <Trophy className="h-4 w-4 opacity-60 shrink-0" />
             View {label} Race
@@ -168,7 +187,7 @@ function MenuItems({
           <CloseWrapper asChild>
             <button
               type="button"
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
               onClick={onDetailNavigate}
             >
               <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
@@ -179,7 +198,7 @@ function MenuItems({
           <CloseWrapper asChild>
             <Link
               href={detailHref!}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/80 transition-colors no-underline text-foreground"
             >
               <ExternalLink className="h-4 w-4 opacity-60 shrink-0" />
               {detailLabel || "View Details"}
@@ -192,7 +211,7 @@ function MenuItems({
         <CloseWrapper asChild>
           <button
             type="button"
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
             onClick={() => {
               void sharePage(share.title, {
                 sharerUserId,
@@ -211,7 +230,7 @@ function MenuItems({
         <CloseWrapper asChild>
           <button
             type="button"
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/60 transition-colors text-foreground"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
             onPointerDown={onBrowseIntentStart}
             onTouchStart={onBrowseIntentStart}
             onClick={onBrowseFullScreen}
@@ -224,13 +243,54 @@ function MenuItems({
         <CloseWrapper asChild>
           <Link
             href={`/?category=${encodeURIComponent(label)}#leaderboard`}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/60 transition-colors no-underline text-foreground"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/80 transition-colors no-underline text-foreground"
           >
             <Users className="h-4 w-4 opacity-60 shrink-0" />
             View {label} on Leaderboard
           </Link>
         </CloseWrapper>
       ) : null}
+
+      {onReact && (
+        <div
+          className="mt-1 pt-1.5 border-t border-border/40 flex items-center gap-1"
+          role="group"
+          aria-label="Card feedback"
+        >
+          <CloseWrapper asChild>
+            <button
+              type="button"
+              aria-pressed={reaction === "like"}
+              className={cn(
+                "group/like flex flex-1 items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-md transition-colors",
+                reaction === "like"
+                  ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+                  : "text-foreground hover:bg-muted/60 hover:text-green-600 dark:hover:text-green-400",
+              )}
+              onClick={() => onReact("like")}
+            >
+              <ThumbsUp className={cn("h-4 w-4 shrink-0 transition-opacity", reaction === "like" ? "opacity-100" : "opacity-60 group-hover/like:opacity-100")} />
+              More like this
+            </button>
+          </CloseWrapper>
+          <CloseWrapper asChild>
+            <button
+              type="button"
+              aria-pressed={reaction === "dislike"}
+              className={cn(
+                "group/dislike flex flex-1 items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-md transition-colors",
+                reaction === "dislike"
+                  ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                  : "text-foreground hover:bg-muted/60 hover:text-red-600 dark:hover:text-red-400",
+              )}
+              onClick={() => onReact("dislike")}
+            >
+              <ThumbsDown className={cn("h-4 w-4 shrink-0 transition-opacity", reaction === "dislike" ? "opacity-100" : "opacity-60 group-hover/dislike:opacity-100")} />
+              Less like this
+            </button>
+          </CloseWrapper>
+        </div>
+      )}
     </div>
   );
 }
@@ -246,6 +306,7 @@ export function InteractiveCategoryPill({
   onBrowseFullScreen,
   menuDisabled = false,
   share,
+  reactionTarget,
   displayLabel,
   canonicalId,
   size = "default",
@@ -256,9 +317,34 @@ export function InteractiveCategoryPill({
   const pendingBrowseFullScreenRef = useRef(false);
   const isMobile = useIsMobile();
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const reactionsMap = useCardReactionsMap();
+  const reactionMutation = useCardReactionMutation();
   const style = getCategoryStyle(category, canonicalId);
   const sizeClass = SIZE_CLASSES[size];
   const label = displayLabel ?? getMarketCategoryLabel(category);
+
+  const currentReaction = reactionTarget
+    ? reactionsMap.get(cardReactionKey(reactionTarget)) ?? null
+    : null;
+
+  const handleReact = reactionTarget
+    ? (next: CardReactionType) => {
+        if (!user) {
+          toast(
+            "Sign in to personalize your feed",
+            signInToVoteToastOptions(() => setLocation("/login")),
+          );
+          return;
+        }
+        reactionMutation.mutate({
+          ...reactionTarget,
+          // Tapping the active reaction toggles it off.
+          reaction: currentReaction === next ? null : next,
+          category,
+        });
+      }
+    : undefined;
 
   if (menuDisabled) {
     return (
@@ -373,6 +459,8 @@ export function InteractiveCategoryPill({
               {...menuProps}
               share={share}
               sharerUserId={user?.id}
+              reaction={currentReaction}
+              onReact={handleReact}
               onDetailNavigate={detailNavHandler}
               onBrowseIntentStart={markCategoryPillBrowseIntent}
               onBrowseFullScreen={browseFullScreenHandler}
@@ -391,11 +479,13 @@ export function InteractiveCategoryPill({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{pillButton}</PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-1">
+      <PopoverContent align="end" className="w-56 p-1 bg-background">
         <MenuItems
           {...menuProps}
           share={share}
           sharerUserId={user?.id}
+          reaction={currentReaction}
+          onReact={handleReact}
           onDetailNavigate={detailNavHandler}
           onBrowseIntentStart={markCategoryPillBrowseIntent}
           onBrowseFullScreen={browseFullScreenHandler}

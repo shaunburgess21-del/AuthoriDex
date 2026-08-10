@@ -77,6 +77,12 @@ interface VoteSnapScrollViewProps {
   apiRef?: MutableRefObject<SnapViewApi | null>;
   /** Fires when the visible card index in the active column changes. */
   onVisibleIndexChange?: (index: number, item: SnapItem | null) => void;
+  /**
+   * Minimal variant only: rendered pinned near the bottom of each snap page
+   * (below the card), scrolling as one unit with it. Bottom space is
+   * reserved so the centred card never underlaps it.
+   */
+  renderPageFooter?: (item: SnapItem, ctx: SnapRenderContext) => ReactNode;
 }
 
 export interface SnapViewApi {
@@ -151,6 +157,11 @@ const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
 /** Symmetric vertical inset for minimal pages so justify-center is true-center
  * (pt-only + bottom-only safe-area previously left topGap > bottomGap). */
 const SNAP_PAGE_INSET_MINIMAL = "max(0.75rem, env(safe-area-inset-bottom, 0px))";
+/** Bottom band reserved on minimal pages for the hovering action bar
+ * (renderPageFooter) so the centred card can never underlap it. */
+const SNAP_PAGE_FOOTER_SPACE = "72px";
+/** Footer bottom offset within the reserved band (above the safe area). */
+const SNAP_PAGE_FOOTER_BOTTOM = `calc(${SNAP_PAGE_INSET_MINIMAL} + 8px)`;
 
 const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
   matchup: "matchup",
@@ -159,7 +170,7 @@ const COMMENT_PARENT_TYPE: Record<CommentEntityType, string> = {
   "open-market": "open_market",
 };
 
-function snapPageStyle(isMinimal = false): CSSProperties {
+function snapPageStyle(isMinimal = false, hasFooter = false): CSSProperties {
   if (isMinimal) {
     return {
       // Size pages off the scroll container itself (100% of its content box)
@@ -171,7 +182,9 @@ function snapPageStyle(isMinimal = false): CSSProperties {
       boxSizing: "border-box",
       scrollSnapAlign: "start",
       paddingTop: SNAP_PAGE_INSET_MINIMAL,
-      paddingBottom: SNAP_PAGE_INSET_MINIMAL,
+      paddingBottom: hasFooter
+        ? `calc(${SNAP_PAGE_INSET_MINIMAL} + ${SNAP_PAGE_FOOTER_SPACE})`
+        : SNAP_PAGE_INSET_MINIMAL,
     };
   }
   return {
@@ -323,6 +336,7 @@ export function VoteSnapScrollView({
   headerSlot,
   apiRef,
   onVisibleIndexChange,
+  renderPageFooter,
 }: VoteSnapScrollViewProps) {
   const isMinimal = variant === "minimal";
   const [, setLocation] = useLocation();
@@ -552,11 +566,54 @@ export function VoteSnapScrollView({
     return catItems[Math.min(idx, catItems.length - 1)] || null;
   }, [categoryItems, activeCategory]);
 
-  // ── Imperative API (Quick Vote auto-advance) ──────────────────────────
+  // ── Programmatic column scroll tween ──────────────────────────────────
   // rAF-tween with scroll-snap disabled for the duration: iOS Safari's
   // scrollTo({behavior:"smooth"}) inside a snap-mandatory container is a
   // known WebKit conflict that can strand the scroll between snap points.
+  // Shared by Quick Vote auto-advance and the settle guard's corrections.
   const programmaticScrollActiveRef = useRef(false);
+  /** Cancels the in-flight tween: restores snap type, clears the flag,
+   * leaves scrollTop wherever the tween got to. Null when no tween runs. */
+  const cancelScrollTweenRef = useRef<(() => void) | null>(null);
+
+  const tweenColumnToTop = useCallback((el: HTMLDivElement, target: number) => {
+    if (programmaticScrollActiveRef.current) return;
+    const startTop = el.scrollTop;
+    const dist = target - startTop;
+    if (dist === 0) return;
+    const duration = 350;
+    const startTs = performance.now();
+    programmaticScrollActiveRef.current = true;
+    el.style.scrollSnapType = "none";
+
+    let rafId = 0;
+    const finish = (jumpToTarget: boolean) => {
+      cancelAnimationFrame(rafId);
+      el.removeEventListener("touchstart", onTouch);
+      cancelScrollTweenRef.current = null;
+      if (jumpToTarget) el.scrollTop = target;
+      el.style.scrollSnapType = "y mandatory";
+      programmaticScrollActiveRef.current = false;
+    };
+    // User takes over mid-tween: stop where we are, snap re-engages on release.
+    const onTouch = () => finish(false);
+    el.addEventListener("touchstart", onTouch, { passive: true });
+    cancelScrollTweenRef.current = () => finish(false);
+
+    const step = (now: number) => {
+      const t = Math.min((now - startTs) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.scrollTop = startTop + dist * eased;
+      if (t < 1) {
+        rafId = requestAnimationFrame(step);
+      } else {
+        finish(true);
+      }
+    };
+    rafId = requestAnimationFrame(step);
+  }, []);
+
+  // ── Imperative API (Quick Vote auto-advance) ──────────────────────────
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
@@ -569,51 +626,32 @@ export function VoteSnapScrollView({
         const idx = Math.round(el.scrollTop / h);
         const target = (idx + 1) * h;
         if (target >= el.scrollHeight) return;
-
-        const startTop = el.scrollTop;
-        const dist = target - startTop;
-        const duration = 350;
-        const startTs = performance.now();
-        programmaticScrollActiveRef.current = true;
-        el.style.scrollSnapType = "none";
-
-        let rafId = 0;
-        const finish = (jumpToTarget: boolean) => {
-          cancelAnimationFrame(rafId);
-          el.removeEventListener("touchstart", onTouch);
-          if (jumpToTarget) el.scrollTop = target;
-          el.style.scrollSnapType = "y mandatory";
-          programmaticScrollActiveRef.current = false;
-        };
-        // User takes over mid-tween: stop where we are, snap re-engages on release.
-        const onTouch = () => finish(false);
-        el.addEventListener("touchstart", onTouch, { passive: true });
-
-        const step = (now: number) => {
-          const t = Math.min((now - startTs) / duration, 1);
-          const eased = 1 - Math.pow(1 - t, 3);
-          el.scrollTop = startTop + dist * eased;
-          if (t < 1) {
-            rafId = requestAnimationFrame(step);
-          } else {
-            finish(true);
-          }
-        };
-        rafId = requestAnimationFrame(step);
+        tweenColumnToTop(el, target);
       },
     };
     return () => {
       apiRef.current = null;
+      // Overlay closing / remounting mid-tween: don't leave snap disabled.
+      cancelScrollTweenRef.current?.();
     };
-  }, [apiRef]);
+  }, [apiRef, tweenColumnToTop]);
 
   // ── Settle guard (minimal): self-heal stranded mid-page scroll ─────────
   // Attaches once per open (deps: isMinimal, open) via a stable ref — NOT
   // React state — so visible-index re-renders mid-swipe cannot remount the
-  // listeners and reset touchActive. Softened so it cannot kill an iOS
-  // native snap fling: post-gesture grace + long rest stability before any
-  // scrollTop write. ResizeObserver re-anchors from the committed visible
-  // index, never round(scrollTop) during unsettled motion.
+  // listeners and reset touchActive. Fast paths first, timers as fallback:
+  //   1. scrollend (iOS 26.2+ / Chrome 114+): fires only when scrolling —
+  //      including snap and momentum — has fully completed, so an
+  //      off-boundary scrollTop at that moment is a definitively stranded
+  //      snap; correct immediately with the shared tween.
+  //   2. Tap-without-scroll after touchend (e.g. a tap that aborted the
+  //      auto-advance tween mid-page): verified still for a short beat,
+  //      then tweened to the nearest boundary — no fling to protect.
+  //   3. Timer fallback (older browsers): post-gesture grace + long rest
+  //      stability before any write, so it cannot kill an iOS native snap
+  //      fling. Correction is the smooth tween, not a scrollTop teleport.
+  // ResizeObserver re-anchors from the committed visible index, never
+  // round(scrollTop) during unsettled motion.
   useEffect(() => {
     if (!isMinimal || !open) return;
 
@@ -624,7 +662,9 @@ export function VoteSnapScrollView({
     const attach = (el: HTMLDivElement) => {
       let touchActive = false;
       let settleTimer: number | null = null;
+      let tapSettleTimer: number | null = null;
       let lastScrollTs = 0;
+      let touchStartTs = 0;
       let gestureGraceUntil = 0;
       /** scrollTop of the current rest candidate; NaN = none. */
       let restSample = Number.NaN;
@@ -635,6 +675,25 @@ export function VoteSnapScrollView({
       const SETTLE_TICK_MS = 250;
       const REST_STABLE_MS = 500;
       const RESIZE_IDLE_MS = 400;
+      /** Stillness check before the tap-release heal — long enough for a
+       * native WebKit re-snap (which moves scrollTop) to reveal itself. */
+      const TAP_SETTLE_DELAY_MS = 90;
+      const OFF_BOUNDARY_PX = 4;
+
+      /** Nearest snap boundary, or null when aligned / unmeasurable. */
+      const strandedTarget = (): number | null => {
+        const h = el.clientHeight;
+        if (h === 0) return null;
+        const top = el.scrollTop;
+        const maxTop = Math.max(0, el.scrollHeight - h);
+        const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
+        return Math.abs(top - nearest) > OFF_BOUNDARY_PX ? nearest : null;
+      };
+      const correctTo = (target: number) => {
+        restSample = Number.NaN;
+        restSince = 0;
+        tweenColumnToTop(el, target);
+      };
 
       const clearTimer = () => {
         if (settleTimer != null) {
@@ -643,6 +702,12 @@ export function VoteSnapScrollView({
         }
         restSample = Number.NaN;
         restSince = 0;
+      };
+      const clearTapTimer = () => {
+        if (tapSettleTimer != null) {
+          window.clearTimeout(tapSettleTimer);
+          tapSettleTimer = null;
+        }
       };
       const armTimer = () => {
         settleTimer = window.setTimeout(settle, SETTLE_TICK_MS);
@@ -676,13 +741,16 @@ export function VoteSnapScrollView({
         }
         restSample = Number.NaN;
         restSince = 0;
-        const h = el.clientHeight;
-        if (h === 0) return;
-        const maxTop = Math.max(0, el.scrollHeight - h);
-        const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
-        if (Math.abs(top - nearest) > 4) {
-          el.scrollTop = nearest;
-        }
+        const target = strandedTarget();
+        if (target != null) correctTo(target);
+      };
+      // Definitive end-of-scroll signal: cannot fire mid-fling, so an
+      // off-boundary position here is a stranded snap — no grace needed.
+      const onScrollEnd = () => {
+        if (touchActive || programmaticScrollActiveRef.current) return;
+        if (!el.isConnected) return;
+        const target = strandedTarget();
+        if (target != null) correctTo(target);
       };
       const onScroll = () => {
         lastScrollTs = performance.now();
@@ -691,13 +759,30 @@ export function VoteSnapScrollView({
       };
       const onTouchStart = () => {
         touchActive = true;
+        touchStartTs = performance.now();
         clearTimer();
+        clearTapTimer();
       };
       const onTouchEnd = () => {
         touchActive = false;
         gestureGraceUntil = performance.now() + POST_GESTURE_GRACE_MS;
         clearTimer();
         armTimer();
+        // Touch produced no scroll (a tap, or a finger that caught a fling
+        // and lifted in place) — nothing is in flight, so heal a stranded
+        // position now instead of waiting out the grace window. The short
+        // stillness check yields to a native re-snap if WebKit runs one.
+        if (lastScrollTs < touchStartTs) {
+          const topAtRelease = el.scrollTop;
+          clearTapTimer();
+          tapSettleTimer = window.setTimeout(() => {
+            tapSettleTimer = null;
+            if (touchActive || programmaticScrollActiveRef.current) return;
+            if (!el.isConnected || el.scrollTop !== topAtRelease) return;
+            const target = strandedTarget();
+            if (target != null) correctTo(target);
+          }, TAP_SETTLE_DELAY_MS);
+        }
       };
 
       let lastHeight = el.clientHeight;
@@ -725,15 +810,22 @@ export function VoteSnapScrollView({
       });
       resizeObserver.observe(el);
 
+      const supportsScrollEnd = "onscrollend" in window;
       el.addEventListener("scroll", onScroll, { passive: true });
+      if (supportsScrollEnd) el.addEventListener("scrollend", onScrollEnd, { passive: true });
       el.addEventListener("touchstart", onTouchStart, { passive: true });
       el.addEventListener("touchend", onTouchEnd, { passive: true });
       el.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
       return () => {
         clearTimer();
+        clearTapTimer();
+        // Guard-initiated correction tween mustn't outlive the guard with
+        // scroll-snap left disabled.
+        cancelScrollTweenRef.current?.();
         resizeObserver.disconnect();
         el.removeEventListener("scroll", onScroll);
+        if (supportsScrollEnd) el.removeEventListener("scrollend", onScrollEnd);
         el.removeEventListener("touchstart", onTouchStart);
         el.removeEventListener("touchend", onTouchEnd);
         el.removeEventListener("touchcancel", onTouchEnd);
@@ -762,7 +854,7 @@ export function VoteSnapScrollView({
       detach?.();
       detach = null;
     };
-  }, [isMinimal, open]);
+  }, [isMinimal, open, tweenColumnToTop]);
 
   // ── Visible-index change notification ─────────────────────────────────
   useEffect(() => {
@@ -1381,13 +1473,14 @@ export function VoteSnapScrollView({
                               const renderCtx: SnapRenderContext = { priority: inWindow, index };
 
                               if (!hasComments) {
+                                const hasFooter = isMinimal && !!renderPageFooter;
                                 return (
                                   <div
                                     key={item.id}
-                                    className={`snap-start flex flex-col items-center justify-center px-3 ${
+                                    className={`snap-start relative flex flex-col items-center justify-center px-3 ${
                                       isMinimal ? "" : "pt-3"
                                     }`}
-                                    style={snapPageStyle(isMinimal)}
+                                    style={snapPageStyle(isMinimal, hasFooter)}
                                   >
                                     {inWindow ? (
                                       <div
@@ -1398,6 +1491,16 @@ export function VoteSnapScrollView({
                                         }`}
                                       >
                                         {renderCard(item, renderCtx)}
+                                      </div>
+                                    ) : null}
+                                    {inWindow && hasFooter ? (
+                                      <div
+                                        className="pointer-events-none absolute inset-x-0 flex justify-center"
+                                        style={{ bottom: SNAP_PAGE_FOOTER_BOTTOM }}
+                                      >
+                                        <div className="pointer-events-auto">
+                                          {renderPageFooter!(item, renderCtx)}
+                                        </div>
                                       </div>
                                     ) : null}
                                   </div>

@@ -154,7 +154,7 @@ export function UnderratedOverratedCard({
       data-testid={`card-value-vote-${person.id}`}
     >
       {person.category && (
-        <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 z-10">
           <InteractiveCategoryPill
             category={person.category}
             onFilter={() => onFilterCategory?.(person.category!)}
@@ -162,6 +162,7 @@ export function UnderratedOverratedCard({
             detailHref={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
             detailLabel="See How They Compare"
             onBrowseFullScreen={onBrowseFullScreen}
+            reactionTarget={{ surfaceType: "value_person", targetId: String(person.id) }}
             menuDisabled={categoryMenuDisabled}
             data-testid={`badge-category-${person.id}`}
           />

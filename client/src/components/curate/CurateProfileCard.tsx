@@ -237,6 +237,7 @@ export function CurateProfileCard({
             onFilter={() => onFilterCategory?.(person.category)}
             leaderboardCategories={leaderboardCategories}
             onBrowseFullScreen={onBrowseFullScreen}
+            reactionTarget={{ surfaceType: "curate_person", targetId: String(person.id) }}
             menuDisabled={categoryMenuDisabled}
           />
         </div>

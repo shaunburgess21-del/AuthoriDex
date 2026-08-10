@@ -419,6 +419,7 @@ function BinaryMarketCard({
             detailLabel="View Market Details"
             onBrowseFullScreen={onBrowseFullScreen}
             share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            reactionTarget={{ surfaceType: "market_world", targetId: String(market.id) }}
             menuDisabled={categoryMenuDisabled}
           />
         )}
@@ -819,6 +820,7 @@ function MultiMarketCard({
             detailLabel="View Market Details"
             onBrowseFullScreen={onBrowseFullScreen}
             share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            reactionTarget={{ surfaceType: "market_world", targetId: String(market.id) }}
             menuDisabled={categoryMenuDisabled}
           />
         )}
@@ -1105,6 +1107,7 @@ function UpDownMarketCard({
             detailLabel="View Market Details"
             onBrowseFullScreen={onBrowseFullScreen}
             share={market.slug ? worldMarketShare(market.slug, market.title) : undefined}
+            reactionTarget={{ surfaceType: "market_world", targetId: String(market.id) }}
             menuDisabled={categoryMenuDisabled}
           />
         )}

@@ -486,7 +486,7 @@ function InductionCandidateCard({
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="absolute top-3 right-3">
+      <div className="absolute top-3 right-3 z-10">
         <InteractiveCategoryPill
           category={candidate.category}
           displayLabel={categoryDisplayLabel}
@@ -496,6 +496,7 @@ function InductionCandidateCard({
           detailHref="/vote/induction"
           detailLabel="View Induction Queue"
           onBrowseFullScreen={onBrowseFullScreen}
+          reactionTarget={{ surfaceType: "induction_candidate", targetId: String(candidate.id) }}
           menuDisabled={categoryMenuDisabled}
           data-testid={`badge-category-${candidate.id}`}
         />

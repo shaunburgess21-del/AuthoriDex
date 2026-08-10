@@ -236,7 +236,7 @@ import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerFunnelRoutes, registerStarterMixRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes } from "./route-modules";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1343,6 +1343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerOgRoutes(app);
   registerFunnelRoutes(app);
   registerStarterMixRoutes(app);
+  registerCardReactionsRoutes(app);
 
   // ---- Supabase Send Email Auth Hook -------------------------------------
   // Receives webhooks from Supabase whenever an auth email needs sending.

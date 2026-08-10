@@ -3,6 +3,7 @@ import { pgTable, pgEnum, text, varchar, integer, real, timestamp, unique, uniqu
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
+import { CARD_REACTION_SURFACES, CARD_REACTION_TYPES } from "./constants";
 
 // SECURITY NOTE:
 // Any new table in exposed schemas (especially public) must ship with a
@@ -2689,3 +2690,50 @@ export const insertVoteScoutIdeaSchema = createInsertSchema(voteScoutIdeas).omit
 
 export type VoteScoutIdea = typeof voteScoutIdeas.$inferSelect;
 export type InsertVoteScoutIdea = z.infer<typeof insertVoteScoutIdeaSchema>;
+
+// ============================================================================
+// CARD REACTIONS (Like / Dislike a Vote/Predict card from the pill menu)
+// ============================================================================
+
+// One row per (user, surface, card). Two consumers:
+//   1. Personalization — likes also feed user_category_engagement via
+//      server/lib/engagementWriter.ts (fire-and-forget, same as votes);
+//      per-card boost/demote in list ordering is a planned phase 2.
+//   2. Dev analytics — which card types earn likes vs dislikes over time
+//      (admin summary endpoint groups on surface_type x reaction).
+export const cardReactions = pgTable("card_reactions", {
+  userId: varchar("user_id").notNull(),
+  /** One of CARD_REACTION_SURFACES (shared/constants.ts). */
+  surfaceType: text("surface_type").notNull(),
+  /** Entity id for the surface (topic/matchup/poll/person/candidate/market id). */
+  targetId: text("target_id").notNull(),
+  /** 'like' | 'dislike' */
+  reaction: text("reaction").notNull(),
+  // Canonical kebab category id frozen at reaction time (nullable). Frozen for
+  // the same reason as user_category_engagement: a later re-categorisation of
+  // the content must not rewrite historical preference signal.
+  categoryId: text("category_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.surfaceType, table.targetId] }),
+  analyticsIdx: index("card_reactions_surface_reaction_created_idx").on(
+    table.surfaceType,
+    table.reaction,
+    table.createdAt,
+  ),
+}));
+
+export type CardReactionRow = typeof cardReactions.$inferSelect;
+export type InsertCardReaction = typeof cardReactions.$inferInsert;
+
+/** PUT /api/me/card-reactions body. `reaction: null` clears the row. */
+export const cardReactionUpsertSchema = z.object({
+  surfaceType: z.enum(CARD_REACTION_SURFACES),
+  targetId: z.string().min(1).max(128),
+  reaction: z.enum(CARD_REACTION_TYPES).nullable(),
+  /** Raw card category label; the server normalises it to a canonical id. */
+  category: z.string().max(120).nullish(),
+});
+
+export type CardReactionUpsert = z.infer<typeof cardReactionUpsertSchema>;

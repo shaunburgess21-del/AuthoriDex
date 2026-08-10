@@ -183,6 +183,7 @@ export function HeadToHeadCard({
               detailHref={`/predict/h2h/${market.id}`}
               detailLabel="View Battle Details"
               share={market.id ? h2hShare(market.id, market.title) : undefined}
+              reactionTarget={{ surfaceType: "market_h2h", targetId: String(market.id) }}
             />
           </div>
         </div>

@@ -90,7 +90,13 @@ export function DiscourseCard({
       className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
       data-testid={`card-discourse-${topic.id}`}
     >
-      <div className="absolute top-3 right-3">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+          <span className={voted ? "" : "text-slate-600"}>
+            {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
+          </span>
+        </div>
         <InteractiveCategoryPill
           category={topic.category}
           onFilter={() => onFilterCategory(topic.category)}
@@ -100,16 +106,11 @@ export function DiscourseCard({
           detailLabel="View Poll Details"
           onBrowseFullScreen={onBrowseFullScreen}
           share={topic.slug ? sentimentPollShare(topic.slug, topic.headline) : undefined}
+          reactionTarget={{ surfaceType: "sentiment_poll", targetId: String(topic.id) }}
           menuDisabled={categoryMenuDisabled}
           size="pollCard"
           data-testid={`badge-category-${topic.id}`}
         />
-      </div>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-        <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-        <span className={voted ? "" : "text-slate-600"}>
-          {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
-        </span>
       </div>
       <AvatarHeightHeadline
         className="mb-3"

@@ -20,6 +20,7 @@ import {
   type SnapItem,
   type SnapViewApi,
 } from "@/components/snap-scroll/VoteSnapScrollView";
+import { QuickVoteActionBar } from "@/components/quick-vote/QuickVoteActionBar";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-polls/OpinionPollCard";
@@ -430,6 +431,24 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     ],
   );
 
+  // Hovering action row below each card (discussion / like / dislike / share).
+  const renderPageFooter = useCallback(
+    (item: SnapItem) => {
+      const type = typeById.get(item.id);
+      if (!type) return null;
+      return (
+        <QuickVoteActionBar
+          type={type}
+          targetId={item.id}
+          slug={item.slug}
+          title={item.title}
+          category={item.category}
+        />
+      );
+    },
+    [typeById],
+  );
+
   return (
     <>
       <VoteSnapScrollView
@@ -443,6 +462,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         renderCard={renderCard}
         apiRef={snapApiRef}
         onVisibleIndexChange={handleVisibleIndexChange}
+        renderPageFooter={renderPageFooter}
       />
       {/* Loading shell: the host locks scroll + pushes history the moment the
           overlay opens, so the visitor must never face a bare locked page.

@@ -150,6 +150,7 @@ export function WeeklyUpDownCard({
           detailLabel="View Up/Down Details"
           onBrowseFullScreen={onBrowseFullScreen}
           share={market.id ? upDownShare(market.id, market.personName) : undefined}
+          reactionTarget={{ surfaceType: "market_updown", targetId: String(market.id) }}
           menuDisabled={categoryMenuDisabled}
         />
       </div>
