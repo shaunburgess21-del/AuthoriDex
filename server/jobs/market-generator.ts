@@ -18,6 +18,10 @@ import {
 import { getWeekContext as getUtcWeekContext } from "../native-markets/week-context";
 import { seedAmmMarket } from "../services/amm-house";
 import { applyWarmStartPrior } from "../services/amm-warmstart";
+import {
+  isH2HOpeningPriorEnabled,
+  pickH2HOpeningPrices,
+} from "../native-markets/h2h-opening-prices";
 import { log } from "../log";
 import { selectAnchoredField, type AnchoredMarketType } from "./anchored-selection";
 import { loadGainerMovementStats, type GainerMovementStat } from "./gainer-movement-stats";
@@ -934,7 +938,37 @@ export async function generateWeeklyH2H(): Promise<number> {
     for (const [personA, personB] of pairings) {
       const baseSlug = `h2h-${personA.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vs-${personB.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-week-${weekNumber}`;
       const openingScores = buildOpeningScores([personA.id, personB.id], snapMap);
-      const h2hMeta = openingScores.length > 0 ? { openingScores } : undefined;
+
+      // Opening-price prior: the higher opening score wins ~79% of H2H
+      // markets, so seeding at 50/50 hands that edge away. Null (missing
+      // score, or a gap inside the noise floor) keeps the uniform seed.
+      const openingPrior = isH2HOpeningPriorEnabled()
+        ? pickH2HOpeningPrices({
+            scoreA: snapMap.get(personA.id)?.score ?? null,
+            scoreB: snapMap.get(personB.id)?.score ?? null,
+          })
+        : null;
+
+      const h2hMeta =
+        openingScores.length > 0 || openingPrior
+          ? {
+              ...(openingScores.length > 0 ? { openingScores } : {}),
+              // Persisted so a later audit can answer "did the prior price
+              // these correctly?" without refitting from snapshots.
+              ...(openingPrior
+                ? {
+                    openingPrior: {
+                      favouritePersonId: openingPrior.favourite === "a" ? personA.id : personB.id,
+                      favouritePrice: openingPrior.favouritePrice,
+                      gapPct: Number(openingPrior.gapPct.toFixed(2)),
+                      bucket: openingPrior.bucket,
+                      measuredWinRate: openingPrior.measuredWinRate,
+                      targetMaxLoss: openingPrior.targetMaxLoss,
+                    },
+                  }
+                : {}),
+            }
+          : undefined;
       const catA = normalizeMarketCategory(personA.category);
       const catB = normalizeMarketCategory(personB.category);
       const h2hCategory = catA === catB ? catA : "trending";
@@ -980,9 +1014,27 @@ export async function generateWeeklyH2H(): Promise<number> {
           .sort((a, b) => a.displayOrder - b.displayOrder)
           .map((e) => e.id);
         await seedAmmMarket(
-          { marketId: market.id, marketType: "h2h", entryIdsInOrder },
+          {
+            marketId: market.id,
+            marketType: "h2h",
+            entryIdsInOrder,
+            // `initialPrices` aligns with entryIdsInOrder, which is sorted
+            // by displayOrder — the same 0/1 order as [personA, personB].
+            initialPrices: openingPrior?.prices ?? null,
+            // Price-matched seeding shrinks `b` unless targetMaxLoss is
+            // scaled with it; see h2h-opening-prices.ts.
+            targetMaxLoss: openingPrior?.targetMaxLoss ?? null,
+          },
           tx,
         );
+        if (openingPrior) {
+          log(
+            `[MarketGenerator:H2H] ${personA.name} vs ${personB.name}: opened ` +
+              `${openingPrior.favourite === "a" ? personA.name : personB.name} at ` +
+              `${openingPrior.favouritePrice} (gap ${openingPrior.gapPct.toFixed(1)}%, ` +
+              `bucket ${openingPrior.bucket}, targetMaxLoss ${openingPrior.targetMaxLoss})`,
+          );
+        }
       }
 
       createdCount++;
