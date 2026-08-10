@@ -897,12 +897,21 @@ export function computeJackpotPrediction(
   let prediction = anchor;
   let reasoning = "";
 
+  // `scoreDelta7d` / `change24h` are PERCENTAGES (e.g. -3.3 for -3.3%), but the
+  // archetype drifts below add their result straight onto a fameIndex anchor in
+  // the hundreds of thousands. Added raw, every drift was worth a few points —
+  // ~0.0005% of anchor — so all archetypes collapsed onto the same guess and
+  // only the ±2% noise term below did any work. Convert to points against the
+  // anchor so each archetype's stated intent actually moves the prediction.
+  const delta7dPoints = anchor * (signals.scoreDelta7d / 100);
+  const change24hPoints = anchor * (signals.change24h / 100);
+
   // Archetype-driven adjustments
   switch (agent.archetype) {
     case "momentum_chaser": {
-      const momentum = signals.scoreDelta7d * agent.recencyWeight * 1.5;
+      const momentum = delta7dPoints * agent.recencyWeight * 1.5;
       prediction += momentum;
-      reasoning = `Extrapolated ${signals.scoreDelta7d > 0 ? "upward" : "downward"} trend (7d delta ${signals.scoreDelta7d.toFixed(1)})`;
+      reasoning = `Extrapolated ${signals.scoreDelta7d > 0 ? "upward" : "downward"} trend (7d delta ${signals.scoreDelta7d.toFixed(1)}%)`;
       break;
     }
     case "prestige_maximiser": {
@@ -923,28 +932,29 @@ export function computeJackpotPrediction(
       // (max ~±130). Replaced with a 24h-score-reaction signal: same
       // "reacts to short news cycles" identity, expressed via the
       // composite signal that already integrates news flow into the
-      // score. Coefficient 30 picked to roughly preserve the original
-      // archetype's max swing on typical 24h moves.
-      const reaction = signals.change24h * agent.recencyWeight * 30;
+      // score. The old ×30 coefficient existed only to inflate a raw
+      // percentage into a visible point count; with the move already
+      // converted to points it would overshoot by 30x.
+      const reaction = change24hPoints * agent.recencyWeight;
       prediction += reaction;
       reasoning = `Reactive to 24h score move (${signals.change24h.toFixed(1)}%)`;
       break;
     }
     case "long_horizon": {
-      const drift = signals.scoreDelta7d * 0.2 * (1 - agent.boldness);
+      const drift = delta7dPoints * 0.2 * (1 - agent.boldness);
       prediction += drift;
       reasoning = `Minimal change expected (long-horizon stable assumption)`;
       break;
     }
     case "recency_bias": {
-      const recentMove = signals.scoreDelta7d * agent.recencyWeight * 2.0;
+      const recentMove = delta7dPoints * agent.recencyWeight * 2.0;
       prediction += recentMove;
-      reasoning = `Heavily weighted recent movement (7d delta ${signals.scoreDelta7d.toFixed(1)})`;
+      reasoning = `Heavily weighted recent movement (7d delta ${signals.scoreDelta7d.toFixed(1)}%)`;
       break;
     }
     case "domain_specialist": {
       const variance = domainMatch ? 0.3 : 1.0;
-      const drift = signals.scoreDelta7d * variance * agent.recencyWeight;
+      const drift = delta7dPoints * variance * agent.recencyWeight;
       prediction += drift;
       reasoning = domainMatch
         ? `Domain match — tight prediction near current score`
@@ -957,23 +967,27 @@ export function computeJackpotPrediction(
       // wiki + news + momentum into UP/DOWN/FLAT inside getTrendSignals).
       // Same "tracks cultural narrative direction" identity via the
       // composite signal.
+      // The old +60 / -40 were absolute points from when fameIndex ran in the
+      // thousands (see the `?? 5000` fallback in getTrendSignals); against a
+      // ~700k anchor they were invisible. Kept as anchor-relative nudges that
+      // preserve the original 3:2 up/down asymmetry.
       const directionBoost =
-        signals.trendDirection === "UP" ? 60 :
-        signals.trendDirection === "DOWN" ? -40 :
+        signals.trendDirection === "UP" ? anchor * 0.006 :
+        signals.trendDirection === "DOWN" ? anchor * -0.004 :
         0;
-      const momentum = signals.scoreDelta7d * agent.recencyWeight;
+      const momentum = delta7dPoints * agent.recencyWeight;
       prediction += directionBoost + momentum;
-      reasoning = `Cultural direction: ${signals.trendDirection}, momentum=${signals.scoreDelta7d.toFixed(1)}`;
+      reasoning = `Cultural direction: ${signals.trendDirection}, momentum=${signals.scoreDelta7d.toFixed(1)}%`;
       break;
     }
     case "high_conviction": {
-      const smallAdjust = signals.scoreDelta7d * 0.5;
+      const smallAdjust = delta7dPoints * 0.5;
       prediction += smallAdjust;
       reasoning = `High conviction — committed near current score with minor trend adjust`;
       break;
     }
     case "conservative": {
-      const tinyDrift = signals.scoreDelta7d * 0.15;
+      const tinyDrift = delta7dPoints * 0.15;
       prediction += tinyDrift;
       reasoning = `Conservative — minimal deviation from current ${anchor}`;
       break;
@@ -986,11 +1000,20 @@ export function computeJackpotPrediction(
       break;
     }
     default: {
-      const defaultDrift = signals.scoreDelta7d * 0.5;
+      const defaultDrift = delta7dPoints * 0.5;
       prediction += defaultDrift;
       reasoning = `Default: anchored to current score with trend adjustment`;
     }
   }
+
+  // Now that drifts scale with the anchor they also scale with outliers, and
+  // ~15% of the roster carries a >30% weekly swing (100% observed). Left
+  // unbounded, `recency_bias` (×2.0) would drive those guesses into the
+  // 2,000,000 clamp below, where every agent lands on the identical number.
+  // Bound the drift well past the p90 weekend move (~37%) so ordinary
+  // archetype behaviour is untouched.
+  const maxDrift = anchor * 0.4;
+  prediction = anchor + Math.max(-maxDrift, Math.min(maxDrift, prediction - anchor));
 
   // Add PRNG noise scaled by boldness and riskAppetite
   const noiseScale = anchor * 0.02 * agent.boldness * (0.5 + agent.riskAppetite * 0.5);
