@@ -82,20 +82,98 @@ function clampFair(p: number): number {
 }
 
 /**
+ * Invert `normalCdf` by bisection.
+ *
+ * Deliberately bisects against THIS module's `normalCdf` rather than adding a
+ * closed-form inverse (Acklam et al). Two independent approximations would not
+ * round-trip: `normalCdf(ppf(0.4))` would come back 0.3999-something, so a
+ * drift calibrated to open at exactly 0.40 would not actually open there. The
+ * cost is ~50 iterations of trivial arithmetic, called once per calibration.
+ */
+export function normalPpf(p: number): number {
+  if (!Number.isFinite(p) || p <= 0 || p >= 1) return 0;
+  let lo = -8;
+  let hi = 8;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (normalCdf(mid) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Log-drift per DAY that makes an unmoved card price at `targetOpenProbability`
+ * when `totalHours` remain.
+ *
+ * Solves `Phi(mu_total / sigmaRemain(totalHours)) = target` for the total
+ * drift, then divides by the number of days so the caller can scale it to
+ * whatever time is actually left. Negative for a target below 0.5.
+ *
+ * Pure math and deliberately unopinionated about WHICH target is right —
+ * the calibration lives with the prior it belongs to
+ * (`UPDOWN_AGENT_DRIFT_PER_DAY` in `native-markets/updown-opening-prices.ts`),
+ * not here.
+ */
+export function driftPerDayForTargetOpen(
+  targetOpenProbability: number,
+  totalHours: number,
+  sigma1d = LOCKIN_SIGMA_1D,
+  beta = LOCKIN_BETA,
+): number {
+  if (
+    !Number.isFinite(targetOpenProbability) ||
+    targetOpenProbability <= 0 ||
+    targetOpenProbability >= 1
+  ) {
+    return 0;
+  }
+  if (!Number.isFinite(totalHours) || totalHours <= 0) return 0;
+  const totalDrift = normalPpf(targetOpenProbability) * sigmaRemain(totalHours, sigma1d, beta);
+  return totalDrift / (totalHours / 24);
+}
+
+/**
  * Binary Up/Down: fair probability UP wins (close score > opening baseline).
+ *
+ * `driftPerDay` is the expected log-drift per day of remaining time, and
+ * defaults to 0 — a driftless random walk, i.e. byte-identical to the
+ * behaviour every existing call site has always had. This matters because the
+ * function is shared by the decision engine, the agent runner, the arb agent
+ * and `liveConvergence.ts`, and that last one moves real prices mid-week.
+ * Opt in per call site; never change this default.
+ *
+ * Why a drift term exists at all: with `driftPerDay = 0` this is a martingale,
+ * so at open (`pctChangeVsOpen === 0`) it is forced to return exactly 0.5. The
+ * measured Up rate for a high-velocity card is 31.6%, so 0.5 is known to be
+ * wrong precisely when there is no information yet. A negative drift expresses
+ * the mean reversion that `velocity_score`'s percentile normalisation builds in.
+ *
+ * Drift accumulates linearly in remaining time while volatility scales as
+ * `(h/24)^beta`, so the correction is largest at open and self-extinguishes
+ * toward close (≈ -0.10 at 168h, -0.03 at 24h, -0.002 in the last 15 minutes).
+ * Late-week and settlement-adjacent pricing are therefore unaffected, and a
+ * decisive realised move still dominates.
  */
 export function computeLockInFairUp(
   pctChangeVsOpen: number | null | undefined,
   hoursRemaining: number,
   sigma1d = LOCKIN_SIGMA_1D,
   beta = LOCKIN_BETA,
+  driftPerDay = 0,
 ): number | null {
   if (pctChangeVsOpen == null || !Number.isFinite(pctChangeVsOpen)) return null;
   const ratio = 1 + pctChangeVsOpen;
   if (ratio <= 0) return pctChangeVsOpen > 0 ? LOCKIN_FAIR_MAX : LOCKIN_FAIR_MIN;
   const sig = sigmaRemain(hoursRemaining, sigma1d, beta);
   if (sig <= 0) return 0.5;
-  const z = Math.log(ratio) / sig;
+  // Clamp hours the same way sigmaRemain does, so drift and vol are always
+  // measured over the same horizon at the tail end of a market.
+  const driftHours = Number.isFinite(hoursRemaining)
+    ? Math.max(MIN_HOURS_LEFT, hoursRemaining)
+    : MIN_HOURS_LEFT;
+  const drift = Number.isFinite(driftPerDay) ? driftPerDay * (driftHours / 24) : 0;
+  const z = (Math.log(ratio) + drift) / sig;
   return clampFair(normalCdf(z));
 }
 

@@ -30,7 +30,9 @@ import {
 } from "../server/jobs/market-generator";
 import { loadOpeningVelocityMap } from "../server/native-markets/openingVelocity";
 import {
+  UPDOWN_AGENT_DRIFT_PER_DAY,
   UPDOWN_HOT_MEASURED_UP_RATE,
+  UPDOWN_HOT_UP_PRICE,
   UPDOWN_HOT_VELOCITY_MIN,
   isUpDownOpeningPriorEnabled,
   pickUpDownOpeningPrices,
@@ -224,13 +226,26 @@ async function main() {
   // is 0 for every card, so the agents' model has no information and anchors
   // to 0.50 — it will trade the seed back up.
   const hoursToClose = 24 * 7;
-  const agentFairAtOpen = computeLockInFairUp(0, hoursToClose);
+  const agentFairDriftless = computeLockInFairUp(0, hoursToClose);
+  const agentFairDrifted = computeLockInFairUp(
+    0,
+    hoursToClose,
+    undefined,
+    undefined,
+    UPDOWN_AGENT_DRIFT_PER_DAY,
+  );
   console.log(
-    `\nAgent fair value at open: computeLockInFairUp(0, ${hoursToClose}h) = ` +
-      `${agentFairAtOpen?.toFixed(4) ?? "null"} — agents have no information at ` +
-      `open (pctChangeVsOpen is 0 by definition) and will trade a 0.40 seed ` +
-      `back toward this. Unlike H2H, whose fair model reads the same score gap ` +
-      `the prior is built on. Resolve this before wiring the prior in.`,
+    `\nAgent fair value at open (flat card, ${hoursToClose}h left):\n` +
+      `  driftless (what every call site uses TODAY): ${agentFairDriftless?.toFixed(4) ?? "null"}\n` +
+      `  with UPDOWN_AGENT_DRIFT_PER_DAY=${UPDOWN_AGENT_DRIFT_PER_DAY.toFixed(6)}: ` +
+      `${agentFairDrifted?.toFixed(4) ?? "null"}`,
+  );
+  console.log(
+    `The driftless model cannot do anything but 0.50 at open — pctChangeVsOpen ` +
+      `is 0 by definition — so agents would trade a ${UPDOWN_HOT_UP_PRICE} seed ` +
+      `back up. The drift term fixes that and is calibrated off the same ` +
+      `constant as the seed, but NO call site passes it yet, so the wiring diff ` +
+      `must enable both together or the agents will still fight the seed.`,
   );
 
   if (isUpDownOpeningPriorEnabled()) {

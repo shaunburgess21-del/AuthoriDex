@@ -119,12 +119,19 @@
  * the same score gap the prior is built on and therefore agreed with the
  * seed. There is no velocity term in the Up/Down fair model.
  *
- * Two consequences:
- *   - Expect the opening price to drift up during the first agent sweep.
- *     Measure where it settles before judging whether the prior worked.
- *   - Making it hold properly means adding a velocity term to the agents'
- *     Up/Down fair model, which is agent tuning and explicitly out of scope
- *     without an ask (see the agent rules in `.cursorrules`).
+ * The fix now exists but is NOT active. `computeLockInFairUp` takes an optional
+ * `driftPerDay` (default 0, so every existing call site is unchanged), and
+ * `UPDOWN_AGENT_DRIFT_PER_DAY` below calibrates it off `UPDOWN_HOT_UP_PRICE` so
+ * an unmoved card prices at exactly the seed. Nothing passes it yet.
+ *
+ * Consequences for whoever wires this in:
+ *   - Enable the seed prior and the agent drift TOGETHER. Either alone puts the
+ *     house and the agents on opposite sides of every card at open.
+ *   - The drift belongs only on hot cards (>= `UPDOWN_HOT_VELOCITY_MIN`); a cold
+ *     card has no measured mean reversion and must be left at 0.
+ *   - `computeLockInFairUp` is shared with the arb agent and
+ *     `liveConvergence.ts`, and the latter moves real prices mid-week. Enable
+ *     per call site, not globally, and leave live convergence for last.
  *
  * --------------------------------------------------------------------------
  * Scope
@@ -141,6 +148,9 @@
 
 import { getTargetMaxLoss } from "../config/amm";
 import { computeDepthPreservingTargetMaxLoss } from "./h2h-opening-prices";
+// lockInFair is pure with zero I/O, so importing it here is safe and keeps the
+// agent drift calibrated off the same constant as the seed price.
+import { driftPerDayForTargetOpen } from "../agents/lockInFair";
 
 /**
  * Lenient flag parser, matching `envFlag` in `h2h-opening-prices.ts` and
@@ -182,6 +192,39 @@ export const UPDOWN_HOT_MEASURED_UP_RATE = 0.316;
 
 /** Resolved markets behind `UPDOWN_HOT_MEASURED_UP_RATE`. */
 export const UPDOWN_HOT_SAMPLE_SIZE = 161;
+
+/** Hours in a weekly market: Monday 00:00 UTC to Sunday 23:59 UTC. */
+export const UPDOWN_WEEK_HOURS = 24 * 7;
+
+/**
+ * Log-drift per day for a HOT card, for the agents' fair-value model.
+ *
+ * Derived from `UPDOWN_HOT_UP_PRICE` rather than stated independently, so the
+ * price the house seeds at and the price the agents believe are the same number
+ * by construction. Retuning the prior moves both together; there is no way to
+ * change one and forget the other, which is the failure that would put the
+ * house and the agents on opposite sides of every card at open.
+ *
+ * Calibrated so an unmoved card with a full week left prices at exactly
+ * `UPDOWN_HOT_UP_PRICE` (≈ -0.0079/day, about -5.6% over a week in log terms).
+ *
+ * Two things this is NOT:
+ *
+ *   - Not the measured rate. Calibrating to `UPDOWN_HOT_MEASURED_UP_RATE`
+ *     (0.316) would be the honest fair value, but agents would then trade a
+ *     0.40 seed DOWN toward 0.316 and consume the headroom deliberately left
+ *     for users. Matching the seed keeps the price still.
+ *   - Not for cold cards. This is the drift for a card at or above
+ *     `UPDOWN_HOT_VELOCITY_MIN`; a card below it has no measured mean reversion
+ *     to express and must use 0. Gating is the caller's job.
+ *
+ * Unused today: no call site passes a drift yet, so `computeLockInFairUp`
+ * still runs driftless everywhere. See the wiring note in this file's header.
+ */
+export const UPDOWN_AGENT_DRIFT_PER_DAY = driftPerDayForTargetOpen(
+  UPDOWN_HOT_UP_PRICE,
+  UPDOWN_WEEK_HOURS,
+);
 
 /**
  * Round to 4 decimal places.
