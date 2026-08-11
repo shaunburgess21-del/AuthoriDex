@@ -150,7 +150,7 @@ export function UnderratedOverratedCard({
   return (
     <div className="hub-card-slot relative h-full">
     <Card 
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${localVote ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-0 flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${localVote ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[340px] md:min-h-0 flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
       data-testid={`card-value-vote-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -259,7 +259,7 @@ export function UnderratedOverratedCard({
         </div>
       ) : (
         <>
-          <div className="flex flex-1 items-end justify-center">
+          <div className="flex justify-center md:flex-1 md:items-end">
             <Link
               href={`/vote/value-rankings?focus=${encodeURIComponent(person.id)}`}
               className="group inline-flex items-center gap-1.5 mb-2 translate-y-[5px] text-sm text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline"
@@ -271,7 +271,7 @@ export function UnderratedOverratedCard({
               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
             </Link>
           </div>
-          <div className="flex flex-col gap-3 md:gap-2.5 translate-y-3">
+          <div className="mt-auto md:mt-0 flex flex-col gap-3 md:gap-2.5 -translate-y-[2px] md:translate-y-3">
             <div className="flex items-center gap-3 md:gap-2.5">
               <ArrowUp className="h-5 w-5 md:h-4 md:w-4 text-[#00C853] shrink-0" />
               <span className="text-base font-medium md:text-sm text-[#00C853] w-[5.25rem] md:w-20 shrink-0">Underrated</span>
