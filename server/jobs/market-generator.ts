@@ -26,6 +26,7 @@ import { log } from "../log";
 import { selectAnchoredField, type AnchoredMarketType } from "./anchored-selection";
 import { loadGainerMovementStats, type GainerMovementStat } from "./gainer-movement-stats";
 import { selectGainerField } from "./gainer-selection";
+import { checkWeeklyGenerationHealth } from "./weekly-generation-health";
 
 const MARKET_GENERATOR_LOCK_KEY = 5_204;
 const MARKET_GENERATOR_RETRY_DELAY_MS = 15 * 60 * 1000;
@@ -94,27 +95,17 @@ export function getWeekContext(now = new Date()) {
   return getUtcWeekContext(now);
 }
 
-async function countOpenNativeMarketsForWeek(weekNumber: number, monday: Date): Promise<number> {
-  const [openCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(predictionMarkets)
-    .where(and(
-      eq(predictionMarkets.status, "OPEN"),
-      inArray(predictionMarkets.marketType, ["updown", "h2h", "gainer", "jackpot"]),
-      eq(predictionMarkets.weekNumber, weekNumber),
-      gte(predictionMarkets.endAt, monday),
-    ));
-  return openCount?.count ?? 0;
-}
-
 /**
  * Per-market-type OPEN counts for the current week. Used by
  * `ensureWeeklyMarketsForCurrentWeek` to backfill ONLY the missing
  * product(s) when an earlier generation pass partially failed —
- * previously, the early-return on `countOpenNativeMarketsForWeek > 0`
- * meant a successful UpDown could prevent a subsequent H2H/gainer
- * backfill from ever happening, leaving the week incomplete until
- * the next Monday.
+ * previously, a single whole-week count meant a successful UpDown
+ * could prevent a subsequent H2H/gainer backfill from ever happening,
+ * leaving the week incomplete until the next Monday.
+ *
+ * Note this still treats a type as missing only at a count of exactly 0, so a
+ * type that is merely SHORT (12 of 20) is not backfilled. That case is
+ * detected and alerted by `weekly-generation-health.ts` for manual top-up.
  */
 export type WeeklyNativeCounts = { updown: number; h2h: number; gainer: number; jackpot: number };
 
@@ -1340,11 +1331,10 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
   const h2h = await generateWeeklyH2H();
   const gainerResult = await generateWeeklyGainer();
 
-  const openCount = await countOpenNativeMarketsForWeek(weekNumber, monday);
-
-  if (openCount === 0) {
-    log(`[MarketGenerator][ALERT] No OPEN native weekly markets found for week ${weekNumber}`);
-  }
+  // Per-type shortfall check. The old `openCount === 0` guard could only fire
+  // if all four generators produced nothing, which never happens; a partial
+  // week (12 of 20 Up/Down) was the realistic failure and was silent.
+  await checkWeeklyGenerationHealth(weekNumber, monday);
 
   log(`[MarketGenerator] Week ${weekNumber}: created ${updown} updown, ${jackpot} jackpot, ${h2h} h2h, ${gainerResult.created} gainer (${gainerResult.updated} updated)`);
   return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };
@@ -1442,6 +1432,13 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
   const lockResult = locked.result ?? { generatedTypes: [] as Array<keyof WeeklyNativeCounts>, openAfter: openBefore };
   const outcome: "already-open" | "generated" | "lock-busy" =
     lockResult.generatedTypes.length > 0 ? "generated" : "already-open";
+
+  // Only check after we actually generated something. Running on every
+  // read-self-heal call would re-check an already-healthy week on every feed
+  // request, and this path is called from user-facing reads.
+  if (lockResult.generatedTypes.length > 0) {
+    await checkWeeklyGenerationHealth(weekNumber, monday);
+  }
   log(
     `[MarketGenerator] ensureWeeklyMarkets(${reason}) outcome=${outcome} ` +
       `week=${weekNumber} before=${openBefore} after=${lockResult.openAfter} ` +
