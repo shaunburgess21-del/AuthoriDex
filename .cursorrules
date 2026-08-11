@@ -137,6 +137,8 @@ Jackpot and Up/Down use **different PRNG seeds** (`weekNumber:jackpot` vs `weekN
 
 Agent lock-in / arb thresholds that look env-like but are **compile-time constants** (not Railway vars): `LOCKIN_DECISIVE_PCT` = 0.10 and `ARB_MIN_EDGE_PP` = 0.04 in `server/agents/lockInFair.ts` / `constants.ts`. Tuning them requires a code change + deploy.
 
+`computeLockInFairUp` also takes an optional `driftPerDay` (default **0** = the original driftless martingale). **No call site passes it yet**, so Up/Down fair value is unchanged in production. It exists because a driftless model must return 0.50 at open, while hot cards resolve Up only ~31.6% of the time. `UPDOWN_AGENT_DRIFT_PER_DAY` (`server/native-markets/updown-opening-prices.ts`) is derived from `UPDOWN_HOT_UP_PRICE`, so seed price and agent belief cannot diverge. Note `computeLockInFairUp` is shared with the arb agent and `liveConvergence.ts` (which moves live prices), so enable per call site, never by changing the default.
+
 ### World Market resolution is MANUAL — auto-resolve does not exist yet
 
 Native markets (Up/Down, H2H, Gainer, Jackpot) settle automatically off trend snapshots via the 5-minute resolver cron. **World Markets do not.** A World Market past `endAt` moves to `CLOSED_PENDING` and waits for an admin to settle it in the AMM resolution dialog.

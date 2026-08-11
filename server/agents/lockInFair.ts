@@ -167,12 +167,16 @@ export function computeLockInFairUp(
   if (ratio <= 0) return pctChangeVsOpen > 0 ? LOCKIN_FAIR_MAX : LOCKIN_FAIR_MIN;
   const sig = sigmaRemain(hoursRemaining, sigma1d, beta);
   if (sig <= 0) return 0.5;
-  // Clamp hours the same way sigmaRemain does, so drift and vol are always
-  // measured over the same horizon at the tail end of a market.
-  const driftHours = Number.isFinite(hoursRemaining)
-    ? Math.max(MIN_HOURS_LEFT, hoursRemaining)
-    : MIN_HOURS_LEFT;
-  const drift = Number.isFinite(driftPerDay) ? driftPerDay * (driftHours / 24) : 0;
+  // Drift must follow the same horizon convention as `sigmaRemain`, which
+  // collapses to `sigma1d * 0.01` once there is no time left. Holding drift at
+  // the MIN_HOURS_LEFT floor while sigma collapses would divide a fixed drift
+  // by a near-zero sigma and leave a ~3pp tilt on a market that is already
+  // past its close — with no time left, no drift can accumulate.
+  const noTimeLeft = !Number.isFinite(hoursRemaining) || hoursRemaining <= 0;
+  const drift =
+    noTimeLeft || !Number.isFinite(driftPerDay)
+      ? 0
+      : driftPerDay * (Math.max(MIN_HOURS_LEFT, hoursRemaining) / 24);
   const z = (Math.log(ratio) + drift) / sig;
   return clampFair(normalCdf(z));
 }

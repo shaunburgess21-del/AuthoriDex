@@ -293,10 +293,17 @@ export type WeeklyGenerationHealth = {
 export async function checkWeeklyGenerationHealth(
   weekNumber: number,
   monday: Date,
+  /**
+   * Per-type counts the caller has already taken for this week. Supplied by
+   * `ensureWeeklyMarketsForCurrentWeek`, which counts inside its advisory lock
+   * anyway — passing them avoids a redundant query and, more importantly,
+   * means the alert judges the same numbers the caller logged.
+   */
+  knownCounts?: WeeklyTypeCounts,
 ): Promise<WeeklyGenerationHealth | null> {
   try {
     const [counts, trailingMax] = await Promise.all([
-      loadWeeklyTypeCounts(weekNumber, monday),
+      knownCounts ?? loadWeeklyTypeCounts(weekNumber, monday),
       loadTrailingWeeklyMax(monday),
     ]);
 

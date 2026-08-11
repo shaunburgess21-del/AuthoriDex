@@ -141,6 +141,20 @@ test("the drift correction shrinks monotonically as the close approaches", () =>
   }
 });
 
+test("a market past its close carries no drift at all", () => {
+  // sigmaRemain collapses to sigma1d*0.01 once hoursRemaining <= 0. If drift
+  // stayed pinned at the MIN_HOURS_LEFT floor it would be divided by that
+  // near-zero sigma and tilt an already-closed market by ~3pp. hoursUntilEnd
+  // legitimately returns 0 for a market awaiting resolution.
+  for (const h of [0, -1, -100]) {
+    assert.equal(
+      computeLockInFairUp(0, h, LOCKIN_SIGMA_1D, LOCKIN_BETA, DRIFT_40),
+      computeLockInFairUp(0, h),
+      `drift leaked into a closed market at h=${h}`,
+    );
+  }
+});
+
 test("the correction is effectively gone in the final minutes", () => {
   const base = computeLockInFairUp(0, 0.25)!;
   const drifted = computeLockInFairUp(0, 0.25, LOCKIN_SIGMA_1D, LOCKIN_BETA, DRIFT_40)!;

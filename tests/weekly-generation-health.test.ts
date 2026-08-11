@@ -14,6 +14,7 @@ import {
   NATIVE_WEEKLY_MARKET_TYPES,
   buildWeeklyExpectations,
   buildShortfallIdempotencyKey,
+  checkWeeklyGenerationHealth,
   describeShortfall,
   detectWeeklyShortfalls,
   type WeeklyTypeCounts,
@@ -170,6 +171,26 @@ test("idempotency key is stable per week and set of short types", () => {
     buildShortfallIdempotencyKey(34, a),
     buildShortfallIdempotencyKey(35, a),
   );
+});
+
+test("the check swallows a dead database instead of breaking generation", async () => {
+  // This suite runs with no DATABASE_URL, so importing ../db throws — which is
+  // the exact condition being asserted. A monitor that took down the generator
+  // it monitors would be worse than the blind spot it replaced, and it runs in
+  // a `finally` on a path with no per-generator isolation.
+  const result = await checkWeeklyGenerationHealth(34, new Date("2026-08-17T00:00:00Z"));
+  assert.equal(result, null);
+});
+
+test("known counts do not spare the check from needing a baseline", async () => {
+  // Passing counts avoids one query but still needs the trailing baseline, so
+  // this must fail soft in the same way rather than half-reporting.
+  const result = await checkWeeklyGenerationHealth(
+    34,
+    new Date("2026-08-17T00:00:00Z"),
+    { updown: 12, h2h: 20, gainer: 9, jackpot: 20 },
+  );
+  assert.equal(result, null);
 });
 
 test("shortfall descriptions name the basis so the operator can judge it", () => {

@@ -1326,15 +1326,28 @@ export async function generateAllWeeklyMarkets(): Promise<{ updown: number; jack
   const { weekNumber, monday } = getWeekContext();
   log(`[MarketGenerator] Generating weekly markets for week ${weekNumber}...`);
 
-  const updown = await generateWeeklyUpDown();
-  const jackpot = await generateWeeklyJackpot();
-  const h2h = await generateWeeklyH2H();
-  const gainerResult = await generateWeeklyGainer();
+  let updown = 0;
+  let jackpot = 0;
+  let h2h = 0;
+  let gainerResult: { created: number; updated: number } = { created: 0, updated: 0 };
 
-  // Per-type shortfall check. The old `openCount === 0` guard could only fire
-  // if all four generators produced nothing, which never happens; a partial
-  // week (12 of 20 Up/Down) was the realistic failure and was silent.
-  await checkWeeklyGenerationHealth(weekNumber, monday);
+  try {
+    updown = await generateWeeklyUpDown();
+    jackpot = await generateWeeklyJackpot();
+    h2h = await generateWeeklyH2H();
+    gainerResult = await generateWeeklyGainer();
+  } finally {
+    // Per-type shortfall check. The old `openCount === 0` guard could only fire
+    // if all four generators produced nothing, which never happens; a partial
+    // week (12 of 20 Up/Down) was the realistic failure and was silent.
+    //
+    // In a `finally` because this path has no per-generator isolation: a throw
+    // in updown means jackpot/h2h/gainer never run at all, which is the single
+    // worst outcome and therefore exactly when the alert matters most. The
+    // check swallows its own errors, so it cannot mask the original throw,
+    // and `finally` still re-raises it to the caller.
+    await checkWeeklyGenerationHealth(weekNumber, monday);
+  }
 
   log(`[MarketGenerator] Week ${weekNumber}: created ${updown} updown, ${jackpot} jackpot, ${h2h} h2h, ${gainerResult.created} gainer (${gainerResult.updated} updated)`);
   return { updown, jackpot, h2h, gainer: gainerResult.created, gainerUpdated: gainerResult.updated, weekNumber };
@@ -1379,7 +1392,11 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
       const insideByType = await countOpenNativeMarketsByTypeForWeek(weekNumber, monday);
       const missing = decideMissingMarketTypes(insideByType);
       if (missing.length === 0) {
-        return { generatedTypes: [] as Array<keyof WeeklyNativeCounts>, openAfter: sumCounts(insideByType) };
+        return {
+          generatedTypes: [] as Array<keyof WeeklyNativeCounts>,
+          openAfter: sumCounts(insideByType),
+          afterByType: insideByType,
+        };
       }
 
       // Run only the generators for the missing types. Each generator
@@ -1415,7 +1432,7 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
       }
 
       const afterByType = await countOpenNativeMarketsByTypeForWeek(weekNumber, monday);
-      return { generatedTypes, openAfter: sumCounts(afterByType) };
+      return { generatedTypes, openAfter: sumCounts(afterByType), afterByType };
     },
   );
 
@@ -1429,16 +1446,23 @@ export async function ensureWeeklyMarketsForCurrentWeek(reason: "read-self-heal"
     };
   }
 
-  const lockResult = locked.result ?? { generatedTypes: [] as Array<keyof WeeklyNativeCounts>, openAfter: openBefore };
+  const lockResult = locked.result ?? {
+    generatedTypes: [] as Array<keyof WeeklyNativeCounts>,
+    openAfter: openBefore,
+    afterByType: undefined as WeeklyNativeCounts | undefined,
+  };
   const outcome: "already-open" | "generated" | "lock-busy" =
     lockResult.generatedTypes.length > 0 ? "generated" : "already-open";
 
-  // Only check after we actually generated something. Running on every
-  // read-self-heal call would re-check an already-healthy week on every feed
-  // request, and this path is called from user-facing reads.
-  if (lockResult.generatedTypes.length > 0) {
-    await checkWeeklyGenerationHealth(weekNumber, monday);
-  }
+  // Check whenever we did the work, NOT only when generation succeeded.
+  // `generatedTypes` is appended only when a generator returns > 0, so a
+  // generator that THREW is swallowed by the per-type catch above and leaves
+  // the list empty — gating on it would keep the alert silent on the exact
+  // failure it exists to report. Reaching this line at all means at least one
+  // type was missing on entry (a complete week returns early before the lock),
+  // so there is nothing healthy to re-check here. Reuses the counts already
+  // taken inside the lock rather than issuing a second query.
+  await checkWeeklyGenerationHealth(weekNumber, monday, lockResult.afterByType);
   log(
     `[MarketGenerator] ensureWeeklyMarkets(${reason}) outcome=${outcome} ` +
       `week=${weekNumber} before=${openBefore} after=${lockResult.openAfter} ` +
