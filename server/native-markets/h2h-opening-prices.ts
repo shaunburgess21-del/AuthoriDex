@@ -17,8 +17,13 @@
  * The rate is also stable week to week — 70%, 75%, 80%, 85%, 75%, 70%,
  * 80%, 90%, 85% — a standard deviation of 6.6 points with no week where
  * pricing on it would have been badly wrong. That stability is what makes
- * H2H safe to price on and Up/Down not (Up/Down's weekly "Up" rate ranges
- * 0%–85%, sd 22.1 points, so it has no stable level to seed at).
+ * H2H the safest of the three native markets to price on.
+ *
+ * (This block used to claim Up/Down had no level worth seeding at, on the
+ * strength of its unconditional weekly Up rate swinging 0%–85%. That was
+ * measured before the velocity decomposition: conditioned on opening
+ * velocity the level is stable enough to price, just far noisier than H2H.
+ * See `updown-opening-prices.ts`.)
  *
  * --------------------------------------------------------------------------
  * Why the opening prices sit BELOW the measured win rates

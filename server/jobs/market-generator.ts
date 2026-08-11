@@ -257,7 +257,15 @@ async function getAnchoredPoolContext(
   return anchoredPoolContextCache;
 }
 
-async function selectAnchoredWeeklyIds(
+// Exported so read-only ops previews (ops/preview-updown-velocity-bands.ts)
+// can rehearse the real anchored field instead of reimplementing selection.
+//
+// Caller beware: `getAnchoredPoolContext` memoizes on weekNumber ALONE, so
+// calling this twice for the same week with different `monday` values returns
+// the first call's pool silently. That is intentional for the Monday cron
+// (jackpot + updown share one pool) but makes it unsafe to loop over weeks in
+// a single process.
+export async function selectAnchoredWeeklyIds(
   marketType: AnchoredMarketType,
   weekNumber: number,
   monday: Date,
@@ -282,7 +290,8 @@ async function selectAnchoredWeeklyIds(
   return { selection, pool };
 }
 
-function orderPoolBySelection(pool: AnchoredPoolRow[], selectedIds: string[]): AnchoredPoolRow[] {
+/** Exported alongside `selectAnchoredWeeklyIds` for the ops previews. */
+export function orderPoolBySelection(pool: AnchoredPoolRow[], selectedIds: string[]): AnchoredPoolRow[] {
   const byId = new Map(pool.map((p) => [p.id, p]));
   return selectedIds.map((id) => byId.get(id)).filter((p): p is AnchoredPoolRow => Boolean(p));
 }
