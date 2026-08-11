@@ -34,6 +34,11 @@ export function CommentsFocusShell({
         />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          // Prevent Radix from restoring/moving focus to the trigger (e.g. a
+          // button inside a scroll-snap column). That scrollIntoView fights
+          // snap-mandatory and can jam Quick Vote / other decks on one card.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
           className={cn(
             "fixed inset-0 z-[70] flex flex-col bg-background shadow-none border-0 rounded-none",
             "max-h-[100dvh] w-full outline-none overflow-hidden",

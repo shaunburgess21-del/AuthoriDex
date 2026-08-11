@@ -432,6 +432,10 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   );
 
   // Hovering action row below each card (discussion / like / dislike / share).
+  const handleOverlayClosed = useCallback(() => {
+    snapApiRef.current?.releaseGestures();
+  }, []);
+
   const renderPageFooter = useCallback(
     (item: SnapItem) => {
       const type = typeById.get(item.id);
@@ -443,10 +447,11 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           slug={item.slug}
           title={item.title}
           category={item.category}
+          onOverlayClosed={handleOverlayClosed}
         />
       );
     },
-    [typeById],
+    [typeById, handleOverlayClosed],
   );
 
   return (

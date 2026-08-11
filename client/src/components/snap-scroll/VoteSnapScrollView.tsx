@@ -88,6 +88,11 @@ interface VoteSnapScrollViewProps {
 export interface SnapViewApi {
   /** Smooth-scroll the active column down one snap page (no-op at the end). */
   advanceToNext: () => void;
+  /**
+   * Clear stuck gesture/settle locks and wake the snap column after an
+   * overlay (comments, share sheet) steals the touch lifecycle.
+   */
+  releaseGestures: () => void;
 }
 
 const SECTION_COMMENT_TYPE: Partial<Record<SnapSectionType, CommentEntityType>> = {
@@ -575,6 +580,35 @@ export function VoteSnapScrollView({
   /** Cancels the in-flight tween: restores snap type, clears the flag,
    * leaves scrollTop wherever the tween got to. Null when no tween runs. */
   const cancelScrollTweenRef = useRef<(() => void) | null>(null);
+  /** Clears settle-guard touchActive / window listeners. Registered by the
+   * settle effect while minimal overlay is open. */
+  const settleResetRef = useRef<(() => void) | null>(null);
+
+  const wakeColumnScroll = useCallback((el: HTMLDivElement) => {
+    // iOS can leave a snap scroller touch-dead after a nested dialog /
+    // share sheet steals the gesture. Briefly toggling overflow and
+    // re-applying scrollTop re-arms native scrolling without moving the card.
+    const y = el.scrollTop;
+    el.style.scrollSnapType = "y mandatory";
+    el.style.overflow = "hidden";
+    void el.offsetHeight;
+    el.style.overflow = "";
+    el.scrollTop = y;
+  }, []);
+
+  const releaseGestures = useCallback(() => {
+    hPanRef.current = null;
+    isAnimatingRef.current = false;
+    cancelScrollTweenRef.current?.();
+    settleResetRef.current?.();
+    const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
+    const el = columnScrollRefs.current[cat];
+    if (el) {
+      el.style.scrollSnapType = "y mandatory";
+      programmaticScrollActiveRef.current = false;
+      wakeColumnScroll(el);
+    }
+  }, [wakeColumnScroll]);
 
   const tweenColumnToTop = useCallback((el: HTMLDivElement, target: number) => {
     if (programmaticScrollActiveRef.current) return;
@@ -613,7 +647,7 @@ export function VoteSnapScrollView({
     rafId = requestAnimationFrame(step);
   }, []);
 
-  // ── Imperative API (Quick Vote auto-advance) ──────────────────────────
+  // ── Imperative API (Quick Vote auto-advance + gesture release) ────────
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
@@ -628,13 +662,14 @@ export function VoteSnapScrollView({
         if (target >= el.scrollHeight) return;
         tweenColumnToTop(el, target);
       },
+      releaseGestures,
     };
     return () => {
       apiRef.current = null;
       // Overlay closing / remounting mid-tween: don't leave snap disabled.
       cancelScrollTweenRef.current?.();
     };
-  }, [apiRef, tweenColumnToTop]);
+  }, [apiRef, tweenColumnToTop, releaseGestures]);
 
   // ── Settle guard (minimal): self-heal stranded mid-page scroll ─────────
   // Attaches once per open (deps: isMinimal, open) via a stable ref — NOT
@@ -757,14 +792,14 @@ export function VoteSnapScrollView({
         clearTimer();
         armTimer();
       };
-      const onTouchStart = () => {
-        touchActive = true;
-        touchStartTs = performance.now();
-        clearTimer();
-        clearTapTimer();
+      const detachWindowTouchEnd = () => {
+        window.removeEventListener("touchend", onWindowTouchEnd, true);
+        window.removeEventListener("touchcancel", onWindowTouchEnd, true);
       };
       const onTouchEnd = () => {
+        if (!touchActive) return;
         touchActive = false;
+        detachWindowTouchEnd();
         gestureGraceUntil = performance.now() + POST_GESTURE_GRACE_MS;
         clearTimer();
         armTimer();
@@ -783,6 +818,33 @@ export function VoteSnapScrollView({
             if (target != null) correctTo(target);
           }, TAP_SETTLE_DELAY_MS);
         }
+      };
+      // Capture on window so a dialog/share sheet that steals the gesture
+      // still clears touchActive (column touchend often never fires).
+      const onWindowTouchEnd = () => {
+        onTouchEnd();
+      };
+      const onTouchStart = (e: TouchEvent) => {
+        // Action-bar / chrome taps are not scroll gestures — arming
+        // touchActive here is how overlays leave settle permanently stuck.
+        if (isInteractiveTarget(e.target)) return;
+        touchActive = true;
+        touchStartTs = performance.now();
+        clearTimer();
+        clearTapTimer();
+        detachWindowTouchEnd();
+        window.addEventListener("touchend", onWindowTouchEnd, { capture: true, passive: true });
+        window.addEventListener("touchcancel", onWindowTouchEnd, { capture: true, passive: true });
+      };
+
+      settleResetRef.current = () => {
+        touchActive = false;
+        detachWindowTouchEnd();
+        clearTimer();
+        clearTapTimer();
+        gestureGraceUntil = 0;
+        restSample = Number.NaN;
+        restSince = 0;
       };
 
       let lastHeight = el.clientHeight;
@@ -820,6 +882,8 @@ export function VoteSnapScrollView({
       return () => {
         clearTimer();
         clearTapTimer();
+        settleResetRef.current?.();
+        if (settleResetRef.current) settleResetRef.current = null;
         // Guard-initiated correction tween mustn't outlive the guard with
         // scroll-snap left disabled.
         cancelScrollTweenRef.current?.();
@@ -1048,6 +1112,9 @@ export function VoteSnapScrollView({
   // ── Horizontal pan: touchstart / touchend ─────────────────────────────
   const handleHPanTouchStart = useCallback((e: React.TouchEvent) => {
     if (isAnimatingRef.current) return;
+    // Action-bar / card chrome taps must not start a pan session — if the
+    // subsequent overlay steals touchend, a stale hPanRef can jam swipes.
+    if (isInteractiveTarget(e.target)) return;
 
     const idx = activeCategoryIdxRef.current;
     const cats = categoriesRef.current;

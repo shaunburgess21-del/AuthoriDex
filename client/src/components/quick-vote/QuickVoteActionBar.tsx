@@ -89,6 +89,8 @@ export interface QuickVoteActionBarProps {
   slug: string;
   title: string;
   category: string;
+  /** Called after comments/share overlays close so the snap deck can unjam. */
+  onOverlayClosed?: () => void;
 }
 
 export function QuickVoteActionBar({
@@ -97,6 +99,7 @@ export function QuickVoteActionBar({
   slug,
   title,
   category,
+  onOverlayClosed,
 }: QuickVoteActionBarProps) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -107,6 +110,11 @@ export function QuickVoteActionBar({
   const surfaceType = REACTION_SURFACE[type];
   const reaction = reactionsMap.get(cardReactionKey({ surfaceType, targetId })) ?? null;
   const hasSlug = slug.length > 0;
+
+  const closeComments = () => {
+    setCommentsOpen(false);
+    onOverlayClosed?.();
+  };
 
   const handleReact = (next: CardReactionType) => {
     if (!user) {
@@ -131,6 +139,9 @@ export function QuickVoteActionBar({
       sharerUserId: user?.id ?? null,
       surface: config.surface,
       url: resolveShareUrl(config.path),
+    }).finally(() => {
+      // Native share sheet also interrupts the touch lifecycle.
+      onOverlayClosed?.();
     });
   };
 
@@ -169,7 +180,7 @@ export function QuickVoteActionBar({
       {hasSlug && (
         <CardCommentsFocusOverlay
           open={commentsOpen}
-          onClose={() => setCommentsOpen(false)}
+          onClose={closeComments}
           entityType={COMMENT_ENTITY[type]}
           slug={slug}
           contextTitle={title}
