@@ -46,6 +46,28 @@ export function scaleEarnedValue(baseValue: number, multiplier: number): number 
 }
 
 /**
+ * Bookkeeping XP actions — never earn-multiplied, and still written for
+ * simulation agents (ops parks / legacy seed). Participation actions
+ * (`place_prediction`, `prediction_win`, votes, comments, …) are skipped
+ * for `is_agent` profiles so the fleet cannot reconverge onto one rank.
+ */
+export const XP_BOOKKEEPING_ACTIONS = ["legacy_migration", "admin_adjustment"] as const;
+
+export function isXpBookkeepingAction(actionType: string): boolean {
+  return (XP_BOOKKEEPING_ACTIONS as readonly string[]).includes(actionType);
+}
+
+/**
+ * Simulation agents share the human XP ladder (rank = f(xp_points)) but
+ * they must not keep accruing participation XP — identical market flow
+ * otherwise piles them onto a single rank. Bookkeeping rows still land
+ * so a one-time park can write `admin_adjustment`.
+ */
+export function shouldSkipXpAward(isAgent: boolean, actionType: string): boolean {
+  return isAgent && !isXpBookkeepingAction(actionType);
+}
+
+/**
  * Canonical idempotency key for `prediction_win` XP: one award per
  * user per market. Resolvers MUST use this (via
  * `gamificationService.awardPredictionWinXp`) rather than embedding

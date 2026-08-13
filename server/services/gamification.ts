@@ -12,7 +12,7 @@ import {
   type Rank
 } from "@shared/schema";
 import { eq, and, sql, gte, desc } from "drizzle-orm";
-import { canAccessCapability, computeCreditBalance, scaleEarnedValue, predictionWinIdempotencyKey, type Capability } from "./gamification-utils";
+import { canAccessCapability, computeCreditBalance, scaleEarnedValue, predictionWinIdempotencyKey, isXpBookkeepingAction, shouldSkipXpAward, type Capability } from "./gamification-utils";
 import { resolveRankForXp } from "./gamification-ranks";
 import { createNotification } from "./notifications";
 import { ALL_CAPABILITIES } from "@shared/rank-config";
@@ -90,13 +90,8 @@ class GamificationService {
   private cacheExpiry: number = 0;
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-  // Phase 2: action keys exempt from the per-tier earn multiplier.
-  // These are bookkeeping ledger rows, not earned participation, so
-  // they always write their face value regardless of rank.
-  private readonly UNSCALED_XP_ACTIONS = new Set<string>([
-    "legacy_migration",
-    "admin_adjustment",
-  ]);
+  // Phase 2: credit keys exempt from the per-tier earn multiplier.
+  // XP bookkeeping exemptions live in `isXpBookkeepingAction`.
   private readonly UNSCALED_CREDIT_ACTIONS = new Set<string>([
     "admin_adjustment",
     "signup_grant",
@@ -296,6 +291,23 @@ class GamificationService {
         };
       }
 
+      // Simulation agents keep rank = f(XP) but do not accrue
+      // participation XP (place/win/vote/comment). Otherwise the
+      // shared market schedule reconverges the fleet onto one rank.
+      // Bookkeeping actions (admin_adjustment, legacy_migration) still
+      // write so ops parks can land through this chokepoint.
+      if (shouldSkipXpAward(!!profile.isAgent, actionType)) {
+        return {
+          success: false,
+          xpAwarded: 0,
+          newTotalXp: profile.xpPoints,
+          newRank: profile.rank || null,
+          dailyCount: 0,
+          dailyCap: action.dailyCap,
+          message: "Skipped - simulation agent",
+        };
+      }
+
       const dailyCountResult = await tx.select({
         count: sql<number>`count(*)`
       })
@@ -325,7 +337,7 @@ class GamificationService {
       // opportunities) but BEFORE the ledger write so the stored xpDelta
       // and the denormalised total agree. Bookkeeping actions are never
       // scaled. XP is integer: round half-up.
-      const earnMultiplier = this.UNSCALED_XP_ACTIONS.has(actionType)
+      const earnMultiplier = isXpBookkeepingAction(actionType)
         ? 1.0
         : this.earnMultiplierForRank(profile.rank);
       const effectiveXp = scaleEarnedValue(action.xpValue, earnMultiplier);

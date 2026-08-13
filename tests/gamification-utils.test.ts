@@ -6,6 +6,8 @@ import {
   computeCreditBalance,
   scaleEarnedValue,
   predictionWinIdempotencyKey,
+  isXpBookkeepingAction,
+  shouldSkipXpAward,
 } from "../server/services/gamification-utils";
 import { RANKS, getRankByName } from "../shared/rank-config";
 
@@ -82,4 +84,18 @@ test("predictionWinIdempotencyKey is one award per user per market", () => {
     predictionWinIdempotencyKey(marketId, userId),
     predictionWinIdempotencyKey(marketId, "00000000-0000-0000-0000-000000000001"),
   );
+});
+
+test("shouldSkipXpAward blocks participation XP for simulation agents only", () => {
+  assert.equal(shouldSkipXpAward(false, "prediction_win"), false);
+  assert.equal(shouldSkipXpAward(false, "place_prediction"), false);
+  assert.equal(shouldSkipXpAward(true, "prediction_win"), true);
+  assert.equal(shouldSkipXpAward(true, "place_prediction"), true);
+  assert.equal(shouldSkipXpAward(true, "vote_sentiment"), true);
+  assert.equal(shouldSkipXpAward(true, "post_comment"), true);
+  // Ops parks and legacy seed still write for agents.
+  assert.equal(shouldSkipXpAward(true, "admin_adjustment"), false);
+  assert.equal(shouldSkipXpAward(true, "legacy_migration"), false);
+  assert.equal(isXpBookkeepingAction("admin_adjustment"), true);
+  assert.equal(isXpBookkeepingAction("prediction_win"), false);
 });
