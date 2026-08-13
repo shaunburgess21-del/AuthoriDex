@@ -50,9 +50,11 @@ export const INSIGHTS_DRIVER_LEGEND: Record<InsightsPrimaryDriver, string> = {
 
 export const INSIGHTS_DIVERGENCE_LABELS: Record<string, string> = {
   rising_disliked: "Rising but Disliked",
-  underrated_gaining: "Underrated & Gaining",
-  overrated_cooling: "Overrated & Cooling",
+  loved_gaining: "Loved & Gaining",
+  disliked_cooling: "Disliked & Cooling",
   consensus: "Consensus Sweet Spot",
+  polarising: "Love It or Hate It",
+  most_rated: "Most Rated",
 };
 
 /** Human labels for vote_actions.vote_type in Insights vote demographics. */

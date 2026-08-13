@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-  ArrowDown,
-  ArrowUp,
   BarChart3,
   LayoutGrid,
   Radio,
@@ -450,50 +448,32 @@ function MostVotedMatchupsTile() {
   );
 }
 
-const VALUE_VOTE_COPY: Record<
-  "underrated" | "overrated",
-  {
-    title: string;
-    description: string;
-    empty: string;
-    subtext: string;
-    pctKey: "underratedPct" | "overratedPct";
-    icon: typeof ArrowUp;
-    iconClass: string;
-    pctClass: string;
-  }
+const RATING_SPOTLIGHT_COPY: Record<
+  "polarising" | "most_rated",
+  { description: string; empty: string }
 > = {
-  underrated: {
-    title: "Underrated",
-    description: "Profiles the crowd thinks deserve more credit.",
-    empty: "Not enough underrated votes yet.",
-    subtext: "of voters say underrated",
-    pctKey: "underratedPct",
-    icon: ArrowUp,
-    iconClass: "text-[#00C853]",
-    pctClass: "text-[#00C853]",
+  polarising: {
+    description: "Profiles that split the crowd — big camps at both ends of the 1-5 scale.",
+    empty: "Not enough split ratings yet.",
   },
-  overrated: {
-    title: "Overrated",
-    description: "Profiles the crowd thinks are overhyped.",
-    empty: "Not enough overrated votes yet.",
-    subtext: "of voters say overrated",
-    pctKey: "overratedPct",
-    icon: ArrowDown,
-    iconClass: "text-[#FF0000]",
-    pctClass: "text-[#FF0000]",
+  most_rated: {
+    description: "Profiles drawing the most overall-rating votes.",
+    empty: "Not enough ratings yet.",
   },
 };
 
-function ValueVoteTile({ divergenceType }: { divergenceType: "underrated" | "overrated" }) {
+function RatingSpotlightTile({
+  divergenceType,
+}: {
+  divergenceType: "polarising" | "most_rated";
+}) {
   const { data, isLoading } = useInsightsQuery<{ rows: InsightsDiscoverRow[]; total: number }>(
     `/api/insights/discover/divergence?type=${divergenceType}&limit=6`,
     { queryKey: ["/api/insights/discover/divergence", divergenceType, 6] },
   );
 
   const rows = data?.rows ?? [];
-  const copy = VALUE_VOTE_COPY[divergenceType];
-  const Icon = copy.icon;
+  const copy = RATING_SPOTLIGHT_COPY[divergenceType];
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
   if (rows.length === 0) {
@@ -502,42 +482,46 @@ function ValueVoteTile({ divergenceType }: { divergenceType: "underrated" | "ove
 
   return (
     <ul className="space-y-1.5">
-      {rows.map((row) => {
-        const pct = Math.round(Number(row[copy.pctKey] ?? 0));
-        return (
-          <li key={row.id}>
-            <Link
-              href={`/person/${row.id}`}
-              onClick={() =>
-                logInsightsEvent("vote", "divergence_row_click", {
-                  type: divergenceType as InsightsDivergenceType,
-                  personId: row.id,
-                })
-              }
-              className="flex items-center gap-2.5 rounded-lg border border-border/40 bg-background/50 p-2.5 transition-colors hover:bg-muted/40"
-            >
-              <PersonAvatar name={row.name} avatar={row.avatar} size="xs" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{row.name}</p>
-                <p className="truncate text-[10px] leading-snug text-muted-foreground">
-                  {copy.subtext}
-                </p>
-              </div>
-              <span className="shrink-0 text-right">
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums",
-                    copy.pctClass,
-                  )}
-                >
-                  <Icon className={cn("h-3 w-3", copy.iconClass)} />
-                  {pct}%
+      {rows.map((row) => (
+        <li key={row.id}>
+          <Link
+            href={`/person/${row.id}`}
+            onClick={() =>
+              logInsightsEvent("vote", "divergence_row_click", {
+                type: divergenceType as InsightsDivergenceType,
+                personId: row.id,
+              })
+            }
+            className="flex items-center gap-2.5 rounded-lg border border-border/40 bg-background/50 p-2.5 transition-colors hover:bg-muted/40"
+          >
+            <PersonAvatar name={row.name} avatar={row.avatar} size="xs" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{row.name}</p>
+              <p className="truncate text-[10px] leading-snug text-muted-foreground">
+                {divergenceType === "polarising"
+                  ? "rate it 1-2 vs 4-5"
+                  : row.approvalAvgRating != null
+                    ? `${row.approvalAvgRating.toFixed(1)}/5 crowd average`
+                    : "crowd average pending"}
+              </p>
+            </div>
+            <span className="shrink-0 text-right">
+              {divergenceType === "polarising" ? (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold tabular-nums">
+                  <span className="text-[#FF0000]">{Math.round(row.lowSharePct)}%</span>
+                  <span className="font-normal text-muted-foreground">/</span>
+                  <span className="text-[#00C853]">{Math.round(row.highSharePct)}%</span>
                 </span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
+              ) : (
+                <span className="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums text-cyan-500">
+                  <Users className="h-3 w-3" />
+                  {formatVotes(row.approvalVotesCount)}
+                </span>
+              )}
+            </span>
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -1374,24 +1358,24 @@ export function VoteTab() {
           tab="vote"
           title={
             <span className="inline-flex items-center gap-1.5">
-              <ArrowUp className="h-4 w-4 text-[#00C853]" /> Underrated
+              <Scale className="h-4 w-4 text-amber-500" /> Most Polarising
             </span>
           }
-          description={VALUE_VOTE_COPY.underrated.description}
+          description={RATING_SPOTLIGHT_COPY.polarising.description}
         >
-          <ValueVoteTile divergenceType="underrated" />
+          <RatingSpotlightTile divergenceType="polarising" />
         </InsightsSection>
 
         <InsightsSection
           tab="vote"
           title={
             <span className="inline-flex items-center gap-1.5">
-              <ArrowDown className="h-4 w-4 text-[#FF0000]" /> Overrated
+              <Users className="h-4 w-4 text-cyan-500" /> Most Rated
             </span>
           }
-          description={VALUE_VOTE_COPY.overrated.description}
+          description={RATING_SPOTLIGHT_COPY.most_rated.description}
         >
-          <ValueVoteTile divergenceType="overrated" />
+          <RatingSpotlightTile divergenceType="most_rated" />
         </InsightsSection>
       </div>
 

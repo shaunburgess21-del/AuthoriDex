@@ -41,13 +41,13 @@ const insightsEventSchema = z.object({
 
 const divergenceTypes = [
   "rising_disliked",
-  "underrated_gaining",
-  "overrated_cooling",
+  "loved_gaining",
+  "disliked_cooling",
   "consensus",
   "press_loved_crowd_cool",
   "crowd_loved_press_critical",
-  "underrated",
-  "overrated",
+  "polarising",
+  "most_rated",
 ] as const;
 
 const insightsEventLimiter = rateLimit({

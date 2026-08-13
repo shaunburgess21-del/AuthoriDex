@@ -25,19 +25,19 @@ const DIVERGENCE_CARDS: Array<{ type: InsightsDivergenceType; title: string; des
     description: "High 7d momentum, low approval percentile",
   },
   {
-    type: "underrated_gaining",
-    title: "Underrated & Gaining",
-    description: "Crowd says underrated while signals rise",
+    type: "loved_gaining",
+    title: "Loved & Gaining",
+    description: "High crowd rating while signals rise",
   },
   {
-    type: "overrated_cooling",
-    title: "Overrated & Cooling",
-    description: "Crowd says overrated while signals cool",
+    type: "disliked_cooling",
+    title: "Disliked & Cooling",
+    description: "Low crowd rating while signals cool",
   },
   {
     type: "consensus",
     title: "Consensus Sweet Spot",
-    description: "High approval with fair-rating consensus",
+    description: "High approval with tight crowd agreement",
   },
 ];
 

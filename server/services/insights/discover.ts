@@ -37,14 +37,23 @@ export async function loadDivergence(
   limit = 25,
 ): Promise<{ rows: InsightsDiscoverRow[]; total: number }> {
   const result = await db.execute(sql`
-    WITH ranked AS (
+    WITH rating_shares AS (
+      SELECT
+        person_id,
+        COUNT(*) FILTER (WHERE rating <= 2)::float / NULLIF(COUNT(*), 0) AS low_share,
+        COUNT(*) FILTER (WHERE rating >= 4)::float / NULLIF(COUNT(*), 0) AS high_share
+      FROM user_votes
+      WHERE rating BETWEEN 1 AND 5
+      GROUP BY person_id
+    ),
+    ranked AS (
       SELECT
         cm.celebrity_id AS id,
         cm.approval_pct,
-        cm.underrated_pct,
-        cm.overrated_pct,
-        cm.fairly_rated_pct,
+        cm.approval_avg_rating,
         cm.approval_votes_count,
+        rs.low_share,
+        rs.high_share,
         tp.rank,
         tp.fame_index,
         tp.change_7d,
@@ -60,6 +69,7 @@ export async function loadDivergence(
         ts.web_sentiment_fetched_at
       FROM celebrity_metrics cm
       INNER JOIN trending_people tp ON tp.id = cm.celebrity_id
+      LEFT JOIN rating_shares rs ON rs.person_id = cm.celebrity_id
       LEFT JOIN LATERAL (
         SELECT
           velocity_score,
@@ -82,27 +92,32 @@ export async function loadDivergence(
 
   const rawRows = (Array.isArray(result) ? result : (result as { rows: Record<string, unknown>[] }).rows) ?? [];
 
+  /** Polarisation = 2 * min(lowShare, highShare); 1 when the crowd splits evenly across both ends. */
+  const ratingSplit = (row: Record<string, unknown>) => {
+    const lowShare = row.low_share != null ? Number(row.low_share) : 0;
+    const highShare = row.high_share != null ? Number(row.high_share) : 0;
+    return { lowShare, highShare, polarisation: 2 * Math.min(lowShare, highShare) };
+  };
+
   const filtered = rawRows.filter((row) => {
     const change7d = Number(row.change_7d ?? 0);
     const approvalPct = Number(row.approval_pct ?? 0);
     const percentile = Number(row.approval_percentile ?? 0.5);
-    const underrated = Number(row.underrated_pct ?? 0);
-    const overrated = Number(row.overrated_pct ?? 0);
-    const fairly = Number(row.fairly_rated_pct ?? 0);
+    const { polarisation } = ratingSplit(row);
 
     switch (type) {
       case "rising_disliked":
         return change7d > 3 && percentile < 0.35;
-      case "underrated_gaining":
-        return underrated >= 40 && change7d > 2;
-      case "overrated_cooling":
-        return overrated >= 40 && change7d < -2;
+      case "loved_gaining":
+        return approvalPct >= 65 && change7d > 2;
+      case "disliked_cooling":
+        return percentile < 0.35 && change7d < -2;
       case "consensus":
-        return approvalPct >= 60 && fairly >= 40;
-      case "underrated":
-        return underrated >= 20;
-      case "overrated":
-        return overrated >= 20;
+        return approvalPct >= 60 && polarisation <= 0.3;
+      case "polarising":
+        return polarisation >= 0.25;
+      case "most_rated":
+        return Number(row.approval_votes_count ?? 0) > 0;
       case "press_loved_crowd_cool":
       case "crowd_loved_press_critical": {
         if (row.web_sentiment_method !== WEB_SENTIMENT_METHOD) return false;
@@ -135,19 +150,22 @@ export async function loadDivergence(
         );
         return gapB - gapA;
       })
-      : type === "underrated"
+      : type === "polarising"
         ? [...filtered].sort(
-            (a, b) => Number(b.underrated_pct ?? 0) - Number(a.underrated_pct ?? 0),
+            (a, b) => ratingSplit(b).polarisation - ratingSplit(a).polarisation,
           )
-        : type === "overrated"
+        : type === "most_rated"
           ? [...filtered].sort(
-              (a, b) => Number(b.overrated_pct ?? 0) - Number(a.overrated_pct ?? 0),
+              (a, b) => Number(b.approval_votes_count ?? 0) - Number(a.approval_votes_count ?? 0),
             )
           : filtered;
 
   const rows: InsightsDiscoverRow[] = sorted.slice(0, limit).map((row) => {
     const change7d = Number(row.change_7d ?? 0);
     const approvalPctVal = row.approval_pct != null ? Number(row.approval_pct) : null;
+    const avgRating = row.approval_avg_rating != null ? Number(row.approval_avg_rating) : null;
+    const votesCount = Number(row.approval_votes_count ?? 0);
+    const { lowShare, highShare, polarisation } = ratingSplit(row);
     const webPct = isPressVsCrowdDivergenceType(type)
       ? displayWebPctFromRow(row)
       : null;
@@ -157,20 +175,20 @@ export async function loadDivergence(
       case "rising_disliked":
         highlight = `Rising (${change7d.toFixed(1)}% 7d) but crowd approval is low`;
         break;
-      case "underrated_gaining":
-        highlight = `Underrated by ${Number(row.underrated_pct ?? 0).toFixed(0)}% of voters, gaining`;
+      case "loved_gaining":
+        highlight = `${avgRating != null ? `${avgRating.toFixed(1)}/5 crowd rating` : "High crowd rating"}, +${change7d.toFixed(1)}% 7d`;
         break;
-      case "overrated_cooling":
-        highlight = `Overrated by ${Number(row.overrated_pct ?? 0).toFixed(0)}% of voters, cooling`;
+      case "disliked_cooling":
+        highlight = `${avgRating != null ? `${avgRating.toFixed(1)}/5 crowd rating` : "Low crowd rating"}, ${change7d.toFixed(1)}% 7d`;
         break;
       case "consensus":
-        highlight = `High approval with fair-rating consensus`;
+        highlight = `High approval with tight crowd agreement`;
         break;
-      case "underrated":
-        highlight = `${Number(row.underrated_pct ?? 0).toFixed(0)}% of voters say underrated`;
+      case "polarising":
+        highlight = `${Math.round(lowShare * 100)}% rate 1-2, ${Math.round(highShare * 100)}% rate 4-5`;
         break;
-      case "overrated":
-        highlight = `${Number(row.overrated_pct ?? 0).toFixed(0)}% of voters say overrated`;
+      case "most_rated":
+        highlight = `${votesCount.toLocaleString()} ratings${avgRating != null ? ` · ${avgRating.toFixed(1)}/5 average` : ""}`;
         break;
       case "press_loved_crowd_cool":
       case "crowd_loved_press_critical":
@@ -192,9 +210,11 @@ export async function loadDivergence(
         row.approval_percentile != null ? Math.round(Number(row.approval_percentile) * 100) : null,
       change7d: row.change_7d != null ? Number(row.change_7d) : null,
       velocityScore: Number(row.velocity_score ?? 0),
-      underratedPct: row.underrated_pct != null ? Number(row.underrated_pct) : null,
-      overratedPct: row.overrated_pct != null ? Number(row.overrated_pct) : null,
-      fairlyRatedPct: row.fairly_rated_pct != null ? Number(row.fairly_rated_pct) : null,
+      approvalAvgRating: avgRating,
+      approvalVotesCount: votesCount,
+      polarisationPct: Math.round(polarisation * 100),
+      lowSharePct: Math.round(lowShare * 100),
+      highSharePct: Math.round(highShare * 100),
       highlight,
     };
 

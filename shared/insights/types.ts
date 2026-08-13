@@ -158,13 +158,13 @@ export interface InsightsOverviewResponse {
 
 export type InsightsDivergenceType =
   | "rising_disliked"
-  | "underrated_gaining"
-  | "overrated_cooling"
+  | "loved_gaining"
+  | "disliked_cooling"
   | "consensus"
   | "press_loved_crowd_cool"
   | "crowd_loved_press_critical"
-  | "underrated"
-  | "overrated";
+  | "polarising"
+  | "most_rated";
 
 export interface InsightsDiscoverRow {
   id: string;
@@ -177,9 +177,14 @@ export interface InsightsDiscoverRow {
   approvalPercentile: number | null;
   change7d: number | null;
   velocityScore: number;
-  underratedPct: number | null;
-  overratedPct: number | null;
-  fairlyRatedPct: number | null;
+  approvalAvgRating: number | null;
+  approvalVotesCount: number;
+  /** 2 * min(lowShare, highShare) as a 0-100 pct — 100 = crowd evenly split across both ends. */
+  polarisationPct: number;
+  /** Share of ratings that are 1-2, as a 0-100 pct. */
+  lowSharePct: number;
+  /** Share of ratings that are 4-5, as a 0-100 pct. */
+  highSharePct: number;
   highlight: string;
   /** Press vs crowd divergence — optional; populated for sentiment types only. */
   webSentimentPositivePct?: number | null;

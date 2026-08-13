@@ -1643,8 +1643,8 @@ ${xmlEntries.join("\n")}
       const typeRaw = typeof req.query.type === "string" ? req.query.type : "";
       const knownTypes = [
         "rising_disliked",
-        "underrated_gaining",
-        "overrated_cooling",
+        "loved_gaining",
+        "disliked_cooling",
         "consensus",
       ];
       const qs = new URLSearchParams();
