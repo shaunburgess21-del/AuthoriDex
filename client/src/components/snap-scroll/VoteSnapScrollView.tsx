@@ -24,7 +24,7 @@ import { CommunityInsights } from "@/components/CommunityInsights";
 
 export type SnapSectionType =
   | "matchups" | "sentiment" | "opinion"
-  | "value" | "induction" | "curate"
+  | "rating" | "induction" | "curate"
   | "world-markets" | "updown";
 
 export type SnapCommentMode = "card" | "person" | "none";
@@ -114,7 +114,7 @@ const SECTION_LABEL: Record<SnapSectionType, string> = {
   matchups: "matchups",
   sentiment: "sentiment polls",
   opinion: "opinion polls",
-  value: "value ratings",
+  rating: "overall ratings",
   induction: "induction candidates",
   curate: "curate profiles",
   "world-markets": "world market predictions",
@@ -128,7 +128,7 @@ const SNAP_TO_VOTE_LIST_TYPE: Partial<Record<SnapSectionType, VoteListNavType>> 
 };
 
 const SNAP_TO_VOTE_HUB_ANCHOR: Partial<Record<SnapSectionType, string>> = {
-  value: "vote-value",
+  rating: "vote-rating",
   induction: "vote-induction",
   curate: "vote-curate",
 };
@@ -137,7 +137,7 @@ const SECTION_SUGGEST_LABEL: Record<SnapSectionType, string> = {
   matchups: "Matchup",
   sentiment: "Sentiment Poll",
   opinion: "Opinion Poll",
-  value: "Profile Image",
+  rating: "Profile Image",
   induction: "Candidate",
   curate: "Profile Image",
   "world-markets": "Market Prediction",
@@ -1221,7 +1221,7 @@ export function VoteSnapScrollView({
           onNavigateToPerson(item.personId);
           return;
         }
-        const anchorHashId = SNAP_TO_VOTE_HUB_ANCHOR[sectionType] ?? "vote-value";
+        const anchorHashId = SNAP_TO_VOTE_HUB_ANCHOR[sectionType] ?? "vote-rating";
         navigateToPersonFromVoteHub(setLocation, item.personId, {
           anchorHashId,
           activeSection: voteHubActiveSection,

@@ -21,7 +21,6 @@ import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { CardSection } from "@/components/CardSection";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
-import { UnderratedOverratedCard, type ValueVotePerson } from "@/components/UnderratedOverratedCard";
 import { CurateProfileCard, type CuratePerson } from "@/components/curate";
 import {
   ArrowLeft,
@@ -111,17 +110,6 @@ function ProfileLazyFallback({ minHeight }: { minHeight?: string }) {
       <div className="h-8 w-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
     </div>
   );
-}
-
-interface ValueVoteMetrics {
-  userVote: "underrated" | "overrated" | "fairly_rated" | null;
-  underratedPct: number | null;
-  overratedPct: number | null;
-  fairlyRatedPct: number | null;
-  valueScore: number | null;
-  underratedVotesCount: number;
-  overratedVotesCount: number;
-  fairlyRatedVotesCount: number;
 }
 
 interface FeaturedPoll {
@@ -947,11 +935,6 @@ export default function PersonDetailPage() {
 
   const isVoteTab = activeTab === "vote";
 
-  const { data: valueMetrics } = useQuery<ValueVoteMetrics>({
-    queryKey: ['/api/celebrity', person?.id, 'value-vote'],
-    enabled: isVoteTab && !!person && !isInduction,
-  });
-
   // Shared voting data (matchups, sentiment polls, opinion polls) for the Vote tab
   const { data: matchups = [], isLoading: matchupsLoading } = useQuery<MatchupData[]>({
     queryKey: ['/api/matchups'],
@@ -1252,30 +1235,6 @@ export default function PersonDetailPage() {
     staleTime: 60 * 1000,
     enabled: isVoteTab,
   });
-
-  const valueVotePerson: ValueVotePerson | null = useMemo(() => {
-    if (!person) return null;
-
-    const metrics = valueMetrics;
-
-    return {
-      id: String(person.id),
-      name: person.name,
-      avatar: person.avatar ?? null,
-      category: person.category ?? null,
-      fameIndex: (person as any).fameIndex ?? Math.round(person.trendScore ?? 0),
-      trendScore: person.trendScore,
-      approvalPct: (person as any).approvalPct ?? null,
-      approvalAvgRating: (person as any).approvalAvgRating ?? null,
-      underratedPct: metrics?.underratedPct ?? null,
-      overratedPct: metrics?.overratedPct ?? null,
-      fairlyRatedPct: metrics?.fairlyRatedPct ?? null,
-      underratedCount: metrics?.underratedVotesCount ?? null,
-      overratedCount: metrics?.overratedVotesCount ?? null,
-      fairlyRatedCount: metrics?.fairlyRatedVotesCount ?? null,
-      userValueVote: metrics?.userVote ?? null,
-    };
-  }, [person, valueMetrics]);
 
   const personMatchups = useMemo(() => {
     if (!person) return [] as MatchupData[];
@@ -1845,25 +1804,6 @@ export default function PersonDetailPage() {
                   </CardSection>
                 )}
               </section>
-            )}
-
-            {/* Underrated / Overrated Section — trend-rank framed, hidden for induction candidates */}
-            {!isInduction && (
-            <section className="mb-10">
-              <UnifiedSectionHeader
-                title="Underrated / Overrated"
-                subtitle="Overhyped or underappreciated?"
-                icon={<BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-                accent="cyan"
-                testId="profile-section-value"
-              />
-
-              {valueVotePerson && (
-                <div className="max-w-xl mx-auto">
-                  <UnderratedOverratedCard person={valueVotePerson} />
-                </div>
-              )}
-            </section>
             )}
 
             {/* Curate the Profile Section */}

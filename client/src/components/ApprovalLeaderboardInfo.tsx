@@ -5,7 +5,7 @@ import {
   Vote,
   Swords,
   MessageSquare,
-  BarChart3,
+  ThumbsUp,
   UserPlus,
   ImageIcon,
   ChevronRight,
@@ -61,7 +61,7 @@ const VOTE_HUB_LINK_ICONS: Record<VoteHubSectionToggle, LucideIcon> = {
   "Sentiment Polls": MessageSquare,
   Matchups: Swords,
   "Opinion Polls": Vote,
-  "Underrated/Overrated": BarChart3,
+  "Overall Rating": ThumbsUp,
   "Induction Queue": UserPlus,
   "Curate Profile": ImageIcon,
 };

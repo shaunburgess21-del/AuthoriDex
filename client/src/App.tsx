@@ -50,7 +50,7 @@ const UnsubscribePage = lazyWithRetry(() => import("@/pages/UnsubscribePage"));
 const UserProfilePage = lazyWithRetry(() => import("@/pages/UserProfilePage"));
 const PredictPage = lazyWithRetry(() => import("@/pages/PredictPage"));
 const VotePage = lazyWithRetry(() => import("@/pages/VotePage"));
-const ValueRankingsPage = lazyWithRetry(() => import("@/pages/ValueRankingsPage"));
+const AllRatingsPage = lazyWithRetry(() => import("@/pages/AllRatingsPage"));
 const MePage = lazyWithRetry(() => import("@/pages/MePage"));
 const VotesPage = lazyWithRetry(() => import("@/pages/me/VotesPage"));
 const PredictionsPage = lazyWithRetry(() => import("@/pages/me/PredictionsPage"));
@@ -70,7 +70,6 @@ const OpinionPollDetailPage = lazyWithRetry(() => import("@/pages/OpinionPollDet
 const MatchupDetailPage = lazyWithRetry(() => import("@/pages/MatchupDetailPage"));
 const UserLeaderboardPage = lazyWithRetry(() => import("@/pages/UserLeaderboardPage"));
 const TownSquarePage = lazyWithRetry(() => import("@/pages/TownSquarePage"));
-const ValueRatingsPage = lazyWithRetry(() => import("@/pages/ValueRatingsPage"));
 const InductionQueuePage = lazyWithRetry(() => import("@/pages/InductionQueuePage"));
 const CategoryRaceDetailPage = lazyWithRetry(() => import("@/pages/CategoryRaceDetailPage"));
 const UpDownDetailPage = lazyWithRetry(() => import("@/pages/UpDownDetailPage"));
@@ -139,7 +138,7 @@ function Router() {
         <Route path="/voices" component={VoicesPage} />
         <Route path="/insights" component={InsightsPage} />
         <Route path="/explore" component={InsightsPage} />
-        <Route path="/vote/value-rankings" component={ValueRankingsPage} />
+        <Route path="/vote/all-ratings" component={AllRatingsPage} />
         <Route path="/vote/induction" component={InductionQueuePage} />
         <Route path="/vote" component={VotePage} />
         <Route path="/me" component={MePage} />
@@ -161,7 +160,6 @@ function Router() {
         <Route path="/predict/updown/:marketId" component={UpDownDetailPage} />
         <Route path="/predict/h2h/:marketId" component={H2HDetailPage} />
         <Route path="/predict/activity" component={TownSquarePage} />
-        <Route path="/vote/value-ratings" component={ValueRatingsPage} />
         <Route path="/admin/suggestions" component={AdminSuggestionsPage} />
         {/* Notifications hub (compose + history + per-user inspector). */}
         <Route path="/admin/notifications" component={AdminNotificationsPage} />

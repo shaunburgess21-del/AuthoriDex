@@ -6,7 +6,7 @@ export interface VoteResumePayload {
   topicsOverlayOpen: boolean;
   matchupsOverlayOpen: boolean;
   opinionPollsOverlayOpen: boolean;
-  valuePerceptionOverlayOpen: boolean;
+  ratingOverlayOpen: boolean;
   snapScrollOpen: boolean;
   snapScrollSection?: SnapSectionType;
   snapScrollInitialId?: string;

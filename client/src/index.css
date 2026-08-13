@@ -1345,6 +1345,17 @@
       transform: none;
     }
   }
+  /* Deep-link focus (?focus=) — the landed-on row lights up in its own
+     variant colour (border + glow), mirroring .hub-card-selected. */
+  .lb-row-card.lb-row-selected {
+    border-color: var(--lb-row-border-hover);
+    box-shadow:
+      0 8px 30px -4px var(--lb-row-glow),
+      0 0 50px -10px var(--lb-row-glow-soft);
+  }
+  .lb-row-card.lb-row-selected::after {
+    opacity: 1;
+  }
 
   /* Chrome neutral (ranks 4+) — same family as .pulse-card-blue, top bar
      toned down (0.45 vs 0.7) so ~150 stacked rows don't strobe. */

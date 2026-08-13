@@ -21,10 +21,10 @@ export const VOTE_HUB_DEEP_LINKS = [
     sectionToggle: "Opinion Polls",
   },
   {
-    hashId: "vote-value",
-    label: "Overrated/Underrated",
-    href: "/vote#vote-value",
-    sectionToggle: "Underrated/Overrated",
+    hashId: "vote-rating",
+    label: "Overall Rating",
+    href: "/vote#vote-rating",
+    sectionToggle: "Overall Rating",
   },
   {
     hashId: "vote-induction",

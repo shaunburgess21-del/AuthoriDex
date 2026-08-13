@@ -4222,11 +4222,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const rating = parsed.rating;
 
-      const [celebrity] = await db
+      let [celebrity] = await db
         .select({ id: trendingPeople.id, name: trendingPeople.name })
         .from(trendingPeople)
         .where(eq(trendingPeople.id, celebrityId))
         .limit(1);
+
+      if (!celebrity) {
+        // Induction-queue shadows have no trending_people row but are still
+        // ratable — user_votes and celebrity_metrics both FK tracked_people.
+        const [tracked] = await db
+          .select({ id: trackedPeople.id, name: trackedPeople.name })
+          .from(trackedPeople)
+          .where(
+            and(
+              eq(trackedPeople.id, celebrityId),
+              inArray(trackedPeople.status, ["main_leaderboard", "induction"]),
+            ),
+          )
+          .limit(1);
+        celebrity = tracked;
+      }
 
       if (!celebrity) {
         return res.status(404).json({ error: "Celebrity not found" });
@@ -4408,6 +4424,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[sentiment-stats GET] Error:", error);
       res.status(500).json({ error: "Failed to get sentiment stats" });
+    }
+  });
+
+  // GET /api/vote/overall-ratings - Vote hub Overall Rating section list:
+  // main-leaderboard people first (approval ordering, cold-start aware), then
+  // active induction-queue shadow people. Each entry carries approval
+  // aggregates, the caller's own rating, and a 1-5 vote distribution so
+  // post-vote cards render community results without per-person requests.
+  app.get("/api/vote/overall-ratings", optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const limit = parseBoundedInt(req.query.limit, 200, 1, 500);
+      const userId = req.userId;
+
+      const coldStart = await shouldUseColdStart(req);
+      const approvalOrder = sql`${celebrityMetrics.approvalAvgRating} DESC NULLS LAST, ${celebrityMetrics.approvalVotesCount} DESC NULLS LAST, ${trendingPeople.name} ASC`;
+      const mainRows = await db
+        .select({
+          id: trendingPeople.id,
+          name: trendingPeople.name,
+          avatar: trendingPeople.avatar,
+          category: trendingPeople.category,
+          secondaryCategories: trendingPeople.secondaryCategories,
+          fameIndex: trendingPeople.fameIndex,
+          trendScore: trendingPeople.trendScore,
+          imageSlug: trackedPeople.imageSlug,
+          approvalAvgRating: celebrityMetrics.approvalAvgRating,
+          approvalPct: celebrityMetrics.approvalPct,
+          approvalVotesCount: celebrityMetrics.approvalVotesCount,
+        })
+        .from(trendingPeople)
+        .leftJoin(trackedPeople, eq(trendingPeople.id, trackedPeople.id))
+        .leftJoin(celebrityMetrics, eq(trendingPeople.id, celebrityMetrics.celebrityId))
+        .orderBy(
+          coldStart
+            ? sql`CASE WHEN ${trendingPeople.category} = 'politics' THEN 1 ELSE 0 END ASC, ${approvalOrder}`
+            : approvalOrder,
+        )
+        .limit(limit);
+
+      // Induction queue people (shadow tracked_people rows matched by name).
+      const candidates = await db
+        .select()
+        .from(inductionCandidates)
+        .where(eq(inductionCandidates.isActive, true))
+        .orderBy(desc(inductionCandidates.seedVotes), asc(inductionCandidates.displayName));
+      const enrichedCandidates = await enrichInductionCandidatesWithAvatars(candidates);
+      const inductionEntries = enrichedCandidates.filter(
+        (c): c is typeof c & { personId: string } => !!c.personId,
+      );
+      const inductionIds = inductionEntries.map((c) => c.personId);
+
+      const inductionMetricsById = new Map<
+        string,
+        { approvalAvgRating: number | null; approvalPct: number | null; approvalVotesCount: number }
+      >();
+      if (inductionIds.length > 0) {
+        const metricsRows = await db
+          .select({
+            celebrityId: celebrityMetrics.celebrityId,
+            approvalAvgRating: celebrityMetrics.approvalAvgRating,
+            approvalPct: celebrityMetrics.approvalPct,
+            approvalVotesCount: celebrityMetrics.approvalVotesCount,
+          })
+          .from(celebrityMetrics)
+          .where(inArray(celebrityMetrics.celebrityId, inductionIds));
+        for (const row of metricsRows) {
+          inductionMetricsById.set(row.celebrityId, {
+            approvalAvgRating: row.approvalAvgRating,
+            approvalPct: row.approvalPct,
+            approvalVotesCount: row.approvalVotesCount ?? 0,
+          });
+        }
+      }
+
+      const allIds = [...mainRows.map((r) => r.id), ...inductionIds];
+
+      // 1-5 distribution counts, one bulk group-by across all listed people.
+      const distributionById = new Map<string, number[]>();
+      if (allIds.length > 0) {
+        const distRows = await db
+          .select({
+            personId: userVotes.personId,
+            rating: userVotes.rating,
+            cnt: sql<number>`cast(count(*) as int)`,
+          })
+          .from(userVotes)
+          .where(
+            and(
+              inArray(userVotes.personId, allIds),
+              gte(userVotes.rating, 1),
+              lte(userVotes.rating, 5),
+            ),
+          )
+          .groupBy(userVotes.personId, userVotes.rating);
+        for (const row of distRows) {
+          const rating = Number(row.rating);
+          if (rating < 1 || rating > 5) continue;
+          const counts = distributionById.get(row.personId) ?? [0, 0, 0, 0, 0];
+          counts[rating - 1] = Number(row.cnt);
+          distributionById.set(row.personId, counts);
+        }
+      }
+
+      let userRatingsById: Record<string, number> = {};
+      if (userId) {
+        const ratings = await db
+          .select({ personId: userVotes.personId, rating: userVotes.rating })
+          .from(userVotes)
+          .where(eq(userVotes.userId, userId));
+        for (const r of ratings) {
+          if (r.rating != null && r.rating >= 1 && r.rating <= 5) {
+            userRatingsById[r.personId] = r.rating;
+          }
+        }
+      }
+
+      const data = [
+        ...mainRows.map((person) => ({
+          id: person.id,
+          name: person.name,
+          avatar: person.avatar,
+          category: person.category,
+          secondaryCategories: person.secondaryCategories,
+          fameIndex: person.fameIndex,
+          trendScore: person.trendScore,
+          imageSlug: person.imageSlug,
+          isInduction: false,
+          approvalAvgRating: person.approvalAvgRating,
+          approvalPct: person.approvalPct,
+          approvalVotesCount: person.approvalVotesCount ?? 0,
+          userApprovalRating: userRatingsById[person.id] ?? null,
+          ratingDistribution: distributionById.get(person.id) ?? [0, 0, 0, 0, 0],
+        })),
+        ...inductionEntries.map((candidate) => {
+          const metrics = inductionMetricsById.get(candidate.personId);
+          return {
+            id: candidate.personId,
+            name: candidate.displayName,
+            avatar: candidate.avatar,
+            category: candidate.category,
+            secondaryCategories: candidate.secondaryCategories ?? [],
+            fameIndex: null,
+            trendScore: 0,
+            imageSlug: candidate.imageSlug,
+            isInduction: true,
+            approvalAvgRating: metrics?.approvalAvgRating ?? null,
+            approvalPct: metrics?.approvalPct ?? null,
+            approvalVotesCount: metrics?.approvalVotesCount ?? 0,
+            userApprovalRating: userRatingsById[candidate.personId] ?? null,
+            ratingDistribution: distributionById.get(candidate.personId) ?? [0, 0, 0, 0, 0],
+          };
+        }),
+      ];
+
+      res.json({ data, totalCount: data.length });
+    } catch (error: any) {
+      console.error("[overall-ratings GET] Error:", error);
+      res.status(500).json({ error: "Failed to get overall ratings" });
     }
   });
 

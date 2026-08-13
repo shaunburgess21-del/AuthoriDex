@@ -90,7 +90,7 @@ import { buildSectionCategoryOptions, involvesAnyFavorite, isPinnedCategory } fr
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
-import { UnderratedOverratedCard } from "@/components/UnderratedOverratedCard";
+import { OverallRatingCard } from "@/components/OverallRatingCard";
 import { CardSection, type CardSectionHandle } from "@/components/CardSection";
 import { useHideExitQueue } from "@/hooks/useHideExitQueue";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
@@ -316,11 +316,11 @@ const curateProfilePolls: CurateProfilePoll[] = [
 ];
 
 
-const SECTION_TOGGLES = ["All", "Sentiment Polls", "Matchups", "Opinion Polls", "Underrated/Overrated", "Induction Queue", "Curate Profile"] as const;
+const SECTION_TOGGLES = ["All", "Sentiment Polls", "Matchups", "Opinion Polls", "Overall Rating", "Induction Queue", "Curate Profile"] as const;
 type SectionToggle = typeof SECTION_TOGGLES[number];
 
 const isShapeVoxDexSection = (section: SectionToggle) =>
-  section === "Underrated/Overrated" ||
+  section === "Overall Rating" ||
   section === "Induction Queue" ||
   section === "Curate Profile";
 
@@ -386,9 +386,9 @@ const SECTION_RULES = {
     title: "Sentiment Polls Rules",
     content: "The ultimate community pulse check. Weigh in on current events and controversies. Evergreen polls remain open; timed polls resolve at the specified deadline."
   },
-  value: {
+  rating: {
     title: "How It Works",
-    content: "This vote is about public perception â€” not your personal like/dislike. Vote Underrated if you think they deserve more recognition than they currently get. Vote Overrated if you think they receive more attention or praise than they deserve. Compare your view with the community results. Your vote updates the Underrated/Overrated split in real time."
+    content: "Rate each public figure from 1 (Hate) to 5 (Love). Your vote feeds the community approval rating shown across VoxDex. Compare your view with the community results — your vote updates the average in real time."
   }
 };
 
@@ -1035,7 +1035,7 @@ export default function VotePage() {
     topicsOverlayOpen: false,
     matchupsOverlayOpen: false,
     opinionPollsOverlayOpen: false,
-    valuePerceptionOverlayOpen: false,
+    ratingOverlayOpen: false,
     snapScrollOpen: false,
   });
 
@@ -1201,9 +1201,9 @@ export default function VotePage() {
     setGlobalCategoryFilter(registry.resolveCanonicalId(category) as FilterCategory);
   }, [registry]);
   
-  const [valuePerceptionOverlayOpen, setValuePerceptionOverlayOpen] = useState(() => window.history.state?.overlay === "value-perception");
-  const prevValuePerceptionOverlayOpenRef = useRef(valuePerceptionOverlayOpen);
-  const [valuePerceptionSearchQuery, setValuePerceptionSearchQuery] = useState("");
+  const [ratingOverlayOpen, setRatingOverlayOpen] = useState(() => window.history.state?.overlay === "overall-rating");
+  const prevRatingOverlayOpenRef = useRef(ratingOverlayOpen);
+  const [ratingSearchQuery, setRatingSearchQuery] = useState("");
 
 
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
@@ -1225,7 +1225,7 @@ export default function VotePage() {
   const topicsScrollRef = useRef<HTMLDivElement>(null);
   const matchupsScrollRef = useRef<HTMLDivElement>(null);
   const opinionPollsScrollRef = useRef<HTMLDivElement>(null);
-  const valuePerceptionScrollRef = useRef<HTMLDivElement>(null);
+  const ratingScrollRef = useRef<HTMLDivElement>(null);
 
   const isMobile = useIsMobile();
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
@@ -1333,39 +1333,39 @@ export default function VotePage() {
     staleTime: 60 * 1000,
   });
   
-  interface ValueLeaderboardResponse {
+  interface OverallRatingsResponse {
     data: Array<{
       id: string;
       name: string;
       avatar: string | null;
       category: string | null;
+      secondaryCategories?: string[];
       fameIndex: number | null;
       trendScore: number;
+      isInduction: boolean;
+      approvalAvgRating: number | null;
       approvalPct: number | null;
-      underratedPct: number | null;
-      overratedPct: number | null;
-      fairlyRatedPct: number | null;
-      underratedCount?: number | null;
-      overratedCount?: number | null;
-      fairlyRatedCount?: number | null;
-      userValueVote: 'underrated' | 'overrated' | 'fairly_rated' | null;
+      approvalVotesCount: number;
+      userApprovalRating: number | null;
+      ratingDistribution: number[];
     }>;
   }
-  
-  const { data: valueCelebritiesData, isLoading: valueLoading } = useQuery<ValueLeaderboardResponse>({
-    queryKey: ['/api/leaderboard?tab=value&limit=100'],
+
+  // Main-leaderboard people first, induction-queue people after (server order).
+  const { data: ratingCelebritiesData, isLoading: ratingLoading } = useQuery<OverallRatingsResponse>({
+    queryKey: ['/api/vote/overall-ratings'],
     staleTime: 60 * 1000,
   });
   
-  const valueCelebrities = valueCelebritiesData?.data || [];
+  const ratingCelebrities = ratingCelebritiesData?.data || [];
   
-  const filteredValueCelebrities = valueCelebrities.filter(c => {
+  const filteredRatingCelebrities = ratingCelebrities.filter(c => {
     const matchesCategory =
       globalCategoryFilter === "all" ||
       globalCategoryFilter === "trending" ||
       (globalCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
       matchesRegistryCategoryFilter(c.category, (c as any).secondaryCategories, globalCategoryFilter);
-    const matchesSearch = !valuePerceptionSearchQuery || c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase());
+    const matchesSearch = !ratingSearchQuery || c.name.toLowerCase().includes(ratingSearchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => {
     if (globalCategoryFilter !== "trending") return 0;
@@ -1737,19 +1737,19 @@ export default function VotePage() {
     [opinionSnapSource],
   );
 
-  const valueSnapSource = useMemo(
+  const ratingSnapSource = useMemo(
     () =>
-      valueCelebrities.filter(
+      ratingCelebrities.filter(
         (c) =>
-          !valuePerceptionSearchQuery ||
-          c.name.toLowerCase().includes(valuePerceptionSearchQuery.toLowerCase()),
+          !ratingSearchQuery ||
+          c.name.toLowerCase().includes(ratingSearchQuery.toLowerCase()),
       ),
-    [valueCelebrities, valuePerceptionSearchQuery],
+    [ratingCelebrities, ratingSearchQuery],
   );
 
-  const valueSnapItems: SnapItem[] = useMemo(
+  const ratingSnapItems: SnapItem[] = useMemo(
     () =>
-      valueSnapSource.map((person: any) => ({
+      ratingSnapSource.map((person: any) => ({
         id: person.id,
         slug: person.id,
         category: person.category || "misc",
@@ -1758,7 +1758,7 @@ export default function VotePage() {
         personId: person.id,
         personName: person.name,
       })),
-    [valueSnapSource],
+    [ratingSnapSource],
   );
 
   const inductionSnapSource = useMemo(
@@ -1847,18 +1847,18 @@ export default function VotePage() {
     [opinionPolls, globalCategoryFilter, registry],
   );
 
-  const valueCategoryOptions = useMemo(
+  const ratingCategoryOptions = useMemo(
     () =>
       buildSectionCategoryOptions({
-        categories: valueCelebrities.map((c) => c.category),
-        secondaryCategories: valueCelebrities.flatMap((c) => (c as any).secondaryCategories || []),
+        categories: ratingCelebrities.map((c) => c.category),
+        secondaryCategories: ratingCelebrities.flatMap((c) => (c as any).secondaryCategories || []),
         includeFavorites: true,
         includeTrending: true,
         selectedCategory: globalCategoryFilter,
         resolveId: registry.resolveCanonicalId,
         getLabel: registry.getDisplayLabel,
       }),
-    [valueCelebrities, globalCategoryFilter, registry],
+    [ratingCelebrities, globalCategoryFilter, registry],
   );
 
   const inductionCategoryOptions = useMemo(
@@ -1897,7 +1897,7 @@ export default function VotePage() {
           ...dbPolls.map((t: any) => t.category),
           ...matchups.filter((m) => m.isActive).map((m) => m.category),
           ...opinionPolls.map((p: any) => p.category),
-          ...valueCelebrities.map((c) => c.category),
+          ...ratingCelebrities.map((c) => c.category),
           ...enrichedCandidates.map((c) => c.category),
           ...curateTrendingCelebrities.map((p: any) => p.category),
         ],
@@ -1905,7 +1905,7 @@ export default function VotePage() {
           ...dbPolls.flatMap((t: any) => t.secondaryCategories || []),
           ...matchups.filter((m) => m.isActive).flatMap((m) => (m as any).secondaryCategories || []),
           ...opinionPolls.flatMap((p: any) => p.secondaryCategories || []),
-          ...valueCelebrities.flatMap((c) => (c as any).secondaryCategories || []),
+          ...ratingCelebrities.flatMap((c) => (c as any).secondaryCategories || []),
           ...enrichedCandidates.flatMap((c) => (c as any).secondaryCategories || []),
           ...curateTrendingCelebrities.flatMap((p: any) => p.secondaryCategories || []),
         ],
@@ -1919,7 +1919,7 @@ export default function VotePage() {
       dbPolls,
       matchups,
       opinionPolls,
-      valueCelebrities,
+      ratingCelebrities,
       enrichedCandidates,
       curateTrendingCelebrities,
       globalCategoryFilter,
@@ -2021,27 +2021,27 @@ export default function VotePage() {
   }, [opinionPollsOverlayOpen]);
 
   useEffect(() => {
-    if (prevValuePerceptionOverlayOpenRef.current && !valuePerceptionOverlayOpen) {
-      setValuePerceptionSearchQuery("");
+    if (prevRatingOverlayOpenRef.current && !ratingOverlayOpen) {
+      setRatingSearchQuery("");
     }
-    prevValuePerceptionOverlayOpenRef.current = valuePerceptionOverlayOpen;
-  }, [valuePerceptionOverlayOpen]);
+    prevRatingOverlayOpenRef.current = ratingOverlayOpen;
+  }, [ratingOverlayOpen]);
 
   useEffect(() => {
-    if (inductionOverlayOpen || topicsOverlayOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || curateSuggestOpen || opinionSuggestOpen || valuePerceptionOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
+    if (inductionOverlayOpen || topicsOverlayOpen || startPollModalOpen || matchupsOverlayOpen || inductionSuggestOpen || matchupSuggestOpen || curateSuggestOpen || opinionSuggestOpen || ratingOverlayOpen || opinionPollsOverlayOpen || snapScrollOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [inductionOverlayOpen, topicsOverlayOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, curateSuggestOpen, opinionSuggestOpen, valuePerceptionOverlayOpen, opinionPollsOverlayOpen, snapScrollOpen]);
+  }, [inductionOverlayOpen, topicsOverlayOpen, startPollModalOpen, matchupsOverlayOpen, inductionSuggestOpen, matchupSuggestOpen, curateSuggestOpen, opinionSuggestOpen, ratingOverlayOpen, opinionPollsOverlayOpen, snapScrollOpen]);
 
   const applyOverlayState = useCallback((name: string | undefined) => {
     setInductionOverlayOpen(name === "induction");
     setTopicsOverlayOpen(name === "topics");
     setMatchupsOverlayOpen(name === "matchups");
     setOpinionPollsOverlayOpen(name === "opinion-polls");
-    setValuePerceptionOverlayOpen(name === "value-perception");
+    setRatingOverlayOpen(name === "overall-rating");
     const isSnap = name?.startsWith("snap-") ?? false;
     setSnapScrollOpen(isSnap);
     if (isSnap && name) setSnapScrollSection(name.replace("snap-", "") as SnapSectionType);
@@ -2056,7 +2056,7 @@ export default function VotePage() {
           ? savedSnapWindowScrollRef.current
           : window.scrollY;
 
-      if (fromSnap || inductionOverlayOpen || valuePerceptionOverlayOpen) {
+      if (fromSnap || inductionOverlayOpen || ratingOverlayOpen) {
         // Avoid the snap-close effect fighting our explicit restore on return.
         if (fromSnap) savedSnapWindowScrollRef.current = null;
         applyOverlayState(undefined);
@@ -2072,7 +2072,7 @@ export default function VotePage() {
     [
       snapScrollOpen,
       inductionOverlayOpen,
-      valuePerceptionOverlayOpen,
+      ratingOverlayOpen,
       activeSection,
       applyOverlayState,
       setLocation,
@@ -2093,7 +2093,7 @@ export default function VotePage() {
       topicsOverlayOpen,
       matchupsOverlayOpen,
       opinionPollsOverlayOpen,
-      valuePerceptionOverlayOpen,
+      ratingOverlayOpen,
       snapScrollOpen,
       ...(snapScrollOpen ? { snapScrollSection } : {}),
       ...(snapScrollOpen && snapScrollInitialId ? { snapScrollInitialId } : {}),
@@ -2106,7 +2106,7 @@ export default function VotePage() {
     topicsOverlayOpen,
     matchupsOverlayOpen,
     opinionPollsOverlayOpen,
-    valuePerceptionOverlayOpen,
+    ratingOverlayOpen,
     snapScrollOpen,
     snapScrollSection,
     snapScrollInitialId,
@@ -2161,8 +2161,8 @@ export default function VotePage() {
       ? "matchups"
       : payload.opinionPollsOverlayOpen
       ? "opinion-polls"
-      : payload.valuePerceptionOverlayOpen
-      ? "value-perception"
+      : payload.ratingOverlayOpen
+      ? "overall-rating"
       : null;
     if (overlayName) {
       window.history.pushState({ overlay: overlayName }, "");
@@ -2171,7 +2171,7 @@ export default function VotePage() {
   }, [user, applyOverlayState]);
 
   const closeOverlay = useCallback(() => {
-    ["induction", "topics", "matchups", "opinion-polls", "value-perception"].forEach(clearOverlayScroll);
+    ["induction", "topics", "matchups", "opinion-polls", "overall-rating"].forEach(clearOverlayScroll);
     applyOverlayState(undefined);
     window.history.back();
   }, [applyOverlayState]);
@@ -2197,8 +2197,8 @@ export default function VotePage() {
     if (opinionPollsOverlayOpen) restoreOverlayScroll("opinion-polls", opinionPollsScrollRef.current);
   }, [opinionPollsOverlayOpen]);
   useEffect(() => {
-    if (valuePerceptionOverlayOpen) restoreOverlayScroll("value-perception", valuePerceptionScrollRef.current);
-  }, [valuePerceptionOverlayOpen]);
+    if (ratingOverlayOpen) restoreOverlayScroll("overall-rating", ratingScrollRef.current);
+  }, [ratingOverlayOpen]);
 
   // Deep-link support: read ?category= from URL on mount
   useEffect(() => {
@@ -2671,7 +2671,7 @@ export default function VotePage() {
                 {section === "Matchups" && <Swords className="h-4 w-4" />}
                 {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
                 {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
-                {section === "Underrated/Overrated" && <BarChart3 className="h-4 w-4" />}
+                {section === "Overall Rating" && <ThumbsUp className="h-4 w-4" />}
                 {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                 {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
                 {section === "All" ? (
@@ -3014,19 +3014,19 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* Shape the VoxDex: sticky splitter + Underrated/Overrated, Induction, Curate */}
+        {/* Shape the VoxDex: sticky splitter + Overall Rating, Induction, Curate */}
         {(activeSection === "All" || isShapeVoxDexSection(activeSection)) && (
         <div data-testid="shape-voxdex-sticky-scope">
           <ShapeVoxDexStickyHeader onInfoClick={() => setInfoModalOpen("governance")} />
 
-        {(activeSection === "All" || activeSection === "Underrated/Overrated") && (
-        <section id="vote-value" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
+        {(activeSection === "All" || activeSection === "Overall Rating") && (
+        <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
           <UnifiedSectionHeader
-            title="Overrated / Underrated "
-            subtitle="overhyped or underappreciated?"
-            icon={<BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+            title="Overall Rating"
+            subtitle="Community approval rating"
+            icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
-            testId="section-header-value"
+            testId="section-header-rating"
             actions={
               <>
                 <Tooltip>
@@ -3034,9 +3034,9 @@ export default function VotePage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setRulesModalOpen("value")}
+                      onClick={() => setRulesModalOpen("rating")}
                       className="text-cyan-600 dark:text-cyan-400"
-                      data-testid="button-rules-value"
+                      data-testid="button-rules-rating"
                     >
                       <HelpCircle className="h-5 w-5" />
                     </Button>
@@ -3047,10 +3047,10 @@ export default function VotePage() {
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => openSnapScroll("value", filteredValueCelebrities[0]?.id, "header-icon")}
+                  onClick={() => openSnapScroll("rating", filteredRatingCelebrities[0]?.id, "header-icon")}
                   className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
                   aria-label="Open immersive browse"
-                  data-testid="button-snap-value"
+                  data-testid="button-snap-rating"
                 >
                   <Maximize2 className="h-5 w-5" aria-hidden />
                 </button>
@@ -3058,26 +3058,26 @@ export default function VotePage() {
             }
           >
             <SectionSearchRow
-              value={valuePerceptionSearchQuery}
-              onChange={setValuePerceptionSearchQuery}
+              value={ratingSearchQuery}
+              onChange={setRatingSearchQuery}
               placeholder="Search celebrities..."
-              testId="filter-value-search"
+              testId="filter-rating-search"
             />
           </UnifiedSectionHeader>
           
-          {valueLoading ? (
+          {ratingLoading ? (
             <CardGridSkeleton count={3} />
-          ) : filteredValueCelebrities.length > 0 ? (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-value">
-              {filteredValueCelebrities.map((person) => (
+          ) : filteredRatingCelebrities.length > 0 ? (
+            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
+              {filteredRatingCelebrities.map((person) => (
                 <div key={person.id}>
-                  <UnderratedOverratedCard 
+                  <OverallRatingCard 
                     person={person}
-                    onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
+                    onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("value", person.id, "browse-button") : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                   />
                 </div>
               ))}
@@ -3091,11 +3091,11 @@ export default function VotePage() {
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
-              onClick={() => setLocation("/vote/value-ratings")}
+              onClick={() => setLocation("/vote/all-ratings")}
               className="text-cyan-600 dark:text-cyan-400"
-              data-testid="button-view-all-value"
+              data-testid="button-view-all-rating"
             >
-              View all rankings
+              View all ratings
               <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
@@ -3715,7 +3715,7 @@ export default function VotePage() {
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
-      {(["voice", "matchups", "opinion", "value", "induction", "curate"] as const).map((key) => {
+      {(["voice", "matchups", "opinion", "rating", "induction", "curate"] as const).map((key) => {
         const cfg = VOTE_RULES_STEPS[key];
         return (
           <StepModal
@@ -3998,7 +3998,7 @@ export default function VotePage() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {valuePerceptionOverlayOpen && (
+        {ratingOverlayOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -4007,47 +4007,47 @@ export default function VotePage() {
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
-              closeTestId="button-close-value-overlay"
-              backTestId="button-back-value-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b border-amber-500/20"
+              closeTestId="button-close-rating-overlay"
+              backTestId="button-back-rating-overlay"
+              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-8 w-8 rounded-lg bg-amber-500/15 dark:bg-amber-500/10 flex shrink-0 items-center justify-center">
-                  <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">
+                  <ThumbsUp className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                 </div>
-                <h2 className="text-xl font-serif font-bold truncate">Underrated / Overrated</h2>
+                <h2 className="text-xl font-serif font-bold truncate">Overall Rating</h2>
               </div>
             </ViewAllOverlayHeader>
             
             <OverlayFilterBar
               value={globalCategoryFilter}
               onChange={(v) => setGlobalCategoryFilter(v as FilterCategory)}
-              searchValue={valuePerceptionSearchQuery}
-              onSearchChange={setValuePerceptionSearchQuery}
-              categories={valueCategoryOptions}
+              searchValue={ratingSearchQuery}
+              onSearchChange={setRatingSearchQuery}
+              categories={ratingCategoryOptions}
               allValue="all"
               placeholder="Search..."
-              testIdPrefix="overlay-value"
+              testIdPrefix="overlay-rating"
               variant="vote"
               user={user}
               onAuthRequired={handleAuthRequired}
             />
             
-            <div ref={valuePerceptionScrollRef} onScroll={(e) => saveOverlayScroll("value-perception", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
+            <div ref={ratingScrollRef} onScroll={(e) => saveOverlayScroll("overall-rating", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredValueCelebrities.map((person) => (
-                  <UnderratedOverratedCard 
+                {filteredRatingCelebrities.map((person) => (
+                  <OverallRatingCard 
                     key={person.id} 
                     person={person}
-                    onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
+                    onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("value", person.id, "browse-button") : undefined}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                   />
                 ))}
               </div>
-              {filteredValueCelebrities.length === 0 && (
+              {filteredRatingCelebrities.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No celebrities match your filter criteria.
                 </div>
@@ -4140,23 +4140,23 @@ export default function VotePage() {
             }}
           />
           <VoteSnapScrollView
-            open={snapScrollOpen && snapScrollSection === "value"}
+            open={snapScrollOpen && snapScrollSection === "rating"}
             onClose={closeSnapScroll}
-            sectionType="value"
+            sectionType="rating"
             commentMode="person"
-            items={valueSnapItems}
+            items={ratingSnapItems}
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
-            onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-value")}
+            onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-rating")}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item, _ctx) => {
-              const person = filteredValueCelebrities.find((p: any) => p.id === item.id);
+              const person = filteredRatingCelebrities.find((p: any) => p.id === item.id);
               if (!person) return null;
               return (
-                <UnderratedOverratedCard
+                <OverallRatingCard
                   person={person}
-                  onVisitProfile={() => goPersonFromVote(person.id, "vote-value")}
+                  onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}

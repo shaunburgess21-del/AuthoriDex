@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Scale,
   Swords,
+  ThumbsUp,
   TrendingUp,
   Trophy,
   Vote,
@@ -24,6 +25,7 @@ export type VoteToastKind =
   | "matchup"
   | "opinion"
   | "overrated"
+  | "rating"
   | "induction"
   | "curate"
   | "updown"
@@ -39,6 +41,7 @@ const KIND_CONFIG: Record<VoteToastKind, { icon: LucideIcon; accent: Accent }> =
   matchup: { icon: Swords, accent: "cyan" },
   opinion: { icon: ListChecks, accent: "cyan" },
   overrated: { icon: BarChart3, accent: "cyan" },
+  rating: { icon: ThumbsUp, accent: "cyan" },
   induction: { icon: Vote, accent: "cyan" },
   curate: { icon: Camera, accent: "cyan" },
   updown: { icon: TrendingUp, accent: "violet" },

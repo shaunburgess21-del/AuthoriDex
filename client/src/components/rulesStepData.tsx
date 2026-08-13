@@ -96,24 +96,24 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
     ],
   },
-  value: {
+  rating: {
     accent: "cyan",
     ctaLabel: "Rate Now →",
     steps: [
       {
-        icon: <Scale />,
-        headline: "Overrated or Underrated?",
-        body: "Is public perception of this person accurate? You decide.",
+        icon: <ThumbsUp />,
+        headline: "Rate Them 1 to 5",
+        body: "How do you feel about each public figure? From Hate to Love — your call.",
       },
       {
-        icon: <ArrowUpDown />,
-        headline: "Vote Your View",
-        body: "Tap Underrated if they deserve more recognition. Tap Overrated if they get too much hype.",
+        icon: <MousePointerClick />,
+        headline: "Pick a Rating, Submit",
+        body: "Select a rating from 1 (Hate) to 5 (Love) and submit your vote. Change it anytime.",
       },
       {
         icon: <TrendingUp />,
         headline: "Shape the Consensus",
-        body: "Your vote updates the split in real time. See if the world agrees with you.",
+        body: "Your vote updates the community rating in real time. See if the world agrees with you.",
       },
     ],
   },
@@ -164,9 +164,9 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
     ctaLabel: "Let's Go →",
     steps: [
       {
-        icon: <BarChart3 />,
-        headline: "Overrated or Underrated?",
-        body: "Vote whether each figure is overhyped or underappreciated. It's about public perception—not personal taste.",
+        icon: <ThumbsUp />,
+        headline: "Rate Every Figure",
+        body: "Give each public figure an overall rating from 1 to 5 and shape the community approval score.",
       },
       {
         icon: <UserPlus />,

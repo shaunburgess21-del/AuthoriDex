@@ -130,7 +130,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       topicsOverlayOpen: false,
       matchupsOverlayOpen: false,
       opinionPollsOverlayOpen: false,
-      valuePerceptionOverlayOpen: false,
+      ratingOverlayOpen: false,
       snapScrollOpen: false,
       quickVoteOpen: true,
       quickVoteCardId: currentCardIdRef.current ?? undefined,

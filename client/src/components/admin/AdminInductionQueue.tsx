@@ -859,7 +859,7 @@ export function AdminInductionQueue() {
                   <>
                     Add{" "}
                     <span className="font-medium text-foreground">{pendingDestructiveAction.candidate.displayName}</span> to
-                    the main leaderboard? This creates their full FameDex profile and native modules (Underrated/Overrated,
+                    the main leaderboard? This creates their full FameDex profile and native modules (Overall Rating,
                     Curate Profile, etc.).
                   </>
                 ) : pendingDestructiveAction?.kind === "delete" ? (
