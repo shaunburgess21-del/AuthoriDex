@@ -156,6 +156,9 @@ const H_COMMIT_VELOCITY = 500;
 const H_BOUNCE_RESISTANCE = 3;
 const H_COMMIT_TWEEN_DURATION = 0.24;
 const VERTICAL_BUFFER = 1;
+/** Quick Vote (minimal) mounts ±2 so the next snap target still has content
+ * if visible-index rounding lags one page behind a fast fling. */
+const VERTICAL_BUFFER_MINIMAL = 2;
 
 const SNAP_PAGE_HEIGHT = "calc(100dvh - 52px)";
 const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
@@ -371,6 +374,11 @@ export function VoteSnapScrollView({
     startTime: number;
     locked: "h" | "v" | null;
   } | null>(null);
+  /** Latest finishHPan — window-capture touchend reads this so a native
+   * scroller that swallows the wrapper's React touchend still clears the lock. */
+  const finishHPanRef = useRef<
+    (e: { changedTouches: ArrayLike<{ clientX: number }> }, cancelled?: boolean) => void
+  >(() => {});
   const hSwipeOccurredRef = useRef(false);
   const isAnimatingRef = useRef(false);
   const positionMemoryRef = useRef<Map<string, number>>(new Map());
@@ -824,10 +832,11 @@ export function VoteSnapScrollView({
       const onWindowTouchEnd = () => {
         onTouchEnd();
       };
-      const onTouchStart = (e: TouchEvent) => {
-        // Action-bar / chrome taps are not scroll gestures — arming
-        // touchActive here is how overlays leave settle permanently stuck.
-        if (isInteractiveTarget(e.target)) return;
+      const onTouchStart = () => {
+        // Card vote buttons ARE the swipe surface — arm even on interactive
+        // targets so settle cannot start a snap-off tween mid-swipe. Window-
+        // capture touchend/cancel still clears touchActive if comments/share
+        // steal the lift, so overlays cannot leave settle stuck.
         touchActive = true;
         touchStartTs = performance.now();
         clearTimer();
@@ -1014,7 +1023,11 @@ export function VoteSnapScrollView({
   }, [expandedItemId, activeCategory]);
 
   // ── Horizontal pan: non-passive touchmove ─────────────────────────────
+  // Minimal (Quick Vote) has no category axis — a leftover "h" lock plus
+  // preventDefault is what jams vertical snap after a few cards. Skip the
+  // whole pan layer; X / history-back still close the overlay.
   useEffect(() => {
+    if (!open || isMinimal) return;
     const el = hPanContainerRef.current;
     if (!el) return;
 
@@ -1058,13 +1071,27 @@ export function VoteSnapScrollView({
       }
     };
 
+    // Capture on window so a native snap scroller that swallows the
+    // wrapper's React touchend still clears a leftover hPanRef (the
+    // preventDefault jam). First caller of finishHPanRef wins.
+    const onWindowTouchEnd = (e: TouchEvent) => {
+      finishHPanRef.current(e, false);
+    };
+    const onWindowTouchCancel = () => {
+      finishHPanRef.current({ changedTouches: [] }, true);
+    };
+
     el.addEventListener("touchmove", handleTouchMove, { passive: false });
     el.addEventListener("click", suppressClick, true);
+    window.addEventListener("touchend", onWindowTouchEnd, { capture: true, passive: true });
+    window.addEventListener("touchcancel", onWindowTouchCancel, { capture: true, passive: true });
     return () => {
       el.removeEventListener("touchmove", handleTouchMove);
       el.removeEventListener("click", suppressClick, true);
+      window.removeEventListener("touchend", onWindowTouchEnd, true);
+      window.removeEventListener("touchcancel", onWindowTouchCancel, true);
     };
-  }, [dragX, open]);
+  }, [dragX, open, isMinimal]);
 
   // ── Horizontal commit / spring-back ───────────────────────────────────
   const commitHorizontalSwipe = useCallback((direction: -1 | 1) => {
@@ -1110,11 +1137,58 @@ export function VoteSnapScrollView({
   }, [dragX]);
 
   // ── Horizontal pan: touchstart / touchend ─────────────────────────────
+  const finishHPan = useCallback((
+    e: { changedTouches: ArrayLike<{ clientX: number }> },
+    cancelled = false,
+  ) => {
+    const pan = hPanRef.current;
+    hPanRef.current = null;
+    if (cancelled) {
+      if (pan) springBack();
+      return;
+    }
+    if (!pan || pan.locked !== "h") return;
+
+    hSwipeOccurredRef.current = true;
+    requestAnimationFrame(() => { hSwipeOccurredRef.current = false; });
+
+    const touch = e.changedTouches[0];
+    if (!touch) {
+      springBack();
+      return;
+    }
+    const dx = touch.clientX - pan.startX;
+    const elapsed = Math.max(performance.now() - pan.startTime, 1);
+    const velocity = (dx / elapsed) * 1000;
+    const vw = window.innerWidth;
+    const idx = activeCategoryIdxRef.current;
+    const cats = categoriesRef.current;
+
+    let direction: -1 | 1 | 0 = 0;
+    if (Math.abs(dx) >= vw * H_COMMIT_RATIO || Math.abs(velocity) >= H_COMMIT_VELOCITY) {
+      direction = dx > 0 ? -1 : 1;
+    }
+
+    const targetIdx = idx + (direction as number);
+    if (direction !== 0 && targetIdx >= 0 && targetIdx < cats.length) {
+      commitHorizontalSwipe(direction as -1 | 1);
+    } else {
+      springBack();
+    }
+  }, [commitHorizontalSwipe, springBack]);
+  finishHPanRef.current = finishHPan;
+
   const handleHPanTouchStart = useCallback((e: React.TouchEvent) => {
+    if (isMinimal) return;
     if (isAnimatingRef.current) return;
     // Action-bar / card chrome taps must not start a pan session — if the
     // subsequent overlay steals touchend, a stale hPanRef can jam swipes.
-    if (isInteractiveTarget(e.target)) return;
+    // Always drop a leftover session first so a vote-button swipe cannot
+    // inherit the previous card's "h" lock.
+    if (isInteractiveTarget(e.target)) {
+      hPanRef.current = null;
+      return;
+    }
 
     const idx = activeCategoryIdxRef.current;
     const cats = categoriesRef.current;
@@ -1131,49 +1205,15 @@ export function VoteSnapScrollView({
       startTime: performance.now(),
       locked: null,
     };
-  }, [warmImagesInColumn]);
+  }, [isMinimal, warmImagesInColumn]);
 
   const handleHPanTouchEnd = useCallback((e: React.TouchEvent) => {
-    const pan = hPanRef.current;
-    hPanRef.current = null;
-    if (!pan || pan.locked !== "h") return;
-
-    hSwipeOccurredRef.current = true;
-    requestAnimationFrame(() => { hSwipeOccurredRef.current = false; });
-
-    const dx = e.changedTouches[0].clientX - pan.startX;
-    const elapsed = Math.max(performance.now() - pan.startTime, 1);
-    const velocity = (dx / elapsed) * 1000;
-    const vw = window.innerWidth;
-    const idx = activeCategoryIdxRef.current;
-    const cats = categoriesRef.current;
-
-    let direction: -1 | 1 | 0 = 0;
-    if (Math.abs(dx) >= vw * H_COMMIT_RATIO || Math.abs(velocity) >= H_COMMIT_VELOCITY) {
-      direction = dx > 0 ? -1 : 1;
-    }
-
-    // Minimal variant has no horizontal category axis — a committed swipe
-    // in either direction dismisses the overlay instead.
-    if (isMinimal) {
-      // Reset the drag offset either way so the exit fade isn't skewed.
-      springBack();
-      if (direction !== 0) onClose();
-      return;
-    }
-
-    const targetIdx = idx + (direction as number);
-    if (direction !== 0 && targetIdx >= 0 && targetIdx < cats.length) {
-      commitHorizontalSwipe(direction as -1 | 1);
-    } else {
-      springBack();
-    }
-  }, [commitHorizontalSwipe, springBack, isMinimal, onClose]);
+    finishHPan(e, false);
+  }, [finishHPan]);
 
   const handleHPanTouchCancel = useCallback(() => {
-    hPanRef.current = null;
-    springBack();
-  }, [springBack]);
+    finishHPan({ changedTouches: [] }, true);
+  }, [finishHPan]);
 
   // ── Category select (chip tap) with slide animation ───────────────────
   const handleCategorySelect = useCallback((cat: string) => {
@@ -1490,9 +1530,9 @@ export function VoteSnapScrollView({
               <motion.div
                 className="flex h-full will-change-transform"
                 style={{ width: "300vw", x: containerX, touchAction: "pan-y" }}
-                onTouchStart={handleHPanTouchStart}
-                onTouchEnd={handleHPanTouchEnd}
-                onTouchCancel={handleHPanTouchCancel}
+                onTouchStart={isMinimal ? undefined : handleHPanTouchStart}
+                onTouchEnd={isMinimal ? undefined : handleHPanTouchEnd}
+                onTouchCancel={isMinimal ? undefined : handleHPanTouchCancel}
               >
                 {windowedCats.map((cat, slotIdx) => {
                   if (cat === null) {
@@ -1530,8 +1570,9 @@ export function VoteSnapScrollView({
                         >
                           {(() => {
                             const visibleIdx = columnVisibleIndices[cat] ?? 0;
-                            const windowStart = Math.max(0, visibleIdx - VERTICAL_BUFFER);
-                            const windowEnd = Math.min(colItems.length - 1, visibleIdx + VERTICAL_BUFFER);
+                            const buffer = isMinimal ? VERTICAL_BUFFER_MINIMAL : VERTICAL_BUFFER;
+                            const windowStart = Math.max(0, visibleIdx - buffer);
+                            const windowEnd = Math.min(colItems.length - 1, visibleIdx + buffer);
                             const scrollRoot = getColumnScrollRoot(cat);
 
                             return colItems.map((item, index) => {
