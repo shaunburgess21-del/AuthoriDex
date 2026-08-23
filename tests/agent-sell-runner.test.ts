@@ -25,6 +25,7 @@ process.env.DATABASE_URL =
 const {
   _aggregateSellSweepPositionsForTesting: aggregate,
   _pickLargestPositionsByMarketForTesting: pickLargest,
+  _selectSellSweepMarketsForTesting: selectMarkets,
 } = await import("../server/agents/agentRunner");
 import { computeSellDecision } from "../server/agents/sellEngine";
 import { createPRNG } from "../server/agents/prng";
@@ -406,4 +407,123 @@ test("pickLargestPositionsByMarket handles markets with single-side positions", 
   assert.equal(largest.size, 2);
   assert.equal(largest.get("m1")!.entryId, "up");
   assert.equal(largest.get("m2")!.entryId, "down");
+});
+
+// ---------------------------------------------------------------------------
+// Sell-sweep market scope (selectSellSweepMarkets)
+// ---------------------------------------------------------------------------
+//
+// H2H and Gainer recorded zero agent sells across weeks 30-34 because the
+// native gate tested `Boolean(personId)` and those market types carry a NULL
+// person_id by design. These tests pin the corrected scope AND the fact that
+// production behaviour is unchanged while the new flag is off.
+
+/** One market row shaped like the runner's `allMarkets` select. */
+function mkt(
+  id: string,
+  marketType: string | null,
+  personId: string | null,
+  engine: string | null = "amm",
+) {
+  return { id, marketType, personId, engine };
+}
+
+/** A representative weekly book: 20 up/down, 20 H2H, 9 gainer, 20 jackpot. */
+const WEEKLY_BOOK = [
+  mkt("ud1", "updown", "person-1"),
+  mkt("ud2", "updown", "person-2"),
+  mkt("h2h1", "h2h", null),
+  mkt("h2h2", "h2h", null),
+  mkt("gain1", "gainer", null),
+  mkt("jack1", "jackpot", "person-3", "parimutuel"),
+];
+
+test("flag off: H2H and Gainer stay excluded, preserving current production scope", () => {
+  const selected = selectMarkets(WEEKLY_BOOK, {
+    communitySells: false,
+    nativeMultiSells: false,
+  });
+  assert.deepEqual(
+    selected.map((m) => m.id),
+    ["ud1", "ud2"],
+    "only up/down should be in scope while NATIVE_MULTI_SELL_SWEEP_ENABLED is off",
+  );
+});
+
+test("flag on: H2H and Gainer join the sweep, jackpot still excluded by engine", () => {
+  const selected = selectMarkets(WEEKLY_BOOK, {
+    communitySells: false,
+    nativeMultiSells: true,
+  });
+  assert.deepEqual(
+    selected.map((m) => m.id),
+    ["ud1", "ud2", "h2h1", "h2h2", "gain1"],
+  );
+  assert.ok(
+    !selected.some((m) => m.marketType === "jackpot"),
+    "parimutuel jackpot must never enter the AMM sell sweep",
+  );
+});
+
+test("up/down is in scope regardless of either flag", () => {
+  for (const nativeMultiSells of [false, true]) {
+    for (const communitySells of [false, true]) {
+      const selected = selectMarkets([mkt("ud1", "updown", "person-1")], {
+        communitySells,
+        nativeMultiSells,
+      });
+      assert.equal(selected.length, 1, "up/down must always be swept");
+    }
+  }
+});
+
+test("the native and community flags are independent of each other", () => {
+  const book = [
+    mkt("h2h1", "h2h", null),
+    mkt("comm1", "community", null),
+    mkt("comm2", "community", "person-9"),
+  ];
+
+  const nativeOnly = selectMarkets(book, {
+    communitySells: false,
+    nativeMultiSells: true,
+  });
+  assert.deepEqual(nativeOnly.map((m) => m.id), ["h2h1"]);
+
+  const communityOnly = selectMarkets(book, {
+    communitySells: true,
+    nativeMultiSells: false,
+  });
+  assert.deepEqual(
+    communityOnly.map((m) => m.id),
+    ["comm1", "comm2"],
+    "community is gated as a unit, with or without a linked person",
+  );
+});
+
+test("an unknown market type without a personId stays excluded even with the flag on", () => {
+  // An admin-built generic race is neither H2H nor Gainer and has no person
+  // identity wired up for telemetry, so widening the native flag must not
+  // silently pull it in.
+  const selected = selectMarkets(
+    [mkt("race1", "race", null), mkt("race2", "race", "person-4")],
+    { communitySells: true, nativeMultiSells: true },
+  );
+  assert.deepEqual(
+    selected.map((m) => m.id),
+    ["race2"],
+    "only the person-linked generic race qualifies via the personId fallback",
+  );
+});
+
+test("non-AMM engines are rejected before any market-type branch runs", () => {
+  const selected = selectMarkets(
+    [
+      mkt("h2h1", "h2h", null, "parimutuel"),
+      mkt("comm1", "community", null, null),
+      mkt("ud1", "updown", "person-1", "parimutuel"),
+    ],
+    { communitySells: true, nativeMultiSells: true },
+  );
+  assert.equal(selected.length, 0);
 });

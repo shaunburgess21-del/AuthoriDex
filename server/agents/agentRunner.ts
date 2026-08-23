@@ -97,6 +97,7 @@ import {
   isCommunityConvergenceShadow,
   isCommunityConvergenceEnabled,
   isCommunitySellSweepEnabled,
+  isNativeMultiSellSweepEnabled,
   COMMUNITY_ARB_MIN_EDGE_PP,
   COMMUNITY_CONVERGENCE_MARKETS_PER_SWEEP,
   AGENT_STAKE_OVERRIDES,
@@ -3377,14 +3378,16 @@ async function runMidweekGainerConvergenceSweep(
 /**
  * Sell sweep — Agent v3 phase 1.
  *
- * For each agent's open AMM up/down position, run the persona-aware
+ * For each of an agent's open AMM positions, run the persona-aware
  * `computeSellDecision`. If the cascade produces a `SellDecision`,
  * persist a `scheduled_agent_actions` row with `actionType='sell'` so
  * the existing action worker poll picks it up on its next pass.
  *
- * Scope: AMM up/down only (mirrors `runConvictionSweep`). H2H, race,
- * and community AMM markets stay buy-only for this phase — those
- * market types need bespoke anchor logic and are deferred to phase 2.
+ * Scope is decided by `selectSellSweepMarkets` — up/down always, H2H and
+ * Top Gainer behind `NATIVE_MULTI_SELL_SWEEP_ENABLED`, community behind
+ * `COMMUNITY_SELL_SWEEP_ENABLED`. Read that helper's doc comment before
+ * changing the gate; the historical `Boolean(personId)` test excluded far
+ * more than it appeared to.
  *
  * Imperfection by design:
  *   - The cascade in `computeSellDecision` rejects most agent×market
@@ -3502,6 +3505,65 @@ function pickLargestPositionsByMarket(
   return out;
 }
 
+/**
+ * Native market types that describe a pair or a field rather than one
+ * person, and therefore carry no `prediction_markets.person_id`.
+ */
+const NATIVE_MULTI_PERSON_MARKET_TYPES = new Set(["h2h", "gainer"]);
+
+/**
+ * Which AMM markets the sell sweep may exit this pass.
+ *
+ * The engine itself is market-type agnostic — `aggregateSellSweepPositions`
+ * keys on (market, entry), so 2-entry (up/down, H2H) and N-entry (Gainer,
+ * community-multi) markets aggregate identically, and the cascade only ever
+ * compares a per-entry anchor against its live price. What varies is which
+ * books we ALLOW exits on, which is a rollout decision rather than a
+ * capability one.
+ *
+ * Three cases, all requiring `engine === 'amm'` (which excludes parimutuel
+ * jackpot automatically):
+ *
+ *  - **up/down** — always in scope. Carries a `personId`, and is the only
+ *    type that also gets a `scoreContext` for score-reversal exits.
+ *  - **H2H / Top Gainer** — gated on `nativeMultiSells`. These have a NULL
+ *    `personId` by design, so the historical `Boolean(personId)` native gate
+ *    silently excluded the entire H2H and Gainer book (29 of 49 weekly AMM
+ *    markets), not merely the handful of admin-built races the old comment
+ *    here claimed. See `isNativeMultiSellSweepEnabled`.
+ *  - **community** — gated on `communitySells`, with or without a linked
+ *    person, so the founder controls world-market exits in one place. Before
+ *    that flag existed, person-linked world markets scheduled sells that the
+ *    action worker then killed via the LLM switch, producing hundreds of
+ *    skipped rows of queue churn. Note the worker deliberately exempts sells
+ *    from the `WORLD_MARKETS_LLM_ENABLED` block: an agent holding a position
+ *    when that kill switch flips off must still be able to exit.
+ *
+ * Anything else without a `personId` (e.g. an admin-built generic race that
+ * is neither H2H nor Gainer) stays out until its telemetry is wired up.
+ *
+ * Pure helper; exported via `_selectSellSweepMarketsForTesting`.
+ */
+function selectSellSweepMarkets<
+  T extends {
+    personId: string | null;
+    marketType: string | null;
+    engine?: string | null;
+  },
+>(
+  markets: readonly T[],
+  opts: { communitySells: boolean; nativeMultiSells: boolean },
+): T[] {
+  return markets.filter((m) => {
+    if (m.engine !== "amm") return false;
+    if (m.marketType === "community") return opts.communitySells;
+    if (m.marketType != null && NATIVE_MULTI_PERSON_MARKET_TYPES.has(m.marketType)) {
+      return opts.nativeMultiSells;
+    }
+    return Boolean(m.personId);
+  });
+}
+
 async function runSellSweep(
   agents: (typeof agentConfigs.$inferSelect)[],
   allMarkets: { id: string; personId: string | null; marketType: string | null; openMarketType?: string | null; title: string | null; engine?: string | null; status?: string | null }[],
@@ -3509,40 +3571,10 @@ async function runSellSweep(
 ): Promise<number> {
   let sellsScheduled = 0;
 
-  // Sell sweep operates on every AMM market regardless of marketType.
-  // Per-entry weighted-avg cost basis in `aggregateSellSweepPositions`
-  // handles 2-entry (UpDown/H2H) and N-entry (Race, Community-multi)
-  // markets identically — the engine compares per-entry anchor vs
-  // live price. Jackpot is parimutuel (engine !== 'amm') so it's
-  // excluded automatically by the `engine === 'amm'` gate.
-  //
-  // `personId` filter retained for NATIVE markets because the Town Square
-  // log lines + sell-engine telemetry use the person identity for context;
-  // the few admin-built generic races without a personId sit out the
-  // sweep until that wiring exists. Documented limitation, not a bug.
-  //
-  // Community (World Market) parity: most world events have no linked
-  // person, which used to exclude them entirely and made agent flow
-  // buy-only (prices only ever pushed one way by simulated traders).
-  // Gated behind COMMUNITY_SELL_SWEEP_ENABLED so the rollout can watch
-  // the price-band exits before they go live. The sell engine's
-  // anchor-vs-live-price cascade is market-type agnostic; community
-  // positions simply never get an updown scoreContext.
-  //
-  // Note on community markets: when `WORLD_MARKETS_LLM_ENABLED=false`
-  // we block community BUYS in actionWorker, but sells fire here
-  // regardless — agents holding positions when the kill switch flips
-  // off must still be able to manage their exits.
-  // Community markets (with OR without a linked person) are gated behind
-  // the flag as a unit: before this flag existed, person-linked world
-  // markets scheduled sells here that the action worker then killed via
-  // the LLM switch — hundreds of skipped rows of queue churn. Now the
-  // founder decides when world-market sells go live, in one place.
-  const communitySells = isCommunitySellSweepEnabled();
-  const ammMarkets = allMarkets.filter((m) =>
-    m.engine === "amm" &&
-    (m.marketType === "community" ? communitySells : Boolean(m.personId)),
-  );
+  const ammMarkets = selectSellSweepMarkets(allMarkets, {
+    communitySells: isCommunitySellSweepEnabled(),
+    nativeMultiSells: isNativeMultiSellSweepEnabled(),
+  });
   if (!ammMarkets.length) return 0;
 
   const updownContext =
@@ -3890,6 +3922,7 @@ function toAgentData(row: typeof agentConfigs.$inferSelect): AgentConfigData {
  */
 export const _aggregateSellSweepPositionsForTesting = aggregateSellSweepPositions;
 export const _pickLargestPositionsByMarketForTesting = pickLargestPositionsByMarket;
+export const _selectSellSweepMarketsForTesting = selectSellSweepMarkets;
 
 export function _deriveTrendDirectionForTesting(input: {
   pctChangeVsOpen?: number;

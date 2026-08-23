@@ -357,6 +357,34 @@ export function isCommunitySellSweepEnabled(): boolean {
 }
 
 /**
+ * Agent sell sweep may exit NATIVE multi-person positions — H2H and Top
+ * Gainer. Those market types carry no `prediction_markets.person_id` (they
+ * are about a pair or a category field, not one person), so the sweep's
+ * `Boolean(personId)` native gate silently excluded them: H2H and Gainer
+ * recorded zero agent sells in every week from 30 to 34 while up/down ran
+ * ~2,200 per week.
+ *
+ * Consequence of that gap: those books are buy-only, so a stale or wrong
+ * position can only be corrected by someone buying the opposite side.
+ * Disagreement accumulates on both sides instead of converging — week 34's
+ * "Theo Von vs Matt Rife" took 64 buys and 15,173 credits to land on
+ * exactly 0.500 while the favourite led by 36%.
+ *
+ * Off by default: enabling this starts real agent exits on 29 of the 49
+ * weekly AMM markets, so it rolls out like COMMUNITY_SELL_SWEEP_ENABLED —
+ * founder flips it when they want the behaviour live.
+ *
+ * Note these markets get no `scoreContext`, so `isScoreReversal` is always
+ * false for them and exits are driven purely by the anchor-vs-live-price
+ * band cascade. That is intended, not a gap: score-reversal is defined
+ * against a single person's weekly open, which has no meaning for a pair
+ * or a field.
+ */
+export function isNativeMultiSellSweepEnabled(): boolean {
+  return envFlag(process.env.NATIVE_MULTI_SELL_SWEEP_ENABLED);
+}
+
+/**
  * Edge bar for community arb buys. Higher than the native near-close
  * ARB_MIN_EDGE_PP (0.04) because the anchor refreshes daily — a stale
  * anchor plus a thin edge would let agents chase yesterday's news.

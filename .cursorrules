@@ -187,6 +187,14 @@ World Market LLM spend has **two** gates, and production currently runs with the
 - `WORLD_MARKETS_LLM_ENABLED` — master switch for the world-market agent path (must be literal `true`/`1`/`yes`/`on` — Railway `TRUE` broke once).
 - `WORLD_MARKETS_LLM_ASSESSMENTS_ENABLED` — **`false` in production.** With it off, agents bet on scouted markets using the zero-cost Polymarket `source_anchor` and simply abstain on unanchored/manual markets. `WORLD_MARKETS_DAILY_BUDGET_USD` is therefore largely inert today. Turning assessments back on will start real per-call spend against that budget — raise it first (the per-call reserve estimate is $0.40, so a $0.50 budget allows one call per day).
 
+### Agent sell sweep scope (H2H / Gainer are buy-only by default)
+
+`runSellSweep` decides scope via `selectSellSweepMarkets` (`server/agents/agentRunner.ts`). Up/Down is always in scope; **H2H and Top Gainer are gated behind `NATIVE_MULTI_SELL_SWEEP_ENABLED`** (off by default) and community behind `COMMUNITY_SELL_SWEEP_ENABLED`.
+
+The native gate used to be `Boolean(personId)`, which silently excluded **every** H2H and Gainer market — `prediction_markets.person_id` is NULL for both by design — so those two types recorded **zero agent sells in weeks 30-34** while Up/Down ran ~2,200/week. Consequence: those books are buy-only, so a wrong position can only be corrected by someone buying the other side, and disagreement accumulates rather than converging (week 34's "Theo Von vs Matt Rife" took 64 buys and 15,173 credits to sit at exactly 0.500 while the favourite led by 36%).
+
+H2H/Gainer positions get no `scoreContext`, so `isScoreReversal` is always false there and exits run purely off the anchor-vs-live-price band. That is intended — score reversal is defined against one person's weekly open, which is meaningless for a pair or a field. Jackpot is excluded automatically by the `engine === 'amm'` gate.
+
 Flag-reading note: `envFlag` accepts `true`/`1`/`yes`/`on` case-insensitively, so Railway `TRUE` is safe now. For the convergence features, `*_SHADOW=true` **does not** mean "log only" when the matching `*_ENABLED` is also true — it adds extra logging on top of live behaviour. `MIDWEEK_CONVERGENCE`, `LATCH_REVERT`, and `COMMUNITY_CONVERGENCE` are all live in production despite their shadow flags being set.
 
 ---
