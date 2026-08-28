@@ -85,7 +85,7 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence, useAnimationControls } from "framer-motion";
-import { type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { type FilterCategory, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions, involvesAnyFavorite, isPinnedCategory } from "@/lib/sectionCategoryFilters";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { CurateSection } from "@/components/curate";
@@ -95,7 +95,6 @@ import { CardSection, type CardSectionHandle } from "@/components/CardSection";
 import { useHideExitQueue } from "@/hooks/useHideExitQueue";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
-import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
 import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
@@ -3338,7 +3337,7 @@ export default function VotePage() {
                     {pollSubjectType === 'custom' ? (
                       <>
                         <Sparkles className="h-3 w-3" />
-                        {CATEGORIES_OPEN.find(c => c.id === sentimentCategory)?.label ?? "Misc"}
+                        {registry.getDisplayLabel(sentimentCategory)}
                       </>
                     ) : (
                       <>

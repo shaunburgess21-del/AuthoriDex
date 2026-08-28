@@ -18,6 +18,8 @@ import {
   VOICES_SURFACES,
   type VoicesSurface,
 } from "@shared/constants";
+import { canonicalVoteSlug } from "@shared/vote-slug-redirects";
+import { voteSlugIn } from "../lib/vote-slug";
 import { gamificationService } from "../services/gamification";
 import { awardInsightCredits, maybeFireReferralCredit } from "../services/credits-earn";
 import { checkAndAwardInsightBadges } from "../services/badges";
@@ -214,13 +216,13 @@ async function resolveCardParentId(type: CardParentType, idOrSlug: string): Prom
     return byId?.id ?? null;
   }
   if (type === "trending_poll") {
-    const [bySlug] = await db.select({ id: trendingPolls.id }).from(trendingPolls).where(eq(trendingPolls.slug, idOrSlug)).limit(1);
+    const [bySlug] = await db.select({ id: trendingPolls.id }).from(trendingPolls).where(voteSlugIn(trendingPolls.slug, idOrSlug)).limit(1);
     if (bySlug) return bySlug.id;
     const [byId] = await db.select({ id: trendingPolls.id }).from(trendingPolls).where(eq(trendingPolls.id, idOrSlug)).limit(1);
     return byId?.id ?? null;
   }
   if (type === "opinion_poll") {
-    const [bySlug] = await db.select({ id: opinionPolls.id }).from(opinionPolls).where(eq(opinionPolls.slug, idOrSlug)).limit(1);
+    const [bySlug] = await db.select({ id: opinionPolls.id }).from(opinionPolls).where(voteSlugIn(opinionPolls.slug, idOrSlug)).limit(1);
     if (bySlug) return bySlug.id;
     const [byId] = await db.select({ id: opinionPolls.id }).from(opinionPolls).where(eq(opinionPolls.id, idOrSlug)).limit(1);
     return byId?.id ?? null;
@@ -241,14 +243,14 @@ async function resolveCardHref(type: CardParentType, idOrSlug: string): Promise<
     return byId?.slug ? `/vote/matchups/${byId.slug}` : "/vote";
   }
   if (type === "trending_poll") {
-    const [row] = await db.select({ slug: trendingPolls.slug }).from(trendingPolls).where(eq(trendingPolls.slug, idOrSlug)).limit(1);
-    if (row?.slug) return `/polls/${row.slug}`;
+    const [row] = await db.select({ slug: trendingPolls.slug }).from(trendingPolls).where(voteSlugIn(trendingPolls.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/polls/${canonicalVoteSlug(row.slug)}`;
     const [byId] = await db.select({ slug: trendingPolls.slug }).from(trendingPolls).where(eq(trendingPolls.id, idOrSlug)).limit(1);
     return byId?.slug ? `/polls/${byId.slug}` : "/vote";
   }
   if (type === "opinion_poll") {
-    const [row] = await db.select({ slug: opinionPolls.slug }).from(opinionPolls).where(eq(opinionPolls.slug, idOrSlug)).limit(1);
-    if (row?.slug) return `/vote/opinion-polls/${row.slug}`;
+    const [row] = await db.select({ slug: opinionPolls.slug }).from(opinionPolls).where(voteSlugIn(opinionPolls.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/vote/opinion-polls/${canonicalVoteSlug(row.slug)}`;
     const [byId] = await db.select({ slug: opinionPolls.slug }).from(opinionPolls).where(eq(opinionPolls.id, idOrSlug)).limit(1);
     return byId?.slug ? `/vote/opinion-polls/${byId.slug}` : "/vote";
   }
