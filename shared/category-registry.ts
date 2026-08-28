@@ -8,12 +8,12 @@
  * (including media, streaming, science, history) instead of the older 19-id
  * `CANONICAL_CATEGORIES` baseline used by engagement CHECK / market helpers.
  *
- * sortOrder: unique tens. Live DB may still have ties for admin-added rows
- * (historically crypto/media 130, ai/streaming 140, fashion/science 150).
- * Proposed unique tens for those live rows — do NOT apply without an ops
- * edit; this file is not a production migration:
- *   media 200, streaming 210, science 220, history 230
- * (crypto 130, ai 140, fashion 150 stay as seeded in migrations/0084).
+ * sortOrder: unique tens in this seed. Live `content_categories` (2026-08-28)
+ * still ties admin-added rows: crypto/media 130, ai/streaming 140,
+ * fashion/science 150. `history` is already 200. Proposed unique tens for
+ * those live rows — do NOT apply from this PR:
+ *   media 210, streaming 220, science 230
+ * (crypto 130, ai 140, fashion 150, history 200 stay).
  */
 
 export type CategoryRegistrySeedRow = {
@@ -42,10 +42,10 @@ export const CATEGORY_REGISTRY_SEED: readonly CategoryRegistrySeedRow[] = [
   { id: "health", label: "Health", sortOrder: 170 },
   { id: "travel", label: "Travel", sortOrder: 180 },
   { id: "dating", label: "Dating", sortOrder: 190 },
-  { id: "media", label: "Media & Podcast", sortOrder: 200 },
-  { id: "streaming", label: "Streaming", sortOrder: 210 },
-  { id: "science", label: "Science", sortOrder: 220 },
-  { id: "history", label: "History", sortOrder: 230 },
+  { id: "history", label: "History", sortOrder: 200 },
+  { id: "media", label: "Media & Podcast", sortOrder: 210 },
+  { id: "streaming", label: "Streaming", sortOrder: 220 },
+  { id: "science", label: "Science", sortOrder: 230 },
 ] as const;
 
 export const CATEGORY_REGISTRY_IDS: readonly string[] = CATEGORY_REGISTRY_SEED.map(
