@@ -9,6 +9,8 @@
  *     the-most-poweful-person-on-earth → the-most-powerful-person-on-earth
  *   Sentiment headline is already "Superhero fatigue is real"
  *     perhero-fatigue-is-real → superhero-fatigue-is-real
+ *   Matchup title/option A is The Weeknd (not Weekend)
+ *     the-weekend-vs-bruno-mars → the-weeknd-vs-bruno-mars
  */
 
 export type VoteSlugRedirect = {
@@ -34,6 +36,12 @@ export const VOTE_SLUG_REDIRECTS: readonly VoteSlugRedirect[] = [
     toPath: "/polls/superhero-fatigue-is-real",
     fromSlug: "perhero-fatigue-is-real",
     toSlug: "superhero-fatigue-is-real",
+  },
+  {
+    fromPath: "/vote/matchups/the-weekend-vs-bruno-mars",
+    toPath: "/vote/matchups/the-weeknd-vs-bruno-mars",
+    fromSlug: "the-weekend-vs-bruno-mars",
+    toSlug: "the-weeknd-vs-bruno-mars",
   },
 ] as const;
 

@@ -210,7 +210,7 @@ async function enrichParentVoteLabels(items: VoicesFeedItem[]): Promise<void> {
 
 async function resolveCardParentId(type: CardParentType, idOrSlug: string): Promise<string | null> {
   if (type === "matchup") {
-    const [bySlug] = await db.select({ id: matchups.id }).from(matchups).where(eq(matchups.slug, idOrSlug)).limit(1);
+    const [bySlug] = await db.select({ id: matchups.id }).from(matchups).where(voteSlugIn(matchups.slug, idOrSlug)).limit(1);
     if (bySlug) return bySlug.id;
     const [byId] = await db.select({ id: matchups.id }).from(matchups).where(eq(matchups.id, idOrSlug)).limit(1);
     return byId?.id ?? null;
@@ -237,8 +237,8 @@ async function resolveCardParentId(type: CardParentType, idOrSlug: string): Prom
 
 async function resolveCardHref(type: CardParentType, idOrSlug: string): Promise<string> {
   if (type === "matchup") {
-    const [row] = await db.select({ slug: matchups.slug }).from(matchups).where(eq(matchups.slug, idOrSlug)).limit(1);
-    if (row?.slug) return `/vote/matchups/${row.slug}`;
+    const [row] = await db.select({ slug: matchups.slug }).from(matchups).where(voteSlugIn(matchups.slug, idOrSlug)).limit(1);
+    if (row?.slug) return `/vote/matchups/${canonicalVoteSlug(row.slug)}`;
     const [byId] = await db.select({ slug: matchups.slug }).from(matchups).where(eq(matchups.id, idOrSlug)).limit(1);
     return byId?.slug ? `/vote/matchups/${byId.slug}` : "/vote";
   }

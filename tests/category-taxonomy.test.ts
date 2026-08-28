@@ -81,6 +81,7 @@ describe("vote slug redirects", () => {
       "the-most-powerful-person-on-earth",
     );
     assert.equal(canonicalVoteSlug("perhero-fatigue-is-real"), "superhero-fatigue-is-real");
+    assert.equal(canonicalVoteSlug("the-weekend-vs-bruno-mars"), "the-weeknd-vs-bruno-mars");
     assert.equal(
       canonicalVoteSlug("the-most-powerful-person-on-earth"),
       "the-most-powerful-person-on-earth",
@@ -93,6 +94,9 @@ describe("vote slug redirects", () => {
     assert.ok(opinion.includes("the-most-powerful-person-on-earth"));
     const sentiment = voteSlugLookupValues("perhero-fatigue-is-real");
     assert.ok(sentiment.includes("superhero-fatigue-is-real"));
-    assert.equal(VOTE_SLUG_REDIRECTS.length, 2);
+    const matchup = voteSlugLookupValues("the-weeknd-vs-bruno-mars");
+    assert.ok(matchup.includes("the-weekend-vs-bruno-mars"));
+    assert.ok(matchup.includes("the-weeknd-vs-bruno-mars"));
+    assert.equal(VOTE_SLUG_REDIRECTS.length, 3);
   });
 });

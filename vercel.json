@@ -15,6 +15,11 @@
       "permanent": true
     },
     {
+      "source": "/vote/matchups/the-weekend-vs-bruno-mars",
+      "destination": "/vote/matchups/the-weeknd-vs-bruno-mars",
+      "permanent": true
+    },
+    {
       "source": "/pricing",
       "destination": "/how-it-works?tab=credits",
       "permanent": false
