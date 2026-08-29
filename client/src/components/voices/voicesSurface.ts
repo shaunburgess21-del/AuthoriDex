@@ -35,3 +35,9 @@ export const VOICES_PANEL_SURFACE_CLASS =
 
 export const VOICES_PANEL_HEADER_CLASS =
   "border-b border-border/40 dark:bg-[#10141B]/95";
+
+/** Shared vertical size for Voices card-link previews (matchup + banner). */
+export const VOICES_ENTITY_PREVIEW_HEIGHT_CLASS = "h-44 sm:h-56";
+
+/** Banner left-column width — wide enough for "Sentiment Poll" on mobile. Matchups unused. */
+export const VOICES_ENTITY_PREVIEW_IMAGE_COL_CLASS = "w-32 sm:w-48";

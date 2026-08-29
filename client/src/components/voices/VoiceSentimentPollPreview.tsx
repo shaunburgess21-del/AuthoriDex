@@ -9,12 +9,13 @@ interface VoiceSentimentPollPreviewProps {
 
 export function VoiceSentimentPollPreview({ results }: VoiceSentimentPollPreviewProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden pt-1">
+    <div className="flex min-h-0 flex-1 flex-col pt-2">
       <SentimentPollResultsBars
         agreePercent={results.agreePercent}
         neutralPercent={results.neutralPercent}
         disagreePercent={results.disagreePercent}
-        compact
+        fill
+        showChoiceLabels
       />
     </div>
   );

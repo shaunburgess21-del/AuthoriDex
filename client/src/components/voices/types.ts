@@ -41,6 +41,8 @@ export interface VoicesEntity {
   refId: string;
   title: string;
   subtitle: string | null;
+  /** Optional card body snippet shown under the title (sentiment polls). */
+  excerpt?: string | null;
   href: string;
   slug: string | null;
   imageUrl: string | null;

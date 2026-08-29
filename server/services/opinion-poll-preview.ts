@@ -2,7 +2,7 @@ import { asc, count, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { opinionPollOptions, opinionPollVotes } from "@shared/schema";
 
-const TOP_OPTION_COUNT = 3;
+const TOP_OPTION_COUNT = 5;
 
 export interface VoicesOpinionPreviewOption {
   name: string;

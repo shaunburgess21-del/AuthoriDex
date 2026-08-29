@@ -464,7 +464,7 @@ function InductionCandidateCard({
   };
 
   return (
-    <div className="relative h-full">
+    <div className="hub-card-slot relative h-full">
     <Card 
       className="hub-card-hover lb-row-neutral relative p-4 sm:p-5 h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl"
       data-testid={`card-induction-${candidate.id}`}
@@ -486,7 +486,11 @@ function InductionCandidateCard({
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="absolute top-3 right-3 z-10">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className={`rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}>
+          {rank === 1 && <Crown className="h-3 w-3" />}
+          #{rank}
+        </div>
         <InteractiveCategoryPill
           category={candidate.category}
           displayLabel={categoryDisplayLabel}
@@ -500,13 +504,6 @@ function InductionCandidateCard({
           menuDisabled={categoryMenuDisabled}
           data-testid={`badge-category-${candidate.id}`}
         />
-      </div>
-      
-      <div className="flex items-center mb-4">
-        <div className={`rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}>
-          {rank === 1 && <Crown className="h-3 w-3" />}
-          #{rank}
-        </div>
       </div>
 
       <div className="flex flex-col items-center text-center mb-2 md:mb-4">

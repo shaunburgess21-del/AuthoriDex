@@ -421,7 +421,7 @@ export function OverallRatingCard({
             </Link>
           </div>
           <div className="mt-auto md:mt-0 flex flex-col gap-2 md:gap-1.5 -translate-y-[2px] md:translate-y-3">
-            {ZONE_LABELS.map((zone, index) => {
+            {[...ZONE_LABELS].map((zone, index) => ({ zone, index })).reverse().map(({ zone, index }) => {
               const color = RATING_COLORS[index];
               const isUserZone = submittedRating === index + 1;
               return (

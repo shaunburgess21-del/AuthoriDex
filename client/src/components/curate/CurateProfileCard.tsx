@@ -231,17 +231,6 @@ export function CurateProfileCard({
           )}
         </AnimatePresence>
 
-        <div className="absolute top-3 right-3 z-20">
-          <InteractiveCategoryPill
-            category={person.category}
-            onFilter={() => onFilterCategory?.(person.category)}
-            leaderboardCategories={leaderboardCategories}
-            onBrowseFullScreen={onBrowseFullScreen}
-            reactionTarget={{ surfaceType: "curate_person", targetId: String(person.id) }}
-            menuDisabled={categoryMenuDisabled}
-          />
-        </div>
-
         <div className="relative p-4 md:p-4 flex flex-col flex-1">
           <div className="flex items-center gap-3 mb-3">
             <PersonAvatar name={person.name} avatar={winningAvatar} size="md" />
@@ -250,6 +239,16 @@ export function CurateProfileCard({
               <span className={`text-xs ${hasVoted ? "text-muted-foreground" : "text-slate-600"}`}>
                 {hasVoted ? `${totalVotes.toLocaleString('en-US')} votes` : "Votes"}
               </span>
+            </div>
+            <div className="shrink-0">
+              <InteractiveCategoryPill
+                category={person.category}
+                onFilter={() => onFilterCategory?.(person.category)}
+                leaderboardCategories={leaderboardCategories}
+                onBrowseFullScreen={onBrowseFullScreen}
+                reactionTarget={{ surfaceType: "curate_person", targetId: String(person.id) }}
+                menuDisabled={categoryMenuDisabled}
+              />
             </div>
           </div>
           

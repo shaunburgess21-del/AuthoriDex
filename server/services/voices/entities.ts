@@ -48,6 +48,8 @@ export interface VoicesEntity {
   title: string;
   /** Short type label, e.g. "Matchup", "Sentiment Poll". */
   subtitle: string | null;
+  /** Optional card body snippet shown under the title (sentiment / opinion polls). */
+  excerpt?: string | null;
   /** Client-side deep link to the source card / profile (no hash). */
   href: string;
   /** Card slug for card surfaces (null for person/timeline) — feeds the focus overlay. */
@@ -293,6 +295,7 @@ export async function resolveCommentEntities(
         slug: trendingPolls.slug,
         headline: trendingPolls.headline,
         subjectText: trendingPolls.subjectText,
+        description: trendingPolls.description,
         category: trendingPolls.category,
         imageUrl: trendingPolls.imageUrl,
         personId: trendingPolls.personId,
@@ -311,6 +314,10 @@ export async function resolveCommentEntities(
         refId: r.id,
         title: r.headline || r.subjectText || "Sentiment Poll",
         subtitle: SUBTITLE.trending_poll,
+        excerpt:
+          r.subjectText && r.subjectText !== r.headline
+            ? r.subjectText
+            : (r.description ?? null),
         href: r.slug ? `/polls/${r.slug}` : "/vote",
         slug: r.slug ?? null,
         imageUrl: effectiveSlug
@@ -331,6 +338,8 @@ export async function resolveCommentEntities(
         id: opinionPolls.id,
         slug: opinionPolls.slug,
         title: opinionPolls.title,
+        summary: opinionPolls.summary,
+        description: opinionPolls.description,
         category: opinionPolls.category,
         imageUrl: opinionPolls.imageUrl,
       })
@@ -382,6 +391,7 @@ export async function resolveCommentEntities(
         refId: r.id,
         title: r.title,
         subtitle: SUBTITLE.opinion_poll,
+        excerpt: r.summary || r.description || null,
         href: r.slug ? `/vote/opinion-polls/${r.slug}` : "/vote",
         slug: r.slug ?? null,
         imageUrl: picked.imageUrl,

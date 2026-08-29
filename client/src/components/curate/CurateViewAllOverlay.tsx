@@ -95,21 +95,25 @@ function CelebCard({
       data-testid={`view-all-card-${person.id}`}
     >
       <div className="p-3 relative">
-        <div className="absolute top-3 right-3 z-10 hidden md:block">
-          <InteractiveCategoryPill
-            category={person.category}
-            onFilter={() => onFilterCategory?.(person.category)}
-            leaderboardCategories={leaderboardCategories}
-          />
-        </div>
         <div className="flex items-center gap-2 mb-2">
           <PersonAvatar name={person.name} avatar={winningAvatar} size="sm" />
-          <div className="min-w-0 flex flex-col justify-center">
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
             <p className="font-medium text-sm truncate">{person.name}</p>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Users className="h-3 w-3" />
               <span>{totalVotes.toLocaleString('en-US')} votes</span>
             </div>
+          </div>
+          <div
+            className="shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <InteractiveCategoryPill
+              category={person.category}
+              onFilter={() => onFilterCategory?.(person.category)}
+              leaderboardCategories={leaderboardCategories}
+            />
           </div>
         </div>
         

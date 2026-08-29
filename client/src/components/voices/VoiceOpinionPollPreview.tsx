@@ -6,22 +6,32 @@ interface VoiceOpinionPollPreviewProps {
   preview: OpinionPreview;
 }
 
+const MOBILE_OPTION_COUNT = 3;
+const DESKTOP_OPTION_COUNT = 5;
+
 export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProps) {
-  const remainingCount = Math.max(0, preview.totalOptions - preview.topOptions.length);
+  const mobileShown = Math.min(MOBILE_OPTION_COUNT, preview.topOptions.length);
+  const desktopShown = Math.min(DESKTOP_OPTION_COUNT, preview.topOptions.length);
+  const remainingMobile = Math.max(0, preview.totalOptions - mobileShown);
+  const remainingDesktop = Math.max(0, preview.totalOptions - desktopShown);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden pt-1">
-      <div className="space-y-1.5">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+      <div className="space-y-1">
         {preview.topOptions.map((option, idx) => {
           const isLeading = idx === 0 && option.percent > 0;
+          const desktopOnly = idx >= MOBILE_OPTION_COUNT;
           return (
-            <div key={`${option.name}-${idx}`} className="min-w-0">
+            <div
+              key={`${option.name}-${idx}`}
+              className={desktopOnly ? "hidden min-w-0 sm:block" : "min-w-0"}
+            >
               <div className="flex items-center gap-1.5">
-                <span className="min-w-0 flex-1 truncate text-xs leading-tight text-foreground">
+                <span className="min-w-0 flex-1 truncate text-xs leading-none text-foreground">
                   {option.name}
                 </span>
                 <span
-                  className={`shrink-0 font-mono text-[11px] font-bold leading-tight ${
+                  className={`shrink-0 font-mono text-[11px] font-bold leading-none ${
                     isLeading ? "text-cyan-600 dark:text-cyan-400" : "text-muted-foreground"
                   }`}
                 >
@@ -38,9 +48,14 @@ export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProp
           );
         })}
       </div>
-      {remainingCount > 0 && (
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          + {remainingCount} more option{remainingCount === 1 ? "" : "s"}
+      {remainingMobile > 0 && (
+        <p className="mt-1 text-[10px] text-muted-foreground sm:hidden">
+          + {remainingMobile} more option{remainingMobile === 1 ? "" : "s"}
+        </p>
+      )}
+      {remainingDesktop > 0 && (
+        <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block">
+          + {remainingDesktop} more option{remainingDesktop === 1 ? "" : "s"}
         </p>
       )}
     </div>

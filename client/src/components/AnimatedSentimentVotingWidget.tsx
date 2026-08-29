@@ -174,7 +174,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
         <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Sentiment Distribution
         </h4>
-        {ZONE_LABELS.map((zone) => {
+        {[...ZONE_LABELS].reverse().map((zone, visualIndex) => {
           const percent = displayStats.distribution[zone] || 0;
           const isUserZone = getZoneLabel(userVote) === zone;
           const color = ZONE_COLORS[zone as keyof typeof ZONE_COLORS];
@@ -201,7 +201,7 @@ function CommunityResultsView({ personName, personId, userVote, onBackToVoting }
                   }}
                   initial={{ width: 0 }}
                   animate={{ width: `${(percent / maxPercent) * 100}%` }}
-                  transition={{ duration: 0.5, delay: ZONE_LABELS.indexOf(zone) * 0.1 }}
+                  transition={{ duration: 0.5, delay: visualIndex * 0.1 }}
                 />
               </div>
             </div>
