@@ -52,15 +52,25 @@ export function VoiceProfilePreviewStats({ stats }: VoiceProfilePreviewStatsProp
 
       {/* Desktop: full 4-column stats */}
       <div className="hidden md:flex md:flex-col">
-        <div className="grid grid-cols-4 gap-x-2 gap-y-1">
+        <div className="grid grid-cols-4 items-end gap-x-2 gap-y-1">
           <p className="truncate text-center font-mono text-base font-bold leading-tight text-foreground">
             {fameIndex}
           </p>
           <div className="flex min-w-0 justify-center">
-            <TrendBadge value={stats.change24h} size="default" showIcon={false} />
+            <TrendBadge
+              value={stats.change24h}
+              size="default"
+              showIcon={false}
+              className="h-auto py-0 text-base font-bold leading-tight"
+            />
           </div>
           <div className="flex min-w-0 justify-center">
-            <TrendBadge value={stats.change7d} size="default" showIcon={false} />
+            <TrendBadge
+              value={stats.change7d}
+              size="default"
+              showIcon={false}
+              className="h-auto py-0 text-base font-bold leading-tight"
+            />
           </div>
           <div className="min-w-0 text-center">
             <ApprovalValue rating={stats.approvalAvgRating} />

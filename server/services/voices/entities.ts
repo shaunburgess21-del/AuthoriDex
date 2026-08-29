@@ -1,4 +1,4 @@
-import { inArray, asc } from "drizzle-orm";
+import { inArray, asc, eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
   matchups,
@@ -7,6 +7,7 @@ import {
   opinionPollOptions,
   predictionMarkets,
   trackedPeople,
+  celebrityProfiles,
   cardRelatedPeople,
 } from "@shared/schema";
 import type { VoicesSurface } from "@shared/constants";
@@ -48,7 +49,7 @@ export interface VoicesEntity {
   title: string;
   /** Short type label, e.g. "Matchup", "Sentiment Poll". */
   subtitle: string | null;
-  /** Optional card body snippet shown under the title (sentiment / opinion polls). */
+  /** Optional card body snippet shown under the title (polls / profile about). */
   excerpt?: string | null;
   /** Client-side deep link to the source card / profile (no hash). */
   href: string;
@@ -455,6 +456,7 @@ export async function resolveCommentEntities(
         refId: personId,
         title: person?.name ?? "Profile",
         subtitle: SUBTITLE.person,
+        excerpt: person?.excerpt ?? null,
         href: `/person/${personId}`,
         slug: null,
         imageUrl: person?.avatar ?? null,
@@ -482,8 +484,16 @@ export async function resolveCommentEntities(
 
 async function loadPeople(
   personIds: string[],
-): Promise<Map<string, { name: string; avatar: string | null; category: string | null }>> {
-  const out = new Map<string, { name: string; avatar: string | null; category: string | null }>();
+): Promise<
+  Map<
+    string,
+    { name: string; avatar: string | null; category: string | null; excerpt: string | null }
+  >
+> {
+  const out = new Map<
+    string,
+    { name: string; avatar: string | null; category: string | null; excerpt: string | null }
+  >();
   if (personIds.length === 0) return out;
   const rows = await db
     .select({
@@ -491,11 +501,20 @@ async function loadPeople(
       name: trackedPeople.name,
       avatar: trackedPeople.avatar,
       category: trackedPeople.category,
+      bio: trackedPeople.bio,
+      shortBio: celebrityProfiles.shortBio,
+      longBio: celebrityProfiles.longBio,
     })
     .from(trackedPeople)
+    .leftJoin(celebrityProfiles, eq(celebrityProfiles.personId, trackedPeople.id))
     .where(inArray(trackedPeople.id, personIds));
   for (const r of rows) {
-    out.set(r.id, { name: r.name, avatar: r.avatar ?? null, category: r.category ?? null });
+    out.set(r.id, {
+      name: r.name,
+      avatar: r.avatar ?? null,
+      category: r.category ?? null,
+      excerpt: r.shortBio || r.longBio || r.bio || null,
+    });
   }
   return out;
 }

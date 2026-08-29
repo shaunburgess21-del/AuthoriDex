@@ -6,9 +6,10 @@ interface TrendBadgeProps {
   value: number | null | undefined;
   size?: "sm" | "default" | "lg";
   showIcon?: boolean;
+  className?: string;
 }
 
-export function TrendBadge({ value, size = "default", showIcon = true }: TrendBadgeProps) {
+export function TrendBadge({ value, size = "default", showIcon = true, className }: TrendBadgeProps) {
   const sizeClass = size === "sm" ? "text-xs h-[33px]" : size === "lg" ? "text-base h-[41px]" : "text-sm h-[37px]";
   
   // Handle null/undefined values - display N/A
@@ -18,7 +19,8 @@ export function TrendBadge({ value, size = "default", showIcon = true }: TrendBa
         className={cn(
           "font-mono font-semibold px-2 gap-1 flex items-center",
           "bg-muted text-muted-foreground",
-          sizeClass
+          sizeClass,
+          className,
         )}
         data-testid="badge-trend-na"
       >
@@ -44,7 +46,8 @@ export function TrendBadge({ value, size = "default", showIcon = true }: TrendBa
       className={cn(
         "font-mono font-semibold px-2 gap-1 flex items-center",
         colorClass,
-        sizeClass
+        sizeClass,
+        className,
       )}
       style={glassStyle}
       data-testid={`badge-trend-${isPositive ? 'up' : isNeutral ? 'neutral' : 'down'}`}

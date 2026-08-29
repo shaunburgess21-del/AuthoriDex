@@ -138,7 +138,7 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
         </div>
         {isProfile ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <span className="line-clamp-1 shrink text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
                 {entity.title}
               </span>
@@ -159,6 +159,13 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
                 </>
               )}
             </div>
+            {entity.excerpt && (
+              <div className="mt-0.5 shrink-0">
+                <p className="line-clamp-3 text-xs leading-snug text-muted-foreground">
+                  {entity.excerpt}
+                </p>
+              </div>
+            )}
             {entity.inductionPreview ? (
               <VoiceInductionProfilePreview preview={entity.inductionPreview} />
             ) : (

@@ -1,6 +1,13 @@
-import { asc, count, inArray } from "drizzle-orm";
+import { asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { opinionPollOptions, opinionPollVotes } from "@shared/schema";
+import {
+  opinionPollOptions,
+  opinionPolls,
+  opinionPollVotes,
+  trackedPeople,
+  trendingPeople,
+} from "@shared/schema";
+import { resolveOpinionOptionDisplayImageUrl } from "./opinion-poll-images";
 
 const TOP_OPTION_COUNT = 5;
 
@@ -8,6 +15,7 @@ export interface VoicesOpinionPreviewOption {
   name: string;
   percent: number;
   votes: number;
+  imageUrl: string | null;
 }
 
 /** Top leading options for Voices opinion poll link cards. */
@@ -23,6 +31,9 @@ interface OptionRow {
   name: string;
   orderIndex: number;
   seedCount: number;
+  imageUrl: string | null;
+  personAvatar: string | null;
+  pollSlug: string | null;
 }
 
 function sortByVotesDesc(a: OptionRow & { displayVotes: number }, b: OptionRow & { displayVotes: number }) {
@@ -46,8 +57,14 @@ export async function loadOpinionPollPreview(
       name: opinionPollOptions.name,
       orderIndex: opinionPollOptions.orderIndex,
       seedCount: opinionPollOptions.seedCount,
+      imageUrl: opinionPollOptions.imageUrl,
+      personAvatar: trendingPeople.avatar,
+      pollSlug: opinionPolls.slug,
     })
     .from(opinionPollOptions)
+    .leftJoin(opinionPolls, eq(opinionPollOptions.pollId, opinionPolls.id))
+    .leftJoin(trackedPeople, eq(opinionPollOptions.personId, trackedPeople.id))
+    .leftJoin(trendingPeople, eq(opinionPollOptions.personId, trendingPeople.id))
     .where(inArray(opinionPollOptions.pollId, pollIds))
     .orderBy(asc(opinionPollOptions.pollId), asc(opinionPollOptions.orderIndex));
 
@@ -87,6 +104,12 @@ export async function loadOpinionPollPreview(
       name: o.name,
       votes: o.displayVotes,
       percent: Math.round((o.displayVotes / totalVotes) * 100),
+      imageUrl: resolveOpinionOptionDisplayImageUrl(
+        o.personAvatar,
+        o.imageUrl,
+        o.pollSlug,
+        o.name,
+      ),
     }));
 
     out.set(pollId, {

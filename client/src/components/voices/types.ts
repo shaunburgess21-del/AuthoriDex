@@ -41,7 +41,7 @@ export interface VoicesEntity {
   refId: string;
   title: string;
   subtitle: string | null;
-  /** Optional card body snippet shown under the title (sentiment polls). */
+  /** Optional card body snippet shown under the title (polls / profile about). */
   excerpt?: string | null;
   href: string;
   slug: string | null;
@@ -67,7 +67,7 @@ export interface VoicesEntity {
   opinionPreview?: {
     totalOptions: number;
     totalVotes: number;
-    topOptions: Array<{ name: string; percent: number; votes: number }>;
+    topOptions: Array<{ name: string; percent: number; votes: number; imageUrl: string | null }>;
   } | null;
   /** Live LMSR outcome split for world market link cards (open_market only). */
   worldMarketPreview?:
