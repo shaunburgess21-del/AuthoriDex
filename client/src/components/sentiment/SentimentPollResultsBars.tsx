@@ -9,7 +9,7 @@ export interface SentimentPollResultsBarsProps {
   compact?: boolean;
   /** Grow rows to fill leftover height (Voices card links). */
   fill?: boolean;
-  /** Agree / Neutral / Disagree to the left of each bar (hidden below sm). */
+  /** Agree / Neutral / Disagree to the right of each bar (hidden below sm). */
   showChoiceLabels?: boolean;
   className?: string;
   testId?: string;
@@ -68,11 +68,6 @@ export function SentimentPollResultsBars({
             fill ? "min-h-5 flex-1 items-stretch" : "items-center",
           )}
         >
-          {showChoiceLabels && (
-            <span className={cn("hidden w-14 shrink-0 self-center text-[11px] font-bold sm:block", row.textClass)}>
-              {getSentimentPollChoiceLabel(row.choice)}
-            </span>
-          )}
           <div className={cn("min-w-0 flex-1", fill && "h-full min-h-5")}>
             <div
               className={cn(
@@ -86,6 +81,11 @@ export function SentimentPollResultsBars({
               <span className={cn(textSize, "font-semibold", row.textClass)}>{row.percent}%</span>
             </div>
           </div>
+          {showChoiceLabels && (
+            <span className={cn("hidden w-14 shrink-0 self-center text-[11px] font-bold sm:block", row.textClass)}>
+              {getSentimentPollChoiceLabel(row.choice)}
+            </span>
+          )}
         </div>
       ))}
     </div>

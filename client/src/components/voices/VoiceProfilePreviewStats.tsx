@@ -50,44 +50,44 @@ export function VoiceProfilePreviewStats({ stats }: VoiceProfilePreviewStatsProp
         </div>
       </div>
 
-      {/* Desktop: full 4-column stats */}
-      <div className="hidden md:flex md:flex-col">
-        <div className="grid grid-cols-4 items-end gap-x-2 gap-y-1">
+      {/* Desktop: 4 stacked columns so 24h/7d badges grow down to the label line */}
+      <div className="hidden md:grid md:grid-cols-4 md:items-stretch md:gap-x-2">
+        <div className="flex h-full min-w-0 flex-col items-center">
           <p className="truncate text-center font-mono text-base font-bold leading-tight text-foreground">
             {fameIndex}
           </p>
-          <div className="flex min-w-0 justify-center">
-            <TrendBadge
-              value={stats.change24h}
-              size="default"
-              showIcon={false}
-              className="h-auto py-0 text-base font-bold leading-tight"
-            />
-          </div>
-          <div className="flex min-w-0 justify-center">
-            <TrendBadge
-              value={stats.change7d}
-              size="default"
-              showIcon={false}
-              className="h-auto py-0 text-base font-bold leading-tight"
-            />
-          </div>
-          <div className="min-w-0 text-center">
-            <ApprovalValue rating={stats.approvalAvgRating} />
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-x-2">
-          <div className="text-center text-[11px] uppercase tracking-wide leading-tight text-muted-foreground">
+          <div className="mt-auto text-center text-[11px] uppercase tracking-wide leading-tight text-muted-foreground">
             <span className="block">Trend</span>
             <span className="block">Score</span>
           </div>
-          <p className="text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+        </div>
+        <div className="flex h-full min-w-0 flex-col items-center">
+          <TrendBadge
+            value={stats.change24h}
+            size="default"
+            showIcon={false}
+            className="flex h-auto min-h-[37px] flex-1 py-0 text-base font-bold leading-tight"
+          />
+          <p className="shrink-0 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
             24h
           </p>
-          <p className="text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+        </div>
+        <div className="flex h-full min-w-0 flex-col items-center">
+          <TrendBadge
+            value={stats.change7d}
+            size="default"
+            showIcon={false}
+            className="flex h-auto min-h-[37px] flex-1 py-0 text-base font-bold leading-tight"
+          />
+          <p className="shrink-0 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
             7d
           </p>
-          <div className="text-center text-[11px] uppercase tracking-wide leading-tight text-muted-foreground">
+        </div>
+        <div className="flex h-full min-w-0 flex-col items-center">
+          <div className="min-w-0 text-center">
+            <ApprovalValue rating={stats.approvalAvgRating} />
+          </div>
+          <div className="mt-auto text-center text-[11px] uppercase tracking-wide leading-tight text-muted-foreground">
             <span className="block">Approval</span>
             <span className="block">Rating</span>
           </div>

@@ -61,40 +61,46 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
         href={entity.href}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          "group/preview relative mt-2.5 block overflow-hidden rounded-lg border border-white/[0.08] transition-colors hover:border-amber-500/40",
+          "group/preview relative mt-2.5 flex flex-col overflow-hidden rounded-lg border border-white/[0.08] transition-colors hover:border-amber-500/40",
           VOICES_ENTITY_PREVIEW_HEIGHT_CLASS,
         )}
         data-testid={`voice-card-entity-${itemId}`}
       >
-        <div className="flex h-full">
-          <div className="relative w-1/2 overflow-hidden">
-            <CardImage src={optionAImage ?? ""} alt={optionAText} width={320} />
-            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-center">
-              <span className="block truncate text-xs font-semibold text-white">
-                {optionAText}
-              </span>
+        <div className="relative flex min-h-0 flex-1">
+          <div className="relative h-full min-h-0 w-1/2 overflow-hidden">
+            <div className="absolute inset-0">
+              <CardImage src={optionAImage ?? ""} alt={optionAText} width={320} />
             </div>
           </div>
-          <div className="relative w-1/2 overflow-hidden border-l border-white/[0.08]">
-            <CardImage src={optionBImage ?? ""} alt={optionBText} width={320} />
-            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-center">
-              <span className="block truncate text-xs font-semibold text-white">
-                {optionBText}
-              </span>
+          <div className="relative h-full min-h-0 w-1/2 overflow-hidden border-l border-white/[0.08]">
+            <div className="absolute inset-0">
+              <CardImage src={optionBImage ?? ""} alt={optionBText} width={320} />
             </div>
           </div>
+          {/* VS centered on the image area (not the name footer) */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-slate-500 bg-gradient-to-br from-slate-700 to-slate-900 shadow-lg sm:h-14 sm:w-14">
+              <span className="text-sm font-bold text-slate-200 sm:text-base">VS</span>
+            </div>
+          </div>
+          {entity.subtitle && (
+            <span className="absolute left-1.5 top-1.5 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
+              {entity.subtitle}
+            </span>
+          )}
         </div>
-        {/* VS badge over the center seam */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-500 bg-gradient-to-br from-slate-700 to-slate-900 shadow-lg">
-            <span className="text-[11px] font-bold text-white">VS</span>
+        <div className="flex shrink-0">
+          <div className="w-1/2 border-t border-white/[0.08] bg-muted/60 px-2 py-1.5 text-center dark:bg-[#090B11] sm:py-2">
+            <span className="block truncate text-sm font-semibold text-foreground">
+              {optionAText}
+            </span>
+          </div>
+          <div className="w-1/2 border-l border-t border-white/[0.08] bg-muted/60 px-2 py-1.5 text-center dark:bg-[#090B11] sm:py-2">
+            <span className="block truncate text-sm font-semibold text-foreground">
+              {optionBText}
+            </span>
           </div>
         </div>
-        {entity.subtitle && (
-          <span className="absolute left-1.5 top-1.5 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
-            {entity.subtitle}
-          </span>
-        )}
       </Link>
     );
   }
