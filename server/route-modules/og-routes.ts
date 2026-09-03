@@ -24,6 +24,7 @@ import {
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
 } from "../services/matchup-og-image";
+import { voteSlugIn } from "../lib/vote-slug";
 import { matchupOgImagePath } from "@shared/matchup-og";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
@@ -788,7 +789,7 @@ async function lookupSentimentPoll(slug: string) {
       slug: trendingPolls.slug,
     })
     .from(trendingPolls)
-    .where(eq(trendingPolls.slug, slug))
+    .where(voteSlugIn(trendingPolls.slug, slug))
     .limit(1);
   return p ?? null;
 }
@@ -805,7 +806,7 @@ async function lookupOpinionPoll(slug: string) {
       slug: opinionPolls.slug,
     })
     .from(opinionPolls)
-    .where(eq(opinionPolls.slug, slug))
+    .where(voteSlugIn(opinionPolls.slug, slug))
     .limit(1);
   return p ?? null;
 }
