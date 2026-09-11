@@ -1874,13 +1874,25 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       console.log(`[Ingest] Staleness decay: News=${(newsDecayFactor * 100).toFixed(0)}%, Search=${(searchDecayFactor * 100).toFixed(0)}%`);
     }
 
-    const newsFreshCount = mediastackBatchStats
-      ? mediastackBatchStats.fetched
-      : newsSource === "cascade"
-        ? (currentsBatchStats?.fetched ?? 0) + (dataforseoNewsBatchStats?.fetched ?? 0)
-        : gdeltBatchStats
-          ? gdeltBatchStats.liveApiFetched
-          : Array.from(newsData.values()).filter(d => (d.articleCount24h ?? 0) > 0).length;
+    /** Roster members holding at least one article after the merge. */
+    const newsPeopleWithArticles = Array.from(newsData.values())
+      .filter(d => (d.articleCount24h ?? 0) > 0).length;
+
+    // Union must be measured from the merged result rather than Mediastack's
+    // live fetch count: Mediastack refreshes on a 4h cadence, so on the ~19
+    // hourly runs it serves from cache `fetched` is 0 while Currents and Serper
+    // still cover 94%+ of the roster. Reading that as 0% coverage held the
+    // degradation governor permanently at 0.75 and left a genuine news outage
+    // indistinguishable from a normal cached run.
+    const newsFreshCount = newsSource === "union"
+      ? newsPeopleWithArticles
+      : mediastackBatchStats
+        ? mediastackBatchStats.fetched
+        : newsSource === "cascade"
+          ? (currentsBatchStats?.fetched ?? 0) + (dataforseoNewsBatchStats?.fetched ?? 0)
+          : gdeltBatchStats
+            ? gdeltBatchStats.liveApiFetched
+            : newsPeopleWithArticles;
     const newsCoveragePctActual = (newsFreshCount / people.length) * 100;
     const searchFreshCount = Array.from(serperData.values()).filter(d => (d.searchVolume ?? 0) > 0).length;
     const searchCoveragePctActual = (searchFreshCount / people.length) * 100;
