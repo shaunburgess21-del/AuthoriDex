@@ -178,7 +178,7 @@ export function VersusCard({
             )}
           </div>
 
-          <div className="flex items-stretch gap-0 relative">
+          <div className="relative isolate flex items-stretch gap-0">
             <button
               type="button"
               onClick={(e) => {
@@ -186,7 +186,7 @@ export function VersusCard({
                 trackMatchupNeutralVote(matchup.id, "option_a");
                 onVote(matchup.id, "option_a", e);
               }}
-              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
                 hasVoted
                   ? votedA
                     ? "border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15"
@@ -219,7 +219,47 @@ export function VersusCard({
               </div>
             </button>
 
-            <div className="absolute left-1/2 top-[calc(50%-18px)] -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                if (votedB) return;
+                trackMatchupNeutralVote(matchup.id, "option_b");
+                onVote(matchup.id, "option_b", e);
+              }}
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+                hasVoted
+                  ? votedB
+                    ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
+                    : "border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40"
+                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
+              }`}
+              data-testid={`button-vote-b-${matchup.id}`}
+            >
+              <div className="relative" style={{ minHeight: "222px" }}>
+                {matchup.optionBImage ? (
+                  <div className="absolute inset-0">
+                    <CardImage
+                      src={matchup.optionBImage}
+                      alt={matchup.optionBText}
+                      priority={priority}
+                      width={400}
+                      fallbackSrc={matchup.optionBFallbackImage}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? "from-amber-100 via-amber-50 to-card dark:from-amber-700/30 dark:via-slate-800 dark:to-slate-900" : "from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"}`}
+                  />
+                )}
+              </div>
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
+                <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                  {matchup.optionBText}
+                </span>
+              </div>
+            </button>
+
+            <div className="absolute left-1/2 top-[calc(50%-18px)] z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1">
               {enableVsShimmer || neutralEducationUi ? (
                 <>
                   {neutralEducationUi && (
@@ -321,46 +361,6 @@ export function VersusCard({
                 </span>
               )}
             </div>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                if (votedB) return;
-                trackMatchupNeutralVote(matchup.id, "option_b");
-                onVote(matchup.id, "option_b", e);
-              }}
-              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
-                hasVoted
-                  ? votedB
-                    ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
-                    : "border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40"
-                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
-              }`}
-              data-testid={`button-vote-b-${matchup.id}`}
-            >
-              <div className="relative" style={{ minHeight: "222px" }}>
-                {matchup.optionBImage ? (
-                  <div className="absolute inset-0">
-                    <CardImage
-                      src={matchup.optionBImage}
-                      alt={matchup.optionBText}
-                      priority={priority}
-                      width={400}
-                      fallbackSrc={matchup.optionBFallbackImage}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? "from-amber-100 via-amber-50 to-card dark:from-amber-700/30 dark:via-slate-800 dark:to-slate-900" : "from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"}`}
-                  />
-                )}
-              </div>
-              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
-                <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
-                  {matchup.optionBText}
-                </span>
-              </div>
-            </button>
           </div>
 
           <div className="mt-auto pt-3 px-4">
