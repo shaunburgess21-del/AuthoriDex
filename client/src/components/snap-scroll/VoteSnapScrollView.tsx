@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, createContext, type MutableRefObject, type ReactNode, type UIEvent, type CSSProperties } from "react";
+import { flushSync } from "react-dom";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
@@ -595,6 +596,7 @@ export function VoteSnapScrollView({
   /** Clears settle-guard touchActive / window listeners. Registered by the
    * settle effect while minimal overlay is open. */
   const settleResetRef = useRef<(() => void) | null>(null);
+  const jumpAnchorTimersRef = useRef<{ raf: number; timeout: number } | null>(null);
 
   const wakeColumnScroll = useCallback((el: HTMLDivElement) => {
     // iOS can leave a snap scroller touch-dead after a nested dialog /
@@ -678,17 +680,39 @@ export function VoteSnapScrollView({
         const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
         const colItems = categoryItemsRef.current.get(cat) || [];
         if (index < 0 || index >= colItems.length) return;
-        setColumnVisibleIndices((prev) =>
-          prev[cat] === index ? prev : { ...prev, [cat]: index },
-        );
+        cancelScrollTweenRef.current?.();
+        if (jumpAnchorTimersRef.current) {
+          cancelAnimationFrame(jumpAnchorTimersRef.current.raf);
+          window.clearTimeout(jumpAnchorTimersRef.current.timeout);
+          jumpAnchorTimersRef.current = null;
+        }
+        // Mount the target page before measuring height — otherwise the
+        // window is around index N while scrollTop is still on card 0
+        // (blank stubs). Instant jump, not a tween through empty pages.
+        flushSync(() => {
+          setColumnVisibleIndices((prev) =>
+            prev[cat] === index ? prev : { ...prev, [cat]: index },
+          );
+        });
         const el = columnScrollRefs.current[cat];
         if (!el) return;
-        if (programmaticScrollActiveRef.current) {
-          cancelScrollTweenRef.current?.();
-        }
-        const h = el.clientHeight;
-        if (h === 0) return;
-        tweenColumnToTop(el, index * h);
+        const apply = () => {
+          const h = el.clientHeight;
+          if (h === 0) return;
+          const maxTop = Math.max(0, el.scrollHeight - h);
+          const target = Math.max(0, Math.min(index * h, maxTop));
+          el.style.scrollSnapType = "none";
+          el.scrollTop = target;
+          el.style.scrollSnapType = "y mandatory";
+        };
+        apply();
+        programmaticScrollActiveRef.current = false;
+        const raf = requestAnimationFrame(() => {
+          apply();
+          const timeout = window.setTimeout(apply, 300);
+          jumpAnchorTimersRef.current = { raf: 0, timeout };
+        });
+        jumpAnchorTimersRef.current = { raf, timeout: 0 };
       },
       releaseGestures,
     };
@@ -696,6 +720,11 @@ export function VoteSnapScrollView({
       apiRef.current = null;
       // Overlay closing / remounting mid-tween: don't leave snap disabled.
       cancelScrollTweenRef.current?.();
+      if (jumpAnchorTimersRef.current) {
+        cancelAnimationFrame(jumpAnchorTimersRef.current.raf);
+        window.clearTimeout(jumpAnchorTimersRef.current.timeout);
+        jumpAnchorTimersRef.current = null;
+      }
     };
   }, [apiRef, tweenColumnToTop, releaseGestures]);
 

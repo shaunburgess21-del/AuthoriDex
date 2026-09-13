@@ -57,6 +57,41 @@ const AUTO_ADVANCE_HOLD_MS = 1000;
 const OPTIMISTIC_VOTE_XP = 20;
 const EMPTY_RACE_MAP = new Map<string, string>();
 const NOOP = () => {};
+const KEYBOARD_SETTLE_IDLE_MS = 80;
+const KEYBOARD_SETTLE_FALLBACK_MS = 450;
+
+/** Wait until the visual viewport stops resizing (iOS keyboard/toolbar) so
+ * a search jump measures the full-bleed card height. Fallback if no resize. */
+function afterVisualViewportSettles(cb: () => void): () => void {
+  let settled = false;
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  let idleTimer = 0;
+  let fallbackTimer = 0;
+
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    vv?.removeEventListener("resize", onResize);
+    window.clearTimeout(idleTimer);
+    window.clearTimeout(fallbackTimer);
+    cb();
+  };
+
+  const onResize = () => {
+    window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(finish, KEYBOARD_SETTLE_IDLE_MS);
+  };
+
+  fallbackTimer = window.setTimeout(finish, KEYBOARD_SETTLE_FALLBACK_MS);
+  vv?.addEventListener("resize", onResize);
+
+  return () => {
+    settled = true;
+    vv?.removeEventListener("resize", onResize);
+    window.clearTimeout(idleTimer);
+    window.clearTimeout(fallbackTimer);
+  };
+}
 
 export interface QuickVoteOverlayProps {
   open: boolean;
@@ -200,6 +235,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   // overlay_open / overlay_close funnel events
   const wasOpenRef = useRef(false);
   const closeReasonRef = useRef<string | null>(null);
+  const keyboardWaitCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       wasOpenRef.current = true;
@@ -216,6 +252,8 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       });
       closeReasonRef.current = null;
       setSearchQuery("");
+      keyboardWaitCleanupRef.current?.();
+      keyboardWaitCleanupRef.current = null;
     }
   }, [open, source]);
 
@@ -237,8 +275,22 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     setSearchQuery("");
     haptic();
     logFunnelEvent("overlay_search_select", "quick_vote", { type: hit.type });
-    snapApiRef.current?.scrollToIndex(hit.index);
-    snapApiRef.current?.releaseGestures();
+    keyboardWaitCleanupRef.current?.();
+    keyboardWaitCleanupRef.current = afterVisualViewportSettles(() => {
+      keyboardWaitCleanupRef.current = null;
+      // Jump only after the keyboard/toolbar height has settled so
+      // clientHeight is the full-bleed card. Keep the old card on screen
+      // until then — never releaseGestures first (that cancels the snap).
+      snapApiRef.current?.scrollToIndex(hit.index);
+      snapApiRef.current?.releaseGestures();
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      keyboardWaitCleanupRef.current?.();
+      keyboardWaitCleanupRef.current = null;
+    };
   }, []);
 
   const cancelAdvance = useCallback(() => {

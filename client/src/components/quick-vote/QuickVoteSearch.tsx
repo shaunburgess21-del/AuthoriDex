@@ -38,6 +38,11 @@ export function QuickVoteSearch({
     inputRef.current?.blur();
   };
 
+  const selectHit = (hit: QuickVoteSearchHit) => {
+    inputRef.current?.blur();
+    onSelect(hit);
+  };
+
   return (
     <div className="relative w-full">
       <div className="relative">
@@ -60,7 +65,7 @@ export function QuickVoteSearch({
             }
             if (e.key === "Enter" && results[0]) {
               e.preventDefault();
-              onSelect(results[0]);
+              selectHit(results[0]);
             }
           }}
           placeholder="Find a vote"
@@ -110,7 +115,7 @@ export function QuickVoteSearch({
                     role="option"
                     data-interactive="true"
                     data-testid={`quick-vote-search-hit-${hit.id}`}
-                    onClick={() => onSelect(hit)}
+                    onClick={() => selectHit(hit)}
                     className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/10 active:bg-white/15"
                   >
                     <SearchThumbs thumbA={hit.thumbA} thumbB={hit.thumbB} />
