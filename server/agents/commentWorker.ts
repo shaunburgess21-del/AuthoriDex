@@ -48,6 +48,13 @@ import {
   fetchTrendingPollParentPool,
   type CommentParentPoolStats,
 } from "./commentParentPool";
+import {
+  attachCommentStats,
+  effectiveCommentCount,
+  filterReplyEligibleParents,
+  MIN_COMMENTS_FOR_REPLY,
+  pickLeastCommentedParent,
+} from "./commentSelection";
 
 /**
  * Probability that an agent's daily comment becomes a reply to someone
@@ -73,6 +80,8 @@ interface EligibleCommentParent {
   parentId: string;
   title: string;
   category: string | null;
+  commentCount: number;
+  lastCommentAt: Date | null;
 }
 
 function getMondayOfWeek(): Date {
@@ -107,8 +116,10 @@ async function countAgentCommentsThisWeek(userId: string): Promise<number> {
  *
  *  Each surface uses a hybrid pool (see commentParentPool.ts): ~70 newest
  *  plus ~130 random live rows, merged to 200. When the catalogue has ≤200
- *  live items we load all of them. chooseParent() still picks uniformly
- *  within the merged pool so explore rows get equal odds alongside recent. */
+ *  live items we load all of them. chooseParent() then weights by
+ *  effective comment count (least-commented-first, with stale thin
+ *  threads treated as empty) so explore rows and quiet cards get a real
+ *  shot alongside recent/busy ones. */
 async function getOpenParents(): Promise<EligibleCommentParent[]> {
   const now = new Date();
   const [matchupPool, trendingPool, opinionPool, marketPool, personPool] = await Promise.all([
@@ -130,13 +141,54 @@ async function getOpenParents(): Promise<EligibleCommentParent[]> {
       `${poolLog("insight", personPool.stats)}`,
   );
 
-  return [
+  const parents = [
     ...matchupPool.rows.map((row) => ({ ...row, parentType: "matchup" as const })),
     ...trendingPool.rows.map((row) => ({ ...row, parentType: "trending_poll" as const })),
     ...opinionPool.rows.map((row) => ({ ...row, parentType: "opinion_poll" as const })),
     ...marketPool.rows.map((row) => ({ ...row, parentType: "open_market" as const })),
     ...personPool.rows.map((row) => ({ ...row, parentType: "community_insight" as const })),
   ];
+  return attachLiveCommentStats(parents);
+}
+
+/** Visible (non-deleted, not-hidden) comment totals per parent, used for
+ *  least-commented-first weighting and the reply-vs-top-level gate. */
+async function attachLiveCommentStats(
+  parents: Array<Omit<EligibleCommentParent, "commentCount" | "lastCommentAt">>,
+): Promise<EligibleCommentParent[]> {
+  if (!parents.length) return [];
+
+  const parentIds = [...new Set(parents.map((p) => p.parentId))];
+  const rows = await db
+    .select({
+      parentType: unifiedComments.parentType,
+      parentId: unifiedComments.parentId,
+      c: count(),
+      lastAt: sql<Date | string | null>`max(${unifiedComments.createdAt})`,
+    })
+    .from(unifiedComments)
+    .where(
+      and(
+        inArray(unifiedComments.parentId, parentIds),
+        isNull(unifiedComments.deletedAt),
+        eq(unifiedComments.moderationStatus, "visible"),
+      ),
+    )
+    .groupBy(unifiedComments.parentType, unifiedComments.parentId);
+
+  const withStats = attachCommentStats(parents, rows);
+  const sweepNow = new Date();
+  const empty = withStats.filter((p) => p.commentCount === 0).length;
+  const staleThin = withStats.filter(
+    (p) => p.commentCount > 0 && effectiveCommentCount(p.commentCount, p.lastCommentAt, sweepNow) === 0,
+  ).length;
+  const replyEligible = withStats.filter(
+    (p) => effectiveCommentCount(p.commentCount, p.lastCommentAt, sweepNow) >= MIN_COMMENTS_FOR_REPLY,
+  ).length;
+  log(
+    `[CommentWorker] Comment fill: empty=${empty} staleThin=${staleThin} replyEligible=${replyEligible} of ${withStats.length}`,
+  );
+  return withStats;
 }
 
 /**
@@ -433,10 +485,14 @@ const SURFACE_PICK_WEIGHTS: Record<CommentSurface, number> = {
   community_insight: 0.20,
 };
 
-function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulationProfile): EligibleCommentParent {
+function chooseParent(
+  parents: EligibleCommentParent[],
+  profile: AgentSimulationProfile,
+  now: Date,
+): EligibleCommentParent {
   // First pick a surface (weighted), then a parent within that surface.
-  // Falls back to a uniform pick across all eligible parents only if the
-  // chosen surface has nothing to offer for this agent — preserving
+  // Falls back to least-commented-first across all eligible parents only
+  // if the chosen surface has nothing to offer for this agent — preserving
   // engagement when one surface temporarily has no eligible parents.
   const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
   for (const p of parents) {
@@ -448,7 +504,7 @@ function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulation
     .filter((s) => (bySurface.get(s)?.length ?? 0) > 0);
 
   if (availableSurfaces.length === 0) {
-    return parents[Math.floor(Math.random() * parents.length)];
+    return pickLeastCommentedParent(parents, now);
   }
 
   const totalWeight = availableSurfaces.reduce((sum, s) => sum + SURFACE_PICK_WEIGHTS[s], 0);
@@ -469,7 +525,9 @@ function chooseParent(parents: EligibleCommentParent[], profile: AgentSimulation
     (p) => p.category && profile.favoriteCategories.includes(p.category),
   );
   const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : surfacePool;
-  return pool[Math.floor(Math.random() * pool.length)];
+  // A + D: weight by effective comment count instead of uniform random so
+  // empty and stale-thin cards rise without changing surface mix or volume.
+  return pickLeastCommentedParent(pool, now);
 }
 
 /**
@@ -560,23 +618,34 @@ async function ensureVoteBeforeComment(
  *  top-level picker) so replies don't accidentally drift onto whichever
  *  surface happens to have the most parents — without this the world-
  *  market surface (typically the largest) would dominate replies even
- *  when polls/matchups have rich active threads. */
+ *  when polls/matchups have rich active threads.
+ *
+ *  Thin cards (empty, one comment, or a stale thread below the unstick
+ *  floor) are excluded up front so the 30% reply roll falls back to a
+ *  top-level post on something that still looks quiet. */
 async function findReplyOpportunity(
   agent: { userId: string; displayName: string },
   allParents: EligibleCommentParent[],
   profile: AgentSimulationProfile,
+  now: Date,
 ): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
-  if (!allParents.length) return null;
+  const replyEligible = filterReplyEligibleParents(allParents, now);
+  if (!replyEligible.length) return null;
 
   // Build per-surface buckets so we can weight the probe order.
   const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
-  for (const p of allParents) {
+  for (const p of replyEligible) {
     if (!bySurface.has(p.parentType)) bySurface.set(p.parentType, []);
     bySurface.get(p.parentType)!.push(p);
   }
 
   // Within each bucket, prefer the agent's favourite categories first
-  // (same bias the top-level path applies), then shuffle the rest.
+  // (same bias the top-level path applies). Among equals, probe thinner
+  // live threads before busy ones so replies grow 2-comment cards rather
+  // than stacking onto the same 13-comment matchup.
+  const byEffectiveCount = (a: EligibleCommentParent, b: EligibleCommentParent) =>
+    effectiveCommentCount(a.commentCount, a.lastCommentAt, now) -
+    effectiveCommentCount(b.commentCount, b.lastCommentAt, now);
   const preparedBuckets = new Map<CommentSurface, EligibleCommentParent[]>();
   for (const [surface, parents] of bySurface.entries()) {
     const preferred = parents.filter(
@@ -584,8 +653,8 @@ async function findReplyOpportunity(
     );
     const others = parents.filter((p) => !preferred.includes(p));
     preparedBuckets.set(surface, [
-      ...preferred.sort(() => Math.random() - 0.5),
-      ...others.sort(() => Math.random() - 0.5),
+      ...preferred.sort(byEffectiveCount),
+      ...others.sort(byEffectiveCount),
     ]);
   }
 
@@ -726,6 +795,7 @@ export async function runCommentSweep(): Promise<{
   };
 
   const allParents = await getOpenParents();
+  const sweepNow = new Date();
 
   for (const agent of agents) {
     if (posted >= MAX_COMMENTS_PER_SWEEP) {
@@ -793,6 +863,7 @@ export async function runCommentSweep(): Promise<{
         { userId: agent.userId, displayName: agent.displayName },
         candidatePool,
         simulation,
+        sweepNow,
       );
       if (opp) {
         parent = opp.parent;
@@ -807,7 +878,7 @@ export async function runCommentSweep(): Promise<{
         skipped++;
         continue;
       }
-      parent = chooseParent(eligible, simulation);
+      parent = chooseParent(eligible, simulation, sweepNow);
     }
 
     // Vote-first: cast inline vote on poll/matchup parents the agent
@@ -836,7 +907,7 @@ export async function runCommentSweep(): Promise<{
         skipped++;
         continue;
       }
-      parent = chooseParent(safeEligible, simulation);
+      parent = chooseParent(safeEligible, simulation, sweepNow);
       replyTarget = null; // reply target was tied to original parent
       voteReady = await ensureVoteBeforeComment(
         { userId: agent.userId, displayName: agent.displayName, contrarianism: agent.contrarianism, prestigeBias: agent.prestigeBias, specialties: agent.specialties },
@@ -1019,6 +1090,10 @@ export async function runCommentSweep(): Promise<{
       }
 
       posted++;
+      // Keep this sweep's in-memory fill stats current so later agents
+      // don't all pile onto the same empty card we just posted on.
+      parent.commentCount += 1;
+      parent.lastCommentAt = sweepNow;
       if (replyTarget) {
         replies++;
         // threadRoot is populated only when the target was itself a reply

@@ -28,6 +28,7 @@ import {
   profiles,
 } from "@shared/schema";
 import { db } from "../db";
+import { COMMENT_ACTIVITY_WINDOW_MS } from "./commentSelection";
 
 export type CommentSurface = "matchup" | "trending_poll" | "opinion_poll" | "open_market" | "community_insight";
 
@@ -575,7 +576,7 @@ export async function findInsightReplyTarget(
   personId: string,
   agentUserId: string,
 ): Promise<ReplyTarget | null> {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - COMMENT_ACTIVITY_WINDOW_MS);
 
   const candidates = await db
     .select({
@@ -669,7 +670,7 @@ export async function findReplyTarget(
   parentId: string,
   agentUserId: string,
 ): Promise<ReplyTarget | null> {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - COMMENT_ACTIVITY_WINDOW_MS);
 
   // Load every non-deleted comment on this parent in the 7-day window —
   // top-level AND replies. We need replies in the result set so we can
