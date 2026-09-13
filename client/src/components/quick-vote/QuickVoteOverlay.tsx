@@ -21,7 +21,7 @@ import {
   type SnapViewApi,
 } from "@/components/snap-scroll/VoteSnapScrollView";
 import { QuickVoteActionBar } from "@/components/quick-vote/QuickVoteActionBar";
-import { QuickVoteSearch } from "@/components/quick-vote/QuickVoteSearch";
+import { QuickVoteSearch, resetIosInputZoom } from "@/components/quick-vote/QuickVoteSearch";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-polls/OpinionPollCard";
@@ -59,37 +59,62 @@ const EMPTY_RACE_MAP = new Map<string, string>();
 const NOOP = () => {};
 const KEYBOARD_SETTLE_IDLE_MS = 80;
 const KEYBOARD_SETTLE_FALLBACK_MS = 450;
+const SCALE_EPS = 0.02;
+const OFFSET_EPS = 2;
 
-/** Wait until the visual viewport stops resizing (iOS keyboard/toolbar) so
- * a search jump measures the full-bleed card height. Fallback if no resize. */
+function isVisualViewportReset(): boolean {
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  if (!vv) return true;
+  return (
+    Math.abs(vv.scale - 1) <= SCALE_EPS &&
+    Math.abs(vv.offsetLeft) <= OFFSET_EPS &&
+    Math.abs(vv.offsetTop) <= OFFSET_EPS
+  );
+}
+
+/** Wait until the keyboard/toolbar AND leftover input-zoom settle so a
+ * search jump measures the full-bleed unzoomed card. Fallback if quiet. */
 function afterVisualViewportSettles(cb: () => void): () => void {
   let settled = false;
   const vv = typeof window !== "undefined" ? window.visualViewport : null;
   let idleTimer = 0;
   let fallbackTimer = 0;
 
-  const finish = () => {
-    if (settled) return;
-    settled = true;
-    vv?.removeEventListener("resize", onResize);
+  const detach = () => {
+    vv?.removeEventListener("resize", onChange);
+    vv?.removeEventListener("scroll", onChange);
     window.clearTimeout(idleTimer);
     window.clearTimeout(fallbackTimer);
+  };
+
+  const finish = (force: boolean) => {
+    if (settled) return;
+    if (!isVisualViewportReset()) {
+      resetIosInputZoom();
+      if (!force) {
+        window.clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(() => finish(false), KEYBOARD_SETTLE_IDLE_MS);
+        return;
+      }
+    }
+    settled = true;
+    detach();
     cb();
   };
 
-  const onResize = () => {
+  const onChange = () => {
     window.clearTimeout(idleTimer);
-    idleTimer = window.setTimeout(finish, KEYBOARD_SETTLE_IDLE_MS);
+    idleTimer = window.setTimeout(() => finish(false), KEYBOARD_SETTLE_IDLE_MS);
   };
 
-  fallbackTimer = window.setTimeout(finish, KEYBOARD_SETTLE_FALLBACK_MS);
-  vv?.addEventListener("resize", onResize);
+  resetIosInputZoom();
+  fallbackTimer = window.setTimeout(() => finish(true), KEYBOARD_SETTLE_FALLBACK_MS);
+  vv?.addEventListener("resize", onChange);
+  vv?.addEventListener("scroll", onChange);
 
   return () => {
     settled = true;
-    vv?.removeEventListener("resize", onResize);
-    window.clearTimeout(idleTimer);
-    window.clearTimeout(fallbackTimer);
+    detach();
   };
 }
 

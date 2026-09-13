@@ -11,6 +11,30 @@ import {
   type QuickVoteSearchHit,
 } from "@/lib/quickVoteSearch";
 
+const SCALE_EPS = 0.02;
+const OFFSET_EPS = 2;
+
+/** Drop leftover iOS Safari input-zoom without locking pinch-zoom site-wide.
+ * Briefly adds maximum-scale=1 to the viewport meta, then restores it. */
+export function resetIosInputZoom(): void {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const vv = window.visualViewport;
+  const scaleOff = vv != null && Math.abs(vv.scale - 1) > SCALE_EPS;
+  const offsetOff =
+    vv != null &&
+    (Math.abs(vv.offsetLeft) > OFFSET_EPS || Math.abs(vv.offsetTop) > OFFSET_EPS);
+  if (!scaleOff && !offsetOff) return;
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  const original = meta.getAttribute("content") || "";
+  if (!original.includes("maximum-scale")) {
+    meta.setAttribute("content", `${original}, maximum-scale=1.0`);
+  }
+  requestAnimationFrame(() => {
+    meta.setAttribute("content", original);
+  });
+}
+
 const TYPE_LABEL: Record<QuickVoteSearchHit["type"], string> = {
   matchup: "Matchup",
   sentiment: "Sentiment",
@@ -72,7 +96,8 @@ export function QuickVoteSearch({
           aria-label="Find a vote"
           data-interactive="true"
           data-testid="quick-vote-search"
-          className="h-9 w-full rounded-full border border-white/15 bg-black/30 py-0 pl-9 pr-9 text-sm text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-white/40 focus:border-white/30 focus:outline-none focus:ring-1 focus:ring-white/25"
+          onBlur={() => resetIosInputZoom()}
+          className="h-9 w-full rounded-full border border-white/15 bg-black/30 py-0 pl-9 pr-9 text-[16px] text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl placeholder:text-white/40 focus:border-white/30 focus:outline-none focus:ring-1 focus:ring-white/25"
         />
         {query.length > 0 && (
           <button
