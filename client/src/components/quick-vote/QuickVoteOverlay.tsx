@@ -56,7 +56,7 @@ export interface QuickVoteOverlayProps {
   onClose: () => void;
   /** Card to restore to (post-signup return). */
   initialCardId?: string;
-  /** Telemetry: what opened the overlay (nudge_pill, reentry_pill, restore). */
+  /** Telemetry: what opened the overlay (nudge_pill, persistent_pill, restore). */
   source?: string;
 }
 

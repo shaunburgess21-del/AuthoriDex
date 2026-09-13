@@ -4,9 +4,9 @@
  *    arbitrated via interruptArbiter so only one interrupt fires per session),
  *  - the QuickVoteOverlay open state + history pushState back-to-close,
  *  - the post-signup restore (AUTH_APPLY_QUICK_VOTE_ONCE_KEY),
- *  - the session re-entry pill after the overlay is closed.
+ *  - the persistent bottom-right Quick Vote pill (mobile Home + Vote).
  *
- * Overlay is mobile-only (v1). On desktop the same pill deep-links to /vote.
+ * Overlay is mobile-only (v1). On desktop the first-visit nudge deep-links to /vote.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,7 +34,6 @@ const NUDGE_DWELL_MS = 7000;
 /** Min. scroll movement before "first scroll" counts as an intent signal —
  * filters out programmatic scrolls and mobile address-bar resize events. */
 const SCROLL_TRIGGER_DELTA_PX = 48;
-const REENTRY_SESSION_KEY = "voxdex_quick_vote_reentry";
 
 export interface QuickVoteHostProps {
   surface: "home" | "vote";
@@ -55,15 +54,6 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
   const [overlaySource, setOverlaySource] = useState<string>("unknown");
   const [initialCardId, setInitialCardId] = useState<string | undefined>(undefined);
   const [nudgeVisible, setNudgeVisible] = useState(false);
-  const [reentryVisible, setReentryVisible] = useState(
-    () => {
-      try {
-        return sessionStorage.getItem(REENTRY_SESSION_KEY) === "1";
-      } catch {
-        return false;
-      }
-    },
-  );
 
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current = overlayOpen;
@@ -87,12 +77,6 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     const onPop = () => {
       if (overlayOpenRef.current) {
         setOverlayOpen(false);
-        try {
-          sessionStorage.setItem(REENTRY_SESSION_KEY, "1");
-        } catch {
-          /* private mode */
-        }
-        setReentryVisible(true);
       }
     };
     window.addEventListener("popstate", onPop);
@@ -129,7 +113,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
   // ── Entry pill nudge: ~7s dwell OR first meaningful scroll ──────────────
   useEffect(() => {
     if (authLoading || user) return;
-    if (overlayOpen || nudgeVisible || reentryVisible) return;
+    if (overlayOpen || nudgeVisible) return;
     // Desktop pill deep-links to /vote — pointless on /vote itself.
     if (!isMobile && surface === "vote") return;
     if (!isQuickVoteNudgeEligible(!!user)) return;
@@ -158,12 +142,14 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     };
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, overlayOpen, reentryVisible, surface, isMobile]);
+  }, [authLoading, user, overlayOpen, surface, isMobile]);
 
-  // Warm the mix + hydration caches while the pill is on screen so the
+  const showFab = isMobile && !overlayOpen && !nudgeVisible;
+
+  // Warm the mix + hydration caches while the FAB is on screen so the
   // overlay opens with cards already in hand.
   useEffect(() => {
-    if (!nudgeVisible || !isMobile) return;
+    if (!showFab) return;
     void queryClient.prefetchQuery({
       queryKey: ["/api/vote/starter-mix"],
       staleTime: 5 * 60 * 1000,
@@ -171,7 +157,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     for (const key of ["/api/matchups", "/api/trending-polls", "/api/opinion-polls"]) {
       void queryClient.prefetchQuery({ queryKey: [key], staleTime: 60 * 1000 });
     }
-  }, [nudgeVisible, isMobile, queryClient]);
+  }, [showFab, queryClient]);
 
   const acceptNudge = useCallback(() => {
     markInterruptActivated(QUICK_VOTE_NUDGE_ID);
@@ -190,8 +176,8 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     setNudgeVisible(false);
   }, [surface]);
 
-  const openFromReentry = useCallback(() => {
-    openOverlay("reentry_pill");
+  const openFromFab = useCallback(() => {
+    openOverlay("persistent_pill");
   }, [openOverlay]);
 
   // Recede-on-idle: the pill stays mounted and tappable at all times, but
@@ -201,7 +187,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
   // the full labelled state for ~3s so the user registers what it is.
   const [pillProminent, setPillProminent] = useState(true);
   useEffect(() => {
-    if (!reentryVisible || !isMobile || overlayOpen) return;
+    if (!showFab) return;
     setPillProminent(true);
     let idleTimer: number | null = window.setTimeout(() => {
       idleTimer = null;
@@ -222,9 +208,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
       window.removeEventListener("scroll", onMove);
       window.removeEventListener("touchmove", onMove);
     };
-  }, [reentryVisible, isMobile, overlayOpen]);
-
-  const showReentry = reentryVisible && isMobile && !overlayOpen && !nudgeVisible;
+  }, [showFab]);
 
   return (
     <>
@@ -280,9 +264,10 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
         </AnimatePresence>
       </div>
 
-      {/* Session re-entry pill after overlay close (mobile). Same fixed
-          wrapper pattern as the nudge pill so it tracks the nav — including
-          the safe-area inset the nav's height grows by. */}
+      {/* Persistent Quick Vote pill (mobile). Same fixed wrapper pattern as
+          the nudge pill so it tracks the nav — including the safe-area inset
+          the nav's height grows by. Hidden while the overlay or first-visit
+          nudge is up. */}
       <div
         className="fixed right-4 z-[55] pointer-events-none"
         style={{
@@ -292,7 +277,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
         }}
       >
         <AnimatePresence>
-          {showReentry && (
+          {showFab && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
               // Full pill while scrolling (snappy expand); soft slow recede to
@@ -300,7 +285,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
               animate={{ opacity: pillProminent ? 1 : 0.5, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
-              onClick={openFromReentry}
+              onClick={openFromFab}
               className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
               aria-label="Quick Vote"
               data-testid="quick-vote-reentry-pill"
