@@ -10,7 +10,7 @@
  *
  * Mobile-only by design (v1); hosts gate on useIsMobile.
  */
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import {
   type SnapViewApi,
 } from "@/components/snap-scroll/VoteSnapScrollView";
 import { QuickVoteActionBar } from "@/components/quick-vote/QuickVoteActionBar";
+import { QuickVoteSearch } from "@/components/quick-vote/QuickVoteSearch";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-polls/OpinionPollCard";
@@ -34,8 +35,14 @@ import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { hapticSuccess } from "@/lib/haptic";
+import { haptic, hapticSuccess } from "@/lib/haptic";
 import { logFunnelEvent, trackVoteCast } from "@/lib/funnelTelemetry";
+import {
+  matchupSearchLabel,
+  searchQuickVoteCards,
+  type QuickVoteSearchHit,
+  type QuickVoteSearchRecord,
+} from "@/lib/quickVoteSearch";
 
 interface StarterMixItem {
   type: "matchup" | "sentiment" | "opinion";
@@ -114,6 +121,58 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     return items;
   }, [mixRefs, matchups, sentimentPolls, opinionPolls]);
 
+  const searchRecords = useMemo<QuickVoteSearchRecord[]>(() => {
+    return snapItems.map((item, index) => {
+      const type = typeById.get(item.id);
+      if (type === "matchup") {
+        const m = matchups.find((x) => x.id === item.id);
+        return {
+          id: item.id,
+          index,
+          type: "matchup" as const,
+          label: matchupSearchLabel(m?.optionAText, m?.optionBText, m?.promptText || m?.title || item.title),
+          titleHaystack: [m?.title, m?.promptText, item.title].filter(Boolean).join(" "),
+          optionHaystack: [m?.optionAText, m?.optionBText].filter(Boolean).join(" "),
+          extraHaystack: m?.category ?? item.category,
+          thumbA: m?.optionAImage,
+          thumbB: m?.optionBImage,
+        };
+      }
+      if (type === "sentiment") {
+        const t = sentimentPolls.find((x: any) => x.id === item.id);
+        return {
+          id: item.id,
+          index,
+          type: "sentiment" as const,
+          label: t?.headline || item.title,
+          titleHaystack: [t?.headline, item.title, t?.personName].filter(Boolean).join(" "),
+          optionHaystack: "",
+          extraHaystack: t?.category ?? item.category,
+          thumbA: t?.personAvatar || t?.imageUrl || null,
+        };
+      }
+      const p = opinionPolls.find((x: any) => x.id === item.id) as OpinionPollCardPoll | undefined;
+      const optionNames = (p?.options ?? []).map((o) => o.name).filter(Boolean);
+      return {
+        id: item.id,
+        index,
+        type: "opinion" as const,
+        label: p?.title || item.title,
+        titleHaystack: [p?.title, p?.description, item.title].filter(Boolean).join(" "),
+        optionHaystack: optionNames.join(" "),
+        extraHaystack: p?.category ?? item.category,
+        thumbA: p?.options?.[0]?.imageUrl || p?.imageUrl || null,
+        thumbB: p?.options?.[1]?.imageUrl || null,
+      };
+    });
+  }, [snapItems, typeById, matchups, sentimentPolls, opinionPolls]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchResults = useMemo(
+    () => searchQuickVoteCards(searchQuery, searchRecords),
+    [searchQuery, searchRecords],
+  );
+
   // ── Session stats + current-card tracking (telemetry, auth snapshot) ───
   const currentCardIdRef = useRef<string | null>(null);
   const maxIndexSeenRef = useRef(0);
@@ -156,6 +215,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         reason: closeReasonRef.current ?? "user",
       });
       closeReasonRef.current = null;
+      setSearchQuery("");
     }
   }, [open, source]);
 
@@ -172,6 +232,14 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   // ── Auto-advance beat (1s result reveal, gesture cancels) ──────────────
   const snapApiRef = useRef<SnapViewApi | null>(null);
   const advanceTimerRef = useRef<number | null>(null);
+
+  const handleSearchSelect = useCallback((hit: QuickVoteSearchHit) => {
+    setSearchQuery("");
+    haptic();
+    logFunnelEvent("overlay_search_select", "quick_vote", { type: hit.type });
+    snapApiRef.current?.scrollToIndex(hit.index);
+    snapApiRef.current?.releaseGestures();
+  }, []);
 
   const cancelAdvance = useCallback(() => {
     if (advanceTimerRef.current != null) {
@@ -468,6 +536,14 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         apiRef={snapApiRef}
         onVisibleIndexChange={handleVisibleIndexChange}
         renderPageFooter={renderPageFooter}
+        headerSlot={
+          <QuickVoteSearch
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            results={searchResults}
+            onSelect={handleSearchSelect}
+          />
+        }
       />
       {/* Loading shell: the host locks scroll + pushes history the moment the
           overlay opens, so the visitor must never face a bare locked page.

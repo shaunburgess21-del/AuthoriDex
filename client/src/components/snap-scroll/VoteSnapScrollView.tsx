@@ -88,6 +88,8 @@ interface VoteSnapScrollViewProps {
 export interface SnapViewApi {
   /** Smooth-scroll the active column down one snap page (no-op at the end). */
   advanceToNext: () => void;
+  /** Jump the active column to a snap page index (Quick Vote search). */
+  scrollToIndex: (index: number) => void;
   /**
    * Clear stuck gesture/settle locks and wake the snap column after an
    * overlay (comments, share sheet) steals the touch lifecycle.
@@ -459,6 +461,8 @@ export function VoteSnapScrollView({
     }
     return map;
   }, [normalizedItems, categories]);
+  const categoryItemsRef = useRef(categoryItems);
+  categoryItemsRef.current = categoryItems;
 
   useEffect(() => {
     if (!open) {
@@ -669,6 +673,22 @@ export function VoteSnapScrollView({
         const target = (idx + 1) * h;
         if (target >= el.scrollHeight) return;
         tweenColumnToTop(el, target);
+      },
+      scrollToIndex: (index: number) => {
+        const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
+        const colItems = categoryItemsRef.current.get(cat) || [];
+        if (index < 0 || index >= colItems.length) return;
+        setColumnVisibleIndices((prev) =>
+          prev[cat] === index ? prev : { ...prev, [cat]: index },
+        );
+        const el = columnScrollRefs.current[cat];
+        if (!el) return;
+        if (programmaticScrollActiveRef.current) {
+          cancelScrollTweenRef.current?.();
+        }
+        const h = el.clientHeight;
+        if (h === 0) return;
+        tweenColumnToTop(el, index * h);
       },
       releaseGestures,
     };
@@ -1494,7 +1514,13 @@ export function VoteSnapScrollView({
             // Absolute so the scroll column is full-bleed under it —
             // justify-center then centers cards in the visible glass, not
             // in the region below a 52px flex header (which always looked low).
-            <div className="absolute inset-x-0 top-0 z-10 h-[52px] flex items-center px-1">
+            <div
+              className="absolute inset-x-0 top-0 z-20 flex items-center px-1"
+              style={{
+                paddingTop: "env(safe-area-inset-top, 0px)",
+                height: "calc(52px + env(safe-area-inset-top, 0px))",
+              }}
+            >
               <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
               <button
                 onClick={onClose}
