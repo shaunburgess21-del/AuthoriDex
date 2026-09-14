@@ -213,6 +213,42 @@ function scheduleIdleTask(task: () => void): void {
   }
 }
 
+/**
+ * True scroll offset of every snap page in a column, measured from live
+ * layout rects. Pages are `height: 100%` of a container whose CSS height is
+ * routinely fractional on mobile, while `clientHeight` rounds to an integer —
+ * so `index * clientHeight` drifts from the browser's real snap boundary by
+ * up to ~0.5px per page. Deep enough in the deck that drift clears
+ * OFF_BOUNDARY_PX: the settle guard would "correct" a perfectly snapped card,
+ * native snap would pull it back on re-enable, scrollend would fire again —
+ * an endless slight up-down shake at rest. Rect-measured offsets keep every
+ * programmatic target identical to the native snap point, so the guard and
+ * the browser always agree.
+ */
+function measureSnapOffsets(el: HTMLElement): number[] {
+  const base = el.getBoundingClientRect().top;
+  const scrollTop = el.scrollTop;
+  const offsets: number[] = [];
+  for (const child of Array.from(el.children)) {
+    if (child instanceof HTMLElement) {
+      offsets.push(child.getBoundingClientRect().top - base + scrollTop);
+    }
+  }
+  return offsets;
+}
+
+function nearestOffsetIndex(offsets: number[], from: number): number {
+  let best = 0;
+  for (let i = 1; i < offsets.length; i++) {
+    if (Math.abs(offsets[i] - from) < Math.abs(offsets[best] - from)) best = i;
+  }
+  return best;
+}
+
+function getMaxScrollTop(el: HTMLElement): number {
+  return Math.max(0, el.scrollHeight - el.clientHeight);
+}
+
 function SnapEndCard({
   category,
   sectionType,
@@ -505,7 +541,8 @@ export function VoteSnapScrollView({
     setColumnVisibleIndices((prev) => ({ ...prev, [cat]: maxIdx }));
     const el = columnScrollRefs.current[cat];
     if (el) {
-      el.scrollTo({ top: maxIdx * el.clientHeight, behavior: "auto" });
+      const boundary = measureSnapOffsets(el)[maxIdx];
+      el.scrollTo({ top: boundary ?? maxIdx * el.clientHeight, behavior: "auto" });
     }
   }, [open, activeCategoryIdx, categories, categoryItems, columnVisibleIndices]);
 
@@ -531,7 +568,8 @@ export function VoteSnapScrollView({
     const idx = positionMemoryRef.current.get(cat);
     if (idx != null && idx > 0) {
       requestAnimationFrame(() => {
-        el.scrollTo({ top: idx * el.clientHeight, behavior: "auto" });
+        const boundary = measureSnapOffsets(el)[idx];
+        el.scrollTo({ top: boundary ?? idx * el.clientHeight, behavior: "auto" });
         setColumnVisibleIndices((prev) => ({ ...prev, [cat]: idx }));
       });
     }
@@ -628,7 +666,9 @@ export function VoteSnapScrollView({
     if (programmaticScrollActiveRef.current) return;
     const startTop = el.scrollTop;
     const dist = target - startTop;
-    if (dist === 0) return;
+    // Sub-device-pixel distances aren't renderable — running the tween would
+    // just hold the programmatic lock for 350ms with no visible movement.
+    if (Math.abs(dist) < 0.5) return;
     const duration = 350;
     const startTs = performance.now();
     programmaticScrollActiveRef.current = true;
@@ -669,12 +709,14 @@ export function VoteSnapScrollView({
         const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
         const el = columnScrollRefs.current[cat];
         if (!el || programmaticScrollActiveRef.current) return;
-        const h = el.clientHeight;
-        if (h === 0) return;
-        const idx = Math.round(el.scrollTop / h);
-        const target = (idx + 1) * h;
-        if (target >= el.scrollHeight) return;
-        tweenColumnToTop(el, target);
+        if (el.clientHeight === 0) return;
+        const offsets = measureSnapOffsets(el);
+        if (offsets.length === 0) return;
+        const idx = nearestOffsetIndex(offsets, el.scrollTop);
+        if (idx + 1 >= offsets.length) return;
+        // Tween to the measured boundary so the landing needs no native
+        // re-snap adjustment (a visible micro-nudge with index*height math).
+        tweenColumnToTop(el, Math.min(offsets[idx + 1], getMaxScrollTop(el)));
       },
       scrollToIndex: (index: number) => {
         const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
@@ -697,10 +739,10 @@ export function VoteSnapScrollView({
         const el = columnScrollRefs.current[cat];
         if (!el) return;
         const apply = () => {
-          const h = el.clientHeight;
-          if (h === 0) return;
-          const maxTop = Math.max(0, el.scrollHeight - h);
-          const target = Math.max(0, Math.min(index * h, maxTop));
+          if (el.clientHeight === 0) return;
+          const boundary = measureSnapOffsets(el)[index];
+          if (boundary == null) return;
+          const target = Math.max(0, Math.min(boundary, getMaxScrollTop(el)));
           el.style.scrollSnapType = "none";
           el.scrollTop = target;
           el.style.scrollSnapType = "y mandatory";
@@ -772,13 +814,18 @@ export function VoteSnapScrollView({
       const TAP_SETTLE_DELAY_MS = 90;
       const OFF_BOUNDARY_PX = 4;
 
-      /** Nearest snap boundary, or null when aligned / unmeasurable. */
+      /** Nearest snap boundary, or null when aligned / unmeasurable.
+       * Boundaries come from rect measurement (see measureSnapOffsets) so a
+       * card the browser already snapped can never read as "stranded". */
       const strandedTarget = (): number | null => {
-        const h = el.clientHeight;
-        if (h === 0) return null;
+        if (el.clientHeight === 0) return null;
+        const offsets = measureSnapOffsets(el);
+        if (offsets.length === 0) return null;
         const top = el.scrollTop;
-        const maxTop = Math.max(0, el.scrollHeight - h);
-        const nearest = Math.max(0, Math.min(Math.round(top / h) * h, maxTop));
+        const nearest = Math.max(
+          0,
+          Math.min(offsets[nearestOffsetIndex(offsets, top)], getMaxScrollTop(el)),
+        );
         return Math.abs(top - nearest) > OFF_BOUNDARY_PX ? nearest : null;
       };
       const correctTo = (target: number) => {
@@ -925,8 +972,10 @@ export function VoteSnapScrollView({
             : prevHeight > 0
               ? Math.round(el.scrollTop / prevHeight)
               : 0;
-        const maxTop = Math.max(0, el.scrollHeight - h);
-        el.scrollTop = Math.max(0, Math.min(idx * h, maxTop));
+        const offsets = measureSnapOffsets(el);
+        if (offsets.length === 0) return;
+        const boundary = offsets[Math.max(0, Math.min(idx, offsets.length - 1))];
+        el.scrollTop = Math.max(0, Math.min(boundary, getMaxScrollTop(el)));
       });
       resizeObserver.observe(el);
 
@@ -1001,7 +1050,8 @@ export function VoteSnapScrollView({
       const el = columnScrollRefs.current[cat];
       if (!el) return false;
       if (idx > 0) {
-        el.scrollTo({ top: idx * el.clientHeight, behavior: "auto" });
+        const boundary = measureSnapOffsets(el)[idx];
+        el.scrollTo({ top: boundary ?? idx * el.clientHeight, behavior: "auto" });
       } else {
         el.scrollTop = 0;
       }
@@ -1028,7 +1078,9 @@ export function VoteSnapScrollView({
       const h = el.clientHeight;
       if (h === 0) return;
       if (Math.round(el.scrollTop / h) !== idx) return;
-      const target = Math.min(idx * h, Math.max(0, el.scrollHeight - h));
+      const boundary = measureSnapOffsets(el)[idx];
+      if (boundary == null) return;
+      const target = Math.min(boundary, getMaxScrollTop(el));
       if (Math.abs(el.scrollTop - target) > 4) {
         el.scrollTo({ top: target, behavior: "auto" });
       }
@@ -1620,7 +1672,11 @@ export function VoteSnapScrollView({
                             }
                           }}
                           onScroll={handleColumnScroll(cat)}
-                          className="h-full overflow-y-auto snap-y snap-mandatory"
+                          // overscroll containment: an edge-of-deck fling must
+                          // not chain to the document behind the overlay —
+                          // root scroll moves browser chrome and wobbles the
+                          // whole surface vertically.
+                          className="h-full overflow-y-auto snap-y snap-mandatory overscroll-y-contain"
                           style={{ scrollSnapType: "y mandatory" }}
                         >
                           {(() => {
