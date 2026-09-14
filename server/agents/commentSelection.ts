@@ -35,17 +35,17 @@ export type CommentCountRow = {
   parentType: string | null;
   parentId: string | null;
   c: number | string;
-  lastAt: Date | string | null;
+  lastAt: Date | string | number | null;
 };
 
-export function commentParentKey(parentType: string, parentId: string): string {
-  return `${parentType}:${parentId}`;
+export function commentParentKey(parentType: unknown, parentId: unknown): string {
+  return `${String(parentType)}:${String(parentId)}`;
 }
 
-function toDate(value: Date | string | null | undefined): Date | null {
+function toDate(value: Date | string | number | null | undefined): Date | null {
   if (value == null) return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-  const parsed = new Date(value);
+  const parsed = typeof value === "number" ? new Date(value) : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 

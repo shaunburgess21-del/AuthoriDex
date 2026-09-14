@@ -9,7 +9,7 @@
  * generic. Quality over quantity.
  */
 
-import { and, count, eq, gte, inArray, sql, desc, isNull } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql, desc, isNull, max } from "drizzle-orm";
 import {
   agentConfigs,
   comments as unifiedComments,
@@ -55,6 +55,11 @@ import {
   MIN_COMMENTS_FOR_REPLY,
   pickLeastCommentedParent,
 } from "./commentSelection";
+import {
+  applyCommentVolumeBoost,
+  COMMENT_VOLUME_BOOST_UNTIL_MS,
+  isCommentVolumeBoostActive,
+} from "./commentVolumeBoost";
 
 /**
  * Probability that an agent's daily comment becomes a reply to someone
@@ -68,8 +73,8 @@ const REPLY_PROBABILITY = 0.30;
 /**
  * Defensive cap on how many comments a single sweep can post platform-wide.
  * With 56 agents × per-sweep dailyCommentChance × weeklyCommentCap, expected
- * daily volume is ~7-8 comments. This ceiling exists so a misconfiguration
- * can't quietly generate hundreds.
+ * daily volume is ~7-8 comments (~20 while the Sep 2026 volume boost is on).
+ * This ceiling exists so a misconfiguration can't quietly generate hundreds.
  */
 const MAX_COMMENTS_PER_SWEEP = 30;
 
@@ -159,16 +164,18 @@ async function attachLiveCommentStats(
   if (!parents.length) return [];
 
   const parentIds = [...new Set(parents.map((p) => p.parentId))];
+  const parentTypes = [...new Set(parents.map((p) => p.parentType))];
   const rows = await db
     .select({
       parentType: unifiedComments.parentType,
       parentId: unifiedComments.parentId,
       c: count(),
-      lastAt: sql<Date | string | null>`max(${unifiedComments.createdAt})`,
+      lastAt: max(unifiedComments.createdAt),
     })
     .from(unifiedComments)
     .where(
       and(
+        inArray(unifiedComments.parentType, parentTypes),
         inArray(unifiedComments.parentId, parentIds),
         isNull(unifiedComments.deletedAt),
         eq(unifiedComments.moderationStatus, "visible"),
@@ -177,6 +184,12 @@ async function attachLiveCommentStats(
     .groupBy(unifiedComments.parentType, unifiedComments.parentId);
 
   const withStats = attachCommentStats(parents, rows);
+  const attached = withStats.filter((p) => p.commentCount > 0).length;
+  if (rows.length > 0 && attached === 0) {
+    log(
+      `[CommentWorker] Comment fill stats did not attach (${rows.length} count rows, 0 matches) — check parentType/parentId keys`,
+    );
+  }
   const sweepNow = new Date();
   const empty = withStats.filter((p) => p.commentCount === 0).length;
   const staleThin = withStats.filter(
@@ -796,6 +809,11 @@ export async function runCommentSweep(): Promise<{
 
   const allParents = await getOpenParents();
   const sweepNow = new Date();
+  if (isCommentVolumeBoostActive(sweepNow)) {
+    log(
+      `[CommentWorker] Temporary volume boost ON until ${new Date(COMMENT_VOLUME_BOOST_UNTIL_MS).toISOString()} (chance ×3, comment/vote caps ×3)`,
+    );
+  }
 
   for (const agent of agents) {
     if (posted >= MAX_COMMENTS_PER_SWEEP) {
@@ -809,7 +827,10 @@ export async function runCommentSweep(): Promise<{
       continue;
     }
 
-    const simulation = getSimulationProfile(agent.simulationProfile);
+    const simulation = applyCommentVolumeBoost(
+      getSimulationProfile(agent.simulationProfile),
+      sweepNow,
+    );
     if (Math.random() > simulation.dailyCommentChance) {
       skipped++;
       continue;
@@ -1032,11 +1053,18 @@ export async function runCommentSweep(): Promise<{
           log(
             `[CommentWorker] moderation auto-hid comment ${newCommentId} by ${agent.displayName} (${applied.result.matchedCategories.join(", ") || "no categories"})`,
           );
+        } else {
+          parent.commentCount += 1;
+          parent.lastCommentAt = sweepNow;
         }
       } catch (modErr) {
         log(
           `[CommentWorker] moderation scan failed (fail-open) for ${newCommentId}: ${modErr instanceof Error ? modErr.message : modErr}`,
         );
+        // Comment stayed visible — count it so later agents in this sweep
+        // don't treat the card as still empty.
+        parent.commentCount += 1;
+        parent.lastCommentAt = sweepNow;
       }
 
       if (shouldAwardXp) {
@@ -1090,10 +1118,6 @@ export async function runCommentSweep(): Promise<{
       }
 
       posted++;
-      // Keep this sweep's in-memory fill stats current so later agents
-      // don't all pile onto the same empty card we just posted on.
-      parent.commentCount += 1;
-      parent.lastCommentAt = sweepNow;
       if (replyTarget) {
         replies++;
         // threadRoot is populated only when the target was itself a reply

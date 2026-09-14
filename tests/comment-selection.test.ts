@@ -59,6 +59,14 @@ describe("attachCommentStats", () => {
     );
     assert.equal(out[0].commentCount, 0);
   });
+
+  it("attaches rows even if parentType is a non-string enum-like value", () => {
+    const out = attachCommentStats(
+      [{ parentType: "matchup", parentId: "a" }],
+      [{ parentType: "matchup" as unknown as string, parentId: "a", c: 2, lastAt: now }],
+    );
+    assert.equal(out[0].commentCount, 2);
+  });
 });
 
 describe("effectiveCommentCount (D)", () => {

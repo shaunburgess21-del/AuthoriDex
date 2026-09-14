@@ -595,6 +595,7 @@ export async function findInsightReplyTarget(
         eq(unifiedComments.parentId, personId),
         isNull(unifiedComments.parentCommentId),
         isNull(unifiedComments.deletedAt),
+        eq(unifiedComments.moderationStatus, "visible"),
         sql`${unifiedComments.createdAt} >= ${sevenDaysAgo}`,
       ),
     )
@@ -694,6 +695,7 @@ export async function findReplyTarget(
         eq(unifiedComments.parentType, parentType),
         eq(unifiedComments.parentId, parentId),
         sql`${unifiedComments.deletedAt} IS NULL`,
+        eq(unifiedComments.moderationStatus, "visible"),
         sql`${unifiedComments.createdAt} >= ${sevenDaysAgo}`,
       ),
     )
