@@ -53,6 +53,8 @@ export interface MarketOgImageContext {
   categoryLabel: string;
   /** Resolved card image: coverImageUrl ?? linked person avatar ?? null. */
   imageUrl: string | null;
+  /** Pre-fetched card-image bytes (tests). Takes precedence over imageUrl. */
+  imageBuffer?: Buffer | null;
   /** Live LMSR chips (already sorted by price desc); empty = no row. */
   chips: AmmPriceChip[];
 }
@@ -273,7 +275,10 @@ async function buildOverlayPng(ctx: MarketOgImageContext): Promise<Buffer> {
 }
 
 async function composeMarketOg(ctx: MarketOgImageContext): Promise<sharp.Sharp> {
-  const heroBuf = await fetchImageBuffer(ctx.imageUrl);
+  const heroBuf =
+    ctx.imageBuffer && ctx.imageBuffer.length > 0
+      ? ctx.imageBuffer
+      : await fetchImageBuffer(ctx.imageUrl);
   const heroJpeg = await coverHeroJpeg(heroBuf, ctx.title);
   const overlayPng = await buildOverlayPng(ctx);
   return sharp(heroJpeg).composite([{ input: overlayPng, left: 0, top: 0 }]);
