@@ -178,7 +178,8 @@ export function VersusCard({
             )}
           </div>
 
-          <div className="relative isolate flex items-stretch gap-0">
+          <div className="relative">
+            <div className="flex items-stretch gap-0">
             <button
               type="button"
               onClick={(e) => {
@@ -186,7 +187,7 @@ export function VersusCard({
                 trackMatchupNeutralVote(matchup.id, "option_a");
                 onVote(matchup.id, "option_a", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
                 hasVoted
                   ? votedA
                     ? "border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15"
@@ -195,7 +196,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-a-${matchup.id}`}
             >
-              <div className="relative" style={{ minHeight: "222px" }}>
+              <div className="relative overflow-hidden" style={{ minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -226,7 +227,7 @@ export function VersusCard({
                 trackMatchupNeutralVote(matchup.id, "option_b");
                 onVote(matchup.id, "option_b", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
                 hasVoted
                   ? votedB
                     ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
@@ -235,7 +236,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-b-${matchup.id}`}
             >
-              <div className="relative" style={{ minHeight: "222px" }}>
+              <div className="relative overflow-hidden" style={{ minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -258,8 +259,10 @@ export function VersusCard({
                 </span>
               </div>
             </button>
+            </div>
 
-            <div className="absolute left-1/2 top-[calc(50%-18px)] z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1">
+            <div className="pointer-events-none absolute inset-0 z-20 isolate">
+            <div className="pointer-events-auto absolute left-1/2 top-[calc(50%-18px)] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1">
               {enableVsShimmer || neutralEducationUi ? (
                 <>
                   {neutralEducationUi && (
@@ -360,6 +363,7 @@ export function VersusCard({
                   Your pick
                 </span>
               )}
+            </div>
             </div>
           </div>
 
