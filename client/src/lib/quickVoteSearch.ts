@@ -3,7 +3,7 @@
  * so a visitor can type "ronaldo messi" and land on that matchup.
  */
 
-export type QuickVoteSearchCardType = "matchup" | "sentiment" | "opinion";
+export type QuickVoteSearchCardType = "matchup" | "sentiment" | "opinion" | "rating";
 
 export interface QuickVoteSearchRecord {
   id: string;

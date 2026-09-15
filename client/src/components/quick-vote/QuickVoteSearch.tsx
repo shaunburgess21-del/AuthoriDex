@@ -39,6 +39,7 @@ const TYPE_LABEL: Record<QuickVoteSearchHit["type"], string> = {
   matchup: "Matchup",
   sentiment: "Sentiment",
   opinion: "Opinion",
+  rating: "Rating",
 };
 
 export interface QuickVoteSearchProps {

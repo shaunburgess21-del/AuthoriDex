@@ -43,6 +43,8 @@ export interface OverallRatingCardProps {
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
   categoryMenuDisabled?: boolean;
+  /** Fired on optimistic submit so Quick Vote can auto-advance. */
+  onRated?: () => void;
 }
 
 export function OverallRatingCard({
@@ -53,6 +55,7 @@ export function OverallRatingCard({
   onBrowseFullScreen,
   leaderboardCategories,
   categoryMenuDisabled = false,
+  onRated,
 }: OverallRatingCardProps) {
   const [submittedRating, setSubmittedRating] = useState<number | null>(
     person.userApprovalRating ?? null,
@@ -156,6 +159,7 @@ export function OverallRatingCard({
       showVoteToast("rating", "Vote recorded!", {
         description: `You rated ${person.name} ${rating}/5 – ${ZONE_LABELS[rating - 1]}.`,
       });
+      onRated?.();
       return snapshot;
     },
     onSuccess: async (data) => {

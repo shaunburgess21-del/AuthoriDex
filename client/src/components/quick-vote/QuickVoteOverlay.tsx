@@ -2,9 +2,10 @@
  * Quick Vote overlay — the "First Vote Fast Path" onboarding surface.
  *
  * A minimal-variant snap view over a single curated column (~12 cards from
- * GET /api/vote/starter-mix, matchup → sentiment → opinion interleave).
+ * GET /api/vote/starter-mix, matchup → sentiment → opinion → rating interleave).
  * Cards hydrate from the SAME list queries the Vote hub uses
- * (/api/matchups, /api/trending-polls, /api/opinion-polls), and votes go
+ * (/api/matchups, /api/trending-polls, /api/opinion-polls,
+ * /api/vote/overall-ratings), and votes go
  * through the shared cache-first paths, so everything the visitor does here
  * is already reflected when they land on /vote.
  *
@@ -25,6 +26,7 @@ import { QuickVoteSearch, resetIosInputZoom } from "@/components/quick-vote/Quic
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-polls/OpinionPollCard";
+import { OverallRatingCard, type OverallRatingPerson } from "@/components/OverallRatingCard";
 import { useMatchupVotes } from "@/hooks/useMatchupVotes";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
@@ -45,7 +47,7 @@ import {
 } from "@/lib/quickVoteSearch";
 
 interface StarterMixItem {
-  type: "matchup" | "sentiment" | "opinion";
+  type: "matchup" | "sentiment" | "opinion" | "rating";
   id: string;
   slug: string | null;
 }
@@ -155,8 +157,17 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     enabled: open,
     staleTime: 60 * 1000,
   });
+  const { data: ratingsResponse, isFetched: ratingsFetched } = useQuery<{ data: OverallRatingPerson[] }>({
+    queryKey: ["/api/vote/overall-ratings"],
+    enabled: open,
+    staleTime: 60 * 1000,
+  });
   const hydrationSettled =
-    mixFetched && matchupsFetched && sentimentFetched && opinionFetched;
+    mixFetched && matchupsFetched && sentimentFetched && opinionFetched && ratingsFetched;
+  const ratingPeople = useMemo(
+    () => (ratingsResponse?.data ?? []).filter((p) => !p.isInduction),
+    [ratingsResponse],
+  );
 
   const mixRefs = useMemo(() => mixResponse?.data ?? [], [mixResponse]);
   const typeById = useMemo(
@@ -173,13 +184,25 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       } else if (ref.type === "sentiment") {
         const t = sentimentPolls.find((x: any) => x.id === ref.id);
         if (t) items.push({ id: t.id, slug: t.slug ?? "", category: t.category, title: t.headline });
+      } else if (ref.type === "rating") {
+        const person = ratingPeople.find((p) => p.id === ref.id);
+        if (person) {
+          items.push({
+            id: person.id,
+            slug: person.id,
+            category: person.category || "misc",
+            title: person.name,
+            personId: person.id,
+            personName: person.name,
+          });
+        }
       } else {
         const p = opinionPolls.find((x: any) => x.id === ref.id);
         if (p) items.push({ id: p.id, slug: p.slug ?? "", category: p.category, title: p.title });
       }
     }
     return items;
-  }, [mixRefs, matchups, sentimentPolls, opinionPolls]);
+  }, [mixRefs, matchups, sentimentPolls, opinionPolls, ratingPeople]);
 
   const searchRecords = useMemo<QuickVoteSearchRecord[]>(() => {
     return snapItems.map((item, index) => {
@@ -211,6 +234,19 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           thumbA: t?.personAvatar || t?.imageUrl || null,
         };
       }
+      if (type === "rating") {
+        const person = ratingPeople.find((p) => p.id === item.id);
+        return {
+          id: item.id,
+          index,
+          type: "rating" as const,
+          label: person?.name || item.title,
+          titleHaystack: [person?.name, item.title].filter(Boolean).join(" "),
+          optionHaystack: "",
+          extraHaystack: person?.category ?? item.category,
+          thumbA: person?.avatar ?? null,
+        };
+      }
       const p = opinionPolls.find((x: any) => x.id === item.id) as OpinionPollCardPoll | undefined;
       const optionNames = (p?.options ?? []).map((o) => o.name).filter(Boolean);
       return {
@@ -225,7 +261,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         thumbB: p?.options?.[1]?.imageUrl || null,
       };
     });
-  }, [snapItems, typeById, matchups, sentimentPolls, opinionPolls]);
+  }, [snapItems, typeById, matchups, sentimentPolls, opinionPolls, ratingPeople]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const searchResults = useMemo(
@@ -352,7 +388,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   // Confirmed-vote bookkeeping: session stats, funnel attribution (the
   // shared vote_cast events carry no overlay marker), auto-advance beat.
   const recordVote = useCallback(
-    (type: "matchup" | "sentiment" | "opinion") => {
+    (type: "matchup" | "sentiment" | "opinion" | "rating") => {
       votesCastRef.current += 1;
       logFunnelEvent("overlay_vote", "quick_vote", { type });
       scheduleAdvance();
@@ -513,6 +549,10 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     [removeOpinionPollVote],
   );
 
+  const handleRated = useCallback(() => {
+    recordVote("rating");
+  }, [recordVote]);
+
   // ── Card rendering ──────────────────────────────────────────────────────
   const renderCard = useCallback(
     (item: SnapItem, ctx: { priority: boolean; index: number }) => {
@@ -560,6 +600,19 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           />
         );
       }
+      if (type === "rating") {
+        const person = ratingPeople.find((p) => p.id === item.id);
+        if (!person) return null;
+        return (
+          <OverallRatingCard
+            person={person}
+            onFilterCategory={NOOP}
+            categoryRaceMap={EMPTY_RACE_MAP}
+            categoryMenuDisabled
+            onRated={handleRated}
+          />
+        );
+      }
       return null;
     },
     [
@@ -567,12 +620,14 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       matchups,
       sentimentPolls,
       opinionPolls,
+      ratingPeople,
       matchupUserVotes,
       handleMatchupVote,
       handleMatchupRemoveVote,
       handleSentimentVote,
       handleOpinionVote,
       handleOpinionRemoveVote,
+      handleRated,
     ],
   );
 

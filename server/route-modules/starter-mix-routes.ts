@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { matchups, trendingPolls, opinionPolls } from "@shared/schema";
+import { matchups, trendingPolls, opinionPolls, trackedPeople, trendingPeople } from "@shared/schema";
 import { isCardVisibleToUser } from "@shared/geoVisibility";
 import { optionalAuth, type AuthRequest } from "../auth-middleware";
 import { resolveUserGeoContext } from "../lib/geoVisibility";
@@ -10,18 +10,20 @@ import { resolveUserGeoContext } from "../lib/geoVisibility";
  * Starter mix — heuristic, cross-type card sequence for the Quick Vote
  * onboarding overlay. Returns ordered *references* only ({ type, id, slug });
  * the client hydrates full card data from the existing list queries
- * (/api/matchups, /api/trending-polls, /api/opinion-polls) so votes cast in
- * the overlay share the same TanStack cache as the Vote hub.
+ * (/api/matchups, /api/trending-polls, /api/opinion-polls,
+ * /api/vote/overall-ratings) so votes cast in the overlay share the same
+ * TanStack cache as the Vote hub.
  *
  * Heuristic (no schema/curation table yet — see plan Phase 2): per type,
  * featured first, then admin-ordered (display_order > 0) ahead of unordered,
- * then recency. Interleaved matchup → sentiment → opinion so a new visitor
+ * then recency. Rating cards are main-leaderboard people by fame rank.
+ * Interleaved matchup → sentiment → opinion → rating so a new visitor
  * sees variety; the FULL live catalog is returned (ids only — cheap) so the
  * overlay can be doomscrolled to the very last votable card. Only
  * anon-votable types are included by design.
  */
 
-export type StarterMixItemType = "matchup" | "sentiment" | "opinion";
+export type StarterMixItemType = "matchup" | "sentiment" | "opinion" | "rating";
 
 export interface StarterMixItem {
   type: StarterMixItemType;
@@ -46,7 +48,7 @@ function heuristicOrder(table: {
 export function registerStarterMixRoutes(app: Express): void {
   app.get("/api/vote/starter-mix", optionalAuth, async (req: AuthRequest, res) => {
     try {
-      const [matchupRows, sentimentRows, opinionRows] = await Promise.all([
+      const [matchupRows, sentimentRows, opinionRows, ratingRows] = await Promise.all([
         db
           .select({
             id: matchups.id,
@@ -74,6 +76,15 @@ export function registerStarterMixRoutes(app: Express): void {
           .from(opinionPolls)
           .where(eq(opinionPolls.visibility, "live"))
           .orderBy(...heuristicOrder(opinionPolls)),
+        db
+          .select({
+            id: trackedPeople.id,
+            slug: trackedPeople.id,
+          })
+          .from(trackedPeople)
+          .innerJoin(trendingPeople, eq(trackedPeople.id, trendingPeople.id))
+          .where(eq(trackedPeople.status, "main_leaderboard"))
+          .orderBy(asc(trendingPeople.rank)),
       ]);
 
       const geo = await resolveUserGeoContext(req);
@@ -86,10 +97,11 @@ export function registerStarterMixRoutes(app: Express): void {
         { type: "matchup", rows: geoFilter(matchupRows) },
         { type: "sentiment", rows: geoFilter(sentimentRows) },
         { type: "opinion", rows: geoFilter(opinionRows) },
+        { type: "rating", rows: ratingRows },
       ];
 
-      // Fixed interleave recipe (matchup, sentiment, opinion, repeat) until
-      // every pool is exhausted — shorter pools simply drop out of the rotation.
+      // Fixed interleave recipe (matchup, sentiment, opinion, rating, repeat)
+      // until every pool is exhausted — shorter pools drop out of the rotation.
       const data: StarterMixItem[] = [];
       const maxRounds = Math.max(...pools.map((p) => p.rows.length));
       for (let round = 0; round < maxRounds; round++) {

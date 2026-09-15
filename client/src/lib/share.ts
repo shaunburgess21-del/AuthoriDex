@@ -66,6 +66,14 @@ export function opinionPollShare(slug: string, title: string): CardShareConfig {
   };
 }
 
+export function personProfileShare(personId: string, name: string): CardShareConfig {
+  return {
+    title: `Rate ${name} on VoxDex`,
+    path: `/person/${encodeURIComponent(personId)}`,
+    surface: "person_profile",
+  };
+}
+
 export function upDownShare(marketId: string, personName: string): CardShareConfig {
   return {
     title: `${personName}: Up or Down? on VoxDex`,

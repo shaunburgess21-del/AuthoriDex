@@ -70,9 +70,23 @@ describe("searchQuickVoteCards", () => {
   });
 
   it("matches title-only queries", () => {
-    const hits = searchQuickVoteCards("paws", [dogs, goat]);
+    assert.equal(searchQuickVoteCards("paws", [dogs, goat]).length, 1);
+    assert.equal(searchQuickVoteCards("paws", [dogs, goat])[0].id, "pets");
+  });
+
+  it("matches an overall-rating card by person name", () => {
+    const rating = record({
+      id: "takaichi",
+      index: 8,
+      type: "rating",
+      label: "Sanae Takaichi",
+      titleHaystack: "Sanae Takaichi",
+      extraHaystack: "politics",
+    });
+    const hits = searchQuickVoteCards("takaichi", [dogs, goat, sentiment, rating]);
     assert.equal(hits.length, 1);
-    assert.equal(hits[0].id, "pets");
+    assert.equal(hits[0].id, "takaichi");
+    assert.equal(hits[0].type, "rating");
   });
 });
 

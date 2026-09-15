@@ -25,6 +25,7 @@ import {
 import {
   matchupShare,
   opinionPollShare,
+  personProfileShare,
   resolveShareUrl,
   sentimentPollShare,
   sharePage,
@@ -33,9 +34,9 @@ import {
 import type { CardReactionSurface, CardReactionType } from "@shared/constants";
 import { cn } from "@/lib/utils";
 
-export type QuickVoteCardType = "matchup" | "sentiment" | "opinion";
+export type QuickVoteCardType = "matchup" | "sentiment" | "opinion" | "rating";
 
-const COMMENT_ENTITY: Record<QuickVoteCardType, CommentEntityType> = {
+const COMMENT_ENTITY: Partial<Record<QuickVoteCardType, CommentEntityType>> = {
   matchup: "matchup",
   sentiment: "poll",
   opinion: "opinion-poll",
@@ -45,6 +46,7 @@ const REACTION_SURFACE: Record<QuickVoteCardType, CardReactionSurface> = {
   matchup: "matchup",
   sentiment: "sentiment_poll",
   opinion: "opinion_poll",
+  rating: "value_person",
 };
 
 const SHARE_CONFIG: Record<
@@ -54,6 +56,7 @@ const SHARE_CONFIG: Record<
   matchup: matchupShare,
   sentiment: sentimentPollShare,
   opinion: opinionPollShare,
+  rating: personProfileShare,
 };
 
 function ActionButton({
@@ -110,6 +113,8 @@ export function QuickVoteActionBar({
   const surfaceType = REACTION_SURFACE[type];
   const reaction = reactionsMap.get(cardReactionKey({ surfaceType, targetId })) ?? null;
   const hasSlug = slug.length > 0;
+  const commentEntity = COMMENT_ENTITY[type];
+  const showDiscussion = hasSlug && !!commentEntity;
 
   const closeComments = () => {
     setCommentsOpen(false);
@@ -148,7 +153,7 @@ export function QuickVoteActionBar({
   return (
     <>
       <div className="flex items-center gap-4" role="group" aria-label="Card actions">
-        {hasSlug && (
+        {showDiscussion && (
           <ActionButton label="Open discussion" onClick={() => setCommentsOpen(true)}>
             <MessageCircle className="h-5 w-5" />
           </ActionButton>
@@ -177,11 +182,11 @@ export function QuickVoteActionBar({
           </ActionButton>
         )}
       </div>
-      {hasSlug && (
+      {showDiscussion && commentEntity && (
         <CardCommentsFocusOverlay
           open={commentsOpen}
           onClose={closeComments}
-          entityType={COMMENT_ENTITY[type]}
+          entityType={commentEntity}
           slug={slug}
           contextTitle={title}
         />
