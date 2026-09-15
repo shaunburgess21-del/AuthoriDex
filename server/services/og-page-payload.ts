@@ -514,28 +514,21 @@ export async function resolveCommunityMarketOg(slug: string): Promise<OgPreviewR
     return geoRestrictedOgFallback(canonicalUrl);
   }
 
-  let subtitle = "World market • Predict on VoxDex";
-  let chips: AmmPriceChip[] | undefined;
-  if (market.engine === "amm") {
-    try {
-      const prices = await lookupLatestAmmPrices(market.id);
-      const enriched = buildAmmMarketCopy("community", prices);
-      if (enriched) {
-        subtitle = enriched.subtitle;
-        chips = enriched.chips;
-      }
-    } catch {
-      /* keep static subtitle */
-    }
-  }
-
   const description = market.teaser ?? market.summary ?? DEFAULT_DESCRIPTION;
   return withPreviewMeta(
     {
       title: `${market.title} • VoxDex`,
       description,
       canonicalUrl,
-      imageUrl: marketImageUrl(market.title, subtitle, "World market", chips),
+      // Slug-based composite render: the market's actual card image with
+      // a path-outlined text overlay (title + live price chips). The old
+      // query-param SVG (`/api/og/image/market.png?title=...`) drew its
+      // text via librsvg <text>, which has no fonts on the production
+      // container — WhatsApp/iMessage previews came out as a blank
+      // gradient with tofu boxes. New URL shape also busts chat apps'
+      // cached copies of those blank previews.
+      imageUrl: `${SITE_URL}/api/og/markets/${encodeURIComponent(slug)}.jpg`,
+      imageType: "image/jpeg",
     },
     "community_market",
     market.title,

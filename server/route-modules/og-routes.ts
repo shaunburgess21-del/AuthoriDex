@@ -49,12 +49,18 @@ import {
   renderPersonOgImageJpeg,
   renderPersonOgUnavailableJpeg,
 } from "../services/person-og-image";
-import { assertOgPathFontsLoaded } from "../services/og-svg-text-paths";
 import {
-  getOgFontFaceStyle,
-  logOgFontStartup,
-  OG_FONT_FAMILY,
-} from "../services/og-fonts";
+  assertOgPathFontsLoaded,
+  measureOutlinedTextWidth,
+  textPath,
+} from "../services/og-svg-text-paths";
+import { logOgFontStartup } from "../services/og-fonts";
+import {
+  renderMarketOgImage,
+  renderMarketOgImageJpeg,
+  type MarketOgImageContext,
+} from "../services/market-og-image";
+import { getMarketCategoryLabel } from "@shared/constants";
 import {
   renderOgHtml,
   resolveBetShareOg,
@@ -202,10 +208,18 @@ function buildOgSvg(
     limited[1] = `${limited[1].slice(0, 20).trim()}…`;
   }
 
+  // Path-outlined text (opentype.js) — librsvg on the production container
+  // has no fontconfig fonts, so SVG <text> rendered as blank tofu boxes.
   const titleLines = limited
-    .map(
-      (line, i) =>
-        `<text x="80" y="${320 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="${OG_FONT_FAMILY}">${escapeHtml(line)}</text>`,
+    .map((line, i) =>
+      textPath({
+        text: line,
+        x: 80,
+        y: 320 + i * 90,
+        fontSize: 78,
+        weight: 700,
+        fill: "#ffffff",
+      }),
     )
     .join("\n");
 
@@ -225,13 +239,21 @@ function buildOgSvg(
     const visible = prices.slice(0, 3);
     const chips = visible.map((c) => {
       const text = `${c.label} ${Math.round(c.pct)}%`;
-      // Rough char-to-px estimate for our chosen 22px font. Generous
-      // upper bound — chips never butt into each other this way.
-      const width = Math.min(420, padX * 2 + text.length * 13);
+      const width = Math.min(
+        420,
+        padX * 2 + Math.ceil(measureOutlinedTextWidth(text, fontSize, 600)),
+      );
       const fill = PRICE_CHIP_FILL[c.accent];
       const chip = `<g>
     <rect x="${cursorX}" y="${y}" width="${width}" height="${chipHeight}" rx="22" ry="22" fill="${fill}" fill-opacity="0.18" stroke="${fill}" stroke-opacity="0.55" stroke-width="1.5" />
-    <text x="${cursorX + padX}" y="${y + chipHeight / 2 + fontSize / 3}" fill="#ffffff" font-size="${fontSize}" font-weight="600" font-family="${OG_FONT_FAMILY}">${escapeHtml(text)}</text>
+    ${textPath({
+      text,
+      x: cursorX + padX,
+      y: y + chipHeight / 2 + fontSize / 3,
+      fontSize,
+      weight: 600,
+      fill: "#ffffff",
+    })}
   </g>`;
       cursorX += width + gap;
       return chip;
@@ -247,7 +269,6 @@ function buildOgSvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
-  ${getOgFontFaceStyle()}
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a" />
@@ -261,16 +282,47 @@ function buildOgSvg(
   <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#bg)" />
   <rect x="0" y="0" width="${OG_WIDTH}" height="8" fill="url(#accent)" />
 
-  <text x="80" y="170" fill="#a78bfa" font-size="32" font-weight="600" letter-spacing="6" font-family="${OG_FONT_FAMILY}">${escapeHtml(badge.toUpperCase())}</text>
+  ${textPath({
+    text: badge.toUpperCase(),
+    x: 80,
+    y: 170,
+    fontSize: 32,
+    weight: 600,
+    fill: "#a78bfa",
+    letterSpacing: 6,
+  })}
 
   ${titleLines}
 
   ${priceChipsSvg}
 
-  <text x="80" y="${subtitleY}" fill="#cbd5e1" font-size="32" font-weight="500" font-family="${OG_FONT_FAMILY}">${escapeHtml(subtitle)}</text>
+  ${textPath({
+    text: subtitle,
+    x: 80,
+    y: subtitleY,
+    fontSize: 32,
+    weight: 500,
+    fill: "#cbd5e1",
+  })}
 
-  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="${OG_FONT_FAMILY}">VoxDex</text>
-  <text x="${OG_WIDTH - 80}" y="${subtitleY}" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="${OG_FONT_FAMILY}">voxdex.com</text>
+  ${textPath({
+    text: "VoxDex",
+    x: OG_WIDTH - 80,
+    y: 170,
+    fontSize: 44,
+    weight: 700,
+    fill: "#ffffff",
+    anchor: "end",
+  })}
+  ${textPath({
+    text: "voxdex.com",
+    x: OG_WIDTH - 80,
+    y: subtitleY,
+    fontSize: 22,
+    weight: 500,
+    fill: "#94a3b8",
+    anchor: "end",
+  })}
 </svg>`;
 }
 
@@ -304,11 +356,25 @@ async function lookupCommunityMarket(slug: string) {
       // Sprint 3: drives whether we enrich the OG with live LMSR
       // prices. Parimutuel community markets keep the static subtitle.
       engine: predictionMarkets.engine,
+      // Card image for the OG hero — same resolution order as the card
+      // UI (coverImageUrl, else the linked person's avatar).
+      coverImageUrl: predictionMarkets.coverImageUrl,
+      personId: predictionMarkets.personId,
     })
     .from(predictionMarkets)
     .where(eq(predictionMarkets.slug, slug))
     .limit(1);
   return m ?? null;
+}
+
+async function lookupPersonAvatar(personId: string | null): Promise<string | null> {
+  if (!personId) return null;
+  const [p] = await db
+    .select({ avatar: trendingPeople.avatar })
+    .from(trendingPeople)
+    .where(eq(trendingPeople.id, personId))
+    .limit(1);
+  return p?.avatar ?? null;
 }
 
 async function lookupNativeMarket(id: string) {
@@ -613,10 +679,18 @@ function buildBetOgSvg(args: {
   if (lines.length > 2) {
     limited[1] = `${limited[1].slice(0, 20).trim()}…`;
   }
+  // Path-outlined text — same rationale as buildOgSvg (no fontconfig on
+  // the production container, SVG <text> renders as tofu).
   const titleLines = limited
-    .map(
-      (line, i) =>
-        `<text x="80" y="${330 + i * 90}" fill="#ffffff" font-size="78" font-weight="700" font-family="${OG_FONT_FAMILY}">${escapeHtml(line)}</text>`,
+    .map((line, i) =>
+      textPath({
+        text: line,
+        x: 80,
+        y: 330 + i * 90,
+        fontSize: 78,
+        weight: 700,
+        fill: "#ffffff",
+      }),
     )
     .join("\n");
 
@@ -627,9 +701,14 @@ function buildBetOgSvg(args: {
 
   const userTag = args.username ? `@${args.username}` : "";
 
+  const badgeText = args.badge.toUpperCase();
+  const badgeWidth = Math.max(
+    160,
+    Math.min(620, 56 + Math.ceil(measureOutlinedTextWidth(badgeText, 26, 700, 4))),
+  );
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
-  ${getOgFontFaceStyle()}
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0f172a" />
@@ -644,22 +723,60 @@ function buildBetOgSvg(args: {
   <rect x="0" y="0" width="${OG_WIDTH}" height="8" fill="url(#accent)" />
 
   <!-- Action pill: filled with the variant accent at low opacity, bordered
-       for legibility on dark bg. Pill width = 60px padding + 24px per char
-       (empirical fit for 26px Inter Bold with letter-spacing 4), clamped
-       so short badges like "WON" and long ones like "BACKED CANDIDATE"
-       both stay legible without overflowing the 1200px canvas. -->
+       for legibility on dark bg. Pill width tracks the measured label width,
+       clamped so short badges like "WON" and long ones like "BACKED
+       CANDIDATE" both stay legible without overflowing the 1200px canvas. -->
   <g>
-    <rect x="80" y="140" rx="22" ry="22" width="${Math.max(160, Math.min(620, 60 + args.badge.length * 24))}" height="56" fill="${badgeFill}" fill-opacity="0.22" stroke="${badgeFill}" stroke-opacity="0.7" stroke-width="2" />
-    <text x="${80 + 28}" y="178" fill="#ffffff" font-size="26" font-weight="700" letter-spacing="4" font-family="${OG_FONT_FAMILY}">${escapeHtml(args.badge.toUpperCase())}</text>
+    <rect x="80" y="140" rx="22" ry="22" width="${badgeWidth}" height="56" fill="${badgeFill}" fill-opacity="0.22" stroke="${badgeFill}" stroke-opacity="0.7" stroke-width="2" />
+    ${textPath({
+      text: badgeText,
+      x: 80 + 28,
+      y: 178,
+      fontSize: 26,
+      weight: 700,
+      fill: "#ffffff",
+      letterSpacing: 4,
+    })}
   </g>
 
   ${titleLines}
 
-  <text x="80" y="520" fill="#e2e8f0" font-size="28" font-weight="500" font-family="${OG_FONT_FAMILY}">${escapeHtml(sub)}</text>
+  ${textPath({
+    text: sub,
+    x: 80,
+    y: 520,
+    fontSize: 28,
+    weight: 500,
+    fill: "#e2e8f0",
+  })}
 
-  <text x="${OG_WIDTH - 80}" y="170" fill="#ffffff" font-size="44" font-weight="700" text-anchor="end" font-family="${OG_FONT_FAMILY}">VoxDex</text>
-  <text x="${OG_WIDTH - 80}" y="210" fill="#cbd5e1" font-size="22" font-weight="500" text-anchor="end" font-family="${OG_FONT_FAMILY}">${escapeHtml(userTag)}</text>
-  <text x="${OG_WIDTH - 80}" y="600" fill="#94a3b8" font-size="22" font-weight="500" text-anchor="end" font-family="${OG_FONT_FAMILY}">voxdex.com</text>
+  ${textPath({
+    text: "VoxDex",
+    x: OG_WIDTH - 80,
+    y: 170,
+    fontSize: 44,
+    weight: 700,
+    fill: "#ffffff",
+    anchor: "end",
+  })}
+  ${textPath({
+    text: userTag,
+    x: OG_WIDTH - 80,
+    y: 210,
+    fontSize: 22,
+    weight: 500,
+    fill: "#cbd5e1",
+    anchor: "end",
+  })}
+  ${textPath({
+    text: "voxdex.com",
+    x: OG_WIDTH - 80,
+    y: 600,
+    fontSize: 22,
+    weight: 500,
+    fill: "#94a3b8",
+    anchor: "end",
+  })}
 </svg>`;
 }
 
@@ -1013,6 +1130,83 @@ async function lookupPersonName(personId: string | null): Promise<string | null>
   return p?.name ?? null;
 }
 
+/**
+ * Community (World Market) OG image — the market's actual card image as
+ * the hero with a path-outlined text overlay (title, category, live
+ * price chips). Replaces the query-param SVG render for /markets/:slug
+ * shares, which drew blank tofu text on the fontless production
+ * container (see market-og-image.ts).
+ */
+async function serveMarketOgImage(
+  req: Request,
+  res: Response,
+  format: "png" | "jpeg",
+): Promise<void> {
+  const slug = req.params.slug;
+  const contentType = format === "jpeg" ? "image/jpeg" : "image/png";
+  try {
+    const market = await lookupCommunityMarket(slug);
+    if (!market) {
+      const fallback = loadDefaultOgPng();
+      if (fallback) {
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.send(fallback);
+        return;
+      }
+      res.status(404).send("market not found");
+      return;
+    }
+
+    // Same image resolution order as the card UI (predictMarketImage.ts):
+    // curated cover image first, then the linked person's avatar.
+    const imageUrl =
+      market.coverImageUrl ?? (await lookupPersonAvatar(market.personId));
+
+    let chips: AmmPriceChip[] = [];
+    if (market.engine === "amm") {
+      try {
+        const prices = await lookupLatestAmmPrices(market.id);
+        chips = buildAmmMarketCopy("community", prices)?.chips ?? [];
+      } catch {
+        /* chips are decorative — render without them */
+      }
+    }
+
+    const ctx: MarketOgImageContext = {
+      title: market.title,
+      categoryLabel: market.category
+        ? getMarketCategoryLabel(market.category)
+        : "World market",
+      imageUrl,
+      chips,
+    };
+    const image =
+      format === "jpeg"
+        ? await renderMarketOgImageJpeg(ctx)
+        : await renderMarketOgImage(ctx);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", "inline");
+    // 15 min — long enough to absorb crawler bursts, short enough that
+    // the price chips stay close to the live market.
+    res.setHeader("Cache-Control", "public, max-age=900");
+    res.send(image);
+  } catch (err: any) {
+    console.error(
+      `[OG] Market ${format.toUpperCase()} render failed slug=${slug} fontsLoaded=${assertOgPathFontsLoaded()}:`,
+      err?.message,
+    );
+    const fallback = loadDefaultOgPng();
+    if (fallback) {
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(fallback);
+      return;
+    }
+    res.status(500).send("og render failed");
+  }
+}
+
 /* ───────────────────────────────────────────────────── route registration */
 
 export function registerOgRoutes(app: Express): void {
@@ -1184,6 +1378,20 @@ export function registerOgRoutes(app: Express): void {
         res.status(500).json({ canonicalUrl: `${SITE_URL}/predict`, found: false });
       }
     },
+  );
+
+  /* Community market OG image — the market's real card image + path-text
+   * overlay. MUST be registered before the `/api/og/markets/:slug` HTML
+   * route: Express matches in registration order and `:slug` would
+   * otherwise swallow "foo.png" as a slug. */
+  app.get(
+    "/api/og/markets/:slug.jpg",
+    (req, res) => serveMarketOgImage(req, res, "jpeg"),
+  );
+
+  app.get(
+    "/api/og/markets/:slug.png",
+    (req, res) => serveMarketOgImage(req, res, "png"),
   );
 
   /* Community market OG HTML page.

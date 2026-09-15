@@ -77,6 +77,42 @@ function measureTextWidth(
   return w;
 }
 
+/**
+ * Serialize glyph path commands to SVG path data ourselves — do NOT use
+ * opentype's Path.toPathData().
+ *
+ * opentype.js 2.0's toPathData() rounds each coordinate via an
+ * exponent-string trick (`+(Math.round(v + "e+2") + "e-2")`). When a
+ * coordinate's fractional part is small enough that JavaScript stringifies
+ * it in scientific notation (e.g. x = 360.00000000000006 → fraction
+ * 5.7e-14 → `Math.round("5.7e-14e+2")`), the result is NaN. A single NaN
+ * token makes librsvg abort the rest of that <path> element, silently
+ * truncating the label mid-glyph. Accumulated per-glyph x offsets land on
+ * such floats routinely, so this hit real market titles in production.
+ * toFixed() never emits scientific notation for coordinates in our range,
+ * and the command values themselves are always finite.
+ */
+function commandsToPathData(commands: opentype.PathCommand[]): string {
+  const num = (v: number): string => {
+    const fixed = v.toFixed(2);
+    // "-0.00" parses fine but is noise — normalise to "0.00".
+    return fixed === "-0.00" ? "0.00" : fixed;
+  };
+  let d = "";
+  for (const c of commands) {
+    if (c.type === "M" || c.type === "L") {
+      d += `${c.type}${num(c.x)} ${num(c.y)}`;
+    } else if (c.type === "C") {
+      d += `C${num(c.x1)} ${num(c.y1)} ${num(c.x2)} ${num(c.y2)} ${num(c.x)} ${num(c.y)}`;
+    } else if (c.type === "Q") {
+      d += `Q${num(c.x1)} ${num(c.y1)} ${num(c.x)} ${num(c.y)}`;
+    } else if (c.type === "Z") {
+      d += "Z";
+    }
+  }
+  return d;
+}
+
 function pathDataForText(
   font: opentype.Font,
   text: string,
@@ -91,7 +127,10 @@ function pathDataForText(
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
     const glyphPath = font.getPath(char, xPos, y, fontSize);
-    if (glyphPath) parts.push(glyphPath.toPathData(2));
+    if (glyphPath) {
+      const d = commandsToPathData(glyphPath.commands);
+      if (d) parts.push(d);
+    }
     xPos += font.getAdvanceWidth(char, fontSize);
     if (i < text.length - 1) xPos += letterSpacing;
   }
