@@ -71,11 +71,18 @@ async function fetchImageBuffer(url: string | null): Promise<Buffer | null> {
       signal: AbortSignal.timeout(12_000),
       headers: { Accept: "image/*" },
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      console.warn(`[OG] Market hero fetch HTTP ${resp.status} url=${url}`);
+      return null;
+    }
     const buf = Buffer.from(await resp.arrayBuffer());
     if (buf.length === 0) return null;
     return buf;
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[OG] Market hero fetch failed url=${url}:`,
+      (err as Error)?.message ?? err,
+    );
     return null;
   }
 }
@@ -112,6 +119,7 @@ async function coverHeroJpeg(
   if (imageBuf) {
     try {
       return await sharp(imageBuf)
+        .rotate()
         .resize(OG_WIDTH, OG_HEIGHT, { fit: "cover", position: "centre" })
         .jpeg({ quality: HERO_JPEG_QUALITY, mozjpeg: true })
         .toBuffer();

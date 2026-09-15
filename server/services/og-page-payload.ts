@@ -20,6 +20,7 @@ import { matchupOgImagePath } from "@shared/matchup-og";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { personOgImagePath } from "@shared/person-og";
+import { marketOgImagePath } from "@shared/market-og";
 import {
   loadMatchupOgContext,
   matchupOgDescription,
@@ -527,7 +528,7 @@ export async function resolveCommunityMarketOg(slug: string): Promise<OgPreviewR
       // container — WhatsApp/iMessage previews came out as a blank
       // gradient with tofu boxes. New URL shape also busts chat apps'
       // cached copies of those blank previews.
-      imageUrl: `${SITE_URL}/api/og/markets/${encodeURIComponent(slug)}.jpg`,
+      imageUrl: `${SITE_URL}${marketOgImagePath(slug)}`,
       imageType: "image/jpeg",
     },
     "community_market",

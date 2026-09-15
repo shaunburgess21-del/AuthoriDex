@@ -48,6 +48,7 @@ import { goBack } from "@/lib/goBack";
 import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { marketOgImagePath } from "@shared/market-og";
 import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
   ArrowLeft,
@@ -1335,9 +1336,7 @@ export default function MarketDetailPage() {
     description: market
       ? market.teaser ?? market.summary ?? `Predict on "${market.title}" — World market on VoxDex.`
       : null,
-    image: market
-      ? `/api/og/image/market.png?title=${encodeURIComponent(market.title)}&subtitle=${encodeURIComponent("World market • VoxDex")}&badge=${encodeURIComponent("World market")}`
-      : null,
+    image: market?.slug ? marketOgImagePath(market.slug) : null,
   });
 
   if ((authLoading || isLoading) && !market) {

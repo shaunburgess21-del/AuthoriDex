@@ -9,6 +9,10 @@ import {
   type MarketOgImageContext,
 } from "../server/services/market-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
+import {
+  MARKET_OG_IMAGE_VERSION,
+  marketOgImagePath,
+} from "@shared/market-og";
 
 const TESLA_CTX: MarketOgImageContext = {
   title: "Will the new Tesla Roaster have the ability to fly",
@@ -19,6 +23,14 @@ const TESLA_CTX: MarketOgImageContext = {
     { label: "No", pct: 50, accent: "down" },
   ],
 };
+
+test("marketOgImagePath uses shared cache version", () => {
+  assert.equal(MARKET_OG_IMAGE_VERSION, "1");
+  assert.equal(
+    marketOgImagePath("will-the-new-tesla-roaster-have-the-ability-to-fly"),
+    "/api/og/markets/will-the-new-tesla-roaster-have-the-ability-to-fly.jpg?v=1",
+  );
+});
 
 test("opentype path fonts load for market OG", () => {
   assert.ok(assertOgPathFontsLoaded());
