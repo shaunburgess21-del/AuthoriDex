@@ -326,6 +326,14 @@
     touch-action: manipulation;
   }
 
+  /* Quick Vote snap pages: let vertical pans reach the snap scroller even
+     when the gesture starts on a control (rating tiles, Submit, VS options).
+     Specificity beats the element/attr rules above. Tap still fires. */
+  .snap-page-minimal button,
+  .snap-page-minimal [role="button"] {
+    touch-action: pan-y;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }

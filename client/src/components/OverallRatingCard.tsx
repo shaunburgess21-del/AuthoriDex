@@ -221,7 +221,9 @@ export function OverallRatingCard({
 
   const isPending = ratingMutation.isPending;
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (!selectedRating || isPending) return;
     const isUpsert = !!user && person.userApprovalRating != null;
     const decision = checkVoteGate(budget, "celebrity_person", person.id, isUpsert);
@@ -251,9 +253,9 @@ export function OverallRatingCard({
   const avgColor = avgRating != null ? RATING_COLORS[Math.round(avgRating) - 1] : undefined;
 
   return (
-    <div className="hub-card-slot relative h-full min-h-0 max-h-full overscroll-none">
+    <div className="hub-card-slot relative h-full min-h-0 max-h-full">
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-0 max-h-full md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl overscroll-none`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-0 max-h-full md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -396,6 +398,7 @@ export function OverallRatingCard({
             })}
           </div>
           <Button
+            type="button"
             onClick={handleSubmit}
             disabled={!selectedRating || isPending}
             className="w-full bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400/30 text-white shadow-lg shadow-blue-500/20"
@@ -460,6 +463,7 @@ export function OverallRatingCard({
                 </span>
               </span>
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 onClick={handleChangeVote}

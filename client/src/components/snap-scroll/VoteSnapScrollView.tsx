@@ -1699,7 +1699,7 @@ export function VoteSnapScrollView({
                                   <div
                                     key={item.id}
                                     className={`snap-start relative flex flex-col items-center justify-center px-3 ${
-                                      isMinimal ? "" : "pt-3"
+                                      isMinimal ? "snap-page-minimal" : "pt-3"
                                     }`}
                                     style={snapPageStyle(isMinimal, hasFooter)}
                                   >
@@ -1731,7 +1731,9 @@ export function VoteSnapScrollView({
                               return (
                                 <div
                                   key={item.id}
-                                  className="snap-start flex flex-col px-3 pt-3"
+                                  className={`snap-start flex flex-col px-3 pt-3 ${
+                                    isMinimal ? "snap-page-minimal" : ""
+                                  }`}
                                   style={snapPageStyle(isMinimal)}
                                 >
                                   {inWindow ? (
