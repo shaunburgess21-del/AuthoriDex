@@ -191,12 +191,12 @@ export function VersusCard({
                 hasVoted
                   ? votedA
                     ? "border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15"
-                    : "border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40"
+                    : "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40"
                   : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
               }`}
               data-testid={`button-vote-a-${matchup.id}`}
             >
-              <div className="relative overflow-hidden" style={{ minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""}`} style={{ minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -213,7 +213,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedA ? "opacity-70" : ""}`}>
                 <span className={`font-semibold text-sm truncate block ${votedA ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                   {matchup.optionAText}
                 </span>
@@ -231,12 +231,12 @@ export function VersusCard({
                 hasVoted
                   ? votedB
                     ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
-                    : "border-border/40 dark:border-slate-700/30 opacity-70 hover:opacity-90 hover:border-foreground/30 dark:hover:border-slate-400/40"
+                    : "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40"
                   : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
               }`}
               data-testid={`button-vote-b-${matchup.id}`}
             >
-              <div className="relative overflow-hidden" style={{ minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""}`} style={{ minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -253,7 +253,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center`}>
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedB ? "opacity-70" : ""}`}>
                 <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
                   {matchup.optionBText}
                 </span>

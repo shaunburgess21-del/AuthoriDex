@@ -251,9 +251,9 @@ export function OverallRatingCard({
   const avgColor = avgRating != null ? RATING_COLORS[Math.round(avgRating) - 1] : undefined;
 
   return (
-    <div className="hub-card-slot relative h-full">
+    <div className="hub-card-slot relative h-full min-h-0 max-h-full overscroll-none">
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[340px] md:min-h-0 flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-0 max-h-full md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl overscroll-none`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">

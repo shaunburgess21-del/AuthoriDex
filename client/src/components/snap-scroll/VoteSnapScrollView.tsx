@@ -1676,7 +1676,9 @@ export function VoteSnapScrollView({
                           // not chain to the document behind the overlay —
                           // root scroll moves browser chrome and wobbles the
                           // whole surface vertically.
-                          className="h-full overflow-y-auto snap-y snap-mandatory overscroll-y-contain"
+                          className={`h-full overflow-y-auto snap-y snap-mandatory overscroll-y-contain ${
+                            isMinimal ? "touch-pan-y" : ""
+                          }`}
                           style={{ scrollSnapType: "y mandatory" }}
                         >
                           {(() => {
@@ -1705,7 +1707,7 @@ export function VoteSnapScrollView({
                                       <div
                                         className={`w-full max-w-lg mx-auto ${
                                           isMinimal
-                                            ? "max-h-full overflow-hidden rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
+                                            ? "max-h-full overflow-clip rounded-[12px] shadow-2xl shadow-black/60 ring-1 ring-white/10"
                                             : ""
                                         }`}
                                       >
