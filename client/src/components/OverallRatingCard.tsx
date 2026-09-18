@@ -20,6 +20,18 @@ import { trackVoteCast } from "@/lib/funnelTelemetry";
 const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"] as const;
 const RATING_COLORS = [1, 2, 3, 4, 5].map((r) => getRatingTileColor(r));
 
+function readSavedRating(personId: string, server: number | null): number | null {
+  if (server != null) return server;
+  try {
+    const saved = localStorage.getItem(`sentiment-vote-${personId}`);
+    const n = saved ? parseInt(saved, 10) : NaN;
+    if (n >= 1 && n <= 5) return n;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export interface OverallRatingPerson {
   id: string;
   name: string;
@@ -57,8 +69,8 @@ export function OverallRatingCard({
   categoryMenuDisabled = false,
   onRated,
 }: OverallRatingCardProps) {
-  const [submittedRating, setSubmittedRating] = useState<number | null>(
-    person.userApprovalRating ?? null,
+  const [submittedRating, setSubmittedRating] = useState<number | null>(() =>
+    readSavedRating(person.id, person.userApprovalRating ?? null),
   );
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [isChanging, setIsChanging] = useState(false);
@@ -82,18 +94,12 @@ export function OverallRatingCard({
   }, [person.userApprovalRating]);
 
   // Anon (and pre-refetch) fallback: the profile widget persists the last
-  // submitted rating in localStorage under this same key.
+  // submitted rating in localStorage under this same key. First paint already
+  // reads it via useState; this covers person/user identity changes.
   useEffect(() => {
     if (person.userApprovalRating != null) return;
-    try {
-      const saved = localStorage.getItem(`sentiment-vote-${person.id}`);
-      if (saved) {
-        const n = parseInt(saved, 10);
-        if (n >= 1 && n <= 5) setSubmittedRating(n);
-      }
-    } catch {
-      /* ignore */
-    }
+    const saved = readSavedRating(person.id, null);
+    if (saved != null) setSubmittedRating(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [person.id, user?.id]);
 
@@ -253,9 +259,9 @@ export function OverallRatingCard({
   const avgColor = avgRating != null ? RATING_COLORS[Math.round(avgRating) - 1] : undefined;
 
   return (
-    <div className="hub-card-slot relative h-full min-h-0 max-h-full">
+    <div className="hub-card-slot relative h-full">
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-0 max-h-full md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
