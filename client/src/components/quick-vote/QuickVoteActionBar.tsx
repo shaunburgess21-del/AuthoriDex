@@ -4,6 +4,10 @@
  * like / dislike (card_reactions personalization signals), and share
  * (card detail-page link).
  *
+ * Discussion targets: matchup / sentiment / opinion open the card's own
+ * comment thread; rating opens the person's Community Insights thread — the
+ * same one rendered on that celebrity's profile page.
+ *
  * Rendered per snap page via VoteSnapScrollView's renderPageFooter slot, so
  * it scrolls and snaps as one unit with its card.
  */
@@ -15,6 +19,8 @@ import {
   CardCommentsFocusOverlay,
   type CommentEntityType,
 } from "@/components/comments/CardComments";
+import { CommentsFocusShell } from "@/components/comments/CommentsFocusShell";
+import { CommunityInsights } from "@/components/CommunityInsights";
 import { useAuth } from "@/contexts/AuthContext";
 import { signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import {
@@ -114,7 +120,10 @@ export function QuickVoteActionBar({
   const reaction = reactionsMap.get(cardReactionKey({ surfaceType, targetId })) ?? null;
   const hasSlug = slug.length > 0;
   const commentEntity = COMMENT_ENTITY[type];
-  const showDiscussion = hasSlug && !!commentEntity;
+  // Rating cards carry the person id as targetId/slug and open the person
+  // thread; every other type needs a card comment entity.
+  const isPersonThread = type === "rating";
+  const showDiscussion = hasSlug && (isPersonThread || !!commentEntity);
 
   const closeComments = () => {
     setCommentsOpen(false);
@@ -182,7 +191,21 @@ export function QuickVoteActionBar({
           </ActionButton>
         )}
       </div>
-      {showDiscussion && commentEntity && (
+      {showDiscussion && isPersonThread && (
+        <CommentsFocusShell open={commentsOpen} onClose={closeComments} contextTitle={title}>
+          {commentsOpen ? (
+            <CommunityInsights
+              personId={targetId}
+              personName={title}
+              compact
+              disableFocusMode
+              focusContextTitle={title}
+              parentExpanded={false}
+            />
+          ) : null}
+        </CommentsFocusShell>
+      )}
+      {showDiscussion && !isPersonThread && commentEntity && (
         <CardCommentsFocusOverlay
           open={commentsOpen}
           onClose={closeComments}

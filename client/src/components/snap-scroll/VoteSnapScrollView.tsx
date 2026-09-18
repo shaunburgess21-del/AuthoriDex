@@ -162,6 +162,13 @@ const VERTICAL_BUFFER = 1;
 /** Quick Vote (minimal) mounts ±2 so the next snap target still has content
  * if visible-index rounding lags one page behind a fast fling. */
 const VERTICAL_BUFFER_MINIMAL = 2;
+/** Minimal variant: scroll silence required before a render-window shift is
+ * committed. Shifting the window (mount/unmount card subtrees) from a live
+ * scroll event mutates the snap container mid-fling; WebKit re-snaps after
+ * any layout inside a snap-mandatory scroller, which on iOS yanks the
+ * momentum scroll and leaves the deck "stuck" on the first page whose
+ * arrival unmounts a previous page. Commits wait for rest instead. */
+const WINDOW_COMMIT_IDLE_MS = 150;
 
 const SNAP_PAGE_HEIGHT = "calc(100dvh - 52px)";
 const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
@@ -192,6 +199,10 @@ function snapPageStyle(isMinimal = false, hasFooter = false): CSSProperties {
       height: "100%",
       boxSizing: "border-box",
       scrollSnapAlign: "start",
+      // One card per swipe: a hard fling cannot skip pages, so every landing
+      // stays inside the ±VERTICAL_BUFFER_MINIMAL window even though window
+      // shifts are deferred until the column is at rest.
+      scrollSnapStop: "always",
       paddingTop: SNAP_PAGE_INSET_MINIMAL,
       paddingBottom: hasFooter
         ? `calc(${SNAP_PAGE_INSET_MINIMAL} + ${SNAP_PAGE_FOOTER_SPACE})`
@@ -431,6 +442,15 @@ export function VoteSnapScrollView({
   const minimalColumnRef = useRef<HTMLDivElement | null>(null);
   const columnVisibleIndicesRef = useRef(columnVisibleIndices);
   columnVisibleIndicesRef.current = columnVisibleIndices;
+  /** Minimal variant: render-window shift waiting for the column to rest
+   * (see WINDOW_COMMIT_IDLE_MS). Null = window already matches scrollTop. */
+  const pendingWindowRef = useRef<{ cat: string; idx: number } | null>(null);
+  const windowCommitTimerRef = useRef<number | null>(null);
+  /** Registered by the settle guard while the minimal overlay is open:
+   * true when no finger is down, no programmatic tween runs, and the
+   * post-gesture grace has elapsed — i.e. a DOM mutation inside the snap
+   * column cannot collide with a native fling / re-snap. */
+  const windowCommitGateRef = useRef<(() => boolean) | null>(null);
   const [dismissCounter, setDismissCounter] = useState(0);
   /** True after open-init runs; prevents vote refetch from resetting scroll/category. */
   const openInitializedRef = useRef(false);
@@ -590,12 +610,75 @@ export function VoteSnapScrollView({
     });
   }, []);
 
-  const updateColumnVisibleIndex = useCallback((cat: string, el: HTMLDivElement) => {
-    const h = el.clientHeight;
-    if (h === 0) return;
-    const idx = Math.round(el.scrollTop / h);
-    setColumnVisibleIndices((prev) => (prev[cat] === idx ? prev : { ...prev, [cat]: idx }));
+  const clearWindowCommitTimer = useCallback(() => {
+    if (windowCommitTimerRef.current != null) {
+      window.clearTimeout(windowCommitTimerRef.current);
+      windowCommitTimerRef.current = null;
+    }
   }, []);
+
+  const commitPendingWindow = useCallback(() => {
+    clearWindowCommitTimer();
+    const pending = pendingWindowRef.current;
+    if (!pending) return;
+    pendingWindowRef.current = null;
+    setColumnVisibleIndices((prev) =>
+      prev[pending.cat] === pending.idx ? prev : { ...prev, [pending.cat]: pending.idx },
+    );
+  }, [clearWindowCommitTimer]);
+
+  /** Re-arms until the settle guard reports the column is safe to mutate. */
+  const scheduleWindowCommit = useCallback(() => {
+    clearWindowCommitTimer();
+    windowCommitTimerRef.current = window.setTimeout(() => {
+      windowCommitTimerRef.current = null;
+      if (!pendingWindowRef.current) return;
+      const gate = windowCommitGateRef.current;
+      if (gate && !gate()) {
+        scheduleWindowCommit();
+        return;
+      }
+      commitPendingWindow();
+    }, WINDOW_COMMIT_IDLE_MS);
+  }, [clearWindowCommitTimer, commitPendingWindow]);
+
+  const updateColumnVisibleIndex = useCallback(
+    (cat: string, el: HTMLDivElement) => {
+      const h = el.clientHeight;
+      if (h === 0) return;
+      const idx = Math.round(el.scrollTop / h);
+      if (!isMinimal) {
+        setColumnVisibleIndices((prev) => (prev[cat] === idx ? prev : { ...prev, [cat]: idx }));
+        return;
+      }
+      // Minimal: never shift the render window from a live scroll event.
+      // Park the target index and commit once the column has been silent
+      // for WINDOW_COMMIT_IDLE_MS with no finger down / tween running.
+      const committed = columnVisibleIndicesRef.current[cat] ?? 0;
+      if (idx === committed) {
+        pendingWindowRef.current = null;
+        clearWindowCommitTimer();
+        return;
+      }
+      pendingWindowRef.current = { cat, idx };
+      // Safety net: the target sits at (or past) the edge of the mounted
+      // window — a blank page is worse than a mid-motion mutation.
+      if (Math.abs(idx - committed) >= VERTICAL_BUFFER_MINIMAL) {
+        commitPendingWindow();
+        return;
+      }
+      scheduleWindowCommit();
+    },
+    [isMinimal, clearWindowCommitTimer, commitPendingWindow, scheduleWindowCommit],
+  );
+
+  // Pending window shift must not outlive the overlay.
+  useEffect(() => {
+    if (open) return;
+    pendingWindowRef.current = null;
+    clearWindowCommitTimer();
+  }, [open, clearWindowCommitTimer]);
+  useEffect(() => () => clearWindowCommitTimer(), [clearWindowCommitTimer]);
 
   const warmRafRef = useRef<number | null>(null);
   const handleColumnScroll = useCallback(
@@ -723,6 +806,9 @@ export function VoteSnapScrollView({
         const colItems = categoryItemsRef.current.get(cat) || [];
         if (index < 0 || index >= colItems.length) return;
         cancelScrollTweenRef.current?.();
+        // The jump commits its own window below; drop any deferred shift.
+        pendingWindowRef.current = null;
+        clearWindowCommitTimer();
         if (jumpAnchorTimersRef.current) {
           cancelAnimationFrame(jumpAnchorTimersRef.current.raf);
           window.clearTimeout(jumpAnchorTimersRef.current.timeout);
@@ -768,7 +854,7 @@ export function VoteSnapScrollView({
         jumpAnchorTimersRef.current = null;
       }
     };
-  }, [apiRef, tweenColumnToTop, releaseGestures]);
+  }, [apiRef, tweenColumnToTop, releaseGestures, clearWindowCommitTimer]);
 
   // ── Settle guard (minimal): self-heal stranded mid-page scroll ─────────
   // Attaches once per open (deps: isMinimal, open) via a stable ref — NOT
@@ -889,7 +975,13 @@ export function VoteSnapScrollView({
         if (touchActive || programmaticScrollActiveRef.current) return;
         if (!el.isConnected) return;
         const target = strandedTarget();
-        if (target != null) correctTo(target);
+        if (target != null) {
+          correctTo(target);
+          return;
+        }
+        // Definitively at rest on a boundary: safe to shift the render
+        // window now rather than waiting out the idle timer.
+        commitPendingWindow();
       };
       const onScroll = () => {
         lastScrollTs = performance.now();
@@ -951,6 +1043,12 @@ export function VoteSnapScrollView({
         restSample = Number.NaN;
         restSince = 0;
       };
+      // Render-window commits (deferred from onScroll) consult the same
+      // gesture state the settle guard uses before writing scrollTop.
+      windowCommitGateRef.current = () =>
+        !touchActive &&
+        !programmaticScrollActiveRef.current &&
+        performance.now() >= gestureGraceUntil;
 
       let lastHeight = el.clientHeight;
       const resizeObserver = new ResizeObserver(() => {
@@ -991,6 +1089,7 @@ export function VoteSnapScrollView({
         clearTapTimer();
         settleResetRef.current?.();
         if (settleResetRef.current) settleResetRef.current = null;
+        windowCommitGateRef.current = null;
         // Guard-initiated correction tween mustn't outlive the guard with
         // scroll-snap left disabled.
         cancelScrollTweenRef.current?.();
@@ -1025,7 +1124,7 @@ export function VoteSnapScrollView({
       detach?.();
       detach = null;
     };
-  }, [isMinimal, open, tweenColumnToTop]);
+  }, [isMinimal, open, tweenColumnToTop, commitPendingWindow]);
 
   // ── Visible-index change notification ─────────────────────────────────
   useEffect(() => {
