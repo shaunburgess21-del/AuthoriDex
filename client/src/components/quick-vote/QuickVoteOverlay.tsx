@@ -11,7 +11,7 @@
  *
  * Mobile-only by design (v1); hosts gate on useIsMobile.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -22,6 +22,9 @@ import {
   type SnapViewApi,
 } from "@/components/snap-scroll/VoteSnapScrollView";
 import { QuickVoteActionBar } from "@/components/quick-vote/QuickVoteActionBar";
+import { QuickVoteDebugHud } from "@/components/quick-vote/QuickVoteDebugHud";
+import { qvLog, qvSetState, readQvDebugFlags } from "@/lib/quickVoteDebug";
+import { Card } from "@/components/ui/card";
 import { QuickVoteSearch, resetIosInputZoom } from "@/components/quick-vote/QuickVoteSearch";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
@@ -59,6 +62,68 @@ const AUTO_ADVANCE_HOLD_MS = 1000;
 const OPTIMISTIC_VOTE_XP = 20;
 const EMPTY_RACE_MAP = new Map<string, string>();
 const NOOP = () => {};
+
+/** Diagnostics (?qvstub=rating): static stand-in for OverallRatingCard with
+ * the identical slot/Card shell and min-height, but no hooks, no Radix
+ * Avatar, no role=button segments. */
+function QuickVoteRatingStub({ name, category }: { name: string; category: string | null }) {
+  return (
+    <div className="hub-card-slot relative h-full">
+      <Card
+        className="hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl"
+        data-testid="card-overall-rating-stub"
+      >
+        <div className="flex items-center justify-between gap-2 mb-3 text-xs text-muted-foreground">
+          <span>Votes</span>
+          <span>{category ?? "misc"}</span>
+        </div>
+        <div className="flex items-start gap-3 mb-2">
+          <div className="h-20 w-20 rounded-md bg-primary/10" />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-serif font-bold text-xl leading-tight">Rate {name}</h3>
+            <p className="text-[15px] text-muted-foreground mt-1">STUB CARD (qvstub=rating)</p>
+          </div>
+        </div>
+        <div className="mt-auto flex flex-col gap-3">
+          <div className="grid grid-cols-5 gap-1">
+            {["Hate", "Dislike", "Neutral", "Like", "Love"].map((l) => (
+              <div key={l} className="py-1.5 rounded-md border border-border/40 text-center text-[10px] text-muted-foreground">
+                {l}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-5 gap-1">
+            {[1, 2, 3, 4, 5].map((v) => (
+              <div key={v} className="h-5 rounded-full bg-white/20" />
+            ))}
+          </div>
+          <div className="h-9 w-full rounded-md bg-blue-600/60" />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** Diagnostics: logs card mount/unmount by deck index and type. Only wrapped
+ * around cards when the HUD flag is on; renders no DOM of its own. */
+function QvCardProbe({
+  index,
+  type,
+  title,
+  children,
+}: {
+  index: number;
+  type: string;
+  title: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    qvLog("card.mount", { i: index, type, title: title.slice(0, 24) });
+    return () => qvLog("card.unmount", { i: index, type });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <>{children}</>;
+}
 const KEYBOARD_SETTLE_IDLE_MS = 80;
 const KEYBOARD_SETTLE_FALLBACK_MS = 450;
 const SCALE_EPS = 0.02;
@@ -201,8 +266,24 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         if (p) items.push({ id: p.id, slug: p.slug ?? "", category: p.category, title: p.title });
       }
     }
+    // Diagnostics bisection (?qvorder=rating-first): rating cards lead the
+    // deck so a jam at card 1 implicates the card, a jam at card 4 the position.
+    if (readQvDebugFlags().ratingFirst) {
+      const ratings = items.filter((i) => typeById.get(i.id) === "rating");
+      const rest = items.filter((i) => typeById.get(i.id) !== "rating");
+      return [...ratings, ...rest];
+    }
     return items;
-  }, [mixRefs, matchups, sentimentPolls, opinionPolls, ratingPeople]);
+  }, [mixRefs, matchups, sentimentPolls, opinionPolls, ratingPeople, typeById]);
+
+  // Diagnostics: count deck identity changes (a refetch of any hydration list
+  // rebuilds snapItems and re-renders every mounted page).
+  const itemsChangesRef = useRef(-1);
+  useEffect(() => {
+    itemsChangesRef.current += 1;
+    qvSetState({ itemsChanges: itemsChangesRef.current });
+    if (itemsChangesRef.current > 0) qvLog("items.changed", { count: snapItems.length });
+  }, [snapItems]);
 
   const searchRecords = useMemo<QuickVoteSearchRecord[]>(() => {
     return snapItems.map((item, index) => {
@@ -277,7 +358,11 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   const handleVisibleIndexChange = useCallback((index: number, item: SnapItem | null) => {
     currentCardIdRef.current = item?.id ?? null;
     if (index > maxIndexSeenRef.current) maxIndexSeenRef.current = index;
-  }, []);
+    qvSetState({
+      cardType: item ? (typeById.get(item.id) ?? "?") : null,
+      cardTitle: item ? item.title.slice(0, 22) : null,
+    });
+  }, [typeById]);
 
   const quickVoteSnapshot = useCallback(
     (): VoteResumePayload => ({
@@ -554,7 +639,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   }, [recordVote]);
 
   // ── Card rendering ──────────────────────────────────────────────────────
-  const renderCard = useCallback(
+  const renderCardInner = useCallback(
     (item: SnapItem, ctx: { priority: boolean; index: number }) => {
       const type = typeById.get(item.id);
       if (type === "matchup") {
@@ -603,6 +688,12 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       if (type === "rating") {
         const person = ratingPeople.find((p) => p.id === item.id);
         if (!person) return null;
+        // Diagnostics bisection (?qvstub=rating): same shell, no hooks, no
+        // avatar, no role=button segments. Smooth here = culprit is inside
+        // OverallRatingCard; still jams = the deck/scroller.
+        if (readQvDebugFlags().stubRating) {
+          return <QuickVoteRatingStub name={person.name} category={person.category} />;
+        }
         return (
           <OverallRatingCard
             person={person}
@@ -630,6 +721,26 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       handleRated,
     ],
   );
+
+  // Diagnostics wrapper: mount/unmount log per deck index (HUD flag only —
+  // without it renderCard IS renderCardInner, no extra component).
+  const renderCard = useMemo(() => {
+    if (!readQvDebugFlags().hud) return renderCardInner;
+    return (item: SnapItem, ctx: { priority: boolean; index: number }) => {
+      const card = renderCardInner(item, ctx);
+      if (card == null) return card;
+      return (
+        <QvCardProbe
+          key={item.id}
+          index={ctx.index}
+          type={typeById.get(item.id) ?? "?"}
+          title={item.title}
+        >
+          {card}
+        </QvCardProbe>
+      );
+    };
+  }, [renderCardInner, typeById]);
 
   // Hovering action row below each card (discussion / like / dislike / share).
   const handleOverlayClosed = useCallback(() => {
@@ -677,6 +788,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           />
         }
       />
+      {open && readQvDebugFlags().hud && <QuickVoteDebugHud />}
       {/* Loading shell: the host locks scroll + pushes history the moment the
           overlay opens, so the visitor must never face a bare locked page.
           Same glass chrome as the minimal snap variant, X always available. */}

@@ -8,6 +8,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constan
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { qvBump, qvDebugEnabled, qvLog, qvSetState } from "@/lib/quickVoteDebug";
 import {
   communityInsightsQueryKey,
   fetchCommunityInsightComments,
@@ -622,6 +623,8 @@ export function VoteSnapScrollView({
     const pending = pendingWindowRef.current;
     if (!pending) return;
     pendingWindowRef.current = null;
+    qvLog("window.commit", { idx: pending.idx });
+    qvSetState({ committedIdx: pending.idx, pendingIdx: null });
     setColumnVisibleIndices((prev) =>
       prev[pending.cat] === pending.idx ? prev : { ...prev, [pending.cat]: pending.idx },
     );
@@ -656,9 +659,14 @@ export function VoteSnapScrollView({
       // for WINDOW_COMMIT_IDLE_MS with no finger down / tween running.
       const committed = columnVisibleIndicesRef.current[cat] ?? 0;
       if (idx === committed) {
+        if (pendingWindowRef.current) qvSetState({ pendingIdx: null });
         pendingWindowRef.current = null;
         clearWindowCommitTimer();
         return;
+      }
+      if (pendingWindowRef.current?.idx !== idx) {
+        qvLog("window.pending", { idx, committed });
+        qvSetState({ pendingIdx: idx, committedIdx: committed });
       }
       pendingWindowRef.current = { cat, idx };
       // Safety net: the target sits at (or past) the edge of the mounted
@@ -681,9 +689,17 @@ export function VoteSnapScrollView({
   useEffect(() => () => clearWindowCommitTimer(), [clearWindowCommitTimer]);
 
   const warmRafRef = useRef<number | null>(null);
+  const lastScrollSampleRef = useRef(0);
   const handleColumnScroll = useCallback(
     (cat: string) => (e: UIEvent<HTMLDivElement>) => {
       const el = e.currentTarget;
+      if (qvDebugEnabled()) {
+        const now = performance.now();
+        if (now - lastScrollSampleRef.current > 50) {
+          lastScrollSampleRef.current = now;
+          qvLog("scroll", { top: Math.round(el.scrollTop), h: el.clientHeight });
+        }
+      }
       updateColumnVisibleIndex(cat, el);
       if (warmRafRef.current != null) return;
       warmRafRef.current = requestAnimationFrame(() => {
@@ -724,6 +740,7 @@ export function VoteSnapScrollView({
     // share sheet steals the gesture. Briefly toggling overflow and
     // re-applying scrollTop re-arms native scrolling without moving the card.
     const y = el.scrollTop;
+    qvLog("wake", { top: Math.round(y) });
     el.style.scrollSnapType = "y mandatory";
     el.style.overflow = "hidden";
     void el.offsetHeight;
@@ -756,6 +773,8 @@ export function VoteSnapScrollView({
     const startTs = performance.now();
     programmaticScrollActiveRef.current = true;
     el.style.scrollSnapType = "none";
+    qvLog("tween.start", { from: Math.round(startTop), to: Math.round(target) });
+    qvSetState({ tweenActive: true });
 
     let rafId = 0;
     const finish = (jumpToTarget: boolean) => {
@@ -765,6 +784,8 @@ export function VoteSnapScrollView({
       if (jumpToTarget) el.scrollTop = target;
       el.style.scrollSnapType = "y mandatory";
       programmaticScrollActiveRef.current = false;
+      qvLog(jumpToTarget ? "tween.finish" : "tween.cancel", { top: Math.round(el.scrollTop) });
+      qvSetState({ tweenActive: false });
     };
     // User takes over mid-tween: stop where we are, snap re-engages on release.
     const onTouch = () => finish(false);
@@ -797,6 +818,7 @@ export function VoteSnapScrollView({
         if (offsets.length === 0) return;
         const idx = nearestOffsetIndex(offsets, el.scrollTop);
         if (idx + 1 >= offsets.length) return;
+        qvLog("api.advance", { from: idx });
         // Tween to the measured boundary so the landing needs no native
         // re-snap adjustment (a visible micro-nudge with index*height math).
         tweenColumnToTop(el, Math.min(offsets[idx + 1], getMaxScrollTop(el)));
@@ -805,6 +827,7 @@ export function VoteSnapScrollView({
         const cat = categoriesRef.current[activeCategoryIdxRef.current] || "All";
         const colItems = categoryItemsRef.current.get(cat) || [];
         if (index < 0 || index >= colItems.length) return;
+        qvLog("api.jump", { index });
         cancelScrollTweenRef.current?.();
         // The jump commits its own window below; drop any deferred shift.
         pendingWindowRef.current = null;
@@ -914,9 +937,15 @@ export function VoteSnapScrollView({
         );
         return Math.abs(top - nearest) > OFF_BOUNDARY_PX ? nearest : null;
       };
-      const correctTo = (target: number) => {
+      const correctTo = (target: number, reason: string) => {
         restSample = Number.NaN;
         restSince = 0;
+        qvLog("settle.correct", {
+          reason,
+          from: Math.round(el.scrollTop),
+          to: Math.round(target),
+        });
+        qvBump("corrections");
         tweenColumnToTop(el, target);
       };
 
@@ -967,16 +996,21 @@ export function VoteSnapScrollView({
         restSample = Number.NaN;
         restSince = 0;
         const target = strandedTarget();
-        if (target != null) correctTo(target);
+        if (target != null) correctTo(target, "timer");
       };
       // Definitive end-of-scroll signal: cannot fire mid-fling, so an
       // off-boundary position here is a stranded snap — no grace needed.
       const onScrollEnd = () => {
+        qvLog("scrollend", {
+          top: Math.round(el.scrollTop),
+          touch: touchActive,
+          tween: programmaticScrollActiveRef.current,
+        });
         if (touchActive || programmaticScrollActiveRef.current) return;
         if (!el.isConnected) return;
         const target = strandedTarget();
         if (target != null) {
-          correctTo(target);
+          correctTo(target, "scrollend");
           return;
         }
         // Definitively at rest on a boundary: safe to shift the render
@@ -997,6 +1031,11 @@ export function VoteSnapScrollView({
         touchActive = false;
         detachWindowTouchEnd();
         gestureGraceUntil = performance.now() + POST_GESTURE_GRACE_MS;
+        qvLog("touch.end", {
+          top: Math.round(el.scrollTop),
+          scrolled: lastScrollTs >= touchStartTs,
+        });
+        qvSetState({ touchActive: false, graceMs: POST_GESTURE_GRACE_MS });
         clearTimer();
         armTimer();
         // Touch produced no scroll (a tap, or a finger that caught a fling
@@ -1011,7 +1050,7 @@ export function VoteSnapScrollView({
             if (touchActive || programmaticScrollActiveRef.current) return;
             if (!el.isConnected || el.scrollTop !== topAtRelease) return;
             const target = strandedTarget();
-            if (target != null) correctTo(target);
+            if (target != null) correctTo(target, "tap-heal");
           }, TAP_SETTLE_DELAY_MS);
         }
       };
@@ -1027,6 +1066,11 @@ export function VoteSnapScrollView({
         // steal the lift, so overlays cannot leave settle stuck.
         touchActive = true;
         touchStartTs = performance.now();
+        qvLog("touch.start", {
+          top: Math.round(el.scrollTop),
+          tween: programmaticScrollActiveRef.current,
+        });
+        qvSetState({ touchActive: true });
         clearTimer();
         clearTapTimer();
         detachWindowTouchEnd();
@@ -1035,6 +1079,7 @@ export function VoteSnapScrollView({
       };
 
       settleResetRef.current = () => {
+        qvLog("settle.reset", { touchWas: touchActive });
         touchActive = false;
         detachWindowTouchEnd();
         clearTimer();
@@ -1042,7 +1087,9 @@ export function VoteSnapScrollView({
         gestureGraceUntil = 0;
         restSample = Number.NaN;
         restSince = 0;
+        qvSetState({ touchActive: false, graceMs: 0 });
       };
+      qvLog("settle.attach", { h: el.clientHeight, top: Math.round(el.scrollTop) });
       // Render-window commits (deferred from onScroll) consult the same
       // gesture state the settle guard uses before writing scrollTop.
       windowCommitGateRef.current = () =>
@@ -1056,6 +1103,15 @@ export function VoteSnapScrollView({
         if (h === 0 || h === lastHeight) return;
         const prevHeight = lastHeight;
         lastHeight = h;
+        qvBump("resizeChanges");
+        const skipped = touchActive || programmaticScrollActiveRef.current
+          ? "gesture"
+          : performance.now() < gestureGraceUntil
+            ? "grace"
+            : performance.now() - lastScrollTs < RESIZE_IDLE_MS
+              ? "scrolling"
+              : null;
+        qvLog("resize", { from: prevHeight, to: h, top: Math.round(el.scrollTop), skipped });
         if (touchActive || programmaticScrollActiveRef.current) return;
         const now = performance.now();
         if (now < gestureGraceUntil) return;
@@ -1073,6 +1129,7 @@ export function VoteSnapScrollView({
         const offsets = measureSnapOffsets(el);
         if (offsets.length === 0) return;
         const boundary = offsets[Math.max(0, Math.min(idx, offsets.length - 1))];
+        qvLog("resize.teleport", { idx, to: Math.round(boundary) });
         el.scrollTop = Math.max(0, Math.min(boundary, getMaxScrollTop(el)));
       });
       resizeObserver.observe(el);
@@ -1676,6 +1733,9 @@ export function VoteSnapScrollView({
     return columnScrollRootRefs.current[cat];
   }, []);
 
+  // Diagnostics: re-render counter (every render re-reconciles all pages).
+  if (isMinimal) qvBump("renders");
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <AnimatePresence>
@@ -1771,6 +1831,7 @@ export function VoteSnapScrollView({
                             }
                           }}
                           onScroll={handleColumnScroll(cat)}
+                          data-qv-column={isMinimal ? "" : undefined}
                           // overscroll containment: an edge-of-deck fling must
                           // not chain to the document behind the overlay —
                           // root scroll moves browser chrome and wobbles the
