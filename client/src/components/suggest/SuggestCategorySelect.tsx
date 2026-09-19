@@ -1,6 +1,7 @@
-import { CATEGORIES_OPEN, normalizeMarketCategory } from "@shared/constants";
+import { normalizeMarketCategory } from "@shared/constants";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getCategoryIcon } from "@/components/interests/categoryIcons";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 
 interface SuggestCategorySelectProps {
   value: string;
@@ -15,15 +16,18 @@ interface SuggestCategorySelectProps {
 export function SuggestCategorySelect({
   value,
   onChange,
-  categories = CATEGORIES_OPEN,
+  categories,
   label = "Category *",
   "data-testid": testId,
 }: SuggestCategorySelectProps) {
+  const registry = useCategoryRegistry();
+  const options = categories ?? registry.categories;
+
   return (
     <div>
       <label className="text-sm font-medium mb-1.5 block">{label}</label>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={label} data-testid={testId}>
-        {categories.map((c) => {
+        {options.map((c) => {
           const isSelected = value === c.id;
           const style = getCategoryStyle(c.id, normalizeMarketCategory(c.id));
           const Icon = getCategoryIcon(normalizeMarketCategory(c.id));

@@ -39,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { CANONICAL_CATEGORIES } from "@shared/constants";
+import { CATEGORY_REGISTRY_SEED } from "@shared/category-registry";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getCategoryIcon } from "@/components/interests/categoryIcons";
 import { cn } from "@/lib/utils";
@@ -137,7 +137,7 @@ function PickerBody({
                 a.id.localeCompare(b.id),
             )
             .map((row) => ({ id: row.id, label: row.label }))
-        : CANONICAL_CATEGORIES;
+        : CATEGORY_REGISTRY_SEED;
     // Send categories whose labels wrap to two lines on a 4-col grid to
     // the tail. Without this they'd stretch their row past `aspect-square`
     // and visually break the grid. The internal sizing (see the tile

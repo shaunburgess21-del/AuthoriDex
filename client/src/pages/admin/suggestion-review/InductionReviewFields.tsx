@@ -1,6 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { SuggestCategorySelect } from "@/components/suggest";
-import { CATEGORIES_LEADERBOARD } from "@shared/constants";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 
 export type InductionReviewValues = {
   displayName: string;
@@ -17,6 +17,8 @@ export function InductionReviewFields({
   onChange: (next: InductionReviewValues) => void;
   socialUrl: string | null;
 }) {
+  const registry = useCategoryRegistry();
+  const leaderboardCategories = registry.categories.filter((c) => c.id !== "misc");
   const set = <K extends keyof InductionReviewValues>(key: K, val: InductionReviewValues[K]) =>
     onChange({ ...values, [key]: val });
 
@@ -29,7 +31,7 @@ export function InductionReviewFields({
       <SuggestCategorySelect
         value={values.category}
         onChange={(v) => set("category", v)}
-        categories={CATEGORIES_LEADERBOARD}
+        categories={leaderboardCategories}
         label="Category"
       />
       <div>

@@ -17,7 +17,7 @@ import {
   SUGGEST_DRAWER_TITLE,
   SUGGEST_DRAWER_DESCRIPTION,
 } from "@/components/suggest/drawerStyles";
-import { CATEGORIES_LEADERBOARD } from "@shared/constants";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 
 interface SuggestCandidateModalProps {
   open: boolean;
@@ -35,6 +35,8 @@ interface SuggestCandidateModalProps {
  */
 export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, onSubmitted }: SuggestCandidateModalProps) {
   const { trigger: triggerXpBurst } = useXpBurst();
+  const registry = useCategoryRegistry();
+  const leaderboardCategories = registry.categories.filter((c) => c.id !== "misc");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [category, setCategory] = useState("");
@@ -122,7 +124,7 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
                 <p className="text-xs text-muted-foreground mt-1">Required for verification</p>
               )}
             </div>
-            <SuggestCategorySelect value={category} onChange={setCategory} categories={CATEGORIES_LEADERBOARD} label="Category (optional)" data-testid="select-induction-category" />
+            <SuggestCategorySelect value={category} onChange={setCategory} categories={leaderboardCategories} label="Category (optional)" data-testid="select-induction-category" />
             <div>
               <label className="text-sm font-medium mb-1 block">Why should they be on VoxDex? (optional)</label>
               <Input

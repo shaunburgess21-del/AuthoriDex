@@ -28,6 +28,7 @@ import {
   captureShareClickFromUrl,
 } from "@/lib/referral-capture";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
+import { VOTE_SLUG_REDIRECTS } from "@shared/vote-slug-redirects";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
@@ -152,6 +153,11 @@ function Router() {
         <Route path="/me/notifications" component={NotificationsArchivePage} />
         <Route path="/u/:username" component={PublicProfilePage} />
         <Route path="/markets/:slug" component={MarketDetailPage} />
+        {VOTE_SLUG_REDIRECTS.map((row) => (
+          <Route key={row.fromPath} path={row.fromPath}>
+            <Redirect to={row.toPath} replace />
+          </Route>
+        ))}
         <Route path="/polls/:slug" component={PollDetailPage} />
         <Route path="/vote/opinion-polls/:slug" component={OpinionPollDetailPage} />
         <Route path="/vote/matchups/:slug" component={MatchupDetailPage} />
