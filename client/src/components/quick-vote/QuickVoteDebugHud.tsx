@@ -94,11 +94,14 @@ export function QuickVoteDebugHud() {
       data-testid="qv-debug-hud"
     >
       <div>
-        col {gauges.found ? "ok" : "MISSING"} h={gauges.clientHeight} sh={gauges.scrollHeight}
+        {String(s.engine ?? "snap")} {gauges.found ? "ok" : "MISSING"} h={gauges.clientHeight}
+        {s.engine === "deck" ? ` y=${String(s.deckY ?? 0)}` : ` sh=${gauges.scrollHeight}`}
       </div>
-      <div>
-        top={gauges.scrollTop} near={gauges.nearestIdx} d={gauges.delta}
-      </div>
+      {s.engine !== "deck" && (
+        <div>
+          top={gauges.scrollTop} near={gauges.nearestIdx} d={gauges.delta}
+        </div>
+      )}
       <div>
         idx={String(s.committedIdx ?? "-")} pend={String(s.pendingIdx ?? "-")} snap={gauges.snapType}
       </div>

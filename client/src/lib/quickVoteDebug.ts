@@ -9,6 +9,8 @@
  *   ?qvdebug=1              HUD + ring-buffer log (Copy log button)
  *   ?qvorder=rating-first   move all rating cards to the front of the deck
  *   ?qvstub=rating          render a static stub instead of OverallRatingCard
+ *   ?qvdeck=snap            use the legacy native scroll-snap column instead
+ *                           of the transform deck (A/B escape hatch)
  *
  * Flags persist in sessionStorage so they survive the overlay's pushState
  * and a login round-trip. Clear the tab (or `?qvdebug=0`) to turn them off.
@@ -18,6 +20,7 @@ export interface QvDebugFlags {
   hud: boolean;
   ratingFirst: boolean;
   stubRating: boolean;
+  legacySnap: boolean;
 }
 
 const STORAGE_KEY = "qv-debug-flags";
@@ -26,7 +29,7 @@ const LOG_CAPACITY = 300;
 let cachedFlags: QvDebugFlags | null = null;
 
 function readFlagsUncached(): QvDebugFlags {
-  const off: QvDebugFlags = { hud: false, ratingFirst: false, stubRating: false };
+  const off: QvDebugFlags = { hud: false, ratingFirst: false, stubRating: false, legacySnap: false };
   if (typeof window === "undefined") return off;
   let flags: QvDebugFlags = off;
   try {
@@ -48,6 +51,10 @@ function readFlagsUncached(): QvDebugFlags {
     }
     if (params.has("qvstub")) {
       flags = { ...flags, stubRating: params.get("qvstub") === "rating" };
+      touched = true;
+    }
+    if (params.has("qvdeck")) {
+      flags = { ...flags, legacySnap: params.get("qvdeck") === "snap" };
       touched = true;
     }
     if (touched) window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(flags));

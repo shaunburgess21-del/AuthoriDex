@@ -1,8 +1,10 @@
 /**
  * Quick Vote overlay — the "First Vote Fast Path" onboarding surface.
  *
- * A minimal-variant snap view over a single curated column (~12 cards from
- * GET /api/vote/starter-mix, matchup → sentiment → opinion → rating interleave).
+ * A transform-driven card deck (QuickVoteDeck — no native scrolling) over a
+ * single curated column (from GET /api/vote/starter-mix, matchup → sentiment
+ * → opinion → rating interleave). `?qvdeck=snap` swaps in the legacy
+ * minimal-variant VoteSnapScrollView for on-device comparison.
  * Cards hydrate from the SAME list queries the Vote hub uses
  * (/api/matchups, /api/trending-polls, /api/opinion-polls,
  * /api/vote/overall-ratings), and votes go
@@ -22,6 +24,7 @@ import {
   type SnapViewApi,
 } from "@/components/snap-scroll/VoteSnapScrollView";
 import { QuickVoteActionBar } from "@/components/quick-vote/QuickVoteActionBar";
+import { QuickVoteDeck } from "@/components/quick-vote/QuickVoteDeck";
 import { QuickVoteDebugHud } from "@/components/quick-vote/QuickVoteDebugHud";
 import { qvLog, qvSetState, readQvDebugFlags } from "@/lib/quickVoteDebug";
 import { Card } from "@/components/ui/card";
@@ -462,9 +465,11 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     // Any user gesture during the reveal hold cancels the pending advance.
     const cancel = () => cancelAdvance();
     window.addEventListener("touchstart", cancel, { passive: true });
+    window.addEventListener("pointerdown", cancel, { passive: true });
     window.addEventListener("wheel", cancel, { passive: true });
     return () => {
       window.removeEventListener("touchstart", cancel);
+      window.removeEventListener("pointerdown", cancel);
       window.removeEventListener("wheel", cancel);
       cancelAdvance();
     };
@@ -765,29 +770,55 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     [typeById, handleOverlayClosed],
   );
 
+  // Stable element: a fresh <QuickVoteSearch> per overlay render would make
+  // every deck prop change on each refetch (anon budget, list invalidation
+  // after a vote) and re-reconcile all mounted cards mid-gesture.
+  const headerSlot = useMemo(
+    () => (
+      <QuickVoteSearch
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        results={searchResults}
+        onSelect={handleSearchSelect}
+      />
+    ),
+    [searchQuery, searchResults, handleSearchSelect],
+  );
+
+  const deckOpen = open && snapItems.length > 0;
+  // ?qvdeck=snap — legacy native scroll-snap column for on-device A/B.
+  const useLegacySnap = readQvDebugFlags().legacySnap;
+
   return (
     <>
-      <VoteSnapScrollView
-        open={open && snapItems.length > 0}
-        onClose={onClose}
-        sectionType="matchups"
-        commentMode="none"
-        variant="minimal"
-        items={snapItems}
-        initialItemId={initialCardId}
-        renderCard={renderCard}
-        apiRef={snapApiRef}
-        onVisibleIndexChange={handleVisibleIndexChange}
-        renderPageFooter={renderPageFooter}
-        headerSlot={
-          <QuickVoteSearch
-            query={searchQuery}
-            onQueryChange={setSearchQuery}
-            results={searchResults}
-            onSelect={handleSearchSelect}
-          />
-        }
-      />
+      {useLegacySnap ? (
+        <VoteSnapScrollView
+          open={deckOpen}
+          onClose={onClose}
+          sectionType="matchups"
+          commentMode="none"
+          variant="minimal"
+          items={snapItems}
+          initialItemId={initialCardId}
+          renderCard={renderCard}
+          apiRef={snapApiRef}
+          onVisibleIndexChange={handleVisibleIndexChange}
+          renderPageFooter={renderPageFooter}
+          headerSlot={headerSlot}
+        />
+      ) : (
+        <QuickVoteDeck
+          open={deckOpen}
+          onClose={onClose}
+          items={snapItems}
+          initialItemId={initialCardId}
+          renderCard={renderCard}
+          apiRef={snapApiRef}
+          onVisibleIndexChange={handleVisibleIndexChange}
+          renderPageFooter={renderPageFooter}
+          headerSlot={headerSlot}
+        />
+      )}
       {open && readQvDebugFlags().hud && <QuickVoteDebugHud />}
       {/* Loading shell: the host locks scroll + pushes history the moment the
           overlay opens, so the visitor must never face a bare locked page.
