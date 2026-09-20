@@ -83,6 +83,14 @@ export interface QuickVoteDeckProps {
   /** Imperative controls (auto-advance, search jump, gesture release). */
   apiRef?: MutableRefObject<SnapViewApi | null>;
   onVisibleIndexChange?: (index: number, item: SnapItem | null) => void;
+  /**
+   * Follow the current card by id when `items` change even before the
+   * visitor has navigated. Off while hydration lists are still landing
+   * (card 1 must stay card 1 as lists arrive in any order); the overlay
+   * turns it on once every source has settled, so later reorders — a
+   * filter toggle, a refetch inserting ahead — keep the card on screen.
+   */
+  followCurrent?: boolean;
 }
 
 interface DragSession {
@@ -130,6 +138,7 @@ function DeckInner({
   headerSlot,
   apiRef,
   onVisibleIndexChange,
+  followCurrent = false,
 }: Omit<QuickVoteDeckProps, "open">) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageH, setStageH] = useState(0);
@@ -157,6 +166,9 @@ function DeckInner({
 
   const y = useMotionValue(0);
   const animRef = useRef<AnimationPlaybackControls | null>(null);
+  /** Velocity the in-flight spring was launched with — y.getVelocity() is
+   * still 0 if it is re-targeted before its first frame. */
+  const animVelocityRef = useRef(0);
   const dragRef = useRef<DragSession | null>(null);
   const suppressClickUntilRef = useRef(0);
   const wheelAccumRef = useRef(0);
@@ -202,6 +214,7 @@ function DeckInner({
         v: Math.round(opts.velocity ?? 0),
       });
       qvSetState({ tweenActive: true });
+      animVelocityRef.current = opts.velocity ?? 0;
       animRef.current = animate(y, destY, {
         type: "spring",
         stiffness: 420,
@@ -216,6 +229,63 @@ function DeckInner({
           qvLog("deck.settle", { idx: target });
         },
       });
+    },
+    [stopAnimation, y],
+  );
+
+  /**
+   * The current card moved to a new index because items were inserted or
+   * removed in front of it (e.g. a voted card dropping out of a filtered
+   * deck). Shift the track by the same amount the pages moved so the
+   * visitor sees nothing — including mid-spring and mid-drag, where a plain
+   * jump would cut the landing animation short.
+   */
+  const relocate = useCallback(
+    (target: number, reason: string) => {
+      const h = stageHRef.current;
+      const from = currentRef.current;
+      const shift = (from - target) * h;
+      currentRef.current = target;
+      currentIdRef.current = itemsRef.current[target]?.id ?? null;
+      setCurrent(target);
+      qvLog("deck.relocate", {
+        from,
+        to: target,
+        reason,
+        y: Math.round(y.get()),
+        v: Math.round(y.getVelocity()),
+        anim: animRef.current != null,
+      });
+      if (shift === 0) return;
+      const drag = dragRef.current;
+      if (drag) {
+        drag.baseY += shift;
+        y.set(y.get() + shift);
+        return;
+      }
+      if (animRef.current) {
+        const velocity = y.getVelocity() || animVelocityRef.current;
+        stopAnimation();
+        y.set(y.get() + shift);
+        qvSetState({ tweenActive: true });
+        animVelocityRef.current = velocity;
+        animRef.current = animate(y, -target * h, {
+          type: "spring",
+          stiffness: 420,
+          damping: 42,
+          mass: 1,
+          velocity,
+          restDelta: 0.5,
+          restSpeed: 5,
+          onComplete: () => {
+            animRef.current = null;
+            qvSetState({ tweenActive: false });
+            qvLog("deck.settle", { idx: target });
+          },
+        });
+        return;
+      }
+      y.set(-target * h);
     },
     [stopAnimation, y],
   );
@@ -261,17 +331,19 @@ function DeckInner({
     const cur = currentRef.current;
     const id = currentIdRef.current;
     if (items[cur]?.id === id) return;
-    // Not yet engaged: keep the index (card 1 stays card 1 while hydration
-    // lists land). Engaged: follow the card the visitor is looking at.
-    const relocated = engagedRef.current && id ? items.findIndex((i) => i.id === id) : -1;
+    // Not yet engaged (and hydration still landing): keep the index — card 1
+    // stays card 1 while lists arrive. Otherwise follow the card the
+    // visitor is looking at.
+    const follow = engagedRef.current || followCurrent;
+    const relocated = follow && id ? items.findIndex((i) => i.id === id) : -1;
     if (relocated >= 0) {
-      goTo(relocated, { animated: false, reason: "items-reorder", engage: false });
+      relocate(relocated, "items-reorder");
     } else if (cur > count - 1) {
       goTo(count - 1, { animated: false, reason: "items-shrink", engage: false });
     } else {
       currentIdRef.current = items[cur]?.id ?? null;
     }
-  }, [items, initialItemId, goTo]);
+  }, [items, initialItemId, followCurrent, goTo, relocate]);
 
   // ── Visible-index notification ────────────────────────────────────────
   useEffect(() => {

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { Loader2, X } from "lucide-react";
+import { CheckCircle2, Loader2, X } from "lucide-react";
 import {
   VoteSnapScrollView,
   type SnapItem,
@@ -29,6 +29,17 @@ import { QuickVoteDebugHud } from "@/components/quick-vote/QuickVoteDebugHud";
 import { qvLog, qvSetState, readQvDebugFlags } from "@/lib/quickVoteDebug";
 import { Card } from "@/components/ui/card";
 import { QuickVoteSearch, resetIosInputZoom } from "@/components/quick-vote/QuickVoteSearch";
+import {
+  QuickVoteHideVotedToggle,
+  type HideVotedTipDismissReason,
+} from "@/components/quick-vote/QuickVoteHideVotedToggle";
+import {
+  hasSeenHideVotedTip,
+  isQuickVoteCardVoted,
+  markHideVotedTipSeen,
+  readHideVotedPreference,
+  writeHideVotedPreference,
+} from "@/lib/quickVoteHideVoted";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { OpinionPollCard, type OpinionPollCardPoll } from "@/components/opinion-polls/OpinionPollCard";
@@ -59,6 +70,10 @@ interface StarterMixItem {
 }
 
 const AUTO_ADVANCE_HOLD_MS = 1000;
+/** Coach tip surfaces once the filter is useful: this many voted cards in
+ * the deck, or this many votes cast this overlay session. */
+const HIDE_VOTED_TIP_MIN_VOTED_CARDS = 3;
+const HIDE_VOTED_TIP_MIN_SESSION_VOTES = 2;
 /** Tap-time XP burst amount (same value as VotePage's optimistic feedback).
  * Fired immediately for signed-in users on NEW votes so the reward doesn't
  * wait on the server round-trip; the server-driven burst is suppressed. */
@@ -288,79 +303,54 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     if (itemsChangesRef.current > 0) qvLog("items.changed", { count: snapItems.length });
   }, [snapItems]);
 
-  const searchRecords = useMemo<QuickVoteSearchRecord[]>(() => {
-    return snapItems.map((item, index) => {
-      const type = typeById.get(item.id);
-      if (type === "matchup") {
-        const m = matchups.find((x) => x.id === item.id);
-        return {
-          id: item.id,
-          index,
-          type: "matchup" as const,
-          label: matchupSearchLabel(m?.optionAText, m?.optionBText, m?.promptText || m?.title || item.title),
-          titleHaystack: [m?.title, m?.promptText, item.title].filter(Boolean).join(" "),
-          optionHaystack: [m?.optionAText, m?.optionBText].filter(Boolean).join(" "),
-          extraHaystack: m?.category ?? item.category,
-          thumbA: m?.optionAImage,
-          thumbB: m?.optionBImage,
-        };
-      }
-      if (type === "sentiment") {
-        const t = sentimentPolls.find((x: any) => x.id === item.id);
-        return {
-          id: item.id,
-          index,
-          type: "sentiment" as const,
-          label: t?.headline || item.title,
-          titleHaystack: [t?.headline, item.title, t?.personName].filter(Boolean).join(" "),
-          optionHaystack: "",
-          extraHaystack: t?.category ?? item.category,
-          thumbA: t?.personAvatar || t?.imageUrl || null,
-        };
-      }
-      if (type === "rating") {
-        const person = ratingPeople.find((p) => p.id === item.id);
-        return {
-          id: item.id,
-          index,
-          type: "rating" as const,
-          label: person?.name || item.title,
-          titleHaystack: [person?.name, item.title].filter(Boolean).join(" "),
-          optionHaystack: "",
-          extraHaystack: person?.category ?? item.category,
-          thumbA: person?.avatar ?? null,
-        };
-      }
-      const p = opinionPolls.find((x: any) => x.id === item.id) as OpinionPollCardPoll | undefined;
-      const optionNames = (p?.options ?? []).map((o) => o.name).filter(Boolean);
-      return {
-        id: item.id,
-        index,
-        type: "opinion" as const,
-        label: p?.title || item.title,
-        titleHaystack: [p?.title, p?.description, item.title].filter(Boolean).join(" "),
-        optionHaystack: optionNames.join(" "),
-        extraHaystack: p?.category ?? item.category,
-        thumbA: p?.options?.[0]?.imageUrl || p?.imageUrl || null,
-        thumbB: p?.options?.[1]?.imageUrl || null,
-      };
-    });
-  }, [snapItems, typeById, matchups, sentimentPolls, opinionPolls, ratingPeople]);
+  // ── Hide voted cards: preference + never-yank-the-current-card sets ────
+  // `retainedIds` holds the previous and current card ids: a card the
+  // visitor just voted on stays for its result reveal and the auto-advance,
+  // and only drops out once it is two pages behind (never on screen, never
+  // mid-spring). `pinnedIds` are hidden cards reached via search.
+  const [hideVoted, setHideVoted] = useState(() => readHideVotedPreference());
+  const [retainedIds, setRetainedIds] = useState<string[]>([]);
+  const [pinnedIds, setPinnedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Rating votes land in localStorage first (anon fallback) — bump to re-read.
+  const [ratingVoteTick, setRatingVoteTick] = useState(0);
+  const [sessionVotes, setSessionVotes] = useState(0);
+  const [tipOpen, setTipOpen] = useState(false);
+  const tipOpenRef = useRef(false);
+  const tipShownRef = useRef(false);
+  const [tipPulseKey, setTipPulseKey] = useState(0);
+  const displayItemsRef = useRef<SnapItem[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    const bump = () => setRatingVoteTick((t) => t + 1);
+    window.addEventListener("sentiment-vote-updated", bump);
+    return () => window.removeEventListener("sentiment-vote-updated", bump);
+  }, [open]);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const searchResults = useMemo(
-    () => searchQuickVoteCards(searchQuery, searchRecords),
-    [searchQuery, searchRecords],
-  );
 
   // ── Session stats + current-card tracking (telemetry, auth snapshot) ───
   const currentCardIdRef = useRef<string | null>(null);
   const maxIndexSeenRef = useRef(0);
   const votesCastRef = useRef(0);
+  const wasOpenRef = useRef(false);
+  // Render-time mirror of `open` (child effects run before our open effect).
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const handleVisibleIndexChange = useCallback((index: number, item: SnapItem | null) => {
     currentCardIdRef.current = item?.id ?? null;
     if (index > maxIndexSeenRef.current) maxIndexSeenRef.current = index;
+    const id = item?.id;
+    // Ignore reports from the deck's exit animation after close so a stale
+    // id cannot survive into the next session.
+    if (id && openRef.current) {
+      setRetainedIds((prev) => {
+        if (prev[prev.length - 1] === id) return prev;
+        const last = prev[prev.length - 1];
+        return last ? [last, id] : [id];
+      });
+    }
     qvSetState({
       cardType: item ? (typeById.get(item.id) ?? "?") : null,
       cardTitle: item ? item.title.slice(0, 22) : null,
@@ -382,7 +372,6 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   );
 
   // overlay_open / overlay_close funnel events
-  const wasOpenRef = useRef(false);
   const closeReasonRef = useRef<string | null>(null);
   const keyboardWaitCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
@@ -391,6 +380,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       maxIndexSeenRef.current = 0;
       votesCastRef.current = 0;
       closeReasonRef.current = null;
+      tipShownRef.current = false;
       logFunnelEvent("overlay_open", "quick_vote", { source: source ?? "unknown" });
     } else if (!open && wasOpenRef.current) {
       wasOpenRef.current = false;
@@ -401,6 +391,15 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       });
       closeReasonRef.current = null;
       setSearchQuery("");
+      tipOpenRef.current = false;
+      setTipOpen(false);
+      // Reset the filter's per-session sets on CLOSE, not open: on the open
+      // commit the deck mounts in the same pass and has already reported
+      // the current card (child effects run first) — clearing here would
+      // wipe that retention and let the card on screen vanish on toggle.
+      setSessionVotes(0);
+      setRetainedIds([]);
+      setPinnedIds(new Set());
       keyboardWaitCleanupRef.current?.();
       keyboardWaitCleanupRef.current = null;
     }
@@ -408,7 +407,9 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
 
   // Nothing to show: all sources settled but hydration produced zero cards
   // (empty mix, geo-filtered out, stale ids). Bail out instead of leaving
-  // the visitor on a scroll-locked spinner.
+  // the visitor on a scroll-locked spinner. Checks the UNFILTERED list on
+  // purpose: the hide-voted filter renders its own empty panel and must
+  // never close the overlay.
   useEffect(() => {
     if (!open || !hydrationSettled) return;
     if (snapItems.length > 0) return;
@@ -423,14 +424,21 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   const handleSearchSelect = useCallback((hit: QuickVoteSearchHit) => {
     setSearchQuery("");
     haptic();
-    logFunnelEvent("overlay_search_select", "quick_vote", { type: hit.type });
+    logFunnelEvent("overlay_search_select", "quick_vote", { type: hit.type, hidden: !!hit.hidden });
+    // Search bypasses the hide-voted filter: pin a hidden hit so it is back
+    // in the deck by the time the jump below runs (≥80ms later).
+    if (hit.hidden) {
+      setPinnedIds((prev) => (prev.has(hit.id) ? prev : new Set(prev).add(hit.id)));
+    }
     keyboardWaitCleanupRef.current?.();
     keyboardWaitCleanupRef.current = afterVisualViewportSettles(() => {
       keyboardWaitCleanupRef.current = null;
       // Jump only after the keyboard/toolbar height has settled so
       // clientHeight is the full-bleed card. Keep the old card on screen
       // until then — never releaseGestures first (that cancels the snap).
-      snapApiRef.current?.scrollToIndex(hit.index);
+      // Resolve the index at jump time: the filtered deck may have shifted.
+      const index = displayItemsRef.current.findIndex((i) => i.id === hit.id);
+      snapApiRef.current?.scrollToIndex(index >= 0 ? index : hit.index);
       snapApiRef.current?.releaseGestures();
     });
   }, []);
@@ -480,6 +488,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   const recordVote = useCallback(
     (type: "matchup" | "sentiment" | "opinion" | "rating") => {
       votesCastRef.current += 1;
+      setSessionVotes((n) => n + 1);
       logFunnelEvent("overlay_vote", "quick_vote", { type });
       scheduleAdvance();
     },
@@ -511,6 +520,153 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
     onVoteSuccess: () => recordVote("matchup"),
     onVoteRolledBack: () => cancelAdvance(),
   });
+
+  // ── Filtered deck (hide voted) ─────────────────────────────────────────
+  const isVoted = useCallback(
+    (item: SnapItem) =>
+      isQuickVoteCardVoted(typeById.get(item.id), item.id, {
+        matchupUserVotes,
+        sentimentPolls,
+        opinionPolls,
+        ratingPeople,
+      }),
+    [typeById, matchupUserVotes, sentimentPolls, opinionPolls, ratingPeople],
+  );
+
+  const votedCount = useMemo(() => {
+    void ratingVoteTick; // rating votes land in localStorage — re-read on the event
+    return snapItems.reduce((n, item) => n + (isVoted(item) ? 1 : 0), 0);
+  }, [snapItems, isVoted, ratingVoteTick]);
+
+  const displayItems = useMemo<SnapItem[]>(() => {
+    void ratingVoteTick;
+    if (!hideVoted) return snapItems;
+    return snapItems.filter(
+      (item) =>
+        retainedIds.includes(item.id) ||
+        pinnedIds.has(item.id) ||
+        item.id === initialCardId ||
+        !isVoted(item),
+    );
+  }, [snapItems, hideVoted, retainedIds, pinnedIds, initialCardId, isVoted, ratingVoteTick]);
+  displayItemsRef.current = displayItems;
+  const hiddenCount = snapItems.length - displayItems.length;
+
+  const displayIndexById = useMemo(
+    () => new Map(displayItems.map((item, index) => [item.id, index])),
+    [displayItems],
+  );
+
+  // Search bypasses the filter: records cover every card, hidden ones tagged.
+  const searchRecords = useMemo<QuickVoteSearchRecord[]>(() => {
+    return snapItems.map((item, rawIndex) => {
+      const type = typeById.get(item.id);
+      const displayIndex = displayIndexById.get(item.id);
+      const index = displayIndex ?? rawIndex;
+      const hidden = displayIndex === undefined;
+      if (type === "matchup") {
+        const m = matchups.find((x) => x.id === item.id);
+        return {
+          id: item.id,
+          index,
+          hidden,
+          type: "matchup" as const,
+          label: matchupSearchLabel(m?.optionAText, m?.optionBText, m?.promptText || m?.title || item.title),
+          titleHaystack: [m?.title, m?.promptText, item.title].filter(Boolean).join(" "),
+          optionHaystack: [m?.optionAText, m?.optionBText].filter(Boolean).join(" "),
+          extraHaystack: m?.category ?? item.category,
+          thumbA: m?.optionAImage,
+          thumbB: m?.optionBImage,
+        };
+      }
+      if (type === "sentiment") {
+        const t = sentimentPolls.find((x: any) => x.id === item.id);
+        return {
+          id: item.id,
+          index,
+          hidden,
+          type: "sentiment" as const,
+          label: t?.headline || item.title,
+          titleHaystack: [t?.headline, item.title, t?.personName].filter(Boolean).join(" "),
+          optionHaystack: "",
+          extraHaystack: t?.category ?? item.category,
+          thumbA: t?.personAvatar || t?.imageUrl || null,
+        };
+      }
+      if (type === "rating") {
+        const person = ratingPeople.find((p) => p.id === item.id);
+        return {
+          id: item.id,
+          index,
+          hidden,
+          type: "rating" as const,
+          label: person?.name || item.title,
+          titleHaystack: [person?.name, item.title].filter(Boolean).join(" "),
+          optionHaystack: "",
+          extraHaystack: person?.category ?? item.category,
+          thumbA: person?.avatar ?? null,
+        };
+      }
+      const p = opinionPolls.find((x: any) => x.id === item.id) as OpinionPollCardPoll | undefined;
+      const optionNames = (p?.options ?? []).map((o) => o.name).filter(Boolean);
+      return {
+        id: item.id,
+        index,
+        hidden,
+        type: "opinion" as const,
+        label: p?.title || item.title,
+        titleHaystack: [p?.title, p?.description, item.title].filter(Boolean).join(" "),
+        optionHaystack: optionNames.join(" "),
+        extraHaystack: p?.category ?? item.category,
+        thumbA: p?.options?.[0]?.imageUrl || p?.imageUrl || null,
+        thumbB: p?.options?.[1]?.imageUrl || null,
+      };
+    });
+  }, [snapItems, displayIndexById, typeById, matchups, sentimentPolls, opinionPolls, ratingPeople]);
+
+  const searchResults = useMemo(
+    () => searchQuickVoteCards(searchQuery, searchRecords),
+    [searchQuery, searchRecords],
+  );
+
+  const handleToggleHideVoted = useCallback(() => {
+    const next = !hideVoted;
+    haptic();
+    setHideVoted(next);
+    writeHideVotedPreference(next);
+    logFunnelEvent("overlay_hide_voted", "quick_vote", {
+      enabled: next,
+      hiddenCount: next ? votedCount : 0,
+    });
+  }, [hideVoted, votedCount]);
+
+  const handleTipDismiss = useCallback((reason: HideVotedTipDismissReason) => {
+    if (!tipOpenRef.current) return;
+    tipOpenRef.current = false;
+    setTipOpen(false);
+    logFunnelEvent("overlay_hide_voted_tip", "quick_vote", {
+      action: reason === "accepted" ? "accepted" : "dismissed",
+    });
+  }, []);
+
+  // Coach tip: once per device, only when the filter would actually do
+  // something, and never over an open comments / search sheet.
+  useEffect(() => {
+    if (!open || hideVoted || tipShownRef.current) return;
+    if (votedCount < HIDE_VOTED_TIP_MIN_VOTED_CARDS && sessionVotes < HIDE_VOTED_TIP_MIN_SESSION_VOTES) return;
+    if (searchQuery.trim().length > 0) return;
+    if (hasSeenHideVotedTip()) {
+      tipShownRef.current = true;
+      return;
+    }
+    if (document.querySelector('[role="dialog"][data-state="open"]')) return;
+    tipShownRef.current = true;
+    tipOpenRef.current = true;
+    markHideVotedTipSeen();
+    setTipOpen(true);
+    setTipPulseKey((k) => k + 1);
+    logFunnelEvent("overlay_hide_voted_tip", "quick_vote", { action: "shown" });
+  }, [open, hideVoted, votedCount, sessionVotes, searchQuery]);
 
   const handleMatchupVote = useCallback(
     (matchupId: string, option: "option_a" | "option_b" | "neutral") => {
@@ -773,19 +929,46 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
   // Stable element: a fresh <QuickVoteSearch> per overlay render would make
   // every deck prop change on each refetch (anon budget, list invalidation
   // after a vote) and re-reconcile all mounted cards mid-gesture.
+  // `relative` here anchors the search results sheet across the whole row.
   const headerSlot = useMemo(
     () => (
-      <QuickVoteSearch
-        query={searchQuery}
-        onQueryChange={setSearchQuery}
-        results={searchResults}
-        onSelect={handleSearchSelect}
-      />
+      <div className="relative flex items-center gap-2">
+        <QuickVoteSearch
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          results={searchResults}
+          onSelect={handleSearchSelect}
+        />
+        <QuickVoteHideVotedToggle
+          enabled={hideVoted}
+          hiddenCount={hiddenCount}
+          onToggle={handleToggleHideVoted}
+          tipOpen={tipOpen}
+          onTipDismiss={handleTipDismiss}
+          pulseKey={tipPulseKey}
+        />
+      </div>
     ),
-    [searchQuery, searchResults, handleSearchSelect],
+    [
+      searchQuery,
+      searchResults,
+      handleSearchSelect,
+      hideVoted,
+      hiddenCount,
+      handleToggleHideVoted,
+      tipOpen,
+      handleTipDismiss,
+      tipPulseKey,
+    ],
   );
 
-  const deckOpen = open && snapItems.length > 0;
+  const deckOpen = open && displayItems.length > 0;
+  // Only once every source has landed: a half-hydrated deck whose first
+  // list happens to be all voted must show the spinner, not "voted on
+  // everything".
+  const allVotedHidden =
+    open && hideVoted && hydrationSettled && snapItems.length > 0 && displayItems.length === 0;
+  const showLoadingShell = open && displayItems.length === 0 && !allVotedHidden;
   // ?qvdeck=snap — legacy native scroll-snap column for on-device A/B.
   const useLegacySnap = readQvDebugFlags().legacySnap;
 
@@ -798,7 +981,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           sectionType="matchups"
           commentMode="none"
           variant="minimal"
-          items={snapItems}
+          items={displayItems}
           initialItemId={initialCardId}
           renderCard={renderCard}
           apiRef={snapApiRef}
@@ -810,20 +993,21 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         <QuickVoteDeck
           open={deckOpen}
           onClose={onClose}
-          items={snapItems}
+          items={displayItems}
           initialItemId={initialCardId}
           renderCard={renderCard}
           apiRef={snapApiRef}
           onVisibleIndexChange={handleVisibleIndexChange}
           renderPageFooter={renderPageFooter}
           headerSlot={headerSlot}
+          followCurrent={hydrationSettled}
         />
       )}
       {open && readQvDebugFlags().hud && <QuickVoteDebugHud />}
       {/* Loading shell: the host locks scroll + pushes history the moment the
           overlay opens, so the visitor must never face a bare locked page.
           Same glass chrome as the minimal snap variant, X always available. */}
-      {open && snapItems.length === 0 && (
+      {showLoadingShell && (
         <div
           className="fixed inset-0 z-[60] flex flex-col bg-black/40 backdrop-blur-md"
           data-testid="quick-vote-loading-shell"
@@ -840,6 +1024,46 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           </div>
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+          </div>
+        </div>
+      )}
+      {/* Hide-voted on and every card is voted: same chrome as the loading
+          shell, with the toggle still in the header and a one-tap way out. */}
+      {allVotedHidden && (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-black/40 backdrop-blur-md"
+          data-testid="quick-vote-all-voted"
+        >
+          <div className="shrink-0 h-[52px] flex items-center safe-top px-1">
+            <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
+            <button
+              onClick={onClose}
+              className="p-3 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              data-interactive="true"
+              aria-label="Close quick vote"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center px-6">
+            <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/60 p-6 text-center shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <CheckCircle2 className="mx-auto h-9 w-9 text-amber-400" aria-hidden />
+              <h2 className="mt-3 font-serif text-xl font-bold text-slate-100">
+                You&apos;ve voted on everything here
+              </h2>
+              <p className="mt-1.5 text-sm text-white/60">
+                All {snapItems.length} cards in this deck are hidden because you&apos;ve already voted on them.
+              </p>
+              <button
+                type="button"
+                onClick={handleToggleHideVoted}
+                data-interactive="true"
+                data-testid="quick-vote-show-voted"
+                className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/15 px-4 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/25 active:scale-[0.98]"
+              >
+                Show voted cards
+              </button>
+            </div>
           </div>
         </div>
       )}

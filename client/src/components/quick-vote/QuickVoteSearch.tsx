@@ -68,8 +68,10 @@ export function QuickVoteSearch({
     onSelect(hit);
   };
 
+  // No `relative` here: the results sheet anchors to the nearest positioned
+  // ancestor — the overlay's header row — so it spans search + toggle.
   return (
-    <div className="relative w-full">
+    <div className="min-w-0 flex-1">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/50" />
         <input
@@ -146,8 +148,16 @@ export function QuickVoteSearch({
                   >
                     <SearchThumbs thumbA={hit.thumbA} thumbB={hit.thumbB} />
                     <span className="min-w-0 flex-1">
-                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-white/40">
+                      <span className="mb-0.5 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-white/40">
                         {TYPE_LABEL[hit.type]}
+                        {hit.hidden && (
+                          <span
+                            className="rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-px text-[9px] normal-case tracking-normal text-amber-400"
+                            data-testid="quick-vote-search-hit-voted"
+                          >
+                            voted
+                          </span>
+                        )}
                       </span>
                       <span className="block truncate text-sm font-medium text-slate-100">
                         {hit.label}

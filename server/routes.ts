@@ -4527,12 +4527,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Anonymous ratings are written under req.sessionId (POST
+      // /api/celebrity/:id/approval-rating) — read them back with the same id.
+      const ratingVoterId = userId || req.sessionId || null;
       let userRatingsById: Record<string, number> = {};
-      if (userId) {
+      if (ratingVoterId) {
         const ratings = await db
           .select({ personId: userVotes.personId, rating: userVotes.rating })
           .from(userVotes)
-          .where(eq(userVotes.userId, userId));
+          .where(eq(userVotes.userId, ratingVoterId));
         for (const r of ratings) {
           if (r.rating != null && r.rating >= 1 && r.rating <= 5) {
             userRatingsById[r.personId] = r.rating;
@@ -16001,12 +16004,15 @@ Target length: about 90-150 words.`;
         }
       }
 
+      // Anonymous votes are written under req.sessionId (see POST
+      // /api/polls/:slug/vote), so read them back with the same voter id.
+      const pollVoterId = userId || (req as AuthRequest).sessionId || null;
       const userVoteMap: Record<string, string> = {};
-      if (userId && pollIds.length > 0) {
+      if (pollVoterId && pollIds.length > 0) {
         const userVotes = await db
           .select({ pollId: trendingPollVotes.pollId, choice: trendingPollVotes.choice })
           .from(trendingPollVotes)
-          .where(and(eq(trendingPollVotes.userId, userId), inArray(trendingPollVotes.pollId, pollIds)));
+          .where(and(eq(trendingPollVotes.userId, pollVoterId), inArray(trendingPollVotes.pollId, pollIds)));
         for (const v of userVotes) {
           userVoteMap[v.pollId] = v.choice;
         }
@@ -17133,6 +17139,7 @@ Target length: about 90-150 words.`;
       // Authorization header (best-effort), so we read it directly instead
       // of paying for a duplicate Supabase getUser() round-trip.
       const userId = (req as AuthRequest).userId ?? null;
+      const opinionVoterId = userId || (req as AuthRequest).sessionId || null;
       const geo = await resolveUserGeoContext(req as AuthRequest);
 
       const orderTerms = await orderRecencyForUser(
@@ -17186,7 +17193,9 @@ Target length: about 90-150 words.`;
           .from(opinionPollVotes)
           .where(inArray(opinionPollVotes.pollId, opPollIds))
           .groupBy(opinionPollVotes.pollId, opinionPollVotes.optionId),
-        userId
+        // Anonymous votes are written under req.sessionId (POST
+        // /api/opinion-polls/:slug/vote) — read them back with the same id.
+        opinionVoterId
           ? db
             .select({
               pollId: opinionPollVotes.pollId,
@@ -17194,7 +17203,7 @@ Target length: about 90-150 words.`;
             })
             .from(opinionPollVotes)
             .where(and(
-              eq(opinionPollVotes.userId, userId),
+              eq(opinionPollVotes.userId, opinionVoterId),
               inArray(opinionPollVotes.pollId, opPollIds),
             ))
           : Promise.resolve([]),

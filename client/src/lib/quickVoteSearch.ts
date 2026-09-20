@@ -16,6 +16,9 @@ export interface QuickVoteSearchRecord {
   extraHaystack?: string;
   thumbA?: string | null;
   thumbB?: string | null;
+  /** Card is currently filtered out of the deck (hide-voted on). Search
+   * bypasses the filter, so the hit still shows — tagged "voted". */
+  hidden?: boolean;
 }
 
 export interface QuickVoteSearchHit {
@@ -25,6 +28,7 @@ export interface QuickVoteSearchHit {
   label: string;
   thumbA?: string | null;
   thumbB?: string | null;
+  hidden?: boolean;
   score: number;
 }
 
@@ -84,6 +88,7 @@ export function searchQuickVoteCards(
       label: record.label,
       thumbA: record.thumbA,
       thumbB: record.thumbB,
+      hidden: record.hidden,
       score,
     });
   }
