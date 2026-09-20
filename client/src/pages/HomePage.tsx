@@ -17,6 +17,7 @@ import { FilterDropdown } from "@/components/FilterDropdown";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { MoverRowSubtext } from "@/components/MoverRowSubtext";
 import { TrendScoreLaunchpad } from "@/components/TrendScoreActionDrawer";
+import { LeaderboardIntroInfoIcon } from "@/components/LeaderboardIntroInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -632,6 +633,7 @@ export default function HomePage() {
   });
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
+  const { user, loading: authLoading } = useAuth();
   const leaderboardCategories = useLeaderboardCategories();
   const categoryRegistry = useCategoryRegistry();
 
@@ -981,7 +983,13 @@ export default function HomePage() {
                   <CardHeader className="relative z-[2] flex flex-col gap-4 space-y-0 pb-4 pt-5">
                       <div>
                         <div className="flex items-center justify-between gap-3">
-                          <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <CardTitle className="text-2xl font-serif">Leaderboard</CardTitle>
+                            <LeaderboardIntroInfoIcon
+                              hintEligible={!authLoading && !user}
+                              testId="icon-leaderboard-intro-info"
+                            />
+                          </div>
                           <Button
                             type="button"
                             variant="ghost"
@@ -1012,6 +1020,14 @@ export default function HomePage() {
                             Share
                           </Button>
                         </div>
+                        <p
+                          className="mt-1 text-sm text-muted-foreground"
+                          data-testid="text-leaderboard-subtitle"
+                        >
+                          {category !== "all" && category !== "favorites" && activeCategoryLabel
+                            ? `Live ranking of the most talked-about people in ${activeCategoryLabel}`
+                            : "Live ranking of the world's most talked-about people"}
+                        </p>
                         <div
                           className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/60 flex-wrap"
                           data-testid="text-leaderboard-freshness"
