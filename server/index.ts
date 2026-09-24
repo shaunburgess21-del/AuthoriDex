@@ -6,6 +6,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 import { anonIdentityMiddleware } from "./middleware/anonIdentityMiddleware";
+import { isNativeAppOrigin } from "./lib/anonIdentity";
 
 import { log, logger, requestIdMiddleware } from "./log";
 import { initSentry, sentryErrorHandler, captureBackgroundError } from "./sentry";
@@ -521,6 +522,33 @@ app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
+
+// Capacitor WebViews call https://voxdex.com from https://localhost (Android)
+// or capacitor://localhost (iOS). Same-origin browser traffic sends no matching
+// Origin and skips this block. Do not use `*` — credentialed fetches require
+// an explicit origin. Helmet's default CORP is same-origin, which would block
+// the WebView from reading the response even after ACAO is set.
+app.use((req, res, next) => {
+  if (!isNativeAppOrigin(req)) {
+    next();
+    return;
+  }
+  const origin = req.get("origin")!;
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Authorization, Content-Type, Idempotency-Key, Accept",
+  );
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 
 // Gzip JSON/asset responses (the trending payload alone is several
 // hundred kB uncompressed). MUST skip SSE: compression buffers the

@@ -232,7 +232,7 @@ import {
   BLEND_STATED_WEEK_4,
   PREDICTION_STAKE_WEIGHT_CAP,
 } from "./lib/rankingConfig";
-import { FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
+import { authCookieFlags, FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity";
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
@@ -1300,10 +1300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!sessionId) {
       sessionId = randomUUID();
       res.cookie(SESSION_COOKIE_NAME, sessionId, {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
+        ...authCookieFlags(req),
         maxAge: 1000 * 60 * 60 * 24 * 365,
       });
     }
@@ -1657,13 +1654,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!getSessionId(req)) {
         const newSid = randomUUID();
         res.cookie(SESSION_COOKIE_NAME, newSid, {
-          httpOnly: true,
-          sameSite: 'lax',
-          // Force Secure in production so the session cookie only rides HTTPS.
-          // Local dev still works because NODE_ENV !== 'production' drops it.
-          secure: process.env.NODE_ENV === 'production',
+          ...authCookieFlags(req),
+          // Secure in production so the session cookie only rides HTTPS.
+          // Native origins always set Secure via authCookieFlags (SameSite=None).
           maxAge: 365 * 24 * 60 * 60 * 1000,
-          path: '/',
         });
       }
       if (shouldCountView(req, id)) {
@@ -7534,12 +7528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Flags must match the original res.cookie(...) call in
       // server/lib/anonIdentity.ts so the browser actually clears.
       if (fdxSidForCleanup) {
-        res.clearCookie(FDX_SID_COOKIE, {
-          path: "/",
-          httpOnly: true,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
+        res.clearCookie(FDX_SID_COOKIE, authCookieFlags(req));
       }
 
       await createNotification({

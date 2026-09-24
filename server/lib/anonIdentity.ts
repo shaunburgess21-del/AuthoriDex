@@ -15,13 +15,43 @@
 // cookie-parser would be a one-line dep but the manual parse is fine
 // and keeps the surface area small.
 //
-// Flags mirror the two existing fdx_sid set sites verbatim:
-//   httpOnly, sameSite: 'lax', secure-in-production, path: '/', 1y max age.
+// Browser flags: httpOnly, sameSite: 'lax', secure-in-production, path: '/', 1y max age.
+// Native WebView origins use SameSite=None; Secure via authCookieFlags.
 
 import type { Request, Response } from "express";
 import { randomUUID } from "crypto";
 
 export const FDX_SID_COOKIE = "fdx_sid";
+
+/** WebView origins for the Capacitor iOS (`capacitor://`) and Android (`https://`) apps. */
+const NATIVE_APP_ORIGINS = new Set(["https://localhost", "capacitor://localhost"]);
+
+export function isNativeAppOrigin(req: Request): boolean {
+  const origin = req.get("origin");
+  return origin != null && NATIVE_APP_ORIGINS.has(origin);
+}
+
+/**
+ * Browser traffic keeps `SameSite=Lax`. The native WebView is a different
+ * origin from https://voxdex.com, so those responses need `SameSite=None`
+ * (which requires `Secure`) or the anonymous `fdx_sid` cookie is dropped.
+ */
+export function authCookieFlags(req: Request): {
+  httpOnly: true;
+  sameSite: "lax" | "none";
+  secure: boolean;
+  path: "/";
+} {
+  if (isNativeAppOrigin(req)) {
+    return { httpOnly: true, sameSite: "none", secure: true, path: "/" };
+  }
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  };
+}
 
 /**
  * Cookie max-age in **seconds** (Express `res.cookie({ maxAge })` wants
@@ -45,10 +75,7 @@ export function ensureFdxSid(req: Request, res: Response): string {
 
   const fresh = randomUUID();
   res.cookie(FDX_SID_COOKIE, fresh, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    ...authCookieFlags(req),
     maxAge: FDX_SID_MAX_AGE * 1000,
   });
   return fresh;
