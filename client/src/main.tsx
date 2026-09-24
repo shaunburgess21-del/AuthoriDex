@@ -4,10 +4,12 @@ import { SplashScreen } from "@capacitor/splash-screen";
 import { installNativeOriginPatch } from "./lib/nativeOrigin";
 import App from "./App";
 import { installNativeOAuthListener } from "./lib/nativeOAuth";
+import { installNativeBackListener } from "./lib/nativeBackListener";
 import "./index.css";
 
 installNativeOriginPatch();
 installNativeOAuthListener();
+installNativeBackListener();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 
