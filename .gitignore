@@ -43,6 +43,10 @@ phantom-capture-*.log
 # is committed instead — see ops/world-market-calibration-*.md)
 ops/.world-market-calibration-cache.json
 
+# Android / Play signing keys — never commit
+*.jks
+*.keystore
+
 # Capacitor: native projects are committed; generated copies and build output are not
 android/.idea/
 android/.gradle
