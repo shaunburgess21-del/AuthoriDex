@@ -1,6 +1,13 @@
 import { createRoot } from "react-dom/client";
+import { Capacitor } from "@capacitor/core";
+import { SplashScreen } from "@capacitor/splash-screen";
+import { installNativeOriginPatch } from "./lib/nativeOrigin";
 import App from "./App";
+import { installNativeOAuthListener } from "./lib/nativeOAuth";
 import "./index.css";
+
+installNativeOriginPatch();
+installNativeOAuthListener();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 
@@ -23,3 +30,9 @@ if (import.meta.env.DEV && typeof window !== "undefined" && "serviceWorker" in n
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+if (Capacitor.isNativePlatform()) {
+  requestAnimationFrame(() => {
+    void SplashScreen.hide();
+  });
+}

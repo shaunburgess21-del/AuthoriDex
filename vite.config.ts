@@ -4,11 +4,15 @@ import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+const capacitorBuild = process.env.CAPACITOR_BUILD === "1";
+
 export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    VitePWA({
+    ...(capacitorBuild
+      ? []
+      : [VitePWA({
       // "prompt": a new deploy's service worker installs and then WAITS
       // instead of seizing the page. "autoUpdate" injects skipWaiting +
       // clientsClaim and its register runtime force-reloads the page the
@@ -69,7 +73,7 @@ export default defineConfig({
           },
         ],
       },
-    }),
+    })]),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -82,6 +86,11 @@ export default defineConfig({
         ]
       : []),
   ],
+  define: capacitorBuild
+    ? {
+        "import.meta.env.VITE_API_ORIGIN": JSON.stringify("https://voxdex.com"),
+      }
+    : undefined,
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VoxDex</string>
+    <string name="title_activity_main">VoxDex</string>
+    <string name="package_name">com.voxdex.app</string>
+    <string name="custom_url_scheme">com.voxdex.app</string>
+</resources>

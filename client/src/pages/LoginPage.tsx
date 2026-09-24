@@ -8,7 +8,9 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
+import { Browser } from "@capacitor/browser";
 import { getSupabase } from "@/lib/supabase";
+import { isNativeApp, NATIVE_OAUTH_REDIRECT } from "@/lib/nativeOAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   redirectAfterLogin,
@@ -290,15 +292,22 @@ export default function LoginPage() {
       // direct-visit cleanup doesn't discard the fresh snapshot.
       markAuthNavIntent();
       const supabase = await getSupabase();
-      const { error } = await supabase.auth.signInWithOAuth({
+      const native = isNativeApp();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           // Allowlist this URL in Supabase Dashboard → Authentication → URL Configuration.
-          redirectTo: `${window.location.origin}/login`,
+          // Web stays a same-tab redirect. Native opens the system browser because
+          // Google rejects OAuth inside the WebView (disallowed_useragent).
+          redirectTo: native ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/login`,
+          skipBrowserRedirect: native,
         },
       });
 
       if (error) throw error;
+      if (native && data?.url) {
+        await Browser.open({ url: data.url });
+      }
     } catch (error: unknown) {
       const mapped = mapAuthError(error);
       toast.error("Google sign-in failed", { description: mapped.message });

@@ -7,6 +7,8 @@
     "dev": "cross-env NODE_ENV=development tsx --env-file=.env server/index.ts",
     "build": "npm run check && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && node scripts/copy-og-fonts.cjs && node scripts/copy-email-assets.cjs",
     "build:client": "vite build",
+    "build:mobile": "cross-env CAPACITOR_BUILD=1 vite build",
+    "cap:sync": "npm run build:mobile && npx cap sync",
     "start": "node scripts/db-deploy-migrate.cjs && cross-env NODE_ENV=production node dist/index.js",
     "db:deploy-migrate": "node scripts/db-deploy-migrate.cjs",
     "check": "tsc",
@@ -56,6 +58,12 @@
     "settle:week23-updown": "tsx --env-file=.env server/scripts/settle-week23-stranded-updown.ts"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -145,6 +153,7 @@
     "zod-validation-error": "^3.5.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@replit/vite-plugin-cartographer": "^0.4.2",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
