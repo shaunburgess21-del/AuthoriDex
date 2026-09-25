@@ -8,6 +8,14 @@ const config: CapacitorConfig = {
     androidScheme: "https",
   },
   plugins: {
+    SplashScreen: {
+      // Android 12+ already shows the system splash from AppTheme.NoActionBarLaunch.
+      // Duration 0 makes showOnLaunch() return immediately so this plugin does not
+      // hold that splash, fade it, or fall back to a second @drawable/splash.
+      launchShowDuration: 0,
+      launchAutoHide: true,
+      launchFadeOutDuration: 0,
+    },
     SystemBars: {
       // Bundled with @capacitor/core (not a new plugin). Pin "css" so Android
       // keeps injecting --safe-area-inset-* even if a future Capacitor major
