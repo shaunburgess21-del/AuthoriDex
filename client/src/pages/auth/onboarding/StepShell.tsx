@@ -51,7 +51,7 @@ export function StepShell({
       data-testid={testId}
     >
       {/* Top bar — sticky so Back + Skip stay reachable on long content. */}
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 pt-4 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="min-w-[44px]">
           {onBack ? (
             <button

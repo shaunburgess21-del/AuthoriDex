@@ -71,7 +71,13 @@ export function BottomNav() {
         aria-hidden="true"
         className="pointer-events-none absolute left-0 right-0 top-full h-[120px] bg-background"
       />
-      <div className="flex items-center justify-around h-16">
+      <div
+        className="flex items-center justify-around h-16"
+        style={{
+          paddingLeft: "var(--safe-area-inset-left, 0px)",
+          paddingRight: "var(--safe-area-inset-right, 0px)",
+        }}
+      >
         {navItems.map((item) => {
           const isActive = location === item.path || 
             (item.path === "/" && location === "/") ||

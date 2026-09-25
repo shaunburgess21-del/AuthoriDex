@@ -384,7 +384,7 @@ export function CommentComposer({
 
   const fullscreenOverlay = isFullscreenComposer ? (
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-background p-4 safe-top text-foreground"
+      className="fixed inset-0 z-[70] flex flex-col bg-background px-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-[max(1rem,var(--safe-area-inset-bottom,_0px))] text-foreground"
       data-testid="comment-composer-fullscreen"
       data-interactive="true"
     >

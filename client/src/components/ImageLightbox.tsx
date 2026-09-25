@@ -54,7 +54,7 @@ export function ImageLightbox({
 
       <button
         type="button"
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors touch-manipulation"
+        className="absolute top-[max(1rem,var(--safe-area-inset-top,_0px))] right-[max(1rem,var(--safe-area-inset-right,_0px))] z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors touch-manipulation"
         onClick={onClose}
         aria-label="Close"
         data-testid={closeButtonTestId}

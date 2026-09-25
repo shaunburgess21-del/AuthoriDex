@@ -1893,5 +1893,41 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
  * room. This applies globally to anything tagged with `data-hash-anchor`
  * so pages can opt in without restyling each section. */
 [data-hash-anchor] {
-  scroll-margin-top: 72px;
+  scroll-margin-top: calc(72px + var(--safe-area-inset-top, 0px));
+}
+
+/* Android system UI. Capacitor SystemBars (insetsHandling: css) sets
+ * --safe-area-inset-* on the WebView document only. Unset everywhere else,
+ * so website/PWA/iOS keep the fallback and do not move. */
+.sticky.top-16 {
+  top: calc(4rem + var(--safe-area-inset-top, 0px));
+}
+
+/* Page headers (SiteHeader and the per-page sticky headers). A transparent
+ * top border grows the bar into the status-bar inset without replacing
+ * any existing padding, so a 0px inset leaves the website unchanged. */
+header.sticky.top-0 {
+  border-top-width: var(--safe-area-inset-top, 0px);
+  border-top-color: transparent;
+}
+
+/* Full-screen overlays whose sticky bar is a direct child of the overlay. */
+.fixed.inset-0 > .sticky.top-0 {
+  padding-top: var(--safe-area-inset-top, 0px);
+}
+
+@media (max-width: 767px) {
+  .min-h-screen.pb-20 {
+    padding-bottom: calc(5rem + var(--safe-area-inset-bottom, 0px));
+  }
+}
+
+html [data-sonner-toaster][data-y-position="top"] {
+  top: calc(var(--offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
+}
+
+@media (max-width: 600px) {
+  html [data-sonner-toaster][data-y-position="top"] {
+    top: calc(var(--mobile-offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
+  }
 }

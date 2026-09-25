@@ -75,7 +75,7 @@ export function SiteHeader({
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl pl-[var(--safe-area-inset-left,_0px)] pr-[var(--safe-area-inset-right,_0px)]">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
         <div className="flex items-center gap-2 min-w-0 justify-self-start">
           {backButton !== "none" && (

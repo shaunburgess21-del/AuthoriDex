@@ -208,7 +208,7 @@ function PostOverlayModalContent({
         className="relative min-h-dvh w-full overflow-hidden rounded-none border-0 bg-background shadow-2xl sm:mx-4 sm:my-8 sm:min-h-0 sm:max-w-2xl sm:rounded-xl sm:border sm:border-border"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b border-border bg-background/95 backdrop-blur-sm">
           <h2 className="text-lg font-semibold">Post</h2>
           <Button
             variant="ghost"

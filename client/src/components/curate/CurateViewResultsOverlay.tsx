@@ -149,9 +149,9 @@ export function CurateViewResultsOverlay({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+        className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
       >
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b">
           <div className="flex items-center gap-3">
             {onBack && (
               <Button

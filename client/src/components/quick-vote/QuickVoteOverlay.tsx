@@ -1012,7 +1012,13 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           className="fixed inset-0 z-[60] flex flex-col bg-black/40 backdrop-blur-md"
           data-testid="quick-vote-loading-shell"
         >
-          <div className="shrink-0 h-[52px] flex items-center justify-end safe-top px-1">
+          <div
+            className="shrink-0 flex items-center justify-end px-1"
+            style={{
+              paddingTop: "var(--safe-area-inset-top, 0px)",
+              height: "calc(52px + var(--safe-area-inset-top, 0px))",
+            }}
+          >
             <button
               onClick={onClose}
               className="p-3 text-white/80 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -1034,7 +1040,13 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
           className="fixed inset-0 z-[60] flex flex-col bg-black/40 backdrop-blur-md"
           data-testid="quick-vote-all-voted"
         >
-          <div className="shrink-0 h-[52px] flex items-center safe-top px-1">
+          <div
+            className="shrink-0 flex items-center px-1"
+            style={{
+              paddingTop: "var(--safe-area-inset-top, 0px)",
+              height: "calc(52px + var(--safe-area-inset-top, 0px))",
+            }}
+          >
             <div className="flex-1 min-w-0 pl-3">{headerSlot}</div>
             <button
               onClick={onClose}

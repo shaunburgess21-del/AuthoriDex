@@ -544,7 +544,7 @@ function FullScreenOverlay({
   if (!open) return null;
   
   return (
-    <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar" data-testid="overlay-view-all">
+    <div ref={scrollRef} onScroll={(e) => saveOverlayScroll(overlayName, e.currentTarget.scrollTop)} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto premium-scrollbar pb-[var(--safe-area-inset-bottom,_0px)]" data-testid="overlay-view-all">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b">
         <div className="container mx-auto px-2 sm:px-4 py-4">
           <ViewAllOverlayHeader

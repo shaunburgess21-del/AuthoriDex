@@ -343,7 +343,7 @@ export default function LoginPage() {
   const submitDisabled = loading || otpSending;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div className="min-h-screen flex items-center justify-center bg-background pl-[max(1rem,var(--safe-area-inset-left,_0px))] pr-[max(1rem,var(--safe-area-inset-right,_0px))] pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-[max(1rem,var(--safe-area-inset-bottom,_0px))]">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
