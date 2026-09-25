@@ -3,6 +3,7 @@ import { apiCache } from "@shared/schema";
 import { eq, and, gt, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import { resolveMediastackRefreshIntervalMinutes } from "./news-refresh-intervals";
+import { planNewsCacheAfterLiveFail, planNewsCacheRead } from "./news-cache-policy";
 
 const MEDIASTACK_API_KEY = process.env.MEDIASTACK_API_KEY;
 const MEDIASTACK_BASE_URL = "https://api.mediastack.com/v1/news";
@@ -79,12 +80,14 @@ export interface WidenDiagnostic {
   cooldownSkipped?: boolean;
 }
 
-async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
+async function getCachedResponse(
+  cacheKey: string,
+  opts?: { allowExpired?: boolean },
+): Promise<{ responseData: string; fetchedAt: Date; expired: boolean } | null> {
   const cached = await db.query.apiCache.findFirst({
-    where: and(
-      eq(apiCache.cacheKey, cacheKey),
-      gt(apiCache.expiresAt, new Date())
-    ),
+    where: opts?.allowExpired
+      ? eq(apiCache.cacheKey, cacheKey)
+      : and(eq(apiCache.cacheKey, cacheKey), gt(apiCache.expiresAt, new Date())),
   });
 
   if (!cached) return null;
@@ -94,7 +97,9 @@ async function getCachedResponse(cacheKey: string): Promise<{ responseData: stri
     return null;
   }
 
-  return { responseData: cached.responseData, fetchedAt: cached.fetchedAt };
+  const expired = cached.expiresAt <= new Date();
+  if (expired && !opts?.allowExpired) return null;
+  return { responseData: cached.responseData, fetchedAt: cached.fetchedAt, expired };
 }
 
 async function setCachedResponse(
@@ -399,11 +404,6 @@ export async function fetchMediastackNews(
   const CACHE_TTL_HOURS = MEDIASTACK_CACHE_TTL_HOURS;
 
   try {
-    const cached = await getCachedResponse(cacheKey);
-    if (cached) {
-      return JSON.parse(cached.responseData);
-    }
-
     const now = new Date();
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -522,6 +522,7 @@ export async function fetchMediastackBatch(
   let cached = 0;
   let failed = 0;
   let cacheOnlyEmpty = 0;
+  let staleFill = 0;
   let apiCallsMade = 0;
   let widenedCount = 0;
   let widenFiredCount = 0;
@@ -559,16 +560,26 @@ export async function fetchMediastackBatch(
       }
 
       const primaryCacheKey = `mediastack:news:${person.name.replace(/\s+/g, "_").toLowerCase()}`;
-      const cachedData = await getCachedResponse(primaryCacheKey);
+      const validRow = await getCachedResponse(primaryCacheKey);
+      const expiredRow = validRow ? null : await getCachedResponse(primaryCacheKey, { allowExpired: true });
+      const action = planNewsCacheRead({
+        cacheOnly,
+        hasValidCache: !!validRow,
+        hasExpiredCache: !!expiredRow,
+      });
 
-      if (cachedData) {
-        const parsed = JSON.parse(cachedData.responseData) as MediastackNewsData;
-        results.set(person.id, parsed);
+      if (action === "use_valid" && validRow) {
+        results.set(person.id, JSON.parse(validRow.responseData) as MediastackNewsData);
         cached++;
         return;
       }
-
-      if (cacheOnly) {
+      if (action === "use_stale" && expiredRow) {
+        results.set(person.id, JSON.parse(expiredRow.responseData) as MediastackNewsData);
+        cached++;
+        staleFill++;
+        return;
+      }
+      if (action === "empty") {
         cacheOnlyEmpty++;
         return;
       }
@@ -648,7 +659,18 @@ export async function fetchMediastackBatch(
           }
         }
       } else {
-        failed++;
+        const fallback = planNewsCacheAfterLiveFail({
+          hasValidCache: !!validRow,
+          hasExpiredCache: !!expiredRow,
+        });
+        const fallbackRow = fallback === "use_valid" ? validRow : expiredRow;
+        if (fallbackRow) {
+          results.set(person.id, JSON.parse(fallbackRow.responseData) as MediastackNewsData);
+          cached++;
+          staleFill++;
+        } else {
+          failed++;
+        }
       }
     })
   );
@@ -701,8 +723,9 @@ export async function fetchMediastackBatch(
   const cacheOnlyEmptySuffix = cacheOnlyEmpty > 0
     ? ` + ${cacheOnlyEmpty} cache-only-empty${budgetThrottled ? " (budget hard stop)" : ""}`
     : "";
+  const staleSuffix = staleFill > 0 ? ` + ${staleFill} stale-fill` : "";
   const failedSuffix = failed > 0 ? ` + ${failed} failed` : "";
-  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached${cacheOnlyEmptySuffix}${failedSuffix}${widenSuffix}${cooldownSuffix} = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
+  console.log(`[Mediastack] Batch complete: ${fetched} fresh + ${cached} cached${staleSuffix}${cacheOnlyEmptySuffix}${failedSuffix}${widenSuffix}${cooldownSuffix} = ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s (${stats.apiCallsMade} API calls, success=${stats.successCoveragePct.toFixed(0)}%, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`);
 
   return { data: results, stats, isRefresh: !cacheOnly && fetched > 0, widenedCount, widenDiagnostics };
 }
@@ -729,10 +752,10 @@ const MEDIASTACK_REFRESH_INTERVAL_MS = MEDIASTACK_REFRESH_INTERVAL_MINUTES * 60 
 // downstream, the trend-score sawtooth). Pinning the two equal closes the
 // gap with no risk of a "cache outlives refresh" loop: at the exact boundary
 // the DB check `gt(expiresAt, now)` returns false (cache miss) AND `ageMs >=
-// REFRESH_INTERVAL_MS` is true (refresh due), so live fetch happens. A
-// previous iteration of this constant subtracted a 5-minute "safety margin"
-// — that was strictly worse, since it re-introduced a 5-min sub-window where
-// the cache was dead before refresh was due.
+// REFRESH_INTERVAL_MS` is true (refresh due), so live fetch happens.
+// Cache-only ticks also stale-fill from expired rows (news-cache-policy.ts)
+// so a last_fetch_at bump cannot drop people whose TTL started earlier in
+// the previous batch. Refresh ticks always live-fetch.
 const MEDIASTACK_CACHE_TTL_HOURS = MEDIASTACK_REFRESH_INTERVAL_MINUTES / 60;
 
 /**

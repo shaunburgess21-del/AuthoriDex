@@ -44,7 +44,10 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 /** summary/live is single-task; fan out one request per keyword at this concurrency. */
 const FETCH_CONCURRENCY = 6;
-const CACHE_TTL_MS = 6 * 24 * 60 * 60 * 1000;
+// Must outlive SENTIMENT_FETCH_INTERVAL_MS (7d). A 6d TTL left a 1-day gap
+// where api_cache expired while ingest still skipped the weekly fetch, so
+// /api/system/freshness marked dataforseo_sentiment stale for ~24h each week.
+const CACHE_TTL_MS = 8 * 24 * 60 * 60 * 1000;
 
 const PAGE_TYPES = ["news", "blogs", "message-boards"] as const;
 

@@ -5,6 +5,10 @@
  * the API's hard cap; values >50 return HTTP 400 "Max page_size...").
  * Flat full-roster cadence — no rank priority. Budget: ~161 × 12 cycles/day ≈
  * 1,932 calls on Builder's 2,500/day limit.
+ *
+ * Refresh ticks always live-fetch (do not reuse leftover TTL). Cache-only ticks
+ * stale-fill from expired rows so a last_fetch_at bump cannot drop people from
+ * the union between cycles (see news-cache-policy.ts).
  */
 import { db } from "../db";
 import { apiCache } from "@shared/schema";
@@ -20,6 +24,7 @@ import {
   type CurrentsSearchResponseBody,
 } from "./currents-parse";
 import { resolveCurrentsRefreshIntervalMinutes } from "./news-refresh-intervals";
+import { planNewsCacheAfterLiveFail, planNewsCacheRead } from "./news-cache-policy";
 
 export type { CurrentsRateLimitSnapshot } from "./currents-parse";
 export {
@@ -78,13 +83,20 @@ export function getCurrentsRefreshIntervalMinutes(): number {
   return CURRENTS_REFRESH_INTERVAL_MINUTES;
 }
 
-async function getCachedResponse(cacheKey: string): Promise<{ responseData: string; fetchedAt: Date } | null> {
+async function getCachedResponse(
+  cacheKey: string,
+  opts?: { allowExpired?: boolean },
+): Promise<{ responseData: string; fetchedAt: Date; expired: boolean } | null> {
   const cached = await db.query.apiCache.findFirst({
-    where: and(eq(apiCache.cacheKey, cacheKey), gt(apiCache.expiresAt, new Date())),
+    where: opts?.allowExpired
+      ? eq(apiCache.cacheKey, cacheKey)
+      : and(eq(apiCache.cacheKey, cacheKey), gt(apiCache.expiresAt, new Date())),
   });
   if (!cached) return null;
   if (cached.expiresAt < cached.fetchedAt) return null;
-  return { responseData: cached.responseData, fetchedAt: cached.fetchedAt };
+  const expired = cached.expiresAt <= new Date();
+  if (expired && !opts?.allowExpired) return null;
+  return { responseData: cached.responseData, fetchedAt: cached.fetchedAt, expired };
 }
 
 async function setCachedResponse(
@@ -321,6 +333,7 @@ export async function fetchCurrentsBatch(
   let cached = 0;
   let failed = 0;
   let cacheOnlyEmpty = 0;
+  let staleFill = 0;
   let apiCallsMade = 0;
   const cacheOnly = options?.cacheOnly ?? false;
   const budgetThrottled = options?.budgetThrottled ?? false;
@@ -364,14 +377,26 @@ export async function fetchCurrentsBatch(
       }
 
       const key = cacheKeyForName(person.name);
-      const cachedRow = await getCachedResponse(key);
-      if (cachedRow) {
-        results.set(person.id, JSON.parse(cachedRow.responseData) as CurrentsNewsData);
+      const validRow = await getCachedResponse(key);
+      const expiredRow = validRow ? null : await getCachedResponse(key, { allowExpired: true });
+      const action = planNewsCacheRead({
+        cacheOnly,
+        hasValidCache: !!validRow,
+        hasExpiredCache: !!expiredRow,
+      });
+
+      if (action === "use_valid" && validRow) {
+        results.set(person.id, JSON.parse(validRow.responseData) as CurrentsNewsData);
         cached++;
         return;
       }
-
-      if (cacheOnly) {
+      if (action === "use_stale" && expiredRow) {
+        results.set(person.id, JSON.parse(expiredRow.responseData) as CurrentsNewsData);
+        cached++;
+        staleFill++;
+        return;
+      }
+      if (action === "empty") {
         cacheOnlyEmpty++;
         return;
       }
@@ -383,9 +408,21 @@ export async function fetchCurrentsBatch(
       if (result) {
         results.set(person.id, result);
         fetched++;
-      } else {
-        failed++;
+        return;
       }
+
+      const fallback = planNewsCacheAfterLiveFail({
+        hasValidCache: !!validRow,
+        hasExpiredCache: !!expiredRow,
+      });
+      const fallbackRow = fallback === "use_valid" ? validRow : expiredRow;
+      if (fallbackRow) {
+        results.set(person.id, JSON.parse(fallbackRow.responseData) as CurrentsNewsData);
+        cached++;
+        staleFill++;
+        return;
+      }
+      failed++;
     }),
   );
 
@@ -420,9 +457,10 @@ export async function fetchCurrentsBatch(
   const emptySuffix = cacheOnlyEmpty > 0
     ? ` + ${cacheOnlyEmpty} cache-only-empty${budgetThrottled ? " (budget hard stop)" : ""}`
     : "";
+  const staleSuffix = staleFill > 0 ? ` + ${staleFill} stale-fill` : "";
   const failedSuffix = failed > 0 ? ` + ${failed} failed` : "";
   console.log(
-    `[Currents] Batch complete: ${fetched} fresh + ${cached} cached${emptySuffix}${failedSuffix} ` +
+    `[Currents] Batch complete: ${fetched} fresh + ${cached} cached${staleSuffix}${emptySuffix}${failedSuffix} ` +
       `= ${results.size}/${people.length} in ${(durationMs / 1000).toFixed(1)}s ` +
       `(${apiCallsMade} API calls, nonZero=${stats.nonZeroCoveragePct.toFixed(0)}%)`,
   );
