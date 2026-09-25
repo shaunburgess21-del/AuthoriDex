@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Fallback behind the opaque launcher foreground. Midpoint of the
+         official icon gradient (#06B6D4 -> #2563EB) in resources/icon.png. -->
+    <color name="ic_launcher_background">#158CDF</color>
 </resources>
