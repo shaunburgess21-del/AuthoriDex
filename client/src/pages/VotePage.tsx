@@ -3750,13 +3750,13 @@ export default function VotePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
               closeTestId="button-close-candidates-overlay"
               backTestId="button-back-candidates-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b"
+              className="flex items-center justify-between gap-2 px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b"
             >
               <h2 className="text-xl font-serif font-bold">All candidates</h2>
             </ViewAllOverlayHeader>
@@ -3815,13 +3815,13 @@ export default function VotePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
               closeTestId="button-close-topics-overlay"
               backTestId="button-back-topics-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b"
+              className="flex items-center justify-between gap-2 px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b"
             >
               <h2 className="text-xl font-serif font-bold">All topics</h2>
             </ViewAllOverlayHeader>
@@ -3871,13 +3871,13 @@ export default function VotePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
               closeTestId="button-close-matchups-overlay"
               backTestId="button-back-matchups-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
+              className="flex items-center justify-between gap-2 px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">
@@ -3938,13 +3938,13 @@ export default function VotePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
               closeTestId="button-close-opinion-polls-overlay"
               backTestId="button-back-opinion-polls-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
+              className="flex items-center justify-between gap-2 px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">
@@ -4000,13 +4000,13 @@ export default function VotePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-hidden flex flex-col pb-[var(--safe-area-inset-bottom,_0px)]"
           >
             <ViewAllOverlayHeader
               onClose={closeOverlay}
               closeTestId="button-close-rating-overlay"
               backTestId="button-back-rating-overlay"
-              className="flex items-center justify-between gap-2 p-4 border-b border-cyan-500/20"
+              className="flex items-center justify-between gap-2 px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] border-b border-cyan-500/20"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="h-8 w-8 rounded-lg bg-cyan-500/15 dark:bg-cyan-500/10 flex shrink-0 items-center justify-center">

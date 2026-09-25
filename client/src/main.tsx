@@ -5,7 +5,14 @@ import { installNativeOriginPatch } from "./lib/nativeOrigin";
 import App from "./App";
 import { installNativeOAuthListener } from "./lib/nativeOAuth";
 import { installNativeBackListener } from "./lib/nativeBackListener";
+import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
+
+try {
+  syncAndroidSystemBars(localStorage.getItem("theme") === "light" ? "light" : "dark");
+} catch {
+  syncAndroidSystemBars("dark");
+}
 
 installNativeOriginPatch();
 installNativeOAuthListener();

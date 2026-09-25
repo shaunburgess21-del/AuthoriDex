@@ -445,7 +445,7 @@ function TrendGraphOverlay({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl overflow-y-auto"
     >
-      <div className="container mx-auto px-4 py-6 max-w-5xl">
+      <div className="container mx-auto px-4 pt-[max(1.5rem,var(--safe-area-inset-top,_0px))] pb-[max(1.5rem,var(--safe-area-inset-bottom,_0px))] max-w-5xl">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-serif font-bold">Compare Momentum</h2>

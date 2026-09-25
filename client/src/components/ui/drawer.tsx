@@ -48,6 +48,8 @@ const DrawerContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        // Zero-height flex spacer when the inset variable is unset.
+        "after:pointer-events-none after:block after:w-full after:shrink-0 after:min-h-0 after:overflow-hidden after:p-0 after:text-[0px] after:leading-none after:content-[''] after:h-[var(--safe-area-inset-bottom,_0px)]",
         className
       )}
       {...props}

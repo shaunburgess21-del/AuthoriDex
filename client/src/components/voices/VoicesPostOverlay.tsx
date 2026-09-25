@@ -189,7 +189,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       >
         <div
           className={cn(
-            "sticky top-0 z-10 flex items-center justify-between p-4 backdrop-blur-sm",
+            "sticky top-0 z-10 flex items-center justify-between px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] backdrop-blur-sm",
             VOICES_PANEL_HEADER_CLASS,
           )}
         >

@@ -61,7 +61,18 @@ const SheetContent = React.forwardRef<
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      className={cn(
+        sheetVariants({ side }),
+        className,
+        // Border width insets content under the status/gesture bars without
+        // replacing padding (callers pass p-0). Width is 0 when the Android
+        // inset variable is unset, so web/PWA layout is unchanged.
+        // Bottom sheets already sit below the status bar — don't pad their top.
+        side !== "bottom" &&
+          "border-t-[length:var(--safe-area-inset-top,_0px)] border-t-transparent",
+        side !== "top" &&
+          "border-b-[length:var(--safe-area-inset-bottom,_0px)] border-b-transparent",
+      )}
       {...props}
     >
       {children}

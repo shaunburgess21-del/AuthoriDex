@@ -1772,7 +1772,7 @@ export function VoteSnapScrollView({
               </button>
             </div>
           ) : (
-            <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md safe-top">
+            <div className="shrink-0 flex items-center border-b border-border/30 bg-background/95 backdrop-blur-md pt-[var(--safe-area-inset-top,_0px)]">
               <button
                 onClick={onClose}
                 className="p-3 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
