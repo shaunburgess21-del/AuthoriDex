@@ -3088,6 +3088,7 @@ export default function PredictPage() {
       <SiteHeader
         active="predict"
         logoVariant="predict"
+        backButton="none"
         mobileExtras={(
           <div className="flex items-center gap-1.5 md:hidden">
             {user && (

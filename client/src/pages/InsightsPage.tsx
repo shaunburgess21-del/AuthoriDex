@@ -125,7 +125,7 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 bg-background overflow-x-clip">
-      <SiteHeader active="insights" />
+      <SiteHeader active="insights" backButton="none" />
 
       <InsightsHeader activeTab={tab} />
 

@@ -159,7 +159,7 @@ export default function VoicesPage() {
 
   return (
     <div className={cn("min-h-screen bg-background pb-20 md:pb-0", VOICES_PAGE_CANVAS_CLASS)}>
-      <SiteHeader active="voices" />
+      <SiteHeader active="voices" backButton="none" />
 
       <div
         ref={headerRef}

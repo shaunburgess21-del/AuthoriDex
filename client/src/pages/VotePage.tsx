@@ -2628,7 +2628,7 @@ export default function VotePage() {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
-      <SiteHeader active="vote" logoVariant="vote" />
+      <SiteHeader active="vote" logoVariant="vote" backButton="none" />
       {/* Section toggles — in normal flow, scrolls away with the page. Darker
           band + bottom divider to visually separate it from the category chip
           row below. */}
