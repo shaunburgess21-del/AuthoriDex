@@ -23,8 +23,9 @@
 
     <!--
       Pre-Android 12 starting window. API 31+ replaces this style from values-v31
-      with the platform splash (icon + colour only). Background #0F172A and the
-      mark are the official resources/splash.png composition.
+      with the platform splash (icon + colour only). Canvas #0F172A is
+      resources/splash.png. splash_icon is resources/icon.png fitted to the
+      288dp system-splash slot (the centered mark in that splash).
     -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>

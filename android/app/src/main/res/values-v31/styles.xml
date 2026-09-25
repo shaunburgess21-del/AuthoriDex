@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      Android 12+ system splash only. The icon is drawn by the platform.
-      windowBackground stays a flat colour so the exit frame cannot show a
-      second, differently scaled logo.
+      Android 12+ system splash only. The platform draws splash_icon
+      (resources/icon.png at 288dp) on #0F172A. windowBackground stays a flat
+      colour so the exit frame cannot show a second, differently scaled logo.
     -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
