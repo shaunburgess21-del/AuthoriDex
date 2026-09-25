@@ -5,12 +5,17 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
 import android.view.WindowManager;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // AndroidX applies postSplashScreenTheme only inside installSplashScreen,
+        // and only if that runs before the window exists. Capacitor skips this
+        // call when launchShowDuration is 0.
+        SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         // First WebView frame after the system splash uses the official splash
         // colour so the handoff is not the default white WebView.
