@@ -10,7 +10,13 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Browser } from "@capacitor/browser";
 import { getSupabase } from "@/lib/supabase";
-import { isNativeApp, NATIVE_OAUTH_REDIRECT } from "@/lib/nativeOAuth";
+import {
+  abortNativeOAuthBrowser,
+  beginNativeOAuthBrowser,
+  isNativeApp,
+  NATIVE_OAUTH_REDIRECT,
+  NATIVE_OAUTH_SETTLED_EVENT,
+} from "@/lib/nativeOAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   redirectAfterLogin,
@@ -57,6 +63,7 @@ export default function LoginPage() {
     parseReason(params.get("reason")),
   );
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
   const [fieldError, setFieldError] = useState<{
@@ -112,6 +119,13 @@ export default function LoginPage() {
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const onSettled = () => setGoogleLoading(false);
+    window.addEventListener(NATIVE_OAUTH_SETTLED_EVENT, onSettled);
+    return () => window.removeEventListener(NATIVE_OAUTH_SETTLED_EVENT, onSettled);
   }, []);
 
   // Email-code cooldown ticker. Decremented each second; the send button/link
@@ -282,6 +296,8 @@ export default function LoginPage() {
   };
 
   const handleGoogleAuth = async () => {
+    const native = isNativeApp();
+    if (native) setGoogleLoading(true);
     try {
       // Snapshot was written when the user opened /login via navigateToLogin; only stash if missing
       // (e.g. bookmarked /login) so we do not overwrite a good stash with "/".
@@ -292,7 +308,6 @@ export default function LoginPage() {
       // direct-visit cleanup doesn't discard the fresh snapshot.
       markAuthNavIntent();
       const supabase = await getSupabase();
-      const native = isNativeApp();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -305,10 +320,21 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      if (native && data?.url) {
-        await Browser.open({ url: data.url });
+      if (native) {
+        if (!data?.url) {
+          throw new Error("Google did not return a sign-in URL.");
+        }
+        beginNativeOAuthBrowser();
+        try {
+          await Browser.open({ url: data.url });
+        } catch (openError) {
+          abortNativeOAuthBrowser();
+          throw openError;
+        }
+        return;
       }
     } catch (error: unknown) {
+      if (native) setGoogleLoading(false);
       const mapped = mapAuthError(error);
       toast.error("Google sign-in failed", { description: mapped.message });
     }
@@ -340,7 +366,7 @@ export default function LoginPage() {
     setIsLogin(true);
   };
 
-  const submitDisabled = loading || otpSending;
+  const submitDisabled = loading || otpSending || googleLoading;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background pl-[max(1rem,var(--safe-area-inset-left,_0px))] pr-[max(1rem,var(--safe-area-inset-right,_0px))] pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-[max(1rem,var(--safe-area-inset-bottom,_0px))]">
@@ -371,7 +397,7 @@ export default function LoginPage() {
               data-testid="button-google-signin"
             >
               <Chrome className="h-5 w-5" />
-              Continue with Google
+              {googleLoading ? "Opening Google…" : "Continue with Google"}
             </Button>
 
             <div className="relative">
