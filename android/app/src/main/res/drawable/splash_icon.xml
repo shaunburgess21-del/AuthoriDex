@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Scale the official mark into the Android 12 splash icon slot (288dp, no icon background). -->
+    <item
+        android:width="288dp"
+        android:height="288dp"
+        android:gravity="center"
+        android:drawable="@drawable/splash_icon_image" />
+</layer-list>
