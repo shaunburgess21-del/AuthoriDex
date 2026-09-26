@@ -3,6 +3,7 @@ import {
   serializeFilters,
   type InsightsFilters,
 } from "@shared/insights/filters";
+import { currentShareContext, isShareCancelled, shareWithAndroidSheet, toPublicShareUrl } from "@/lib/nativeShare";
 import { logInsightsEvent } from "./insights-telemetry";
 
 export async function shareInsightsView(options: {
@@ -38,11 +39,23 @@ export async function shareInsightsView(options: {
     }
   }
 
-  const shareUrl = url.toString();
+  const shareUrl = toPublicShareUrl(url.toString(), currentShareContext());
   logInsightsEvent(options.surface, "share_click", {
     url: shareUrl,
     ...options.telemetryParams,
   });
+
+  const sheet = await shareWithAndroidSheet({
+    title: options.title,
+    text: options.text,
+    url: shareUrl,
+  });
+  if (sheet === "shared") return "shared";
+  if (sheet === "cancelled") {
+    const abort = new Error("Share canceled");
+    abort.name = "AbortError";
+    throw abort;
+  }
 
   if (typeof navigator.share === "function") {
     try {
@@ -53,7 +66,7 @@ export async function shareInsightsView(options: {
       });
       return "shared";
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") {
+      if (isShareCancelled(err)) {
         throw err;
       }
     }

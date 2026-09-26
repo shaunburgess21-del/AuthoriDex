@@ -1,3 +1,5 @@
+import { currentShareContext, isShareCancelled, shareWithAndroidSheet, toPublicShareUrl } from "@/lib/nativeShare";
+
 export type HomeLeaderboardSortDirection = "asc" | "desc";
 
 export interface HomeLeaderboardShareState {
@@ -51,15 +53,23 @@ export function buildHomeLeaderboardShareTitle(
 export async function shareHomeLeaderboardView(
   state: HomeLeaderboardShareState,
 ): Promise<"shared" | "copied"> {
-  const shareUrl = buildHomeLeaderboardShareUrl(state);
+  const shareUrl = toPublicShareUrl(buildHomeLeaderboardShareUrl(state), currentShareContext());
   const title = buildHomeLeaderboardShareTitle(state);
+
+  const sheet = await shareWithAndroidSheet({ title, url: shareUrl });
+  if (sheet === "shared") return "shared";
+  if (sheet === "cancelled") {
+    const abort = new Error("Share canceled");
+    abort.name = "AbortError";
+    throw abort;
+  }
 
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({ title, url: shareUrl });
       return "shared";
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") {
+      if (isShareCancelled(err)) {
         throw err;
       }
     }
