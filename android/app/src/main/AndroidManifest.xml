@@ -76,7 +76,12 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
-
+    <!--
+      Phase 13. This file declares INTERNET only. The merger also keeps
+      ACCESS_NETWORK_STATE from @capacitor/network and VIBRATE from
+      @capacitor/haptics. Do not add POST_NOTIFICATIONS, camera, microphone,
+      location, or storage — push is deferred and share writes app cache.
+      Inventory: android/PERMISSIONS.md.
+    -->
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
