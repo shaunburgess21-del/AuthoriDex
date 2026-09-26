@@ -2,6 +2,7 @@ import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
 import { navigateInApp } from "@/lib/nativeDeepLinks";
 import {
+  NATIVE_EXTERNAL_ATTR,
   classifyExternalLink,
   type ExternalLinkDecision,
 } from "@/lib/nativeExternalLink";
@@ -59,6 +60,7 @@ function onDocumentClick(event: MouseEvent): void {
     currentOrigin: window.location.origin,
     baseHref: window.location.href,
     target: anchor.getAttribute("target"),
+    forceExternal: anchor.hasAttribute(NATIVE_EXTERNAL_ATTR),
   });
   if (decision.kind === "passthrough") return;
 

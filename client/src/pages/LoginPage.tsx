@@ -522,6 +522,7 @@ export default function LoginPage() {
                     href="/terms"
                     target="_blank"
                     rel="noopener noreferrer"
+                    data-native-external=""
                     className="text-primary underline underline-offset-2 hover:text-foreground"
                   >
                     Terms of Service
@@ -531,6 +532,7 @@ export default function LoginPage() {
                     href="/privacy"
                     target="_blank"
                     rel="noopener noreferrer"
+                    data-native-external=""
                     className="text-primary underline underline-offset-2 hover:text-foreground"
                   >
                     Privacy Policy

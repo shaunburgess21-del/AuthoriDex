@@ -54,6 +54,69 @@ test("target=_blank first-party links stay in the SPA instead of a dropped windo
   );
 });
 
+test("signup Terms and Privacy open the public site in a Custom Tab", () => {
+  assert.deepEqual(
+    classifyExternalLink("/terms", {
+      currentOrigin: WEBVIEW,
+      target: "_blank",
+      forceExternal: true,
+    }),
+    { kind: "external", url: "https://voxdex.com/terms" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("/privacy", {
+      currentOrigin: WEBVIEW,
+      target: "_blank",
+      forceExternal: true,
+    }),
+    { kind: "external", url: "https://voxdex.com/privacy" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://localhost/terms", {
+      currentOrigin: WEBVIEW,
+      forceExternal: true,
+    }),
+    { kind: "external", url: "https://voxdex.com/terms" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://www.voxdex.com/privacy", {
+      currentOrigin: WEBVIEW,
+      forceExternal: true,
+    }),
+    { kind: "external", url: "https://voxdex.com/privacy" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://voxdex.com/terms", {
+      currentOrigin: "https://voxdex.com",
+      target: "_blank",
+      forceExternal: true,
+    }),
+    { kind: "external", url: "https://voxdex.com/terms" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("/terms", { currentOrigin: WEBVIEW, target: "_blank" }),
+    { kind: "in_app", path: "/terms" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("/privacy", { currentOrigin: WEBVIEW }),
+    { kind: "passthrough" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("mailto:legal@voxdex.com", {
+      currentOrigin: WEBVIEW,
+      forceExternal: true,
+    }),
+    { kind: "passthrough" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("com.voxdex.app://login?code=pkce-code", {
+      currentOrigin: WEBVIEW,
+      forceExternal: true,
+    }),
+    { kind: "passthrough" },
+  );
+});
+
 test("public voxdex.com links stay in-app, including www and query/hash", () => {
   assert.deepEqual(
     classifyExternalLink(

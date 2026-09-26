@@ -362,6 +362,7 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
             href="/terms"
             target="_blank"
             rel="noopener noreferrer"
+            data-native-external=""
             className="underline underline-offset-2 hover:text-foreground"
           >
             Terms of Service
@@ -371,6 +372,7 @@ export function WelcomeStep({ onCompleted }: WelcomeStepProps) {
             href="/privacy"
             target="_blank"
             rel="noopener noreferrer"
+            data-native-external=""
             className="underline underline-offset-2 hover:text-foreground"
           >
             Privacy Policy

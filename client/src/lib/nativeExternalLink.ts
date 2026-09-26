@@ -9,6 +9,9 @@
  *
  * First-party http(s) (the WebView origin, `https://localhost`, and
  * `https://voxdex.com` / `www.voxdex.com`) stay inside the bundled SPA.
+ * Signup/auth Terms and Privacy anchors set `data-native-external`. Those
+ * open `https://voxdex.com/terms` or `/privacy` in Custom Tabs so the form
+ * stays mounted. Other `/terms` and `/privacy` links stay in the SPA.
  * Other http(s) open in `@capacitor/browser` (Chrome Custom Tabs). `mailto:`,
  * `tel:`, `sms:`, and `market:` stay on the OS intent path. `intent:` and
  * `file:` are blocked. `com.voxdex.app://login` is left untouched so Phase 6
@@ -26,6 +29,15 @@ export type ExternalLinkDecision =
   | { kind: "system"; url: string }
   | { kind: "block" };
 
+/** Live site opened in a Custom Tab. The WebView origin is `https://localhost`. */
+const PUBLIC_SITE_ORIGIN = "https://voxdex.com";
+
+/**
+ * Present on signup/auth Terms and Privacy anchors only. The Android click
+ * listener reads it. Web ignores it; `target="_blank"` still opens a new tab.
+ */
+export const NATIVE_EXTERNAL_ATTR = "data-native-external";
+
 export interface ClassifyExternalLinkOptions {
   /** `window.location.origin`, for example `https://localhost`. */
   currentOrigin: string;
@@ -38,6 +50,11 @@ export interface ClassifyExternalLinkOptions {
   target?: string | null;
   /** `window.open` always asks for a new browsing context. */
   newContext?: boolean;
+  /**
+   * Auth Terms/Privacy. Open the public page in a Custom Tab instead of
+   * pushing the SPA route (which would unmount the signup form).
+   */
+  forceExternal?: boolean;
 }
 
 const SYSTEM_SCHEMES = new Set(["mailto:", "tel:", "sms:", "market:"]);
@@ -159,6 +176,10 @@ export function classifyExternalLink(
 
   const path = inAppPath(parsed);
   if (!path) return { kind: "block" };
+
+  if (options.forceExternal) {
+    return { kind: "external", url: `${PUBLIC_SITE_ORIGIN}${path}` };
+  }
 
   if (wantsNewContext(options) || !isSameWebViewDocument(parsed, origin)) {
     return { kind: "in_app", path };
