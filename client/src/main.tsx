@@ -11,6 +11,7 @@ import {
 } from "./lib/nativeDeepLinks";
 import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
 import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
+import { primeAndroidNetworkStatus } from "./lib/nativeNetworkListener";
 import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
 
@@ -62,7 +63,9 @@ function startApp() {
 // Cold-start HTTPS links replace the initial history entry before React
 // reads window.location. Web skips the bridge call and renders immediately.
 if (Capacitor.isNativePlatform()) {
-  void applyNativeColdStartContentLink().finally(startApp);
+  void applyNativeColdStartContentLink()
+    .then(() => primeAndroidNetworkStatus())
+    .finally(startApp);
 } else {
   startApp();
 }

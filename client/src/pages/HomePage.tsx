@@ -48,6 +48,9 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useQuery, useQueries, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { getAuthHeaders, queryClient } from "@/lib/queryClient";
+import { OfflineUnavailable } from "@/components/OfflineUnavailable";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { isTransportFailure, shouldReplaceEmptyWithOffline } from "@/lib/networkStatus";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { TrendingPerson } from "@shared/schema";
@@ -695,6 +698,9 @@ export default function HomePage() {
     isFetchingNextPage,
     isLoading,
     error,
+    status,
+    fetchStatus,
+    refetch,
   } = useInfiniteQuery<TrendingResponse>({
     queryKey: ['/api/leaderboard', searchQuery, category, 'fame', sortDirection],
     queryFn: async ({ pageParam = 0 }) => {
@@ -858,6 +864,13 @@ export default function HomePage() {
   });
 
   const hasLeaderboardData = (data?.pages?.length ?? 0) > 0;
+  const network = useNetworkStatus();
+  const offlineKind = shouldReplaceEmptyWithOffline({
+    status,
+    fetchStatus,
+    transportError: isTransportFailure(error),
+    offline: network.reachability === "offline",
+  });
   const showLeaderboardInitialLoader = isLoading && !hasLeaderboardData;
 
   const hasActiveFilters = searchQuery || category !== "all";
@@ -891,6 +904,15 @@ export default function HomePage() {
     return resolveCategoryLabel(category);
   }, [category, resolveCategoryLabel]);
 
+  if (offlineKind && !hasLeaderboardData) {
+    return (
+      <OfflineUnavailable
+        kind={offlineKind}
+        onRetry={offlineKind === "unreachable" ? () => { void refetch(); } : undefined}
+      />
+    );
+  }
+
   if (showLeaderboardInitialLoader) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -902,7 +924,10 @@ export default function HomePage() {
     );
   }
 
-  if (error) {
+  const keepStaleLeaderboard =
+    hasLeaderboardData && (isTransportFailure(error) || network.reachability === "offline");
+
+  if (error && !keepStaleLeaderboard) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

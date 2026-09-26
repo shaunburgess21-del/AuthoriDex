@@ -1,3 +1,5 @@
+import { isTransportFailure, transportFailureDescription } from "./networkStatus";
+
 /**
  * Parse an error from a vote/prediction submission into a user-friendly
  * message + optional `retryAfter` (seconds).
@@ -29,6 +31,9 @@ export function isBudgetExhaustedVoteError(err: unknown): boolean {
 }
 
 export function parseVoteError(err: unknown): { message: string; retryAfter?: number } {
+  if (isTransportFailure(err)) {
+    return { message: transportFailureDescription() };
+  }
   const retryAfter = (err as { retryAfter?: number } | null | undefined)?.retryAfter;
   if (err instanceof Error && err.message) {
     // Shape: "429: { "error": "…" }"

@@ -2,6 +2,9 @@ import { Fragment, useState, useEffect, useRef, useMemo, useCallback, lazy, Susp
 import { handleImageError } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Button } from "@/components/ui/button";
+import { OfflineUnavailable } from "@/components/OfflineUnavailable";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { isTransportFailure, shouldReplaceEmptyWithOffline } from "@/lib/networkStatus";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -880,7 +883,7 @@ export default function PersonDetailPage() {
     });
   };
 
-  const { data: person, isLoading, error } = useQuery<
+  const { data: person, isLoading, error, status, fetchStatus, refetch } = useQuery<
     TrendingPerson & {
       wikiSlug?: string | null;
       imageSlug?: string | null;
@@ -1351,6 +1354,23 @@ export default function PersonDetailPage() {
       setFavoriteLoading(false);
     }
   };
+
+  const network = useNetworkStatus();
+  const offlineKind = shouldReplaceEmptyWithOffline({
+    status,
+    fetchStatus,
+    transportError: isTransportFailure(error),
+    offline: network.reachability === "offline",
+  });
+
+  if (offlineKind && !person) {
+    return (
+      <OfflineUnavailable
+        kind={offlineKind}
+        onRetry={offlineKind === "unreachable" ? () => { void refetch(); } : undefined}
+      />
+    );
+  }
 
   if (isLoading && !person) {
     return (
