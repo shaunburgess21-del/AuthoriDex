@@ -1,4 +1,13 @@
 import { toast } from "sonner";
+import {
+  currentShareContext,
+  isAndroidNativeShare,
+  isShareCancelled,
+  shareWithAndroidSheet,
+  cachePngForAndroidShare,
+  toPublicShareText,
+  toPublicShareUrl,
+} from "@/lib/nativeShare";
 
 /**
  * Canonical share-attribution surfaces. Mirrors the `share_surface`
@@ -120,6 +129,10 @@ export function worldMarketShare(slug: string, title: string): CardShareConfig {
  * them in place rather than appending duplicates. This matters for
  * the openShareCard path, where buildTradeShareData has already
  * baked the sharer param into shareUrl.
+ *
+ * On Capacitor Android the WebView origin is `https://localhost`.
+ * After attribution, that host is rewritten to `https://voxdex.com`
+ * so the shared link matches the web app. Web and iOS are unchanged.
  */
 export function appendShareAttribution(
   baseUrl: string,
@@ -139,7 +152,7 @@ export function appendShareAttribution(
     if (options.surface && !url.searchParams.has("utm_campaign")) {
       url.searchParams.set("utm_campaign", options.surface);
     }
-    return url.toString();
+    return toPublicShareUrl(url.toString(), currentShareContext());
   } catch {
     // Fallback for non-absolute URLs that fail the URL constructor.
     return baseUrl;
@@ -165,14 +178,15 @@ export async function sharePage(
     surface: options.surface,
   });
 
+  const sheet = await shareWithAndroidSheet({ title, url });
+  if (sheet === "shared" || sheet === "cancelled") return;
+
   if (navigator.share) {
     try {
       await navigator.share({ title, url });
       return;
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        return;
-      }
+      if (isShareCancelled(err)) return;
     }
   }
 
@@ -222,6 +236,36 @@ export async function shareImage(
 ): Promise<ShareImageResult> {
   const filename = options.filename ?? "voxdex-share.png";
   const file = new File([blob], filename, { type: blob.type || "image/png" });
+  const ctx = currentShareContext();
+  const text = options.text == null ? undefined : toPublicShareText(options.text, ctx);
+  const sharedUrl = options.url == null ? undefined : toPublicShareUrl(options.url, ctx);
+
+  // Capacitor Android has no Web Share API. Write the PNG into the app
+  // cache (FileProvider already allows cache) and open the system sheet.
+  // A failed sheet falls through to the Web Share / clipboard / download
+  // path below. User dismiss is not a failure.
+  if (ctx.nativeAndroid) {
+    const fileUri = await cachePngForAndroidShare(blob, filename);
+    if (fileUri) {
+      const withFile = await shareWithAndroidSheet({
+        title: options.title,
+        text,
+        url: sharedUrl,
+        files: [fileUri],
+      });
+      if (withFile === "shared") return { status: "shared", via: "native" };
+      if (withFile === "cancelled") return { status: "cancelled" };
+    }
+    if (text || sharedUrl) {
+      const textOnly = await shareWithAndroidSheet({
+        title: options.title,
+        text,
+        url: sharedUrl,
+      });
+      if (textOnly === "shared") return { status: "shared", via: "native" };
+      if (textOnly === "cancelled") return { status: "cancelled" };
+    }
+  }
 
   // Step 1: native share with files (mobile primary path)
   // canShare check is important — iOS/Android will throw rather than return
@@ -236,12 +280,12 @@ export async function shareImage(
       await navigator.share({
         files: [file],
         title: options.title,
-        text: options.text,
-        url: options.url,
+        text,
+        url: sharedUrl,
       });
       return { status: "shared", via: "native" };
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
+      if (isShareCancelled(err)) {
         return { status: "cancelled" };
       }
       // Fall through to step 2.
@@ -343,6 +387,7 @@ export function downloadBlob(blob: Blob, filename: string) {
  * the blob first, which we want to defer until the user actually clicks.
  */
 export function canUseNativeShare(): boolean {
+  if (isAndroidNativeShare()) return true;
   return (
     typeof navigator !== "undefined" &&
     typeof navigator.share === "function" &&
