@@ -6,7 +6,13 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Install-time permissions the merged manifest is allowed to contain. */
+/**
+ * Platform permissions declared by the app manifest and Capacitor plugin
+ * manifests. The debug APK also contains the signature permission
+ * `com.voxdex.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` from
+ * androidx.core. That name is not in these sources; `tools:node="remove"`
+ * in the app manifest is rejected below so it cannot be stripped.
+ */
 const ALLOWED = [
   "android.permission.INTERNET",
   "android.permission.ACCESS_NETWORK_STATE",

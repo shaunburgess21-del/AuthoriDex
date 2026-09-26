@@ -3,10 +3,11 @@
 Package `com.voxdex.app`. Capacitor 8. This is the Play-ready inventory for the
 merged debug/release manifest. It is locked by `tests/android-permissions.test.ts`.
 
-The app manifest declares one permission. Two more are merged from Capacitor
-plugins that the shipped shell already uses. Nothing else is merged from
-`@capacitor/android`, App, Browser, Filesystem, Share, Splash Screen,
-`ionfilesystem-android` 1.1.0, or Cordova framework 14.0.1.
+The app manifest declares one permission. Capacitor plugins merge two more.
+`androidx.core` 1.17.0 merges a signature permission the app defines for
+itself. Nothing else is merged from `@capacitor/android`, App, Browser,
+Filesystem, Share, Splash Screen, `ionfilesystem-android` 1.1.0, or Cordova
+framework 14.0.1. Confirmed with `aapt dump permissions` on the debug APK.
 
 ## Inventory
 
@@ -15,9 +16,11 @@ plugins that the shipped shell already uses. Nothing else is merged from
 | `android.permission.INTERNET` | App manifest | WebView, API, Google OAuth Custom Tabs, HTTPS | Keep. Normal permission. |
 | `android.permission.ACCESS_NETWORK_STATE` | `@capacitor/network` 8.0.1 | Offline banner (`nativeNetworkListener.ts`) | Keep. Normal permission. `ConnectivityManager` requires it. |
 | `android.permission.VIBRATE` | `@capacitor/haptics` 8.0.2 | Light impact after a confirmed vote or trade | Keep. Normal permission. No runtime prompt. |
+| `com.voxdex.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | `androidx.core:core:1.17.0` (declares the `<permission>` at `protectionLevel="signature"` and the matching `uses-permission`) | AndroidX non-exported dynamic receivers. Not a product feature and not a user grant. | Keep. Stripping it breaks `ContextCompat.registerReceiver` on minSdk 24. Only this app's signature can hold it. |
 
-All three are install-time normal permissions. None are dangerous, so Play
-does not show a runtime permission dialog for them.
+`INTERNET`, `ACCESS_NETWORK_STATE`, and `VIBRATE` are install-time normal
+permissions. The AndroidX entry is signature-level. None of them produce a
+runtime permission dialog.
 
 ## Reviewed and not declared
 
