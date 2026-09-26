@@ -636,6 +636,7 @@ function CurateProfileCard({
       return response.json();
     },
     onSuccess: (data) => {
+      hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -1081,6 +1082,7 @@ export default function VotePage() {
       return res.json();
     },
     onSuccess: (data) => {
+      hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
@@ -1433,11 +1435,11 @@ export default function VotePage() {
       toastDescription: string,
       xpReason: string,
     ) => {
-      // Instant feedback for everyone: haptic + toast fire at click time on
-      // every device/filter. The XP burst + carousel advance stay gated to
-      // the mobile "All" flow (the return value keeps its original meaning
-      // so onSuccess XP/advance fallbacks still run when this returns false).
-      hapticSuccess();
+      // Toast fires at click time on every device/filter. The haptic waits
+      // for the server success path so a failed or offline vote stays
+      // silent. The XP burst + carousel advance stay gated to the mobile
+      // "All" flow (the return value keeps its original meaning so
+      // onSuccess XP/advance fallbacks still run when this returns false).
       showVoteToast(section === "matchups" ? "matchup" : section, toastTitle, { description: toastDescription });
       if (!isMobile || myVotesFilter !== "all") return false;
       if (user) {
@@ -1493,8 +1495,8 @@ export default function VotePage() {
 
   // Matchup voting via the shared query-cache-first hook (also used by the
   // Quick Vote overlay). The hook owns the anon-budget gate, optimistic cache
-  // writes + rollback, and shared error UX; VotePage keeps its click-time
-  // feedback (haptic/toast/XP), Hidden-mode hide-exit, and carousel advance.
+  // writes + rollback, shared error UX, and the success haptic. VotePage
+  // keeps its click-time toast/XP, Hidden-mode hide-exit, and carousel advance.
   const {
     userVotes: matchupUserVotes,
     voteMatchup,
@@ -1526,7 +1528,7 @@ export default function VotePage() {
         }
         if (previousVote) {
           // Re-vote: instant toast with change copy; XP/advance stay onSuccess-gated.
-          hapticSuccess();
+          // The success haptic lives in useMatchupVotes.
           showVoteToast("matchup", "Vote changed!", { description: "Your Matchup vote has been updated." });
           return { optimisticFeedbackShown: false };
         }
@@ -2261,7 +2263,6 @@ export default function VotePage() {
       newSet.add(candidateId);
       return newSet;
     });
-    hapticSuccess();
     showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     inductionVoteMutation.mutate(candidateId);
   };
@@ -2281,6 +2282,7 @@ export default function VotePage() {
       return res.json();
     },
     onSuccess: (data, variables) => {
+      hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);

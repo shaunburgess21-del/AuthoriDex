@@ -41,6 +41,7 @@ import {
   type MatchupVoteShape,
 } from "@/lib/optimisticMatchupVote";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
+import { hapticSuccess } from "@/lib/haptic";
 
 export const MATCHUPS_LIST_KEY = ["/api/matchups"] as const;
 export const MATCHUP_USER_VOTES_KEY = ["/api/matchups/user-votes"] as const;
@@ -51,7 +52,7 @@ interface VoteVars {
   matchupId: string;
   option: MatchupVoteOption;
   previousVote: MatchupVoteOption | null;
-  /** Caller already fired haptic/toast/XP at click time. */
+  /** Caller already fired toast/XP at click time. */
   optimisticFeedbackShown: boolean;
 }
 
@@ -203,6 +204,7 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
         (current) => ({ ...current, [matchupId]: option }),
       ),
     onSuccess: (data, variables) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       if (!variables.previousVote) {
         trackVoteCast("matchup_poll");
@@ -261,9 +263,9 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
   /**
    * Gate + optimistically apply + fire the vote. `onProceed` runs
    * synchronously after the gate passes and before the mutation fires — the
-   * place for click-time feedback (haptic, toast, hide-exit). Its return
-   * value flags whether the caller already played the full optimistic
-   * XP/advance flow so onSuccess doesn't double-fire it.
+   * place for click-time feedback (toast, hide-exit). The success haptic
+   * fires from onSuccess. Its return value flags whether the caller already
+   * played the full optimistic XP/advance flow so onSuccess doesn't double-fire it.
    */
   const voteMatchup = useCallback(
     (

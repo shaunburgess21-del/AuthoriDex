@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
+import { hapticSuccess } from "@/lib/haptic";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocation } from "wouter";
@@ -168,6 +169,7 @@ export function CurateProfileCard({
     try {
       const upRes = await apiRequest("POST", `/api/people/${person.id}/images/${imageId}/vote`, { direction: "up" });
       const upData = await upRes.json() as CurateImageVoteResponse;
+      hapticSuccess();
       queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
         applyCurateVoteToImages(currentImages, imageId, upData)
       );

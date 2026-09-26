@@ -22,6 +22,7 @@ import type { TrendingPerson } from "@shared/schema";
 import { formatVox, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { hapticSuccess } from "@/lib/haptic";
 
 // Referral reward derives from credit-config so the out-of-Vox nudge
 // tracks the real award amount (same pattern as ReferAFriendCard).
@@ -204,6 +205,7 @@ export function JackpotEntryModal({
       return data;
     },
     onSuccess: (data) => {
+      hapticSuccess();
       setLastPrediction(data.predictedScore);
       setShowSuccess(true);
       setScoreInput("");

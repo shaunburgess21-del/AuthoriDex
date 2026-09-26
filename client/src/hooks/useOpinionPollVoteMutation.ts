@@ -6,6 +6,7 @@ import {
   type VoteResponseBudget,
 } from "@/hooks/useAnonBudget";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
+import { hapticSuccess } from "@/lib/haptic";
 
 const OPINION_POLLS_LIST_KEY = ["/api/opinion-polls"] as const;
 
@@ -127,6 +128,7 @@ export function useOpinionPollVoteMutation() {
       }
     },
     onSuccess: (data, action) => {
+      if (action.kind === "vote" && !data?.removed) hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response. No-op for authed users (response.budget
       // is null), so safe to call unconditionally.

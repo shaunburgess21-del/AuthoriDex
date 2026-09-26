@@ -54,7 +54,7 @@ import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { useAuth } from "@/contexts/AuthContext";
-import { haptic, hapticSuccess } from "@/lib/haptic";
+import { hapticSuccess } from "@/lib/haptic";
 import { logFunnelEvent, trackVoteCast } from "@/lib/funnelTelemetry";
 import {
   matchupSearchLabel,
@@ -423,7 +423,6 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
 
   const handleSearchSelect = useCallback((hit: QuickVoteSearchHit) => {
     setSearchQuery("");
-    haptic();
     logFunnelEvent("overlay_search_select", "quick_vote", { type: hit.type, hidden: !!hit.hidden });
     // Search bypasses the hide-voted filter: pin a hidden hit so it is back
     // in the deck by the time the jump below runs (≥80ms later).
@@ -631,7 +630,6 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
 
   const handleToggleHideVoted = useCallback(() => {
     const next = !hideVoted;
-    haptic();
     setHideVoted(next);
     writeHideVotedPreference(next);
     logFunnelEvent("overlay_hide_voted", "quick_vote", {
@@ -673,9 +671,9 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       const attempt = voteMatchup(matchupId, option, {
         // No success toast in the overlay: the top-center toaster would sit
         // over the header X for 4s. Card voted-state + auto-advance is the
-        // feedback; haptic + tap-time XP burst give click-time confirmation.
+        // feedback; the success haptic fires from useMatchupVotes, and the
+        // tap-time XP burst gives click-time confirmation.
         onProceed: (previousVote) => {
-          hapticSuccess();
           if (user && !previousVote) {
             triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");
             return { optimisticFeedbackShown: true };
@@ -704,6 +702,7 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
       return res.json();
     },
     onSuccess: (data, variables) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       // New votes only — matches the matchup hook's !previousVote gate so
       // nthInSession isn't inflated by vote changes.
@@ -745,7 +744,6 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         });
         throw new VoteGateRedirectError();
       }
-      hapticSuccess();
       const optimisticBurst = !!user && !topic.userVote;
       if (optimisticBurst) {
         triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");

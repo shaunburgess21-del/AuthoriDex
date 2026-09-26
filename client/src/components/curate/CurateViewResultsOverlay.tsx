@@ -12,6 +12,7 @@ import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } f
 import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
+import { hapticSuccess } from "@/lib/haptic";
 import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
 import type { CuratePerson } from "./CurateProfileCard";
@@ -120,6 +121,7 @@ export function CurateViewResultsOverlay({
       showVoteToast("curate", "Vote recorded!", { description: "Your vote has been counted." });
     },
     onSuccess: (data: CurateImageVoteResponse, variables: { imageId: string }) => {
+      hapticSuccess();
       queryClient.setQueryData<CelebrityImage[]>(imageQueryKey, (currentImages) =>
         applyCurateVoteToImages(currentImages, variables.imageId, data)
       );
