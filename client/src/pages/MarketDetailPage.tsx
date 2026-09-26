@@ -817,6 +817,7 @@ export default function MarketDetailPage() {
       return { toastId };
     },
     onSuccess: async (data: any, _variables, context) => {
+      hapticSuccess();
       const isAmmTrade = data?.engine === "amm";
       if (isAmmTrade && market) {
         // Find the entry the user picked so we can use its label as the
@@ -957,6 +958,7 @@ export default function MarketDetailPage() {
       return data as { predictedScore: number };
     },
     onSuccess: async (data: any) => {
+      hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

@@ -4,6 +4,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
+import { hapticSuccess } from "@/lib/haptic";
 import { sharePage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -205,6 +206,7 @@ export default function PollDetailPage() {
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
     onSuccess: (data, { slug: voteSlug }) => {
+      hapticSuccess();
       const votePollQueryKey = ["/api/polls", voteSlug] as const;
       applyBudgetFromVoteResponse(queryClient, data);
       if (data?.poll && typeof data.poll === "object") {

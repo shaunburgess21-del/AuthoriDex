@@ -57,6 +57,7 @@ import { normalizeMarketCategory } from "@shared/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
+import { hapticSuccess } from "@/lib/haptic";
 import { sharePage } from "@/lib/share";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
@@ -985,6 +986,7 @@ export default function PersonDetailPage() {
       return res.json();
     },
     onSuccess: (data) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
       queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
@@ -1047,6 +1049,7 @@ export default function PersonDetailPage() {
       });
     },
     onSuccess: (data, variables) => {
+      hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
@@ -1170,6 +1173,7 @@ export default function PersonDetailPage() {
       return res.json();
     },
     onSuccess: (data) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/trending-polls'] });
       queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });

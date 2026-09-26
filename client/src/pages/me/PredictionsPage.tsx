@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { hapticSuccess } from "@/lib/haptic";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { usePollingAmmState, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1706,6 +1707,7 @@ function AmmPositionCashOut({
       return { toastId };
     },
     onSuccess: async (data: any, _variables, context) => {
+      hapticSuccess();
       const proceeds = Math.round(Number(data?.proceeds ?? 0));
       const mt = position?.marketType;
       showVoteToast(

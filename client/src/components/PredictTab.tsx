@@ -22,6 +22,7 @@ import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getCanonicalNativeCycle } from "@/lib/nativeMarketLifecycle";
 import { fireAmmTradeToast } from "@/lib/share-data";
 import { appendOptimisticPrediction } from "@/lib/optimisticPrediction";
+import { hapticSuccess } from "@/lib/haptic";
 import { formatVox } from "@/lib/currency";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import type { ClosedMarketMessage } from "@/lib/marketClosedMessaging";
@@ -501,6 +502,7 @@ export function PredictTab({
       return { toastId };
     },
     onSuccess: async (data: any, variables, context) => {
+      hapticSuccess();
       let entryLabel = "Up";
       if (variables.entryId === weeklyMarket?.downEntryId) entryLabel = "Down";
       else if (variables.entryId === weeklyMarket?.upEntryId) entryLabel = "Up";
@@ -606,6 +608,7 @@ export function PredictTab({
       return { toastId };
     },
     onSuccess: async (data: any, variables, context) => {
+      hapticSuccess();
       // AMM share-toast on success when we have enough metadata to
       // build a sensible share card; legacy / non-AMM paths or callers
       // that didn't pass meta still get the simple confirmation toast.
@@ -683,6 +686,7 @@ export function PredictTab({
       return { toastId };
     },
     onSuccess: async (data: any, variables, context) => {
+      hapticSuccess();
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }

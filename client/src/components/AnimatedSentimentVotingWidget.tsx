@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
+import { hapticSuccess } from "@/lib/haptic";
 
 interface AnimatedSentimentVotingWidgetProps {
   personId: string;
@@ -337,6 +338,7 @@ export function AnimatedSentimentVotingWidget({
       return snapshot;
     },
     onSuccess: async (data) => {
+      hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);

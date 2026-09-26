@@ -16,6 +16,7 @@ import { showVoteToast } from "@/lib/vote-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
+import { hapticSuccess } from "@/lib/haptic";
 
 const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"] as const;
 const RATING_COLORS = [1, 2, 3, 4, 5].map((r) => getRatingTileColor(r));
@@ -169,6 +170,7 @@ export function OverallRatingCard({
       return snapshot;
     },
     onSuccess: async (data) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       trackVoteCast("celebrity_person", { kind: "overall_rating" });
       queryClient.invalidateQueries({ queryKey: ["/api/celebrity", person.id, "approval-rating"] });

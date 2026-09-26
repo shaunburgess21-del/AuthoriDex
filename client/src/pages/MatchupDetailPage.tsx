@@ -22,6 +22,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
+import { hapticSuccess } from "@/lib/haptic";
 import {
   optimisticMatchupRemovePatch,
   optimisticMatchupVotePatch,
@@ -173,6 +174,7 @@ export default function MatchupDetailPage() {
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
     onSuccess: (data, _variables, context) => {
+      hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       if (data && typeof data === "object" && context?.previousMatchup) {
         const m = context.previousMatchup;
