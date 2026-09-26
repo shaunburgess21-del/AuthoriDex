@@ -8,6 +8,13 @@ import { Capacitor } from "@capacitor/core";
  */
 export const PUBLIC_SHARE_ORIGIN = "https://voxdex.com";
 
+/**
+ * Directory under Capacitor `Directory.Cache` for share PNGs.
+ * `res/xml/file_paths.xml` `<cache-path path>` must stay equal to this.
+ * Phase 14 removed the template external-storage FileProvider root.
+ */
+export const ANDROID_SHARE_CACHE_DIR = "share";
+
 const WEBVIEW_ORIGINS = new Set([
   "https://localhost",
   "http://localhost",
@@ -170,7 +177,7 @@ export async function cachePngForAndroidShare(blob: Blob, filename: string): Pro
     const { Directory, Filesystem } = await import("@capacitor/filesystem");
     const data = await blobToBase64(blob);
     const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_") || "voxdex-share.png";
-    const path = `share/${Date.now()}-${safeName}`;
+    const path = `${ANDROID_SHARE_CACHE_DIR}/${Date.now()}-${safeName}`;
     const written = await Filesystem.writeFile({
       path,
       data,

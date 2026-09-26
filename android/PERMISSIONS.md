@@ -38,7 +38,7 @@ runtime permission dialog.
 
 - `@capacitor/browser` adds a `<queries>` intent for `CustomTabsService` so Custom Tabs can be resolved on Android 11+. Package visibility, not a permission. OAuth and external links depend on it.
 - App Links (`https://voxdex.com` + `autoVerify`) and the OAuth scheme `com.voxdex.app://login` are intent filters. They do not need extra permissions.
-- `res/xml/file_paths.xml` still has the Capacitor `<external-path>` and `<cache-path>` roots. Share images resolve through `<cache-path>`. `<external-path>` does not add a storage permission. It was left in place so this audit does not change the Share / FileProvider path.
+- `res/xml/file_paths.xml` grants the non-exported FileProvider only `cache/share`, which is where Share writes PNGs (`ANDROID_SHARE_CACHE_DIR`). Phase 14 removed the Capacitor `<external-path path=".">` root. That change does not add or remove a storage permission. See `android/SECURITY.md`.
 
 ## Runtime requests
 
