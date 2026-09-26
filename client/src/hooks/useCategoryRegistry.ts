@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { normalizeMarketCategory, getMarketCategoryLabel } from "@shared/constants";
+import { categoryRegistryFallback } from "@shared/category-registry";
 
 export interface RegistryCategory {
   id: string;
@@ -9,7 +10,7 @@ export interface RegistryCategory {
 }
 
 export interface CategoryRegistry {
-  /** Raw registry rows in admin-defined sort order (may be empty until fetched). */
+  /** Registry rows (live API when ready; 23-id seed on first paint). */
   categories: RegistryCategory[];
   /** Lookup by canonical id (e.g. "media" → { id, label }). */
   byId: Map<string, RegistryCategory>;
@@ -27,18 +28,67 @@ export interface CategoryRegistry {
    * label, falling back to the legacy `getMarketCategoryLabel` mapping.
    */
   getDisplayLabel(stored: string | null | undefined): string;
-  /** True once the registry data has loaded. Helpers fall back to legacy logic until then. */
+  /** True once GET /api/categories has returned. First paint uses the 23-id seed. */
   isReady: boolean;
 }
 
-const EMPTY_REGISTRY: CategoryRegistry = {
-  categories: [],
-  byId: new Map(),
-  byLabel: new Map(),
-  resolveCanonicalId: (stored) => normalizeMarketCategory(stored ?? ""),
-  getDisplayLabel: (stored) => getMarketCategoryLabel(stored ?? ""),
-  isReady: false,
-};
+function buildRegistry(rows: RegistryCategory[], isReady: boolean): CategoryRegistry {
+  const categories = rows;
+  const byId = new Map<string, RegistryCategory>();
+  const byLabel = new Map<string, RegistryCategory>();
+  // Maps a normalised slug derived from a registry label back to the canonical id.
+  // Lets callers resolve cached/legacy values like "media-and-podcast" (the slug form
+  // of a renamed label "Media & Podcast") back to the canonical id "media".
+  const byNormalisedLabel = new Map<string, RegistryCategory>();
+
+  for (const row of categories) {
+    if (!row?.id) continue;
+    byId.set(row.id, row);
+    if (row.label) {
+      byLabel.set(row.label.trim().toLowerCase(), row);
+      const normalisedLabel = normalizeMarketCategory(row.label);
+      if (normalisedLabel) {
+        byNormalisedLabel.set(normalisedLabel, row);
+      }
+    }
+  }
+
+  const resolveCanonicalId = (stored: string | null | undefined): string => {
+    if (stored == null) return "misc";
+    const trimmed = stored.trim();
+    if (!trimmed) return "misc";
+
+    if (byId.has(trimmed)) return trimmed;
+
+    const labelHit = byLabel.get(trimmed.toLowerCase());
+    if (labelHit) return labelHit.id;
+
+    const normalised = normalizeMarketCategory(trimmed);
+    if (byId.has(normalised)) return normalised;
+    const normalisedLabelHit = byNormalisedLabel.get(normalised);
+    if (normalisedLabelHit) return normalisedLabelHit.id;
+    return normalised;
+  };
+
+  const getDisplayLabel = (stored: string | null | undefined): string => {
+    const id = resolveCanonicalId(stored);
+    const hit = byId.get(id);
+    if (hit?.label) return hit.label;
+    return getMarketCategoryLabel(stored ?? id);
+  };
+
+  return {
+    categories,
+    byId,
+    byLabel,
+    resolveCanonicalId,
+    getDisplayLabel,
+    isReady,
+  };
+}
+
+/** First-paint fallback: same 23-id seed GET /api/categories uses when the DB is empty. */
+const FALLBACK_REGISTRY: CategoryRegistry = buildRegistry(categoryRegistryFallback(), false);
 
 export function useCategoryRegistry(): CategoryRegistry {
   const { data } = useQuery<RegistryCategory[]>({
@@ -48,60 +98,8 @@ export function useCategoryRegistry(): CategoryRegistry {
 
   return useMemo<CategoryRegistry>(() => {
     if (!data || data.length === 0) {
-      return EMPTY_REGISTRY;
+      return FALLBACK_REGISTRY;
     }
-
-    const categories = data;
-    const byId = new Map<string, RegistryCategory>();
-    const byLabel = new Map<string, RegistryCategory>();
-    // Maps a normalised slug derived from a registry label back to the canonical id.
-    // Lets callers resolve cached/legacy values like "media-and-podcast" (the slug form
-    // of a renamed label "Media & Podcast") back to the canonical id "media".
-    const byNormalisedLabel = new Map<string, RegistryCategory>();
-
-    for (const row of categories) {
-      if (!row?.id) continue;
-      byId.set(row.id, row);
-      if (row.label) {
-        byLabel.set(row.label.trim().toLowerCase(), row);
-        const normalisedLabel = normalizeMarketCategory(row.label);
-        if (normalisedLabel) {
-          byNormalisedLabel.set(normalisedLabel, row);
-        }
-      }
-    }
-
-    const resolveCanonicalId = (stored: string | null | undefined): string => {
-      if (stored == null) return "misc";
-      const trimmed = stored.trim();
-      if (!trimmed) return "misc";
-
-      if (byId.has(trimmed)) return trimmed;
-
-      const labelHit = byLabel.get(trimmed.toLowerCase());
-      if (labelHit) return labelHit.id;
-
-      const normalised = normalizeMarketCategory(trimmed);
-      if (byId.has(normalised)) return normalised;
-      const normalisedLabelHit = byNormalisedLabel.get(normalised);
-      if (normalisedLabelHit) return normalisedLabelHit.id;
-      return normalised;
-    };
-
-    const getDisplayLabel = (stored: string | null | undefined): string => {
-      const id = resolveCanonicalId(stored);
-      const hit = byId.get(id);
-      if (hit?.label) return hit.label;
-      return getMarketCategoryLabel(stored ?? id);
-    };
-
-    return {
-      categories,
-      byId,
-      byLabel,
-      resolveCanonicalId,
-      getDisplayLabel,
-      isReady: true,
-    };
+    return buildRegistry(data, true);
   }, [data]);
 }

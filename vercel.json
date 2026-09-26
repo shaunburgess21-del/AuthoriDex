@@ -5,6 +5,21 @@
   "outputDirectory": "dist/public",
   "redirects": [
     {
+      "source": "/vote/opinion-polls/the-most-poweful-person-on-earth",
+      "destination": "/vote/opinion-polls/the-most-powerful-person-on-earth",
+      "permanent": true
+    },
+    {
+      "source": "/polls/perhero-fatigue-is-real",
+      "destination": "/polls/superhero-fatigue-is-real",
+      "permanent": true
+    },
+    {
+      "source": "/vote/matchups/the-weekend-vs-bruno-mars",
+      "destination": "/vote/matchups/the-weeknd-vs-bruno-mars",
+      "permanent": true
+    },
+    {
       "source": "/pricing",
       "destination": "/how-it-works?tab=credits",
       "permanent": false
