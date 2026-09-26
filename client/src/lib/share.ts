@@ -240,8 +240,8 @@ export async function shareImage(
   const text = options.text == null ? undefined : toPublicShareText(options.text, ctx);
   const sharedUrl = options.url == null ? undefined : toPublicShareUrl(options.url, ctx);
 
-  // Capacitor Android has no Web Share API. Write the PNG into the app
-  // cache (FileProvider already allows cache) and open the system sheet.
+  // Capacitor Android has no Web Share API. Write the PNG into cache/share
+  // (the FileProvider cache-path) and open the system sheet.
   // A failed sheet falls through to the Web Share / clipboard / download
   // path below. User dismiss is not a failure.
   if (ctx.nativeAndroid) {

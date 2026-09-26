@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 14. Share writes PNGs under cache/share (ANDROID_SHARE_CACHE_DIR
+  in client/src/lib/nativeShare.ts). The Capacitor template external-path
+  of "." covered all of shared external storage and is removed. HTML
+  capture is not a product path (no CAMERA permission), so there is no
+  external-files-path.
+-->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
-    <cache-path name="my_cache_images" path="." />
+    <cache-path name="share_images" path="share" />
 </paths>

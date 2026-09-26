@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 14. Same policy as the targetSdk 36 defaults, written down so a
+  later merge cannot reopen cleartext or trust a user-installed CA.
+  There is no debug override: capacitor.config.ts has no server.url.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
