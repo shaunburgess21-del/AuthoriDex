@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.voxdex.app",
       "sha256_cert_fingerprints": [
-        "FB:D1:60:0F:BE:6C:9F:1B:79:14:C0:AE:EF:05:01:E4:7C:D2:44:3B:E4:D0:E4:B1:8E:29:18:5C:A3:34:EA:18"
+        "FB:D1:60:0F:BE:6C:9F:1B:79:14:C0:AE:EF:05:01:E4:7C:D2:44:3B:E4:D0:E4:B1:8E:29:18:5C:A3:34:EA:18",
+        "13:A5:1F:E3:5A:45:BD:9C:D2:46:DA:95:EB:BB:32:E4:ED:B6:26:88:AC:D5:B5:55:B7:E0:6E:9C:29:44:07:7D"
       ]
     }
   }

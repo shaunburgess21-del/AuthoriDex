@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 
 import { contentPathFromUrl } from "../client/src/lib/nativeContentLink";
 
-const DEBUG_SHA256 =
+const CLOUD_AGENT_DEBUG_SHA256 =
   "FB:D1:60:0F:BE:6C:9F:1B:79:14:C0:AE:EF:05:01:E4:7C:D2:44:3B:E4:D0:E4:B1:8E:29:18:5C:A3:34:EA:18";
+const PIXEL_DEBUG_SHA256 =
+  "13:A5:1F:E3:5A:45:BD:9C:D2:46:DA:95:EB:BB:32:E4:ED:B6:26:88:AC:D5:B5:55:B7:E0:6E:9C:29:44:07:7D";
 
 test("OAuth custom scheme is ignored by the content router", () => {
   assert.deepEqual(
@@ -141,5 +143,8 @@ test("assetlinks.json names com.voxdex.app and the debug cert SHA-256", () => {
   assert.deepEqual(parsed[0]?.relation, ["delegate_permission/common.handle_all_urls"]);
   assert.equal(parsed[0]?.target.namespace, "android_app");
   assert.equal(parsed[0]?.target.package_name, "com.voxdex.app");
-  assert.deepEqual(parsed[0]?.target.sha256_cert_fingerprints, [DEBUG_SHA256]);
+  assert.deepEqual(parsed[0]?.target.sha256_cert_fingerprints, [
+    CLOUD_AGENT_DEBUG_SHA256,
+    PIXEL_DEBUG_SHA256,
+  ]);
 });
