@@ -9,6 +9,7 @@ import {
   applyNativeColdStartContentLink,
   installNativeContentLinkListener,
 } from "./lib/nativeDeepLinks";
+import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
 import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
 
@@ -22,6 +23,7 @@ installNativeOriginPatch();
 installNativeOAuthListener();
 installNativeBackListener();
 installNativeContentLinkListener();
+installNativeExternalLinkPolicy();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 
