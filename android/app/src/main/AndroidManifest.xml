@@ -29,6 +29,32 @@
                 <data android:scheme="com.voxdex.app" android:host="login" />
             </intent-filter>
 
+            <!--
+              Phase 7 HTTPS App Links. Apex only: www.voxdex.com 308s to
+              https://voxdex.com/. Paths match share/referral URLs, not the
+              whole host. autoVerify checks public/.well-known/assetlinks.json.
+              The fingerprint there is the debug keystore (Pixel/debug only).
+              Play signing is Phase 18. OAuth stays on the custom-scheme filter.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="voxdex.com" android:path="/" />
+                <data android:scheme="https" android:host="voxdex.com" android:path="/vote" />
+                <data android:scheme="https" android:host="voxdex.com" android:path="/predict" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/person/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/polls/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/vote/matchups/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/vote/opinion-polls/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/predict/updown/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/predict/h2h/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/predict/race/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/markets/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/share/bet/" />
+                <data android:scheme="https" android:host="voxdex.com" android:pathPrefix="/u/" />
+            </intent-filter>
+
         </activity>
 
         <provider

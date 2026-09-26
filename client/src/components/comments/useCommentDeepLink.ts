@@ -36,12 +36,19 @@ export function useCommentDeepLink(ready: boolean): CommentDeepLink {
 
   useEffect(() => {
     if (!ready) return;
-    const match = window.location.hash.match(/^#(?:comment|insight)-(.+)$/);
-    if (!match) return;
-    const id = match[1];
-    if (handledRef.current === id) return;
-    handledRef.current = id;
-    highlight(id);
+    const apply = () => {
+      const match = window.location.hash.match(/^#(?:comment|insight)-(.+)$/);
+      if (!match) return;
+      const id = match[1];
+      if (handledRef.current === id) return;
+      handledRef.current = id;
+      highlight(id);
+    };
+    apply();
+    // pushState from an App Link does not emit hashchange on its own.
+    // NativeContentLinkBridge dispatches one after a warm navigation.
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
   }, [ready, highlight]);
 
   return { highlightedId, highlight };

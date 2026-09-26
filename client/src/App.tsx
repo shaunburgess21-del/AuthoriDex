@@ -27,6 +27,7 @@ import {
   captureReferralFromUrl,
   captureShareClickFromUrl,
 } from "@/lib/referral-capture";
+import { registerNativeContentNavigator } from "@/lib/nativeDeepLinks";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
@@ -272,6 +273,33 @@ function ShareAttributionWatcher() {
 }
 
 /**
+ * Warm HTTPS App Links. Cold start is applied in main.tsx before this
+ * tree renders, so referral capture on mount still sees `?ref=` / `?sharer=`.
+ * A link opened while the process is alive is pushed through wouter.
+ */
+function NativeContentLinkBridge() {
+  const [, setLocation] = useLocation();
+  const { user, loading } = useAuth();
+  const sessionRef = useRef({ id: user?.id ?? null, loading });
+  sessionRef.current = { id: user?.id ?? null, loading };
+
+  useEffect(() => {
+    return registerNativeContentNavigator((path, mode) => {
+      setLocation(path, mode === "replace" ? { replace: true } : undefined);
+      captureReferralFromUrl();
+      if (!sessionRef.current.loading) {
+        void captureShareClickFromUrl(sessionRef.current.id);
+      }
+      if (window.location.hash) {
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      }
+    });
+  }, [setLocation]);
+
+  return null;
+}
+
+/**
  * Force first-time users through the multi-step /login/welcome flow before
  * they can land anywhere else. Catches the Google-OAuth signup path, which
  * skips the email verify screen entirely and would otherwise drop the user
@@ -431,6 +459,7 @@ function App() {
                 <RankUpModalGate />
                 <AnalyticsWatcher />
                 <ShareAttributionWatcher />
+                <NativeContentLinkBridge />
                 <XpBurstProvider>
                   {/* Watcher is inside XpBurstProvider so useXpCelebration can fire daily-login bursts via useXpBurst. */}
                   <XpCelebrationWatcher />
