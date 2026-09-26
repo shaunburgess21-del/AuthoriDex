@@ -43,6 +43,16 @@ function deliver(path: string, mode: "push" | "replace"): void {
   current.pending = { path, mode };
 }
 
+/**
+ * Push a same-app path through the wouter navigator. The App Link allowlist
+ * stays in `contentPathFromUrl` and only applies to OS VIEW intents. Callers
+ * must pass a path (`/terms`), never `com.voxdex.app://login`.
+ */
+export function navigateInApp(path: string): void {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) return;
+  deliver(path, "push");
+}
+
 /** Registered by the React tree so warm links use wouter `setLocation`. */
 export function registerNativeContentNavigator(navigate: ContentNavigate): () => void {
   const current = slot();
