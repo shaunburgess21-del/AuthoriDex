@@ -1922,6 +1922,31 @@ header.sticky.top-0 {
   }
 }
 
+/* Android Capacitor soft keyboard. nativeKeyboardListener adds
+   android-keyboard-open on <html> only while the native IME overlaps
+   the WebView. Website, PWA, and iOS never get the class, so these
+   rules do not run there. The fixed bottom nav would otherwise sit on
+   the resized viewport and cover the focused field. Auth shells opt in
+   with data-android-keyboard-scroll so a centered card can scroll. */
+html.android-keyboard-open [data-android-keyboard-hide] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html.android-keyboard-open [data-android-keyboard-scroll] {
+  align-items: flex-start;
+  justify-content: flex-start;
+  max-height: 100dvh;
+  overflow-y: auto;
+}
+
+html.android-keyboard-open input,
+html.android-keyboard-open textarea,
+html.android-keyboard-open [contenteditable="true"] {
+  scroll-margin-top: 4.5rem;
+  scroll-margin-bottom: 5.5rem;
+}
+
 html [data-sonner-toaster][data-y-position="top"] {
   top: calc(var(--offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
 }

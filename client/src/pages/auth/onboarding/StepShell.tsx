@@ -48,6 +48,7 @@ export function StepShell({
   return (
     <div
       className="flex min-h-[100dvh] w-full flex-col bg-background text-foreground"
+      data-android-keyboard-scroll=""
       data-testid={testId}
     >
       {/* Top bar — sticky so Back + Skip stay reachable on long content. */}

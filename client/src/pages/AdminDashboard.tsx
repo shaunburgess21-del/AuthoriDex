@@ -2841,6 +2841,7 @@ export default function AdminDashboard() {
           without squishing labels into 2 lines. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl"
+        data-android-keyboard-hide=""
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           transform: adminNavViewportOffset !== 0 ? `translateY(${adminNavViewportOffset}px)` : undefined,

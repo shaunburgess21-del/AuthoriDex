@@ -15,7 +15,15 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <!--
+              adjustResize delivers IME insets. Capacitor SystemBars
+              (insetsHandling=css) pads the decor by that inset and zeros
+              the bottom safe area while the keyboard is open. The default
+              adjustUnspecified mode pans the WebView as one view, so HTML
+              fields stay covered. Edge-to-edge is unchanged.
+            -->
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

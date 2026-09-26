@@ -1,6 +1,11 @@
 import { App } from "@capacitor/app";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { decideNativeBack } from "@/lib/nativeBack";
+import {
+  blurTextEntry,
+  elementIsTextEntry,
+  shouldConsumeBackForKeyboard,
+} from "@/lib/nativeKeyboard";
 
 /**
  * Survives Vite re-evaluating this module. `import.meta.hot.dispose` drops
@@ -62,6 +67,13 @@ export function installNativeBackListener(): void {
   slot.pending = true;
 
   void App.addListener("backButton", ({ canGoBack }) => {
+    // Android gives the IME the first Back. Capacitor's listener runs
+    // before that default, so consume it here and leave navigation for
+    // the next press.
+    if (shouldConsumeBackForKeyboard(elementIsTextEntry(document.activeElement))) {
+      blurTextEntry(document.activeElement);
+      return;
+    }
     performNativeBack(canGoBack);
   })
     .then((handle) => {
