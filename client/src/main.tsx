@@ -10,6 +10,7 @@ import {
   installNativeContentLinkListener,
 } from "./lib/nativeDeepLinks";
 import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
+import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
 import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
 
@@ -24,6 +25,7 @@ installNativeOAuthListener();
 installNativeBackListener();
 installNativeContentLinkListener();
 installNativeExternalLinkPolicy();
+installNativeKeyboardListener();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 

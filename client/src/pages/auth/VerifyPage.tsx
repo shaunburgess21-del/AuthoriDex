@@ -244,7 +244,7 @@ export default function VerifyPage() {
       : "We sent a 6-digit code to sign you in.";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background" data-android-keyboard-scroll="">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
