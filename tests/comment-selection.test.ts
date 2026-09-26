@@ -10,6 +10,8 @@ import {
   filterReplyEligibleParents,
   pickLeastCommentedFirst,
   pickLeastCommentedParent,
+  pickFocusedCommentParent,
+  THIN_CARD_MAX_COMMENTS,
 } from "../server/agents/commentSelection";
 
 const now = new Date("2026-09-13T10:00:00.000Z");
@@ -207,5 +209,33 @@ describe("pickLeastCommentedParent (A + D together)", () => {
       stale > 1600 && stale < 2400,
       `expected a ~50/50 split, got ${stale}/4000`,
     );
+  });
+});
+
+describe("pickFocusedCommentParent (0–1 first)", () => {
+  it("never picks a busy card while a 0–1 card exists", () => {
+    const pool = [
+      { id: "empty", commentCount: 0, lastCommentAt: null, category: "sports" },
+      { id: "one", commentCount: 1, lastCommentAt: hoursAgo(2), category: "sports" },
+      { id: "busy", commentCount: 13, lastCommentAt: hoursAgo(1), category: "sports" },
+    ];
+    for (let i = 0; i < 400; i++) {
+      const picked = pickFocusedCommentParent(pool, ["sports"], now, 0.7);
+      assert.notEqual(picked.id, "busy");
+      assert.ok(picked.commentCount <= THIN_CARD_MAX_COMMENTS);
+    }
+  });
+
+  it("falls back to the full pool once every card has 2+ comments", () => {
+    const pool = [
+      { id: "a", commentCount: 2, lastCommentAt: hoursAgo(1), category: "sports" },
+      { id: "b", commentCount: 13, lastCommentAt: hoursAgo(1), category: "sports" },
+    ];
+    const picks = new Set<string>();
+    for (let i = 0; i < 2000; i++) {
+      picks.add(pickFocusedCommentParent(pool, ["sports"], now, 0).id);
+    }
+    assert.ok(picks.has("a"));
+    assert.ok(picks.has("b"));
   });
 });

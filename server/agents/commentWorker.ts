@@ -53,10 +53,13 @@ import {
   effectiveCommentCount,
   filterReplyEligibleParents,
   MIN_COMMENTS_FOR_REPLY,
+  pickFocusedCommentParent,
   pickLeastCommentedParent,
 } from "./commentSelection";
 import {
   applyCommentVolumeBoost,
+  COMMENT_VOLUME_BOOST_CATEGORY_BIAS,
+  COMMENT_VOLUME_BOOST_REPLY_PROBABILITY,
   COMMENT_VOLUME_BOOST_UNTIL_MS,
   isCommentVolumeBoostActive,
 } from "./commentVolumeBoost";
@@ -498,6 +501,28 @@ const SURFACE_PICK_WEIGHTS: Record<CommentSurface, number> = {
   community_insight: 0.20,
 };
 
+/** During the thin-card boost, send more of the extra comments at vote
+ *  cards (the surface Shaun is looking at) and less at profiles/markets. */
+const BOOST_SURFACE_PICK_WEIGHTS: Record<CommentSurface, number> = {
+  matchup: 0.32,
+  trending_poll: 0.32,
+  opinion_poll: 0.26,
+  open_market: 0.05,
+  community_insight: 0.05,
+};
+
+function surfacePickWeights(now: Date): Record<CommentSurface, number> {
+  return isCommentVolumeBoostActive(now) ? BOOST_SURFACE_PICK_WEIGHTS : SURFACE_PICK_WEIGHTS;
+}
+
+function categoryBias(now: Date): number {
+  return isCommentVolumeBoostActive(now) ? COMMENT_VOLUME_BOOST_CATEGORY_BIAS : 0.7;
+}
+
+function replyProbability(now: Date): number {
+  return isCommentVolumeBoostActive(now) ? COMMENT_VOLUME_BOOST_REPLY_PROBABILITY : REPLY_PROBABILITY;
+}
+
 function chooseParent(
   parents: EligibleCommentParent[],
   profile: AgentSimulationProfile,
@@ -507,40 +532,39 @@ function chooseParent(
   // Falls back to least-commented-first across all eligible parents only
   // if the chosen surface has nothing to offer for this agent — preserving
   // engagement when one surface temporarily has no eligible parents.
+  const weights = surfacePickWeights(now);
   const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
   for (const p of parents) {
     if (!bySurface.has(p.parentType)) bySurface.set(p.parentType, []);
     bySurface.get(p.parentType)!.push(p);
   }
 
-  const availableSurfaces = (Object.keys(SURFACE_PICK_WEIGHTS) as CommentSurface[])
+  const availableSurfaces = (Object.keys(weights) as CommentSurface[])
     .filter((s) => (bySurface.get(s)?.length ?? 0) > 0);
 
   if (availableSurfaces.length === 0) {
     return pickLeastCommentedParent(parents, now);
   }
 
-  const totalWeight = availableSurfaces.reduce((sum, s) => sum + SURFACE_PICK_WEIGHTS[s], 0);
+  const totalWeight = availableSurfaces.reduce((sum, s) => sum + weights[s], 0);
   let roll = Math.random() * totalWeight;
   let chosenSurface: CommentSurface = availableSurfaces[0];
   for (const s of availableSurfaces) {
-    roll -= SURFACE_PICK_WEIGHTS[s];
+    roll -= weights[s];
     if (roll <= 0) { chosenSurface = s; break; }
   }
 
   const surfacePool = bySurface.get(chosenSurface)!;
 
-  // Within the chosen surface, prefer parents in the agent's favourite
-  // categories 70% of the time (when any are available). Same idea as the
-  // previous chooseParent but now scoped to the picked surface so it
-  // can't accidentally drag the comment back onto a world market.
-  const preferred = surfacePool.filter(
-    (p) => p.category && profile.favoriteCategories.includes(p.category),
+  // If any 0–1 comment cards exist on this surface, stay on those so
+  // busy threads stop soaking the budget. Category bias still applies
+  // inside that thin pool.
+  return pickFocusedCommentParent(
+    surfacePool,
+    profile.favoriteCategories,
+    now,
+    categoryBias(now),
   );
-  const pool = preferred.length > 0 && Math.random() < 0.7 ? preferred : surfacePool;
-  // A + D: weight by effective comment count instead of uniform random so
-  // empty and stale-thin cards rise without changing surface mix or volume.
-  return pickLeastCommentedParent(pool, now);
 }
 
 /**
@@ -627,14 +651,14 @@ async function ensureVoteBeforeComment(
 /** Try to find a parent + reply target for the agent. We probe a small
  *  random sample of open parents (≤6) for an eligible target — no point
  *  hammering findReplyTarget on every parent in the universe. The probe
- *  order is weighted by SURFACE_PICK_WEIGHTS (same distribution as the
- *  top-level picker) so replies don't accidentally drift onto whichever
- *  surface happens to have the most parents — without this the world-
- *  market surface (typically the largest) would dominate replies even
- *  when polls/matchups have rich active threads.
+ *  order uses the same surface mix as the top-level picker so replies
+ *  don't accidentally drift onto whichever surface happens to have the
+ *  most parents — without this the world-market surface (typically the
+ *  largest) would dominate replies even when polls/matchups have rich
+ *  active threads.
  *
  *  Thin cards (empty, one comment, or a stale thread below the unstick
- *  floor) are excluded up front so the 30% reply roll falls back to a
+ *  floor) are excluded up front so the reply roll falls back to a
  *  top-level post on something that still looks quiet. */
 async function findReplyOpportunity(
   agent: { userId: string; displayName: string },
@@ -644,6 +668,7 @@ async function findReplyOpportunity(
 ): Promise<{ parent: EligibleCommentParent; target: ReplyTarget } | null> {
   const replyEligible = filterReplyEligibleParents(allParents, now);
   if (!replyEligible.length) return null;
+  const weights = surfacePickWeights(now);
 
   // Build per-surface buckets so we can weight the probe order.
   const bySurface = new Map<CommentSurface, EligibleCommentParent[]>();
@@ -686,13 +711,13 @@ async function findReplyOpportunity(
     if (availableSurfaces.length === 0) break;
 
     const totalWeight = availableSurfaces.reduce(
-      (sum, s) => sum + SURFACE_PICK_WEIGHTS[s],
+      (sum, s) => sum + weights[s],
       0,
     );
     let roll = Math.random() * totalWeight;
     let chosen: CommentSurface = availableSurfaces[0];
     for (const s of availableSurfaces) {
-      roll -= SURFACE_PICK_WEIGHTS[s];
+      roll -= weights[s];
       if (roll <= 0) {
         chosen = s;
         break;
@@ -811,7 +836,8 @@ export async function runCommentSweep(): Promise<{
   const sweepNow = new Date();
   if (isCommentVolumeBoostActive(sweepNow)) {
     log(
-      `[CommentWorker] Temporary volume boost ON until ${new Date(COMMENT_VOLUME_BOOST_UNTIL_MS).toISOString()} (chance ×3, comment/vote caps ×3)`,
+      `[CommentWorker] Temporary volume boost ON until ${new Date(COMMENT_VOLUME_BOOST_UNTIL_MS).toISOString()} ` +
+        `(chance ×3, caps ×3, replies ${COMMENT_VOLUME_BOOST_REPLY_PROBABILITY}, thin 0–1 cards first)`,
     );
   }
 
@@ -877,7 +903,7 @@ export async function runCommentSweep(): Promise<{
 
     let parent: EligibleCommentParent | null = null;
     let replyTarget: ReplyTarget | null = null;
-    const wantedReply = Math.random() < REPLY_PROBABILITY;
+    const wantedReply = Math.random() < replyProbability(sweepNow);
 
     if (wantedReply) {
       const opp = await findReplyOpportunity(

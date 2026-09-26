@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  COMMENT_VOLUME_BOOST_FROM_MS,
   COMMENT_VOLUME_BOOST_UNTIL_MS,
   COMMENT_VOLUME_CAP_MULT,
   COMMENT_VOLUME_CHANCE_MULT,
@@ -29,16 +30,19 @@ const base: AgentSimulationProfile = {
   bankrollProfile: "normal",
 };
 
-const during = new Date("2026-09-16T12:00:00.000Z");
-const after = new Date("2026-09-20T00:00:00.000Z");
+const during = new Date("2026-09-28T12:00:00.000Z");
+const before = new Date("2026-09-25T23:59:59.000Z");
+const after = new Date("2026-10-04T00:00:00.000Z");
 
 describe("isCommentVolumeBoostActive", () => {
-  it("is on during the 5-day window", () => {
+  it("is on during the week-long window", () => {
     assert.equal(isCommentVolumeBoostActive(during), true);
+    assert.equal(isCommentVolumeBoostActive(new Date(COMMENT_VOLUME_BOOST_FROM_MS)), true);
     assert.equal(isCommentVolumeBoostActive(new Date(COMMENT_VOLUME_BOOST_UNTIL_MS - 1)), true);
   });
 
-  it("turns itself off at the until instant", () => {
+  it("is off before the window and at the until instant", () => {
+    assert.equal(isCommentVolumeBoostActive(before), false);
     assert.equal(isCommentVolumeBoostActive(new Date(COMMENT_VOLUME_BOOST_UNTIL_MS)), false);
     assert.equal(isCommentVolumeBoostActive(after), false);
   });
@@ -63,6 +67,11 @@ describe("applyCommentVolumeBoost", () => {
     assert.equal(out, base);
     assert.equal(out.dailyCommentChance, 0.020);
     assert.equal(out.weeklyCommentCap, 1);
+  });
+
+  it("is a no-op before the window", () => {
+    const out = applyCommentVolumeBoost(base, before);
+    assert.equal(out, base);
   });
 
   it("keeps silent arb agents silent", () => {

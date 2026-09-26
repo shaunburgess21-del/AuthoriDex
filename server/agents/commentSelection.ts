@@ -31,6 +31,10 @@ export const UNSTICK_COMMENT_FLOOR = 3;
  *  can reach this floor. */
 export const MIN_COMMENTS_FOR_REPLY = 2;
 
+/** Cards at or below this effective count are the "needs comments" pool.
+ *  When any exist in the chosen surface, top-level picks stay there. */
+export const THIN_CARD_MAX_COMMENTS = 1;
+
 export type CommentCountRow = {
   parentType: string | null;
   parentId: string | null;
@@ -140,4 +144,40 @@ export function pickLeastCommentedParent<T extends { commentCount: number; lastC
     commentCount: effectiveCommentCount(parent.commentCount, parent.lastCommentAt, now),
   }));
   return pickLeastCommentedFirst(scored).parent;
+}
+
+export function isThinCommentCard(
+  commentCount: number,
+  lastCommentAt: Date | null,
+  now: Date,
+): boolean {
+  return effectiveCommentCount(commentCount, lastCommentAt, now) <= THIN_CARD_MAX_COMMENTS;
+}
+
+export function filterThinCommentParents<
+  T extends { commentCount: number; lastCommentAt: Date | null },
+>(parents: T[], now: Date): T[] {
+  return parents.filter((parent) => isThinCommentCard(parent.commentCount, parent.lastCommentAt, now));
+}
+
+/**
+ * Within a surface: if any 0–1 comment cards exist, pick only from those.
+ * Otherwise fall back to least-commented-first across the full surface.
+ * Optional category bias still applies, but only inside that scoped pool.
+ */
+export function pickFocusedCommentParent<
+  T extends { commentCount: number; lastCommentAt: Date | null; category: string | null },
+>(
+  surfacePool: T[],
+  favoriteCategories: string[],
+  now: Date,
+  categoryBias = 0.7,
+): T {
+  const thin = filterThinCommentParents(surfacePool, now);
+  const scoped = thin.length > 0 ? thin : surfacePool;
+  const preferred = scoped.filter(
+    (parent) => parent.category && favoriteCategories.includes(parent.category),
+  );
+  const pool = preferred.length > 0 && Math.random() < categoryBias ? preferred : scoped;
+  return pickLeastCommentedParent(pool, now);
 }
