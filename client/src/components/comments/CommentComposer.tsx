@@ -384,9 +384,10 @@ export function CommentComposer({
 
   const fullscreenOverlay = isFullscreenComposer ? (
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-background px-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-[max(1rem,var(--safe-area-inset-bottom,_0px))] text-foreground"
+      className="pointer-events-auto fixed inset-0 z-[70] flex flex-col bg-background px-4 pt-[max(1rem,var(--safe-area-inset-top,_0px))] pb-[max(1rem,var(--safe-area-inset-bottom,_0px))] text-foreground"
       data-testid="comment-composer-fullscreen"
       data-interactive="true"
+      data-keyboard-keep=""
     >
       <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-3">
         <div>
@@ -449,6 +450,7 @@ export function CommentComposer({
           hideTopBorder ? "pt-0" : "border-t border-border/20 pt-3",
         )}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 4px)" }}
+        data-keyboard-keep=""
       >
         {replyTo && (
           <div className="flex items-center gap-2 mb-2 px-1">
@@ -533,7 +535,16 @@ export function CommentComposer({
         </div>
       </div>
 
-      {fullscreenOverlay && createPortal(fullscreenOverlay, document.body)}
+      {fullscreenOverlay &&
+        createPortal(
+          fullscreenOverlay,
+          // A modal Discussion shell sets pointer-events:none on <body>
+          // and traps focus inside [role=dialog]. Portaling the expanded
+          // composer to document.body puts the textarea outside that
+          // trap, so taps never focus it and a hardware keyboard cannot
+          // type. Mount into the dialog when one contains this composer.
+          composerContainerRef.current?.closest("[role='dialog']") ?? document.body,
+        )}
     </>
   );
 }

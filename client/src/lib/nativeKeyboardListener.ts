@@ -1,10 +1,10 @@
 import { Capacitor } from "@capacitor/core";
 import {
   ANDROID_KEYBOARD_OPEN_CLASS,
-  KEYBOARD_KEEP_FOCUS_SELECTOR,
   blurTextEntry,
   elementIsTextEntry,
   fieldNeedsScroll,
+  pointerChainKeepsKeyboard,
   reduceKeyboardViewport,
   shouldBlurTextEntryOnPathChange,
   shouldDismissKeyboardOnPointer,
@@ -34,6 +34,23 @@ function elementFromEventTarget(target: EventTarget | null): Element | null {
   if (target instanceof Element) return target;
   if (target instanceof Node) return target.parentElement;
   return null;
+}
+
+function targetKeepsKeyboard(target: Element | null): boolean {
+  const chain = [];
+  let node: Element | null = target;
+  while (node) {
+    const input = node instanceof HTMLInputElement ? node : null;
+    chain.push({
+      tag: node.tagName,
+      type: input?.type,
+      role: node.getAttribute("role"),
+      contentEditable: node instanceof HTMLElement && node.isContentEditable,
+      keepKeyboard: node.hasAttribute("data-keyboard-keep"),
+    });
+    node = node.parentElement;
+  }
+  return pointerChainKeepsKeyboard(chain);
 }
 
 function insideVerticalSnap(el: HTMLElement): boolean {
@@ -122,7 +139,17 @@ export function installNativeKeyboardListener(): void {
     });
     state.closedInnerHeight = next.closedInnerHeight;
     document.documentElement.classList.toggle(ANDROID_KEYBOARD_OPEN_CLASS, next.open);
-    if (next.open && active instanceof HTMLElement) scrollFieldIntoView(active);
+  };
+
+  // Scroll only after the IME animation settles. Doing it on the focus
+  // frame, or on every resize while the keyboard is opening, makes
+  // Android WebView cancel the input connection. The comment composer
+  // sits on the bottom edge, so a "near the edge" scroll was hiding
+  // the keyboard on every focus.
+  const scrollSettledField = () => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !elementIsTextEntry(active)) return;
+    scrollFieldIntoView(active);
   };
 
   const scheduleSync = () => {
@@ -133,21 +160,31 @@ export function installNativeKeyboardListener(): void {
   const scheduleScroll = () => {
     window.clearTimeout(scrollTimer);
     scheduleSync();
-    scrollTimer = window.setTimeout(sync, 300);
+    scrollTimer = window.setTimeout(() => {
+      sync();
+      scrollSettledField();
+    }, 300);
   };
 
-  const onPointerDown = (event: PointerEvent) => {
+  const onPointerUp = (event: PointerEvent) => {
     const target = elementFromEventTarget(event.target);
-    const targetKeepsFocus = Boolean(target?.closest(KEYBOARD_KEEP_FOCUS_SELECTOR));
+    const keeps = targetKeepsKeyboard(target);
     if (
       !shouldDismissKeyboardOnPointer({
         textEntryFocused: elementIsTextEntry(document.activeElement),
-        targetKeepsFocus,
+        targetKeepsFocus: keeps,
       })
     ) {
       return;
     }
-    blurTextEntry(document.activeElement);
+    // Wait until after this gesture's click can move focus. Blurring
+    // inside pointerdown (especially capture) consumes the Android
+    // user-gesture and the soft keyboard never opens.
+    const focused = document.activeElement;
+    window.setTimeout(() => {
+      if (document.activeElement !== focused) return;
+      blurTextEntry(focused);
+    }, 0);
   };
 
   const onFocusIn = () => {
@@ -171,7 +208,7 @@ export function installNativeKeyboardListener(): void {
   window.addEventListener("resize", scheduleSync);
   window.addEventListener("orientationchange", onOrientation);
   document.addEventListener("focusin", onFocusIn);
-  document.addEventListener("pointerdown", onPointerDown, true);
+  document.addEventListener("pointerup", onPointerUp, { capture: true, passive: true });
 
   const restoreHistory = slot.restoreHistory;
   slot.restoreHistory = () => {
@@ -180,7 +217,7 @@ export function installNativeKeyboardListener(): void {
     window.removeEventListener("resize", scheduleSync);
     window.removeEventListener("orientationchange", onOrientation);
     document.removeEventListener("focusin", onFocusIn);
-    document.removeEventListener("pointerdown", onPointerDown, true);
+    document.removeEventListener("pointerup", onPointerUp, true);
     if (frame !== 0) window.cancelAnimationFrame(frame);
     window.clearTimeout(scrollTimer);
     window.clearTimeout(orientationTimer);

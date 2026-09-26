@@ -5,6 +5,8 @@ import {
   KEYBOARD_OBSCURE_THRESHOLD_PX,
   fieldNeedsScroll,
   isTextEntryControl,
+  pointerChainKeepsKeyboard,
+  pointerNodeKeepsKeyboard,
   reduceKeyboardViewport,
   shouldBlurTextEntryOnPathChange,
   shouldConsumeBackForKeyboard,
@@ -123,17 +125,85 @@ test("empty-space taps dismiss; buttons, links, and other fields do not", () => 
   );
 });
 
-test("a field already inside the visible band does not scroll", () => {
+test("a tap on a field, contenteditable, or labeled control does not dismiss", () => {
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "textarea" }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "input", type: "email" }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "input", type: "search" }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "div", contentEditable: true }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "div", keepKeyboard: true }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "label" }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "button" }), true);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "div" }), false);
+  assert.equal(pointerNodeKeepsKeyboard({ tag: "p" }), false);
+
+  assert.equal(
+    pointerChainKeepsKeyboard([{ tag: "span" }, { tag: "label" }]),
+    true,
+  );
+  assert.equal(
+    pointerChainKeepsKeyboard([{ tag: "div" }, { tag: "textarea" }]),
+    true,
+  );
+  assert.equal(
+    pointerChainKeepsKeyboard([
+      { tag: "span" },
+      { tag: "div", contentEditable: true },
+    ]),
+    true,
+  );
+  assert.equal(
+    pointerChainKeepsKeyboard([{ tag: "span" }, { tag: "div", keepKeyboard: true }]),
+    true,
+  );
+  assert.equal(
+    pointerChainKeepsKeyboard([{ tag: "span" }, { tag: "section" }]),
+    false,
+  );
+  assert.equal(
+    shouldDismissKeyboardOnPointer({
+      textEntryFocused: true,
+      targetKeepsFocus: pointerChainKeepsKeyboard([{ tag: "textarea" }]),
+    }),
+    false,
+  );
+  assert.equal(
+    shouldDismissKeyboardOnPointer({
+      textEntryFocused: true,
+      targetKeepsFocus: pointerChainKeepsKeyboard([{ tag: "div" }, { tag: "main" }]),
+    }),
+    true,
+  );
+});
+
+test("a visible field is not scrolled just because it sits near the viewport edge", () => {
   assert.equal(
     fieldNeedsScroll({ top: 120, bottom: 160 }, { top: 0, bottom: 500 }),
     false,
   );
+  // Bottom-pinned comment composer, fully on screen. Scrolling this
+  // during focus is what hid the Android soft keyboard.
   assert.equal(
-    fieldNeedsScroll({ top: 120, bottom: 496 }, { top: 0, bottom: 500 }),
+    fieldNeedsScroll({ top: 740, bottom: 798 }, { top: 0, bottom: 800 }),
+    false,
+  );
+  assert.equal(
+    fieldNeedsScroll({ top: 4, bottom: 48 }, { top: 0, bottom: 500 }),
+    false,
+  );
+  // Full-height expanded composer still shows a usable top edge.
+  assert.equal(
+    fieldNeedsScroll({ top: 72, bottom: 760 }, { top: 0, bottom: 500 }),
+    false,
+  );
+});
+
+test("a field actually covered by the keyboard still scrolls into view", () => {
+  assert.equal(
+    fieldNeedsScroll({ top: 640, bottom: 690 }, { top: 0, bottom: 500 }),
     true,
   );
   assert.equal(
-    fieldNeedsScroll({ top: 4, bottom: 40 }, { top: 0, bottom: 500 }),
+    fieldNeedsScroll({ top: 470, bottom: 510 }, { top: 0, bottom: 500 }),
     true,
   );
 });

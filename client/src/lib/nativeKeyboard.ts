@@ -26,27 +26,18 @@ export const ANDROID_KEYBOARD_OPEN_CLASS = "android-keyboard-open";
  */
 export const KEYBOARD_OBSCURE_THRESHOLD_PX = 150;
 
-/** Ancestors matching this keep the IME up (another field, a submit, a mention row). */
-export const KEYBOARD_KEEP_FOCUS_SELECTOR = [
-  "input",
-  "textarea",
-  "select",
+const KEEP_FOCUS_ROLES = new Set([
   "button",
-  "a",
-  "label",
-  "[contenteditable='true']",
-  "[contenteditable='']",
-  "[role='button']",
-  "[role='checkbox']",
-  "[role='switch']",
-  "[role='radio']",
-  "[role='combobox']",
-  "[role='listbox']",
-  "[role='option']",
-  "[role='tab']",
-  "[role='menuitem']",
-  "[role='slider']",
-].join(",");
+  "checkbox",
+  "switch",
+  "radio",
+  "combobox",
+  "listbox",
+  "option",
+  "tab",
+  "menuitem",
+  "slider",
+]);
 
 const NON_TEXT_INPUT_TYPES = new Set([
   "button",
@@ -152,7 +143,48 @@ export function shouldBlurTextEntryOnPathChange(
   return textEntryFocused && beforePath !== afterPath;
 }
 
-/** Empty-space taps dismiss. Controls, links, and labels do not — blurring those shifts layout under the finger. */
+/**
+ * One node in the hit-target ancestor chain. A match anywhere in the
+ * chain means the gesture is on a control, so the IME must stay up.
+ * Blurring on that tap shifts the layout under the finger and, on
+ * Android WebView, cancels the user-gesture that opens the keyboard.
+ */
+export function pointerNodeKeepsKeyboard(node: {
+  tag: string;
+  type?: string;
+  role?: string | null;
+  contentEditable?: boolean;
+  /** `data-keyboard-keep` on a composer or other field chrome. */
+  keepKeyboard?: boolean;
+}): boolean {
+  if (node.keepKeyboard || node.contentEditable) return true;
+  const tag = node.tag.toLowerCase();
+  if (
+    tag === "textarea" ||
+    tag === "select" ||
+    tag === "button" ||
+    tag === "a" ||
+    tag === "label"
+  ) {
+    return true;
+  }
+  if (tag === "input") return true;
+  const role = (node.role ?? "").toLowerCase();
+  return KEEP_FOCUS_ROLES.has(role);
+}
+
+/** True when the tap target or an ancestor is a field, label, or control. */
+export function pointerChainKeepsKeyboard(
+  chainFromTarget: Array<Parameters<typeof pointerNodeKeepsKeyboard>[0]>,
+): boolean {
+  return chainFromTarget.some(pointerNodeKeepsKeyboard);
+}
+
+/**
+ * Empty-space taps dismiss. A tap whose target chain keeps the keyboard
+ * must not — including the tap that is itself focusing an input,
+ * textarea, contenteditable, or a control inside a label.
+ */
 export function shouldDismissKeyboardOnPointer(args: {
   textEntryFocused: boolean;
   targetKeepsFocus: boolean;
@@ -160,12 +192,25 @@ export function shouldDismissKeyboardOnPointer(args: {
   return args.textEntryFocused && !args.targetKeepsFocus;
 }
 
+/**
+ * Scroll only when the focused control is actually off-screen.
+ * A bottom-pinned composer or a full-height textarea already intersects
+ * the visible band; scrolling it during the IME animation makes Android
+ * WebView drop the input connection and hide the keyboard.
+ */
 export function fieldNeedsScroll(
   rect: { top: number; bottom: number },
   visible: { top: number; bottom: number },
   marginPx = 12,
 ): boolean {
-  return rect.bottom > visible.bottom - marginPx || rect.top < visible.top + marginPx;
+  const height = rect.bottom - rect.top;
+  if (height <= 0) return false;
+  const visibleTop = visible.top + marginPx;
+  const visibleBottom = visible.bottom - marginPx;
+  const intersection =
+    Math.min(rect.bottom, visibleBottom) - Math.max(rect.top, visibleTop);
+  const minVisible = Math.min(24, height);
+  return intersection < minVisible;
 }
 
 /**
