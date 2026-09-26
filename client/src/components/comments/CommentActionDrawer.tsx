@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Flag, Share2, Trash2, X } from "lucide-react";
-import { toast } from "sonner";
-import { appendShareAttribution } from "@/lib/share";
+import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface CommentActionDrawerProps {
@@ -33,7 +32,6 @@ export function CommentActionDrawer({
   onReport,
   onDelete,
   commentId,
-  entitySlug,
 }: CommentActionDrawerProps) {
   const [showReportPicker, setShowReportPicker] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -48,30 +46,13 @@ export function CommentActionDrawer({
   const { user } = useAuth();
   const handleShare = useCallback(async () => {
     const rawUrl = `${window.location.origin}${window.location.pathname}#comment-${commentId}`;
-    const url = appendShareAttribution(rawUrl, {
+    await sharePage("Check out this comment", {
       sharerUserId: user?.id ?? null,
       surface: "comment",
+      url: rawUrl,
     });
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Check out this comment", url });
-        onClose();
-        return;
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          onClose();
-          return;
-        }
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Link copied!");
-    } catch {
-      toast.error("Could not copy link");
-    }
     onClose();
-  }, [commentId, entitySlug, onClose, user?.id]);
+  }, [commentId, onClose, user?.id]);
 
   const handleReport = useCallback((reason: string) => {
     setReportSubmitted((already) => {

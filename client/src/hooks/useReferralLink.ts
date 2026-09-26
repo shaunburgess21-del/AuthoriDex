@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiRequest } from "@/lib/queryClient";
+import { outboundShareOrigin } from "@/lib/nativeShare";
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -57,7 +58,8 @@ export function useReferralLink(): UseReferralLink {
   });
 
   const referralCode = data?.referralCode ?? null;
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const rawOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const origin = outboundShareOrigin(rawOrigin);
   const referralUrl = referralCode ? `${origin}?ref=${referralCode}` : null;
 
   const copy = useCallback(async () => {

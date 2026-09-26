@@ -51,8 +51,9 @@ interface ShareCardModalProps {
  *   tree without affecting page layout or scrollbar behaviour.
  * - The modal shows a scaled-down preview so mobile users can see the
  *   entire card without horizontal scroll.
- * - Buttons are feature-detected: "Share" only appears if `navigator.share`
- *   is available; "Copy image" only if clipboard image writes are supported.
+ * - Buttons are feature-detected: "Share" appears when Web Share can send
+ *   a file, or on Capacitor Android where the system sheet is used instead.
+ *   "Copy image" only if clipboard image writes are supported.
  *   Download always appears — it's the universal fallback.
  */
 export function ShareCardModal({
