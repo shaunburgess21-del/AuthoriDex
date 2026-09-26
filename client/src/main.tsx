@@ -5,6 +5,10 @@ import { installNativeOriginPatch } from "./lib/nativeOrigin";
 import App from "./App";
 import { installNativeOAuthListener } from "./lib/nativeOAuth";
 import { installNativeBackListener } from "./lib/nativeBackListener";
+import {
+  applyNativeColdStartContentLink,
+  installNativeContentLinkListener,
+} from "./lib/nativeDeepLinks";
 import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
 
@@ -17,6 +21,7 @@ try {
 installNativeOriginPatch();
 installNativeOAuthListener();
 installNativeBackListener();
+installNativeContentLinkListener();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 
@@ -38,10 +43,22 @@ if (import.meta.env.DEV && typeof window !== "undefined" && "serviceWorker" in n
   });
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const rootEl = document.getElementById("root")!;
 
+function startApp() {
+  createRoot(rootEl).render(<App />);
+
+  if (Capacitor.isNativePlatform()) {
+    requestAnimationFrame(() => {
+      void SplashScreen.hide();
+    });
+  }
+}
+
+// Cold-start HTTPS links replace the initial history entry before React
+// reads window.location. Web skips the bridge call and renders immediately.
 if (Capacitor.isNativePlatform()) {
-  requestAnimationFrame(() => {
-    void SplashScreen.hide();
-  });
+  void applyNativeColdStartContentLink().finally(startApp);
+} else {
+  startApp();
 }

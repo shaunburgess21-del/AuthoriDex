@@ -56,7 +56,7 @@ import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useLocation, Link } from "wouter";
+import { useLocation, useSearch, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketCategoryLabel, normalizeMarketCategory, CANONICAL_CATEGORIES } from "@shared/constants";
@@ -611,6 +611,28 @@ interface TrendingResponse {
 
 type SortDirection = "desc" | "asc";
 
+/** Home leaderboard share URLs (`/?category=&search=&sortDir=#leaderboard`). */
+function readHomeLeaderboardShareState(search: string): {
+  searchQuery: string;
+  category: string;
+  sortDirection: SortDirection;
+} {
+  const params = new URLSearchParams(search);
+  const rawCategory = params.get("category");
+  let category = "all";
+  if (rawCategory) {
+    const lowered = rawCategory.toLowerCase();
+    if (lowered === "trending") category = "all";
+    else if (lowered === "all" || lowered === "favorites") category = lowered;
+    else category = normalizeMarketCategory(rawCategory);
+  }
+  return {
+    searchQuery: params.get("search") ?? "",
+    category,
+    sortDirection: params.get("sortDir") === "asc" ? "asc" : "desc",
+  };
+}
+
 export default function HomePage() {
   useDocumentMeta({
     title: "VoxDex | Vox Populi - Indexed",
@@ -618,38 +640,46 @@ export default function HomePage() {
       "VoxDex turns the voice of the people into a living, real-time index. Vote, predict, and weigh in on the figures and topics shaping global conversation. — make your voice heard, one vote at a time.",
   });
 
-  const [searchQuery, setSearchQuery] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("search") ?? "";
-  });
-  const [category, setCategory] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const raw = params.get("category");
-    if (!raw) return "all";
-    const lowered = raw.toLowerCase();
-    if (lowered === "trending") return "all";
-    if (lowered === "all" || lowered === "favorites") return lowered;
-    return normalizeMarketCategory(raw);
-  });
+  const urlSearch = useSearch();
+  const [searchQuery, setSearchQuery] = useState(
+    () => readHomeLeaderboardShareState(window.location.search).searchQuery,
+  );
+  const [category, setCategory] = useState(
+    () => readHomeLeaderboardShareState(window.location.search).category,
+  );
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const { user, loading: authLoading } = useAuth();
   const leaderboardCategories = useLeaderboardCategories();
   const categoryRegistry = useCategoryRegistry();
 
+  const [activeView, setActiveView] = useState<HomeView>("leaderboard");
+  const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    () => readHomeLeaderboardShareState(window.location.search).sortDirection,
+  );
+
+  // Share links land as client navigations in the native shell. Re-read the
+  // query when it changes so a warm open of `/?category=&search=#leaderboard`
+  // updates a Home page that is already mounted.
   useEffect(() => {
-    if (window.location.hash === "#leaderboard") {
+    const next = readHomeLeaderboardShareState(urlSearch);
+    setSearchQuery(next.searchQuery);
+    setCategory(next.category);
+    setSortDirection(next.sortDirection);
+  }, [urlSearch]);
+
+  useEffect(() => {
+    const scrollToLeaderboard = () => {
+      if (window.location.hash !== "#leaderboard") return;
       requestAnimationFrame(() => {
         document.getElementById("leaderboard")?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
-    }
+    };
+    scrollToLeaderboard();
+    window.addEventListener("hashchange", scrollToLeaderboard);
+    return () => window.removeEventListener("hashchange", scrollToLeaderboard);
   }, []);
-  const [activeView, setActiveView] = useState<HomeView>("leaderboard");
-  const [trendOverlayOpen, setTrendOverlayOpen] = useState(false);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("sortDir") === "asc" ? "asc" : "desc";
-  });
   const [votingModalOpen, setVotingModalOpen] = useState(false);
   const [votingPersonId, setVotingPersonId] = useState<string | null>(null);
   const [voteLeaderboardInfoOpen, setVoteLeaderboardInfoOpen] = useState(false);

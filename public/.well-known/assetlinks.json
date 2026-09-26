@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.voxdex.app",
+      "sha256_cert_fingerprints": [
+        "FB:D1:60:0F:BE:6C:9F:1B:79:14:C0:AE:EF:05:01:E4:7C:D2:44:3B:E4:D0:E4:B1:8E:29:18:5C:A3:34:EA:18"
+      ]
+    }
+  }
+]
