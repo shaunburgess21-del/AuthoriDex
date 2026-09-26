@@ -10,6 +10,9 @@ import {
 import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
 import type { CardSectionHandle } from "@/components/CardSection";
 import { Button } from "@/components/ui/button";
+import { OfflineInlineNotice } from "@/components/OfflineUnavailable";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { isTransportFailure, shouldReplaceEmptyWithOffline } from "@/lib/networkStatus";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
@@ -1321,7 +1324,7 @@ export default function PredictPage() {
     [trendingResponse],
   );
   
-  const { data: openMarketsData, isLoading: isLoadingOpenMarkets, error: openMarketsError, refetch: refetchOpenMarkets } = useQuery<any[]>({
+  const { data: openMarketsData, isLoading: isLoadingOpenMarkets, error: openMarketsError, refetch: refetchOpenMarkets, status: openMarketsStatus, fetchStatus: openMarketsFetchStatus } = useQuery<any[]>({
     queryKey: ["/api/open-markets", "predict-page"],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/open-markets?limit=${OPEN_MARKETS_PREDICT_LIMIT}`);
@@ -2764,6 +2767,13 @@ export default function PredictPage() {
     communitySearch.trim().length > 0 || communityCategory !== "all"
       ? "No markets match your filters"
       : "No markets available yet";
+  const network = useNetworkStatus();
+  const communityOfflineKind = shouldReplaceEmptyWithOffline({
+    status: openMarketsStatus,
+    fetchStatus: openMarketsFetchStatus,
+    transportError: isTransportFailure(openMarketsError),
+    offline: network.reachability === "offline",
+  });
 
   const filteredCommunity = useMemo(
     () =>
@@ -3865,7 +3875,12 @@ export default function PredictPage() {
         {showWorldPredictScope && (
           <div data-testid="world-markets-sticky-scope">
             <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
-              {openMarketsError ? (
+              {communityOfflineKind ? (
+                <OfflineInlineNotice
+                  kind={communityOfflineKind}
+                  onRetry={communityOfflineKind === "unreachable" ? () => { void refetchOpenMarkets(); } : undefined}
+                />
+              ) : openMarketsError ? (
                 <Card className="p-8 text-center">
                   <p className="text-destructive mb-2">Couldn&apos;t load World Markets</p>
                   <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>

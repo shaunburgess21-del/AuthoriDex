@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
 import { SiteBanner } from "@/components/SiteBanner";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { Footer } from "@/components/Footer";
 import { PWAUpdatePrompt } from "@/components/PWAUpdatePrompt";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -469,10 +470,8 @@ function App() {
                       `useShareCard()`. */}
                   <ShareCardProvider>
                     <SiteBanner />
-                    <div
-                      className="min-h-0"
-                      style={{ paddingTop: "var(--site-banner-height, 0px)" }}
-                    >
+                    <OfflineBanner />
+                    <div className="min-h-0 pt-[calc(var(--site-banner-height,0px)+var(--offline-banner-height,0px))]">
                       <ErrorBoundary>
                         <Router />
                       </ErrorBoundary>

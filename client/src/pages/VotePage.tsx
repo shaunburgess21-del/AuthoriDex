@@ -9,6 +9,9 @@ import {
 } from "@/lib/hub-activity-filter";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
+import { OfflineInlineNotice } from "@/components/OfflineUnavailable";
+import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { isTransportFailure, shouldReplaceEmptyWithOffline } from "@/lib/networkStatus";
 import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import {
@@ -1279,14 +1282,41 @@ export default function VotePage() {
   );
   const maxVotes = sortedCandidates[0]?.votes || 1;
 
-  const { data: dbPolls = [], isLoading: pollsLoading } = useQuery<any[]>({
+  const {
+    data: dbPolls = [],
+    isLoading: pollsLoading,
+    status: pollsStatus,
+    fetchStatus: pollsFetchStatus,
+    error: pollsError,
+    refetch: refetchTopics,
+  } = useQuery<any[]>({
     queryKey: ['/api/trending-polls'],
     staleTime: 60 * 1000,
   });
 
-  const { data: opinionPolls = [], isLoading: opinionPollsLoading } = useQuery<any[]>({
+  const {
+    data: opinionPolls = [],
+    isLoading: opinionPollsLoading,
+    status: opinionPollsStatus,
+    fetchStatus: opinionPollsFetchStatus,
+    error: opinionPollsError,
+    refetch: refetchOpinionPolls,
+  } = useQuery<any[]>({
     queryKey: ['/api/opinion-polls'],
     staleTime: 60 * 1000,
+  });
+  const network = useNetworkStatus();
+  const topicsOfflineKind = shouldReplaceEmptyWithOffline({
+    status: pollsStatus,
+    fetchStatus: pollsFetchStatus,
+    transportError: isTransportFailure(pollsError),
+    offline: network.reachability === "offline",
+  });
+  const opinionOfflineKind = shouldReplaceEmptyWithOffline({
+    status: opinionPollsStatus,
+    fetchStatus: opinionPollsFetchStatus,
+    transportError: isTransportFailure(opinionPollsError),
+    offline: network.reachability === "offline",
   });
 
   const filteredTopics = dbPolls.filter((t: any) => {
@@ -2784,6 +2814,11 @@ export default function VotePage() {
                 </HideExitCard>
               ))}
             </CardSection>
+          ) : topicsOfflineKind ? (
+            <OfflineInlineNotice
+              kind={topicsOfflineKind}
+              onRetry={topicsOfflineKind === "unreachable" ? () => { void refetchTopics(); } : undefined}
+            />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               No topics match your filter criteria.
@@ -2990,6 +3025,11 @@ export default function VotePage() {
                 </HideExitCard>
               ))}
             </CardSection>
+          ) : opinionOfflineKind ? (
+            <OfflineInlineNotice
+              kind={opinionOfflineKind}
+              onRetry={opinionOfflineKind === "unreachable" ? () => { void refetchOpinionPolls(); } : undefined}
+            />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <ListChecks className="h-12 w-12 mx-auto mb-3 opacity-50" />

@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getPublishedReachability, isTransportFailure, transportFailureDescription } from "./networkStatus";
 import { getSupabase } from "./supabase";
 
 export class ApiError extends Error {
@@ -48,6 +49,9 @@ export function parseApiError(
   err: unknown,
   fallbackTitle: string,
 ): { title: string; description?: string; status?: number } {
+  if (isTransportFailure(err)) {
+    return { title: fallbackTitle, description: transportFailureDescription() };
+  }
   const msg = err instanceof Error ? err.message : String(err);
   const m = msg.match(/^(\d{3}): (.+)$/s);
   if (m) {
@@ -93,8 +97,10 @@ const MAX_QUERY_RETRIES = 3;
 
 /**
  * Retry transient failures (network, 5xx, 408, 429). Skip retries for typical client errors (4xx except 408/429) and 401/403/404.
+ * A confirmed Android offline link does not retry; the reconnect path refetches once.
  */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (getPublishedReachability() === "offline") return false;
   if (failureCount >= MAX_QUERY_RETRIES) return false;
   if (!(error instanceof Error)) return true;
   const m = error.message;
