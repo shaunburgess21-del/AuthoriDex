@@ -25,7 +25,7 @@ Inspected the app manifest, FileProvider paths, Gradle build types, `capacitor.c
 | Root detection and obfuscation | Not present. | **Deferred.** Do not add them as product features. |
 | Custom-scheme interception | Another app can register `com.voxdex.app`. Content URLs use verified App Links. Moving OAuth off the custom scheme would touch the auth redirect. | **Deferred.** Phase 6 filter stays as it is. |
 | HTML `capture` camera | `BridgeWebChromeClient` writes a temp JPEG under `getExternalFilesDir(Pictures)` and needs an `external-files-path` plus `CAMERA`. The app has neither, and no `<input capture>`. A system file picker does not need this provider path. | **Keep unsupported.** Do not add the path or the permission. |
-| Play signing / AAB | The App Link fingerprint comment still points at the debug keystore. | **Deferred.** This pass does not sign or build an AAB. |
+| Play signing / AAB | The App Link fingerprint comment still points at the debug keystore. | **Phase 15 config only.** `android/app/build.gradle` signs release when a local `keystore.properties` exists (`SIGNING.md`). `assetlinks.json` is unchanged. |
 
 ## What changed
 

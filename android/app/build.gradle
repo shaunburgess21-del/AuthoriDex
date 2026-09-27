@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// Local upload key only. android/keystore.properties is gitignored.
+// Absent file: release gets no signingConfig. assembleDebug does not read it.
+// Do not print keystoreProperties or any password.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = false
+if (keystorePropertiesFile.exists()) {
+    def stream = new FileInputStream(keystorePropertiesFile)
+    try {
+        keystoreProperties.load(stream)
+    } finally {
+        stream.close()
+    }
+    hasReleaseKeystore = true
+}
+
 android {
     namespace = "com.voxdex.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +32,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
