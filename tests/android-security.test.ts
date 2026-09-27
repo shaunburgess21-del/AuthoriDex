@@ -191,16 +191,24 @@ test("Capacitor config does not opt into cleartext, mixed content, or release de
   }
 });
 
+const PASSWORD_KEY_FILES = new Set([
+  "android/app/build.gradle",
+  "android/keystore.properties.example",
+  "android/SIGNING.md",
+]);
+
 test("release minify stays off and the Android tree has no embedded secrets", () => {
   const gradle = read("android/app/build.gradle");
   assert.match(gradle, /minifyEnabled false/);
   assert.equal(gradle.includes("debuggable true"), false);
-  assert.equal(gradle.includes("storePassword"), false);
-  assert.equal(gradle.includes("keyPassword"), false);
-  assert.equal(gradle.includes("signingConfig"), false);
+  assert.equal(gradle.includes('storePassword "'), false);
+  assert.equal(gradle.includes("storePassword '"), false);
+  assert.equal(gradle.includes('keyPassword "'), false);
+  assert.equal(gradle.includes("keyPassword '"), false);
+  assert.equal(gradle.includes("println"), false);
 
-  const secret =
-    /AIza[0-9A-Za-z_-]{20,}|-----BEGIN |sk_live_|service_role|storePassword|keyPassword/;
+  const secret = /AIza[0-9A-Za-z_-]{20,}|-----BEGIN |sk_live_|service_role/;
+  const passwordKey = /storePassword|keyPassword/;
   const hits: string[] = [];
 
   function walk(dir: string): void {
@@ -212,14 +220,54 @@ test("release minify stays off and the Android tree has no embedded secrets", ()
         walk(abs);
         continue;
       }
-      if (!/\.(xml|gradle|properties|java|pro|md)$/.test(entry)) continue;
+      if (!/\.(xml|gradle|properties|java|pro|md|example)$/.test(entry)) continue;
       const text = readFileSync(abs, "utf8");
       if (secret.test(text)) hits.push(abs);
+      const rel = abs.slice(root.length + 1);
+      if (passwordKey.test(text) && !PASSWORD_KEY_FILES.has(rel)) hits.push(rel);
     }
   }
 
   walk(join(root, "android"));
   assert.deepEqual(hits, []);
+});
+
+test("release signing loads android/keystore.properties only when that file exists", () => {
+  const gradle = read("android/app/build.gradle");
+  assert.match(gradle, /applicationId "com\.voxdex\.app"/);
+  assert.match(gradle, /versionCode 1\b/);
+  assert.match(gradle, /versionName "1\.0"/);
+  assert.match(gradle, /def keystorePropertiesFile = rootProject\.file\("keystore\.properties"\)/);
+  assert.match(gradle, /if \(keystorePropertiesFile\.exists\(\)\)/);
+  assert.match(
+    gradle,
+    /signingConfigs \{\s*release \{\s*if \(hasReleaseKeystore\) \{\s*storeFile file\(keystoreProperties\['storeFile'\]\)\s*storePassword keystoreProperties\['storePassword'\]\s*keyAlias keystoreProperties\['keyAlias'\]\s*keyPassword keystoreProperties\['keyPassword'\]\s*\}\s*\}/,
+  );
+  assert.match(
+    gradle,
+    /buildTypes \{\s*release \{\s*if \(hasReleaseKeystore\) \{\s*signingConfig signingConfigs\.release\s*\}/,
+  );
+  assert.equal(gradle.includes("keystoreProperties["), true);
+  assert.equal(/println[\s\S]{0,120}keystoreProperties/.test(gradle), false);
+  assert.equal(/logger\.\w+\([\s\S]{0,120}keystoreProperties/.test(gradle), false);
+
+  const example = read("android/keystore.properties.example");
+  const assignments = [...example.matchAll(/^(storeFile|storePassword|keyAlias|keyPassword)=(.*)$/gm)];
+  assert.deepEqual(
+    assignments.map((match) => match[1]),
+    ["storeFile", "storePassword", "keyAlias", "keyPassword"],
+  );
+  for (const match of assignments) {
+    assert.match(match[2] ?? "", /^YOUR_[A-Z0-9_]+$/);
+  }
+
+  assert.equal(read(".gitignore").includes("keystore.properties"), true);
+  assert.equal(read("android/.gitignore").includes("keystore.properties"), true);
+  const signingDoc = read("android/SIGNING.md");
+  assert.match(signingDoc, /keystore\.properties/);
+  assert.match(signingDoc, /\.\/gradlew bundleRelease/);
+  assert.match(signingDoc, /app\/build\/outputs\/bundle\/release\/app-release\.aab/);
+  assert.match(signingDoc, /assetlinks\.json/);
 });
 
 test("Capacitor plugin manifests do not export components or allow cleartext", () => {

@@ -46,6 +46,7 @@ ops/.world-market-calibration-cache.json
 # Android / Play signing keys — never commit
 *.jks
 *.keystore
+keystore.properties
 
 # Capacitor: native projects are committed; generated copies and build output are not
 android/.idea/
