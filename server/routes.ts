@@ -33,6 +33,12 @@ import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
 import {
+  DELETED_AUTHOR_LABEL,
+  isAnonymisedUsername,
+  isPublicProfileUnavailable,
+  shouldRejectSignIn,
+} from "./services/account-deletion-utils";
+import {
   COMMENT_PARENT_TYPES,
   getCommentParentVoteLabelMap,
   type CommentParentType,
@@ -260,7 +266,7 @@ type CommentAuthorJoin = {
   authorAvatarUrl: string | null;
   authorRank: string | null;
 };
-const DELETED_COMMENT_AUTHOR_USERNAME = "[deleted user]";
+const DELETED_COMMENT_AUTHOR_USERNAME = DELETED_AUTHOR_LABEL;
 const commentAuthorSelect = {
   authorId: profiles.id,
   authorUsername: profiles.username,
@@ -270,7 +276,7 @@ const commentAuthorSelect = {
   authorRank: profiles.rank,
 };
 function formatCommentAuthor(author: CommentAuthorJoin) {
-  if (!author.authorId) {
+  if (!author.authorId || isAnonymisedUsername(author.authorUsername)) {
     return { username: DELETED_COMMENT_AUTHOR_USERNAME, avatarUrl: null, authorRank: null };
   }
 
@@ -7341,6 +7347,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const created = existing.length === 0;
 
       if (!created) {
+        if (shouldRejectSignIn(existing[0])) {
+          return res.status(403).json({
+            error: "account_deleted",
+            message: "This account has been deleted.",
+          });
+        }
         // Update existing profile (update avatar if changed)
         const updateData: Partial<Profile> = {
           lastActiveAt: new Date(),
@@ -8438,6 +8450,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const baseProfile = profile[0];
+      if (isPublicProfileUnavailable(baseProfile)) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
       
       // If profile is private, return limited info
       if (!baseProfile.isPublic) {
@@ -8634,12 +8649,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const [user] = await db.select({
         id: profiles.id,
+        username: profiles.username,
+        deletedAt: profiles.deletedAt,
         isPublic: profiles.isPublic,
         positionsPublic: profiles.positionsPublic,
         isAgent: profiles.isAgent,
       })
         .from(profiles).where(eq(profiles.username, username)).limit(1);
-      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user || isPublicProfileUnavailable(user)) return res.status(404).json({ error: "User not found" });
       if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
 
       // Phase 15.C.3 privacy: the Active tab leaks "where the user is
@@ -8803,11 +8820,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username } = req.params;
       const [user] = await db
-        .select({ id: profiles.id, isPublic: profiles.isPublic })
+        .select({
+          id: profiles.id,
+          username: profiles.username,
+          deletedAt: profiles.deletedAt,
+          isPublic: profiles.isPublic,
+        })
         .from(profiles)
         .where(eq(profiles.username, username))
         .limit(1);
-      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user || isPublicProfileUnavailable(user)) return res.status(404).json({ error: "User not found" });
       if (!user.isPublic) return res.status(403).json({ error: "Profile is private" });
 
       const userId = user.id;
@@ -9187,19 +9209,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==========================================================================
-  // User-initiated account deletion (7-day soft-delete window)
+  // User-initiated account deletion (7-day window, then erasure)
   // --------------------------------------------------------------------------
-  // POST /api/me/account/delete           — request deletion (idempotent)
-  // POST /api/me/account/cancel-deletion  — cancel within the 7-day window
+  // POST /api/me/account/delete           — schedule deletion (idempotent)
+  // POST /api/me/account/cancel-deletion  — cancel during the 7-day window
   // GET  /api/me/account/deletion-status  — read current state
   //
-  // The actual anonymisation happens via the hourly
-  // account-deletion-sweeper scheduler (server/index.ts). During the
-  // window the user can still log in and cancel; after finalisation
-  // the row is anonymised but FK-preserved so the audit trail (credit
-  // ledger / market_bets / comments / votes) survives intact.
-  //
-  // See server/services/account-deletion.ts for the lifecycle docblock.
+  // During the window the account stays active and cancellation works.
+  // When the window ends, the sweeper erases personal data, deletes the
+  // Supabase Auth user, and only then stamps deletedAt. See
+  // server/services/account-deletion.ts.
   // ==========================================================================
 
   app.post("/api/me/account/delete", requireAuth, async (req: AuthRequest, res) => {
@@ -9269,6 +9288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requestedAt: status.requestedAt?.toISOString() ?? null,
         scheduledFor: status.scheduledFor?.toISOString() ?? null,
         deletedAt: status.deletedAt?.toISOString() ?? null,
+        erasureStarted: status.erasureStarted,
       });
     } catch (error: any) {
       console.error("[AccountDeletion] Status fetch failed:", error);
@@ -10986,13 +11006,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [user] = await db
         .select({
           id: profiles.id,
+          username: profiles.username,
+          deletedAt: profiles.deletedAt,
           isPublic: profiles.isPublic,
           positionsPublic: profiles.positionsPublic,
         })
         .from(profiles)
         .where(eq(profiles.username, username))
         .limit(1);
-      if (!user) return res.status(404).json({ error: "User not found" });
+      if (!user || isPublicProfileUnavailable(user)) return res.status(404).json({ error: "User not found" });
 
       // Soft-hide: same payload shape for both private and "no
       // positions", so the panel renders an empty state in either case
@@ -18197,6 +18219,7 @@ Target length: about 90-150 words.`;
           pollTitle: opinionPolls.title,
           pollSlug: opinionPolls.slug,
           suggesterUsername: profiles.username,
+          suggesterDeletedAt: profiles.deletedAt,
           voteCount: count(opinionPollOptionSuggestionVotes.id),
         })
         .from(opinionPollOptionSuggestions)
@@ -18207,10 +18230,24 @@ Target length: about 90-150 words.`;
           eq(opinionPollOptionSuggestionVotes.suggestionId, opinionPollOptionSuggestions.id),
         )
         .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .groupBy(opinionPollOptionSuggestions.id, opinionPolls.title, opinionPolls.slug, profiles.username)
+        .groupBy(
+          opinionPollOptionSuggestions.id,
+          opinionPolls.title,
+          opinionPolls.slug,
+          profiles.username,
+          profiles.deletedAt,
+        )
         .orderBy(desc(count(opinionPollOptionSuggestionVotes.id)), desc(opinionPollOptionSuggestions.createdAt));
 
-      res.json(rows.map(r => ({ ...r, voteCount: Number(r.voteCount || 0) })));
+      res.json(rows.map(r => ({
+        ...r,
+        voteCount: Number(r.voteCount || 0),
+        suggesterUsername:
+          r.suggesterDeletedAt || isAnonymisedUsername(r.suggesterUsername)
+            ? null
+            : r.suggesterUsername,
+        suggesterDeletedAt: undefined,
+      })));
     } catch (error: any) {
       console.error("Error fetching admin opinion poll suggestions:", error.message);
       res.status(500).json({ error: "Failed to fetch suggestions" });

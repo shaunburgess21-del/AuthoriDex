@@ -1002,22 +1002,23 @@ export const profiles = pgTable("profiles", {
   referredBy: text("referred_by"),
   firstActionAt: timestamp("first_action_at", { withTimezone: true }),
   referralCreditFiredAt: timestamp("referral_credit_fired_at", { withTimezone: true }),
-  // User-initiated account deletion (7-day soft-delete window).
+  // User-initiated account deletion (7-day window, then erasure).
   // See migration 0065. Lifecycle:
   //   - `deletionRequestedAt` is set when the user calls
   //     POST /api/me/account/delete. The matching
-  //     `deletionScheduledFor` is requestedAt + 7 days. The user
-  //     can still log in, see, and CANCEL during this window.
-  //   - `deletedAt` is set by the hourly account-deletion sweeper
-  //     when `deletionScheduledFor` has elapsed. At that point the
-  //     row is anonymised (PII cleared, username randomised,
-  //     isPublic forced false) and `predictCredits` zeroed. The
-  //     row itself remains so credit_ledger / market_bets /
-  //     comments / votes FKs stay intact (the audit-log
-  //     contract). Public profile displays "Deleted user".
-  //   - Cancellation clears both `*RequestedAt` and
-  //     `*ScheduledFor` and is only valid while `deletedAt` is
-  //     null.
+  //     `deletionScheduledFor` is requestedAt + 7 days. The account
+  //     stays active and cancellation still works during this window.
+  //   - When the window ends, the sweeper erases personal data first
+  //     (tombstone username `deleted_` + 32 hex). That closes
+  //     cancellation and rejects sign-in. It then deletes the
+  //     Supabase Auth user and only then stamps `deletedAt`. If Auth
+  //     deletion fails, `deletedAt` stays null so the sweeper retries.
+  //   - The row itself remains so credit_ledger (ON DELETE RESTRICT)
+  //     and historical votes / predictions stay. Comment bodies are
+  //     replaced with `[deleted]`. Identifying fields on the ledger,
+  //     bet metadata, audit snapshots, and telemetry are cleared.
+  //   - Cancellation clears both timestamps and is only valid before
+  //     erasure starts (`deletedAt` null and username not a tombstone).
   deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
   deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),

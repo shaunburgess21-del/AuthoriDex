@@ -55,7 +55,7 @@ We use personal information for the following purposes:
 | **Communicate with you** | Service announcements, account notifications, responses to support requests, occasional product updates (you can opt out of non-essential email at any time) | Performance of contract; legitimate interest; consent (where required) |
 | **Personalize your experience** | Remembering preferences, suggesting markets, ranking content | Legitimate interest |
 | **Protect the Service** | Detecting fraud, preventing abuse, enforcing our [Terms of Service](/terms) | Legitimate interest |
-| **Comply with legal obligations** | Tax records, responding to lawful requests, enforcing rights | Legal obligation |
+| **Comply with legal obligations** | Responding to lawful requests, enforcing rights | Legal obligation |
 
 We do **not** use personal information for advertising-targeting purposes or sell it to advertisers. The Service is ad-free and intended to remain so.
 
@@ -113,12 +113,17 @@ We do not currently respond to "Do Not Track" browser signals because there is n
 
 ## 8. How long we keep personal information
 
-We keep personal information for as long as necessary to provide the Service and fulfill the purposes described in this Privacy Policy, unless a longer retention period is required by law.
+We keep personal information while your account is active and as needed to provide the Service.
 
-Specifically:
+### 8.1 Scheduled deletion and permanent deletion
 
-- **Account data:** kept while your account is active and for up to 90 days after you delete your account, after which it is permanently deleted or anonymized (some data may be retained longer if required for fraud prevention, dispute resolution, or legal compliance)
-- **Transaction records:** retained for 7 years to comply with tax and accounting obligations under South African law
+You can schedule deletion while signed in: **Me → Settings → Account → Delete Account**. You can also email [legal@voxdex.com](mailto:legal@voxdex.com). The public explanation is at [Account deletion](/account-deletion).
+
+- **Scheduled deletion (7 days).** Requesting deletion schedules it for 7 days. During those 7 days the account stays active. You can still sign in and you can cancel. The account is not permanently deleted during this window.
+- **Permanent deletion on active systems.** When the 7 days end, we erase or irreversibly anonymise personal data on active systems. That includes your sign-in email and authentication identity, username, avatar, bio, demographics, date of birth, recovery email, phone number, social handles, and other direct profile identifiers. The public profile is removed and is not navigable. Account-specific state with no reason to remain — XP, streaks, referrals, Vox balance, preferences, interests, and sessions — is deleted or anonymised.
+- **Comments.** Comment text is replaced with a neutral placeholder so the thread can remain. The author is shown as a deleted user, with no profile link.
+- **Historical results.** Votes, poll responses, matchup votes, and predictions are kept and disassociated so past results stay intact. Identifying fields are cleared from the virtual credit ledger, bet metadata, audit snapshots, and telemetry. Opinion-poll suggestion text may remain when it is the suggested option; the suggester's username is cleared.
+- **Virtual credit ledger.** The ledger is an engineering audit log. Rows may remain because the database restricts deleting a profile that still has ledger entries. Remaining rows have identifying fields removed. Vox and predictions are not tax or accounting records, and we do not keep the ledger for a tax-retention period.
 - **Backups:** routine encrypted backups may retain deleted information for up to 60 days before being overwritten
 - **Aggregated and anonymized data:** may be retained indefinitely as it no longer identifies you
 
@@ -155,7 +160,7 @@ If you are in a jurisdiction with its own data-protection laws (such as Californ
 
 ### 9.4 How to exercise your rights
 
-To exercise any of these rights, contact us at [legal@voxdex.com](mailto:legal@voxdex.com). We may need to verify your identity before responding (typically by confirming the request comes from the email associated with your account). We will respond within 30 days, or sooner if required by your local law.
+To exercise any of these rights, including an account-deletion request, contact us at [legal@voxdex.com](mailto:legal@voxdex.com). Signed-in deletion is also available at Me → Settings → Account → Delete Account, and is described on the [Account deletion](/account-deletion) page. We may need to verify your identity before responding (typically by confirming the request comes from the email associated with your account). We will respond within 30 days, or sooner if required by your local law.
 
 There is no charge for exercising your rights. If a request is manifestly unfounded or excessive, we may charge a reasonable administrative fee or refuse to act on the request, as permitted by applicable law.
 
