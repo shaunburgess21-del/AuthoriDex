@@ -8,6 +8,10 @@ const CLOUD_AGENT_DEBUG_SHA256 =
   "FB:D1:60:0F:BE:6C:9F:1B:79:14:C0:AE:EF:05:01:E4:7C:D2:44:3B:E4:D0:E4:B1:8E:29:18:5C:A3:34:EA:18";
 const PIXEL_DEBUG_SHA256 =
   "13:A5:1F:E3:5A:45:BD:9C:D2:46:DA:95:EB:BB:32:E4:ED:B6:26:88:AC:D5:B5:55:B7:E0:6E:9C:29:44:07:7D";
+const PLAY_APP_SIGNING_SHA256 =
+  "9F:0E:4A:24:55:03:9E:F5:90:54:9A:84:21:DF:68:F2:8C:B8:E1:56:2F:73:E6:46:29:15:30:65:EE:47:8B:20";
+const UPLOAD_CERT_SHA256 =
+  "8B:AD:35:E8:70:84:82:72:F8:57:CD:A7:65:4E:13:C2:B9:41:CA:34:35:02:F8:C9:B9:59:B2:91:50:87:1F:EE";
 
 test("OAuth custom scheme is ignored by the content router", () => {
   assert.deepEqual(
@@ -133,7 +137,7 @@ test("disallowed hosts and paths are ignored", () => {
   }
 });
 
-test("assetlinks.json names com.voxdex.app and the debug cert SHA-256", () => {
+test("assetlinks.json names com.voxdex.app, debug certs, and Play App Signing", () => {
   const raw = readFileSync(new URL("../public/.well-known/assetlinks.json", import.meta.url), "utf8");
   const parsed = JSON.parse(raw) as Array<{
     relation: string[];
@@ -143,8 +147,11 @@ test("assetlinks.json names com.voxdex.app and the debug cert SHA-256", () => {
   assert.deepEqual(parsed[0]?.relation, ["delegate_permission/common.handle_all_urls"]);
   assert.equal(parsed[0]?.target.namespace, "android_app");
   assert.equal(parsed[0]?.target.package_name, "com.voxdex.app");
-  assert.deepEqual(parsed[0]?.target.sha256_cert_fingerprints, [
+  const fingerprints = parsed[0]?.target.sha256_cert_fingerprints ?? [];
+  assert.deepEqual(fingerprints, [
     CLOUD_AGENT_DEBUG_SHA256,
     PIXEL_DEBUG_SHA256,
+    PLAY_APP_SIGNING_SHA256,
   ]);
+  assert.equal(fingerprints.includes(UPLOAD_CERT_SHA256), false);
 });
