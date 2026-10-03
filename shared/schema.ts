@@ -2023,6 +2023,25 @@ export const commentReports = pgTable("comment_reports", {
 export type CommentReport = typeof commentReports.$inferSelect;
 
 // ============================================================================
+// USER BLOCKS
+// One row per (blocker, blocked). One-directional: the blocker hides the
+// blocked user's comments in threads they load. Does not delete comments.
+// ============================================================================
+
+export const userBlocks = pgTable("user_blocks", {
+  blockerId: varchar("blocker_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  blockedId: varchar("blocked_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.blockerId, table.blockedId] }),
+  notSelf: check("user_blocks_not_self", sql`${table.blockerId} <> ${table.blockedId}`),
+  blockedIdx: index("user_blocks_blocked_idx").on(table.blockedId),
+}));
+
+export type UserBlock = typeof userBlocks.$inferSelect;
+export type InsertUserBlock = typeof userBlocks.$inferInsert;
+
+// ============================================================================
 // CONTENT MODERATION QUEUE (P0)
 // ============================================================================
 

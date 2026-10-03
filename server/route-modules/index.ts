@@ -11,6 +11,7 @@ export { registerBadgesRoutes } from "./badges-routes";
 export { registerInsightsRoutes } from "./insights-routes";
 export { registerVoicesRoutes } from "./voices-routes";
 export { registerMeCommentsRoutes } from "./me-comments-routes";
+export { registerUserBlockRoutes } from "./user-block-routes";
 export { registerFunnelRoutes } from "./funnel-routes";
 export { registerStarterMixRoutes } from "./starter-mix-routes";
 export { registerCardReactionsRoutes } from "./card-reactions-routes";

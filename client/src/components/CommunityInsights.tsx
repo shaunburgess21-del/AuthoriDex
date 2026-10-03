@@ -14,6 +14,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { toast } from "sonner";
 import { useXpBurst } from "./XpBurstProvider";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
+import { useBlockUser } from "./comments/useBlockUser";
 import { CommentComposer } from "./comments/CommentComposer";
 import { CommentList } from "./comments/CommentList";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
@@ -70,6 +71,7 @@ export function CommunityInsights({
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const blockUser = useBlockUser();
   const [focusDiscussionOpen, setFocusDiscussionOpen] = useState(false);
   const discussionExpandRef = useRef<HTMLButtonElement>(null);
 
@@ -248,6 +250,15 @@ export function CommunityInsights({
             }
             : undefined
         }
+        onBlock={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId !== user?.id
+            ? () => {
+              blockUser.mutate(drawerComment.userId);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
