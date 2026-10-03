@@ -37,9 +37,13 @@ import {
   getVoteLabelsForItems,
   type CommentParentType,
 } from "../services/commentVoteLabels";
+import {
+  DELETED_AUTHOR_LABEL,
+  presentPublicAuthor,
+} from "../services/account-deletion-utils";
 
 const VOICES_POST_MAX_LENGTH = 5000;
-const DELETED_USER = "[deleted user]";
+const DELETED_USER = DELETED_AUTHOR_LABEL;
 
 async function moderateNewComment(opts: {
   commentId: string;
@@ -300,12 +304,17 @@ function mapReplyRow(row: {
   createdAt: Date;
 }, userVoted: Set<string>): ReplyDTO {
   const isDeleted = Boolean(row.deletedAt) || row.moderationStatus === "hidden";
+  const author = presentPublicAuthor({
+    username: row.authorUsername,
+    avatarUrl: row.authorAvatarUrl,
+    rank: row.authorRank,
+  });
   return {
     id: row.id,
     userId: row.userId,
-    username: isDeleted ? DELETED_USER : row.authorUsername,
-    avatarUrl: isDeleted ? null : row.authorAvatarUrl,
-    authorRank: isDeleted ? null : row.authorRank,
+    username: isDeleted ? DELETED_USER : author.username,
+    avatarUrl: isDeleted ? null : author.avatarUrl,
+    authorRank: isDeleted ? null : author.rank,
     body: isDeleted ? "" : row.body,
     parentCommentId: row.parentCommentId,
     upvotes: row.upvotes,
@@ -384,11 +393,16 @@ async function buildCommentFeedItem(
   const entities = await resolveCommentEntities([{ parentType: row.parentType, parentId: row.parentId }]);
   const entity = entities.get(entityKey(row.parentType, row.parentId));
   if (!entity) return null;
-  const [author] = await db
+  const [authorRow] = await db
     .select({ username: profiles.username, avatarUrl: profiles.avatarUrl, rank: profiles.rank })
     .from(profiles)
     .where(eq(profiles.id, row.userId))
     .limit(1);
+  const author = presentPublicAuthor({
+    username: authorRow?.username ?? null,
+    avatarUrl: authorRow?.avatarUrl ?? null,
+    rank: authorRow?.rank ?? null,
+  });
   const replies = await loadThreadReplies(row.id, null);
   const isTopLevelProfilePost =
     row.parentType === "community_insight" && (row.parentCommentId ?? null) === null;
@@ -410,9 +424,9 @@ async function buildCommentFeedItem(
     body: isHidden ? "" : row.body,
     author: {
       userId: row.userId,
-      username: isHidden ? DELETED_USER : (author?.username ?? null),
-      avatarUrl: isHidden ? null : (author?.avatarUrl ?? null),
-      rank: isHidden ? null : (author?.rank ?? null),
+      username: isHidden ? DELETED_USER : author.username,
+      avatarUrl: isHidden ? null : author.avatarUrl,
+      rank: isHidden ? null : author.rank,
     },
     upvotes: row.upvotes,
     downvotes: row.downvotes,

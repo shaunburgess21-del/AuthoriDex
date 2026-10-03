@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { isAdminRole, resolveProfileRole } from "./utils/authz";
+import { shouldRejectSignIn } from "./services/account-deletion-utils";
 import { readFdxSid } from "./lib/anonIdentity";
 import { gamificationService } from "./services/gamification";
 import {
@@ -57,10 +58,21 @@ export async function resolveAuthContextFromHeader(authHeader?: string | string[
   }
 
   const [profile] = await db
-    .select({ role: profiles.role })
+    .select({
+      role: profiles.role,
+      username: profiles.username,
+      deletedAt: profiles.deletedAt,
+    })
     .from(profiles)
     .where(eq(profiles.id, user.id))
     .limit(1);
+
+  // Once erasure has started (or deletedAt is stamped), a still-valid
+  // JWT must not restore the account. During the 7-day window the
+  // username is unchanged, so sign-in keeps working.
+  if (profile && shouldRejectSignIn(profile)) {
+    return null;
+  }
 
   return {
     userId: user.id,

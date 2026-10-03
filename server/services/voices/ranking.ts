@@ -12,6 +12,7 @@ import {
   type VoicesEntity,
 } from "./entities";
 import type { ParentVoteLabel } from "../commentVoteLabels";
+import { presentPublicAuthor } from "../account-deletion-utils";
 
 export type VoicesFeedMode = "for-you" | "latest" | "top";
 export type VoicesFeedSource = "comment" | "insight";
@@ -151,6 +152,11 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
     // =null) keep source="insight" for backwards compat with the Voices feed
     // client (icon styling, filter tabs). Everything else is source="comment".
     const isTopLevelProfilePost = r.parentType === "community_insight";
+    const author = presentPublicAuthor({
+      username: r.authorUsername,
+      avatarUrl: r.authorAvatarUrl,
+      rank: r.authorRank,
+    });
     candidates.push({
       id: r.id,
       source: isTopLevelProfilePost ? "insight" : "comment",
@@ -160,9 +166,9 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
       body: r.body,
       author: {
         userId: r.userId,
-        username: r.authorUsername,
-        avatarUrl: r.authorAvatarUrl,
-        rank: r.authorRank,
+        username: author.username,
+        avatarUrl: author.avatarUrl,
+        rank: author.rank,
       },
       upvotes: r.upvotes,
       downvotes: r.downvotes,

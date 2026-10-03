@@ -172,7 +172,7 @@ You agree to defend, indemnify, and hold harmless VoxDex, its directors, officer
 
 ## 15. Termination
 
-You may stop using the Service at any time. To delete your account, contact us at [hello@voxdex.com](mailto:hello@voxdex.com) — see our [Privacy Policy](/privacy) for how account deletion is handled.
+You may stop using the Service at any time. To delete your account, sign in and open Me → Settings → Account → Delete Account, or email [legal@voxdex.com](mailto:legal@voxdex.com). Requesting deletion schedules it for 7 days. During those 7 days the account stays active and you can cancel. When that window ends, personal data is erased or anonymised on active systems as described in our [Privacy Policy](/privacy) and on the [Account deletion](/account-deletion) page. The account is not permanently deleted during the 7-day window.
 
 We may suspend or terminate your account at any time, with or without notice, if we believe you have violated these Terms, applicable law, or for any reason at our discretion.
 

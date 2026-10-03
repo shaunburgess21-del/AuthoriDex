@@ -1602,6 +1602,7 @@ export function registerOgRoutes(app: Express): void {
         { loc: `${SITE_URL}/pricing`, changefreq: "weekly", priority: "0.6" },
         { loc: `${SITE_URL}/terms`, changefreq: "monthly", priority: "0.3" },
         { loc: `${SITE_URL}/privacy`, changefreq: "monthly", priority: "0.3" },
+        { loc: `${SITE_URL}/account-deletion`, changefreq: "monthly", priority: "0.3" },
         {
           loc: `${SITE_URL}/refund-policy`,
           changefreq: "monthly",

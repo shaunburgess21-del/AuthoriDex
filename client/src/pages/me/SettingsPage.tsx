@@ -32,12 +32,17 @@ import {
   AlertTriangle,
   Trash2,
 } from "lucide-react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  DELETE_ACCOUNT_DIALOG_PARAGRAPHS,
+  DELETE_ACCOUNT_PENDING_BODY,
+  DELETE_ACCOUNT_SETTINGS_SUMMARY,
+} from "@shared/account-deletion-copy";
 import { ApiError, apiRequest, parseApiError } from "@/lib/queryClient";
 import {
   AlertDialog,
@@ -1499,6 +1504,7 @@ function AccountTab({ signOut }: { signOut: () => Promise<void> }) {
 type DeletionStatus = {
   pending: boolean;
   finalised: boolean;
+  erasureStarted?: boolean;
   requestedAt: string | null;
   scheduledFor: string | null;
   deletedAt: string | null;
@@ -1609,9 +1615,20 @@ function AccountDeletionRow() {
   if (status?.finalised) {
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-        <p className="text-sm font-medium text-destructive">Account already deleted</p>
+        <p className="text-sm font-medium text-destructive">Account deleted</p>
         <p className="text-xs text-muted-foreground mt-1">
-          This account has been anonymised and cannot be recovered.
+          This account has been permanently deleted and cannot be recovered.
+        </p>
+      </div>
+    );
+  }
+
+  if (status?.erasureStarted) {
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+        <p className="text-sm font-medium text-destructive">Deletion in progress</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          The 7-day window has ended and deletion has started. It can no longer be cancelled.
         </p>
       </div>
     );
@@ -1629,8 +1646,8 @@ function AccountDeletionRow() {
             </p>
             <p className="text-xs text-muted-foreground">
               {when
-                ? `Your account will be permanently deleted on ${when}. You can still cancel before then.`
-                : "Your account is scheduled for deletion. You can still cancel before the scheduled date."}
+                ? DELETE_ACCOUNT_PENDING_BODY(when)
+                : "Your account is scheduled for deletion. It stays active, and you can still cancel before the scheduled date."}
             </p>
           </div>
         </div>
@@ -1659,7 +1676,7 @@ function AccountDeletionRow() {
       <div className="space-y-0.5">
         <Label className="text-destructive">Delete Account</Label>
         <p className="text-xs text-muted-foreground">
-          Permanently delete your account and all data
+          {DELETE_ACCOUNT_SETTINGS_SUMMARY}
         </p>
       </div>
       <AlertDialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
@@ -1677,16 +1694,22 @@ function AccountDeletionRow() {
             <AlertDialogTitle>Delete your account?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
+                {DELETE_ACCOUNT_DIALOG_PARAGRAPHS.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
                 <p>
-                  Your account will be scheduled for deletion in{" "}
-                  <span className="font-medium text-foreground">7 days</span>. You
-                  can sign back in any time before then to cancel.
-                </p>
-                <p>
-                  After the cooling-off window, your username, avatar, bio,
-                  demographics, recovery email, phone number and social handles
-                  will be permanently anonymised. Your public profile will be
-                  hidden and any remaining predict credits will be wiped.
+                  <Link href="/account-deletion" className="underline">
+                    Account deletion
+                  </Link>
+                  {" "}and the{" "}
+                  <Link href="/privacy" className="underline">
+                    Privacy Policy
+                  </Link>
+                  {" "}describe this in full. Email{" "}
+                  <a href="mailto:legal@voxdex.com" className="underline">
+                    legal@voxdex.com
+                  </a>
+                  {" "}to request deletion without signing in.
                 </p>
               </div>
             </AlertDialogDescription>

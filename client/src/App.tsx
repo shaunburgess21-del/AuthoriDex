@@ -22,6 +22,7 @@ import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import { RANK_UP_EVENT, type RankUpPayload } from "@/lib/rank-up-events";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { NEW_USER_GATE_ALLOWLIST as NEW_USER_GATE_ALLOWLIST_PATHS } from "@shared/public-paths";
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 import { trackPageLand } from "@/lib/funnelTelemetry";
 import {
@@ -42,6 +43,7 @@ const VerifyPage = lazyWithRetry(() => import("@/pages/auth/VerifyPage"));
 const WelcomePage = lazyWithRetry(() => import("@/pages/auth/WelcomePage"));
 const TermsPage = lazyWithRetry(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazyWithRetry(() => import("@/pages/PrivacyPage"));
+const AccountDeletionPage = lazyWithRetry(() => import("@/pages/AccountDeletionPage"));
 const TakedownPage = lazyWithRetry(() => import("@/pages/TakedownPage"));
 // RefundPolicyPage / PricingPage / CheckoutPage are intentionally not
 // routed while VoxDex runs free-to-play (no payment provider yet). The
@@ -120,6 +122,7 @@ function Router() {
         <Route path="/login" component={LoginPage} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/account-deletion" component={AccountDeletionPage} />
         <Route path="/takedown" component={TakedownPage} />
         {/* Free-to-play launch: purchases are disabled, so the old
             commerce URLs redirect. Refund questions belong in Terms;
@@ -313,16 +316,11 @@ function NativeContentLinkBridge() {
  * back into the flow to resume where they left off.
  *
  * Excludes /login/* (so the email signup flow can stay in place) and the
- * legal reference pages — opening Terms, Privacy, Takedown, or Contact
- * mid-onboarding shouldn't force-redirect the user back to welcome
- * before they finish reading.
+ * legal reference pages — opening Terms, Privacy, Account deletion,
+ * Takedown, or Contact mid-onboarding shouldn't force-redirect the user
+ * back to welcome before they finish reading.
  */
-const NEW_USER_GATE_ALLOWLIST = new Set([
-  "/terms",
-  "/privacy",
-  "/takedown",
-  "/contact",
-]);
+const NEW_USER_GATE_ALLOWLIST = new Set<string>(NEW_USER_GATE_ALLOWLIST_PATHS);
 
 function NewUserGate() {
   const { user, profile, profileLoading, loading } = useAuth();
