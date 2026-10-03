@@ -133,5 +133,22 @@ describe("user blocks", () => {
     assert.match(sql, /ON DELETE CASCADE/);
     assert.doesNotMatch(sql, /DROP TABLE/i);
     assert.match(journal, /"tag": "0103_user_blocks"/);
+
+    // db-deploy-migrate.cjs runs each breakpoint chunk as one node-pg query.
+    const statements = sql
+      .split(/-->\s*statement-breakpoint/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean);
+    assert.equal(statements.length, 3);
+    for (const chunk of statements) {
+      const commands = chunk
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("--"))
+        .join("\n")
+        .split(";")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      assert.equal(commands.length, 1);
+    }
   });
 });
