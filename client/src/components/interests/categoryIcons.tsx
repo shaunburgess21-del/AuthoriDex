@@ -16,6 +16,7 @@
  */
 import {
   Bitcoin,
+  BookOpen,
   BrainCircuit,
   Briefcase,
   Clapperboard,
@@ -72,6 +73,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "media-and-podcast": Mic,
   streaming: Tv,
   science: Microscope,
+  history: BookOpen,
 };
 
 export function getCategoryIcon(id: string): LucideIcon {

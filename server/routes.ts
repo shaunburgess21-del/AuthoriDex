@@ -180,9 +180,8 @@ import {
 } from "./services/induction-sync";
 import {
   CANONICAL_MARKET_CATEGORIES,
-  CANONICAL_CATEGORIES,
   GAINER_MIN_ELIGIBLE,
-  canonicalizePersonCategory,
+  canonicalCategoryId,
   getMarketCategoryLabel,
   matchesCategoryFilter,
   normalizeMarketCategory,
@@ -193,6 +192,8 @@ import {
   OPINION_POLL_OPTION_SUGGESTION_MAX_PER_USER,
   VOICES_TIMELINE_ID,
 } from "@shared/constants";
+import { categoryRegistryFallback, CATEGORY_REGISTRY_IDS } from "@shared/category-registry";
+import { voteSlugIn } from "./lib/vote-slug";
 import {
   shouldUseColdStart,
   orderRecencyForUser,
@@ -348,10 +349,10 @@ async function getAllowedCategoryIds(): Promise<Set<string>> {
     const rows = await db.select({ id: contentCategories.id }).from(contentCategories);
     const ids = rows.length > 0
       ? rows.map((r) => r.id)
-      : (CANONICAL_MARKET_CATEGORIES as readonly string[]);
-    return new Set(ids.map((id) => normalizeMarketCategory(id)));
+      : CATEGORY_REGISTRY_IDS;
+    return new Set(ids.map((id) => canonicalCategoryId(id)));
   } catch {
-    return new Set((CANONICAL_MARKET_CATEGORIES as readonly string[]).map((id) => normalizeMarketCategory(id)));
+    return new Set(CATEGORY_REGISTRY_IDS.map((id) => canonicalCategoryId(id)));
   }
 }
 
@@ -364,6 +365,18 @@ type CategoryUsageBreakdown = {
   predictionMarkets: number;
   leaderboardRows: number;
 };
+
+/** Persist taxonomy ids (`film-tv`), never labels (`Film & TV`). */
+function writeCategoryId(raw: unknown, fallback = "misc"): string {
+  if (typeof raw !== "string" || !raw.trim()) return fallback;
+  return canonicalCategoryId(raw);
+}
+
+function writeOptionalCategoryId(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  return canonicalCategoryId(raw);
+}
 
 function sumCategoryUsage(u: CategoryUsageBreakdown): number {
   return (
@@ -461,7 +474,7 @@ async function resolveUnifiedCommentParent(input: {
     const [bySlug] = await db
       .select({ id: trendingPolls.id })
       .from(trendingPolls)
-      .where(eq(trendingPolls.slug, parentSlug))
+        .where(voteSlugIn(trendingPolls.slug, parentSlug))
       .limit(1);
     if (bySlug) return bySlug.id;
     if (isLikelyMatchupUuid(parentSlug)) {
@@ -479,7 +492,7 @@ async function resolveUnifiedCommentParent(input: {
     const [bySlug] = await db
       .select({ id: opinionPolls.id })
       .from(opinionPolls)
-      .where(eq(opinionPolls.slug, parentSlug))
+        .where(voteSlugIn(opinionPolls.slug, parentSlug))
       .limit(1);
     if (bySlug) return bySlug.id;
     if (isLikelyMatchupUuid(parentSlug)) {
@@ -8233,14 +8246,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(rows);
       }
 
-      // Fallback for environments that haven't run the category registry migration yet.
-      res.json(
-        CANONICAL_CATEGORIES.map((c, idx) => ({
-          id: c.id,
-          label: c.label,
-          sortOrder: (idx + 1) * 10,
-        })),
-      );
+      // Same 23-id seed the client uses for first paint (shared/category-registry.ts).
+      res.json(categoryRegistryFallback());
     } catch (error: any) {
       console.error("Error fetching category registry:", error.message);
       res.status(500).json({ error: "Failed to fetch categories" });
@@ -8273,7 +8280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validIds = new Set<string>(
         (registryRows.length > 0
           ? registryRows.map((r) => r.id)
-          : CANONICAL_CATEGORIES.map((c) => c.id)
+          : CATEGORY_REGISTRY_IDS
         ).map((id) => id.toLowerCase()),
       );
       const cleaned: string[] = [];
@@ -13512,7 +13519,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updates: any = { ...handleResult.values };
       if (name !== undefined) updates.name = name;
-      if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
+      if (category !== undefined) updates.category = writeCategoryId(category);
       if (status !== undefined) updates.status = status;
       if (wikiSlug !== undefined) updates.wikiSlug = wikiSlug;
       if (avatar !== undefined) updates.avatar = avatar;
@@ -13524,7 +13531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const allowedCategoryIds = await getAllowedCategoryIds();
         cleanSecondary = sanitizeSecondaryCategories(
           secondaryCategories,
-          category !== undefined ? category : existing.category,
+          category !== undefined ? writeCategoryId(category) : existing.category,
           allowedCategoryIds,
         );
         updates.secondaryCategories = cleanSecondary;
@@ -13532,7 +13539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const trendingUpdates: Record<string, unknown> = {};
       if (name !== undefined) trendingUpdates.name = name;
-      if (category !== undefined) trendingUpdates.category = canonicalizePersonCategory(category)!;
+      if (category !== undefined) trendingUpdates.category = writeCategoryId(category);
       if (avatar !== undefined) trendingUpdates.avatar = avatar;
       if (cleanSecondary !== undefined) trendingUpdates.secondaryCategories = cleanSecondary;
 
@@ -14826,11 +14833,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, writeCategoryId(category || "misc"), allowedCategoryIds);
 
       const [created] = await db.insert(trackedPeople).values({
         name,
-        category: canonicalizePersonCategory(category || "Other")!,
+        category: writeCategoryId(category || "misc"),
         secondaryCategories: cleanSecondary,
         status: status || 'main_leaderboard',
         imageSlug: generateImageSlug(name),
@@ -15611,7 +15618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category || 'General', allowedCategoryIds);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, writeCategoryId(category, "misc"), allowedCategoryIds);
       
       // Get next display order
       const [maxOrder] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(matchups);
@@ -15628,7 +15635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const [created] = await db.insert(matchups).values({
         title,
-        category: category || 'General',
+        category: writeCategoryId(category, "misc"),
         secondaryCategories: cleanSecondary,
         optionAText,
         optionAImage: linkedSides.optionAImage,
@@ -15696,12 +15703,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updates: any = {};
       if (title !== undefined) updates.title = title;
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = writeCategoryId(category);
       if (secondaryCategories !== undefined) {
         const allowedCategoryIds = await getAllowedCategoryIds();
         updates.secondaryCategories = sanitizeSecondaryCategories(
           secondaryCategories,
-          category !== undefined ? category : existing.category,
+          category !== undefined ? writeCategoryId(category) : existing.category,
           allowedCategoryIds,
         );
       }
@@ -16138,7 +16145,7 @@ Target length: about 90-150 words.`;
         .from(trendingPolls)
         .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
         .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
-        .where(eq(trendingPolls.slug, slug))
+        .where(voteSlugIn(trendingPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
@@ -16237,7 +16244,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select({ id: trendingPolls.id, category: trendingPolls.category, visibleCountries: trendingPolls.visibleCountries })
         .from(trendingPolls)
-        .where(eq(trendingPolls.slug, slug))
+        .where(voteSlugIn(trendingPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
@@ -16405,7 +16412,8 @@ Target length: about 90-150 words.`;
       const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const primaryCategory = writeCategoryId(category);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, primaryCategory, allowedCategoryIds);
 
       const effectiveVisibility = visibility || status || "draft";
       const effectiveStatus = (effectiveVisibility === "inactive") ? "draft" : effectiveVisibility;
@@ -16413,7 +16421,7 @@ Target length: about 90-150 words.`;
       const nextDisplayOrder = (maxOrd?.max || 0) + 1;
       const [created] = await db.insert(trendingPolls).values({
         status: effectiveStatus,
-        category,
+        category: primaryCategory,
         secondaryCategories: cleanSecondary,
         headline,
         subjectText,
@@ -16477,12 +16485,12 @@ Target length: about 90-150 words.`;
       } else if (status !== undefined) {
         updates.status = status;
       }
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = writeCategoryId(category);
       if (secondaryCategories !== undefined) {
         const allowedCategoryIds = await getAllowedCategoryIds();
         updates.secondaryCategories = sanitizeSecondaryCategories(
           secondaryCategories,
-          category !== undefined ? category : existing.category,
+          category !== undefined ? writeCategoryId(category) : existing.category,
           allowedCategoryIds,
         );
       }
@@ -17296,7 +17304,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select()
         .from(opinionPolls)
-        .where(eq(opinionPolls.slug, slug))
+        .where(voteSlugIn(opinionPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
@@ -17412,7 +17420,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select({ id: opinionPolls.id, category: opinionPolls.category, visibleCountries: opinionPolls.visibleCountries })
         .from(opinionPolls)
-        .where(eq(opinionPolls.slug, slug))
+        .where(voteSlugIn(opinionPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
@@ -17626,7 +17634,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select({ id: opinionPolls.id })
         .from(opinionPolls)
-        .where(eq(opinionPolls.slug, slug))
+        .where(voteSlugIn(opinionPolls.slug, slug))
         .limit(1);
 
       if (!poll) {
@@ -17694,7 +17702,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select({ id: opinionPolls.id, visibility: opinionPolls.visibility })
         .from(opinionPolls)
-        .where(eq(opinionPolls.slug, slug))
+        .where(voteSlugIn(opinionPolls.slug, slug))
         .limit(1);
 
       if (!poll || poll.visibility !== "live") {
@@ -17783,7 +17791,7 @@ Target length: about 90-150 words.`;
       const [poll] = await db
         .select({ id: opinionPolls.id })
         .from(opinionPolls)
-        .where(eq(opinionPolls.slug, slug))
+        .where(voteSlugIn(opinionPolls.slug, slug))
         .limit(1);
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
@@ -17901,14 +17909,15 @@ Target length: about 90-150 words.`;
       const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const primaryCategory = writeCategoryId(category);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, primaryCategory, allowedCategoryIds);
 
       const [maxOrd] = await db.select({ max: sql<number>`COALESCE(MAX(display_order), 0)` }).from(opinionPolls);
       const nextDisplayOrder = (maxOrd?.max || 0) + 1;
       const [created] = await db.insert(opinionPolls).values({
         title,
         slug,
-        category,
+        category: primaryCategory,
         secondaryCategories: cleanSecondary,
         description: description || null,
         summary: summary || null,
@@ -17972,12 +17981,12 @@ Target length: about 90-150 words.`;
       const updates: any = { updatedAt: new Date() };
       if (title !== undefined) updates.title = title;
       if (slug !== undefined) updates.slug = slug;
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = writeCategoryId(category);
       if (secondaryCategories !== undefined) {
         const allowedCategoryIds = await getAllowedCategoryIds();
         updates.secondaryCategories = sanitizeSecondaryCategories(
           secondaryCategories,
-          category !== undefined ? category : existing.category,
+          category !== undefined ? writeCategoryId(category) : existing.category,
           allowedCategoryIds,
         );
       }
@@ -18996,7 +19005,8 @@ Target length: about 90-150 words.`;
       } = req.body;
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const primaryCategory = writeOptionalCategoryId(category);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, primaryCategory, allowedCategoryIds);
       const cleanVisibleCountries = sanitizeVisibleCountries(visibleCountries);
 
       // Watch criteria for the AI resolution scout (leading indicators to
@@ -19060,7 +19070,7 @@ Target length: about 90-150 words.`;
             teaser: teaser || null,
             summary: summary || null,
             description: description || null,
-            category: category || null,
+            category: primaryCategory,
             secondaryCategories: cleanSecondary,
             tags: tags || null,
             coverImageUrl: coverImageUrl || null,
@@ -19283,12 +19293,12 @@ Target length: about 90-150 words.`;
       if (teaser !== undefined) updates.teaser = teaser;
       if (summary !== undefined) updates.summary = summary;
       if (description !== undefined) updates.description = description;
-      if (category !== undefined) updates.category = category;
+      if (category !== undefined) updates.category = writeOptionalCategoryId(category);
       if (secondaryCategories !== undefined) {
         const allowedCategoryIds = await getAllowedCategoryIds();
         updates.secondaryCategories = sanitizeSecondaryCategories(
           secondaryCategories,
-          category !== undefined ? category : existing.category,
+          category !== undefined ? writeOptionalCategoryId(category) : existing.category,
           allowedCategoryIds,
         );
       }
@@ -22021,7 +22031,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       // Normalize to a canonical kebab id (mirrors the weekly H2H generator),
       // so manually created battles filter the same way as auto-generated ones.
-      const h2hPrimaryCategory = normalizeMarketCategory(category || personA.category);
+      const h2hPrimaryCategory = canonicalCategoryId(category || personA.category);
       const allowedCategoryIds = await getAllowedCategoryIds();
       // Inherit both fighters' primary + secondary categories so the battle
       // surfaces under each side's filters (sanitize drops the primary + dupes).
@@ -24793,7 +24803,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
               .insert(trackedPeople)
               .values({
                 name,
-                category: canonicalizePersonCategory(candidate.category || "Other")!,
+                category: writeCategoryId(candidate.category || "misc"),
                 status: "induction",
                 imageSlug: resolvedSlug,
               })
@@ -25492,7 +25502,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       if (!displayName || !category) return res.status(400).json({ error: "displayName and category are required" });
 
       const allowedCategoryIds = await getAllowedCategoryIds();
-      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, category, allowedCategoryIds);
+      const cleanSecondary = sanitizeSecondaryCategories(secondaryCategories, writeCategoryId(category), allowedCategoryIds);
 
       const handleResult = normaliseSocialHandles(body);
       if (Object.keys(handleResult.errors).length > 0) {
@@ -25513,7 +25523,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const insertRow: Record<string, unknown> = {
         displayName,
-        category: canonicalizePersonCategory(category)!,
+        category: writeCategoryId(category),
         secondaryCategories: cleanSecondary,
         imageSlug: autoSlug,
         wikiSlug: wikiSlug || null,
@@ -25669,7 +25679,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
 
       const updates: any = {};
       if (displayName !== undefined) updates.displayName = displayName;
-      if (category !== undefined) updates.category = canonicalizePersonCategory(category)!;
+      if (category !== undefined) updates.category = writeCategoryId(category);
       if (secondaryCategories !== undefined) {
         let primaryForSanitize = category;
         if (primaryForSanitize === undefined) {
