@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Flag, Share2, Trash2, X } from "lucide-react";
+import { Ban, Flag, Share2, Trash2, X } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -13,6 +13,12 @@ interface CommentActionDrawerProps {
    * degrades to Share-only.
    */
   onReport?: (reason: string) => void;
+  /**
+   * Block the comment's author. Shown beside Report. Omit for your own
+   * comments and for surfaces that do not offer Report.
+   */
+  onBlock?: () => void;
+  blockPending?: boolean;
   onDelete?: () => void;
   commentId: string | null;
   entitySlug: string;
@@ -30,15 +36,19 @@ export function CommentActionDrawer({
   open,
   onClose,
   onReport,
+  onBlock,
+  blockPending = false,
   onDelete,
   commentId,
 }: CommentActionDrawerProps) {
   const [showReportPicker, setShowReportPicker] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [reportSubmitted, setReportSubmitted] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setShowReportPicker(false);
+      setShowBlockConfirm(false);
       setReportSubmitted(false);
     }
   }, [open]);
@@ -79,7 +89,31 @@ export function CommentActionDrawer({
           <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
         </div>
 
-        {!showReportPicker ? (
+        {showBlockConfirm ? (
+          <div className="px-4 pb-4">
+            <h3 className="text-sm font-semibold mb-1 px-4">Block this user?</h3>
+            <p className="text-sm text-muted-foreground mb-3 px-4">
+              You won&apos;t see their comments. This doesn&apos;t delete them for anyone else, and it doesn&apos;t send a report. You can unblock them in Settings → Privacy.
+            </p>
+            <button
+              type="button"
+              onClick={() => onBlock?.()}
+              disabled={blockPending}
+              data-testid="button-confirm-block-user"
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Ban className="h-5 w-5 text-muted-foreground" />
+              Block user
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBlockConfirm(false)}
+              className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors mt-1 border-t border-border/10 pt-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <span className="text-sm font-medium text-muted-foreground">Back</span>
+            </button>
+          </div>
+        ) : !showReportPicker ? (
           <div className="px-4 pb-4">
             <button
               onClick={handleShare}
@@ -95,6 +129,17 @@ export function CommentActionDrawer({
               >
                 <Flag className="h-5 w-5 text-muted-foreground" />
                 <span className="text-sm font-medium">Report</span>
+              </button>
+            )}
+            {onBlock && (
+              <button
+                type="button"
+                onClick={() => setShowBlockConfirm(true)}
+                data-testid="button-block-user"
+                className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <Ban className="h-5 w-5 text-muted-foreground" />
+                <span className="text-sm font-medium">Block user</span>
               </button>
             )}
             {onDelete && (

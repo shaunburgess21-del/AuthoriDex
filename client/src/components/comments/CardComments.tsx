@@ -8,6 +8,7 @@ import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CommentActionDrawer } from "./CommentActionDrawer";
+import { useBlockUser } from "./useBlockUser";
 import { CommentSortHeader } from "./CommentSortHeader";
 import { CommentList } from "./CommentList";
 import { CommentSkeleton } from "./CommentSkeleton";
@@ -197,6 +198,7 @@ function CardCommentsEmbedded({
   const [, setLocation] = useLocation();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const blockUser = useBlockUser();
 
   const snapDismiss = useContext(SnapDismissContext);
   useEffect(() => {
@@ -336,6 +338,15 @@ function CardCommentsEmbedded({
             }
             : undefined
         }
+        onBlock={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId !== user?.id
+            ? () => {
+              blockUser.mutate(drawerComment.userId);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
@@ -377,6 +388,7 @@ function CardCommentsFocusInner({
   const [, setLocation] = useLocation();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const blockUser = useBlockUser();
   const listScrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -519,6 +531,15 @@ function CardCommentsFocusInner({
             }
             : undefined
         }
+        onBlock={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId !== user?.id
+            ? () => {
+              blockUser.mutate(drawerComment.userId);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {

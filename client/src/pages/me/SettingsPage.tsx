@@ -44,6 +44,7 @@ import {
   DELETE_ACCOUNT_SETTINGS_SUMMARY,
 } from "@shared/account-deletion-copy";
 import { ApiError, apiRequest, parseApiError } from "@/lib/queryClient";
+import { BlockedUsersSection } from "@/components/settings/BlockedUsersSection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1999,6 +2000,8 @@ function PrivacyTab() {
             </button>
           </div>
         </div>
+
+        <BlockedUsersSection />
 
         <div className="pt-2">
           <Button

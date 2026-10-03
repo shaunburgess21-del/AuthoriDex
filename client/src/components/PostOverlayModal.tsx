@@ -10,6 +10,7 @@ import { MentionText } from "@/components/comments/MentionText";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoteLabel } from "./VoteLabel";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
+import { useBlockUser } from "./comments/useBlockUser";
 import { CommentComposer } from "./comments/CommentComposer";
 import { CommentList } from "./comments/CommentList";
 import { CommentSortHeader } from "./comments/CommentSortHeader";
@@ -173,6 +174,7 @@ function PostOverlayModalContent({
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const blockUser = useBlockUser();
   const [rootActionsOpen, setRootActionsOpen] = useState(false);
   const [rootDeleteOpen, setRootDeleteOpen] = useState(false);
 
@@ -363,6 +365,15 @@ function PostOverlayModalContent({
       <CommentActionDrawer
         open={!!drawerComment}
         onClose={() => setDrawerComment(null)}
+        onBlock={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId !== user?.id
+            ? () => {
+              blockUser.mutate(drawerComment.userId);
+              setDrawerComment(null);
+            }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
@@ -377,6 +388,16 @@ function PostOverlayModalContent({
       <CommentActionDrawer
         open={rootActionsOpen}
         onClose={() => setRootActionsOpen(false)}
+        onBlock={
+          !isInsightDeleted && insight.userId !== user?.id
+            ? () => {
+              blockUser.mutate(insight.userId);
+              setRootActionsOpen(false);
+              onClose();
+            }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           !isInsightDeleted && insight.userId === user?.id
             ? () => {

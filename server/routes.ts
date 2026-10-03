@@ -242,7 +242,9 @@ import { authCookieFlags, FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity"
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerUserBlockRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes } from "./route-modules";
+import { blockedAuthorSqlExclusion, omitBlockedAuthors } from "./services/user-blocks";
+import { blockedUserIdSet } from "./services/user-blocks-store";
 import { handleAuthHook } from "./emails/routes/auth-hook";
 import { sendEmail } from "./emails/send";
 import { WelcomeEmail, welcomeSubject } from "./emails/templates/lifecycle/Welcome";
@@ -1339,6 +1341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerInsightsRoutes(app);
   registerVoicesRoutes(app);
   registerMeCommentsRoutes(app);
+  registerUserBlockRoutes(app);
   registerFavoritesRoutes(app);
   registerNotificationsRoutes(app);
   registerAdminNotificationsRoutes(app);
@@ -5467,6 +5470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // of a specific comment. Used by PostOverlayModal / InsightReplies to
       // fetch a top-level profile post's reply thread.
       const parentCommentIdParam = typeof req.query.parentCommentId === "string" ? req.query.parentCommentId : null;
+      const blockedUserIds = req.userId ? [...await blockedUserIdSet(req.userId)] : [];
 
       const encodePagedCursor = (payload: Record<string, unknown>): string =>
         Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -5546,6 +5550,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           SELECT COUNT(*)::int FROM comments r
           WHERE r.parent_comment_id = ${unifiedComments.id}
             AND r.deleted_at IS NULL
+            ${blockedAuthorSqlExclusion(sql`r.user_id`, blockedUserIds)}
         )`,
         ...commentAuthorSelect,
       };
@@ -5597,13 +5602,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      const blockedIdSet = new Set(blockedUserIds);
+      const visibleRows = omitBlockedAuthors(rows, blockedIdSet);
+
       const userVoteMap = new Map<string, CommentVoteState>();
-      if (req.userId && rows.length > 0) {
+      if (req.userId && visibleRows.length > 0) {
         const votesForUser = await db
           .select({ commentId: commentVotes.commentId, voteType: commentVotes.voteType })
           .from(commentVotes)
           .where(and(
-            inArray(commentVotes.commentId, rows.map(row => row.id)),
+            inArray(commentVotes.commentId, visibleRows.map(row => row.id)),
             eq(commentVotes.userId, req.userId),
           ));
 
@@ -5615,10 +5623,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parentVoteLabelMap = await getCommentParentVoteLabelMap({
         parentType: parsedParentType.data,
         parentId: resolvedParentId,
-        comments: rows,
+        comments: visibleRows,
       });
 
-      const mapped = rows.map(row => toUnifiedCommentItem(
+      const mapped = visibleRows.map(row => toUnifiedCommentItem(
         row,
         userVoteMap.get(row.id) ?? null,
         parentVoteLabelMap.get(row.id) ?? null,

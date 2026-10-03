@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { VoteLabel } from "@/components/VoteLabel";
 import { CommentActionDrawer } from "@/components/comments/CommentActionDrawer";
+import { useBlockUser } from "@/components/comments/useBlockUser";
 import { CommentComposer } from "@/components/comments/CommentComposer";
 import { CommentList } from "@/components/comments/CommentList";
 import { CommentSortHeader } from "@/components/comments/CommentSortHeader";
@@ -78,6 +79,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
   const queryClient = useQueryClient();
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommentItem | null>(null);
+  const blockUser = useBlockUser();
   const [rootActionsOpen, setRootActionsOpen] = useState(false);
   const [rootDeleteOpen, setRootDeleteOpen] = useState(false);
   const [postDeleted, setPostDeleted] = useState(false);
@@ -218,7 +220,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                   <span className="text-sm text-muted-foreground">{formatTimeAgo(item.createdAt)}</span>
                   {!postDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
                 </div>
-                {isOwner && !postDeleted && (
+                {!postDeleted && (
                   <button
                     onClick={() => setRootActionsOpen(true)}
                     className="shrink-0 p-1 text-muted-foreground/50 transition-colors hover:text-muted-foreground"
@@ -333,6 +335,15 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
             ? (reason) => thread.report({ commentId: drawerComment.id, reason })
             : undefined
         }
+        onBlock={
+          drawerComment && !drawerComment.deletedAt && drawerComment.userId !== user?.id
+            ? () => {
+                blockUser.mutate(drawerComment.userId);
+                setDrawerComment(null);
+              }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
@@ -347,6 +358,16 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       <CommentActionDrawer
         open={rootActionsOpen}
         onClose={() => setRootActionsOpen(false)}
+        onBlock={
+          !postDeleted && item.author.userId !== user?.id
+            ? () => {
+                blockUser.mutate(item.author.userId);
+                setRootActionsOpen(false);
+                onClose();
+              }
+            : undefined
+        }
+        blockPending={blockUser.isPending}
         onDelete={
           isOwner && !postDeleted
             ? () => {

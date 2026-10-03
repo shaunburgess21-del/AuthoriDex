@@ -33,6 +33,8 @@ import {
 import { sanitizeMentions, notifyMentionedUsers } from "../services/mentions";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { applyTextModeration } from "../services/moderation";
+import { omitBlockedAuthors } from "../services/user-blocks";
+import { blockedUserIdSet } from "../services/user-blocks-store";
 import {
   getVoteLabelsForItems,
   type CommentParentType,
@@ -327,7 +329,11 @@ function mapReplyRow(row: {
 }
 
 /** BFS the reply tree under a root comment (bounded depth to keep it cheap). */
-async function loadThreadReplies(rootId: string, userId: string | null): Promise<ReplyDTO[]> {
+async function loadThreadReplies(
+  rootId: string,
+  userId: string | null,
+  blockedUserIds: ReadonlySet<string> = new Set(),
+): Promise<ReplyDTO[]> {
   const collected: Array<Parameters<typeof mapReplyRow>[0]> = [];
   let frontier = [rootId];
   for (let depth = 0; depth < 6 && frontier.length > 0; depth++) {
@@ -355,8 +361,9 @@ async function loadThreadReplies(rootId: string, userId: string | null): Promise
     frontier = rows.map((r) => r.id);
   }
 
-  const userVoted = await loadCommentUpvotes(collected.map((r) => r.id), userId);
-  return collected.map((r) => mapReplyRow(r, userVoted));
+  const visible = omitBlockedAuthors(collected, blockedUserIds);
+  const userVoted = await loadCommentUpvotes(visible.map((r) => r.id), userId);
+  return visible.map((r) => mapReplyRow(r, userVoted));
 }
 
 async function loadCommentUpvotes(commentIds: string[], userId: string | null): Promise<Set<string>> {
@@ -465,14 +472,18 @@ export function registerVoicesRoutes(app: Express): void {
       }
 
       const ranked = await getRankedList(opts);
-      const page = ranked.slice(offset, offset + limit).map((item) => ({ ...item }));
+      const blocked = await blockedUserIdSet(req.userId ?? null);
+      const visibleRanked = blocked.size === 0
+        ? ranked
+        : ranked.filter((item) => !blocked.has(item.author.userId));
+      const page = visibleRanked.slice(offset, offset + limit).map((item) => ({ ...item }));
       await enrichUserVotes(page, req.userId ?? null);
       await enrichParentVoteLabels(page);
 
       const nextOffset = offset + limit;
-      const nextCursor = nextOffset < ranked.length ? encodeCursor({ sig, off: nextOffset }) : null;
+      const nextCursor = nextOffset < visibleRanked.length ? encodeCursor({ sig, off: nextOffset }) : null;
 
-      res.json({ items: page, nextCursor, total: ranked.length });
+      res.json({ items: page, nextCursor, total: visibleRanked.length });
     } catch (error) {
       console.error("[voices] feed error:", error);
       res.status(500).json({ error: "Failed to load Voices feed" });
@@ -737,12 +748,17 @@ export function registerVoicesRoutes(app: Express): void {
 
       if (!comment) return res.status(404).json({ error: "Post not found" });
 
+      const blocked = await blockedUserIdSet(userId);
+      if (blocked.has(comment.userId)) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+
       const post = await buildCommentFeedItem(comment, userId);
       if (post) {
         const upvoted = await loadCommentUpvotes([comment.id], userId);
         post.userVote = upvoted.has(comment.id) ? "up" : null;
       }
-      const replies = await loadThreadReplies(comment.id, userId);
+      const replies = await loadThreadReplies(comment.id, userId, blocked);
       return res.json({ post, replies });
     } catch (error) {
       console.error("[voices] post detail error:", error);
