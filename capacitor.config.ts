@@ -19,7 +19,8 @@ const config: CapacitorConfig = {
     SystemBars: {
       // Bundled with @capacitor/core (not a new plugin). Pin "css" so Android
       // keeps injecting --safe-area-inset-* even if a future Capacitor major
-      // defaults insetsHandling to "native". Android-only.
+      // defaults insetsHandling to "native". Android-only. The iOS shell maps
+      // env(safe-area-inset-*) onto those variables under html.ios-shell.
       insetsHandling: "css",
       // index.html already sets viewport-fit=cover. Hint it so the first
       // inset pass is edge-to-edge instead of a padded frame that then jumps.
