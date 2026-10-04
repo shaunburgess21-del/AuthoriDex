@@ -180,7 +180,7 @@ function marketImageUrl(
 }
 
 function defaultImageUrl(): string {
-  return `${SITE_URL}/api/og/image/default.png`;
+  return `${SITE_URL}/api/og/image/default.png?v=2`;
 }
 
 function withPreviewMeta(
