@@ -8,7 +8,7 @@
  *
  * Overlay is mobile-only (v1). On desktop the first-visit nudge deep-links to /vote.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +34,51 @@ const NUDGE_DWELL_MS = 7000;
 /** Min. scroll movement before "first scroll" counts as an intent signal —
  * filters out programmatic scrolls and mobile address-bar resize events. */
 const SCROLL_TRIGGER_DELTA_PX = 48;
+
+/** Set once the visitor opens Quick Vote (pill, nudge, or restore). */
+const QUICK_VOTE_OPENED_KEY = "voxdex_quick_vote_opened";
+/** Session clock for the one labelled intro, shared across Home and Vote. */
+const PILL_INTRO_AT_KEY = "voxdex_quick_vote_pill_intro_at";
+/** Session flag so the later label pulse fires at most once. */
+const PILL_REMINDER_SHOWN_KEY = "voxdex_quick_vote_pill_reminder_shown";
+const PILL_INTRO_MS = 3000;
+const PILL_REMINDER_DELAY_MS = 45000;
+const PILL_REMINDER_HOLD_MS = 2500;
+
+function hasOpenedQuickVote(): boolean {
+  try {
+    return localStorage.getItem(QUICK_VOTE_OPENED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markQuickVoteOpened(): void {
+  try {
+    localStorage.setItem(QUICK_VOTE_OPENED_KEY, "1");
+  } catch {
+    // Private mode — the pill just stays quiet this visit.
+  }
+}
+
+function pillIntroAt(): number | null {
+  try {
+    const raw = sessionStorage.getItem(PILL_INTRO_AT_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function pillReminderShown(): boolean {
+  try {
+    return sessionStorage.getItem(PILL_REMINDER_SHOWN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export interface QuickVoteHostProps {
   surface: "home" | "vote";
@@ -61,6 +106,7 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
   // ── Overlay open/close with history back-to-close (same as snap) ────────
   const openOverlay = useCallback((source: string, cardId?: string) => {
     if (overlayOpenRef.current) return;
+    markQuickVoteOpened();
     setOverlaySource(source);
     setInitialCardId(cardId);
     setNudgeVisible(false);
@@ -180,33 +226,52 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
     openOverlay("persistent_pill");
   }, [openOverlay]);
 
-  // Recede-on-idle: the pill stays mounted and tappable at all times, but
-  // collapses to a dim icon-only circle when the user isn't scrolling —
-  // hiding it entirely proved wrong because the moment a user stops
-  // scrolling is exactly when they reach for it. On first reveal it holds
-  // the full labelled state for ~3s so the user registers what it is.
-  const [pillProminent, setPillProminent] = useState(true);
-  useEffect(() => {
-    if (!showFab) return;
-    setPillProminent(true);
-    let idleTimer: number | null = window.setTimeout(() => {
-      idleTimer = null;
+  // The pill stays mounted and tappable, collapsed to a dim icon. The full
+  // "Quick Vote" label shows once at the start of a session (3s), then once
+  // more ~45s later if they still haven't opened it. Scrolling never expands it.
+  // Visitors who have opened Quick Vote stay on the icon.
+  const [pillProminent, setPillProminent] = useState(false);
+  useLayoutEffect(() => {
+    if (!showFab || hasOpenedQuickVote()) {
       setPillProminent(false);
-    }, 3000);
-    const onMove = () => {
+      return;
+    }
+
+    const timers: number[] = [];
+    let started = pillIntroAt();
+    if (started == null) {
+      started = Date.now();
+      try {
+        sessionStorage.setItem(PILL_INTRO_AT_KEY, String(started));
+      } catch {
+        // Private mode — intro still plays, it just won't be shared across pages.
+      }
+    }
+
+    const introRemaining = PILL_INTRO_MS - (Date.now() - started);
+    if (introRemaining > 0) {
       setPillProminent(true);
-      if (idleTimer != null) window.clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(() => {
-        idleTimer = null;
-        setPillProminent(false);
-      }, 1500);
-    };
-    window.addEventListener("scroll", onMove, { passive: true });
-    window.addEventListener("touchmove", onMove, { passive: true });
+      timers.push(window.setTimeout(() => setPillProminent(false), introRemaining));
+    } else {
+      setPillProminent(false);
+    }
+
+    if (!pillReminderShown()) {
+      const wait = Math.max(0, started + PILL_REMINDER_DELAY_MS - Date.now());
+      timers.push(window.setTimeout(() => {
+        if (hasOpenedQuickVote()) return;
+        try {
+          sessionStorage.setItem(PILL_REMINDER_SHOWN_KEY, "1");
+        } catch {
+          // Still show the pulse; a later page in this session may repeat it.
+        }
+        setPillProminent(true);
+        timers.push(window.setTimeout(() => setPillProminent(false), PILL_REMINDER_HOLD_MS));
+      }, wait));
+    }
+
     return () => {
-      if (idleTimer != null) window.clearTimeout(idleTimer);
-      window.removeEventListener("scroll", onMove);
-      window.removeEventListener("touchmove", onMove);
+      for (const id of timers) window.clearTimeout(id);
     };
   }, [showFab]);
 
@@ -280,8 +345,8 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
           {showFab && (
             <motion.button
               initial={{ opacity: 0, scale: 0.9 }}
-              // Full pill while scrolling (snappy expand); soft slow recede to
-              // a dim icon circle on idle. Never unmounts — always tappable.
+              // Labelled only for the session intro and one later reminder.
+              // Otherwise a dim icon circle. Always tappable.
               animate={{ opacity: pillProminent ? 1 : 0.5, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
