@@ -3,8 +3,10 @@ import { Capacitor } from "@capacitor/core";
 /**
  * Public origin already used by web/PWA share links and by Android App
  * Links. Capacitor Android serves the bundle from `https://localhost`
- * (`androidScheme: "https"`), so share URLs built from
- * `window.location.origin` must be rewritten before they leave the app.
+ * (`androidScheme: "https"`). iOS keeps Capacitor's default
+ * `capacitor://localhost` (there is no `iosScheme` override). Share URLs
+ * built from `window.location.origin` must be rewritten before they leave
+ * either shell.
  */
 export const PUBLIC_SHARE_ORIGIN = "https://voxdex.com";
 
@@ -25,14 +27,20 @@ const WEBVIEW_ORIGIN_IN_TEXT =
   /(?:https?:\/\/localhost|capacitor:\/\/localhost)(?=\/|\?|#|$)/g;
 
 export interface ShareUrlContext {
+  /** Android shell. Also selects the system share sheet and cache PNG path. */
   nativeAndroid: boolean;
+  /**
+   * iOS shell. Rewrites webview share URLs only. The sheet stays
+   * `navigator.share`. Leave this false on Android.
+   */
+  nativeIos: boolean;
   currentOrigin: string;
 }
 
 /**
- * Android only. iOS WebView already implements `navigator.share`, and the
- * Capacitor Share web implementation drops file payloads, so both stay on
- * the existing Web Share path.
+ * Android only. iOS WKWebView implements `navigator.share`. The Capacitor
+ * Share web implementation drops file payloads, so iOS image shares stay
+ * on that Web Share path instead of the Android cache/FileProvider sheet.
  */
 export function isAndroidNativeShare(): boolean {
   try {
@@ -42,33 +50,49 @@ export function isAndroidNativeShare(): boolean {
   }
 }
 
+function isIosNativeWebView(): boolean {
+  try {
+    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
+  } catch {
+    return false;
+  }
+}
+
 export function currentShareContext(): ShareUrlContext {
   return {
     nativeAndroid: isAndroidNativeShare(),
+    nativeIos: isIosNativeWebView(),
     currentOrigin: typeof window !== "undefined" ? window.location.origin : "",
   };
 }
 
+function leavesNativeWebView(ctx: ShareUrlContext): boolean {
+  return ctx.nativeAndroid || ctx.nativeIos;
+}
+
 /**
- * Origin used when building a share/referral link. Web and iOS keep
- * `window.location.origin`. Android WebView origins become the public host.
+ * Origin used when building a share/referral link. The website keeps
+ * `window.location.origin`. Android (`https://localhost`) and iOS
+ * (`capacitor://localhost`) webview origins become the public host.
+ * `nativeWebView` is true for either shell.
  */
-export function shareLinkOrigin(currentOrigin: string, nativeAndroid: boolean): string {
-  if (nativeAndroid && WEBVIEW_ORIGINS.has(currentOrigin)) return PUBLIC_SHARE_ORIGIN;
+export function shareLinkOrigin(currentOrigin: string, nativeWebView: boolean): string {
+  if (nativeWebView && WEBVIEW_ORIGINS.has(currentOrigin)) return PUBLIC_SHARE_ORIGIN;
   return currentOrigin;
 }
 
 export function outboundShareOrigin(currentOrigin: string): string {
-  return shareLinkOrigin(currentOrigin, isAndroidNativeShare());
+  return shareLinkOrigin(currentOrigin, isAndroidNativeShare() || isIosNativeWebView());
 }
 
 /**
  * Rewrite a WebView-origin share URL to `https://voxdex.com`, preserving
- * path, query (`ref`, `sharer`, `utm_*`), and hash. No-op on web, on iOS,
+ * path, query (`ref`, `sharer`, `utm_*`), and hash. No-op on the website,
  * and when the URL is already public or points at any other host.
+ * Android and iOS both rewrite. iOS does not use the Android share sheet.
  */
 export function toPublicShareUrl(url: string, ctx: ShareUrlContext): string {
-  if (!ctx.nativeAndroid) return url;
+  if (!leavesNativeWebView(ctx)) return url;
   if (!WEBVIEW_ORIGINS.has(ctx.currentOrigin)) return url;
 
   let parsed: URL;
@@ -85,7 +109,8 @@ export function toPublicShareUrl(url: string, ctx: ShareUrlContext): string {
 /**
  * `capacitor://localhost` is a non-special URL, so `parsed.origin` is the
  * string `"null"` rather than `capacitor://localhost`. Match the host
- * explicitly. Android's configured scheme is `https://localhost`.
+ * explicitly. Android's configured scheme is `https://localhost`. iOS
+ * keeps the default `capacitor://localhost`.
  */
 function isWebviewShareUrl(parsed: URL): boolean {
   if (WEBVIEW_ORIGINS.has(parsed.origin)) return true;
@@ -97,7 +122,7 @@ function isWebviewShareUrl(parsed: URL): boolean {
  * WebView origins in place and leave the surrounding sentence alone.
  */
 export function toPublicShareText(text: string, ctx: ShareUrlContext): string {
-  if (!ctx.nativeAndroid || !text) return text;
+  if (!leavesNativeWebView(ctx) || !text) return text;
   if (!WEBVIEW_ORIGINS.has(ctx.currentOrigin)) return text;
   return text.replace(WEBVIEW_ORIGIN_IN_TEXT, PUBLIC_SHARE_ORIGIN);
 }

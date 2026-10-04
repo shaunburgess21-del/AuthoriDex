@@ -14,17 +14,26 @@ import {
 
 const androidLocalhost: ShareUrlContext = {
   nativeAndroid: true,
+  nativeIos: false,
   currentOrigin: "https://localhost",
 };
 
 const webProduction: ShareUrlContext = {
   nativeAndroid: false,
+  nativeIos: false,
   currentOrigin: "https://voxdex.com",
 };
 
 const webLocalhost: ShareUrlContext = {
   nativeAndroid: false,
+  nativeIos: false,
   currentOrigin: "http://localhost",
+};
+
+const iosWebView: ShareUrlContext = {
+  nativeAndroid: false,
+  nativeIos: true,
+  currentOrigin: "capacitor://localhost",
 };
 
 test("android rewrites webview share URLs to https://voxdex.com and keeps query and hash", () => {
@@ -58,14 +67,14 @@ test("android rewrites webview share URLs to https://voxdex.com and keeps query 
 
   for (const [currentOrigin, input, expected] of cases) {
     assert.equal(
-      toPublicShareUrl(input, { nativeAndroid: true, currentOrigin }),
+      toPublicShareUrl(input, { nativeAndroid: true, nativeIos: false, currentOrigin }),
       expected,
     );
   }
   assert.equal(PUBLIC_SHARE_ORIGIN, "https://voxdex.com");
 });
 
-test("web, iOS, and already-public URLs are not rewritten", () => {
+test("the website and already-public URLs are not rewritten", () => {
   const publicUrl =
     "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile";
   assert.equal(toPublicShareUrl(publicUrl, webProduction), publicUrl);
@@ -80,6 +89,7 @@ test("web, iOS, and already-public URLs are not rewritten", () => {
   assert.equal(
     toPublicShareUrl("https://localhost/person/abc?sharer=1", {
       nativeAndroid: true,
+      nativeIos: false,
       currentOrigin: "https://voxdex.com",
     }),
     "https://localhost/person/abc?sharer=1",
@@ -114,12 +124,51 @@ test("share text rewrites embedded webview links and leaves the sentence", () =>
   assert.equal(toPublicShareText(input, webLocalhost), input);
 });
 
-test("referral origin is public only on android webview", () => {
+test("referral origin is public on a native webview and unchanged on the website", () => {
   assert.equal(shareLinkOrigin("https://localhost", true), "https://voxdex.com");
   assert.equal(shareLinkOrigin("capacitor://localhost", true), "https://voxdex.com");
   assert.equal(shareLinkOrigin("https://voxdex.com", true), "https://voxdex.com");
   assert.equal(shareLinkOrigin("https://localhost", false), "https://localhost");
+  assert.equal(shareLinkOrigin("capacitor://localhost", false), "capacitor://localhost");
   assert.equal(shareLinkOrigin("https://voxdex.com", false), "https://voxdex.com");
+});
+
+test("iOS rewrites webview share URLs without using the Android sheet flag", () => {
+  assert.equal(
+    toPublicShareUrl(
+      "capacitor://localhost/markets/world-event?sharer=user-1&utm_campaign=market#top",
+      iosWebView,
+    ),
+    "https://voxdex.com/markets/world-event?sharer=user-1&utm_campaign=market#top",
+  );
+  assert.equal(
+    toPublicShareUrl("https://localhost/person/abc?ref=VXABCDEF&sharer=user-1", {
+      nativeAndroid: false,
+      nativeIos: true,
+      currentOrigin: "https://localhost",
+    }),
+    "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1",
+  );
+  assert.equal(
+    toPublicShareUrl("https://voxdex.com/person/abc?sharer=user-1", iosWebView),
+    "https://voxdex.com/person/abc?sharer=user-1",
+  );
+  assert.equal(
+    toPublicShareUrl("https://example.com/person/abc?sharer=1", iosWebView),
+    "https://example.com/person/abc?sharer=1",
+  );
+  assert.equal(
+    toPublicShareUrl("https://localhost:8443/person/abc", iosWebView),
+    "https://localhost:8443/person/abc",
+  );
+  const sentence =
+    'I just backed Up on "Ada" on VoxDex!\ncapacitor://localhost/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win';
+  assert.equal(
+    toPublicShareText(sentence, iosWebView),
+    'I just backed Up on "Ada" on VoxDex!\nhttps://voxdex.com/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win',
+  );
+  assert.equal(toPublicShareText(sentence, webLocalhost), sentence);
+  assert.equal(iosWebView.nativeAndroid, false);
 });
 
 test("android share fields omit url when the text already contains it", () => {

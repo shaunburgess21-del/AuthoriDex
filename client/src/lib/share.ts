@@ -131,8 +131,9 @@ export function worldMarketShare(slug: string, title: string): CardShareConfig {
  * baked the sharer param into shareUrl.
  *
  * On Capacitor Android the WebView origin is `https://localhost`.
- * After attribution, that host is rewritten to `https://voxdex.com`
- * so the shared link matches the web app. Web and iOS are unchanged.
+ * On Capacitor iOS it is `capacitor://localhost`. After attribution,
+ * either host is rewritten to `https://voxdex.com` so the shared link
+ * matches the web app. The website is unchanged.
  */
 export function appendShareAttribution(
   baseUrl: string,
