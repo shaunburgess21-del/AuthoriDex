@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,97 +11,74 @@ import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudge
 import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { writeVoteHubReturnState } from "@/lib/voteListNavigation";
+import { searchByName } from "@/lib/inductionSearch";
+import { hapticSuccess } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
-import { PersonAvatar } from "@/components/PersonAvatar";
-import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
-import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
-import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
-import { normalizeMarketCategory, type FilterCategory, CATEGORIES_WITH_FILTERS } from "@shared/constants";
+import { getMarketCategoryLabel } from "@shared/constants";
 import { Button } from "@/components/ui/button";
-import {
-  SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
-  SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS,
-  SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS,
-} from "@/lib/sentimentPollVoteDisplay";
-import { cn } from "@/lib/utils";
-import { FILTER_INACTIVE_PILL_VOTE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
+import { cn } from "@/lib/utils";
+import { FILTER_ACTIVE_CHIP_VOTE, FILTER_INACTIVE_PILL_VOTE, CATEGORY_CHIP_RADIUS } from "@/lib/filterControlStyles";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft,
-  Crown,
-  Vote,
-  Check,
-  Users,
-  BarChart3,
-  Search,
-  Info,
-  TrendingUp,
-  UserPlus,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, Plus, Search, Trophy, UserPlus, Vote, X } from "lucide-react";
 import { SuggestCandidateModal } from "@/components/suggest/SuggestCandidateModal";
-import { InductionRaceChart } from "@/components/vote/InductionRaceChart";
+import { CandidateSpotlight } from "@/components/induction/CandidateSpotlight";
+import { CandidateTile } from "@/components/induction/CandidateTile";
+import { InductionPodium } from "@/components/induction/InductionPodium";
+import { InductionSearchResults, type LeaderboardMatch } from "@/components/induction/InductionSearchResults";
+import type { InductionAPIResponse, RankedCandidate } from "@/components/induction/types";
 
-interface InductionCandidate {
-  id: string;
-  displayName: string;
-  category: string;
-  imageSlug: string | null;
-  avatar: string | null;
-  seedVotes: number;
-  wikiSlug: string | null;
-  isActive: boolean;
-  /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
-  personId: string | null;
-}
+const ALL_CATEGORIES = "all";
+const INITIAL_GRID_COUNT = 30;
+const GRID_PAGE_SIZE = 60;
+const SEARCH_RESULT_LIMIT = 30;
+const SPOTLIGHT_HISTORY_KEY = "induction-spotlight";
+const CARD_HASH_PREFIX = "#induction-card-";
 
-interface InductionAPIResponse {
-  data: InductionCandidate[];
-  totalCount: number;
-}
+const HOW_IT_WORKS = [
+  { icon: Search, title: "Find them", body: "Search the queue for someone you think belongs on VoxDex." },
+  { icon: Vote, title: "Vote them up", body: "One vote per person. The more votes, the higher they climb." },
+  {
+    icon: Trophy,
+    title: "Join the leaderboard",
+    body: "Top-voted candidates are reviewed for induction onto the live leaderboard with tracked Trend Scores.",
+  },
+] as const;
 
-function getRankStyle(rank: number) {
-  if (rank === 1) return "bg-yellow-500/20 dark:bg-yellow-500/15 border-yellow-500/50 dark:border-yellow-500/40 text-yellow-500 dark:text-yellow-300";
-  if (rank === 2) return "bg-slate-400/10 border-slate-400/30 text-slate-500 dark:text-slate-300";
-  if (rank === 3) return "bg-orange-500/15 dark:bg-orange-500/10 border-orange-500/40 dark:border-orange-500/30 text-orange-500 dark:text-orange-300";
-  return "bg-slate-800/40 border-slate-700/30 text-slate-600 dark:text-slate-400";
-}
-
-function getRankBg(rank: number) {
-  if (rank === 1) return "from-yellow-500/5 via-transparent to-transparent";
-  if (rank === 2) return "from-slate-400/5 via-transparent to-transparent";
-  if (rank === 3) return "from-orange-500/5 via-transparent to-transparent";
-  return "";
-}
-
-const FILTER_CATEGORIES = CATEGORIES_WITH_FILTERS
-  .filter(c => c.id !== "favorites" && c.id !== "trending")
-  .map(c => ({ value: c.id, label: c.label }));
+type TrendingResponse = { data: LeaderboardMatch[] } | LeaderboardMatch[];
 
 export default function InductionQueuePage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { user, isLoggedIn } = useAuth();
+  const { isLoggedIn } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
-  const raceMap = useCategoryRaceMap();
-  const leaderboardCats = useLeaderboardCategories();
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const budget = useAnonBudget();
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const [searchQuery, setSearchQuery] = useState(() =>
     new URLSearchParams(window.location.search).get("search")?.trim() ?? "",
   );
+  const deferredQuery = useDeferredValue(searchQuery);
+  const trimmedQuery = deferredQuery.trim();
+  const isSearching = trimmedQuery.length > 0;
+  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES);
+  const [gridCount, setGridCount] = useState(INITIAL_GRID_COUNT);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
-  const [showVoteAnim, setShowVoteAnim] = useState<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestPrefillName, setSuggestPrefillName] = useState("");
-  const animRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Kept after close (open: false) so the dialog's exit animation still has content.
+  const [spotlight, setSpotlight] = useState<{ ids: string[]; index: number; open: boolean } | null>(null);
+  const pendingNavRef = useRef<string | null>(null);
+  // Read before the spotlight pushes entries of its own, which would otherwise
+  // make a directly-opened page look like it has somewhere to go back to.
+  const hadHistoryOnArrivalRef = useRef(window.history.length > 1);
 
-  // Keep the ?search= param in sync with the search box so the view stays
-  // shareable and a stale term never survives a manual clear or refresh.
+  // Keep ?search= in sync so the view stays shareable and survives the
+  // sign-in round trip.
   useEffect(() => {
     const url = new URL(window.location.href);
     const current = url.searchParams.get("search") ?? "";
@@ -112,29 +89,10 @@ export default function InductionQueuePage() {
     } else {
       url.searchParams.delete("search");
     }
-    window.history.replaceState({}, "", url.toString());
+    window.history.replaceState(window.history.state, "", url.toString());
   }, [searchQuery]);
 
-  const clearSearchAndFilters = () => {
-    setCategoryFilter("all");
-    setSearchQuery("");
-  };
-
-  const openSuggest = (prefillName = "") => {
-    if (!isLoggedIn) {
-      toast.error("Sign in required", { description: "Please sign in to suggest content." });
-      return;
-    }
-    setSuggestPrefillName(prefillName);
-    setSuggestOpen(true);
-  };
-
-  const handleBack = () => {
-    writeVoteHubReturnState({ activeSection: "All", anchorHashId: "vote-induction" });
-    setLocation("/vote");
-  };
-
-  const { data: inductionData, isLoading } = useQuery<InductionAPIResponse>({
+  const { data: inductionData, isLoading, isError, refetch } = useQuery<InductionAPIResponse>({
     queryKey: ["/api/vote/induction"],
     staleTime: 60_000,
   });
@@ -142,6 +100,13 @@ export default function InductionQueuePage() {
   const { data: myVoteIds } = useQuery<string[]>({
     queryKey: ["/api/me/induction-votes"],
     enabled: isLoggedIn,
+  });
+
+  // Only needed to tell people "they're already on the leaderboard".
+  const { data: trendingResponse } = useQuery<TrendingResponse>({
+    queryKey: ["/api/trending"],
+    enabled: trimmedQuery.length >= 2,
+    staleTime: 5 * 60_000,
   });
 
   useEffect(() => {
@@ -152,23 +117,199 @@ export default function InductionQueuePage() {
     if (myVoteIds) setVotedIds(new Set(myVoteIds));
   }, [isLoggedIn, myVoteIds]);
 
+  const ranked = useMemo<RankedCandidate[]>(() => {
+    if (!inductionData?.data) return [];
+    return [...inductionData.data]
+      .sort((a, b) => b.seedVotes - a.seedVotes || a.displayName.localeCompare(b.displayName))
+      .map((c, i) => ({ ...c, rank: i + 1 }));
+  }, [inductionData]);
+
+  const byId = useMemo(() => new Map(ranked.map((c) => [c.id, c])), [ranked]);
+  const isVoted = useCallback((id: string) => votedIds.has(id), [votedIds]);
+  const myVoteCount = useMemo(() => ranked.filter((c) => votedIds.has(c.id)).length, [ranked, votedIds]);
+
+  // ── Search ────────────────────────────────────────────────────────────
+  // Result order is frozen per query so a vote that bumps someone's rank
+  // can't slide a different row under the user's finger.
+  const searchOrderRef = useRef<{ query: string; order: Map<string, number> } | null>(null);
+  const searchResults = useMemo(() => {
+    if (!trimmedQuery) return [];
+    if (searchOrderRef.current?.query !== trimmedQuery) {
+      searchOrderRef.current = { query: trimmedQuery, order: new Map(ranked.map((c, i) => [c.id, i])) };
+    }
+    const order = searchOrderRef.current.order;
+    const stable = [...ranked].sort(
+      (a, b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+    return searchByName(stable, trimmedQuery, (c) => c.displayName);
+  }, [trimmedQuery, ranked]);
+
+  const leaderboardMatches = useMemo(() => {
+    if (trimmedQuery.length < 2 || !trendingResponse) return [];
+    const people = Array.isArray(trendingResponse) ? trendingResponse : trendingResponse.data ?? [];
+    return searchByName(people, trimmedQuery, (p) => p.name).slice(0, 4);
+  }, [trimmedQuery, trendingResponse]);
+
   useEffect(() => {
-    return () => { if (animRef.current) clearTimeout(animRef.current); };
+    setActiveIndex(0);
+  }, [trimmedQuery]);
+
+  // ── Browse ────────────────────────────────────────────────────────────
+  // Chips come from the categories candidates actually carry ("Film & TV",
+  // "Media & Podcast", …), biggest first — not every one has a canonical id.
+  const categoryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of ranked) {
+      if (c.category) counts.set(c.category, (counts.get(c.category) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, label: getMarketCategoryLabel(value), count }));
+  }, [ranked]);
+
+  const browseList = useMemo(() => {
+    if (categoryFilter === ALL_CATEGORIES) return ranked;
+    return ranked.filter((c) => c.category === categoryFilter);
+  }, [ranked, categoryFilter]);
+
+  const activeCategoryLabel = categoryOptions.find((c) => c.value === categoryFilter)?.label ?? "All";
+  const showPodium = browseList.length >= 3;
+  const gridSource = showPodium ? browseList.slice(3) : browseList;
+  const gridOffset = showPodium ? 3 : 0;
+  const gridShown = gridSource.slice(0, gridCount);
+
+  const selectCategory = (value: string) => {
+    setCategoryFilter(value);
+    setGridCount(INITIAL_GRID_COUNT);
+  };
+
+  // ── Spotlight (pushes a history entry so Android/browser back closes it) ──
+  const hideSpotlight = useCallback(() => {
+    setSpotlight((s) => (s ? { ...s, open: false } : s));
   }, []);
 
-  const budget = useAnonBudget();
+  const openSpotlight = useCallback((list: RankedCandidate[], index: number) => {
+    if (!list[index]) return;
+    setSpotlight({ ids: list.map((c) => c.id), index, open: true });
+    window.history.pushState({ overlay: SPOTLIGHT_HISTORY_KEY }, "");
+  }, []);
 
+  const closeSpotlight = useCallback(() => {
+    if (window.history.state?.overlay === SPOTLIGHT_HISTORY_KEY) {
+      window.history.back();
+    } else {
+      hideSpotlight();
+    }
+  }, [hideSpotlight]);
+
+  const viewProfileFromSpotlight = useCallback(
+    (personId: string) => {
+      const target = `/person/${personId}`;
+      if (window.history.state?.overlay === SPOTLIGHT_HISTORY_KEY) {
+        pendingNavRef.current = target;
+        window.history.back();
+      } else {
+        hideSpotlight();
+        setLocation(target);
+      }
+    },
+    [hideSpotlight, setLocation],
+  );
+
+  useEffect(() => {
+    const onPop = () => {
+      if (window.history.state?.overlay !== SPOTLIGHT_HISTORY_KEY) hideSpotlight();
+      const pending = pendingNavRef.current;
+      if (pending) {
+        pendingNavRef.current = null;
+        setLocation(pending);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [hideSpotlight, setLocation]);
+
+  const spotlightSequence = useMemo(
+    () => (spotlight ? spotlight.ids.map((id) => byId.get(id)).filter((c): c is RankedCandidate => !!c) : []),
+    [spotlight, byId],
+  );
+
+  // Vote hub cards deep-link here as /vote/induction#induction-card-<id>.
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandledRef.current || ranked.length === 0) return;
+    deepLinkHandledRef.current = true;
+    const hash = window.location.hash;
+    if (!hash.startsWith(CARD_HASH_PREFIX)) return;
+    const url = new URL(window.location.href);
+    url.hash = "";
+    window.history.replaceState(window.history.state, "", url.toString());
+    const index = ranked.findIndex((c) => c.id === hash.slice(CARD_HASH_PREFIX.length));
+    if (index >= 0) openSpotlight(ranked, index);
+  }, [ranked, openSpotlight]);
+
+  // Desktop: land with the cursor in the search box. Skipped on touch so the
+  // keyboard doesn't cover the page on arrival.
+  useEffect(() => {
+    if (window.location.hash.startsWith(CARD_HASH_PREFIX)) return;
+    if (!window.matchMedia?.("(pointer: fine)").matches) return;
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // ── Suggest ───────────────────────────────────────────────────────────
+  const openSuggest = useCallback(
+    (prefillName = "") => {
+      if (!isLoggedIn) {
+        toast("Sign in to suggest someone", {
+          description: "Create a free account to nominate people for the Induction Queue.",
+          action: {
+            label: "Sign in",
+            onClick: () => {
+              // Return URL carries ?suggest=1 so the form reopens after sign-in.
+              const url = new URL(window.location.href);
+              url.searchParams.set("suggest", "1");
+              window.history.replaceState(window.history.state, "", url.toString());
+              navigateToLogin(setLocation);
+            },
+          },
+        });
+        return;
+      }
+      setSuggestPrefillName(prefillName);
+      setSuggestOpen(true);
+    },
+    [isLoggedIn, setLocation],
+  );
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("suggest") !== "1") return;
+    url.searchParams.delete("suggest");
+    window.history.replaceState(window.history.state, "", url.toString());
+    setSuggestPrefillName(url.searchParams.get("search")?.trim() ?? "");
+    setSuggestOpen(true);
+  }, [isLoggedIn]);
+
+  // ── Voting ────────────────────────────────────────────────────────────
   const voteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("POST", `/api/vote/induction/${id}/vote`);
       return res.json();
     },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/vote/induction"] });
+      queryClient.setQueryData<InductionAPIResponse>(["/api/vote/induction"], (prev) =>
+        prev
+          ? { ...prev, data: prev.data.map((c) => (c.id === id ? { ...c, seedVotes: c.seedVotes + 1 } : c)) }
+          : prev,
+      );
+    },
     onSuccess: (data) => {
+      hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
-      queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
@@ -196,15 +337,18 @@ export default function InductionQueuePage() {
         toast.error("Vote failed", { description: err.message || "Something went wrong" });
       }
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+    },
   });
 
-  const handleVote = (id: string) => {
+  /** `silent` skips the success toast — inside the spotlight it would cover the close button. */
+  const handleVote = (id: string, opts?: { silent?: boolean }) => {
     if (votedIds.has(id)) return;
-    // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
-    // removed; anon users with remaining budget hit the server. isUpsert
-    // hardcoded false: votedIds.has() above filters re-votes for authed;
-    // anon users start with empty votedIds (server-side anon induction
-    // history not surfaced to client until signup).
+    // Phase 4 — anon-budget gate. isUpsert hardcoded false: votedIds.has()
+    // above filters re-votes for authed; anon users start with empty votedIds
+    // (server-side anon induction history not surfaced to client until signup).
     const decision = checkVoteGate(budget, "induction", id, false);
     if (!decision.proceed) {
       navigateToLogin(setLocation, {
@@ -219,107 +363,86 @@ export default function InductionQueuePage() {
       return;
     }
     setVotedIds((prev) => new Set(prev).add(id));
-    setShowVoteAnim(id);
-    animRef.current = setTimeout(() => setShowVoteAnim(null), 800);
-    showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
+    if (!opts?.silent) {
+      showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
+    }
     voteMutation.mutate(id);
   };
 
-  const candidates = useMemo(() => {
-    if (!inductionData?.data) return [];
-    return [...inductionData.data].sort((a, b) => b.seedVotes - a.seedVotes);
-  }, [inductionData]);
+  const handleBack = () => {
+    if (hadHistoryOnArrivalRef.current) {
+      window.history.back();
+      return;
+    }
+    writeVoteHubReturnState({ activeSection: "All", anchorHashId: "vote-induction" });
+    setLocation("/vote");
+  };
 
-  // Deep-link support: when arriving via /vote/induction#induction-card-<id>
-  // (e.g. tapping a candidate avatar/name on the Vote page), smooth-scroll to
-  // the card and briefly highlight it once the grid has rendered.
-  useEffect(() => {
-    if (isLoading || candidates.length === 0) return;
-    const hash = window.location.hash;
-    if (!hash.startsWith("#induction-card-")) return;
-    let resetTimeout: ReturnType<typeof setTimeout> | undefined;
-    const timeout = setTimeout(() => {
-      const el = document.getElementById(hash.slice(1));
-      if (!el) return;
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      const overlay = el.querySelector<HTMLElement>("[data-hover-border]");
-      overlay?.classList.remove("opacity-0", "hidden");
-      overlay?.classList.add("opacity-100", "block");
-      el.classList.add("shadow-lg", "md:shadow-[0_8px_32px_rgba(239,239,239,0.1)]");
-      resetTimeout = setTimeout(() => {
-        overlay?.classList.add("opacity-0", "hidden");
-        overlay?.classList.remove("opacity-100", "block");
-        el.classList.remove("shadow-lg", "md:shadow-[0_8px_32px_rgba(239,239,239,0.1)]");
-      }, 2200);
-    }, 220);
-    return () => {
-      clearTimeout(timeout);
-      if (resetTimeout) clearTimeout(resetTimeout);
-    };
-  }, [isLoading, candidates.length]);
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape" && searchQuery) {
+      e.preventDefault();
+      setSearchQuery("");
+      return;
+    }
+    if (!isSearching) return;
+    const lastIndex = Math.min(searchResults.length, SEARCH_RESULT_LIMIT) - 1;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, Math.max(lastIndex, 0)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchResults.length > 0) {
+        openSpotlight(searchResults, Math.min(activeIndex, lastIndex));
+      } else if (leaderboardMatches.length > 0) {
+        setLocation(`/person/${leaderboardMatches[0].id}`);
+      } else {
+        openSuggest(searchQuery.trim());
+      }
+    }
+  };
 
-  const filteredCandidates = useMemo(() => {
-    return candidates.filter((c) => {
-      const matchesCat = categoryFilter === "all" || c.category?.toLowerCase() === categoryFilter.toLowerCase();
-      const matchesSearch = !searchQuery || c.displayName.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCat && matchesSearch;
-    });
-  }, [candidates, categoryFilter, searchQuery]);
-
-  const candidateRankById = useMemo(
-    () => new Map(candidates.map((candidate, index) => [candidate.id, index + 1])),
-    [candidates],
+  const header = (
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-lg">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <Link href="/">
+            <VoxDexLogo size={24} />
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openSuggest(searchQuery.trim())}
+            className="hidden items-center gap-2 rounded-full border border-cyan-500/40 bg-cyan-500/15 px-3.5 py-1.5 text-sm font-medium text-cyan-600 transition-colors hover:bg-cyan-500/25 sm:flex dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-400 dark:hover:bg-cyan-500/20"
+            data-testid="button-suggest-induction-header"
+          >
+            <Plus className="h-4 w-4" />
+            Suggest
+          </button>
+          <HeaderUserActions />
+        </div>
+      </div>
+    </header>
   );
-
-  // Race chart reflects the active category only (not the search box) so the
-  // visualisation stays stable while users search the grid below.
-  const raceCandidates = useMemo(() => {
-    if (categoryFilter === "all") return candidates;
-    return candidates.filter((c) => c.category?.toLowerCase() === categoryFilter.toLowerCase());
-  }, [candidates, categoryFilter]);
-
-  const activeCategoryLabel = FILTER_CATEGORIES.find((c) => c.value === categoryFilter)?.label ?? "All";
-
-  const maxVotes = candidates.length > 0 ? candidates[0].seedVotes : 1;
-  const totalVotes = candidates.reduce((sum, c) => sum + c.seedVotes, 0);
-  const uniqueCategories = new Set(candidates.map((c) => c.category));
-
-  const categoryBreakdown = useMemo(() => {
-    const map = new Map<string, number>();
-    candidates.forEach((c) => {
-      map.set(c.category, (map.get(c.category) || 0) + c.seedVotes);
-    });
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [candidates]);
 
   if (isLoading && inductionData === undefined) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Back to Vote">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <Link href="/">
-                <VoxDexLogo size={24} />
-              </Link>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </header>
-        <main className="max-w-6xl mx-auto px-4 py-6 md:py-10">
-          <Skeleton className="h-10 w-64 mb-8" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[68px]" />
-            ))}
-          </div>
-          <Skeleton className="h-9 w-full max-w-md mb-6" />
-          <Skeleton className="h-[280px] w-full rounded-xl mb-8" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-[280px] rounded-xl" />
+        {header}
+        <main className="mx-auto max-w-5xl px-4 py-8 md:py-12">
+          <Skeleton className="mb-3 h-4 w-32" />
+          <Skeleton className="mb-6 h-10 w-full max-w-md" />
+          <Skeleton className="mb-10 h-14 w-full rounded-2xl" />
+          <Skeleton className="mb-8 h-56 w-full rounded-2xl" />
+          <div className="grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-square w-full rounded-xl" />
             ))}
           </div>
         </main>
@@ -329,401 +452,227 @@ export default function InductionQueuePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-lg border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={handleBack} aria-label="Back to Vote">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <Link href="/">
-              <VoxDexLogo size={24} />
-            </Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openSuggest()}
-              className="hidden sm:flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
-              data-testid="button-suggest-induction-header"
-            >
-              <Plus className="h-4 w-4" />
-              Suggest
-            </button>
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      {header}
 
-      <main className="max-w-6xl mx-auto px-4 py-6 md:py-10">
-        {/* Hero */}
-        <div className="mb-8 md:mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center">
-              <Vote className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-serif font-bold tracking-tight">Induction Queue</h1>
-              <p className="text-sm text-muted-foreground">Vote for who joins the leaderboard next</p>
-            </div>
-          </div>
-        </div>
+      <main className="mx-auto max-w-5xl px-4 pb-28 pt-8 md:pb-16 md:pt-12">
+        {/* Hero + search */}
+        <section className="relative mb-8">
+          <div
+            className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[36rem] max-w-full -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl"
+            aria-hidden
+          />
+          <p className="relative mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-400">
+            Induction Queue
+          </p>
+          <h1 className="relative font-serif text-[28px] font-bold leading-tight tracking-tight md:text-4xl">
+            Who&apos;s missing from the leaderboard?
+          </h1>
+          <p className="relative mt-2 text-sm text-muted-foreground md:text-base">
+            Find someone and vote them in. Can&apos;t find them? Suggest them.
+          </p>
 
-        {/* Stats ribbon */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              Candidates
-            </div>
-            <p className="text-xl font-bold tabular-nums">{candidates.length}</p>
-          </Card>
-          <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <TrendingUp className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              Total Votes
-            </div>
-            <p className="text-xl font-bold tabular-nums">{totalVotes.toLocaleString("en-US")}</p>
-          </Card>
-          <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <BarChart3 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              Categories
-            </div>
-            <p className="text-xl font-bold tabular-nums">{uniqueCategories.size}</p>
-          </Card>
-          <Card className="px-4 py-3 bg-gradient-to-br from-slate-900/60 to-slate-800/60 border-slate-700/40">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              Your Votes
-            </div>
-            <p className="text-xl font-bold tabular-nums">{votedIds.size}</p>
-          </Card>
-        </div>
-
-        {/* Filter bar */}
-        <div className="flex flex-col md:flex-row gap-3 mb-6">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {FILTER_CATEGORIES.map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => setCategoryFilter(cat.value)}
-                className={`shrink-0 px-3 py-1.5 ${CATEGORY_CHIP_RADIUS} text-xs font-medium border transition-all whitespace-nowrap ${
-                  categoryFilter === cat.value
-                    ? "bg-cyan-500/25 dark:bg-cyan-500/20 border-cyan-500/50 dark:border-cyan-500/40 text-cyan-700 dark:text-cyan-300"
-                    : FILTER_INACTIVE_PILL_VOTE
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-          <div className="relative md:ml-auto md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative mt-6">
+            <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              type="text"
-              placeholder="Search candidates..."
+              ref={inputRef}
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder={ranked.length > 0 ? `Search ${ranked.length} candidates…` : "Search candidates…"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              onKeyDown={handleSearchKeyDown}
+              aria-label="Search the Induction Queue"
+              className="h-14 rounded-2xl border-border/70 bg-card/70 pl-12 pr-12 text-base shadow-lg md:text-base shadow-black/5 backdrop-blur focus-visible:border-cyan-500/60 focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-0 [&::-webkit-search-cancel-button]:hidden"
+              data-testid="input-induction-search"
             />
-          </div>
-        </div>
-
-        {/* Induction race — glowing bar chart of the front-runners */}
-        <div className="mb-8">
-          <InductionRaceChart candidates={raceCandidates} categoryLabel={activeCategoryLabel} />
-        </div>
-
-        {/* Main grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
-          <AnimatePresence mode="popLayout">
-            {filteredCandidates.map((candidate, idx) => {
-              const globalRank = candidateRankById.get(candidate.id) ?? idx + 1;
-              const progressPct = maxVotes > 0 ? (candidate.seedVotes / maxVotes) * 100 : 0;
-              const isVoted = votedIds.has(candidate.id);
-
-              return (
-                <motion.div
-                  key={candidate.id}
-                  id={`induction-card-${candidate.id}`}
-                  className="relative scroll-mt-24 rounded-xl"
-                  layout
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: idx * 0.02 }}
-                >
-                  <Card className={`hub-card-hover lb-row-neutral relative bg-gradient-to-br ${getRankBg(globalRank)} from-slate-900/80 via-slate-800/80 to-slate-900/80`}>
-                    <AnimatePresence>
-                      {showVoteAnim === candidate.id && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="absolute inset-0 z-10 pointer-events-none"
-                        >
-                          <motion.div
-                            initial={{ x: "-100%" }}
-                            animate={{ x: "200%" }}
-                            transition={{ duration: 0.6, ease: "easeInOut" }}
-                            className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent skew-x-12"
-                          />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <div className="p-5">
-                      {/* Rank + Category */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className={`rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5 border ${getRankStyle(globalRank)}`}>
-                          {globalRank === 1 && <Crown className="h-3 w-3" />}
-                          #{globalRank}
-                        </div>
-                        <InteractiveCategoryPill
-                          category={candidate.category}
-                          onFilter={() => setCategoryFilter(candidate.category)}
-                          leaderboardCategories={leaderboardCats}
-                          detailHref="/vote/induction"
-                          detailLabel="View Induction Queue"
-                        />
-                      </div>
-
-                      {/* Avatar + name — link to the candidate's dormant profile page */}
-                      <div className="flex flex-col items-center text-center mb-4">
-                        <div className="relative mb-3">
-                          {candidate.personId ? (
-                            <Link
-                              href={`/person/${candidate.personId}`}
-                              aria-label={`View ${candidate.displayName}'s profile`}
-                              className="block rounded-full transition-opacity hover:opacity-90"
-                            >
-                              <PersonAvatar
-                                name={candidate.displayName}
-                                avatar={candidate.avatar}
-                                imageSlug={candidate.imageSlug}
-                                imageContext="induction"
-                                className="h-28 w-28 md:h-24 md:w-24"
-                              />
-                            </Link>
-                          ) : (
-                            <PersonAvatar
-                              name={candidate.displayName}
-                              avatar={candidate.avatar}
-                              imageSlug={candidate.imageSlug}
-                              imageContext="induction"
-                              className="h-28 w-28 md:h-24 md:w-24"
-                            />
-                          )}
-                          {isVoted && (
-                            <div className={`absolute -top-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center shadow-lg pointer-events-none ${SENTIMENT_POLL_SUPPORT_BADGE_BG_CLASS} ${SENTIMENT_POLL_SUPPORT_BADGE_SHADOW_CLASS}`}>
-                              <Check className="h-3.5 w-3.5 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        {candidate.personId ? (
-                          <Link
-                            href={`/person/${candidate.personId}`}
-                            className="font-semibold text-base leading-tight hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
-                          >
-                            {candidate.displayName}
-                          </Link>
-                        ) : (
-                          <h3 className="font-semibold text-base leading-tight">{candidate.displayName}</h3>
-                        )}
-                      </div>
-
-                      {/* Progress */}
-                      <div className="mb-4">
-                        <div className="h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
-                          <motion.div
-                            className={`h-full rounded-full ${globalRank === 1 ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : globalRank <= 3 ? "bg-gradient-to-r from-cyan-500 to-cyan-400" : "bg-cyan-500/60"}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progressPct}%` }}
-                            transition={{ duration: 0.6, delay: idx * 0.03 }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between mt-1.5">
-                          <span className="text-xs text-muted-foreground">{candidate.seedVotes.toLocaleString("en-US")} votes</span>
-                          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{Math.round(progressPct)}%</span>
-                        </div>
-                      </div>
-
-                      {/* Vote button */}
-                      {isVoted ? (
-                        <button
-                          type="button"
-                          disabled
-                          className={cn(
-                            SENTIMENT_POLL_SUPPORT_BUTTON_CLASS,
-                            "disabled:opacity-100 disabled:cursor-default",
-                          )}
-                        >
-                          <Check className="h-4 w-4 shrink-0" />
-                          <span>Voted</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleVote(candidate.id)}
-                          className="group w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-md bg-muted/40 border border-border text-foreground dark:bg-white/5 dark:border-white/40 dark:text-white text-sm font-medium transition-all duration-300 hover:border-cyan-500/80 hover:bg-cyan-500/25 dark:hover:border-cyan-500/50 dark:hover:bg-cyan-500/20 hover:text-cyan-600 dark:hover:text-cyan-400"
-                        >
-                          <Vote className="h-4 w-4 shrink-0" />
-                          <span>Vote to Induct</span>
-                        </button>
-                      )}
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-
-          {/* Suggest Someone — dedicated CTA card, final cell unless search has zero matches */}
-          {!(filteredCandidates.length === 0 && searchQuery) && (
-          <motion.div
-            layout
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <button
-              type="button"
-              onClick={() => openSuggest()}
-              data-testid="card-suggest-induction"
-              className="pulse-card-cyan group relative flex h-full min-h-[260px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-cyan-500/40 dark:border-cyan-500/30 p-5 text-center transition-colors hover:border-cyan-500/70 dark:hover:border-cyan-500/50"
-            >
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 transition-transform group-hover:scale-105">
-                <UserPlus className="h-7 w-7 text-cyan-600 dark:text-cyan-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-base leading-tight">Suggest Someone</h3>
-                <p className="mt-1 text-xs text-muted-foreground max-w-[14rem]">
-                  Who are we missing? Nominate a new candidate for the Induction Queue.
-                </p>
-              </div>
-              <span className="mt-1 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 transition-colors group-hover:bg-cyan-500/25 dark:group-hover:bg-cyan-500/20">
-                <Plus className="h-4 w-4" />
-                Suggest a Candidate
-              </span>
-            </button>
-          </motion.div>
-          )}
-        </div>
-
-        {filteredCandidates.length === 0 && !isLoading && (
-          <div className="text-center py-16 text-muted-foreground">
-            <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-            {searchQuery ? (
-              <>
-                <p className="text-sm font-medium text-foreground">Can&apos;t find who you&apos;re looking for?</p>
-                <p className="text-sm mt-1">
-                  No induction candidates match &ldquo;{searchQuery}&rdquo;
-                </p>
-                <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openSuggest(searchQuery)}
-                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
-                    data-testid="button-suggest-search-miss"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Suggest &ldquo;{searchQuery}&rdquo;
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearSearchAndFilters}
-                    className="inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                    data-testid="button-clear-filters"
-                  >
-                    Clear search and see all
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm">No candidates match your filters.</p>
-                {categoryFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={clearSearchAndFilters}
-                    className="mt-4 inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25 dark:hover:bg-cyan-500/20 transition-colors"
-                    data-testid="button-clear-filters"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  inputRef.current?.focus();
+                }}
+                className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
             )}
           </div>
-        )}
 
-        {/* Category Breakdown + How It Works */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-          {/* Category Breakdown */}
-          <Card className="p-5 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-4">
-              <BarChart3 className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-              Votes by Category
-            </h3>
-            <div className="space-y-3">
-              {categoryBreakdown.map(([cat, votes]) => {
-                const pct = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
-                return (
-                  <div key={cat}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-muted-foreground">{cat}</span>
-                      <span className="font-medium tabular-nums">{votes.toLocaleString("en-US")}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-cyan-500/60 rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+          <div className="relative mt-3 flex items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
+            <span>
+              {ranked.length} in the queue
+              {myVoteCount > 0 && (
+                <>
+                  {" · "}
+                  <span className="text-[#00C853]">{myVoteCount} voted by you</span>
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => openSuggest(searchQuery.trim())}
+              className="inline-flex items-center gap-1 font-medium text-cyan-600 hover:underline dark:text-cyan-400"
+              data-testid="button-suggest-induction"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Suggest someone
+            </button>
+          </div>
+        </section>
+
+        <AnimatePresence mode="wait" initial={false}>
+          {isSearching ? (
+            <motion.div
+              key="search"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15 }}
+            >
+              <InductionSearchResults
+                query={trimmedQuery}
+                results={searchResults}
+                limit={SEARCH_RESULT_LIMIT}
+                leaderboardMatches={leaderboardMatches}
+                activeIndex={activeIndex}
+                isVoted={isVoted}
+                onOpen={(index) => openSpotlight(searchResults, index)}
+                onVote={handleVote}
+                onSuggest={() => openSuggest(searchQuery.trim())}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="browse"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15 }}
+              className="space-y-8"
+            >
+              {categoryOptions.length > 1 && (
+                <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide">
+                  {[{ value: ALL_CATEGORIES, label: "All", count: ranked.length }, ...categoryOptions].map((cat) => (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => selectCategory(cat.value)}
+                      aria-pressed={categoryFilter === cat.value}
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 whitespace-nowrap border px-3 py-1.5 text-xs font-medium transition-all",
+                        CATEGORY_CHIP_RADIUS,
+                        categoryFilter === cat.value ? FILTER_ACTIVE_CHIP_VOTE : FILTER_INACTIVE_PILL_VOTE,
+                      )}
+                      data-testid={`chip-induction-category-${cat.value}`}
+                    >
+                      {cat.label}
+                      <span className="tabular-nums opacity-60">{cat.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {showPodium && (
+                <InductionPodium
+                  leaders={browseList.slice(0, 3)}
+                  label={categoryFilter === ALL_CATEGORIES ? "Whole queue" : activeCategoryLabel}
+                  isVoted={isVoted}
+                  onOpen={(position) => openSpotlight(browseList, position)}
+                />
+              )}
+
+              {gridSource.length > 0 && (
+                <section>
+                  <div className="mb-4 flex items-baseline justify-between">
+                    <h2 className="text-sm font-semibold">
+                      {showPodium ? "Chasing the lead" : "In the queue"}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">Tap anyone to vote</span>
                   </div>
-                );
-              })}
-            </div>
-          </Card>
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+                    {gridShown.map((candidate, i) => (
+                      <CandidateTile
+                        key={candidate.id}
+                        candidate={candidate}
+                        voted={votedIds.has(candidate.id)}
+                        onOpen={() => openSpotlight(browseList, i + gridOffset)}
+                      />
+                    ))}
+                  </div>
+                  {gridSource.length > gridShown.length && (
+                    <div className="mt-8 flex justify-center">
+                      <Button
+                        variant="outline"
+                        onClick={() => setGridCount((n) => n + GRID_PAGE_SIZE)}
+                        className="rounded-full px-6"
+                        data-testid="button-induction-show-more"
+                      >
+                        Show more · {gridSource.length - gridShown.length} left
+                      </Button>
+                    </div>
+                  )}
+                </section>
+              )}
 
-          {/* How It Works */}
-          <Card className="p-5 border-slate-700/40 bg-gradient-to-br from-slate-900/60 to-slate-800/60">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-4">
-              <Info className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-              How It Works
-            </h3>
-            <div className="space-y-4 text-sm text-muted-foreground">
-              <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">1</span>
+              {isError && ranked.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-border/60 px-6 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">We couldn&apos;t load the queue.</p>
+                  <Button variant="outline" onClick={() => refetch()} className="mt-4">
+                    Try again
+                  </Button>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">Community Nominations</p>
-                  <p className="text-xs mt-0.5">Candidates are nominated by the community and seeded with initial votes based on popularity.</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">2</span>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Vote for Your Picks</p>
-                  <p className="text-xs mt-0.5">Cast your vote on any candidate you think deserves a spot on the official VoxDex leaderboard.</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="h-7 w-7 rounded-full bg-cyan-500/15 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400">3</span>
-                </div>
-                <div>
-                  <p className="font-medium text-foreground">Leaderboard Entry</p>
-                  <p className="text-xs mt-0.5">Top-voted candidates are reviewed and approved for induction into the live VoxDex leaderboard with tracked Trend Scores.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
+              )}
 
+              {!isError && ranked.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-border/60 px-6 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">The queue is empty right now.</p>
+                  <Button onClick={() => openSuggest()} className="mt-4 bg-cyan-500 text-white hover:bg-cyan-400">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Suggest the first candidate
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!isSearching && (
+          <section className="mt-14 grid gap-3 sm:grid-cols-3">
+            {HOW_IT_WORKS.map(({ icon: Icon, title, body }, i) => (
+              <div key={title} className="flex gap-3 rounded-xl border border-border/40 bg-card/30 p-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10">
+                  <Icon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium">
+                    <span className="mr-1.5 font-mono text-xs text-muted-foreground">{i + 1}</span>
+                    {title}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{body}</p>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
       </main>
+
+      <CandidateSpotlight
+        open={!!spotlight?.open && spotlightSequence.length > 0}
+        onClose={closeSpotlight}
+        sequence={spotlightSequence}
+        index={Math.min(spotlight?.index ?? 0, Math.max(spotlightSequence.length - 1, 0))}
+        onIndexChange={(index) => setSpotlight((s) => (s ? { ...s, index } : s))}
+        ranked={ranked}
+        isVoted={isVoted}
+        onVote={(id) => handleVote(id, { silent: true })}
+        onViewProfile={viewProfileFromSpotlight}
+      />
 
       <SuggestCandidateModal
         open={suggestOpen}
