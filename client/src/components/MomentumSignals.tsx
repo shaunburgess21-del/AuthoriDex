@@ -2,11 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search, TrendingUp, Globe } from "lucide-react";
+import { Newspaper, BookOpen, Sparkles, AlertTriangle, ExternalLink, Info, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { SiX, SiYoutube, SiInstagram, SiTiktok, SiSpotify } from "react-icons/si";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { WEB_SENTIMENT_PROFILE_TOOLTIP_COPY } from "@/components/WebSentimentLeaderboardInfo";
-import { SentimentMiniBar } from "@/components/insights/SentimentMiniBar";
 import { cn } from "@/lib/utils";
 
 type MomentumLevel = "none" | "low" | "medium" | "high";
@@ -154,32 +152,14 @@ function formatNum(n: number): string {
 // Fallback thresholds used only when the server response doesn't carry `level`
 // (e.g. older cached responses or the first load before stats warm up).
 function fallbackLevel(
-  source: "momentum" | "wiki-momentum" | "news" | "wiki" | "trends" | "web-sentiment",
+  source: "news" | "wiki",
   value: number,
 ): MomentumLevel {
   if (!Number.isFinite(value) || value <= 0) return "none";
-  if (source === "momentum" || source === "wiki-momentum") {
-    // Kept in sync with computeMomentumLevel in server/routes.ts.
-    if (value < 1.0) return "low";
-    if (value < 2.0) return "medium";
-    return "high";
-  }
   if (source === "news") {
     // Kept in sync with FIXED_LEVEL_FALLBACKS.news in server/routes.ts.
     if (value < 15) return "low";
     if (value < 40) return "medium";
-    return "high";
-  }
-  if (source === "trends") {
-    // 24h-mean scale on `now 1-d` (May 2026). Population distribution
-    // p25=28.3, p50=47.9, p75=61.2 — thresholds for ~26/45/29 Low/Med/High.
-    if (value < 30) return "low";
-    if (value < 60) return "medium";
-    return "high";
-  }
-  if (source === "web-sentiment") {
-    if (value < 25) return "low";
-    if (value < 50) return "medium";
     return "high";
   }
   if (value < 500) return "low";
@@ -190,20 +170,8 @@ function fallbackLevel(
 const LEVEL_SCALE_COPY =
   "Level compares this person to everyone we track over the last 14 days — Low = bottom 25%, Medium = middle 50%, High = top 25%.";
 
-const MOMENTUM_DIRECTION_COPY =
-  "Accelerating means attention is climbing vs this person's own recent baseline; Steady means it's holding; Cooling means it's easing. Quiet means there isn't enough recent signal to read a direction yet. The +/–% compares today's volume to their 7-day average.";
-
-const MOMENTUM_LEVEL_COPY =
-  `News volume compared to this person's own 7-day daily average. ${MOMENTUM_DIRECTION_COPY}`;
-
-const WIKI_MOMENTUM_LEVEL_COPY =
-  `Wikipedia pageviews compared to this person's own 7-day daily average. ${MOMENTUM_DIRECTION_COPY}`;
-
 const SEARCH_INTEREST_COPY =
-  "An estimate of how many times people Googled this person over the last month. Because it's a search count rather than a relative score, you can compare different people directly — High means 500k+ searches, Medium 100k+, and Low is below that. See Search Momentum for whether their attention is rising or falling.";
-
-const SEARCH_MOMENTUM_COPY =
-  "Google Trends relative interest (0–100), where 100 is this person's busiest day in the past month — not comparable across people. The pill shows whether search attention is Accelerating, Steady, or Cooling vs their own prior weeks (median of last 7 days vs earlier in the window). For absolute monthly search volume you can compare directly, see Search Interest.";
+  "An estimate of how many times people Googled this person over the last month. Because it's a search count rather than a relative score, you can compare different people directly — High means 500k+ searches, Medium 100k+, and Low is below that.";
 
 // Each level gets a distinct dot SHAPE on top of its colour so the indicator is
 // still unambiguous for users who can't rely on red/amber/green alone:
@@ -623,10 +591,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <SignalSkeleton />
           <SignalSkeleton />
           <SignalSkeleton />
-          <SignalSkeleton />
-          <SignalSkeleton />
-          <SignalSkeleton />
-          <SignalSkeleton />
         </div>
       </div>
     );
@@ -649,89 +613,17 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
         : signals.wiki.deltaPct > 5 ? "rising"
           : signals.wiki.deltaPct < -5 ? "falling"
             : "steady";
-  // Three-way display state for the News Momentum card.
-  // positive score even when the 7-day baseline is empty (uses MOMENTUM_AVG_FLOOR=1
-  // internally) so brand-new tracked persons can still rank — but showing the
-  // absolute average in that case is misleading because there *is* no baseline
-  // yet. Detect that explicitly so the user sees a "warming up" state.
-  const momentumScore = signals.momentum?.score ?? 0;
-  const momentumAvg7d = signals.momentum?.averageDaily7d ?? 0;
-  const hasNewsToday = signals.news.count > 0;
-  const hasMomentumBaseline = momentumAvg7d > 0;
-  // Show the baseline whenever we have one — including on quiet days where
-  // today's count is 0. "203.1 articles/day (7-day avg)" + a Low/Quiet level
-  // pill is more informative than a blank "no recent news" because it tells
-  // the reader this person *usually* gets a lot of coverage and today is
-  // genuinely below their normal.
-  const showBaseline = hasMomentumBaseline;
-
-  // Promote the absolute 7-day daily average to the headline metric (Apr 27
-  // 2026 user feedback): the previous "1.3×" framing was technically correct
-  // but semantically opaque to non-analytical users. The Level pill + delta%
-  // already convey "above/below typical" qualitatively, so the absolute
-  // number gives readers a concrete weight-class without requiring them to
-  // mentally reconstruct the comparison from a multiplier.
-  const baselineUnit = momentumAvg7d === 1 ? "article/day" : "articles/day";
-  const momentumValue = showBaseline
-    ? momentumAvg7d.toFixed(1)
-    : "—";
-
-  const momentumUnit = showBaseline
-    ? `${baselineUnit} (7-day avg)`
-    : !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
-      ? "establishing baseline"
-      : "no recent news";
-
-  // Footer used to carry the "7-day avg: …" line that's now the headline.
-  // The only remaining footer state is the warm-up explainer for newly
-  // tracked people — keeps the card from looking unfinished while history
-  // accumulates.
-  const momentumFooter = !showBaseline && !hasMomentumBaseline && (hasNewsToday || momentumScore > 0)
-    ? (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-momentum-warmup">
-          Need 7 days of history to compare against
-        </p>
-      )
-    : null;
-
+  // News / wiki momentum still feed Today's Take; the dedicated cards are gone.
   const newsMomentumHasDirection =
-    showBaseline || (signals.momentum?.ratio ?? 0) > 0;
+    (signals.momentum?.averageDaily7d ?? 0) > 0 || (signals.momentum?.ratio ?? 0) > 0;
   const newsMomentumRatioDelta = ratioToDirectionDelta(signals.momentum?.ratio ?? 0);
   const newsMomentumDirection = deriveMomentumDirection(
     newsMomentumRatioDelta,
     newsMomentumHasDirection,
   );
 
-  // ── Wiki Momentum (display-only mirror of News Momentum) ──
-  // Same warm-up / baseline / no-recent-pageviews state machine as the
-  // news momentum card above. Older API responses may omit `wikiMomentum`
-  // entirely (deployed before this PR or stale React Query cache); the
-  // optional chains below ensure the card still renders cleanly in that
-  // case as a quiet/empty state.
-  const wikiMomentumScore = signals.wikiMomentum?.score ?? 0;
-  const wikiMomentumAvg7d = signals.wikiMomentum?.averageDaily7d ?? 0;
-  const wikiPageviewsToday = signals.wikiMomentum?.pageviews24h ?? signals.wiki.views ?? 0;
-  const hasWikiToday = wikiPageviewsToday > 0;
-  const hasWikiMomentumBaseline = wikiMomentumAvg7d > 0;
-  const showWikiBaseline = hasWikiMomentumBaseline;
-
-  const wikiMomentumValue = showWikiBaseline ? formatNum(wikiMomentumAvg7d) : "—";
-  const wikiMomentumUnit = showWikiBaseline
-    ? "pageviews/day (7-day avg)"
-    : !hasWikiMomentumBaseline && (hasWikiToday || wikiMomentumScore > 0)
-      ? "establishing baseline"
-      : "no recent pageviews";
-
-  const wikiMomentumFooter = !showWikiBaseline && !hasWikiMomentumBaseline && (hasWikiToday || wikiMomentumScore > 0)
-    ? (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-wiki-momentum-warmup">
-          Need 7 days of history to compare against
-        </p>
-      )
-    : null;
-
   const wikiMomentumHasDirection =
-    showWikiBaseline || (signals.wikiMomentum?.ratio ?? 0) > 0;
+    (signals.wikiMomentum?.averageDaily7d ?? 0) > 0 || (signals.wikiMomentum?.ratio ?? 0) > 0;
   const wikiMomentumRatioDelta = ratioToDirectionDelta(signals.wikiMomentum?.ratio ?? 0);
   const wikiMomentumDirection = deriveMomentumDirection(
     wikiMomentumRatioDelta,
@@ -780,70 +672,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
     </>
   );
 
-  // ── Search Momentum (DataForSEO Google Trends relative interest) ──
-  const trendsInterest = signals.trends?.interest ?? 0;
-  const searchMomentumRatio = signals.trends?.momentumRatio ?? 0;
-  const hasSearchMomentum = signals.trends != null && trendsInterest > 0;
-  const searchMomentumHasDirection = hasSearchMomentum && searchMomentumRatio > 0;
-  const searchMomentumDeltaPct = signals.trends?.deltaPct ?? 0;
-  const searchMomentumDirection = deriveMomentumDirection(
-    searchMomentumDeltaPct,
-    searchMomentumHasDirection,
-  );
-  const searchMomentumValue = hasSearchMomentum ? String(Math.round(trendsInterest)) : "—";
-  const searchMomentumUnit = hasSearchMomentum ? "relative interest (0–100)" : "awaiting data";
-  const searchMomentumFooter = !hasSearchMomentum ? (
-    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-momentum-warmup">
-      {signals.trends?.carriedForward ? "Carried forward from last fetch" : "Awaiting search momentum data"}
-    </p>
-  ) : signals.trends?.carriedForward ? (
-    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-search-momentum-carried">
-      Last live fetch over 12h ago — values carried forward
-    </p>
-  ) : null;
-
-  const ws = signals.webSentiment;
-  const webSentimentMentions = (ws?.positive ?? 0) + (ws?.negative ?? 0);
-  const hasWebSentimentHeadline =
-    ws != null && ws.positivePct != null && Number.isFinite(ws.positivePct);
-  const hasWebSentimentBar = ws != null && webSentimentMentions > 0;
-  const hasWebSentiment = hasWebSentimentHeadline || hasWebSentimentBar;
-  const webSentimentLevel: MomentumLevel = hasWebSentimentHeadline
-    ? (ws!.level ?? fallbackLevel("web-sentiment", ws!.positivePct!))
-    : hasWebSentimentBar
-      ? "medium"
-      : "none";
-  const webSentimentValue = hasWebSentimentHeadline
-    ? `${Math.round(ws!.positivePct!)}%`
-    : hasWebSentimentBar
-      ? "—"
-      : "—";
-  const webSentimentUnit = hasWebSentimentHeadline
-    ? "positive (web)"
-    : hasWebSentimentBar
-      ? "polarity mix (no headline %)"
-      : "awaiting data";
-  const webSentimentFooter = !hasWebSentiment ? (
-    <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-web-sentiment-warmup">
-      {ws?.carriedForward ? "Carried forward from last weekly fetch" : "Awaiting web sentiment data"}
-    </p>
-  ) : (
-    <>
-      <SentimentMiniBar
-        positive={ws!.positive}
-        negative={ws!.negative}
-        className="mt-1.5"
-        testId="web-sentiment-bar"
-      />
-      <p className="text-[10px] text-muted-foreground/60 pt-0.5" data-testid="text-web-sentiment-mentions">
-        {hasWebSentimentHeadline
-          ? `Based on ${formatNum(webSentimentMentions)} web mentions`
-          : `Too few polarized mentions for a % — showing ${formatNum(webSentimentMentions)} citations`}
-        {ws!.carriedForward ? " · carried forward" : ""}
-      </p>
-    </>
-  );
-
   return (
     <div id="momentum-signals" className="mt-8 space-y-5" data-testid="section-momentum-signals">
       <div className="flex flex-col gap-1">
@@ -851,7 +679,7 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
           <h2 className="text-xl font-bold">Attention Signals</h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="whitespace-nowrap">Sources: News · Wikipedia · Search · Web</span>
+          <span className="whitespace-nowrap">Sources: News · Wikipedia · Search</span>
         </div>
       </div>
 
@@ -863,11 +691,9 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
       )}
 
       {/*
-       * Card layout (May 2026 — 8-card grid):
-       *   Row 1: Today's Take     |  Web Sentiment
-       *   Row 2: Search Interest  |  Search Momentum
-       *   Row 3: News Activity    |  News Momentum
-       *   Row 4: Wikipedia Pulse  |  Wiki Momentum
+       * Card layout — 2×2 on sm+:
+       *   Row 1: Today's Take     |  Search Interest
+       *   Row 2: News Activity    |  Wikipedia Pulse
        */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <MomentumTakeCard
@@ -885,27 +711,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               delta: wikiMomentumRatioDelta,
             },
           ]}
-        />
-
-        <SignalCard
-          testId="card-web-sentiment"
-          icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="Web Sentiment"
-          level={webSentimentLevel}
-          value={webSentimentValue}
-          unit={webSentimentUnit}
-          hideDelta
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] whitespace-pre-line text-xs normal-case tracking-normal"
-              content={WEB_SENTIMENT_PROFILE_TOOLTIP_COPY}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-web-sentiment-tooltip" />
-            </TouchTooltip>
-          }
-          footer={webSentimentFooter}
         />
 
         <SignalCard
@@ -927,30 +732,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
             </TouchTooltip>
           }
           footer={searchVolumeFooter}
-        />
-
-        <SignalCard
-          testId="card-search-momentum"
-          icon={<TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="Search Momentum"
-          level="none"
-          direction={searchMomentumDirection}
-          value={searchMomentumValue}
-          unit={searchMomentumUnit}
-          deltaPct={searchMomentumDeltaPct}
-          hideDelta={!searchMomentumHasDirection}
-          suppressTrendWord
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={SEARCH_MOMENTUM_COPY}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-search-momentum-tooltip" />
-            </TouchTooltip>
-          }
-          footer={searchMomentumFooter}
         />
 
         <SignalCard
@@ -979,29 +760,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               </p>
             ) : null
           }
-        />
-
-        <SignalCard
-          testId="card-news-momentum"
-          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="News Momentum"
-          level="none"
-          direction={newsMomentumDirection}
-          value={momentumValue}
-          unit={momentumUnit}
-          deltaPct={newsMomentumRatioDelta}
-          suppressTrendWord
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={`This person's typical daily news volume averaged over the last 7 days. ${MOMENTUM_LEVEL_COPY}`}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-momentum-tooltip" />
-            </TouchTooltip>
-          }
-          footer={momentumFooter}
         />
 
         <SignalCard
@@ -1035,29 +793,6 @@ export function MomentumSignals({ personId, wikiSlug }: { personId: string; wiki
               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-60 group-hover:opacity-100 transition-opacity" />
             </a>
           ) : undefined}
-        />
-
-        <SignalCard
-          testId="card-wiki-momentum"
-          icon={<Activity className="h-3.5 w-3.5 text-muted-foreground" />}
-          iconWrapClass="bg-muted"
-          title="Wiki Momentum"
-          level="none"
-          direction={wikiMomentumDirection}
-          value={wikiMomentumValue}
-          unit={wikiMomentumUnit}
-          deltaPct={wikiMomentumRatioDelta}
-          suppressTrendWord
-          tooltip={
-            <TouchTooltip
-              side="top"
-              contentClassName="max-w-[260px] text-xs normal-case tracking-normal"
-              content={`This person's typical daily Wikipedia pageviews averaged over the last 7 days. ${WIKI_MOMENTUM_LEVEL_COPY}`}
-            >
-              <Info className="h-3 w-3 text-muted-foreground/50 cursor-help" data-testid="icon-wiki-momentum-tooltip" />
-            </TouchTooltip>
-          }
-          footer={wikiMomentumFooter}
         />
       </div>
 
