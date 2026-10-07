@@ -1896,9 +1896,23 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
   scroll-margin-top: calc(72px + var(--safe-area-inset-top, 0px));
 }
 
+/* iOS Capacitor shell only. WKWebView already resolves env(safe-area-inset-*),
+ * but SystemBars insetsHandling is Android-only, so --safe-area-inset-* stays
+ * unset in that shell. Map the live env() values while html.ios-shell is
+ * present (nativeSystemBars adds that class). Website, PWA, and Android never
+ * get the class: the website keeps the 0px fallback, and Android keeps the
+ * pixel values Capacitor writes on the document. */
+html.ios-shell {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
 /* Android system UI. Capacitor SystemBars (insetsHandling: css) sets
- * --safe-area-inset-* on the WebView document only. Unset everywhere else,
- * so website/PWA/iOS keep the fallback and do not move. */
+ * --safe-area-inset-* on the WebView document. The iOS shell sets the same
+ * variables from env() under html.ios-shell. Unset on the website and PWA,
+ * so those layouts keep the 0px fallback. */
 .sticky.top-16 {
   top: calc(4rem + var(--safe-area-inset-top, 0px));
 }
