@@ -1,7 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { chooseFontSizeForHeight } from "@/lib/fitFontSize";
 
 /**
- * Find largest font size so wrapped text fits within maxHeightPx (up to natural line wraps).
+ * Find largest font size so wrapped text fits within maxHeightPx.
+ * The heading is never clipped: if the final face is wider than the one
+ * measured (Android system Roboto, then Inter), a later pass refits, and
+ * any leftover overflow stays visible.
  */
 export function useFitTextBlockToHeight({
   text,
@@ -22,11 +26,10 @@ export function useFitTextBlockToHeight({
 }) {
   const ref = useRef<HTMLHeadingElement>(null);
   const [fontSizePx, setFontSizePx] = useState(18);
-
   const defaultMax = maxHeightPx > 0 ? Math.min(40, Math.max(minFontPx, Math.floor(maxHeightPx / 2))) : 28;
   const maxFontPx = maxFontPxProp ?? defaultMax;
 
-  useLayoutEffect(() => {
+  const fit = useCallback(() => {
     const el = ref.current;
     if (!el || maxHeightPx <= 0 || maxWidthPx <= 8) return;
 
@@ -36,33 +39,89 @@ export function useFitTextBlockToHeight({
     el.style.whiteSpace = "normal";
     el.style.wordBreak = "break-word";
     el.style.lineHeight = String(lineHeight);
-    if (fontFamily) el.style.fontFamily = fontFamily;
-    // Unclamp while searching: with max-height applied, some engines report a
-    // clipped scrollHeight and the binary search picks too large a font.
+    // Unclamp while measuring. A previous max-height makes some engines
+    // report a clipped scrollHeight and the search then picks too large a font.
     el.style.maxHeight = "none";
-    el.style.overflow = "hidden";
+    el.style.overflow = "visible";
+    if (fontFamily) el.style.fontFamily = fontFamily;
 
-    let lo = minFontPx;
-    let hi = Math.max(lo, maxFontPx);
-    let best = lo;
+    const contentHeight = () => {
+      void el.offsetHeight;
+      return Math.max(el.scrollHeight, Math.ceil(el.getBoundingClientRect().height));
+    };
 
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      el.style.fontSize = `${mid}px`;
-      const sh = el.scrollHeight;
-      if (sh <= maxHeightPx) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
+    const best = chooseFontSizeForHeight(
+      (size) => {
+        el.style.fontSize = `${size}px`;
+        return contentHeight();
+      },
+      minFontPx,
+      maxFontPx,
+      maxHeightPx,
+    );
 
     el.style.fontSize = `${best}px`;
-    el.style.maxHeight = `${maxHeightPx}px`;
-    el.style.overflow = "hidden";
+    el.style.maxHeight = "none";
+    el.style.overflow = "visible";
     setFontSizePx(best);
   }, [text, maxHeightPx, maxWidthPx, minFontPx, maxFontPx, lineHeight, fontFamily]);
+
+  useLayoutEffect(() => {
+    fit();
+  }, [fit]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    let fitting = false;
+    let locked = false;
+    let scheduled = false;
+    const refit = () => {
+      if (fitting || locked) return;
+      fitting = true;
+      try {
+        const before = parseFloat(el.style.fontSize || "0");
+        fit();
+        const after = parseFloat(el.style.fontSize || "0");
+        // Search and the live box can disagree by a pixel. If shrinking
+        // doesn't stick, keep the extra line instead of looping.
+        if (after >= before && el.scrollHeight > maxHeightPx) locked = true;
+      } finally {
+        fitting = false;
+      }
+    };
+
+    // Font swap (Roboto fallback → Inter) changes wrapping without changing
+    // the column width, so the width ResizeObserver never refits. Once the
+    // block is allowed to grow, this observer sees the extra line. Mutating
+    // layout inside the callback trips a ResizeObserver loop error, so the
+    // refit is deferred to the next frame.
+    const ro = new ResizeObserver(() => {
+      if (scheduled || locked) return;
+      const size = parseFloat(el.style.fontSize || "0");
+      if (size <= minFontPx) return;
+      if (el.scrollHeight <= maxHeightPx) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        refit();
+      });
+    });
+    ro.observe(el);
+
+    const fonts = document.fonts;
+    const onFonts = () => refit();
+    fonts?.addEventListener("loadingdone", onFonts);
+    if (fonts && fonts.status !== "loaded") {
+      void fonts.ready.then(onFonts);
+    }
+
+    return () => {
+      ro.disconnect();
+      fonts?.removeEventListener("loadingdone", onFonts);
+    };
+  }, [fit, maxHeightPx, minFontPx]);
 
   return { ref, fontSizePx };
 }
@@ -93,6 +152,7 @@ export function useFitSingleLineToWidth({
     el.textContent = text;
     el.style.whiteSpace = "nowrap";
     el.style.overflow = "hidden";
+    el.style.textOverflow = "ellipsis";
     el.style.width = "100%";
     el.style.maxWidth = "100%";
     el.style.fontWeight = String(fontWeight);

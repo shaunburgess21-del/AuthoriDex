@@ -19,7 +19,9 @@ type AvatarHeightHeadlineProps = {
 };
 
 /**
- * Top-aligned avatar + headline; headline font scales to fill avatar height (up to 3 wrapped lines).
+ * Top-aligned avatar + headline. The font scales up to fill the avatar when
+ * the line fits, and wraps onto another line when it doesn't. Nothing is
+ * clipped: a late webfont swap must not hide a word.
  */
 export function AvatarHeightHeadline({
   text,
@@ -80,10 +82,9 @@ export function AvatarHeightHeadline({
   const titleStyle: CSSProperties = {
     fontSize: fontSizePx,
     lineHeight: 1.2,
-    maxHeight: safeH,
-    overflow: "hidden",
     ...(serif ? { fontFamily: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif" } : {}),
   };
+  const titleClass = `font-bold break-words min-w-0 ${titleClassName}`;
 
   const titleEl = onTitleNavigate ? (
     <button
@@ -95,7 +96,7 @@ export function AvatarHeightHeadline({
       <h3
         ref={titleRef}
         style={titleStyle}
-        className={`font-bold hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors ${titleClassName}`}
+        className={`${titleClass} hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors`}
       >
         {text}
       </h3>
@@ -105,13 +106,13 @@ export function AvatarHeightHeadline({
       <h3
         ref={titleRef}
         style={titleStyle}
-        className={`font-bold hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer ${titleClassName}`}
+        className={`${titleClass} hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors cursor-pointer`}
       >
         {text}
       </h3>
     </Link>
   ) : (
-    <h3 ref={titleRef} style={titleStyle} className={`font-bold min-w-0 ${titleClassName}`}>
+    <h3 ref={titleRef} style={titleStyle} className={titleClass}>
       {text}
     </h3>
   );
