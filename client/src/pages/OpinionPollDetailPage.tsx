@@ -33,6 +33,7 @@ import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
+import { CollapsibleCompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
 import { sortOpinionPollOptionsByVotes } from "@/lib/opinionPollOptions";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
@@ -619,56 +620,42 @@ export default function OpinionPollDetailPage() {
           confirmPending={voteMutation.isPending}
         />
 
+        {/* List view already draws name, bar, percent, and votes on each option after a vote. */}
+        {!(hasVoted && optionsViewMode === "list") && (
         <Card className={voteDetailSectionCardClass("p-5 mb-6")} data-testid="section-results">
-          <h2 className="text-lg font-serif font-bold mb-5 flex items-center gap-2">
+          <h2 className="text-lg font-serif font-bold mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-cyan-700 dark:text-cyan-500" />
             Results
           </h2>
 
-          <div className="flex flex-col gap-3">
-            {voteSortedOptions.map((option: any) => {
-                const percent = option.percent || 0;
-                const maxPercent = Math.max(...voteSortedOptions.map((o: any) => o.percent || 0), 0);
-                const isLeading = percent === maxPercent && percent > 0;
-                const isUserVote = poll.userVote === option.id;
-                return (
-                  <div key={option.id} className="flex items-center gap-3" data-testid={`opinion-poll-result-${option.id}`}>
-                    <span className={`w-[38%] sm:w-[30%] text-sm truncate shrink-0 ${isUserVote ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
-                      {option.name}
-                    </span>
-                    <div className="flex-1 h-6 rounded bg-slate-800/60 overflow-hidden">
-                      <div
-                        className={`h-full rounded transition-all duration-700 ease-out ${
-                          hasVoted
-                            ? "bg-cyan-500"
-                            : isLeading
-                              ? "bg-cyan-500"
-                              : isUserVote
-                                ? "bg-cyan-400/60"
-                                : "bg-slate-600/50"
-                        }`}
-                        style={{ width: `${Math.max(percent, 1)}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 w-[72px] justify-end">
-                      <span className={`text-sm font-mono font-bold ${isLeading ? 'text-cyan-600 dark:text-cyan-400' : 'text-muted-foreground'}`} data-testid={`text-percent-${option.id}`}>
-                        {percent}%
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted-foreground shrink-0 w-[56px] text-right hidden sm:block">
-                      {(option.votes || 0).toLocaleString("en-US")}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border/30 text-center">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{(poll.totalVotes || 0).toLocaleString("en-US")}</span> total votes
-            </p>
-          </div>
+          <CollapsibleCompactResultRows
+            key={`${poll.id}:${voteSortedOptions.map((option: { id: string }) => option.id).join(",")}`}
+            rows={voteSortedOptions.map((option: any): CompactResultRowData => {
+              const percent = option.percent || 0;
+              const isLeading = percent === detailMaxPercent && percent > 0;
+              const isUserVote = poll.userVote === option.id;
+              return {
+                id: option.id,
+                label: option.name,
+                percent,
+                votes: option.votes || 0,
+                labelClassName: isUserVote
+                  ? "text-foreground"
+                  : isLeading
+                    ? "text-cyan-600 dark:text-cyan-400"
+                    : "text-muted-foreground",
+                percentClassName: isLeading
+                  ? "text-cyan-600 dark:text-cyan-400"
+                  : "text-muted-foreground",
+                barClassName: isLeading ? "bg-cyan-500" : "bg-cyan-500/45",
+                emphasized: isUserVote,
+                testId: `opinion-poll-result-${option.id}`,
+                percentTestId: `text-percent-${option.id}`,
+              };
+            })}
+          />
         </Card>
+        )}
 
         <div className="grid grid-cols-3 gap-3 mb-6" data-testid="section-stats">
           <Card className="p-3 text-center">

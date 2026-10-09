@@ -212,7 +212,7 @@ export function OpinionPollOptionRow({
         />
       </div>
       <p className="text-[10px] text-muted-foreground mt-0.5">
-        {(option.votes || 0).toLocaleString("en-US")} votes
+        {(option.votes || 0).toLocaleString("en-US")} {(option.votes || 0) === 1 ? "vote" : "votes"}
       </p>
     </div>
   );
