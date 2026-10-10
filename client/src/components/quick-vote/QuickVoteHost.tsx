@@ -398,6 +398,17 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
         </AnimatePresence>
       </div>
 
+      {activityFilter && (
+        <div className="fixed right-4 bottom-6 z-[55] pointer-events-none hidden md:flex">
+          <VoteActivityFilterFab
+            value={activityFilter.value}
+            count={activityFilter.count}
+            onCycle={activityFilter.onCycle}
+            pulseTick={activityFilter.pulseTick}
+          />
+        </div>
+      )}
+
       {isMobile && (
         <QuickVoteOverlay
           open={overlayOpen}

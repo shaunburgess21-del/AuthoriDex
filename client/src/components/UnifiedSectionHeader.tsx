@@ -71,7 +71,7 @@ export function UnifiedSectionHeader({
         {meta && <div className="px-3 pb-2 md:px-5">{meta}</div>}
 
         {children && (
-          <div className="px-3 pb-3 md:px-5 max-md:has-[>[data-section-search]:only-child]:hidden">
+          <div className="px-3 pb-3 md:px-5">
             {children}
           </div>
         )}

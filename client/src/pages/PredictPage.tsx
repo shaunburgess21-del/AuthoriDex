@@ -18,7 +18,6 @@ import { Card } from "@/components/ui/card";
 import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
-import { HubActivityFilterControl } from "@/components/HubActivityFilterControl";
 import { VoteActivityFilterFab } from "@/components/VoteActivityFilterFab";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -65,15 +64,12 @@ import {
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
-import { CategoryRowWithSearch } from "@/components/CategoryRowWithSearch";
-import { FilterChip } from "@/components/FilterChip";
-import { GlobalCategoryBar } from "@/components/GlobalCategoryBar";
 import { SectionSearchRow } from "@/components/SectionSearchRow";
+import { VoteCategoryMenu } from "@/components/VoteCategoryMenu";
 import { useScrollHideTransform } from "@/hooks/useScrollHideOffset";
 import {
   FILTER_INACTIVE_SECTION_TOGGLE,
   FILTER_ACTIVE_PILL_WEEKLY,
-  FILTER_ACTIVE_PILL_WORLD,
 } from "@/lib/filterControlStyles";
 import { 
   TrendingUp, 
@@ -408,71 +404,6 @@ function HorizontalScroll({ children, className = "" }: { children: React.ReactN
     </div>
   );
 }
-
-/** Shared sticky section filter bar (categories + search) for Weekly/World sections. */
-function SectionFilterBar({
-  categoryFilter,
-  onCategoryChange,
-  searchQuery,
-  onSearchChange,
-  searchPlaceholder = "Search...",
-  testIdPrefix,
-  user,
-  onAuthRequired,
-  filters,
-  accent = "world",
-  reserveStartPadding = true,
-}: {
-  categoryFilter: CategoryFilter;
-  onCategoryChange: (cat: CategoryFilter) => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  searchPlaceholder?: string;
-  testIdPrefix: string;
-  user?: any;
-  onAuthRequired?: () => void;
-  filters: Array<{ id: string; label: string }>;
-  /** Weekly = VoxDex blue chips; World = violet chips. */
-  accent?: "weekly" | "world";
-  /** When false, category chips sit flush after an external leading control. */
-  reserveStartPadding?: boolean;
-}) {
-  const searchVariant = accent === "weekly" ? "predict-weekly" : "predict";
-
-  return (
-    <div>
-      <CategoryRowWithSearch
-        searchValue={searchQuery}
-        onSearchChange={onSearchChange}
-        placeholder={searchPlaceholder}
-        testId={`${testIdPrefix}-search`}
-        variant={searchVariant}
-        activeCategory={categoryFilter}
-        reserveStartPadding={reserveStartPadding}
-      >
-        {filters.map((cat) => (
-          <FilterChip
-            key={cat.id}
-            category={cat.id}
-            label={cat.label}
-            isActive={categoryFilter === cat.id}
-            onClick={() => onCategoryChange(cat.id as CategoryFilter)}
-            testIdPrefix={`${testIdPrefix}-category`}
-            user={user}
-            onAuthRequired={onAuthRequired}
-            accent={accent}
-            isCustomTopic={cat.id === "misc"}
-          />
-        ))}
-      </CategoryRowWithSearch>
-    </div>
-  );
-}
-
-
-
-
-
 
 function SuggestMarketCard({ onClick }: { onClick: () => void }) {
   return (
@@ -3164,62 +3095,54 @@ export default function PredictPage() {
           data-testid="predict-contextual-filter-row"
         >
           {predictView === "weekly" ? (
-            <HorizontalScroll className="pb-1 flex-1 min-w-0">
-              {user && !userBetsError && (
-                <div className="max-md:hidden min-w-fit">
-                  <HubActivityFilterControl
-                    scope="predict"
-                    value={myPositionsFilter}
-                    count={activePredictions}
-                    onChange={(next) => setMyPositionsFilter(next)}
-                    accent="weekly"
+            <>
+              {selectedType !== "jackpot" && (
+                <div className="shrink-0 self-start">
+                  <VoteCategoryMenu
+                    options={weeklyCategoryOptions}
+                    value={weeklyCategory}
+                    onChange={(next) => setWeeklyCategory(next as CategoryFilter)}
+                    user={user}
+                    onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
                   />
                 </div>
               )}
-              {PREDICTION_TYPES.map((type) => (
-                <button
-                  key={type.id}
-                  onClick={() => setSelectedType(type.id)}
-                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                    selectedType === type.id
-                      ? FILTER_ACTIVE_PILL_WEEKLY
-                      : FILTER_INACTIVE_SECTION_TOGGLE
-                  }`}
-                  data-testid={`toggle-type-${type.id}`}
-                >
-                  {type.icon}
-                  <span className="sm:hidden">{type.mobileLabel}</span>
-                  <span className="hidden sm:inline">{type.label}</span>
-                </button>
-              ))}
-            </HorizontalScroll>
+              <HorizontalScroll className="pb-1 flex-1 min-w-0">
+                {PREDICTION_TYPES.map((type) => (
+                  <button
+                    key={type.id}
+                    onClick={() => setSelectedType(type.id)}
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      selectedType === type.id
+                        ? FILTER_ACTIVE_PILL_WEEKLY
+                        : FILTER_INACTIVE_SECTION_TOGGLE
+                    }`}
+                    data-testid={`toggle-type-${type.id}`}
+                  >
+                    {type.icon}
+                    <span className="sm:hidden">{type.mobileLabel}</span>
+                    <span className="hidden sm:inline">{type.label}</span>
+                  </button>
+                ))}
+              </HorizontalScroll>
+            </>
           ) : (
             <div className="flex flex-1 min-w-0 items-center gap-2" data-testid="world-mode-filter-bar">
-              {user && !userBetsError && (
-                <div className="max-md:hidden shrink-0">
-                  <HubActivityFilterControl
-                    scope="predict"
-                    value={myPositionsFilter}
-                    count={activePredictions}
-                    onChange={(next) => setMyPositionsFilter(next)}
-                    shrink
-                    accent="world"
-                  />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <SectionFilterBar
-                  categoryFilter={communityCategory}
-                  onCategoryChange={setCommunityCategory}
-                  searchQuery={communitySearch}
-                  onSearchChange={setCommunitySearch}
-                  searchPlaceholder="Search predictions..."
-                  testIdPrefix="community"
+              <div className="shrink-0">
+                <VoteCategoryMenu
+                  options={communityCategoryFilters.map((cat) => ({ value: cat.id, label: cat.label }))}
+                  value={communityCategory}
+                  onChange={(next) => setCommunityCategory(next as CategoryFilter)}
                   user={user}
                   onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-                  filters={communityCategoryFilters}
-                  accent="world"
-                  reserveStartPadding={false}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <SectionSearchRow
+                  value={communitySearch}
+                  onChange={setCommunitySearch}
+                  placeholder="Search predictions..."
+                  testId="community-search"
                 />
               </div>
             </div>
@@ -3505,23 +3428,7 @@ export default function PredictPage() {
         <MarketCycleHero
           marketState={marketCycle}
           rootRef={weeklyHeroRef}
-        >
-          {/* Weekly-wide category filter — docked under the countdown; the whole
-              bar (timer + chips) hides/reveals 1:1 with scroll. Chips hidden for
-              Jackpot (no category filtering). */}
-          {selectedType !== "jackpot" && (
-            <GlobalCategoryBar
-              options={weeklyCategoryOptions}
-              value={weeklyCategory}
-              onChange={(v) => setWeeklyCategory(v as CategoryFilter)}
-              accent="weekly"
-              user={user}
-              onAuthRequired={() => navigateToLogin(setLocation, { mode: "signup", reason: "predict_signup" })}
-              testIdPrefix="filter-weekly-global"
-              className="px-2 pb-3 md:px-6"
-            />
-          )}
-        </MarketCycleHero>
+        />
 
         {showSection("jackpot") && (
           <section id="jackpot" data-hash-anchor className="mb-10 scroll-mt-16">
@@ -4337,9 +4244,8 @@ export default function PredictPage() {
 
       {user && !userBetsError && (
         <div
-          className="fixed right-4 z-[55] pointer-events-none md:hidden"
+          className="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[55] pointer-events-none md:bottom-6"
           style={{
-            bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
             transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
             willChange: "transform",
           }}

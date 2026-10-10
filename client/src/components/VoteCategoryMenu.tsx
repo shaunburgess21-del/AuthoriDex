@@ -1,13 +1,19 @@
 /**
- * Mobile Vote category picker. Sits in the section-chip row where the
- * All votes dropdown used to be, and lists the same options as the
- * desktop category chips.
+ * Category picker for Vote and Predict. Drawer on mobile, popover on desktop.
+ * The pill is "Categories", or the selected category name when one is active.
  */
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
 import type { SectionCategoryOption } from "@/lib/sectionCategoryFilters";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverClose,
+} from "@/components/ui/popover";
 import {
   Drawer,
   DrawerTrigger,
@@ -15,12 +21,6 @@ import {
   DrawerClose,
   DrawerTitle,
 } from "@/components/ui/drawer";
-
-const FILTER_ACTIVE_PILL =
-  "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20";
-
-const FILTER_INACTIVE_PILL =
-  "bg-background text-muted-foreground hover:bg-muted/40 dark:hover:bg-white/5 border border-border/60";
 
 interface VoteCategoryMenuProps {
   options: SectionCategoryOption[];
@@ -86,7 +86,8 @@ export function VoteCategoryMenu({
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
   const pillLabel = !value || value === "all" ? "Categories" : (selected?.label ?? "Categories");
-  const filtering = value !== "all";
+
+  const isMobile = useIsMobile();
 
   const handleSelect = (next: string) => {
     if (next === "favorites" && !user) {
@@ -98,44 +99,64 @@ export function VoteCategoryMenu({
     setOpen(false);
   };
 
+  const pillButton = (
+    <button
+      type="button"
+      aria-label={`Categories: ${pillLabel}`}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      className={cn(
+        "category-menu-chrome flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground whitespace-nowrap min-w-fit shrink-0",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      )}
+      data-testid="filter-vote-category-menu"
+    >
+      <span className="max-w-[9rem] truncate">{pillLabel}</span>
+      <ChevronDown
+        className={cn(
+          "h-4 w-4 shrink-0 transition-transform",
+          open && "rotate-180",
+        )}
+        aria-hidden
+      />
+    </button>
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
+        <DrawerContent>
+          <div className="px-2 pb-4">
+            <DrawerTitle className="px-3 pt-1 pb-2 text-sm font-semibold text-foreground text-left">
+              Categories
+            </DrawerTitle>
+            <OptionList
+              options={options}
+              value={value}
+              onSelect={handleSelect}
+              CloseWrapper={DrawerClose}
+            />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Categories: ${pillLabel}`}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit shrink-0",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            filtering ? FILTER_ACTIVE_PILL : FILTER_INACTIVE_PILL,
-          )}
-          data-testid="filter-vote-category-menu"
-        >
-          <span className="max-w-[9rem] truncate">{pillLabel}</span>
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 opacity-70 transition-transform",
-              open && "rotate-180",
-            )}
-            aria-hidden
-          />
-        </button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <div className="px-2 pb-4">
-          <DrawerTitle className="px-3 pt-1 pb-2 text-sm font-semibold text-foreground text-left">
-            Categories
-          </DrawerTitle>
-          <OptionList
-            options={options}
-            value={value}
-            onSelect={handleSelect}
-            CloseWrapper={DrawerClose}
-          />
-        </div>
-      </DrawerContent>
-    </Drawer>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{pillButton}</PopoverTrigger>
+      <PopoverContent align="start" className="w-72 bg-background p-1">
+        <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground">
+          Categories
+        </p>
+        <OptionList
+          options={options}
+          value={value}
+          onSelect={handleSelect}
+          CloseWrapper={PopoverClose}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

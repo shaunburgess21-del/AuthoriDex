@@ -8,7 +8,7 @@ interface MarketCycleHeroProps {
   constrainedWidth?: boolean;
   /** When false, bar renders in-flow without sticking (e.g. community-only predict filter) */
   sticky?: boolean;
-  /** Extra row docked under the timer inside the sticky surface (e.g. the Weekly global category bar). */
+  /** Extra row docked under the timer inside the sticky surface. */
   children?: ReactNode;
   /**
    * Ref to the root element. Callers pass it to `useScrollHideTransform`,

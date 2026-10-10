@@ -1376,6 +1376,30 @@
     --lb-row-tint: rgba(255, 255, 255, 0.04);
   }
 
+  /* Categories menu: the card chrome lip only, with no fill, lift, or glow. */
+  .category-menu-chrome {
+    position: relative;
+    overflow: hidden;
+    background: transparent;
+    border: 1px solid rgba(15, 23, 42, 0.18);
+  }
+  .category-menu-chrome::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent 0%, rgba(15, 23, 42, 0.35) 50%, transparent 100%);
+  }
+  .dark .category-menu-chrome {
+    border-color: rgba(255, 255, 255, 0.13);
+  }
+  .dark .category-menu-chrome::before {
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+  }
+
   /* Vote/Predict hub cards — leaderboard lip + expand on hover only (no resting border). */
   .hub-card-hover {
     position: relative;
@@ -1898,9 +1922,9 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
 
 /* Vote sections opt into a taller offset. The attribute rule above shares
    specificity with Tailwind's scroll-mt-* utilities and is loaded later,
-   so the utility alone cannot clear the sticky section + search band. */
-[data-hash-anchor].scroll-mt-44 {
-  scroll-margin-top: calc(11rem + var(--safe-area-inset-top, 0px));
+   so the utility alone cannot clear the sticky section row. */
+[data-hash-anchor].scroll-mt-32 {
+  scroll-margin-top: calc(8rem + var(--safe-area-inset-top, 0px));
 }
 
 /* Android system UI. Capacitor SystemBars (insetsHandling: css) sets

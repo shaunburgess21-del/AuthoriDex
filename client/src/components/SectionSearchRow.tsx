@@ -12,9 +12,7 @@ interface SectionSearchRowProps {
 }
 
 /**
- * Always-expanded search field for section headers. Category chips moved to the
- * page-level GlobalCategoryBar, so each section keeps only its search, spanning
- * the full row width on all breakpoints.
+ * Always-expanded search field. Spans the full width of its row on every breakpoint.
  */
 export function SectionSearchRow({
   value,
@@ -26,10 +24,7 @@ export function SectionSearchRow({
   const hasQuery = value.length > 0;
 
   return (
-    <div
-      className={cn("flex", className)}
-      {...(className?.includes("max-md:hidden") ? { "data-section-search": "" } : {})}
-    >
+    <div className={cn("flex", className)}>
       <div className="relative w-full">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
