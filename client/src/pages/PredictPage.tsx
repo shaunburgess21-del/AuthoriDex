@@ -8,6 +8,21 @@ import {
   readHubActivityFilter,
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
+import {
+  createTownSquareSession,
+  PREDICT_FILTER_SCROLL_DELAY_MS,
+  prefersReducedMotion,
+  readTownSquareCollapsed,
+  reduceTownSquareFilterChange,
+  reduceTownSquareManualToggle,
+  scrollElementIntoView,
+  shouldPersistTownSquareCollapse,
+  shouldScrollPredictResults,
+  townSquareCollapsedHint,
+  writeTownSquareCollapsed,
+} from "@/lib/town-square-collapse";
+import { positionsSectionEmptyMessage } from "@/lib/positions-filter-notice";
+import { PositionsFilterNotice } from "@/components/predict/PositionsFilterNotice";
 import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
 import type { CardSectionHandle } from "@/components/CardSection";
 import { Button } from "@/components/ui/button";
@@ -1003,16 +1018,40 @@ export default function PredictPage() {
     setMyPositionsFilterState(readHubActivityFilter("predict", user.id));
   }, [user?.id]);
 
+  const pendingFilterScrollRef = useRef(false);
   const setMyPositionsFilter = useCallback(
     (value: HubActivityFilter | ((prev: HubActivityFilter) => HubActivityFilter)) => {
       setMyPositionsFilterState((prev) => {
         const next = typeof value === "function" ? value(prev) : value;
-        writeHubActivityFilter("predict", user?.id, next);
+        if (next !== prev) {
+          writeHubActivityFilter("predict", user?.id, next);
+          if (shouldScrollPredictResults(prev, next)) {
+            pendingFilterScrollRef.current = true;
+          }
+        }
         return next;
       });
     },
     [user?.id],
   );
+
+  useEffect(() => {
+    if (!pendingFilterScrollRef.current) return;
+    if (myPositionsFilter === "all") {
+      pendingFilterScrollRef.current = false;
+      return;
+    }
+    const reduced = prefersReducedMotion();
+    const delay = reduced ? 0 : PREDICT_FILTER_SCROLL_DELAY_MS;
+    const timer = window.setTimeout(() => {
+      pendingFilterScrollRef.current = false;
+      scrollElementIntoView(
+        document.querySelector("[data-testid='predict-filter-results'], [data-predict-market-card]"),
+        reduced,
+      );
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [myPositionsFilter]);
 
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
@@ -1225,26 +1264,41 @@ export default function PredictPage() {
     pendingSelection?.marketId,
     pendingSelection?.entryId,
   ]);
-  // Town Square defaults open so new visitors see live activity; the
-  // user's last toggle wins on return visits (persisted per-browser).
-  const [townSquareCollapsed, setTownSquareCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("voxdex-town-square-collapsed") === "1";
-    } catch {
-      return false;
-    }
-  });
+  // Town Square defaults open so new visitors see live activity. A manual
+  // toggle on Show all is persisted. A positions filter collapses it for
+  // the view, then restores the previous state — unless the visitor toggles
+  // the header while filtered, which wins for the rest of the session.
+  const [townSquareSession, setTownSquareSession] = useState(() =>
+    createTownSquareSession(
+      readTownSquareCollapsed(typeof window === "undefined" ? null : window.localStorage),
+      readHubActivityFilter("predict", user?.id),
+    ),
+  );
+  const townSquareCollapsed = townSquareSession.collapsed;
+  const prevPositionsFilterRef = useRef(myPositionsFilter);
+  useEffect(() => {
+    if (prevPositionsFilterRef.current === myPositionsFilter) return;
+    prevPositionsFilterRef.current = myPositionsFilter;
+    setTownSquareSession((session) => reduceTownSquareFilterChange(session, myPositionsFilter));
+  }, [myPositionsFilter]);
   const toggleTownSquare = () => {
-    setTownSquareCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("voxdex-town-square-collapsed", next ? "1" : "0");
-      } catch {
-        // localStorage unavailable (private mode) — session-only toggle
+    setTownSquareSession((session) => {
+      const next = reduceTownSquareManualToggle(session, myPositionsFilter);
+      if (shouldPersistTownSquareCollapse(myPositionsFilter)) {
+        writeTownSquareCollapsed(window.localStorage, next.collapsed);
       }
       return next;
     });
   };
+  const townSquareFeedRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = townSquareFeedRef.current;
+    if (!node) return;
+    // React 18's DOM types omit `inert`; set it directly so the clipped feed
+    // is not keyboard-focusable while collapsed.
+    if (townSquareCollapsed) node.setAttribute("inert", "");
+    else node.removeAttribute("inert");
+  }, [townSquareCollapsed]);
   
   const { data: trendingResponse, isLoading: isLoadingPeople, error: trendingError, refetch: refetchTrending } = useQuery<{ data: TrendingPerson[], totalCount: number, hasMore: boolean }>({
     queryKey: ['/api/trending?sort=rank'],
@@ -2694,13 +2748,12 @@ export default function PredictPage() {
     .sort((a, b) => gainersOverlayCategoryFilter === "trending"
       ? trendingCompare(a.totalBets, b.totalBets, gainerFame(a), gainerFame(b))
       : 0);
-  const gainerEmptyMessage = myPositionsFilter === "show-mine"
-    ? "You don't have any active Category Race positions yet"
-    : hasInactiveOnlyGainers
+  const gainerEmptyMessage = positionsSectionEmptyMessage(myPositionsFilter, "gainer")
+    ?? (hasInactiveOnlyGainers
       ? "No live Category Races are open right now"
       : hasLiveGainers
         ? "No gainers match your filters"
-        : "No Category Races are available right now";
+        : "No Category Races are available right now");
 
   const communityEmptyMessage =
     communitySearch.trim().length > 0 || communityCategory !== "all"
@@ -2859,6 +2912,37 @@ export default function PredictPage() {
   const showSection = (type: PredictionType) => selectedType === "all" || selectedType === type;
   const showNativePredictScope = predictView === "weekly";
   const showWorldPredictScope = predictView === "world";
+  const resetPositionsFilter = () => setMyPositionsFilter(DEFAULT_HUB_ACTIVITY_FILTER);
+  const weeklyPositionSections =
+    (showSection("updown") ? 1 : 0) +
+    (showSection("h2h") ? 1 : 0) +
+    (showSection("gainer") ? 1 : 0);
+  const weeklyVisiblePositionCards =
+    (showSection("updown") ? filteredUpDown.length : 0) +
+    (showSection("h2h") ? filteredH2H.length : 0) +
+    (showSection("gainer") ? filteredGainers.length : 0);
+  const weeklyResultsReady =
+    (!showSection("updown") || !updownLoading) &&
+    (!showSection("h2h") || !h2hLoading) &&
+    (!showSection("gainer") || !gainerLoading);
+  const weeklyNarrowed =
+    weeklyCategory !== "all" ||
+    (showSection("updown") && updownSearch.trim().length > 0) ||
+    (showSection("h2h") && h2hSearch.trim().length > 0) ||
+    (showSection("gainer") && gainerSearch.trim().length > 0);
+  const weeklyPositionsEmpty =
+    myPositionsFilter !== "all" &&
+    weeklyPositionSections > 0 &&
+    weeklyResultsReady &&
+    !weeklyNarrowed &&
+    weeklyVisiblePositionCards === 0;
+  const communityNarrowed = communitySearch.trim().length > 0 || communityCategory !== "all";
+  const worldResultsReady = !isLoadingOpenMarkets && !openMarketsError && !communityOfflineKind;
+  const worldPositionsEmpty =
+    myPositionsFilter !== "all" &&
+    worldResultsReady &&
+    !communityNarrowed &&
+    filteredCommunity.length === 0;
 
   // Open+live only, matching the teaser rail and feed filters — the raw
   // array could disagree if the API ever returns a non-open row.
@@ -2926,11 +3010,12 @@ export default function PredictPage() {
       const totals = ammPositionTotalsByMarket.get(marketId);
       const top = ammPositionByMarket.get(marketId);
       return (
-        <div
-          key={market.id}
-          className="max-md:h-auto max-md:self-start w-full"
-          data-testid={`card-community-${market.id}`}
-        >
+          <div
+            key={market.id}
+            className="max-md:h-auto max-md:self-start w-full"
+            data-testid={`card-community-${market.id}`}
+            data-predict-market-card=""
+          >
           <OpenMarketCard
             market={market}
             onNavigate={(slug, pick, direction) =>
@@ -3199,26 +3284,59 @@ export default function PredictPage() {
       {((predictView === "weekly" && selectedType === "all") || predictView === "world") && (
         <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
           {/* Town Square - below section filters, above weekly timer */}
-          <div className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue transition-all duration-200" data-testid="town-square-card">
-            <div className={`px-3 sm:px-4 ${townSquareCollapsed ? 'py-4' : 'pt-5 pb-4'}`}>
-              <div
-                className="flex items-center gap-3 cursor-pointer select-none group"
+          <div
+            className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue"
+            data-testid="town-square-card"
+            data-collapsed={townSquareCollapsed ? "true" : "false"}
+          >
+            <div className={`px-3 sm:px-4 ${townSquareCollapsed ? "py-2.5" : "pt-5 pb-4"}`}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-lg border-0 bg-transparent p-0 text-left font-inherit text-inherit select-none group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={toggleTownSquare}
+                aria-expanded={!townSquareCollapsed}
+                aria-controls="town-square-feed"
                 data-testid="town-square-header"
               >
-                <div className="h-9 w-9 rounded-lg flex items-center justify-center pulse-icon-blue shrink-0">
+                <div className={`rounded-lg flex items-center justify-center pulse-icon-blue shrink-0 ${townSquareCollapsed ? "h-7 w-7" : "h-9 w-9"}`}>
                   <Users className="h-4 w-4 text-slate-300" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</h3>
-                  <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                  {townSquareCollapsed ? (
+                    <p className="truncate text-sm font-semibold text-foreground dark:text-slate-100">
+                      Town Square
+                      <span className="font-normal text-muted-foreground dark:text-slate-400">
+                        {" · "}
+                        {townSquareCollapsedHint({
+                          pending: recentActivityPending,
+                          failed: !!recentActivityError,
+                          count: Math.min(activityItems.length, 8),
+                          latestName: activityItems[0]?.displayName,
+                        })}
+                      </span>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</p>
+                      <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                    </>
+                  )}
                 </div>
-                <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 shrink-0 ${townSquareCollapsed ? '' : 'rotate-180'}`}>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" />
+                <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ease-out motion-reduce:transition-none shrink-0 ${townSquareCollapsed ? "" : "rotate-180"}`}>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" aria-hidden />
                 </div>
-              </div>
-              {!townSquareCollapsed && (
-                <div className="mt-4">
+              </button>
+              <div
+                id="town-square-feed"
+                data-testid="town-square-feed"
+                className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${townSquareCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
+              >
+                <div
+                  ref={townSquareFeedRef}
+                  className="min-h-0 overflow-hidden"
+                  aria-hidden={townSquareCollapsed}
+                >
+                <div className={townSquareCollapsed ? undefined : "mt-4"}>
                   <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
                     {recentActivityError ? (
                       <div className="p-6 text-center">
@@ -3379,7 +3497,8 @@ export default function PredictPage() {
                     )}
                   </Card>
                 </div>
-              )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3460,7 +3579,16 @@ export default function PredictPage() {
           </section>
         )}
 
-        {showSection("updown") && (
+        {myPositionsFilter !== "all" && weeklyPositionSections > 0 && (
+          <PositionsFilterNotice
+            filter={myPositionsFilter}
+            visibleCount={weeklyVisiblePositionCards}
+            empty={weeklyPositionsEmpty}
+            onShowAll={resetPositionsFilter}
+          />
+        )}
+
+        {showSection("updown") && !weeklyPositionsEmpty && (
           <section id="updown" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Weekly Up / Down"
@@ -3515,7 +3643,7 @@ export default function PredictPage() {
             ) : filteredUpDown.length > 0 ? (
               <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-blue-500">
                 {filteredUpDown.map((market) => (
-                  <div key={market.id}>
+                  <div key={market.id} data-predict-market-card="">
                     <WeeklyUpDownCard 
                       market={market} 
                       isMarketClosed={isMarketClosed}
@@ -3552,6 +3680,8 @@ export default function PredictPage() {
                       Reset filters
                     </Button>
                   </div>
+                ) : myPositionsFilter !== "all" ? (
+                  <p>{positionsSectionEmptyMessage(myPositionsFilter, "updown")}</p>
                 ) : (
                   <p>No Up/Down markets right now &mdash; check back soon.</p>
                 )}
@@ -3572,7 +3702,7 @@ export default function PredictPage() {
           </section>
         )}
 
-        {showSection("h2h") && (
+        {showSection("h2h") && !weeklyPositionsEmpty && (
           <section id="h2h" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
@@ -3627,8 +3757,8 @@ export default function PredictPage() {
                       ? Math.round(ammPos.netCreditsIn)
                       : bet?.stakeAmount;
                   return (
-                    <HeadToHeadCard 
-                      key={market.id}
+                    <div key={market.id} data-predict-market-card="">
+                    <HeadToHeadCard
                       market={market} 
                       isMarketClosed={isMarketClosed}
                       closedMessage={closedMarketMessage}
@@ -3640,6 +3770,7 @@ export default function PredictPage() {
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
                     />
+                    </div>
                   );
                 })}
               </CardSection>
@@ -3660,6 +3791,8 @@ export default function PredictPage() {
                       Reset filters
                     </Button>
                   </div>
+                ) : myPositionsFilter !== "all" ? (
+                  <p>{positionsSectionEmptyMessage(myPositionsFilter, "h2h")}</p>
                 ) : (
                   <p>No Head-to-Head matchups right now &mdash; check back soon.</p>
                 )}
@@ -3680,7 +3813,7 @@ export default function PredictPage() {
           </section>
         )}
 
-        {showSection("gainer") && (
+        {showSection("gainer") && !weeklyPositionsEmpty && (
           <section id="race" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Category Races"
@@ -3733,8 +3866,8 @@ export default function PredictPage() {
                   );
                   const isMultiPick = summary?.pickLabel === "Multiple picks";
                   return (
-                  <TopGainerCard 
-                    key={market.id}
+                  <div key={market.id} data-predict-market-card="">
+                  <TopGainerCard
                     market={market} 
                     isMarketClosed={isMarketClosed}
                     closedMessage={closedMarketMessage}
@@ -3753,6 +3886,7 @@ export default function PredictPage() {
                         : (top?.unrealisedPnl ?? null)
                     }
                   />
+                  </div>
                   );
                 })}
               </CardSection>
@@ -3792,7 +3926,15 @@ export default function PredictPage() {
         {showWorldPredictScope && (
           <div data-testid="world-markets-sticky-scope">
             <section id="community" data-hash-anchor className="mb-12 mt-[5px]">
-              {communityOfflineKind ? (
+              {myPositionsFilter !== "all" && worldResultsReady && (
+                <PositionsFilterNotice
+                  filter={myPositionsFilter}
+                  visibleCount={filteredCommunity.length}
+                  empty={worldPositionsEmpty}
+                  onShowAll={resetPositionsFilter}
+                />
+              )}
+              {worldPositionsEmpty ? null : communityOfflineKind ? (
                 <OfflineInlineNotice
                   kind={communityOfflineKind}
                   onRetry={communityOfflineKind === "unreachable" ? () => { void refetchOpenMarkets(); } : undefined}
