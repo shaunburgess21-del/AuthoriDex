@@ -1896,6 +1896,13 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
   scroll-margin-top: calc(72px + var(--safe-area-inset-top, 0px));
 }
 
+/* Vote sections opt into a taller offset. The attribute rule above shares
+   specificity with Tailwind's scroll-mt-* utilities and is loaded later,
+   so the utility alone cannot clear the sticky section + search band. */
+[data-hash-anchor].scroll-mt-44 {
+  scroll-margin-top: calc(11rem + var(--safe-area-inset-top, 0px));
+}
+
 /* Android system UI. Capacitor SystemBars (insetsHandling: css) sets
  * --safe-area-inset-* on the WebView document only. Unset everywhere else,
  * so website/PWA/iOS keep the fallback and do not move. */

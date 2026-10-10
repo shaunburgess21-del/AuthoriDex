@@ -112,6 +112,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { GlobalCategoryBar } from "@/components/GlobalCategoryBar";
 import { SectionSearchRow } from "@/components/SectionSearchRow";
+import { VoteCategoryMenu } from "@/components/VoteCategoryMenu";
 import { FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import { sentimentPollShare } from "@/lib/share";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
@@ -1210,6 +1211,8 @@ export default function VotePage() {
 
 
   const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
+  /** Mobile page search. Desktop keeps the per-section fields below. */
+  const [voteSearchQuery, setVoteSearchQuery] = useState("");
   const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
   const prevOpinionPollsOverlayOpenRef = useRef(opinionPollsOverlayOpen);
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
@@ -1231,6 +1234,12 @@ export default function VotePage() {
   const ratingScrollRef = useRef<HTMLDivElement>(null);
 
   const isMobile = useIsMobile();
+  const inductionSearch = isMobile ? voteSearchQuery : inductionSearchQuery;
+  const topicsSearch = isMobile ? voteSearchQuery : topicsSearchQuery;
+  const matchupsSearch = isMobile ? voteSearchQuery : matchupsSearchQuery;
+  const opinionPollsSearch = isMobile ? voteSearchQuery : opinionPollsSearchQuery;
+  const ratingSearch = isMobile ? voteSearchQuery : ratingSearchQuery;
+  const curateSearch = isMobile ? voteSearchQuery : curateSearchQuery;
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
@@ -1274,7 +1283,7 @@ export default function VotePage() {
       globalCategoryFilter === "trending" ||
       (globalCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
       matchesRegistryCategoryFilter(c.category, (c as any).secondaryCategories, globalCategoryFilter);
-    const matchesSearch = c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase());
+    const matchesSearch = c.name.toLowerCase().includes(inductionSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a, b) => b.votes - a.votes);
   
@@ -1329,8 +1338,8 @@ export default function VotePage() {
       (globalCategoryFilter === "favorites" &&
         involvesAnyFavorite(favoriteIds, [t.personId, ...(t.relatedPersonIds || [])])) ||
       matchesRegistryCategoryFilter(t.category, t.secondaryCategories, globalCategoryFilter);
-    const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
-                         (t.description || '').toLowerCase().includes(topicsSearchQuery.toLowerCase());
+    const matchesSearch = (t.headline ?? '').toLowerCase().includes(topicsSearch.toLowerCase()) ||
+                         (t.description || '').toLowerCase().includes(topicsSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => globalCategoryFilter === "trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
 
@@ -1344,8 +1353,8 @@ export default function VotePage() {
           ...(p.relatedPersonIds || []),
         ])) ||
       matchesRegistryCategoryFilter(p.category, p.secondaryCategories, globalCategoryFilter);
-    const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
-                         (p.description || '').toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
+    const matchesSearch = (p.title || '').toLowerCase().includes(opinionPollsSearch.toLowerCase()) ||
+                         (p.description || '').toLowerCase().includes(opinionPollsSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => globalCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
@@ -1395,7 +1404,7 @@ export default function VotePage() {
       globalCategoryFilter === "trending" ||
       (globalCategoryFilter === "favorites" && favoriteIds.has(c.id)) ||
       matchesRegistryCategoryFilter(c.category, (c as any).secondaryCategories, globalCategoryFilter);
-    const matchesSearch = !ratingSearchQuery || c.name.toLowerCase().includes(ratingSearchQuery.toLowerCase());
+    const matchesSearch = !ratingSearch || c.name.toLowerCase().includes(ratingSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => {
     if (globalCategoryFilter !== "trending") return 0;
@@ -1562,9 +1571,9 @@ export default function VotePage() {
           ...(f.relatedPersonIds || []),
         ])) ||
       matchesRegistryCategoryFilter(f.category, (f as any).secondaryCategories, globalCategoryFilter);
-    const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-                         (f.optionAText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-                         (f.optionBText ?? '').toLowerCase().includes(matchupsSearchQuery.toLowerCase());
+    const matchesSearch = (f.title ?? '').toLowerCase().includes(matchupsSearch.toLowerCase()) ||
+                         (f.optionAText ?? '').toLowerCase().includes(matchupsSearch.toLowerCase()) ||
+                         (f.optionBText ?? '').toLowerCase().includes(matchupsSearch.toLowerCase());
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => globalCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
@@ -1695,9 +1704,9 @@ export default function VotePage() {
   const matchupSnapSource = useMemo(() => {
     const base = matchups.filter((f) => {
       const matchesSearch =
-        (f.title ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-        (f.optionAText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase()) ||
-        (f.optionBText ?? "").toLowerCase().includes(matchupsSearchQuery.toLowerCase());
+        (f.title ?? "").toLowerCase().includes(matchupsSearch.toLowerCase()) ||
+        (f.optionAText ?? "").toLowerCase().includes(matchupsSearch.toLowerCase()) ||
+        (f.optionBText ?? "").toLowerCase().includes(matchupsSearch.toLowerCase());
       return matchesSearch && f.isActive;
     });
     return myVotesFilter === "all"
@@ -1705,7 +1714,7 @@ export default function VotePage() {
       : myVotesFilter === "show-mine"
         ? base.filter((m) => !!matchupUserVotes[m.id])
         : base.filter((m) => !matchupUserVotes[m.id]);
-  }, [matchups, matchupsSearchQuery, myVotesFilter, matchupUserVotes]);
+  }, [matchups, matchupsSearch, myVotesFilter, matchupUserVotes]);
 
   const matchupSnapItems: SnapItem[] = useMemo(
     () =>
@@ -1722,8 +1731,8 @@ export default function VotePage() {
   const sentimentSnapSource = useMemo(() => {
     const base = dbPolls.filter((t: any) => {
       const matchesSearch =
-        (t.headline ?? "").toLowerCase().includes(topicsSearchQuery.toLowerCase()) ||
-        (t.description || "").toLowerCase().includes(topicsSearchQuery.toLowerCase());
+        (t.headline ?? "").toLowerCase().includes(topicsSearch.toLowerCase()) ||
+        (t.description || "").toLowerCase().includes(topicsSearch.toLowerCase());
       return matchesSearch;
     });
     return myVotesFilter === "all"
@@ -1731,7 +1740,7 @@ export default function VotePage() {
       : myVotesFilter === "show-mine"
         ? base.filter((t: any) => !!t.userVote)
         : base.filter((t: any) => !t.userVote);
-  }, [dbPolls, topicsSearchQuery, myVotesFilter]);
+  }, [dbPolls, topicsSearch, myVotesFilter]);
 
   const sentimentSnapItems: SnapItem[] = useMemo(
     () =>
@@ -1748,8 +1757,8 @@ export default function VotePage() {
   const opinionSnapSource = useMemo(() => {
     const base = opinionPolls.filter((p: any) => {
       const matchesSearch =
-        (p.title || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase()) ||
-        (p.description || "").toLowerCase().includes(opinionPollsSearchQuery.toLowerCase());
+        (p.title || "").toLowerCase().includes(opinionPollsSearch.toLowerCase()) ||
+        (p.description || "").toLowerCase().includes(opinionPollsSearch.toLowerCase());
       return matchesSearch;
     });
     return myVotesFilter === "all"
@@ -1757,7 +1766,7 @@ export default function VotePage() {
       : myVotesFilter === "show-mine"
         ? base.filter((p: any) => !!p.userVote)
         : base.filter((p: any) => !p.userVote);
-  }, [opinionPolls, opinionPollsSearchQuery, myVotesFilter]);
+  }, [opinionPolls, opinionPollsSearch, myVotesFilter]);
 
   const opinionSnapItems: SnapItem[] = useMemo(
     () =>
@@ -1775,10 +1784,10 @@ export default function VotePage() {
     () =>
       ratingCelebrities.filter(
         (c) =>
-          !ratingSearchQuery ||
-          c.name.toLowerCase().includes(ratingSearchQuery.toLowerCase()),
+          !ratingSearch ||
+          c.name.toLowerCase().includes(ratingSearch.toLowerCase()),
       ),
-    [ratingCelebrities, ratingSearchQuery],
+    [ratingCelebrities, ratingSearch],
   );
 
   const ratingSnapItems: SnapItem[] = useMemo(
@@ -1798,9 +1807,9 @@ export default function VotePage() {
   const inductionSnapSource = useMemo(
     () =>
       enrichedCandidates.filter((c) =>
-        c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase()),
+        c.name.toLowerCase().includes(inductionSearch.toLowerCase()),
       ),
-    [enrichedCandidates, inductionSearchQuery],
+    [enrichedCandidates, inductionSearch],
   );
 
   const inductionSnapItems: SnapItem[] = useMemo(
@@ -1827,7 +1836,7 @@ export default function VotePage() {
   }, [curateTrendingData]);
 
   const filteredCurateCelebrities = useMemo(() => {
-    const search = curateSearchQuery.trim().toLowerCase();
+    const search = curateSearch.trim().toLowerCase();
     return curateTrendingCelebrities.filter((p: any) => {
       const matchesCategory =
         globalCategoryFilter === "all" ||
@@ -1837,7 +1846,7 @@ export default function VotePage() {
       const matchesSearch = !search || p.name.toLowerCase().includes(search);
       return matchesCategory && matchesSearch;
     });
-  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearchQuery, favoriteIds, matchesRegistryCategoryFilter]);
+  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearch, favoriteIds, matchesRegistryCategoryFilter]);
 
   const topicsCategoryOptions = useMemo(
     () =>
@@ -1971,11 +1980,11 @@ export default function VotePage() {
   }, [globalCategoryFilter, globalCategoryOptions]);
 
   const curateSnapSource = useMemo(() => {
-    const search = curateSearchQuery.trim().toLowerCase();
+    const search = curateSearch.trim().toLowerCase();
     return curateTrendingCelebrities.filter(
       (p: any) => !search || p.name.toLowerCase().includes(search),
     );
-  }, [curateTrendingCelebrities, curateSearchQuery]);
+  }, [curateTrendingCelebrities, curateSearch]);
 
   const curateSnapItems: SnapItem[] = useMemo(
     () =>
@@ -2666,15 +2675,29 @@ export default function VotePage() {
   return (
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <SiteHeader active="vote" logoVariant="vote" backButton="none" />
-      {/* Section toggles — in normal flow, scrolls away with the page. Darker
-          band + bottom divider to visually separate it from the category chip
-          row below. */}
+      {/* Section chips and the search/category bar stick as one band. The
+          whole band slides up on scroll down and back on scroll up
+          (useScrollHideTransform). */}
+      <div
+        ref={chipBarRef}
+        className="sticky top-16 z-40 will-change-transform"
+        data-testid="vote-sticky-band"
+      >
       <div
         className="bg-slate-200/50 dark:bg-black/40 border-b border-border/60"
         data-testid="section-toggles-container"
       >
         <div className="container mx-auto px-2 sm:px-4 pt-3 pb-2 max-w-7xl">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="md:hidden shrink-0">
+              <VoteCategoryMenu
+                options={globalCategoryOptions}
+                value={globalCategoryFilter}
+                onChange={(next) => setGlobalCategoryFilter(next as FilterCategory)}
+                user={user}
+                onAuthRequired={handleAuthRequired}
+              />
+            </div>
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
               <motion.div
@@ -2722,30 +2745,39 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      {/* Page-wide category filter — sticky below the site header; slides up
-          underneath it (translate + fade, driven imperatively by
-          useScrollHideTransform) on scroll down and re-reveals on scroll up. */}
+      {/* Search on mobile, category chips on desktop. Shares the sticky
+          band above so it hides and returns with the section row. */}
       <div
-        ref={chipBarRef}
-        className="sticky top-16 z-40 bg-background/80 backdrop-blur-xl border-b will-change-transform"
+        className="bg-background/80 backdrop-blur-xl border-b"
         data-testid="category-filter-bar"
       >
         <div className="container mx-auto px-2 sm:px-4 pt-2 pb-2 max-w-7xl">
-          <GlobalCategoryBar
-            options={globalCategoryOptions}
-            value={globalCategoryFilter}
-            onChange={(v) => setGlobalCategoryFilter(v as FilterCategory)}
-            accent="vote"
-            user={user}
-            onAuthRequired={handleAuthRequired}
-            testIdPrefix="filter-global"
-          />
+          <div className="md:hidden">
+            <SectionSearchRow
+              value={voteSearchQuery}
+              onChange={setVoteSearchQuery}
+              placeholder="Search votes..."
+              testId="filter-vote-search"
+            />
+          </div>
+          <div className="max-md:hidden">
+            <GlobalCategoryBar
+              options={globalCategoryOptions}
+              value={globalCategoryFilter}
+              onChange={(v) => setGlobalCategoryFilter(v as FilterCategory)}
+              accent="vote"
+              user={user}
+              onAuthRequired={handleAuthRequired}
+              testIdPrefix="filter-global"
+            />
+          </div>
         </div>
+      </div>
       </div>
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
         {(activeSection === "All" || activeSection === "Sentiment Polls") && (
-        <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
+        <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-44">
           <UnifiedSectionHeader
             title="Sentiment Polls"
             subtitle="Weigh in on current topics"
@@ -2795,6 +2827,7 @@ export default function VotePage() {
               onChange={setTopicsSearchQuery}
               placeholder="Search topics..."
               testId="filter-topics-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
           
@@ -2848,7 +2881,7 @@ export default function VotePage() {
 
         {/* ZONE 1: Public Opinion - Matchups Section (Second) */}
         {(activeSection === "All" || activeSection === "Matchups") && (
-        <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-28">
+        <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-44">
           <UnifiedSectionHeader
             title="Matchups"
             subtitle="Vote on A vs B"
@@ -2898,6 +2931,7 @@ export default function VotePage() {
               onChange={setMatchupsSearchQuery}
               placeholder="Search matchups..."
               testId="filter-matchups-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
           
@@ -2955,7 +2989,7 @@ export default function VotePage() {
 
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
         {(activeSection === "All" || activeSection === "Opinion Polls") && (
-        <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-28">
+        <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-44">
           <UnifiedSectionHeader
             title="Opinion Polls"
             subtitle="Your preference. The world's verdict."
@@ -3005,6 +3039,7 @@ export default function VotePage() {
               onChange={setOpinionPollsSearchQuery}
               placeholder="Search opinion polls..."
               testId="filter-opinion-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
 
@@ -3064,7 +3099,7 @@ export default function VotePage() {
           <ShapeVoxDexStickyHeader onInfoClick={() => setInfoModalOpen("governance")} />
 
         {(activeSection === "All" || activeSection === "Overall Rating") && (
-        <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-28">
+        <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-44">
           <UnifiedSectionHeader
             title="Overall Rating"
             subtitle="Community approval rating"
@@ -3106,6 +3141,7 @@ export default function VotePage() {
               onChange={setRatingSearchQuery}
               placeholder="Search celebrities..."
               testId="filter-rating-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
           
@@ -3148,7 +3184,7 @@ export default function VotePage() {
 
         {/* Induction Queue */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (
-        <section id="vote-induction" data-hash-anchor className="mb-10 scroll-mt-28">
+        <section id="vote-induction" data-hash-anchor className="mb-10 scroll-mt-44">
           <UnifiedSectionHeader
             title="The Induction Queue"
             subtitle="Who joins the leaderboard next"
@@ -3198,6 +3234,7 @@ export default function VotePage() {
               onChange={setInductionSearchQuery}
               placeholder="Search candidates..."
               testId="filter-induction-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
 
@@ -3251,7 +3288,7 @@ export default function VotePage() {
 
         {/* Curate Profile */}
         {(activeSection === "All" || activeSection === "Curate Profile") && (
-        <section id="vote-curate" data-hash-anchor className="mb-10 scroll-mt-28">
+        <section id="vote-curate" data-hash-anchor className="mb-10 scroll-mt-44">
           <UnifiedSectionHeader
             title="Curate the Profile"
             subtitle="Help select their profile photo"
@@ -3301,12 +3338,13 @@ export default function VotePage() {
               onChange={setCurateSearchQuery}
               placeholder="Search profiles..."
               testId="filter-curate-search"
+              className="max-md:hidden"
             />
           </UnifiedSectionHeader>
 
           <CurateSection
             categoryFilter={globalCategoryFilter}
-            searchQuery={curateSearchQuery}
+            searchQuery={curateSearch}
             onFilterCategory={handleCategoryPillFilter}
             categoryRaceMap={raceMap}
             leaderboardCategories={leaderboardCats}
