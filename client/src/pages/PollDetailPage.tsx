@@ -39,7 +39,8 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
-import { SentimentPollResultsBars } from "@/components/sentiment/SentimentPollResultsBars";
+import { normalizeSentimentChoice } from "@shared/lib/sentiment-poll-choice";
+import { CompactResultRows } from "@/components/vote/CompactResultRows";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -451,77 +452,25 @@ export default function PollDetailPage() {
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("agree") }} />
+            <div className="flex items-center justify-between gap-3">
+              <p className="min-w-0 text-sm text-muted-foreground">
+                You voted:{" "}
                 <span
-                  className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
-                  style={{ color: getSentimentPollChoiceColor("agree") }}
+                  className="font-semibold"
+                  style={{
+                    color: displayUserVote ? getSentimentPollChoiceColor(displayUserVote) : undefined,
+                  }}
                 >
-                  {getSentimentPollChoiceLabel("agree")}
+                  {displayUserVote ? getSentimentPollChoiceLabel(displayUserVote) : "—"}
                 </span>
-                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#00C853] rounded-full transition-all duration-500"
-                    style={{ width: `${poll.agreePercent}%` }}
-                  />
-                </div>
-                <span className="text-sm text-muted-foreground w-10 text-right">{poll.agreePercent}%</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Minus className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("neutral") }} />
-                <span
-                  className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
-                  style={{ color: getSentimentPollChoiceColor("neutral") }}
-                >
-                  {getSentimentPollChoiceLabel("neutral")}
-                </span>
-                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-slate-400 rounded-full transition-all duration-500"
-                    style={{ width: `${poll.neutralPercent}%` }}
-                  />
-                </div>
-                <span className="text-sm text-muted-foreground w-10 text-right">{poll.neutralPercent}%</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("disagree") }} />
-                <span
-                  className="text-sm w-[4.5rem] shrink-0 font-medium whitespace-nowrap"
-                  style={{ color: getSentimentPollChoiceColor("disagree") }}
-                >
-                  {getSentimentPollChoiceLabel("disagree")}
-                </span>
-                <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
-                    style={{ width: `${poll.disagreePercent}%` }}
-                  />
-                </div>
-                <span className="text-sm text-muted-foreground w-10 text-right">{poll.disagreePercent}%</span>
-              </div>
-              <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>
-                    You voted:{" "}
-                    <span
-                      className="font-semibold"
-                      style={{
-                        color: displayUserVote ? getSentimentPollChoiceColor(displayUserVote) : undefined,
-                      }}
-                    >
-                      {displayUserVote ? getSentimentPollChoiceLabel(displayUserVote) : "—"}
-                    </span>
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowVoteChange(true)}
-                  className="text-xs text-slate-600 dark:text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
-                  data-testid="button-change-vote"
-                >
-                  Change your vote
-                </button>
-              </div>
+              </p>
+              <button
+                onClick={() => setShowVoteChange(true)}
+                className="shrink-0 text-xs text-slate-600 dark:text-slate-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+                data-testid="button-change-vote"
+              >
+                Change your vote
+              </button>
             </div>
           )}
           {!isLoggedIn && (
@@ -541,45 +490,43 @@ export default function PollDetailPage() {
             Results
           </h2>
 
-          <SentimentPollResultsBars
-            agreePercent={poll.agreePercent}
-            neutralPercent={poll.neutralPercent}
-            disagreePercent={poll.disagreePercent}
-            className="mb-4"
+          <CompactResultRows
+            rows={[
+              {
+                id: "agree",
+                label: getSentimentPollChoiceLabel("agree"),
+                percent: poll.agreePercent,
+                votes: poll.agreeCount,
+                labelClassName: "text-[#00C853]",
+                percentClassName: "text-[#00C853]",
+                barClassName: "bg-[#00C853]",
+                emphasized: normalizeSentimentChoice(displayUserVote) === "agree",
+                percentTestId: "text-agree-percent",
+              },
+              {
+                id: "neutral",
+                label: getSentimentPollChoiceLabel("neutral"),
+                percent: poll.neutralPercent,
+                votes: poll.neutralCount,
+                labelClassName: "text-slate-600 dark:text-slate-300",
+                percentClassName: "text-slate-500 dark:text-slate-300",
+                barClassName: "bg-slate-400",
+                emphasized: normalizeSentimentChoice(displayUserVote) === "neutral",
+                percentTestId: "text-neutral-percent",
+              },
+              {
+                id: "disagree",
+                label: getSentimentPollChoiceLabel("disagree"),
+                percent: poll.disagreePercent,
+                votes: poll.disagreeCount,
+                labelClassName: "text-[#FF0000]",
+                percentClassName: "text-[#FF0000]",
+                barClassName: "bg-[#FF0000]",
+                emphasized: normalizeSentimentChoice(displayUserVote) === "disagree",
+                percentTestId: "text-disagree-percent",
+              },
+            ]}
           />
-
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-[#00C853]" />
-                <span className="text-xs font-medium">{getSentimentPollChoiceLabel("agree")}</span>
-              </div>
-              <p className="text-lg font-bold font-mono text-[#00C853]" data-testid="text-agree-percent">{poll.agreePercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.agreeCount.toLocaleString('en-US')} votes</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                <span className="text-xs font-medium">{getSentimentPollChoiceLabel("neutral")}</span>
-              </div>
-              <p className="text-lg font-bold font-mono text-slate-500 dark:text-slate-300" data-testid="text-neutral-percent">{poll.neutralPercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.neutralCount.toLocaleString('en-US')} votes</p>
-            </div>
-            <div>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-[#FF0000]" />
-                <span className="text-xs font-medium">{getSentimentPollChoiceLabel("disagree")}</span>
-              </div>
-              <p className="text-lg font-bold font-mono text-[#FF0000]" data-testid="text-disagree-percent">{poll.disagreePercent}%</p>
-              <p className="text-xs text-muted-foreground">{poll.disagreeCount.toLocaleString('en-US')} votes</p>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border/30 text-center">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{poll.totalVotes.toLocaleString('en-US')}</span> total votes
-            </p>
-          </div>
         </Card>
 
         {/* Stats Row */}

@@ -31,6 +31,7 @@ import {
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
+import { CompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { matchupOgImagePath } from "@shared/matchup-og";
 import {
@@ -353,6 +354,42 @@ export default function MatchupDetailPage() {
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
   const leadingA = matchup.optionAPercent >= matchup.optionBPercent;
+  const matchupResultRows: CompactResultRowData[] = [
+    {
+      id: "option-a",
+      label: matchup.optionAText,
+      percent: matchup.optionAPercent,
+      votes: matchup.optionAVotes,
+      labelClassName: "text-blue-600 dark:text-blue-400",
+      percentClassName: "text-blue-600 dark:text-blue-400",
+      barClassName: "bg-gradient-to-r from-blue-600 to-blue-400",
+      emphasized: votedA,
+      percentTestId: "text-option-a-percent",
+    },
+    ...((matchup.neutralVotes ?? 0) > 0
+      ? [{
+          id: "neutral",
+          label: "Neither / Neutral",
+          percent: matchup.neutralPercent,
+          votes: matchup.neutralVotes,
+          labelClassName: "text-slate-600 dark:text-slate-300",
+          percentClassName: "text-slate-600 dark:text-slate-300",
+          barClassName: "bg-slate-400 dark:bg-slate-500",
+          emphasized: votedNeutral,
+        }]
+      : []),
+    {
+      id: "option-b",
+      label: matchup.optionBText,
+      percent: matchup.optionBPercent,
+      votes: matchup.optionBVotes,
+      labelClassName: "text-amber-600 dark:text-amber-400",
+      percentClassName: "text-amber-600 dark:text-amber-400",
+      barClassName: "bg-gradient-to-r from-amber-500 to-amber-600",
+      emphasized: votedB,
+      percentTestId: "text-option-b-percent",
+    },
+  ];
   const votePendingOnOptions =
     (voteMutation.isPending || removeVoteMutation.isPending) && !hasVoted;
   const removeVotePending = removeVoteMutation.isPending;
@@ -591,101 +628,7 @@ export default function MatchupDetailPage() {
             Results
           </h2>
 
-          <div className="space-y-3 mb-4" data-testid="bar-results">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-medium">{matchup.optionAText}</span>
-                <span className={`text-sm font-bold font-mono ${leadingA ? 'text-blue-600 dark:text-blue-400' : 'text-muted-foreground'}`}>
-                  {matchup.optionAPercent}%
-                </span>
-              </div>
-              <div className="h-8 rounded-md bg-blue-500/15 dark:bg-blue-500/10 border border-blue-500/40 dark:border-blue-500/30 overflow-hidden relative">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-500 rounded-md flex items-center justify-center"
-                  style={{ width: `${Math.max(matchup.optionAPercent, 5)}%` }}
-                >
-                  {matchup.optionAPercent >= 20 && (
-                    <span className="text-xs font-semibold text-white drop-shadow-sm">{matchup.optionAPercent}%</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {(matchup.neutralVotes ?? 0) > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-medium text-muted-foreground">Neither / Neutral</span>
-                  <span className={`text-sm font-bold font-mono ${votedNeutral ? 'text-slate-600 dark:text-slate-300' : 'text-muted-foreground'}`}>
-                    {matchup.neutralPercent}%
-                  </span>
-                </div>
-                <div className="h-8 rounded-md bg-slate-500/15 dark:bg-slate-500/10 border border-slate-500/40 dark:border-slate-500/30 overflow-hidden relative">
-                  <div
-                    className="h-full bg-slate-400 dark:bg-slate-500 transition-all duration-500 rounded-md flex items-center justify-center"
-                    style={{ width: `${Math.max(matchup.neutralPercent, 5)}%` }}
-                  >
-                    {matchup.neutralPercent >= 20 && (
-                      <span className="text-xs font-semibold text-white drop-shadow-sm">{matchup.neutralPercent}%</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-medium">{matchup.optionBText}</span>
-                <span className={`text-sm font-bold font-mono ${!leadingA ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
-                  {matchup.optionBPercent}%
-                </span>
-              </div>
-              <div className="h-8 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30 overflow-hidden relative">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all duration-500 rounded-md flex items-center justify-center"
-                  style={{ width: `${Math.max(matchup.optionBPercent, 5)}%` }}
-                >
-                  {matchup.optionBPercent >= 20 && (
-                    <span className="text-xs font-semibold text-white drop-shadow-sm">{matchup.optionBPercent}%</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={(matchup.neutralVotes ?? 0) > 0 ? "grid grid-cols-3 gap-3 text-center mb-3" : "grid grid-cols-2 gap-3 text-center mb-3"}>
-            <div>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
-                <span className="text-xs font-medium">{matchup.optionAText}</span>
-              </div>
-              <p className="text-lg font-bold font-mono text-blue-600 dark:text-blue-400" data-testid="text-option-a-percent">{matchup.optionAPercent}%</p>
-              <p className="text-xs text-muted-foreground">{matchup.optionAVotes.toLocaleString('en-US')} votes</p>
-            </div>
-            {(matchup.neutralVotes ?? 0) > 0 && (
-              <div>
-                <div className="flex items-center justify-center gap-1.5 mb-1">
-                  <div className="h-2.5 w-2.5 rounded-full bg-slate-400 dark:bg-slate-500" />
-                  <span className="text-xs font-medium text-muted-foreground">Neutral</span>
-                </div>
-                <p className="text-lg font-bold font-mono text-slate-600 dark:text-slate-300">{matchup.neutralPercent}%</p>
-                <p className="text-xs text-muted-foreground">{matchup.neutralVotes.toLocaleString('en-US')} votes</p>
-              </div>
-            )}
-            <div>
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                <span className="text-xs font-medium">{matchup.optionBText}</span>
-              </div>
-              <p className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400" data-testid="text-option-b-percent">{matchup.optionBPercent}%</p>
-              <p className="text-xs text-muted-foreground">{matchup.optionBVotes.toLocaleString('en-US')} votes</p>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-border/30 text-center">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{matchup.totalVotes.toLocaleString('en-US')}</span> total votes
-            </p>
-          </div>
+          <CompactResultRows rows={matchupResultRows} />
         </Card>
 
         {/* Stats Row */}

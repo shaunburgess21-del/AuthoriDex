@@ -87,7 +87,7 @@ export function OpinionPollGalleryOption({
         ) : (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">{(option.votes || 0).toLocaleString("en-US")} votes</span>
+              <span className="text-xs text-muted-foreground">{(option.votes || 0).toLocaleString("en-US")} {(option.votes || 0) === 1 ? "vote" : "votes"}</span>
               <span
                 className={cn(
                   "font-mono text-sm font-bold",
