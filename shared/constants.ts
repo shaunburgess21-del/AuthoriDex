@@ -67,25 +67,26 @@ export const CARD_REACTION_TYPES = ["like", "dislike"] as const;
 export type CardReactionType = (typeof CARD_REACTION_TYPES)[number];
 
 /**
- * CANONICAL_CATEGORIES — default seed set and normalization baseline (not the full admin registry).
+ * CANONICAL_CATEGORIES — engagement CHECK / market-helper baseline (not the UI source of truth).
+ *
+ * Vote / suggest / interest surfaces must use GET /api/categories (`useCategoryRegistry`).
+ * First-paint fallback is `CATEGORY_REGISTRY_SEED` in `shared/category-registry.ts` (all 23
+ * ids, including media, streaming, science, history) — the same module `/api/categories`
+ * uses when `content_categories` is empty.
  *
  * The **authoritative** list of category ids an operator can add/remove lives in Postgres
- * (`content_categories`) and is exposed to admin as `GET /api/admin/categories`. Admin
- * create/edit UIs for polls, markets, matchups, induction, etc. must use that API so new
- * categories appear without code changes. This array stays in sync with the initial
- * migration seed and powers `MARKET_CATEGORY_OPTIONS`, filter helpers, and
- * `normalizeMarketCategory` (which maps legacy display text and slugs to kebab-case ids).
+ * (`content_categories`) and is exposed as `GET /api/admin/categories`. This array stays
+ * aligned with the engagement CHECK (19 ids from migrations 0031 + 0084) and powers
+ * `MARKET_CATEGORY_OPTIONS`, filter helpers, and `normalizeMarketCategory` (maps legacy
+ * display text and slugs to kebab-case ids).
  *
  * ID is kebab-lowercase (typical storage on the wire). Label is for display only.
  *
  * Rules for consumers:
- *   - Filter bars on Vote / Predict / Leaderboard / Induction: use CATEGORIES_WITH_FILTERS
- *     (adds "all", "favorites", "trending" as UI-only filter items).
- *   - Suggest modals for types that REQUIRE a real person from the leaderboard
- *     (induction, profile_image): use CATEGORIES_LEADERBOARD (excludes "misc").
- *   - Suggest modals for types that can be about anything
- *     (matchup, sentiment_poll, opinion_poll, open_market): use CATEGORIES_OPEN (all 12)
- *     as a baseline; prefer registry-backed lists where the UX allows dynamic categories.
+ *   - Filter bars on Vote / Predict / Leaderboard / Induction: prefer the live registry;
+ *     CATEGORIES_WITH_FILTERS is a stale pin+baseline list only.
+ *   - Suggest modals: use `useCategoryRegistry` (induction may omit "misc").
+ *   - CATEGORIES_OPEN / CATEGORIES_LEADERBOARD are the 19-id baseline, not the full set.
  *
  * Note: only the World/Open Markets prediction type has a user-facing suggest flow.
  * The other prediction types (Weekly Up/Down, Head-to-Head, Category Races) are
@@ -117,7 +118,7 @@ export const CANONICAL_CATEGORIES = [
 
 export type CategoryId = (typeof CANONICAL_CATEGORIES)[number]["id"];
 
-/** All 12 categories including misc — for matchup, sentiment_poll, opinion_poll, open_market, and admin. */
+/** 19-id baseline including misc. Prefer `useCategoryRegistry` / CATEGORY_REGISTRY_SEED. */
 export const CATEGORIES_OPEN = CANONICAL_CATEGORIES;
 
 /** 11 categories without misc — for leaderboard-tied suggest modals (induction, profile_image). */
@@ -221,7 +222,7 @@ export const MARKET_CATEGORY_LABELS: Record<CanonicalMarketCategory, string> = {
   misc: "Misc",
 };
 
-const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
+const MARKET_CATEGORY_ALIASES: Record<string, string> = {
   tech: "tech",
   politics: "politics",
   business: "business",
@@ -251,6 +252,13 @@ const MARKET_CATEGORY_ALIASES: Record<string, CanonicalMarketCategory> = {
   other: "misc",
   custom: "misc",
   "custom topic": "misc",
+  general: "misc",
+  media: "media",
+  "media & podcast": "media",
+  "media and podcast": "media",
+  streaming: "streaming",
+  science: "science",
+  history: "history",
 };
 
 /** Display labels for legacy person categories not in the canonical 12. */
@@ -260,6 +268,8 @@ const PERSON_CATEGORY_LEGACY_LABELS: Record<string, string> = {
   // collapse the old "Media" spelling.
   media: "Media & Podcast",
   streaming: "Streaming",
+  science: "Science",
+  history: "History",
   "media-and-podcast": "Media & Podcast",
 };
 
@@ -298,6 +308,15 @@ function normalizeCategoryLookupKey(category: string) {
     .replace(/-/g, " ")
     .replace(/\s*&\s*/g, " & ")
     .replace(/\s+/g, " ");
+}
+
+/**
+ * Canonical kebab id for reads and writes. Accepts taxonomy ids (`film-tv`)
+ * and stored labels (`Film & TV`, `Media & Podcast`). Prefer this on WRITE
+ * so new rows store ids, not labels. Old label rows still match on READ.
+ */
+export function canonicalCategoryId(category: string | null | undefined): string {
+  return getCategoryBucketId(category);
 }
 
 export function normalizeMarketCategory(category: string | null | undefined): string {
@@ -383,15 +402,15 @@ export function sanitizeSecondaryCategories(
   if (!Array.isArray(input)) return [];
   const allowed = new Set<string>(
     [...(allowedIds ?? CANONICAL_MARKET_CATEGORIES)].map((id) =>
-      normalizeMarketCategory(id),
+      canonicalCategoryId(id),
     ),
   );
-  const primaryId = primary ? normalizeMarketCategory(primary) : null;
+  const primaryId = primary ? canonicalCategoryId(primary) : null;
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of input) {
     if (typeof raw !== "string") continue;
-    const id = normalizeMarketCategory(raw);
+    const id = canonicalCategoryId(raw);
     if (!id || id === primaryId) continue;
     if (!allowed.has(id)) continue;
     if (seen.has(id)) continue;

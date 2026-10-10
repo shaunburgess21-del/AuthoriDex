@@ -1,4 +1,4 @@
-import { canonicalizePersonCategory } from "@shared/constants";
+import { canonicalCategoryId } from "@shared/constants";
 import { sanitizeVisibleCountries } from "@shared/geoVisibility";
 import { db } from "../db";
 import {
@@ -125,7 +125,7 @@ export function translateMatchupPayload(
 ): MatchupAdminPayload {
   const base: MatchupAdminPayload = {
     title: String(userPayload.title ?? ""),
-    category: String(userPayload.category ?? "General"),
+    category: canonicalCategoryId(String(userPayload.category ?? "misc")),
     optionAText: String(userPayload.optionAText ?? ""),
     optionBText: String(userPayload.optionBText ?? ""),
     optionAImage: userPayload.optionAImage ?? null,
@@ -169,7 +169,7 @@ export function translateSentimentPollPayload(
   const base: SentimentPollAdminPayload = {
     headline: String(userPayload.headline ?? ""),
     subjectText: String(userPayload.subjectText ?? ""),
-    category: String(userPayload.category ?? "misc"),
+    category: canonicalCategoryId(String(userPayload.category ?? "misc")),
     personId: userPayload.personId ?? null,
     description: userPayload.description ?? null,
     timeline: userPayload.timeline ?? null,
@@ -214,7 +214,7 @@ export function translateOpinionPollPayload(
   const base: OpinionPollAdminPayload = {
     title: String(userPayload.title ?? ""),
     slug: generateSlug(String(userPayload.title ?? "opinion-poll")),
-    category: String(userPayload.category ?? "misc"),
+    category: canonicalCategoryId(String(userPayload.category ?? "misc")),
     description: userPayload.description ?? null,
     summary: userPayload.summary ?? null,
     imageUrl: userPayload.imageUrl ?? null,
@@ -265,7 +265,7 @@ export function translateInductionPayload(
   const displayName = String(userPayload.displayName ?? "");
   const base: InductionAdminPayload = {
     displayName,
-    category: String(userPayload.category ?? "Misc"),
+    category: canonicalCategoryId(String(userPayload.category ?? "misc")),
     imageSlug: generateImageSlug(displayName) || generateSlug(displayName),
     wikiSlug: null,
     xHandle: extractXHandle(userPayload.socialUrl),
@@ -385,7 +385,9 @@ export function translateOpenMarketPayload(
     title: String(userPayload.title ?? ""),
     slug: generateSlug(String(userPayload.title ?? "market")),
     openMarketType: marketType,
-    category: userPayload.category ?? null,
+    category: userPayload.category
+      ? canonicalCategoryId(String(userPayload.category))
+      : null,
     description: userPayload.description ?? null,
     teaser: null,
     summary: null,
@@ -578,7 +580,7 @@ export async function dispatchApproval(
         .insert(inductionCandidates)
         .values({
           displayName: p.displayName,
-          category: canonicalizePersonCategory(p.category)!,
+          category: canonicalCategoryId(p.category),
           imageSlug: p.imageSlug,
           wikiSlug: p.wikiSlug,
           xHandle: p.xHandle,

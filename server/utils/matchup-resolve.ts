@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { matchups } from "@shared/schema";
+import { voteSlugIn } from "../lib/vote-slug";
 
 /** PostgreSQL gen_random_uuid() style */
 const UUID_RE =
@@ -26,7 +27,7 @@ export async function resolvePublicMatchupBySlugOrId(
   }
   if (!param) return null;
 
-  const [bySlug] = await db.select().from(matchups).where(eq(matchups.slug, param));
+  const [bySlug] = await db.select().from(matchups).where(voteSlugIn(matchups.slug, param));
   let row = bySlug;
   if (!row && isLikelyMatchupUuid(param)) {
     const [byId] = await db.select().from(matchups).where(eq(matchups.id, param));
