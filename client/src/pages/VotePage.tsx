@@ -4,6 +4,7 @@ import { getDisplayImageUrl } from "@/lib/imageTransform";
 import {
   DEFAULT_HUB_ACTIVITY_FILTER,
   type HubActivityFilter,
+  nextVoteActivityFilter,
   readHubActivityFilter,
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
@@ -1574,6 +1575,10 @@ export default function VotePage() {
     return matchupVoted + sentimentVoted + opinionVoted;
   }, [filteredMatchups, filteredTopics, filteredOpinionPolls, matchupUserVotes]);
 
+  const cycleMyVotesFilter = useCallback(() => {
+    setMyVotesFilter((prev) => nextVoteActivityFilter(prev, myVotesCount));
+  }, [myVotesCount, setMyVotesFilter]);
+
   // In hide-mine mode a freshly-voted card is kept while it is dwelling/exiting
   // (so it can show results and fly into the Hidden toggle), then dropped once
   // its lifecycle completes (isHidden) — independent of refetch timing.
@@ -2673,8 +2678,8 @@ export default function VotePage() {
           <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0">
             {user && (
               <motion.div
-                animate={hideTogglePulse}
-                className="min-w-fit rounded-lg"
+                animate={isMobile ? undefined : hideTogglePulse}
+                className="max-md:hidden min-w-fit rounded-lg"
               >
                 <HubActivityFilterControl
                   scope="vote"
@@ -4270,7 +4275,19 @@ export default function VotePage() {
         </>
       )}
 
-      <QuickVoteHost surface="vote" />
+      <QuickVoteHost
+        surface="vote"
+        activityFilter={
+          user
+            ? {
+                value: myVotesFilter,
+                count: myVotesCount,
+                onCycle: cycleMyVotesFilter,
+                pulseTick: hidePulseTick,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

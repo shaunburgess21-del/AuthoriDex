@@ -4,7 +4,8 @@
  *    arbitrated via interruptArbiter so only one interrupt fires per session),
  *  - the QuickVoteOverlay open state + history pushState back-to-close,
  *  - the post-signup restore (AUTH_APPLY_QUICK_VOTE_ONCE_KEY),
- *  - the persistent bottom-right Quick Vote pill (mobile Home + Vote).
+ *  - the persistent bottom-right Quick Vote pill (mobile Home + Vote),
+ *    with the Vote activity-filter eye beside it when `activityFilter` is set.
  *
  * Overlay is mobile-only (v1). On desktop the first-visit nudge deep-links to /vote.
  */
@@ -17,6 +18,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickVoteOverlay } from "@/components/quick-vote/QuickVoteOverlay";
+import {
+  VoteActivityFilterFab,
+  type VoteActivityFilterFabProps,
+} from "@/components/VoteActivityFilterFab";
 import {
   QUICK_VOTE_NUDGE_ID,
   QUICK_VOTE_NUDGE_LIFETIME_CAP,
@@ -82,9 +87,14 @@ function pillReminderShown(): boolean {
 
 export interface QuickVoteHostProps {
   surface: "home" | "vote";
+  /**
+   * Signed-in Vote hub filter. Rendered as a pill to the left of Quick Vote
+   * while the FAB is up. Home and logged-out Vote omit it.
+   */
+  activityFilter?: VoteActivityFilterFabProps;
 }
 
-export function QuickVoteHost({ surface }: QuickVoteHostProps) {
+export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
   const isMobile = useIsMobile();
   // BottomNav translates itself by this signed delta to stay glued to the
   // visual viewport as the iOS toolbar shows/hides. The pills sit 16px above
@@ -343,32 +353,47 @@ export function QuickVoteHost({ surface }: QuickVoteHostProps) {
       >
         <AnimatePresence>
           {showFab && (
-            <motion.button
+            <motion.div
+              key="quick-vote-fab-cluster"
               initial={{ opacity: 0, scale: 0.9 }}
-              // Labelled only for the session intro and one later reminder.
-              // Otherwise a dim icon circle. Always tappable.
-              animate={{ opacity: pillProminent ? 1 : 0.5, scale: 1 }}
+              animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
-              onClick={openFromFab}
-              className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
-              aria-label="Quick Vote"
-              data-testid="quick-vote-reentry-pill"
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="flex origin-right items-center justify-end gap-2"
             >
-              <Zap className="h-4 w-4 shrink-0 text-primary" />
-              <motion.span
-                initial={false}
-                animate={
-                  pillProminent
-                    ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
-                    : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
-                }
+              {activityFilter && (
+                <VoteActivityFilterFab
+                  value={activityFilter.value}
+                  count={activityFilter.count}
+                  onCycle={activityFilter.onCycle}
+                  pulseTick={activityFilter.pulseTick}
+                />
+              )}
+              <motion.button
+                // Labelled only for the session intro and one later reminder.
+                // Otherwise a dim icon circle. Always tappable.
+                animate={{ opacity: pillProminent ? 1 : 0.5 }}
                 transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
-                className="overflow-hidden whitespace-nowrap"
+                onClick={openFromFab}
+                className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+                aria-label="Quick Vote"
+                data-testid="quick-vote-reentry-pill"
               >
-                Quick Vote
-              </motion.span>
-            </motion.button>
+                <Zap className="h-4 w-4 shrink-0 text-primary" />
+                <motion.span
+                  initial={false}
+                  animate={
+                    pillProminent
+                      ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
+                      : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
+                  }
+                  transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  Quick Vote
+                </motion.span>
+              </motion.button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

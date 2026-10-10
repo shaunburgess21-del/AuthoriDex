@@ -3,6 +3,7 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import {
   DEFAULT_HUB_ACTIVITY_FILTER,
   type HubActivityFilter,
+  nextVoteActivityFilter,
   passesSectionActivityFilter,
   readHubActivityFilter,
   writeHubActivityFilter,
@@ -18,6 +19,7 @@ import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { HubActivityFilterControl } from "@/components/HubActivityFilterControl";
+import { VoteActivityFilterFab } from "@/components/VoteActivityFilterFab";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -179,6 +181,7 @@ import type { AmmOpenPositionLike } from "@/lib/ammPositionMaps";
 import { ProfileTabs, type ProfileTab } from "@/components/ProfileTabs";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { consumeCategoryPillBrowseIntent } from "@/components/InteractiveCategoryPill";
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
@@ -1220,6 +1223,7 @@ export default function PredictPage() {
   useScrollHideTransform(weeklyHeroRef, `${selectedType}|${weeklyCategory}`);
 
   const isMobile = useIsMobile();
+  const viewportOffset = useVisualViewportOffset();
   const playInactivePredictionAdvance = useCallback(
     (section: "updown" | "h2h" | "gainer", marketId: string) => {
       if (!isMobile || myPositionsFilter !== "all") return;
@@ -1575,6 +1579,10 @@ export default function PredictPage() {
       setMyPositionsFilter(DEFAULT_HUB_ACTIVITY_FILTER);
     }
   }, [activePredictions, myPositionsFilter, setMyPositionsFilter]);
+
+  const cycleMyPositionsFilter = useCallback(() => {
+    setMyPositionsFilter((prev) => nextVoteActivityFilter(prev, activePredictions));
+  }, [activePredictions, setMyPositionsFilter]);
 
   const predictedMarkets = useMemo(() => new Set(Array.from(userBetsByMarket.keys())), [userBetsByMarket]);
   const hydratedMarkets = useMemo((): PredictionMarket[] => {
@@ -3158,13 +3166,15 @@ export default function PredictPage() {
           {predictView === "weekly" ? (
             <HorizontalScroll className="pb-1 flex-1 min-w-0">
               {user && !userBetsError && (
-                <HubActivityFilterControl
-                  scope="predict"
-                  value={myPositionsFilter}
-                  count={activePredictions}
-                  onChange={(next) => setMyPositionsFilter(next)}
-                  accent="weekly"
-                />
+                <div className="max-md:hidden min-w-fit">
+                  <HubActivityFilterControl
+                    scope="predict"
+                    value={myPositionsFilter}
+                    count={activePredictions}
+                    onChange={(next) => setMyPositionsFilter(next)}
+                    accent="weekly"
+                  />
+                </div>
               )}
               {PREDICTION_TYPES.map((type) => (
                 <button
@@ -3186,7 +3196,7 @@ export default function PredictPage() {
           ) : (
             <div className="flex flex-1 min-w-0 items-center gap-2" data-testid="world-mode-filter-bar">
               {user && !userBetsError && (
-                <div className="shrink-0">
+                <div className="max-md:hidden shrink-0">
                   <HubActivityFilterControl
                     scope="predict"
                     value={myPositionsFilter}
@@ -4323,6 +4333,24 @@ export default function PredictPage() {
             }}
           />
         </>
+      )}
+
+      {user && !userBetsError && (
+        <div
+          className="fixed right-4 z-[55] pointer-events-none md:hidden"
+          style={{
+            bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
+            transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
+            willChange: "transform",
+          }}
+        >
+          <VoteActivityFilterFab
+            scope="predict"
+            value={myPositionsFilter}
+            count={activePredictions}
+            onCycle={cycleMyPositionsFilter}
+          />
+        </div>
       )}
     </div>
   );
