@@ -1,0 +1,278 @@
+name: Android release
+
+# Manual Play upload for the Capacitor app (com.voxdex.app).
+# Secrets, the versionCode offset, and the one-time Play setup: docs/android-release.md
+# Do not print secret values. Do not enable xtrace.
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: Play track
+        type: choice
+        required: true
+        default: internal
+        options:
+          - internal
+          - closed
+          - alpha
+          - beta
+          - production
+      release_notes:
+        description: Play release notes (en-US). Empty uses a default line.
+        required: false
+        type: string
+        default: ""
+      version_code_offset:
+        description: Overrides ANDROID_VERSION_CODE_OFFSET for this run.
+        required: false
+        type: string
+        default: ""
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-play-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and upload AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Resolve version and signing config
+        env:
+          INPUT_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.track || 'internal' }}
+          INPUT_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || '' }}
+          INPUT_OFFSET: ${{ github.event_name == 'workflow_dispatch' && inputs.version_code_offset || '' }}
+          VAR_OFFSET: ${{ vars.ANDROID_VERSION_CODE_OFFSET }}
+          SECRET_OFFSET: ${{ secrets.ANDROID_VERSION_CODE_OFFSET }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+
+          require_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -z "${value}" ]; then
+              echo "::error::Missing secret ${name}. See docs/android-release.md."
+              exit 1
+            fi
+          }
+
+          require_secret ANDROID_KEYSTORE_BASE64 "${ANDROID_KEYSTORE_BASE64}"
+          require_secret ANDROID_KEYSTORE_PASSWORD "${ANDROID_KEYSTORE_PASSWORD}"
+          require_secret ANDROID_KEY_ALIAS "${ANDROID_KEY_ALIAS}"
+          require_secret ANDROID_KEY_PASSWORD "${ANDROID_KEY_PASSWORD}"
+          require_secret PLAY_SERVICE_ACCOUNT_JSON "${PLAY_SERVICE_ACCOUNT_JSON}"
+
+          json_compact=$(printf '%s' "${PLAY_SERVICE_ACCOUNT_JSON}" | tr -d '[:space:]')
+          if [[ "${json_compact}" != "{"* ]]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON must be the raw JSON key, starting with {."
+            exit 1
+          fi
+          unset json_compact
+
+          compact_b64=$(printf '%s' "${ANDROID_KEYSTORE_BASE64}" | tr -d '[:space:]')
+          if ! [[ "${compact_b64}" =~ ^[A-Za-z0-9+/]+={0,2}$ ]]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64. See docs/android-release.md."
+            exit 1
+          fi
+
+          case "${INPUT_TRACK}" in
+            internal|closed|alpha|beta|production) ;;
+            *)
+              echo "::error::Unsupported Play track."
+              exit 1
+              ;;
+          esac
+
+          offset=""
+          if [ -n "${INPUT_OFFSET}" ]; then
+            offset="${INPUT_OFFSET}"
+          elif [ -n "${VAR_OFFSET}" ]; then
+            offset="${VAR_OFFSET}"
+          elif [ -n "${SECRET_OFFSET}" ]; then
+            offset="${SECRET_OFFSET}"
+          else
+            echo "::error::Set repository variable ANDROID_VERSION_CODE_OFFSET to the highest versionCode already on Play, or pass version_code_offset. See docs/android-release.md."
+            exit 1
+          fi
+
+          if ! [[ "${offset}" =~ ^[0-9]+$ ]]; then
+            echo "::error::ANDROID_VERSION_CODE_OFFSET must be a non-negative integer."
+            exit 1
+          fi
+          if [ "${#offset}" -gt 10 ]; then
+            echo "::error::ANDROID_VERSION_CODE_OFFSET is too large."
+            exit 1
+          fi
+
+          offset=$((10#${offset}))
+          version_code=$((offset + 10#${GITHUB_RUN_NUMBER}))
+          if [ "${version_code}" -le "${offset}" ]; then
+            echo "::error::versionCode did not increase past the offset."
+            exit 1
+          fi
+          if [ "${version_code}" -gt 2100000000 ]; then
+            echo "::error::versionCode ${version_code} exceeds Play's maximum of 2100000000."
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version_name="${GITHUB_REF_NAME#v}"
+          else
+            pkg_version=$(node -p "require('./package.json').version")
+            version_name="${pkg_version}.${GITHUB_RUN_NUMBER}"
+          fi
+
+          if ! [[ "${version_name}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+            echo "::error::versionName must contain only letters, numbers, dots, underscores, plus signs, and hyphens."
+            exit 1
+          fi
+
+          if [ "${INPUT_TRACK}" = "production" ]; then
+            play_status="draft"
+            changes_not_sent="true"
+          else
+            play_status="completed"
+            changes_not_sent="false"
+          fi
+
+          notes="${INPUT_NOTES}"
+          if [ -z "${notes//[[:space:]]/}" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              notes="VoxDex ${GITHUB_REF_NAME}"
+            else
+              notes="VoxDex ${version_name}"
+            fi
+          fi
+
+          keystore_path="${RUNNER_TEMP}/voxdex-upload.keystore"
+          umask 077
+          printf '%s' "${compact_b64}" | base64 --decode > "${keystore_path}"
+          unset compact_b64
+          keystore_bytes=$(wc -c < "${keystore_path}" | tr -d '[:space:]')
+          if [ "${keystore_bytes}" -lt 100 ]; then
+            echo "::error::Decoded keystore is ${keystore_bytes} bytes. Check ANDROID_KEYSTORE_BASE64."
+            exit 1
+          fi
+          keystore_magic=$(od -An -t x1 -N 4 "${keystore_path}" | tr -d '[:space:]')
+          case "${keystore_magic}" in
+            30*|feedfeed) ;;
+            *)
+              echo "::error::Decoded ANDROID_KEYSTORE_BASE64 is not a JKS or PKCS12 keystore."
+              exit 1
+              ;;
+          esac
+
+          export KEYSTORE_PATH="${keystore_path}"
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+
+          function esc(value) {
+            return String(value)
+              .replaceAll("\\", "\\\\")
+              .replaceAll("\n", "\\n")
+              .replaceAll("\r", "\\r");
+          }
+
+          const file = [
+            `storeFile=${esc(process.env.KEYSTORE_PATH)}`,
+            `storePassword=${esc(process.env.ANDROID_KEYSTORE_PASSWORD)}`,
+            `keyAlias=${esc(process.env.ANDROID_KEY_ALIAS)}`,
+            `keyPassword=${esc(process.env.ANDROID_KEY_PASSWORD)}`,
+            "",
+          ].join("\n");
+          writeFileSync("android/keystore.properties", file, { mode: 0o600 });
+          NODE
+          chmod 600 android/keystore.properties "${keystore_path}"
+
+          mkdir -p android/play-release-notes
+          printf '%s\n' "${notes}" > android/play-release-notes/whatsnew-en-US
+
+          {
+            echo "ANDROID_VERSION_CODE=${version_code}"
+            echo "ANDROID_VERSION_NAME=${version_name}"
+            echo "PLAY_TRACK=${INPUT_TRACK}"
+            echo "PLAY_STATUS=${play_status}"
+            echo "PLAY_CHANGES_NOT_SENT_FOR_REVIEW=${changes_not_sent}"
+          } >> "${GITHUB_ENV}"
+
+          echo "versionName=${version_name} versionCode=${version_code} offset=${offset} run_number=${GITHUB_RUN_NUMBER} track=${INPUT_TRACK} status=${play_status}"
+          {
+            echo "### Android release"
+            echo "- versionName: \`${version_name}\`"
+            echo "- versionCode: \`${version_code}\`"
+            echo "- track: \`${INPUT_TRACK}\` (${play_status})"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build:mobile
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK platform
+        run: sdkmanager --install "platforms;android-36" "build-tools;35.0.0" "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed release AAB
+        working-directory: android
+        run: bash ./gradlew bundleRelease --stacktrace --no-daemon
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxdex-${{ env.ANDROID_VERSION_NAME }}-${{ env.ANDROID_VERSION_CODE }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload AAB to Google Play
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.voxdex.app
+          releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
+          tracks: ${{ env.PLAY_TRACK }}
+          status: ${{ env.PLAY_STATUS }}
+          releaseName: ${{ env.ANDROID_VERSION_NAME }}
+          whatsNewDirectory: android/play-release-notes
+          changesNotSentForReview: ${{ env.PLAY_CHANGES_NOT_SENT_FOR_REVIEW }}

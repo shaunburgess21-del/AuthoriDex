@@ -16,6 +16,34 @@ if (keystorePropertiesFile.exists()) {
     hasReleaseKeystore = true
 }
 
+// Local builds stay at versionCode 1 / versionName "1.0".
+// CI sets ANDROID_VERSION_CODE and ANDROID_VERSION_NAME (docs/android-release.md).
+// Local override: -Pandroid.versionCode= / -Pandroid.versionName= or the same env vars.
+// Do not print these values.
+def resolveAndroidVersionCode() {
+    def fromEnv = System.getenv("ANDROID_VERSION_CODE")
+    if (fromEnv?.trim()) {
+        return Integer.parseInt(fromEnv.trim())
+    }
+    def fromProp = findProperty("android.versionCode")
+    if (fromProp?.toString()?.trim()) {
+        return Integer.parseInt(fromProp.toString().trim())
+    }
+    return 1
+}
+
+def resolveAndroidVersionName() {
+    def fromEnv = System.getenv("ANDROID_VERSION_NAME")
+    if (fromEnv?.trim()) {
+        return fromEnv.trim()
+    }
+    def fromProp = findProperty("android.versionName")
+    if (fromProp?.toString()?.trim()) {
+        return fromProp.toString().trim()
+    }
+    return "1.0"
+}
+
 android {
     namespace = "com.voxdex.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -23,8 +51,8 @@ android {
         applicationId "com.voxdex.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode resolveAndroidVersionCode()
+        versionName resolveAndroidVersionName()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
