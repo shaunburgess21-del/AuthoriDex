@@ -235,8 +235,16 @@ test("release minify stays off and the Android tree has no embedded secrets", ()
 test("release signing loads android/keystore.properties only when that file exists", () => {
   const gradle = read("android/app/build.gradle");
   assert.match(gradle, /applicationId "com\.voxdex\.app"/);
-  assert.match(gradle, /versionCode 1\b/);
-  assert.match(gradle, /versionName "1\.0"/);
+  assert.match(gradle, /def resolveAndroidVersionCode\(\)/);
+  assert.match(gradle, /System\.getenv\("ANDROID_VERSION_CODE"\)/);
+  assert.match(gradle, /findProperty\("android\.versionCode"\)/);
+  assert.match(gradle, /return 1\b/);
+  assert.match(gradle, /versionCode resolveAndroidVersionCode\(\)/);
+  assert.match(gradle, /def resolveAndroidVersionName\(\)/);
+  assert.match(gradle, /System\.getenv\("ANDROID_VERSION_NAME"\)/);
+  assert.match(gradle, /findProperty\("android\.versionName"\)/);
+  assert.match(gradle, /return "1\.0"/);
+  assert.match(gradle, /versionName resolveAndroidVersionName\(\)/);
   assert.match(gradle, /def keystorePropertiesFile = rootProject\.file\("keystore\.properties"\)/);
   assert.match(gradle, /if \(keystorePropertiesFile\.exists\(\)\)/);
   assert.match(
@@ -281,4 +289,33 @@ test("Capacitor plugin manifests do not export components or allow cleartext", (
     assert.equal(xml.includes("<service"), false, rel);
     assert.equal(xml.includes("<receiver"), false, rel);
   }
+});
+
+test("android release workflow reads signing material from secrets only", () => {
+  const workflow = read(".github/workflows/android-release.yml");
+  const doc = read("docs/android-release.md");
+  for (const name of [
+    "ANDROID_KEYSTORE_BASE64",
+    "ANDROID_KEYSTORE_PASSWORD",
+    "ANDROID_KEY_ALIAS",
+    "ANDROID_KEY_PASSWORD",
+    "PLAY_SERVICE_ACCOUNT_JSON",
+    "ANDROID_VERSION_CODE_OFFSET",
+  ]) {
+    assert.match(workflow, new RegExp(name));
+    assert.match(doc, new RegExp(name));
+  }
+  assert.match(workflow, /workflow_dispatch/);
+  assert.match(workflow, /r0adkll\/upload-google-play@/);
+  assert.match(workflow, /npm run build:mobile/);
+  assert.match(workflow, /npx cap sync android/);
+  assert.match(workflow, /bundleRelease/);
+  assert.match(workflow, /upload-artifact@/);
+  assert.equal(workflow.includes("echo ${{ secrets"), false);
+  assert.equal(workflow.includes('echo "$ANDROID_KEYSTORE'), false);
+  assert.equal(workflow.includes('echo "$ANDROID_KEY_'), false);
+  assert.equal(workflow.includes('echo "$PLAY_SERVICE'), false);
+  assert.equal(workflow.includes("set -x"), false);
+  assert.match(read("android/SIGNING.md"), /docs\/android-release\.md/);
+  assert.equal(read(".github/workflows/ci.yml").includes("android-release"), false);
 });
