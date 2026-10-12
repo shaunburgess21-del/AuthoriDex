@@ -218,11 +218,6 @@ const IMPERFECTIONS: ReadonlyArray<{ weight: number; instruction: string }> = [
       "STYLE QUIRK: start the comment with a LOWERCASE letter (e.g. 'honestly, this take is fine' instead of 'Honestly, this take is fine'). Do NOT also drop punctuation or break grammar — just the lowercase opener, the way people post on X.",
   },
   {
-    weight: 20,
-    instruction:
-      "STYLE QUIRK: drop the final period from your last sentence so it ends on the word itself, the way people often type on X (e.g. 'Yeah they are folding by November for sure'). Do NOT use this in combination with any other imperfection.",
-  },
-  {
     weight: 15,
     instruction:
       "STYLE QUIRK: include exactly ONE casual sentence fragment (no verb) somewhere in the comment, like 'Wild stuff.' or 'Classic Drake move.' or 'Honestly insane.'. Keep the rest of the comment grammatical.",
@@ -378,6 +373,7 @@ function buildSystemPrompt(
     "- A touch of dry wit or humour is welcome when it fits the topic, but never forced and never at someone's expense.",
     "- Reference the ACTUAL subject matter (the people, the topic, the question). No generic platitudes.",
     "- PUNCTUATION: do NOT use semicolons (;) or em dashes (— or --). They're the strongest tells that a bot wrote the comment. Use commas or full stops instead. A plain hyphen with spaces ( - ) is fine and common in real comments — 'Spain wins it - food and beaches' or 'I went neutral - love both' reads completely human. Use sparingly, not in every sentence.",
+    "- ENDINGS: do NOT end the comment with a full stop. People posting on X almost never put a period after their last word ('Spain by a mile' not 'Spain by a mile.'). Full stops BETWEEN sentences are fine, and ending on '!' or '?' is fine when it's natural. The examples in these instructions end with periods only because they're quoted — your comment should not.",
     "- If you have a stated vote/position below ('You voted: …' or 'You bet: …'), your comment MUST clearly support that side. A reader should be able to tell which way you voted from your comment alone. Do NOT contradict your own vote, and do NOT sit on the fence if you voted decisively.",
     "",
     "ANTI-AI-TELLS — readers on X / Reddit can spot ChatGPT-style writing instantly. Avoid every one of these:",
@@ -764,10 +760,24 @@ function sanitise(
     text = lastSentenceEnd > maxChars * 0.5 ? window.slice(0, lastSentenceEnd + 1) : `${window.trimEnd()}…`;
   }
 
+  text = stripTrailingFullStop(text);
+
   // Reject overly short / single-word noise.
   if (text.length < 8) return null;
 
   return text;
+}
+
+/**
+ * People posting on social almost never end a comment with a full stop, and
+ * the model does it on nearly every one. Drops a single trailing "." (also
+ * when followed by a closing emoji). Ellipses ("..."), "!", "?" and
+ * abbreviations like "U.S." are left alone.
+ */
+export function stripTrailingFullStop(text: string): string {
+  return text
+    .replace(/(?<!\.|\.[A-Za-z])\.((?:\s*[\p{Extended_Pictographic}\uFE0F\u200D])*)\s*$/u, "$1")
+    .trimEnd();
 }
 
 function escapeRegex(input: string): string {
@@ -787,7 +797,7 @@ export async function generateAgentComment(
   const length = pickLength(ctx.surface, profile, isReply);
   const hasDiscussion = (ctx.existingComments?.length ?? 0) > 0;
   // ~18% of comments get a "human imperfection" directive (lowercase
-  // start, dropped period, sentence fragment, casual contraction slip,
+  // start, sentence fragment, casual contraction slip,
   // etc.) so the cohort doesn't read as uniformly polished. Doing it via
   // the prompt instead of post-processing keeps the imperfection
   // coherent with the comment's content.
