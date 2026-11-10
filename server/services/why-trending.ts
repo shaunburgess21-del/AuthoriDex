@@ -35,7 +35,7 @@ function providerUnavailablePayload(
 }
 
 export const WHY_TRENDING_PROMPT_VERSION = 5;
-export const WHY_TRENDING_CACHE_TTL_HOURS = 4;
+export const WHY_TRENDING_CACHE_TTL_HOURS = 12;
 export const WHY_TRENDING_RATE_LIMIT_MINUTES = 30;
 export const WHY_TRENDING_RANK_CUTOFF = 20;
 export const WHY_TRENDING_RANK_EXIT = 22;

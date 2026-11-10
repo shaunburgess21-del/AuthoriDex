@@ -964,7 +964,7 @@ async function startServer() {
     }
 
     // Why-Trending warmer for top-20 + hot movers. Cadence matches the
-    // 4h cache TTL so caches stay fresh without users paying the cold-
+    // 12h cache TTL so caches stay fresh without users paying the cold-
     // path OpenAI latency.
     if (!SERVERLESS_MODE) {
       startScheduler("WhyTrendingRefresh", startWhyTrendingRefreshScheduler);
@@ -1280,7 +1280,7 @@ function startNetWorthRefreshScheduler() {
 }
 
 // ─── Why-Trending warmer scheduler ───────────────────────────────────────────
-const WHY_TRENDING_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4h, matches cache TTL
+const WHY_TRENDING_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12h, matches cache TTL
 
 async function runScheduledWhyTrendingRefresh(): Promise<void> {
   try {
@@ -1299,7 +1299,7 @@ async function runScheduledWhyTrendingRefresh(): Promise<void> {
 
 function startWhyTrendingRefreshScheduler() {
   if (SERVERLESS_MODE) return;
-  log("[WhyTrendingRefresh] Starting (every 4h)");
+  log("[WhyTrendingRefresh] Starting (every 12h)");
   // Stagger 3 min in so the first warm-up runs after ingestion has
   // had a chance to populate ranks at :02.
   setTimeout(() => {

@@ -951,7 +951,7 @@ export async function fetchTrendingNewsContext(name: string): Promise<TrendingNe
 
   const cacheKey = `serper:trending:${name.replace(/\s+/g, "_").toLowerCase()}`;
   // Keep aligned with WHY_TRENDING_CACHE_TTL_HOURS so hash-extension can match on cache expiry.
-  const CACHE_TTL_HOURS = 4;
+  const CACHE_TTL_HOURS = 12;
 
   try {
     const cached = await getCachedResponse(cacheKey);

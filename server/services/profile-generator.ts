@@ -32,9 +32,10 @@ export const parseNetWorthToUsd = parseNetWorthToUsdPure;
 export const isImplausibleNetWorth = isImplausibleNetWorthPure;
 
 export const PROFILE_PROMPT_VERSION = 4;
-export const PROFILE_BIO_TTL_DAYS = 30;
-/** Cron only force-regenerates bios older than this (daily job). */
-export const PROFILE_BIO_CRON_REFRESH_DAYS = 25;
+export const PROFILE_BIO_TTL_DAYS = 90;
+/** Cron only force-regenerates bios older than this (daily job). Keep below
+ *  PROFILE_BIO_TTL_DAYS so the cron refreshes before profile visits do. */
+export const PROFILE_BIO_CRON_REFRESH_DAYS = 85;
 
 const PROFILE_LOCK_TTL_SECONDS = 120;
 const inFlightRegenerations = new Map<string, Promise<void>>();
