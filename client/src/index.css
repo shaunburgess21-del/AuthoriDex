@@ -1996,6 +1996,15 @@ html [data-sonner-toaster][data-y-position="top"] {
   top: calc(var(--offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
 }
 
+/* iOS WKWebView zooms the page when a focused field is under 16px.
+ * html.ios-shell is native iOS only, so website, PWA, and Android keep
+ * their smaller field type. 16px is the floor that skips the zoom. */
+html.ios-shell input,
+html.ios-shell textarea,
+html.ios-shell select {
+  font-size: 16px;
+}
+
 @media (max-width: 600px) {
   html [data-sonner-toaster][data-y-position="top"] {
     top: calc(var(--mobile-offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
