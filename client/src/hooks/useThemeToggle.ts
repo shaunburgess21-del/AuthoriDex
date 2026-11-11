@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { syncAndroidSystemBars } from "@/lib/nativeSystemBars";
+import { syncNativeSystemBars } from "@/lib/nativeSystemBars";
 
 type Theme = "light" | "dark";
 
@@ -11,7 +11,7 @@ export function useThemeToggle() {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    syncAndroidSystemBars(theme);
+    syncNativeSystemBars(theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

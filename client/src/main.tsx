@@ -12,13 +12,13 @@ import {
 import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
 import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
 import { primeAndroidNetworkStatus } from "./lib/nativeNetworkListener";
-import { syncAndroidSystemBars } from "./lib/nativeSystemBars";
+import { syncNativeSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
 
 try {
-  syncAndroidSystemBars(localStorage.getItem("theme") === "light" ? "light" : "dark");
+  syncNativeSystemBars(localStorage.getItem("theme") === "light" ? "light" : "dark");
 } catch {
-  syncAndroidSystemBars("dark");
+  syncNativeSystemBars("dark");
 }
 
 installNativeOriginPatch();
