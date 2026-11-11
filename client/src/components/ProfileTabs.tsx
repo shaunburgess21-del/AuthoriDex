@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { Eye, Vote, TrendingUp } from "lucide-react";
+import { hapticSelection } from "@/lib/haptic";
 
 export interface ProfileTab {
   id: string;
@@ -39,7 +40,10 @@ export function ProfileTabs({ activeTab, onTabChange, noBottomMargin, tabs }: Pr
           return (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => {
+                hapticSelection();
+                onTabChange(tab.id);
+              }}
               className={`
                 relative flex items-center justify-center gap-2 flex-1
                 whitespace-nowrap px-2 sm:px-5 py-[13px] rounded-md text-[15px] font-medium transition-all
