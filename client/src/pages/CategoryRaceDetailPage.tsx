@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { dismissVoteToast, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
+import { PREDICTION_DOCK_CLASS } from "@/lib/safeAreaChrome";
 import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -1001,7 +1002,7 @@ export default function CategoryRaceDetailPage() {
           (h-16, z-50) on phones; back to bottom-0 on md+ where the nav
           isn't rendered. */}
       {userPick ? (
-      <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md">
+      <div className={PREDICTION_DOCK_CLASS}>
         <div className="max-w-3xl mx-auto px-4 py-3">
           {(() => {
             // Race resolves on biggest mover, so the most useful "am I
