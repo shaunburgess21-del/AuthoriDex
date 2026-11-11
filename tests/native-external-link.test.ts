@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { classifyExternalLink } from "../client/src/lib/nativeExternalLink";
+import { classifyExternalLink, shouldInstallExternalLinkPolicy } from "../client/src/lib/nativeExternalLink";
 
 const WEBVIEW = "https://localhost";
 
@@ -286,5 +286,56 @@ test("credentialed and lookalike first-party URLs do not navigate in-app", () =>
   assert.deepEqual(
     classifyExternalLink("https://voxdex.com@evil.example/terms", { currentOrigin: WEBVIEW }),
     { kind: "block" },
+  );
+});
+
+const IOS_WEBVIEW = "capacitor://localhost";
+
+test("the external-link policy installs on iOS and Android shells only", () => {
+  assert.equal(shouldInstallExternalLinkPolicy(true, "ios"), true);
+  assert.equal(shouldInstallExternalLinkPolicy(true, "android"), true);
+  assert.equal(shouldInstallExternalLinkPolicy(false, "ios"), false);
+  assert.equal(shouldInstallExternalLinkPolicy(false, "android"), false);
+  assert.equal(shouldInstallExternalLinkPolicy(true, "web"), false);
+  assert.equal(shouldInstallExternalLinkPolicy(false, "web"), false);
+});
+
+test("the iOS capacitor origin keeps voxdex.com inside the app and opens other domains outside", () => {
+  assert.deepEqual(classifyExternalLink("/vote", { currentOrigin: IOS_WEBVIEW }), {
+    kind: "passthrough",
+  });
+  assert.deepEqual(
+    classifyExternalLink("capacitor://localhost/predict", { currentOrigin: IOS_WEBVIEW }),
+    { kind: "passthrough" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://voxdex.com/person/abc?ref=1#top", { currentOrigin: IOS_WEBVIEW }),
+    { kind: "in_app", path: "/person/abc?ref=1#top" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://www.voxdex.com/terms", {
+      currentOrigin: IOS_WEBVIEW,
+      target: "_blank",
+    }),
+    { kind: "in_app", path: "/terms" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://en.wikipedia.org/wiki/Ada_Lovelace", { currentOrigin: IOS_WEBVIEW }),
+    { kind: "external", url: "https://en.wikipedia.org/wiki/Ada_Lovelace" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("https://x.com/voxdex", { currentOrigin: IOS_WEBVIEW, target: "_blank" }),
+    { kind: "external", url: "https://x.com/voxdex" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("mailto:legal@voxdex.com", {
+      currentOrigin: IOS_WEBVIEW,
+      target: "_blank",
+    }),
+    { kind: "system", url: "mailto:legal@voxdex.com" },
+  );
+  assert.deepEqual(
+    classifyExternalLink("com.voxdex.app://login?code=pkce-code", { currentOrigin: IOS_WEBVIEW }),
+    { kind: "passthrough" },
   );
 });

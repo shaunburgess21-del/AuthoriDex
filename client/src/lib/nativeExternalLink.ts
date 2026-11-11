@@ -17,8 +17,13 @@
  * `file:` are blocked. `com.voxdex.app://login` is left untouched so Phase 6
  * OAuth is not opened as a web page.
  *
+ * iOS WKWebView does follow those navigations, including a plain `<a href>`
+ * to another host, which would replace the app with that site. The same
+ * classification runs on iOS. `Browser.open` is SFSafariViewController there
+ * and Chrome Custom Tabs on Android. Web never calls this.
+ *
  * Auth hosts (Supabase, accounts.google.com) are not first-party. A clicked
- * link to them opens externally. Phase 6 already calls `Browser.open` itself
+ * link to them opens externally. The OAuth flow calls `Browser.open` itself
  * and does not go through this helper.
  */
 
@@ -33,10 +38,15 @@ export type ExternalLinkDecision =
 const PUBLIC_SITE_ORIGIN = "https://voxdex.com";
 
 /**
- * Present on signup/auth Terms and Privacy anchors only. The Android click
+ * Present on signup/auth Terms and Privacy anchors only. The native click
  * listener reads it. Web ignores it; `target="_blank"` still opens a new tab.
  */
 export const NATIVE_EXTERNAL_ATTR = "data-native-external";
+
+/** Android and iOS shells. Web and PWA keep normal link behavior. */
+export function shouldInstallExternalLinkPolicy(native: boolean, platform: string): boolean {
+  return native && (platform === "ios" || platform === "android");
+}
 
 export interface ClassifyExternalLinkOptions {
   /** `window.location.origin`, for example `https://localhost`. */
@@ -124,8 +134,8 @@ function staysInApp(parsed: URL, currentOrigin: string): boolean {
 }
 
 /**
- * Decide what an Android WebView should do with a clicked or `window.open` URL.
- * Web and iOS never call this.
+ * Decide what a native WebView should do with a clicked or `window.open` URL.
+ * Web never calls this. Android and iOS both do.
  */
 export function classifyExternalLink(
   href: string,

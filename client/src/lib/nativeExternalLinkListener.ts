@@ -4,20 +4,26 @@ import { navigateInApp } from "@/lib/nativeDeepLinks";
 import {
   NATIVE_EXTERNAL_ATTR,
   classifyExternalLink,
+  shouldInstallExternalLinkPolicy,
   type ExternalLinkDecision,
 } from "@/lib/nativeExternalLink";
 
 /**
- * Android-only click and `window.open` policy. No-op on web and iOS, so
- * `target="_blank"` on the website still opens a new tab. Does not register
- * `appUrlOpen` or `browserFinished` listeners — Phase 6 owns those.
+ * Native click and `window.open` policy. No-op on web, so `target="_blank"`
+ * on the website still opens a new tab. Android and iOS both install it:
+ * Android would otherwise drop `target="_blank"`, and iOS would navigate
+ * the WebView to the other site. Does not register `appUrlOpen` or
+ * `browserFinished` listeners — OAuth owns those.
  */
 
 const SLOT_KEY = "__voxdexNativeExternalLinks";
 
-function isAndroidNative(): boolean {
+function isNativeShell(): boolean {
   try {
-    return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+    return shouldInstallExternalLinkPolicy(
+      Capacitor.isNativePlatform(),
+      Capacitor.getPlatform(),
+    );
   } catch {
     return false;
   }
@@ -92,7 +98,7 @@ function patchWindowOpen(): void {
 /** Idempotent. Safe to call from `main.tsx` on every platform. */
 export function installNativeExternalLinkPolicy(): void {
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (!isAndroidNative()) return;
+  if (!isNativeShell()) return;
 
   const slot = globalThis as typeof globalThis & { [SLOT_KEY]?: boolean };
   if (slot[SLOT_KEY]) return;
