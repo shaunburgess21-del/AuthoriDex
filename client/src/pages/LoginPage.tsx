@@ -8,15 +8,10 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 import { getSupabase } from "@/lib/supabase";
-import {
-  abortNativeOAuthBrowser,
-  beginNativeOAuthBrowser,
-  isNativeApp,
-  NATIVE_OAUTH_REDIRECT,
-  NATIVE_OAUTH_SETTLED_EVENT,
-} from "@/lib/nativeOAuth";
+import { isNativeApp, NATIVE_OAUTH_SETTLED_EVENT, openNativeOAuth } from "@/lib/nativeOAuth";
+import { nativeOAuthLaunchForPlatform } from "@/lib/nativeOAuthLaunch";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   redirectAfterLogin,
@@ -296,7 +291,9 @@ export default function LoginPage() {
   };
 
   const handleGoogleAuth = async () => {
-    const native = isNativeApp();
+    const platform = Capacitor.getPlatform();
+    const launch = nativeOAuthLaunchForPlatform(platform, window.location.origin);
+    const native = launch.kind !== "web-redirect";
     if (native) setGoogleLoading(true);
     try {
       // Snapshot was written when the user opened /login via navigateToLogin; only stash if missing
@@ -311,11 +308,13 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          // Allowlist this URL in Supabase Dashboard → Authentication → URL Configuration.
-          // Web stays a same-tab redirect. Native opens the system browser because
+          // Allowlist com.voxdex.app://login in Supabase → Authentication → URL Configuration.
+          // Web stays a same-tab redirect. Android opens the system browser.
+          // iOS (platform === "ios") opens ASWebAuthenticationSession. Both native
+          // platforms return through that same URL and finish PKCE in nativeOAuth.ts.
           // Google rejects OAuth inside the WebView (disallowed_useragent).
-          redirectTo: native ? NATIVE_OAUTH_REDIRECT : `${window.location.origin}/login`,
-          skipBrowserRedirect: native,
+          redirectTo: launch.redirectTo,
+          skipBrowserRedirect: launch.skipBrowserRedirect,
         },
       });
 
@@ -324,13 +323,7 @@ export default function LoginPage() {
         if (!data?.url) {
           throw new Error("Google did not return a sign-in URL.");
         }
-        beginNativeOAuthBrowser();
-        try {
-          await Browser.open({ url: data.url });
-        } catch (openError) {
-          abortNativeOAuthBrowser();
-          throw openError;
-        }
+        await openNativeOAuth(data.url, launch);
         return;
       }
     } catch (error: unknown) {
