@@ -3,7 +3,7 @@ import {
   serializeFilters,
   type InsightsFilters,
 } from "@shared/insights/filters";
-import { currentShareContext, isShareCancelled, shareWithAndroidSheet, toPublicShareUrl } from "@/lib/nativeShare";
+import { currentShareContext, isShareCancelled, shareWithSystemSheet, toPublicShareUrl } from "@/lib/nativeShare";
 import { logInsightsEvent } from "./insights-telemetry";
 
 export async function shareInsightsView(options: {
@@ -45,7 +45,7 @@ export async function shareInsightsView(options: {
     ...options.telemetryParams,
   });
 
-  const sheet = await shareWithAndroidSheet({
+  const sheet = await shareWithSystemSheet({
     title: options.title,
     text: options.text,
     url: shareUrl,
