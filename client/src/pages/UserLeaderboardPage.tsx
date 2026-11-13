@@ -10,6 +10,7 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { CURRENCY } from "@/lib/currency";
 import { hapticSelection } from "@/lib/haptic";
+import { ABOVE_TAB_BAR_BOTTOM } from "@/lib/safeAreaChrome";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   OnboardingDrawer,
@@ -545,7 +546,7 @@ export default function UserLeaderboardPage() {
 
           {/* Sticky "You" row if logged in but not visible on current page */}
           {isLoggedIn && userEntry && !isUserVisibleOnPage && rows.length > 0 && (
-            <div className="sticky bottom-0 border-t-2 border-cyan-500/50 dark:border-cyan-500/40 bg-cyan-500/8 dark:bg-cyan-500/5 backdrop-blur-sm">
+            <div className={`sticky ${ABOVE_TAB_BAR_BOTTOM} border-t-2 border-cyan-500/50 dark:border-cyan-500/40 bg-cyan-500/8 dark:bg-cyan-500/5 backdrop-blur-sm`}>
               <UserRow
                 user={userEntry}
                 isCurrentUser={true}
