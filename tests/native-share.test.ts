@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   PUBLIC_SHARE_ORIGIN,
@@ -217,11 +218,25 @@ test("share cancel is not treated as a failed share", () => {
   assert.equal(isShareCancelled({ message: "Can't share while sharing is in progress" }), false);
 });
 
-test("iOS URL shares use the Capacitor sheet and image shares do not", () => {
+test("iOS URL and image shares use the Capacitor sheet; the website does not", () => {
   assert.equal(systemShareTarget(true, false, false), "android");
   assert.equal(systemShareTarget(true, false, true), "android");
   assert.equal(systemShareTarget(false, true, false), "ios");
-  assert.equal(systemShareTarget(false, true, true), "none");
+  assert.equal(systemShareTarget(false, true, true), "ios");
   assert.equal(systemShareTarget(false, false, false), "none");
-  assert.equal(systemShareTarget(true, true, false), "android");
+  assert.equal(systemShareTarget(false, false, true), "none");
+  assert.equal(systemShareTarget(true, true, true), "android");
+});
+
+test("native image shares write a cache file before the sheet; web still uses navigator.share", () => {
+  const share = readFileSync(new URL("../client/src/lib/share.ts", import.meta.url), "utf8");
+  const native = readFileSync(new URL("../client/src/lib/nativeShare.ts", import.meta.url), "utf8");
+  const nativeBlock = share.slice(share.indexOf("if (ctx.nativeAndroid || ctx.nativeIos)"));
+  const webShare = nativeBlock.indexOf("navigator.share");
+  const cacheCall = nativeBlock.indexOf("cachePngForNativeShare");
+  assert.ok(cacheCall >= 0 && webShare > cacheCall);
+  assert.match(share, /files: \[file\]/);
+  assert.match(native, /directory: Directory\.Cache/);
+  assert.match(native, /files: files\.length > 0 \? files : undefined/);
+  assert.match(native, /export async function cachePngForNativeShare/);
 });

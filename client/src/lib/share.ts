@@ -2,10 +2,10 @@ import { toast } from "sonner";
 import {
   currentShareContext,
   isAndroidNativeShare,
+  isIosNativeShare,
   isShareCancelled,
-  shareWithAndroidSheet,
   shareWithSystemSheet,
-  cachePngForAndroidShare,
+  cachePngForNativeShare,
   toPublicShareText,
   toPublicShareUrl,
 } from "@/lib/nativeShare";
@@ -242,14 +242,15 @@ export async function shareImage(
   const text = options.text == null ? undefined : toPublicShareText(options.text, ctx);
   const sharedUrl = options.url == null ? undefined : toPublicShareUrl(options.url, ctx);
 
-  // Capacitor Android has no Web Share API. Write the PNG into cache/share
-  // (the FileProvider cache-path) and open the system sheet.
-  // A failed sheet falls through to the Web Share / clipboard / download
-  // path below. User dismiss is not a failure.
-  if (ctx.nativeAndroid) {
-    const fileUri = await cachePngForAndroidShare(blob, filename);
+  // Native shells have no reliable Web Share file payload. Write the PNG
+  // into Directory.Cache and open @capacitor/share. Web skips this and
+  // uses navigator.share below. A failed sheet falls through. User dismiss
+  // is not a failure. Android still has a text-only retry; iOS does not,
+  // so a missing file does not drop the image on the floor of a text sheet.
+  if (ctx.nativeAndroid || ctx.nativeIos) {
+    const fileUri = await cachePngForNativeShare(blob, filename);
     if (fileUri) {
-      const withFile = await shareWithAndroidSheet({
+      const withFile = await shareWithSystemSheet({
         title: options.title,
         text,
         url: sharedUrl,
@@ -258,8 +259,8 @@ export async function shareImage(
       if (withFile === "shared") return { status: "shared", via: "native" };
       if (withFile === "cancelled") return { status: "cancelled" };
     }
-    if (text || sharedUrl) {
-      const textOnly = await shareWithAndroidSheet({
+    if (ctx.nativeAndroid && (text || sharedUrl)) {
+      const textOnly = await shareWithSystemSheet({
         title: options.title,
         text,
         url: sharedUrl,
@@ -269,8 +270,8 @@ export async function shareImage(
     }
   }
 
-  // Step 1: native share with files (mobile primary path)
-  // canShare check is important — iOS/Android will throw rather than return
+  // Website path, and the fallback when a native sheet could not start.
+  // canShare check is important — some browsers throw rather than return
   // false for unsupported data, so we must guard with `canShare(...)`.
   if (
     typeof navigator !== "undefined" &&
@@ -389,7 +390,7 @@ export function downloadBlob(blob: Blob, filename: string) {
  * the blob first, which we want to defer until the user actually clicks.
  */
 export function canUseNativeShare(): boolean {
-  if (isAndroidNativeShare()) return true;
+  if (isAndroidNativeShare() || isIosNativeShare()) return true;
   return (
     typeof navigator !== "undefined" &&
     typeof navigator.share === "function" &&
