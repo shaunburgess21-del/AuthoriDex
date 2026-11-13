@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StreakToast } from "@/components/StreakToast";
+import { hapticNotifySuccess } from "@/lib/haptic";
 import {
   STREAK_TOAST_DELAY_MS,
   STREAK_TOAST_DURATION_MS,
@@ -273,6 +274,7 @@ export function useDailyCheckin(enabled: boolean = true) {
         queryClient.invalidateQueries({ queryKey: ['/api/gamification/stats'] });
 
         if (data.xpAwarded > 0) {
+          hapticNotifySuccess();
           const reason = data.isMilestone
             ? `Day ${data.milestoneDay} milestone`
             : data.streak > 1
