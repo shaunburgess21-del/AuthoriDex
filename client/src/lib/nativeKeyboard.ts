@@ -8,14 +8,17 @@
  * default `adjustUnspecified` mode often pans the WebView as one native
  * view, so the HTML field stays under the keyboard.
  *
- * `@capacitor/keyboard` is intentionally not added. Its Android resize
- * path no-ops when SystemBars is present, and `resizeOnFullScreen` fights
- * the inset padding SystemBars already applies.
+ * `@capacitor/keyboard` is installed for the iOS shell (`resize: "native"`,
+ * accessory bar on, `resizeOnFullScreen` left unset). Its Android default
+ * for `resizeOnFullScreen` is false, so this plugin does not add the
+ * fullscreen padding that would fight SystemBars. The `resize` key is
+ * iOS-only.
  *
  * These helpers are pure so unit tests can cover them without a WebView.
  * `nativeKeyboardListener` is the only caller that touches the DOM, and
- * it no-ops unless the platform is Android Capacitor. Website, PWA, and
- * iOS never receive `android-keyboard-open`.
+ * it no-ops unless the platform is Android Capacitor. Website and PWA
+ * never receive `android-keyboard-open`. iOS keyboard show/hide is
+ * `nativeIosKeyboardListener`.
  */
 
 export const ANDROID_KEYBOARD_OPEN_CLASS = "android-keyboard-open";
