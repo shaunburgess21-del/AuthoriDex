@@ -1,9 +1,6 @@
 import { CalendarCheck, Check, Gift, Sparkles, X } from "lucide-react";
-import {
-  STREAK_REWARD_TEASE,
-  getNextMilestone,
-  getStreakToastTimeline,
-} from "@/lib/streak-config";
+import { getNextMilestone, getStreakToastTimeline } from "@/lib/streak-config";
+import { isNativeSurface, streakRewardTease } from "@/lib/nativeCopy";
 
 const toastWidth =
   "w-full max-w-[min(384px,calc(100vw-1rem))] sm:max-w-[400px]";
@@ -199,7 +196,7 @@ export function StreakToast({
       </div>
 
       <div className="mt-3 space-y-1">
-        <p className="text-[13px] text-foreground/90">{STREAK_REWARD_TEASE}</p>
+        <p className="text-[13px] text-foreground/90">{streakRewardTease(isNativeSurface())}</p>
         {daysToNext !== null && daysToNext > 0 && !isMilestone && (
           <p className="text-[12px] text-muted-foreground">
             {daysToNext === 1

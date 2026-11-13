@@ -2,6 +2,7 @@ import { Home, TrendingUp, Vote, LineChart, MessagesSquare } from "lucide-react"
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { prefetchRoute } from "@/lib/routePrefetch";
+import { hapticSelection } from "@/lib/haptic";
 
 interface NavItem {
   path: string;
@@ -89,6 +90,7 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               aria-current={isActive ? "page" : undefined}
+              onClick={() => hapticSelection()}
               onPointerEnter={() => prefetchRoute(item.path)}
               onTouchStart={() => prefetchRoute(item.path)}
               onFocus={() => prefetchRoute(item.path)}

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { CURRENCY } from "@/lib/currency";
+import { hapticSelection } from "@/lib/haptic";
 import { ABOVE_TAB_BAR_BOTTOM } from "@/lib/safeAreaChrome";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -469,7 +470,10 @@ export default function UserLeaderboardPage() {
                     ? "bg-background text-foreground shadow-sm border border-border/60"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={() => setPeriod(p)}
+                onClick={() => {
+                  hapticSelection();
+                  setPeriod(p);
+                }}
                 data-testid={`button-period-${p}`}
               >
                 {PERIOD_LABELS[p]}

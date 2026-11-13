@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import { MessageSquare, ArrowUpDown, Clock, ExternalLink, Share2, Maximize2 } from "lucide-react";
+import { hapticSelection } from "@/lib/haptic";
 
 export type CommentCountLabel = "Discussion" | "Comments" | "Insights" | "Replies";
 export type CommentSort = "top" | "newest";
@@ -87,7 +88,10 @@ export function CommentSortHeader({
   const sortToggles = (
     <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5">
       <button
-        onClick={() => onSortChange("top")}
+        onClick={() => {
+          hapticSelection();
+          onSortChange("top");
+        }}
         className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           sort === "top" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
         }`}
@@ -100,7 +104,10 @@ export function CommentSortHeader({
         )}
       </button>
       <button
-        onClick={() => onSortChange("newest")}
+        onClick={() => {
+          hapticSelection();
+          onSortChange("newest");
+        }}
         className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           sort === "newest" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
         }`}

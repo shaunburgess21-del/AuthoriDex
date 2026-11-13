@@ -7,6 +7,7 @@ import {
   fileUriForShare,
   isShareCancelled,
   shareLinkOrigin,
+  systemShareTarget,
   toPublicShareText,
   toPublicShareUrl,
   type ShareUrlContext,
@@ -214,4 +215,13 @@ test("share cancel is not treated as a failed share", () => {
   assert.equal(isShareCancelled("Share canceled"), true);
   assert.equal(isShareCancelled(new Error("Must provide a URL or Message or files")), false);
   assert.equal(isShareCancelled({ message: "Can't share while sharing is in progress" }), false);
+});
+
+test("iOS URL shares use the Capacitor sheet and image shares do not", () => {
+  assert.equal(systemShareTarget(true, false, false), "android");
+  assert.equal(systemShareTarget(true, false, true), "android");
+  assert.equal(systemShareTarget(false, true, false), "ios");
+  assert.equal(systemShareTarget(false, true, true), "none");
+  assert.equal(systemShareTarget(false, false, false), "none");
+  assert.equal(systemShareTarget(true, true, false), "android");
 });

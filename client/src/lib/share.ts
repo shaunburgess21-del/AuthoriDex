@@ -4,6 +4,7 @@ import {
   isAndroidNativeShare,
   isShareCancelled,
   shareWithAndroidSheet,
+  shareWithSystemSheet,
   cachePngForAndroidShare,
   toPublicShareText,
   toPublicShareUrl,
@@ -179,7 +180,7 @@ export async function sharePage(
     surface: options.surface,
   });
 
-  const sheet = await shareWithAndroidSheet({ title, url });
+  const sheet = await shareWithSystemSheet({ title, url });
   if (sheet === "shared" || sheet === "cancelled") return;
 
   if (navigator.share) {

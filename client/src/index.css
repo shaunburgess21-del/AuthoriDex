@@ -1996,8 +1996,70 @@ html [data-sonner-toaster][data-y-position="top"] {
   top: calc(var(--offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
 }
 
+/* iOS WKWebView zooms the page when a focused field is under 16px.
+ * html.ios-shell is native iOS only, so website, PWA, and Android keep
+ * their smaller field type. 16px is the floor that skips the zoom. */
+html.ios-shell input,
+html.ios-shell textarea,
+html.ios-shell select {
+  font-size: 16px;
+}
+
 @media (max-width: 600px) {
   html [data-sonner-toaster][data-y-position="top"] {
     top: calc(var(--mobile-offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
   }
+}
+
+/* iOS Capacitor chrome. html.ios-shell is added only by the native iOS
+ * shell (see nativeSystemBars). Website, PWA, and Android never match.
+ * The grey tap flash, long-press callout, and a white rubber-band gap
+ * are WebView defaults. Bounce stays; the page background matches the
+ * theme so the gap is not white. Selection stays on in fields and prose. */
+html.ios-shell {
+  background-color: hsl(var(--background));
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.ios-shell body {
+  background-color: hsl(var(--background));
+  min-height: 100%;
+}
+
+html.ios-shell * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.ios-shell button,
+html.ios-shell nav,
+html.ios-shell [role="button"],
+html.ios-shell [role="tab"],
+html.ios-shell [role="tablist"],
+html.ios-shell [role="menuitem"],
+html.ios-shell .lb-row-card,
+html.ios-shell .hub-card-hover {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html.ios-shell a,
+html.ios-shell img {
+  -webkit-touch-callout: none;
+}
+
+html.ios-shell img {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.ios-shell input,
+html.ios-shell textarea,
+html.ios-shell select,
+html.ios-shell [contenteditable="true"],
+html.ios-shell p,
+html.ios-shell li,
+html.ios-shell blockquote {
+  -webkit-user-select: text;
+  user-select: text;
 }
