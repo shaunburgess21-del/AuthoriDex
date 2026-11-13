@@ -334,6 +334,12 @@
     touch-action: pan-y;
   }
 
+  /* Same token as body, so a native first-paint color on html does not
+     stay behind a short light-theme page after CSS loads. */
+  html {
+    background-color: hsl(var(--background));
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
@@ -1933,6 +1939,15 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
  * present (nativeSystemBars adds that class). Website, PWA, and Android never
  * get the class: the website keeps the 0px fallback, and Android keeps the
  * pixel values Capacitor writes on the document. */
+/* Wide layouts have no bottom nav, so the home shell's md padding is 0.
+   The Quick Vote nudge is a centered pill near the bottom. While it is
+   open, keep the last leaderboard row scrollable above it. */
+@media (min-width: 768px) {
+  html[data-quick-vote-nudge="open"] .home-shell {
+    padding-bottom: 5.5rem;
+  }
+}
+
 html.ios-shell {
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);

@@ -941,7 +941,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0" ref={pullRefreshRef}>
+    <div className="home-shell min-h-screen pb-20 md:pb-0" ref={pullRefreshRef}>
       {(pullDistance > 0 || isPullRefreshing) && (
         <div
           className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center pointer-events-none transition-opacity"

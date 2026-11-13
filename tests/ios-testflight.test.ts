@@ -130,17 +130,31 @@ test("launch screen centers the brand mark on the dark splash color", () => {
     const png = readPng(rel);
     assert.equal(png.width, size);
     assert.equal(png.height, size);
-    assert.equal(png.colorType, 6);
-    assert.equal(pixel(png, 0, 0)[3], 0, "rounded mark keeps a transparent corner");
-    const mid = pixel(png, Math.floor(size / 2), 8);
-    assert.ok((mid[3] ?? 0) > 200, "gradient is opaque inside the mark");
+    assert.equal(png.colorType, 2, "launch image is opaque RGB");
+    assert.deepEqual(pixel(png, 0, 0), [15, 23, 42]);
+    const center = pixel(png, Math.floor(size / 2), Math.floor(size / 2));
+    assert.ok(center[0]! > 230 && center[1]! > 240 && center[2]! > 240, "cube is centered");
   }
+  const contents = read("ios/App/App/Assets.xcassets/Splash.imageset/Contents.json");
+  assert.match(contents, /"idiom" : "universal"/);
+  assert.match(contents, /"idiom" : "ipad"/);
+  assert.match(contents, /splash-logo@2x\.png/);
   const storyboard = read("ios/App/App/Base.lproj/LaunchScreen.storyboard");
-  assert.match(storyboard, /name="SplashBackground"/);
   assert.match(storyboard, /image="Splash"/);
   assert.match(storyboard, /centerX/);
+  assert.match(storyboard, /centerY/);
   assert.match(storyboard, /constant="160"/);
+  assert.match(storyboard, /red="0\.058823529411764705"/);
+  assert.match(storyboard, /green="0\.09019607843137255"/);
+  assert.match(storyboard, /blue="0\.16470588235294117"/);
   assert.doesNotMatch(storyboard, /systemBackgroundColor/);
+  assert.doesNotMatch(storyboard, /name="SplashBackground"/);
+  const ids = [...storyboard.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1] ?? "");
+  const objectIds = ids.filter((id) => id.includes("-"));
+  assert.ok(objectIds.length >= 8);
+  for (const id of objectIds) {
+    assert.match(id, /^[A-Za-z0-9]{3}-[A-Za-z0-9]{2,3}-[A-Za-z0-9]{3}$/, id);
+  }
   const colorset = read("ios/App/App/Assets.xcassets/SplashBackground.colorset/Contents.json");
   assert.equal(colorset.match(/"red" : "0x0F"/g)?.length, 2);
   assert.equal(colorset.match(/"green" : "0x17"/g)?.length, 2);
@@ -216,9 +230,21 @@ test("Capacitor config has no release server or cleartext override", () => {
   const config = read("capacitor.config.ts");
   assert.match(config, /appId:\s*"com\.voxdex\.app"/);
   assert.match(config, /androidScheme:\s*"https"/);
+  assert.match(config, /backgroundColor:\s*"#0F172A"/);
+  assert.match(config, /ios:\s*\{[^}]*backgroundColor:\s*"#0F172A"/s);
   assert.doesNotMatch(config, /url\s*:/);
   assert.doesNotMatch(config, /cleartext/);
   assert.doesNotMatch(config, /iosScheme/);
   assert.doesNotMatch(config, /allowNavigation/);
   assert.equal(read("ios/debug.xcconfig").trim(), "CAPACITOR_DEBUG = true");
+
+  const html = read("client/index.html");
+  const vite = read("vite.config.ts");
+  assert.match(vite, /native-first-paint/);
+  assert.match(vite, /background-color: #0F172A/);
+  assert.match(vite, /if \(!capacitorBuild\) return html/);
+  assert.match(html, /if \(saved !== "light"\)/);
+  const css = read("client/src/index.css");
+  assert.match(css, /html \{\s*background-color: hsl\(var\(--background\)\);/);
+  assert.match(css, /html\[data-quick-vote-nudge="open"\] \.home-shell/);
 });

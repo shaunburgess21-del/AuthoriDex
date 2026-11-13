@@ -202,6 +202,17 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
 
   const showFab = isMobile && !overlayOpen && !nudgeVisible;
 
+  // Wide home lists have no bottom nav. Flag the document while the nudge
+  // pill is up so the page can pad the last row clear of it.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (nudgeVisible) root.dataset.quickVoteNudge = "open";
+    else delete root.dataset.quickVoteNudge;
+    return () => {
+      delete root.dataset.quickVoteNudge;
+    };
+  }, [nudgeVisible]);
+
   // Warm the mix + hydration caches while the FAB is on screen so the
   // overlay opens with cards already in hand.
   useEffect(() => {

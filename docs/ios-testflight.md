@@ -21,11 +21,12 @@ Release builds set `CAPACITOR_DEBUG` to false. Debug still uses `ios/debug.xccon
 ## Icon and launch screen
 
 - App icon: `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`. Generated from `resources/icon.png` (the 1024 brand icon used for Android). Same cube and gradient `#06b6d4` → `#2563eb` as `public/voxdex-logo.svg`, `public/voxdex-favicon.svg`, and `resources/play-icon-512.png`. `resources/icon.png` has transparent rounded corners, which the App Store rejects, so those corners were filled with that gradient and the alpha channel was removed. The file is 1024×1024 RGB.
-- Launch screen: `LaunchScreen.storyboard` centers the **Splash** logo (the same `resources/icon.png` mark) on **SplashBackground** `#0F172A` (the Android splash color in `resources/splash.png`). The color is the same in light and dark appearances, so the launch screen does not flash white. The app defaults to dark mode.
+- Launch screen: `LaunchScreen.storyboard` centers the **Splash** image (the same `resources/icon.png` mark, flattened onto `#0F172A`) with constraints whose object IDs are the Xcode form (`xxx-xx-xxx`). The background color is written into the storyboard as sRGB `#0F172A` (`rgb(15, 23, 42)`), so it does not depend on a named color resolving at launch. The imageset is `Splash` and includes universal and iPad scales. iPad support stays (`TARGETED_DEVICE_FAMILY` `1,2`).
+- After the launch screen, the WKWebView uses `backgroundColor` and `ios.backgroundColor` `#0F172A`. The mobile web build also paints `html` and `body` that color before CSS, in a layer that loses to the theme token once the stylesheet loads, so light theme is unchanged after first paint.
 
 ## Flags to decide before upload
 
-- **iPad.** `TARGETED_DEVICE_FAMILY` is `1,2` (iPhone and iPad). iPhone orientations are portrait only. iPad still allows portrait, upside down, and both landscapes. App Store Connect will ask for iPad screenshots if iPad stays enabled. The web layout uses wider breakpoints in an iPad-sized window. To ship iPhone only, set the device family to `1`. This was left unchanged.
+- **iPad.** Kept. `TARGETED_DEVICE_FAMILY` is `1,2`. iPhone orientations are portrait only. iPad still allows portrait, upside down, and both landscapes. App Store Connect will ask for iPad screenshots. The web layout uses wider breakpoints on an iPad-sized window.
 - **Privacy manifest data types** (linked to the account, not used for tracking, purpose App Functionality): email address, user ID, other user content (votes, comments, predictions, usernames).
 - **Not in the manifest. Confirm on the App Store Connect form:**
   - Photos or Videos. People can attach an image to a poll or a custom contender. Profile photo upload is turned off in Settings (generative avatars only). `uploadAvatarFile` has no caller.
