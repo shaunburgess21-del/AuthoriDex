@@ -121,45 +121,61 @@ test("App Store icon is the opaque 1024 VoxDex mark", () => {
   assert.doesNotMatch(contents, /AppIcon-512@2x\.png/);
 });
 
-test("launch screen centers the brand mark on the dark splash color", () => {
+test("launch screen is the Info.plist UILaunchScreen, not a storyboard name", () => {
   for (const [rel, size] of [
-    ["ios/App/App/Assets.xcassets/Splash.imageset/splash-logo.png", 160],
-    ["ios/App/App/Assets.xcassets/Splash.imageset/splash-logo@2x.png", 320],
-    ["ios/App/App/Assets.xcassets/Splash.imageset/splash-logo@3x.png", 480],
+    ["ios/App/App/Assets.xcassets/LaunchLogo.imageset/launch-logo.png", 160],
+    ["ios/App/App/Assets.xcassets/LaunchLogo.imageset/launch-logo@2x.png", 320],
+    ["ios/App/App/Assets.xcassets/LaunchLogo.imageset/launch-logo@3x.png", 480],
   ] as const) {
     const png = readPng(rel);
     assert.equal(png.width, size);
     assert.equal(png.height, size);
-    assert.equal(png.colorType, 2, "launch image is opaque RGB");
-    assert.deepEqual(pixel(png, 0, 0), [15, 23, 42]);
+    assert.equal(png.colorType, 6);
+    assert.equal(pixel(png, 0, 0)[3], 0, "logo corner is transparent so the launch color shows");
     const center = pixel(png, Math.floor(size / 2), Math.floor(size / 2));
     assert.ok(center[0]! > 230 && center[1]! > 240 && center[2]! > 240, "cube is centered");
+    assert.equal(center[3], 255);
   }
-  const contents = read("ios/App/App/Assets.xcassets/Splash.imageset/Contents.json");
+  const contents = read("ios/App/App/Assets.xcassets/LaunchLogo.imageset/Contents.json");
   assert.match(contents, /"idiom" : "universal"/);
   assert.match(contents, /"idiom" : "ipad"/);
-  assert.match(contents, /splash-logo@2x\.png/);
+  assert.match(contents, /launch-logo@2x\.png/);
+  assert.match(contents, /template-rendering-intent" : "original"/);
+  const colorset = read("ios/App/App/Assets.xcassets/LaunchBackground.colorset/Contents.json");
+  assert.equal(colorset.match(/"red" : "0x0F"/g)?.length, 2);
+  assert.equal(colorset.match(/"green" : "0x17"/g)?.length, 2);
+  assert.equal(colorset.match(/"blue" : "0x2A"/g)?.length, 2);
+  assert.match(colorset, /"value" : "dark"/);
+
+  const plist = read("ios/App/App/Info.plist");
+  assert.match(plist, /<key>UILaunchScreen<\/key>/);
+  assert.match(plist, /<key>UIColorName<\/key>\s*<string>LaunchBackground<\/string>/);
+  assert.match(plist, /<key>UIImageName<\/key>\s*<string>LaunchLogo<\/string>/);
+  assert.match(plist, /<key>UIImageRespectsSafeAreaInsets<\/key>\s*<false\/>/);
+  const plistKeys = plist.replace(/<!--[\s\S]*?-->/g, "");
+  assert.doesNotMatch(plistKeys, /<key>UILaunchStoryboardName<\/key>/);
+  assert.doesNotMatch(plistKeys, /<key>UILaunchStoryboards<\/key>/);
+  assert.doesNotMatch(plistKeys, /<key>UILaunchScreens<\/key>/);
+
   const storyboard = read("ios/App/App/Base.lproj/LaunchScreen.storyboard");
-  assert.match(storyboard, /image="Splash"/);
+  assert.match(storyboard, /initialViewController="01J-lp-oVM"/);
+  assert.match(storyboard, /<viewController id="01J-lp-oVM"/);
+  assert.match(storyboard, /image="LaunchLogo"/);
+  assert.match(storyboard, /name="LaunchBackground"/);
   assert.match(storyboard, /centerX/);
   assert.match(storyboard, /centerY/);
   assert.match(storyboard, /constant="160"/);
-  assert.match(storyboard, /red="0\.058823529411764705"/);
-  assert.match(storyboard, /green="0\.09019607843137255"/);
-  assert.match(storyboard, /blue="0\.16470588235294117"/);
+  assert.doesNotMatch(storyboard, /image="Splash"/);
   assert.doesNotMatch(storyboard, /systemBackgroundColor/);
-  assert.doesNotMatch(storyboard, /name="SplashBackground"/);
   const ids = [...storyboard.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1] ?? "");
   const objectIds = ids.filter((id) => id.includes("-"));
   assert.ok(objectIds.length >= 8);
   for (const id of objectIds) {
     assert.match(id, /^[A-Za-z0-9]{3}-[A-Za-z0-9]{2,3}-[A-Za-z0-9]{3}$/, id);
   }
-  const colorset = read("ios/App/App/Assets.xcassets/SplashBackground.colorset/Contents.json");
-  assert.equal(colorset.match(/"red" : "0x0F"/g)?.length, 2);
-  assert.equal(colorset.match(/"green" : "0x17"/g)?.length, 2);
-  assert.equal(colorset.match(/"blue" : "0x2A"/g)?.length, 2);
-  assert.match(colorset, /"value" : "dark"/);
+  const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
+  assert.match(pbx, /LaunchScreen\.storyboard in Resources/);
+  assert.equal(pbx.includes("UILaunchStoryboardName"), false);
 });
 
 test("version, encryption, portrait iPhone, and camera purpose string", () => {

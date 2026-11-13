@@ -58,8 +58,21 @@
 			</array>
 		</dict>
 	</dict>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
+	<!--
+	  System launch screen. UILaunchStoryboardName is omitted on purpose:
+	  if both keys are present, iOS ignores UILaunchScreen. The storyboard
+	  file stays in the bundle so the Capacitor splash plugin's default
+	  "LaunchScreen" lookup does not throw. It is not the system launch screen.
+	-->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchLogo</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<false/>
+	</dict>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
