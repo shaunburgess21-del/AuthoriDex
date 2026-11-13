@@ -2078,3 +2078,22 @@ html.ios-shell blockquote {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* 44px hit area on compact mobile controls. The painted box stays the
+ * same size; the ::before only extends the pointer target. Absolute
+ * controls (close X) keep their position. Desktop is unchanged. */
+@media (max-width: 767px) {
+  .tap-44:not(.absolute) {
+    position: relative;
+  }
+
+  .tap-44::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}

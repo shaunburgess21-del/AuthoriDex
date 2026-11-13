@@ -92,7 +92,7 @@ export function CommentSortHeader({
           hapticSelection();
           onSortChange("top");
         }}
-        className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+        className={`tap-44 relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           sort === "top" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
         }`}
         data-testid="button-sort-top"
@@ -108,7 +108,7 @@ export function CommentSortHeader({
           hapticSelection();
           onSortChange("newest");
         }}
-        className={`relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+        className={`tap-44 relative flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
           sort === "newest" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
         }`}
         data-testid="button-sort-newest"

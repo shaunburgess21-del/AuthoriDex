@@ -338,7 +338,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
                 </button>
                 <button
                   onClick={dismissNudge}
-                  className="p-1.5 text-slate-400 transition-colors hover:text-slate-200"
+                  className="tap-44 p-1.5 text-slate-400 transition-colors hover:text-slate-200"
                   aria-label="Dismiss"
                   data-testid="quick-vote-nudge-dismiss"
                 >
