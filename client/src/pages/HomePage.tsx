@@ -150,7 +150,7 @@ function MarketPulseCard({
   
   return (
     <div 
-      className={`min-w-[280px] md:min-w-0 shrink-0 md:shrink h-full rounded-xl ${cardClass} transition-all duration-200`}
+      className={`w-[min(100%,20rem)] max-w-full min-w-0 shrink-0 md:w-auto md:max-w-none md:min-w-0 md:shrink h-full rounded-xl ${cardClass} transition-all duration-200`}
       data-testid={`pulse-card-${type}`}
     >
       <div className={`px-3 sm:px-4 ${collapsed ? 'py-4' : 'pt-5 pb-4'}`}>
@@ -236,7 +236,7 @@ function MarketPulseCard({
                       />
                     </div>
                     <span
-                      className={`px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
+                      className={`shrink-0 px-2 py-0.5 rounded text-xs font-mono font-medium tabular-nums ${
                         isPositive
                           ? "bg-green-500/20 dark:bg-green-500/15 text-green-600 dark:text-green-400"
                           : "bg-red-500/20 dark:bg-red-500/15 text-red-600 dark:text-red-400"
@@ -994,8 +994,8 @@ export default function HomePage() {
         </div>
       </div>
       */}
-      <div className="container mx-auto px-2 sm:px-4 pt-[18px] pb-8 max-w-7xl" data-content-section>
-                            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-6 mb-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-2 md:mb-4" data-testid="market-pulse-row">
+      <div className="container mx-auto min-w-0 max-w-7xl px-2 sm:px-4 pt-[18px] pb-8" data-content-section>
+                            <div className="flex w-full min-w-0 max-w-full gap-4 overflow-x-auto scrollbar-hide pb-6 mb-0 md:grid md:grid-cols-3 md:overflow-visible md:pb-2 md:mb-4" data-testid="market-pulse-row">
                 <MarketPulseCard 
                   title="Daily Movers" 
                   icon={Activity} 

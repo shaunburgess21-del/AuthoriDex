@@ -1,8 +1,10 @@
+import { Capacitor } from "@capacitor/core";
 import { Home, TrendingUp, Vote, LineChart, MessagesSquare } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { prefetchRoute } from "@/lib/routePrefetch";
 import { hapticSelection } from "@/lib/haptic";
+import { scrollActiveScreenToTop, shouldScrollTabOnReselect } from "@/lib/scrollActiveScreen";
 
 interface NavItem {
   path: string;
@@ -90,7 +92,23 @@ export function BottomNav() {
               key={item.path}
               href={item.path}
               aria-current={isActive ? "page" : undefined}
-              onClick={() => hapticSelection()}
+              onClick={(event) => {
+                hapticSelection();
+                let reselect = false;
+                try {
+                  reselect = shouldScrollTabOnReselect(
+                    Capacitor.isNativePlatform(),
+                    Capacitor.getPlatform(),
+                    isActive,
+                  );
+                } catch {
+                  reselect = false;
+                }
+                if (!reselect) return;
+                // Stay on this screen. The link would only re-enter the same tab.
+                event.preventDefault();
+                scrollActiveScreenToTop();
+              }}
               onPointerEnter={() => prefetchRoute(item.path)}
               onTouchStart={() => prefetchRoute(item.path)}
               onFocus={() => prefetchRoute(item.path)}
