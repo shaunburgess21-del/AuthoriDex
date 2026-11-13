@@ -4,6 +4,13 @@ const config: CapacitorConfig = {
   appId: "com.voxdex.app",
   appName: "VoxDex",
   webDir: "dist/public",
+  // WKWebView is opaque white until the document paints. Match the launch
+  // screen (#0F172A) so that gap is the brand navy, not a white flash.
+  // ios.backgroundColor is what Capacitor iOS reads first.
+  backgroundColor: "#0F172A",
+  ios: {
+    backgroundColor: "#0F172A",
+  },
   server: {
     androidScheme: "https",
   },

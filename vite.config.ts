@@ -8,6 +8,22 @@ const capacitorBuild = process.env.CAPACITOR_BUILD === "1";
 
 export default defineConfig({
   plugins: [
+    {
+      name: "native-first-paint",
+      transformIndexHtml: {
+        order: "pre",
+        handler(html: string) {
+          if (!capacitorBuild) return html;
+          // Unlayered CSS would beat Tailwind's @layer base and pin the
+          // background dark in light theme. This layer is declared first,
+          // so base (the theme token) wins once the stylesheet loads.
+          return html.replace(
+            "<head>",
+            '<head>\n    <style id="native-first-paint">@layer native-first-paint { html, body { background-color: #0F172A; } }</style>',
+          );
+        },
+      },
+    },
     react(),
     runtimeErrorOverlay(),
     ...(capacitorBuild
