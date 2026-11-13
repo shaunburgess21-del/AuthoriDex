@@ -33,6 +33,14 @@ const config: CapacitorConfig = {
       // inset pass is edge-to-edge instead of a padded frame that then jumps.
       initialViewportFitValueHint: "cover",
     },
+    Keyboard: {
+      // iOS only. Shrinks the WKWebView so comment and search fields move
+      // above the keyboard. Android ignores `resize`. `resizeOnFullScreen`
+      // stays unset (plugin default false) so it does not fight SystemBars.
+      resize: "native",
+      // iOS only. Match the keyboard backdrop to the page instead of white.
+      autoBackdropColor: "dom",
+    },
   },
 };
 

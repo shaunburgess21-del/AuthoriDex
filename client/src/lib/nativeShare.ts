@@ -30,17 +30,20 @@ export interface ShareUrlContext {
   /** Android shell. Also selects the system share sheet and cache PNG path. */
   nativeAndroid: boolean;
   /**
-   * iOS shell. Rewrites webview share URLs only. The sheet stays
-   * `navigator.share`. Leave this false on Android.
+   * iOS shell. Rewrites webview share URLs, and URL/text shares use the
+   * Capacitor share sheet. Image shares stay on `navigator.share` because
+   * that path already carries the PNG file. Leave this false on Android.
    */
   nativeIos: boolean;
   currentOrigin: string;
 }
 
 /**
- * Android only. iOS WKWebView implements `navigator.share`. The Capacitor
- * Share web implementation drops file payloads, so iOS image shares stay
- * on that Web Share path instead of the Android cache/FileProvider sheet.
+ * Android uses the Capacitor share sheet for every payload, including
+ * cached PNGs. iOS URL and text shares use the same plugin (UIActivity).
+ * iOS image shares stay on `navigator.share`, which can attach the file.
+ * The Capacitor Share web implementation drops file payloads, so the
+ * website is unchanged.
  */
 export function isAndroidNativeShare(): boolean {
   try {
@@ -89,7 +92,8 @@ export function outboundShareOrigin(currentOrigin: string): string {
  * Rewrite a WebView-origin share URL to `https://voxdex.com`, preserving
  * path, query (`ref`, `sharer`, `utm_*`), and hash. No-op on the website,
  * and when the URL is already public or points at any other host.
- * Android and iOS both rewrite. iOS does not use the Android share sheet.
+ * Android and iOS both rewrite. iOS URL shares then open the Capacitor
+ * share sheet; iOS image shares still use `navigator.share`.
  */
 export function toPublicShareUrl(url: string, ctx: ShareUrlContext): string {
   if (!leavesNativeWebView(ctx)) return url;
@@ -168,6 +172,17 @@ export function isShareCancelled(err: unknown): boolean {
 
 export type SheetShareOutcome = "shared" | "cancelled" | "unavailable";
 
+/** Which native sheet a payload should use. Files stay off the iOS plugin path. */
+export function systemShareTarget(
+  nativeAndroid: boolean,
+  nativeIos: boolean,
+  hasFiles: boolean,
+): "android" | "ios" | "none" {
+  if (nativeAndroid) return "android";
+  if (nativeIos && !hasFiles) return "ios";
+  return "none";
+}
+
 export async function shareWithAndroidSheet(options: {
   title?: string;
   text?: string;
@@ -187,6 +202,47 @@ export async function shareWithAndroidSheet(options: {
       text: fields.text,
       url: fields.url,
       files: files.length > 0 ? files : undefined,
+      dialogTitle: fields.title?.trim() || "Share",
+    });
+    return "shared";
+  } catch (err) {
+    if (isShareCancelled(err)) return "cancelled";
+    return "unavailable";
+  }
+}
+
+/**
+ * URL and text shares. Android keeps the file-capable sheet. iOS opens
+ * `@capacitor/share` for text/url only. Image payloads and the website
+ * return "unavailable" so callers fall through to Web Share or clipboard.
+ */
+export async function shareWithSystemSheet(options: {
+  title?: string;
+  text?: string;
+  url?: string;
+  files?: string[];
+}): Promise<SheetShareOutcome> {
+  let nativeAndroid = false;
+  let nativeIos = false;
+  try {
+    nativeAndroid = isAndroidNativeShare();
+    nativeIos = isIosNativeWebView();
+  } catch {
+    return "unavailable";
+  }
+  const target = systemShareTarget(nativeAndroid, nativeIos, (options.files?.length ?? 0) > 0);
+  if (target === "android") return shareWithAndroidSheet(options);
+  if (target !== "ios") return "unavailable";
+
+  const fields = androidShareFields(options);
+  if (!fields.text && !fields.url) return "unavailable";
+
+  try {
+    const { Share } = await import("@capacitor/share");
+    await Share.share({
+      title: fields.title,
+      text: fields.text,
+      url: fields.url,
       dialogTitle: fields.title?.trim() || "Share",
     });
     return "shared";

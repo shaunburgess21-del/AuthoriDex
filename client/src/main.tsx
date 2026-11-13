@@ -11,6 +11,7 @@ import {
 } from "./lib/nativeDeepLinks";
 import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
 import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
+import { installIosKeyboard } from "./lib/nativeIosKeyboardListener";
 import { primeAndroidNetworkStatus } from "./lib/nativeNetworkListener";
 import { syncNativeSystemBars } from "./lib/nativeSystemBars";
 import "./index.css";
@@ -27,6 +28,7 @@ installNativeBackListener();
 installNativeContentLinkListener();
 installNativeExternalLinkPolicy();
 installNativeKeyboardListener();
+installIosKeyboard();
 
 const DEV_SW_RESET_KEY = "__voxdex_dev_sw_reset__";
 

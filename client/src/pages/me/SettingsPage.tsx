@@ -96,6 +96,7 @@ function maskEmail(email: string): string {
 }
 import { InterestsPicker } from "@/components/interests/InterestsPicker";
 import { cn } from "@/lib/utils";
+import { hapticSelection } from "@/lib/haptic";
 import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import { ETHNICITY_OPTIONS } from "@shared/ethnicity";
 import { resolveCountryCode } from "@shared/countries";
@@ -298,7 +299,10 @@ function SettingsTabsBar({
           <button
             key={t.id}
             type="button"
-            onClick={() => onTabChange(t.id)}
+            onClick={() => {
+              hapticSelection();
+              onTabChange(t.id);
+            }}
             className={cn(
               "relative flex items-center justify-center gap-1.5",
               "whitespace-nowrap px-2.5 sm:px-4 py-[11px]",

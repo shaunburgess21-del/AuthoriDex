@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Fragment } from "react";
+import { ABOVE_TAB_BAR_PADDING } from "@/lib/safeAreaChrome";
 
 interface FooterLink {
   label: string;
@@ -64,7 +65,7 @@ export function Footer() {
 
   return (
     <footer
-      className="border-t border-border/60 mt-8 pb-20 md:pb-0"
+      className={`border-t border-border/60 mt-8 ${ABOVE_TAB_BAR_PADDING}`}
       data-testid="site-footer"
     >
       <div className="container mx-auto px-4 py-5 md:py-6">
