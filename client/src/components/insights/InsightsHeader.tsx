@@ -69,7 +69,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                     writeInsightsQuery({ tab: tab.id, clearFilters: true });
                   }}
                   className={cn(
-                    "relative flex items-center justify-center gap-1.5",
+                    "tap-44 relative flex items-center justify-center gap-1.5",
                     "whitespace-nowrap px-2.5 sm:px-4 py-[11px]",
                     "rounded-md text-[13px] sm:text-[14px] font-medium transition-all snap-start",
                     "flex-1 min-w-fit",

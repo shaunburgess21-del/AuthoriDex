@@ -337,7 +337,7 @@ function SnapEndCard({
                   <button
                     key={cat}
                     onClick={() => onSelectCategory(cat)}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium border transition-transform active:scale-95 ${style.bg} ${style.border} ${style.text}`}
+                    className={`tap-44 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-transform active:scale-95 ${style.bg} ${style.border} ${style.text}`}
                   >
                     {getMarketCategoryLabel(cat)}
                   </button>
@@ -351,14 +351,14 @@ function SnapEndCard({
         <div className="flex items-center gap-3 pt-4">
           <button
             onClick={onBackToTop}
-            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
+            className="tap-44 flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
           >
             <ArrowUp className="h-3.5 w-3.5" />
             Back to top
           </button>
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
+            className="tap-44 flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 active:scale-[0.97]"
           >
             <X className="h-3.5 w-3.5" />
             Close snap view
