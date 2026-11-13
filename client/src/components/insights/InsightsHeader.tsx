@@ -9,6 +9,7 @@ import {
 import { type InsightsTab, writeInsightsQuery } from "@shared/insights/filters";
 import { getInsightsTabAccentHex } from "@shared/insights/constants";
 import { cn } from "@/lib/utils";
+import { hapticSelection } from "@/lib/haptic";
 
 const INSIGHTS_TABS: Array<{
   id: InsightsTab;
@@ -63,7 +64,10 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                   key={tab.id}
                   ref={isActive ? activeBtnRef : undefined}
                   type="button"
-                  onClick={() => writeInsightsQuery({ tab: tab.id, clearFilters: true })}
+                  onClick={() => {
+                    hapticSelection();
+                    writeInsightsQuery({ tab: tab.id, clearFilters: true });
+                  }}
                   className={cn(
                     "relative flex items-center justify-center gap-1.5",
                     "whitespace-nowrap px-2.5 sm:px-4 py-[11px]",

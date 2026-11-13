@@ -2,12 +2,16 @@ import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
 import { toast } from "sonner";
+import { AsWebAuth } from "@/lib/asWebAuth";
 import { mapAuthError } from "@/lib/authErrors";
 import { parseNativeOAuthCallback, type NativeOAuthCallback } from "@/lib/nativeOAuthCallback";
+import {
+  isNativeOAuthUserCancel,
+  type NativeOAuthLaunch,
+} from "@/lib/nativeOAuthLaunch";
 import { SUPABASE_AUTH_STORAGE_KEY, getSupabase } from "@/lib/supabase";
 
-/** Custom scheme registered on Android. Allowlist in Supabase Auth. */
-export const NATIVE_OAUTH_REDIRECT = "com.voxdex.app://login";
+export { NATIVE_OAUTH_REDIRECT } from "@/lib/nativeOAuthLaunch";
 
 /** Fired when the native Google browser flow ends (success, error, or cancel). */
 export const NATIVE_OAUTH_SETTLED_EVENT = "voxdex-native-oauth-settled";
@@ -38,13 +42,13 @@ function clearCancelTimer(): void {
   }
 }
 
-/** Call immediately before `Browser.open` so closing Custom Tabs can unlock the UI. */
+/** Call immediately before the system browser or auth sheet opens. */
 export function beginNativeOAuthBrowser(): void {
   pending = true;
   clearCancelTimer();
 }
 
-/** Call when `Browser.open` fails before a return URL can arrive. */
+/** Call when the opener fails before a return URL can arrive. */
 export function abortNativeOAuthBrowser(): void {
   if (handlingReturn) return;
   pending = false;
@@ -52,7 +56,51 @@ export function abortNativeOAuthBrowser(): void {
   settleNativeOAuth();
 }
 
+/**
+ * Android and iOS share `redirectTo` and this PKCE completion path.
+ * iOS presents ASWebAuthenticationSession; Android opens the system browser.
+ * Web never calls this.
+ */
+export async function openNativeOAuth(url: string, launch: NativeOAuthLaunch): Promise<void> {
+  if (launch.kind === "web-redirect") return;
+
+  beginNativeOAuthBrowser();
+  if (launch.kind === "as-web-authentication-session") {
+    let callbackUrl: string;
+    try {
+      const result = await AsWebAuth.authenticate({
+        url,
+        callbackScheme: launch.callbackScheme,
+      });
+      callbackUrl = result.url;
+    } catch (error) {
+      if (isNativeOAuthUserCancel(error)) {
+        // appUrlOpen can still deliver the code if the session also opens the app.
+        onBrowserFinished();
+        return;
+      }
+      abortNativeOAuthBrowser();
+      throw error;
+    }
+    onNativeOAuthUrl(callbackUrl);
+    if (!handlingReturn && pending) {
+      abortNativeOAuthBrowser();
+      throw new Error("Google sign-in did not return to the app.");
+    }
+    return;
+  }
+
+  try {
+    await Browser.open({ url });
+  } catch (error) {
+    abortNativeOAuthBrowser();
+    throw error;
+  }
+}
+
 async function closeOAuthBrowser(): Promise<void> {
+  // The iOS auth sheet dismisses itself. Android Custom Tabs stay up until close.
+  if (Capacitor.getPlatform() === "ios") return;
   await Browser.close().catch(() => {
     /* Custom Tab may already be gone */
   });
@@ -133,7 +181,9 @@ function onBrowserFinished(): void {
 /**
  * Google returns to the custom scheme, not the WebView URL. Exchange the
  * PKCE code that `signInWithOAuth({ skipBrowserRedirect: true })` stored
- * in this WebView's localStorage, then close the system browser.
+ * in this WebView's localStorage.
+ * iOS prefers the auth-session callback; `appUrlOpen` stays as the fallback
+ * (and is still the Android return path).
  */
 export function installNativeOAuthListener(): void {
   if (!Capacitor.isNativePlatform()) return;
