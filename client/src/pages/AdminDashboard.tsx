@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
+import { backToSurfaceLabel, isNativeSurface } from "@/lib/nativeCopy";
 import { formatVox } from "@/lib/currency";
 import { 
   LayoutDashboard, 
@@ -2832,7 +2833,7 @@ export default function AdminDashboard() {
             }}
             data-testid="button-back-to-site"
           >
-            Back to Site
+            {backToSurfaceLabel(isNativeSurface())}
           </Button>
         </div>
       </aside>

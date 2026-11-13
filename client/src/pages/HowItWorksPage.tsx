@@ -70,6 +70,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { HowItWorksWelcomeModal } from "@/components/HowItWorksWelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SiteHeader } from "@/components/SiteHeader";
+import { hapticSelection } from "@/lib/haptic";
 
 /**
  * Tier at which a member's rank qualifier starts appearing inline on their
@@ -102,7 +103,10 @@ function KnowledgeTabsBar({
           return (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => {
+                hapticSelection();
+                onTabChange(tab.id);
+              }}
               className={`
                 relative flex items-center justify-center gap-1.5 flex-1 sm:flex-1
                 whitespace-nowrap px-2.5 sm:px-4 py-[11px] rounded-md text-[13px] sm:text-[14px] font-medium transition-all

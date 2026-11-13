@@ -25,7 +25,11 @@ import { STREAK_MILESTONES } from "@shared/streak-config";
  */
 export const STREAK_MILESTONE_DAYS: readonly number[] = STREAK_MILESTONES;
 
-/** Always-shown line nudging the user toward Vox-earning actions. */
+/**
+ * Website / PWA wording. The native shell swaps "site" for "app" via
+ * `streakRewardTease` in `nativeCopy.ts` — keep this sentence in sync
+ * with that helper's web branch.
+ */
 export const STREAK_REWARD_TEASE = "Take action on the site to earn Vox.";
 
 /** Shown only while the user is still working toward the next milestone. */
