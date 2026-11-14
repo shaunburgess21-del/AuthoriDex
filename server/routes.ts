@@ -24992,9 +24992,24 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       const [image] = await db.select().from(celebrityImages).where(eq(celebrityImages.id, imageId));
       if (!image) return res.status(404).json({ error: "Image not found" });
 
-      await db.update(celebrityImages)
-        .set({ votesUp })
-        .where(eq(celebrityImages.id, imageId));
+      // Winner selection reads weighted_score, not votes_up. Admin seed votes
+      // count at weight 1.0; real user votes keep their stored curatorial weight.
+      await db.transaction(async (tx) => {
+        const [real] = await tx
+          .select({
+            realCount: sql<number>`COUNT(*)::int`,
+            realWeight: sql<number>`COALESCE(SUM(${imageVotes.weight}), 0)::float`,
+          })
+          .from(imageVotes)
+          .where(eq(imageVotes.imageId, imageId));
+        const realCount = Number(real?.realCount ?? 0);
+        const realWeight = Number(real?.realWeight ?? 0);
+        const weightedScore = Math.max(votesUp - realCount, 0) + realWeight;
+
+        await tx.update(celebrityImages)
+          .set({ votesUp, weightedScore })
+          .where(eq(celebrityImages.id, imageId));
+      });
 
       await syncWinningAvatarForPerson(image.personId);
 

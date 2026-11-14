@@ -188,8 +188,6 @@ export function AdminCurateProfile() {
   const categories = Array.from(new Set(cards.map(c => c.category))).sort();
 
   const images = imagesData?.data || [];
-  const highestVoteImage = images.length > 0 ? images.reduce((max, img) => img.votesUp > max.votesUp ? img : max, images[0]) : null;
-
   const getVisibilityBadge = (vis: string) => {
     switch (vis) {
       case 'live': return <Badge variant="default" className="bg-emerald-500/25 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30">Live</Badge>;
@@ -423,7 +421,7 @@ export function AdminCurateProfile() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {images.map((img) => {
-                      const isWinner = highestVoteImage?.id === img.id && img.votesUp > 0;
+                      const isWinner = img.isPrimary;
                       return (
                         <Card
                           key={img.id}
