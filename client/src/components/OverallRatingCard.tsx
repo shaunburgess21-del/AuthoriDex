@@ -58,6 +58,8 @@ export interface OverallRatingCardProps {
   categoryMenuDisabled?: boolean;
   /** Fired on optimistic submit so Quick Vote can auto-advance. */
   onRated?: () => void;
+  /** Fired when an optimistic rating is rolled back, so a hide-exit can abort. */
+  onRateRolledBack?: () => void;
 }
 
 export function OverallRatingCard({
@@ -69,6 +71,7 @@ export function OverallRatingCard({
   leaderboardCategories,
   categoryMenuDisabled = false,
   onRated,
+  onRateRolledBack,
 }: OverallRatingCardProps) {
   const [submittedRating, setSubmittedRating] = useState<number | null>(() =>
     readSavedRating(person.id, person.userApprovalRating ?? null),
@@ -203,6 +206,7 @@ export function OverallRatingCard({
           }),
         );
       }
+      onRateRolledBack?.();
 
       if (isBudgetExhaustedVoteError(error)) {
         navigateToLogin(setLocation, {

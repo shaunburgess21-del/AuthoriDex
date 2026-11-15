@@ -15,6 +15,10 @@ import { Crown, ImageIcon, Users } from "lucide-react";
 import { type FilterCategory } from "@shared/constants";
 import type { CuratePerson } from "./CurateProfileCard";
 import { selectCurateDisplayImages } from "./selectCurateDisplayImages";
+import {
+  filterCardsByVoteActivity,
+  type HubActivityFilter,
+} from "@/lib/hub-activity-filter";
 
 interface TrendingPerson {
   id: string;
@@ -40,6 +44,10 @@ interface CurateViewAllOverlayProps {
   onFilterCategory?: (category: string) => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
+  activityFilter?: HubActivityFilter;
+  isPersonVoted?: (personId: string) => boolean;
+  isPersonRetained?: (personId: string) => boolean;
+  isPersonHidden?: (personId: string) => boolean;
 }
 
 const CURATE_CATEGORIES = CATEGORY_FILTER_SELECT_OPTIONS;
@@ -157,6 +165,10 @@ export function CurateViewAllOverlay({
   onFilterCategory,
   categoryRaceMap,
   leaderboardCategories,
+  activityFilter = "all",
+  isPersonVoted,
+  isPersonRetained,
+  isPersonHidden,
 }: CurateViewAllOverlayProps) {
   const { user } = useAuth();
   const { favoriteIds } = useFavorites();
@@ -194,6 +206,21 @@ export function CurateViewAllOverlay({
       return matchesCategory && matchesSearch(person);
     }).sort((a: any, b: any) => categoryFilter === "trending" ? ((b.fameScore ?? b.score ?? 0) - (a.fameScore ?? a.score ?? 0)) : 0);
   }, [celebrities, categoryFilter, searchQuery, favoriteIds]);
+
+  const visibleCelebrities = useMemo(
+    () =>
+      filterCardsByVoteActivity(
+        filteredCelebrities,
+        activityFilter,
+        (person) => isPersonVoted?.(person.id) ?? false,
+        {
+          keyOf: (person) => person.id,
+          isRetained: isPersonRetained,
+          isHidden: isPersonHidden,
+        },
+      ),
+    [filteredCelebrities, activityFilter, isPersonVoted, isPersonRetained, isPersonHidden],
+  );
 
   return (
     <motion.div
@@ -233,13 +260,13 @@ export function CurateViewAllOverlay({
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
           </div>
-        ) : filteredCelebrities.length === 0 ? (
+        ) : visibleCelebrities.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>No celebrities match your filters.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-w-5xl mx-auto">
-            {filteredCelebrities.map((person, idx) => (
+            {visibleCelebrities.map((person, idx) => (
               <CelebCard
                 key={person.id}
                 person={person}

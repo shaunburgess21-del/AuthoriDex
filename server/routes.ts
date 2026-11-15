@@ -25179,6 +25179,26 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
     }
   });
 
+  // Person ids the caller has a curate image vote on. The trending list that
+  // feeds Curate the Profile has no per-user voted flag; each card learns it
+  // only from GET /api/people/:id/images (`currentUserDirection === "up"`).
+  // The vote-hub activity filter needs the same signal for the whole carousel
+  // without one images request per person. Curate votes require auth, so
+  // signed-out callers never have a row here.
+  app.get("/api/me/curate-voted-person-ids", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const rows = await db
+        .selectDistinct({ personId: celebrityImages.personId })
+        .from(imageVotes)
+        .innerJoin(celebrityImages, eq(imageVotes.imageId, celebrityImages.id))
+        .where(eq(imageVotes.userId, req.userId!));
+      res.json({ data: rows.map((row) => row.personId).filter((id): id is string => !!id) });
+    } catch (error: any) {
+      console.error("Error fetching curate voted people:", error);
+      res.status(500).json({ error: "Failed to fetch curate votes" });
+    }
+  });
+
   // POST /api/vote/induction/:id/vote - Auth-or-anon: vote for an induction candidate (one vote per identity per candidate)
   app.post("/api/vote/induction/:id/vote", optionalAuth, anonVoteIpRateLimit, async (req: AuthRequest, res) => {
     try {

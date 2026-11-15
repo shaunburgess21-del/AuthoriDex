@@ -61,6 +61,19 @@ export function readSavedRatingVote(personId: string): boolean {
   }
 }
 
+/**
+ * Same signal OverallRatingCard uses to render "You voted": the server
+ * rating when present, otherwise the localStorage key the widgets write
+ * before the list refetch (and for signed-out votes).
+ */
+export function hasOverallRatingVote(
+  person: { id: string; userApprovalRating?: number | null } | null | undefined,
+): boolean {
+  if (!person) return false;
+  if (person.userApprovalRating != null) return true;
+  return readSavedRatingVote(person.id);
+}
+
 export type QuickVoteCardKind = "matchup" | "sentiment" | "opinion" | "rating";
 
 export interface QuickVoteVotedSources {
@@ -82,11 +95,8 @@ export function isQuickVoteCardVoted(
       return !!sources.sentimentPolls.find((t) => t.id === id)?.userVote;
     case "opinion":
       return !!sources.opinionPolls.find((p) => p.id === id)?.userVote;
-    case "rating": {
-      const person = sources.ratingPeople.find((p) => p.id === id);
-      if (person?.userApprovalRating != null) return true;
-      return readSavedRatingVote(id);
-    }
+    case "rating":
+      return hasOverallRatingVote(sources.ratingPeople.find((p) => p.id === id) ?? { id });
     default:
       return false;
   }

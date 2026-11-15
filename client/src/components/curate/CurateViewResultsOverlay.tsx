@@ -16,6 +16,7 @@ import { hapticSuccess } from "@/lib/haptic";
 import { useLocation } from "wouter";
 import { X, Crown, ThumbsUp, ChevronLeft, Maximize2, ZoomIn } from "lucide-react";
 import type { CuratePerson } from "./CurateProfileCard";
+import { rememberCuratePersonVoted } from "@/lib/curateVotedPeople";
 
 interface CelebrityImage {
   id: string;
@@ -78,6 +79,8 @@ interface CurateViewResultsOverlayProps {
   onClose: () => void;
   onBack?: () => void;
   onFilterCategory?: (category: string) => void;
+  /** Fired after a vote is saved so the hub filter can retain the card. */
+  onVoted?: () => void;
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
 }
@@ -87,6 +90,7 @@ export function CurateViewResultsOverlay({
   onClose,
   onBack,
   onFilterCategory,
+  onVoted,
   categoryRaceMap,
   leaderboardCategories,
 }: CurateViewResultsOverlayProps) {
@@ -126,6 +130,8 @@ export function CurateViewResultsOverlay({
         applyCurateVoteToImages(currentImages, variables.imageId, data)
       );
       void queryClient.invalidateQueries({ queryKey: imageQueryKey });
+      rememberCuratePersonVoted(person.id);
+      onVoted?.();
     },
     onError: (error: Error) => {
       if (isUnauthorizedApiError(error)) {
