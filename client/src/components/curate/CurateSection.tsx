@@ -1,19 +1,20 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, type Ref } from "react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { ImageIcon, ChevronRight } from "lucide-react";
-import { Swiper, SwiperSlide } from "swiper/react";
-import { A11y, Virtual } from "swiper/modules";
-import type { Swiper as SwiperType } from "swiper";
-import "swiper/css";
-import "swiper/css/virtual";
-import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { CurateProfileCard, type CuratePerson } from "./CurateProfileCard";
 import { CurateViewResultsOverlay } from "./CurateViewResultsOverlay";
 import { CurateViewAllOverlay } from "./CurateViewAllOverlay";
 import { matchesCategoryFilter, type FilterCategory } from "@shared/constants";
 import { useFavorites } from "@/hooks/useFavorites";
+import { CardSection, type CardSectionHandle } from "@/components/CardSection";
+import { HideExitCard } from "@/components/HideExitCard";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  filterCardsByVoteActivity,
+  type HubActivityFilter,
+} from "@/lib/hub-activity-filter";
 
 interface TrendingPerson {
   id: string;
@@ -33,6 +34,18 @@ interface CurateSectionProps {
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: (personId: string) => void;
+  /** Vote-hub activity filter. Defaults to showing every profile. */
+  activityFilter?: HubActivityFilter;
+  /** Person ids with a saved curate vote. Empty until that query resolves. */
+  votedPersonIds?: ReadonlySet<string>;
+  /** True while the voted-person query is still in flight and the filter is active. */
+  votesPending?: boolean;
+  isPersonRetained?: (personId: string) => boolean;
+  isPersonHidden?: (personId: string) => boolean;
+  isPersonExiting?: (personId: string) => boolean;
+  /** A curate vote just saved. Parent starts the hide-exit when filtering to not-voted. */
+  onPersonVoted?: (personId: string) => void;
+  sectionRef?: Ref<CardSectionHandle>;
 }
 
 export function CurateSection({ 
@@ -43,11 +56,18 @@ export function CurateSection({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  activityFilter = "all",
+  votedPersonIds,
+  votesPending = false,
+  isPersonRetained,
+  isPersonHidden,
+  isPersonExiting,
+  onPersonVoted,
+  sectionRef,
 }: CurateSectionProps) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const swiperRef = useRef<SwiperType | null>(null);
+  const isMobile = useIsMobile();
 
   const { favoriteIds } = useFavorites();
   const { data: allCelebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
@@ -90,12 +110,24 @@ export function CurateSection({
     }));
   }, [filteredCelebrities]);
 
-  useEffect(() => {
-    setCarouselIndex(0);
-    swiperRef.current?.slideTo(0, 0);
-  }, [curatePersons.length]);
+  const visiblePersons = useMemo(
+    () =>
+      filterCardsByVoteActivity(
+        curatePersons,
+        activityFilter,
+        (person) => votedPersonIds?.has(person.id) ?? false,
+        {
+          keyOf: (person) => person.id,
+          isRetained: isPersonRetained,
+          isHidden: isPersonHidden,
+        },
+      ),
+    [curatePersons, activityFilter, votedPersonIds, isPersonRetained, isPersonHidden],
+  );
 
-  const handleVote = useCallback(() => {}, []);
+  const handleVote = useCallback((personId: string) => {
+    onPersonVoted?.(personId);
+  }, [onPersonVoted]);
 
   const handleComplete = useCallback(() => {}, []);
 
@@ -111,24 +143,32 @@ export function CurateSection({
   return (
     <>
       <div className="space-y-3">
-        {isLoading ? (
+        {isLoading || votesPending ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
           </div>
-        ) : filteredCelebrities.length === 0 ? (
+        ) : visiblePersons.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground bg-muted/20 rounded-lg border border-border">
             <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No celebrities match this filter</p>
           </div>
         ) : (
-          <>
-            {/* Desktop: grid layout */}
-            <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 gap-5">
-              {curatePersons.slice(0, 9).map((person) => (
+          <CardSection
+            key={activityFilter}
+            ref={sectionRef}
+            desktopLimit={9}
+            gap="gap-5"
+            testIdPrefix="section-curate"
+          >
+            {visiblePersons.map((person) => (
+              <HideExitCard
+                key={person.id}
+                isMobile={isMobile}
+                exiting={isPersonExiting?.(person.id) ?? false}
+              >
                 <CurateProfileCard
-                  key={person.id}
                   person={person}
-                  onVote={handleVote}
+                  onVote={() => handleVote(person.id)}
                   onComplete={handleComplete}
                   onViewResults={handleViewResults}
                   cycleNumber={0}
@@ -137,64 +177,12 @@ export function CurateSection({
                   leaderboardCategories={leaderboardCategories}
                   onBrowseFullScreen={onBrowseFullScreen ? () => onBrowseFullScreen(person.id) : undefined}
                 />
-              ))}
-            </div>
-
-            {/* Mobile: Swiper carousel */}
-            <div className="md:hidden relative w-full">
-              <Swiper
-                modules={[A11y, Virtual]}
-                spaceBetween={0}
-                slidesPerView={1}
-                threshold={10}
-                touchAngle={45}
-                resistanceRatio={0.85}
-                speed={300}
-                cssMode={false}
-                virtual
-                pagination={false}
-                onSwiper={(s) => {
-                  swiperRef.current = s;
-                }}
-                onSlideChange={(s) => setCarouselIndex(s.activeIndex)}
-                a11y={{
-                  enabled: true,
-                  prevSlideMessage: "Previous slide",
-                  nextSlideMessage: "Next slide",
-                }}
-                className="pt-0 pb-2 md:py-2"
-                data-testid="section-curate-carousel"
-              >
-                {curatePersons.map((person, i) => (
-                  <SwiperSlide key={person.id} virtualIndex={i}>
-                    <div className="w-full px-1.5 md:px-0">
-                      <CurateProfileCard
-                        person={person}
-                        onVote={handleVote}
-                        onComplete={handleComplete}
-                        onViewResults={handleViewResults}
-                        cycleNumber={0}
-                        onFilterCategory={onFilterCategory}
-                        categoryRaceMap={categoryRaceMap}
-                        leaderboardCategories={leaderboardCategories}
-                        onBrowseFullScreen={onBrowseFullScreen ? () => onBrowseFullScreen(person.id) : undefined}
-                      />
-                    </div>
-                  </SwiperSlide>
-                ))}
-              </Swiper>
-              <WindowedDotIndicator
-                totalSlides={curatePersons.length}
-                activeIndex={carouselIndex}
-                accent="cyan"
-                testIdPrefix="section-curate-dots"
-                onDotClick={(idx) => swiperRef.current?.slideTo(idx)}
-              />
-            </div>
-          </>
+              </HideExitCard>
+            ))}
+          </CardSection>
         )}
         
-        {!isLoading && filteredCelebrities.length > 0 && (
+        {!isLoading && !votesPending && visiblePersons.length > 0 && (
           <div className="text-center mt-2 md:mt-6">
             <Button
               variant="ghost"
@@ -217,6 +205,10 @@ export function CurateSection({
             onFilterCategory={onFilterCategory}
             categoryRaceMap={categoryRaceMap}
             leaderboardCategories={leaderboardCategories}
+            activityFilter={activityFilter}
+            isPersonVoted={(id) => votedPersonIds?.has(id) ?? false}
+            isPersonRetained={isPersonRetained}
+            isPersonHidden={isPersonHidden}
           />
         )}
       </AnimatePresence>
@@ -225,6 +217,7 @@ export function CurateSection({
         {viewResultsPerson && (
           <CurateViewResultsOverlay
             person={viewResultsPerson}
+            onVoted={() => handleVote(viewResultsPerson.id)}
             onClose={() => setViewResultsPerson(null)}
             onFilterCategory={onFilterCategory}
             categoryRaceMap={categoryRaceMap}

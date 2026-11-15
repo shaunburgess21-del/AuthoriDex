@@ -170,3 +170,34 @@ export function passesSectionActivityFilter(
 ): boolean {
   return searchBypassesActivityFilter(search) || passesMyPositions(marketId);
 }
+
+export interface VoteActivityLifecycle<T> {
+  keyOf: (card: T) => string;
+  /** Card is dwelling or flying out after a vote cast in hide-mine. Keep it mounted. */
+  isRetained?: (key: string) => boolean;
+  /** Hide-exit finished. Drop the card even if the voted flag has not landed yet. */
+  isHidden?: (key: string) => boolean;
+}
+
+/**
+ * Vote-hub activity filter for one card.
+ * All = every card. Votes only = acted cards. Not voted = cards the user has
+ * not acted on, keeping a just-voted card through its hide-exit animation.
+ * Snap lists omit `lifecycle` so a voted card leaves immediately.
+ */
+export function filterCardsByVoteActivity<T>(
+  cards: readonly T[],
+  filter: HubActivityFilter,
+  hasVoted: (card: T) => boolean,
+  lifecycle?: VoteActivityLifecycle<T>,
+): T[] {
+  if (filter === "all") return cards as T[];
+  if (filter === "show-mine") return cards.filter((card) => hasVoted(card));
+  return cards.filter((card) => {
+    const key = lifecycle?.keyOf(card);
+    if (key && lifecycle?.isRetained?.(key)) return true;
+    if (hasVoted(card)) return false;
+    if (key && lifecycle?.isHidden?.(key)) return false;
+    return true;
+  });
+}

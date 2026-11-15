@@ -3,11 +3,17 @@ import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import {
   DEFAULT_HUB_ACTIVITY_FILTER,
+  filterCardsByVoteActivity,
   type HubActivityFilter,
   nextVoteActivityFilter,
   readHubActivityFilter,
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
+import { hasOverallRatingVote } from "@/lib/quickVoteHideVoted";
+import {
+  CURATE_VOTED_PERSONS_KEY,
+  type CurateVotedPersonsResponse,
+} from "@/lib/curateVotedPeople";
 import { handleImageError } from "@/lib/imageResolver";
 import { Button } from "@/components/ui/button";
 import { OfflineInlineNotice } from "@/components/OfflineUnavailable";
@@ -88,13 +94,14 @@ import { A11y } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 import { motion, AnimatePresence } from "framer-motion";
-import { type FilterCategory, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
+import { type FilterCategory, matchesCategoryFilter, CATEGORIES_LEADERBOARD, CATEGORIES_OPEN, OPINION_POLL_MIN_OPTIONS, OPINION_POLL_MAX_OPTIONS } from "@shared/constants";
 import { buildSectionCategoryOptions, involvesAnyFavorite, isPinnedCategory } from "@/lib/sectionCategoryFilters";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { CurateSection } from "@/components/curate";
 import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } from "@/components/curate/CurateProfileCard";
 import { OverallRatingCard } from "@/components/OverallRatingCard";
 import { CardSection, type CardSectionHandle } from "@/components/CardSection";
+import { HideExitCard } from "@/components/HideExitCard";
 import { useHideExitQueue } from "@/hooks/useHideExitQueue";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
@@ -327,50 +334,7 @@ const isShapeVoxDexSection = (section: SectionToggle) =>
   section === "Induction Queue" ||
   section === "Curate Profile";
 
-// Vote-hub "Hidden" mode card transition. A voted card dwells on its results,
-// then shrinks + drifts toward the top-left Hidden toggle while fading out;
-// the grid reflows the next card into the vacated slot.
-const HIDE_EXIT_REST = { opacity: 1, scale: 1, x: 0, y: 0 } as const;
-const HIDE_EXIT_FLY = { opacity: 0, scale: 0.12, x: -160, y: -200 } as const;
-const HIDE_EXIT_FLY_TRANSITION = { duration: 0.45, ease: "easeIn" } as const;
-const HIDE_EXIT_SETTLE_TRANSITION = { duration: 0.2, ease: "easeOut" } as const;
-const HIDE_EXIT_LAYOUT_TRANSITION = { duration: 0.3, ease: "easeOut" } as const;
 const OPTIMISTIC_VOTE_XP = 20;
-
-/**
- * Card wrapper for the Vote-hub Hidden-mode transition. The outer layer owns
- * the grid `layout` reflow (so neighbours slide into the vacated slot on
- * desktop); the inner layer plays the shrink + drift-toward-the-toggle fly.
- * On mobile the fly + layout are disabled — the carousel advance (slideNext)
- * provides the exit motion instead.
- */
-function HideExitCard({
-  isMobile,
-  exiting,
-  children,
-}: {
-  isMobile: boolean;
-  exiting: boolean;
-  children: React.ReactNode;
-}) {
-  const flying = exiting && !isMobile;
-  return (
-    <motion.div
-      layout={isMobile ? false : "position"}
-      transition={HIDE_EXIT_LAYOUT_TRANSITION}
-      className="h-full"
-    >
-      <motion.div
-        className="h-full"
-        style={{ transformOrigin: "top left" }}
-        animate={flying ? HIDE_EXIT_FLY : HIDE_EXIT_REST}
-        transition={flying ? HIDE_EXIT_FLY_TRANSITION : HIDE_EXIT_SETTLE_TRANSITION}
-      >
-        {children}
-      </motion.div>
-    </motion.div>
-  );
-}
 
 const SECTION_RULES = {
   induction: {
@@ -1059,10 +1023,25 @@ export default function VotePage() {
     staleTime: 60 * 1000,
   });
 
-  const { data: myInductionVoteIds } = useQuery<string[]>({
+  const { data: myInductionVoteIds, isFetched: inductionVotesFetched } = useQuery<string[]>({
     queryKey: ["/api/me/induction-votes"],
     enabled: !!user,
   });
+
+  const { data: curateVotedData, isFetched: curateVotesFetched } = useQuery<CurateVotedPersonsResponse>({
+    queryKey: CURATE_VOTED_PERSONS_KEY,
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+
+  const curateVotedIds = useMemo(() => {
+    if (!user) return new Set<string>();
+    return new Set(curateVotedData?.data ?? []);
+  }, [user, curateVotedData]);
+
+  // Induction's onError runs before the hide-exit queue exists. The ref is
+  // assigned once that queue is created, and the callback only fires later.
+  const cancelHideExitRef = useRef<(key: string) => void>(() => {});
 
   useEffect(() => {
     if (!user) {
@@ -1073,6 +1052,17 @@ export default function VotePage() {
       setVotedIds(new Set(myInductionVoteIds));
     }
   }, [user, myInductionVoteIds]);
+
+  // Server rows plus any optimistic add that has not been refetched yet.
+  // Reading this during render avoids a frame where the filter still thinks
+  // nobody has voted after the query resolves and before the effect copies it.
+  const inductionVotedSet = useMemo(() => {
+    // Signed-out cards only know about votes cast this session (votedIds).
+    if (!user) return votedIds;
+    const merged = new Set(Array.isArray(myInductionVoteIds) ? myInductionVoteIds : []);
+    votedIds.forEach((id) => merged.add(id));
+    return merged;
+  }, [user, myInductionVoteIds, votedIds]);
 
   const budget = useAnonBudget();
 
@@ -1094,6 +1084,7 @@ export default function VotePage() {
     },
     onError: (err, candidateId) => {
       hapticError();
+      cancelHideExitRef.current(`induction:${candidateId}`);
       setVotedIds((prev) => {
         const next = new Set(prev);
         next.delete(candidateId);
@@ -1188,6 +1179,15 @@ export default function VotePage() {
     },
     [user?.id],
   );
+
+  // Overall Rating writes the voted key to localStorage before the list
+  // refetch. Bump so the activity filter re-reads that signal.
+  const [ratingVoteEpoch, setRatingVoteEpoch] = useState(0);
+  useEffect(() => {
+    const bump = () => setRatingVoteEpoch((n) => n + 1);
+    window.addEventListener("sentiment-vote-updated", bump);
+    return () => window.removeEventListener("sentiment-vote-updated", bump);
+  }, []);
 
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
@@ -1414,6 +1414,9 @@ export default function VotePage() {
   const sentimentSectionRef = useRef<CardSectionHandle | null>(null);
   const matchupsSectionRef = useRef<CardSectionHandle | null>(null);
   const opinionSectionRef = useRef<CardSectionHandle | null>(null);
+  const ratingSectionRef = useRef<CardSectionHandle | null>(null);
+  const inductionSectionRef = useRef<CardSectionHandle | null>(null);
+  const curateSectionRef = useRef<CardSectionHandle | null>(null);
   const playInactiveVoteAdvance = useCallback(
     (section: "sentiment" | "matchups" | "opinion", id: string) => {
       if (!isMobile || myVotesFilter !== "all" || snapScrollOpen) return;
@@ -1464,7 +1467,13 @@ export default function VotePage() {
             ? matchupsSectionRef
             : section === "opinion"
               ? opinionSectionRef
-              : null;
+              : section === "rating"
+                ? ratingSectionRef
+                : section === "induction"
+                  ? inductionSectionRef
+                  : section === "curate"
+                    ? curateSectionRef
+                    : null;
       ref?.current?.playHideExit(id);
     },
   });
@@ -1476,6 +1485,14 @@ export default function VotePage() {
     isHidden: isHideHidden,
     pulseTick: hidePulseTick,
   } = hideExit;
+  cancelHideExitRef.current = cancelHideExit;
+
+  const beginShapeHideExit = useCallback(
+    (key: string) => {
+      if (myVotesFilter === "hide-mine") beginHideExit(key);
+    },
+    [myVotesFilter, beginHideExit],
+  );
 
   // Matchup voting via the shared query-cache-first hook (also used by the
   // Quick Vote overlay). The hook owns the anon-budget gate, optimistic cache
@@ -1551,67 +1568,73 @@ export default function VotePage() {
     return matchesCategory && matchesSearch && f.isActive;
   }).sort((a: any, b: any) => globalCategoryFilter === "trending" ? ((b.totalVotes ?? 0) - (a.totalVotes ?? 0)) : 0);
 
-  const myVotesCount = useMemo(() => {
-    const matchupVoted = filteredMatchups.filter((m) => !!matchupUserVotes[m.id]).length;
-    const sentimentVoted = filteredTopics.filter((t: any) => !!t.userVote).length;
-    const opinionVoted = filteredOpinionPolls.filter((p: any) => !!p.userVote).length;
-    return matchupVoted + sentimentVoted + opinionVoted;
-  }, [filteredMatchups, filteredTopics, filteredOpinionPolls, matchupUserVotes]);
-
-  const cycleMyVotesFilter = useCallback(() => {
-    setMyVotesFilter((prev) => nextVoteActivityFilter(prev, myVotesCount));
-  }, [myVotesCount, setMyVotesFilter]);
+  const voteActivityLifecycle = useMemo(
+    () => ({
+      isRetained: isHideRetained,
+      isHidden: isHideHidden,
+    }),
+    [isHideRetained, isHideHidden],
+  );
 
   // In hide-mine mode a freshly-voted card is kept while it is dwelling/exiting
   // (so it can show results and fly into the Hidden toggle), then dropped once
   // its lifecycle completes (isHidden) — independent of refetch timing.
   const displayMatchups = useMemo(
     () =>
-      myVotesFilter === "all"
-        ? filteredMatchups
-        : myVotesFilter === "show-mine"
-          ? filteredMatchups.filter((m) => !!matchupUserVotes[m.id])
-          : filteredMatchups.filter((m) => {
-              const key = `matchups:${m.id}`;
-              if (isHideRetained(key)) return true;
-              return !matchupUserVotes[m.id] && !isHideHidden(key);
-            }),
-    [filteredMatchups, matchupUserVotes, myVotesFilter, isHideRetained, isHideHidden],
+      filterCardsByVoteActivity(
+        filteredMatchups,
+        myVotesFilter,
+        (m) => !!matchupUserVotes[m.id],
+        { keyOf: (m) => `matchups:${m.id}`, ...voteActivityLifecycle },
+      ),
+    [filteredMatchups, matchupUserVotes, myVotesFilter, voteActivityLifecycle],
   );
 
   const displayTopics = useMemo(
     () =>
-      myVotesFilter === "all"
-        ? filteredTopics
-        : myVotesFilter === "show-mine"
-          ? filteredTopics.filter((t: any) => !!t.userVote)
-          : filteredTopics.filter((t: any) => {
-              const key = `sentiment:${t.id}`;
-              if (isHideRetained(key)) return true;
-              return !t.userVote && !isHideHidden(key);
-            }),
-    [filteredTopics, myVotesFilter, isHideRetained, isHideHidden],
+      filterCardsByVoteActivity(
+        filteredTopics,
+        myVotesFilter,
+        (t: any) => !!t.userVote,
+        { keyOf: (t: any) => `sentiment:${t.id}`, ...voteActivityLifecycle },
+      ),
+    [filteredTopics, myVotesFilter, voteActivityLifecycle],
   );
 
   const displayOpinionPolls = useMemo(
     () =>
-      myVotesFilter === "all"
-        ? filteredOpinionPolls
-        : myVotesFilter === "show-mine"
-          ? filteredOpinionPolls.filter((p: any) => !!p.userVote)
-          : filteredOpinionPolls.filter((p: any) => {
-              const key = `opinion:${p.id}`;
-              if (isHideRetained(key)) return true;
-              return !p.userVote && !isHideHidden(key);
-            }),
-    [filteredOpinionPolls, myVotesFilter, isHideRetained, isHideHidden],
+      filterCardsByVoteActivity(
+        filteredOpinionPolls,
+        myVotesFilter,
+        (p: any) => !!p.userVote,
+        { keyOf: (p: any) => `opinion:${p.id}`, ...voteActivityLifecycle },
+      ),
+    [filteredOpinionPolls, myVotesFilter, voteActivityLifecycle],
   );
 
-  useEffect(() => {
-    if (myVotesCount === 0 && myVotesFilter === "show-mine") {
-      setMyVotesFilter(DEFAULT_HUB_ACTIVITY_FILTER);
-    }
-  }, [myVotesCount, myVotesFilter, setMyVotesFilter]);
+  const displayRatingCelebrities = useMemo(
+    () =>
+      filterCardsByVoteActivity(
+        filteredRatingCelebrities,
+        myVotesFilter,
+        (person) => hasOverallRatingVote(person),
+        { keyOf: (person) => `rating:${person.id}`, ...voteActivityLifecycle },
+      ),
+    [filteredRatingCelebrities, myVotesFilter, voteActivityLifecycle, ratingVoteEpoch],
+  );
+
+  const displayCandidates = useMemo(
+    () =>
+      filterCardsByVoteActivity(
+        filteredCandidates,
+        myVotesFilter,
+        (candidate) => inductionVotedSet.has(candidate.id),
+        { keyOf: (candidate) => `induction:${candidate.id}`, ...voteActivityLifecycle },
+      ),
+    [filteredCandidates, inductionVotedSet, myVotesFilter, voteActivityLifecycle],
+  );
+
+  const inductionVotesPending = !!user && myVotesFilter !== "all" && !inductionVotesFetched;
 
   const sentimentSlugList = useMemo(
     () => displayTopics.map((t: any) => t.slug).filter(Boolean) as string[],
@@ -1755,13 +1778,15 @@ export default function VotePage() {
   );
 
   const ratingSnapSource = useMemo(
-    () =>
-      ratingCelebrities.filter(
+    () => {
+      const base = ratingCelebrities.filter(
         (c) =>
           !ratingSearchQuery ||
           c.name.toLowerCase().includes(ratingSearchQuery.toLowerCase()),
-      ),
-    [ratingCelebrities, ratingSearchQuery],
+      );
+      return filterCardsByVoteActivity(base, myVotesFilter, (person) => hasOverallRatingVote(person));
+    },
+    [ratingCelebrities, ratingSearchQuery, myVotesFilter, ratingVoteEpoch],
   );
 
   const ratingSnapItems: SnapItem[] = useMemo(
@@ -1779,11 +1804,13 @@ export default function VotePage() {
   );
 
   const inductionSnapSource = useMemo(
-    () =>
-      enrichedCandidates.filter((c) =>
+    () => {
+      const base = enrichedCandidates.filter((c) =>
         c.name.toLowerCase().includes(inductionSearchQuery.toLowerCase()),
-      ),
-    [enrichedCandidates, inductionSearchQuery],
+      );
+      return filterCardsByVoteActivity(base, myVotesFilter, (candidate) => inductionVotedSet.has(candidate.id));
+    },
+    [enrichedCandidates, inductionSearchQuery, myVotesFilter, inductionVotedSet],
   );
 
   const inductionSnapItems: SnapItem[] = useMemo(
@@ -1809,18 +1836,51 @@ export default function VotePage() {
     return (Array.isArray(raw) ? raw : []).filter((p: any) => !!p?.id);
   }, [curateTrendingData]);
 
+  // Same membership rules as CurateSection (category helper, not the registry
+  // matcher) so the activity-filter badge counts the cards that carousel shows.
   const filteredCurateCelebrities = useMemo(() => {
     const search = curateSearchQuery.trim().toLowerCase();
     return curateTrendingCelebrities.filter((p: any) => {
-      const matchesCategory =
-        globalCategoryFilter === "all" ||
-        globalCategoryFilter === "trending" ||
-        (globalCategoryFilter === "favorites" && favoriteIds.has(p.id)) ||
-        matchesRegistryCategoryFilter(p.category, p.secondaryCategories, globalCategoryFilter);
-      const matchesSearch = !search || p.name.toLowerCase().includes(search);
-      return matchesCategory && matchesSearch;
+      const matchesSearch = !search || String(p.name ?? "").toLowerCase().includes(search);
+      if (!matchesSearch) return false;
+      if (globalCategoryFilter === "favorites") return favoriteIds.has(p.id);
+      return matchesCategoryFilter(p.category, p.secondaryCategories, globalCategoryFilter);
     });
-  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearchQuery, favoriteIds, matchesRegistryCategoryFilter]);
+  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearchQuery, favoriteIds]);
+
+  const myVotesCount = useMemo(() => {
+    const matchupVoted = filteredMatchups.filter((m) => !!matchupUserVotes[m.id]).length;
+    const sentimentVoted = filteredTopics.filter((t: any) => !!t.userVote).length;
+    const opinionVoted = filteredOpinionPolls.filter((p: any) => !!p.userVote).length;
+    const ratingVoted = filteredRatingCelebrities.filter((person) => hasOverallRatingVote(person)).length;
+    const inductionVoted = filteredCandidates.filter((candidate) => inductionVotedSet.has(candidate.id)).length;
+    const curateVoted = filteredCurateCelebrities.filter((person: { id: string }) => curateVotedIds.has(person.id)).length;
+    return matchupVoted + sentimentVoted + opinionVoted + ratingVoted + inductionVoted + curateVoted;
+  }, [
+    filteredMatchups,
+    filteredTopics,
+    filteredOpinionPolls,
+    filteredRatingCelebrities,
+    filteredCandidates,
+    filteredCurateCelebrities,
+    matchupUserVotes,
+    inductionVotedSet,
+    curateVotedIds,
+    ratingVoteEpoch,
+  ]);
+
+  const shapeVotesPending = !!user && (!inductionVotesFetched || !curateVotesFetched);
+
+  const cycleMyVotesFilter = useCallback(() => {
+    const owned = shapeVotesPending ? Math.max(myVotesCount, 1) : myVotesCount;
+    setMyVotesFilter((prev) => nextVoteActivityFilter(prev, owned));
+  }, [myVotesCount, shapeVotesPending, setMyVotesFilter]);
+
+  useEffect(() => {
+    if (myVotesFilter !== "show-mine") return;
+    if (shapeVotesPending) return;
+    if (myVotesCount === 0) setMyVotesFilter(DEFAULT_HUB_ACTIVITY_FILTER);
+  }, [myVotesCount, myVotesFilter, shapeVotesPending, setMyVotesFilter]);
 
   const topicsCategoryOptions = useMemo(
     () =>
@@ -1955,10 +2015,11 @@ export default function VotePage() {
 
   const curateSnapSource = useMemo(() => {
     const search = curateSearchQuery.trim().toLowerCase();
-    return curateTrendingCelebrities.filter(
+    const base = curateTrendingCelebrities.filter(
       (p: any) => !search || p.name.toLowerCase().includes(search),
     );
-  }, [curateTrendingCelebrities, curateSearchQuery]);
+    return filterCardsByVoteActivity(base, myVotesFilter, (person: { id: string }) => curateVotedIds.has(person.id));
+  }, [curateTrendingCelebrities, curateSearchQuery, myVotesFilter, curateVotedIds]);
 
   const curateSnapItems: SnapItem[] = useMemo(
     () =>
@@ -2225,7 +2286,7 @@ export default function VotePage() {
   }, []);
 
   const handleToggleVote = (candidateId: string) => {
-    if (votedIds.has(candidateId)) return;
+    if (inductionVotedSet.has(candidateId)) return;
     // Phase 4 — anon-budget gate. The pre-Stage-7 anon-block has been
     // removed; anon users with remaining budget now hit the server,
     // exhausted users redirect via the gate. isUpsert hardcoded false:
@@ -2246,6 +2307,7 @@ export default function VotePage() {
       });
       return;
     }
+    beginShapeHideExit(`induction:${candidateId}`);
     setVotedIds(prev => {
       const newSet = new Set(prev);
       newSet.add(candidateId);
@@ -3054,7 +3116,7 @@ export default function VotePage() {
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => openSnapScroll("rating", filteredRatingCelebrities[0]?.id, "header-icon")}
+                  onClick={() => openSnapScroll("rating", displayRatingCelebrities[0]?.id, "header-icon")}
                   className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
                   aria-label="Open immersive browse"
                   data-testid="button-snap-rating"
@@ -3074,10 +3136,14 @@ export default function VotePage() {
           
           {ratingLoading ? (
             <CardGridSkeleton count={3} />
-          ) : filteredRatingCelebrities.length > 0 ? (
-            <CardSection desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
-              {filteredRatingCelebrities.map((person) => (
-                <div key={person.id}>
+          ) : displayRatingCelebrities.length > 0 ? (
+            <CardSection ref={ratingSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
+              {displayRatingCelebrities.map((person) => (
+                <HideExitCard
+                  key={person.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`rating:${person.id}`)}
+                >
                   <OverallRatingCard 
                     person={person}
                     onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
@@ -3085,8 +3151,10 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
+                    onRated={() => beginShapeHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
                   />
-                </div>
+                </HideExitCard>
               ))}
             </CardSection>
           ) : (
@@ -3146,7 +3214,7 @@ export default function VotePage() {
                 </Button>
                 <button
                   type="button"
-                  onClick={() => openSnapScroll("induction", filteredCandidates[0]?.id, "header-icon")}
+                  onClick={() => openSnapScroll("induction", displayCandidates[0]?.id, "header-icon")}
                   className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
                   aria-label="Open immersive browse"
                   data-testid="button-snap-induction"
@@ -3164,17 +3232,21 @@ export default function VotePage() {
             />
           </UnifiedSectionHeader>
 
-          {inductionLoading ? (
+          {inductionLoading || inductionVotesPending ? (
             <CardGridSkeleton count={3} />
-          ) : filteredCandidates.length > 0 ? (
-            <CardSection desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
-              {filteredCandidates.map((candidate, index) => (
-                <div key={candidate.id}>
+          ) : displayCandidates.length > 0 ? (
+            <CardSection ref={inductionSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
+              {displayCandidates.map((candidate, index) => (
+                <HideExitCard
+                  key={candidate.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`induction:${candidate.id}`)}
+                >
                   <InductionCandidateCard
                     candidate={candidate}
                     rank={candidateRankById.get(candidate.id) ?? index + 1}
                     maxVotes={maxVotes}
-                    isVoted={votedIds.has(candidate.id)}
+                    isVoted={inductionVotedSet.has(candidate.id)}
                     onToggleVote={handleToggleVote}
                     onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
                     onFilterCategory={handleCategoryPillFilter}
@@ -3189,7 +3261,7 @@ export default function VotePage() {
                         : undefined
                     }
                   />
-                </div>
+                </HideExitCard>
               ))}
             </CardSection>
           ) : (
@@ -3249,7 +3321,7 @@ export default function VotePage() {
                 </Button>
                 <button
                   type="button"
-                  onClick={() => openSnapScroll("curate", undefined, "header-icon")}
+                  onClick={() => openSnapScroll("curate", curateSnapSource[0]?.id, "header-icon")}
                   className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
                   aria-label="Open immersive browse"
                   data-testid="button-snap-curate"
@@ -3274,6 +3346,14 @@ export default function VotePage() {
             categoryRaceMap={raceMap}
             leaderboardCategories={leaderboardCats}
             onBrowseFullScreen={isMobile ? (personId) => openSnapScroll("curate", personId, "browse-button") : undefined}
+            activityFilter={myVotesFilter}
+            votedPersonIds={curateVotedIds}
+            votesPending={!!user && myVotesFilter !== "all" && !curateVotesFetched}
+            isPersonRetained={(id) => isHideRetained(`curate:${id}`)}
+            isPersonHidden={(id) => isHideHidden(`curate:${id}`)}
+            isPersonExiting={(id) => isHideExiting(`curate:${id}`)}
+            onPersonVoted={(id) => beginShapeHideExit(`curate:${id}`)}
+            sectionRef={curateSectionRef}
           />
         </section>
         )}
@@ -3787,13 +3867,13 @@ export default function VotePage() {
             
             <div ref={inductionScrollRef} onScroll={(e) => saveOverlayScroll("induction", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
-                {filteredCandidates.map((candidate, index) => (
+                {displayCandidates.map((candidate, index) => (
                   <InductionCandidateCard
                     key={candidate.id}
                     candidate={candidate}
                     rank={candidateRankById.get(candidate.id) ?? index + 1}
                     maxVotes={maxVotes}
-                    isVoted={votedIds.has(candidate.id)}
+                    isVoted={inductionVotedSet.has(candidate.id)}
                     onToggleVote={handleToggleVote}
                     onXPGain={() => { /* bursts now fire from vote mutation onSuccess */ }}
                     onFilterCategory={handleCategoryPillFilter}
@@ -3810,7 +3890,7 @@ export default function VotePage() {
                   />
                 ))}
               </div>
-              {filteredCandidates.length === 0 && (
+              {displayCandidates.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No candidates match your filter criteria.
                 </div>
@@ -4042,7 +4122,7 @@ export default function VotePage() {
             
             <div ref={ratingScrollRef} onScroll={(e) => saveOverlayScroll("overall-rating", e.currentTarget.scrollTop)} className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-7xl mx-auto">
-                {filteredRatingCelebrities.map((person) => (
+                {displayRatingCelebrities.map((person) => (
                   <OverallRatingCard 
                     key={person.id} 
                     person={person}
@@ -4051,10 +4131,12 @@ export default function VotePage() {
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
+                    onRated={() => beginShapeHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
                   />
                 ))}
               </div>
-              {filteredRatingCelebrities.length === 0 && (
+              {displayRatingCelebrities.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   No celebrities match your filter criteria.
                 </div>
@@ -4158,7 +4240,7 @@ export default function VotePage() {
             onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-rating")}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item, _ctx) => {
-              const person = filteredRatingCelebrities.find((p: any) => p.id === item.id);
+              const person = ratingCelebrities.find((p: any) => p.id === item.id);
               if (!person) return null;
               return (
                 <OverallRatingCard
@@ -4168,6 +4250,8 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   categoryMenuDisabled
+                  onRated={() => beginShapeHideExit(`rating:${person.id}`)}
+                  onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
                 />
               );
             }}
@@ -4184,15 +4268,15 @@ export default function VotePage() {
             onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-induction")}
             onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
             renderCard={(item, _ctx) => {
-              const idx = filteredCandidates.findIndex((c: any) => c.id === item.id);
-              const candidate = idx >= 0 ? filteredCandidates[idx] : null;
+              const idx = enrichedCandidates.findIndex((c: any) => c.id === item.id);
+              const candidate = idx >= 0 ? enrichedCandidates[idx] : null;
               if (!candidate) return null;
               return (
                 <InductionCandidateCard
                   candidate={candidate}
                   rank={candidateRankById.get(candidate.id) ?? idx + 1}
                   maxVotes={maxVotes}
-                  isVoted={votedIds.has(candidate.id)}
+                  isVoted={inductionVotedSet.has(candidate.id)}
                   onToggleVote={handleToggleVote}
                   onXPGain={() => {}}
                   onFilterCategory={handleCategoryPillFilter}
@@ -4224,7 +4308,7 @@ export default function VotePage() {
               return (
                 <CurateProfileCardComponent
                   person={person}
-                  onVote={() => {}}
+                  onVote={() => beginShapeHideExit(`curate:${item.id}`)}
                   onComplete={() => {}}
                   onViewResults={() => {}}
                   onFilterCategory={handleCategoryPillFilter}
