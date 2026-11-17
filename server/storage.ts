@@ -2,6 +2,7 @@ import { type TrendingPerson, type CelebrityProfile, type InsertCelebrityProfile
 import { canonicalizePersonCategory } from "@shared/constants";
 import { db } from "./db";
 import { eq, asc, sql } from "drizzle-orm";
+import { MIN_PLAUSIBLE_AVG_FAME_INDEX } from "./scoring/scale";
 
 const PROFILE_METADATA_FALLBACK_VERSION = 2;
 
@@ -98,13 +99,12 @@ export class MemStorage implements IStorage {
 
   async updateTrendingPeople(people: TrendingPerson[]): Promise<void> {
     // SAFEGUARD: Reject mock data writes - THROWS ERROR instead of silent failure
-    // Real fame_index values should be in the 100k-600k range (from ingestion)
-    // Mock data typically has values in the 5k-10k range
+    // Real fame_index values should be in the 10k-80k range (from ingestion, avg ~46k)
     // Block writes where the average fame_index is suspiciously low
     if (people.length > 0) {
       const avgFameIndex = people.reduce((sum, p) => sum + (p.fameIndex ?? 0), 0) / people.length;
-      if (avgFameIndex < 50000) {
-        const errorMsg = `[Storage] BLOCKED: Attempted to write mock/corrupted data (avg fameIndex: ${avgFameIndex.toFixed(0)}). Real data should have avg fameIndex > 50,000.`;
+      if (avgFameIndex < MIN_PLAUSIBLE_AVG_FAME_INDEX) {
+        const errorMsg = `[Storage] BLOCKED: Attempted to write mock/corrupted data (avg fameIndex: ${avgFameIndex.toFixed(0)}). Real data should have avg fameIndex > ${MIN_PLAUSIBLE_AVG_FAME_INDEX.toLocaleString("en-US")}.`;
         console.error(errorMsg);
         throw new Error(errorMsg);
       }

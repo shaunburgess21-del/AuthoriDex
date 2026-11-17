@@ -1921,7 +1921,7 @@ export default function MarketDetailPage() {
                     type="number"
                     min="1"
                     step="1"
-                    placeholder="Enter exact score (e.g. 352000)"
+                    placeholder="Enter exact score (e.g. 35200)"
                     ref={jackpotInputRef}
                     value={jackpotScoreInput}
                     onChange={(e) => setJackpotScoreInput(e.target.value)}

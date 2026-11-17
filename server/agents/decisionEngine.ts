@@ -899,8 +899,8 @@ export function computeJackpotPrediction(
 
   // `scoreDelta7d` / `change24h` are PERCENTAGES (e.g. -3.3 for -3.3%), but the
   // archetype drifts below add their result straight onto a fameIndex anchor in
-  // the hundreds of thousands. Added raw, every drift was worth a few points —
-  // ~0.0005% of anchor — so all archetypes collapsed onto the same guess and
+  // the tens of thousands. Added raw, every drift was worth a few points —
+  // a negligible fraction of anchor — so all archetypes collapsed onto the same guess and
   // only the ±2% noise term below did any work. Convert to points against the
   // anchor so each archetype's stated intent actually moves the prediction.
   const delta7dPoints = anchor * (signals.scoreDelta7d / 100);
@@ -969,7 +969,7 @@ export function computeJackpotPrediction(
       // composite signal.
       // The old +60 / -40 were absolute points from when fameIndex ran in the
       // thousands (see the `?? 5000` fallback in getTrendSignals); against a
-      // ~700k anchor they were invisible. Kept as anchor-relative nudges that
+      // much larger anchor they were invisible. Kept as anchor-relative nudges that
       // preserve the original 3:2 up/down asymmetry.
       const directionBoost =
         signals.trendDirection === "UP" ? anchor * 0.006 :
@@ -1009,7 +1009,7 @@ export function computeJackpotPrediction(
   // Now that drifts scale with the anchor they also scale with outliers, and
   // ~15% of the roster carries a >30% weekly swing (100% observed). Left
   // unbounded, `recency_bias` (×2.0) would drive those guesses into the
-  // 2,000,000 clamp below, where every agent lands on the identical number.
+  // JACKPOT_MAX_PREDICTED_SCORE clamp below, where every agent lands on the identical number.
   // Bound the drift well past the p90 weekend move (~37%) so ordinary
   // archetype behaviour is untouched.
   const maxDrift = anchor * 0.4;

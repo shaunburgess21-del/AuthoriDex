@@ -85,7 +85,8 @@ function getCategoryHex(category: string): string {
 
 function formatScore(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  // One decimal below 100K keeps three significant digits on five-digit scores.
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
   return String(Math.round(value));
 }
 

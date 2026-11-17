@@ -13,6 +13,7 @@ import {
   PLATFORM_WEIGHTS,
   VELOCITY_ALLOCATION,
 } from "../server/scoring/normalize";
+import { FAME_INDEX_MAX, FAME_INDEX_SCALE } from "../server/scoring/scale";
 
 // Build a minimal valid TrendInputs — the full type has many optional fields,
 // these are the ones that actually drive the core score path.
@@ -366,7 +367,7 @@ test("computeTrendScore: trendsMomentum is 0 when inputs omit Trends data", () =
 //   diversityMultiplier === 1    (constant placeholder)
 //   spikingSourceCount === 0     (constant placeholder)
 //   velocityAdjusted === velocityScore (no taper/damping)
-//   rawFameIndex === round( (mass*0.4 + velocity*0.6) * 10000 )
+//   rawFameIndex === round( (mass*0.4 + velocity*0.6) * FAME_INDEX_SCALE )
 //   fameIndex === round( 0.5·rawFameIndex + 0.5·previousFameIndex )  (May 2026 temp)
 
 test("computeTrendScore: rawFameIndex equals fameIndex when no previous tick", () => {
@@ -377,12 +378,12 @@ test("computeTrendScore: rawFameIndex equals fameIndex when no previous tick", (
 test("computeTrendScore: stabilization fields are constant placeholders", () => {
   const out = computeTrendScore(
     baseInputs(),
-    800_000,   // previousScore — used to be a smoothing anchor
-    750_000,   // previousScore7d
-    800_000,   // previousFameIndex
+    80_000,   // previousScore — used to be a smoothing anchor
+    75_000,   // previousScore7d
+    80_000,   // previousFameIndex
     DEFAULT_SOURCE_STATS,
-    700_000,   // previousFameIndex24h
-    650_000,   // previousFameIndex7d
+    70_000,   // previousFameIndex24h
+    65_000,   // previousFameIndex7d
   );
   assert.equal(out.wasStabilized, false);
   assert.equal(out.stabDetail, null);
@@ -394,15 +395,33 @@ test("computeTrendScore: stabilization fields are constant placeholders", () => 
 test("computeTrendScore: rawFameIndex equals raw mass/velocity composite (within rounding)", () => {
   // massScore / velocityScore in the return are rounded to 2 decimals for
   // display, but rawFameIndex is computed from the unrounded values. Allow a
-  // small tolerance (up to a few hundred units on a 0–1,000,000 scale).
+  // small tolerance (0.05% of the 0–FAME_INDEX_MAX range).
   const out = computeTrendScore(baseInputs());
   const expected = Math.round(
-    (out.massScore * MASS_ALLOCATION + out.velocityScore * VELOCITY_ALLOCATION) * 10000
+    (out.massScore * MASS_ALLOCATION + out.velocityScore * VELOCITY_ALLOCATION) * FAME_INDEX_SCALE
   );
   assert.ok(
-    Math.abs(out.rawFameIndex - expected) < 500,
+    Math.abs(out.rawFameIndex - expected) < FAME_INDEX_MAX * 0.0005,
     `expected rawFameIndex ≈ ${expected}, got ${out.rawFameIndex}`
   );
+});
+
+test("computeTrendScore: fameIndex stays within the 0..FAME_INDEX_MAX scale", () => {
+  // Guards the Nov 2026 rescale: a typical profile must land in the tens of
+  // thousands, and even a previous tick far above the ceiling cannot push the
+  // smoothed value past it.
+  const out = computeTrendScore(baseInputs());
+  assert.ok(out.fameIndex > 0 && out.fameIndex <= FAME_INDEX_MAX, `got ${out.fameIndex}`);
+  assert.ok(out.trendScore <= FAME_INDEX_MAX, `got ${out.trendScore}`);
+
+  const withHugePrev = computeTrendScore(
+    baseInputs(),
+    undefined,
+    undefined,
+    FAME_INDEX_MAX * 10, // a legacy-scale value leaking in as the prior tick
+    DEFAULT_SOURCE_STATS,
+  );
+  assert.ok(withHugePrev.fameIndex <= FAME_INDEX_MAX, `got ${withHugePrev.fameIndex}`);
 });
 
 test("computeTrendScore: asymmetric EMA — downward move uses alpha_down blend", () => {
@@ -414,16 +433,16 @@ test("computeTrendScore: asymmetric EMA — downward move uses alpha_down blend"
     baseInputs(),
     undefined,
     undefined,
-    900_000, // previousFameIndex (large — raw is below this → downward)
+    90_000, // previousFameIndex (large — raw is below this → downward)
     DEFAULT_SOURCE_STATS,
   );
   assert.ok(
-    withoutPrev.fameIndex < 900_000,
+    withoutPrev.fameIndex < 90_000,
     "test precondition: raw composite should be below the previous tick",
   );
   assert.equal(withPrev.rawFameIndex, withoutPrev.fameIndex,
     "rawFameIndex should match the no-prev fameIndex (EMA happens after raw is computed)");
-  const expected = Math.round(withoutPrev.fameIndex * alphaDown + 900_000 * (1 - alphaDown));
+  const expected = Math.round(withoutPrev.fameIndex * alphaDown + 90_000 * (1 - alphaDown));
   assert.ok(
     Math.abs(withPrev.fameIndex - expected) < 2,
     `expected downward EMA blend ≈ ${expected}, got ${withPrev.fameIndex}`
@@ -438,7 +457,7 @@ test("computeTrendScore: asymmetric EMA — upward spike uses 0.85/0.15 blend", 
   // When the raw composite is AT OR ABOVE the prior tick (a breakout), the EMA
   // barely damps it: fameIndex = 0.85·raw + 0.15·prev, so spikes show fast.
   const withoutPrev = computeTrendScore(baseInputs());
-  const lowPrev = 100_000; // well below the raw composite → upward
+  const lowPrev = 10_000; // well below the raw composite → upward
   const withPrev = computeTrendScore(
     baseInputs(),
     undefined,

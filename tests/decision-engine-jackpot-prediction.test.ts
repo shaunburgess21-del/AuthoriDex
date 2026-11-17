@@ -4,7 +4,7 @@
  *
  * Background: the archetype drift terms consume `scoreDelta7d` / `change24h`,
  * which are PERCENTAGES (e.g. -3.3 for -3.3%). They used to be added straight
- * onto a `fameIndex` anchor in the hundreds of thousands, so every drift was
+ * onto a `fameIndex` anchor in the tens of thousands, so every drift was
  * worth a handful of points (~0.0005% of anchor). The practical effect was that
  * all archetypes collapsed onto the same guess and only the ±2% noise term did
  * any work. The drifts are now converted to points against the anchor, with a
@@ -34,7 +34,7 @@ import type { AgentConfigData, TrendSignals } from "../server/agents/types";
 /** Clears every abstain gate and zeroes the noise term. See file header. */
 const STEADY_RNG: RNG = { nextFloat: () => 0.5 };
 
-const ANCHOR = 700_000;
+const ANCHOR = 70_000;
 const CATEGORY = "politics";
 
 function makeAgent(overrides: Partial<AgentConfigData> = {}): AgentConfigData {
@@ -95,18 +95,18 @@ function predict(
 
 test("7d percentage drift scales with the anchor, not raw percentage points", () => {
   // -10% week, momentum_chaser extrapolates it at 1.5x with recencyWeight 1.0:
-  // 700_000 * -0.10 * 1.5 = -105_000.
+  // 70_000 * -0.10 * 1.5 = -10_500.
   const score = predict(
     makeAgent({ archetype: "momentum_chaser" }),
     makeSignals({ scoreDelta7d: -10 }),
   );
 
-  assert.equal(score, 595_000);
+  assert.equal(score, 59_500);
 });
 
 test("a double-digit weekly move shifts the guess materially, not by a few points", () => {
   // Regression guard for the original bug: adding the raw percentage produced
-  // a drift of ~15 points on a 700k anchor, i.e. no drift at all.
+  // a drift of ~15 points on a 70k anchor, i.e. no drift at all.
   const score = predict(
     makeAgent({ archetype: "recency_bias" }),
     makeSignals({ scoreDelta7d: -10 }),
@@ -125,9 +125,9 @@ test("archetypes reach materially different guesses from identical signals", () 
   const recencyBias = predict(makeAgent({ archetype: "recency_bias" }), signals);
   const longHorizon = predict(makeAgent({ archetype: "long_horizon" }), signals);
 
-  // -70_000 raw move: conservative takes 0.15 of it, recency_bias 2.0.
-  assert.equal(conservative, 689_500);
-  assert.equal(recencyBias, 560_000);
+  // -7_000 raw move: conservative takes 0.15 of it, recency_bias 2.0.
+  assert.equal(conservative, 68_950);
+  assert.equal(recencyBias, 56_000);
 
   const spread = Math.max(conservative, recencyBias, longHorizon)
     - Math.min(conservative, recencyBias, longHorizon);
@@ -138,14 +138,14 @@ test("archetypes reach materially different guesses from identical signals", () 
 });
 
 test("news_reactive reads the 24h move in points without the legacy 30x coefficient", () => {
-  // 700_000 * 0.05 * recencyWeight 1.0 = +35_000. The old code produced
+  // 70_000 * 0.05 * recencyWeight 1.0 = +3_500. The old code produced
   // 5 * 1.0 * 30 = 150 points, which was invisible at this anchor.
   const score = predict(
     makeAgent({ archetype: "news_reactive" }),
     makeSignals({ change24h: 5 }),
   );
 
-  assert.equal(score, 735_000);
+  assert.equal(score, 73_500);
 });
 
 test("culture_tracker direction boost is anchor-relative and keeps its up/down asymmetry", () => {
@@ -162,8 +162,8 @@ test("culture_tracker direction boost is anchor-relative and keeps its up/down a
     makeSignals({ trendDirection: "FLAT" }),
   );
 
-  assert.equal(up, 704_200); // +0.6% of anchor
-  assert.equal(down, 697_200); // -0.4% of anchor
+  assert.equal(up, 70_420); // +0.6% of anchor
+  assert.equal(down, 69_720); // -0.4% of anchor
   assert.equal(flat, ANCHOR);
   assert.ok(up - ANCHOR > ANCHOR - down, "UP nudge should exceed the DOWN nudge");
 });
@@ -174,7 +174,7 @@ test("culture_tracker direction boost is anchor-relative and keeps its up/down a
 
 test("extreme weekly movers are bounded to ±40% instead of hitting the score ceiling", () => {
   // A +100% week is real — it has been observed on the live roster. Unbounded,
-  // recency_bias would compute 700_000 + (700_000 * 1.0 * 2.0) = 2_100_000 and
+  // recency_bias would compute 70_000 + (70_000 * 1.0 * 2.0) = 210_000 and
   // clamp to JACKPOT_MAX_PREDICTED_SCORE, putting every such agent on the exact
   // same number.
   const surging = predict(
@@ -186,8 +186,8 @@ test("extreme weekly movers are bounded to ±40% instead of hitting the score ce
     makeSignals({ scoreDelta7d: -100 }),
   );
 
-  assert.equal(surging, 980_000); // anchor + 40%
-  assert.equal(collapsing, 420_000); // anchor - 40%
+  assert.equal(surging, 98_000); // anchor + 40%
+  assert.equal(collapsing, 42_000); // anchor - 40%
   assert.ok(surging < JACKPOT_MAX_PREDICTED_SCORE, "must not reach the score ceiling");
   assert.ok(collapsing > 1, "must not reach the score floor");
 });
@@ -199,7 +199,7 @@ test("ordinary weekly moves are left untouched by the drift bound", () => {
     makeSignals({ scoreDelta7d: 5 }),
   );
 
-  assert.equal(score, 770_000);
+  assert.equal(score, 77_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -210,12 +210,12 @@ test("baseline-relative archetypes keep operating on raw point differences", () 
   // prestige_maximiser and contrarian derive their drift from
   // (scoreBaseline - anchor), which is already a point delta. Converting these
   // would have double-scaled them.
-  const signals = makeSignals({ scoreBaseline: 750_000 });
+  const signals = makeSignals({ scoreBaseline: 75_000 });
 
-  // (750_000 - 700_000) * prestigeBias 0.5 * 0.4 = +10_000
-  assert.equal(predict(makeAgent({ archetype: "prestige_maximiser" }), signals), 710_000);
-  // -(700_000 - 750_000) * contrarianism 0.5 * 0.5 = +12_500
-  assert.equal(predict(makeAgent({ archetype: "contrarian" }), signals), 712_500);
+  // (75_000 - 70_000) * prestigeBias 0.5 * 0.4 = +1_000
+  assert.equal(predict(makeAgent({ archetype: "prestige_maximiser" }), signals), 71_000);
+  // -(70_000 - 75_000) * contrarianism 0.5 * 0.5 = +1_250
+  assert.equal(predict(makeAgent({ archetype: "contrarian" }), signals), 71_250);
 });
 
 // ---------------------------------------------------------------------------

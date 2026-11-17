@@ -43,7 +43,8 @@ function formatNumber(n: number): string {
 }
 
 function formatCompact(n: number): string {
-  if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(0)}K`;
+  // One decimal below 100K keeps three significant digits on five-digit scores.
+  if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(Math.abs(n) >= 100_000 ? 0 : 1)}K`;
   return String(Math.round(n));
 }
 

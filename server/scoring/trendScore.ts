@@ -22,6 +22,7 @@ import {
 import {
   normalizeEngagementScore,
 } from "./engagement";
+import { FAME_INDEX_SCALE, FAME_INDEX_MAX } from "./scale";
 
 // ============================================================================
 // TREND SCORE — raw mass + velocity with cross-snapshot Fame Index EMA.
@@ -33,8 +34,10 @@ import {
 //                   trimmed from 0.60; wiki trimmed from 0.40; search
 //                   permanently zero. Momentum carries the news 24h-vs-7d
 //                   acceleration ratio.)
-//   rawFameIndex  = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 10000 ), 0, 1M )
-//   fameIndex     = clamp( round( α × rawFameIndex + (1−α) × previousFameIndex ), 0, 1M )
+//   rawFameIndex  = clamp( round( (massScore * 0.40 + velocityScore * 0.60) * 1000 ), 0, 100K )
+//   fameIndex     = clamp( round( α × rawFameIndex + (1−α) × previousFameIndex ), 0, 100K )
+//                   (Nov 2026: scale reduced from x10000 / 1M to x1000 / 100K —
+//                   see ./scale.ts. Pure unit change; the composite is identical.)
 //                   (Fix Z — Apr 2026 PR2: cross-snapshot EMA when a
 //                   recent previousFameIndex is supplied; otherwise
 //                   fameIndex === rawFameIndex.)
@@ -44,7 +47,7 @@ import {
 // and 0.60 when raw < prev (a real news-cycle decline propagates over ~3-4
 // ticks). This lets genuine attention breakouts register almost immediately
 // while still damping the downside against single-tick flicker / the leftover
-// ±150K oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
+// ±15K oscillation that upstream input smoothing (ingest.ts soft-hold) doesn't
 // catch (e.g. mass-side wiki-7d-avg refresh flips).
 //
 // `rawFameIndex` is preserved un-smoothed for admin diagnostics so the
@@ -421,8 +424,8 @@ export function computeTrendScore(
   const baseScore =
     (1 - engagementBlendWeight) * externalComposite
     + engagementBlendWeight * engagementScore;
-  const rawFameIndex = clamp(Math.round(baseScore * 10000), 0, 1000000);
-  const rawTrendScore = clamp(baseScore * 10000, 0, 1000000);
+  const rawFameIndex = clamp(Math.round(baseScore * FAME_INDEX_SCALE), 0, FAME_INDEX_MAX);
+  const rawTrendScore = clamp(baseScore * FAME_INDEX_SCALE, 0, FAME_INDEX_MAX);
 
   // Apply cross-snapshot EMA only when we have a usable prior tick. Caller
   // (ingest) is responsible for not passing a stale previousFameIndex.
@@ -449,7 +452,7 @@ export function computeTrendScore(
             previousFameIndex! * emaAlphaPrevious,
         ),
         0,
-        1000000,
+        FAME_INDEX_MAX,
       )
     : rawFameIndex;
 
@@ -458,7 +461,7 @@ export function computeTrendScore(
         rawTrendScore * emaAlphaCurrent +
           previousFameIndex! * emaAlphaPrevious,
         0,
-        1000000,
+        FAME_INDEX_MAX,
       )
     : rawTrendScore;
 

@@ -9,7 +9,9 @@ export const NEGATIVE_HINTS = ["down", "fall", "lower", "no", "lose", "decline",
 export const CONTRARIAN_TRIGGER_THRESHOLD = 0.65;
 
 // Prestige UP-tilt only when baseline reflects real leaderboard stature.
-export const PRESTIGE_MIN_BASELINE = 200_000;
+// Absolute fame-index threshold — tied to the score scale (server/scoring/scale.ts).
+// Was 200_000 before the Nov 2026 rescale; same cut-off, new units.
+export const PRESTIGE_MIN_BASELINE = 20_000;
 
 // Young markets with no directional signal — throttle Monday-morning pile-on.
 export const NO_SIGNAL_ABSTAIN_RATE_STANDARD = 0.60;

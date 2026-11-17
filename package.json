@@ -53,6 +53,7 @@
     "gainer:preview": "tsx --env-file=.env ops/preview-gainer-bands.ts",
     "updown:preview": "tsx --env-file=.env ops/preview-updown-velocity-bands.ts",
     "repair:knockout-draw": "tsx --env-file=.env ops/repair-knockout-draw-resolutions.ts",
+    "rescale:scores": "tsx --env-file=.env ops/rescale-scores-div10.ts",
     "world:calibrate": "tsx scripts/world-market-calibration.ts",
     "repair:amm-outcomes": "tsx --env-file=.env server/scripts/repair-amm-outcomes.ts",
     "settle:week23-updown": "tsx --env-file=.env server/scripts/settle-week23-stranded-updown.ts"

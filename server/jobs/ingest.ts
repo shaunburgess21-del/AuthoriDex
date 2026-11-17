@@ -17,6 +17,7 @@ import {
   type CascadeAggregatorStats,
 } from "../providers/news-aggregator";
 import { computeTrendScore } from "../scoring/trendScore";
+import { FAME_INDEX_MAX, MIN_PLAUSIBLE_AVG_FAME_INDEX, isLegacyFameScale } from "../scoring/scale";
 import { computeEngagementBlendWeight } from "../scoring/engagement";
 import { loadEngagementSignalsForIngest } from "../services/engagement-aggregate";
 import {
@@ -518,6 +519,33 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
       await releaseIngestionLock(runId, "failed", { errorSummary: "DB guardrails not verified" });
       return { processed: 0, errors: 1, duration: Date.now() - startTime, runId };
     }
+  }
+
+  // SCALE GUARD (Nov 2026 rescale — see server/scoring/scale.ts). The engine now
+  // emits scores on the x1,000 scale. If the stored leaderboard is still on the
+  // legacy x10,000 scale, the cross-snapshot EMA would blend the two and write a
+  // meaningless value into history, so refuse to run until
+  // ops/rescale-scores-div10.ts has been applied. Checked before any provider
+  // call so a blocked run costs nothing. Fails closed: if the leaderboard can't
+  // be read the run could not have written it either.
+  try {
+    const [scaleRow] = await db
+      .select({ maxFameIndex: sql<number | null>`MAX(${trendingPeople.fameIndex})` })
+      .from(trendingPeople);
+    const maxStoredFameIndex = scaleRow?.maxFameIndex == null ? null : Number(scaleRow.maxFameIndex);
+    if (isLegacyFameScale(maxStoredFameIndex)) {
+      const errorSummary =
+        `Score scale mismatch: stored max fame_index ${maxStoredFameIndex} exceeds the ${FAME_INDEX_MAX} ceiling, ` +
+        `so history is still on the legacy scale. Run ops/rescale-scores-div10.ts --apply before ingesting.`;
+      console.error(`${logPrefix} BLOCKED: ${errorSummary}`);
+      await releaseIngestionLock(runId, "failed", { errorSummary });
+      return { processed: 0, errors: 1, duration: Date.now() - startTime, runId };
+    }
+  } catch (scaleErr) {
+    const errorSummary = `Score scale check failed: ${scaleErr instanceof Error ? scaleErr.message : String(scaleErr)}`;
+    console.error(`${logPrefix} ABORT: ${errorSummary}`);
+    await releaseIngestionLock(runId, "failed", { errorSummary });
+    return { processed: 0, errors: 1, duration: Date.now() - startTime, runId };
   }
 
   // Use targetHour if provided (backfill), otherwise truncate current time to the hour.
@@ -3190,16 +3218,16 @@ export async function runDataIngestion(options?: { targetHour?: Date; isBackfill
     scoreResults.sort((a, b) => b.score.fameIndex - a.score.fameIndex);
 
     // SAFEGUARD: Validate fameIndex range before writing to database
-    // Real fame_index values should be in the 100k-600k range
-    // Mock/corrupted data typically has values in the 5k-10k range
+    // Real fame_index values should be in the 10k-80k range (avg ~46k)
+    // Collapsed/corrupted data lands well below the floor in scoring/scale.ts
     if (scoreResults.length > 0) {
       const avgFameIndex = scoreResults.reduce((sum, r) => sum + (r.score.fameIndex ?? 0), 0) / scoreResults.length;
-      if (avgFameIndex < 50000) {
-        const errorMsg = `[Ingest] BLOCKED: Computed data has suspicious avg fameIndex (${avgFameIndex.toFixed(0)}). Real data should be > 50,000. Aborting write.`;
+      if (avgFameIndex < MIN_PLAUSIBLE_AVG_FAME_INDEX) {
+        const errorMsg = `[Ingest] BLOCKED: Computed data has suspicious avg fameIndex (${avgFameIndex.toFixed(0)}). Real data should be > ${MIN_PLAUSIBLE_AVG_FAME_INDEX.toLocaleString("en-US")}. Aborting write.`;
         console.error(errorMsg);
         throw new Error(errorMsg);
       }
-      console.log(`[Ingest] Validated avg fameIndex: ${avgFameIndex.toFixed(0)} (above 50k threshold)`);
+      console.log(`[Ingest] Validated avg fameIndex: ${avgFameIndex.toFixed(0)} (above ${MIN_PLAUSIBLE_AVG_FAME_INDEX} threshold)`);
     }
 
     // Fetch primary images for all celebrities (from celebrity_images table)

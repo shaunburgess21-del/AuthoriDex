@@ -27,7 +27,7 @@ import {
   ARB_EDGE_BAND,
 } from "./constants";
 import { getSimulationProfile } from "./simulationProfile";
-import { JACKPOT_TICKET_COST } from "../config/constants";
+import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "../config/constants";
 import {
   WORLD_MARKETS_LLM_ENABLED,
   MIN_SHARES_TO_SELL,
@@ -842,7 +842,7 @@ async function executeJackpotAction(
     if (takenNumbers.has(predictedScore)) {
       let found = false;
       for (let offset = 1; offset <= JACKPOT_AGENT_COLLISION_RANGE; offset++) {
-        if (predictedScore + offset <= 2_000_000 && !takenNumbers.has(predictedScore + offset)) {
+        if (predictedScore + offset <= JACKPOT_MAX_PREDICTED_SCORE && !takenNumbers.has(predictedScore + offset)) {
           predictedScore = predictedScore + offset;
           found = true;
           break;

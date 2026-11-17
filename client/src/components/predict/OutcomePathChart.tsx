@@ -210,7 +210,7 @@ export function OutcomePathChart({
     if (baselineScore != null) scores.push(baselineScore);
     const min = Math.min(...scores);
     const max = Math.max(...scores);
-    const padding = (max - min) * 0.15 || 1000;
+    const padding = (max - min) * 0.15 || 100;
     return [Math.floor(min - padding), Math.ceil(max + padding)];
   }, [chartData, baselineScore]);
 
@@ -422,7 +422,11 @@ export function OutcomePathChart({
               yAxisId="score"
               domain={yDomain as [number, number]}
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v))}
+              tickFormatter={(v: number) =>
+                // One decimal below 100K so a week's range on a five-digit
+                // score doesn't collapse into repeated identical ticks.
+                v >= 1000 ? `${(v / 1000).toFixed(v >= 100_000 ? 0 : 1)}K` : String(v)
+              }
               axisLine={false}
               tickLine={false}
               width={compact ? 36 : 44}

@@ -103,7 +103,7 @@ When a candidate is approved via the admin portal, code inserts a `trending_peop
 - The frontend `LeaderboardRow` displays a **"New"** badge instead of a numeric rank when `rank` is null or 0.
 - The live-tick job skips rank clamping for `rank = 0` people (keeps the sentinel intact).
 - After the **first successful ingestion cycle**, `fame_index` and `rank` are set to real computed values (`1..N`), the "New" badge disappears, and the real dynamic rank shows automatically.
-- `fame_index = 0` is never a legitimate post-ingest value (ingest's 50k avg safeguard ensures real values are in the 100k-600k range).
+- `fame_index = 0` is never a legitimate post-ingest value (ingest's 5k avg safeguard ensures real values are in the 10k-80k range; see `server/scoring/scale.ts`).
 
 **One-time repair for existing rows** (e.g. rows still showing `rank = 999` from before this change):
 
