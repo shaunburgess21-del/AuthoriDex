@@ -289,7 +289,7 @@ function generateFallbackHistory(
     };
 
     people.forEach((person, idx) => {
-      const baseScore = person.trendScore || 50000 + idx * 10000;
+      const baseScore = person.trendScore || 5000 + idx * 1000;
       const variation = Math.sin((i / totalPoints) * Math.PI * 2 + idx) * 0.15;
       const trend = (1 - i / totalPoints) * 0.1 * (idx % 2 === 0 ? 1 : -1);
       // Deterministic per-(i, idx) pseudo-noise. Math.random() made the whole
@@ -534,7 +534,7 @@ function TrendGraphOverlay({
                       axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                       tickFormatter={(value) => {
                         if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-                        if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                        if (value >= 1000) return `${(value / 1000).toFixed(value >= 100000 ? 0 : 1)}K`;
                         return value;
                       }}
                       width={50}

@@ -13,6 +13,7 @@ import { db } from "../db";
 import { sql, desc, eq } from "drizzle-orm";
 import { trendingPeople, trendSnapshots, trackedPeople } from "@shared/schema";
 import { fetchRollingSourceStats } from "../scoring/sourceStats";
+import { FAME_INDEX_SCALE } from "../scoring/scale";
 import { computeTrendScore } from "../scoring/trendScore";
 import {
   AllSourceStats,
@@ -230,7 +231,7 @@ async function main() {
             newsVelocity: recomputed.velocityComponents.news,
             searchVelocity: recomputed.velocityComponents.search,
             momentumVelocity: recomputed.velocityComponents.momentum,
-            massContrib: Math.round(recomputed.massScore * MASS_ALLOCATION * 10000),
+            massContrib: Math.round(recomputed.massScore * MASS_ALLOCATION * FAME_INDEX_SCALE),
             wikiVelContrib: Math.round(
               recomputed.velocityComponents.wiki * PLATFORM_WEIGHTS.velocity.wiki * VELOCITY_ALLOCATION * 100,
             ),

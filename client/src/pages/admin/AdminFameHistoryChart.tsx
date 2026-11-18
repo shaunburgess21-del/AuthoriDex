@@ -26,7 +26,7 @@ export function AdminFameHistoryChart({ snapshots }: { snapshots: FameSnapshot[]
         />
         <YAxis 
           tick={{ fontSize: 10 }}
-          tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val}
+          tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(val >= 100000 ? 0 : 1)}K` : val}
           stroke="hsl(var(--muted-foreground))"
           domain={['auto', 'auto']}
         />

@@ -1,24 +1,15 @@
 /**
- * Fame Index scale — the single place that defines how big a trend score is.
+ * Server-side fame-index scale. The numbers themselves live in
+ * `shared/fame-scale.ts` (the jackpot form imports the same ceiling). This
+ * file adds the ingest guardrails that only the server needs.
  *
- * The composite `baseScore` is a 0..100 number. It is multiplied by
- * `FAME_INDEX_SCALE` to produce the integer shown on the leaderboard, so the
- * top of the board sits around 80,000 and the hard ceiling is 100,000.
- *
- * Nov 2026 — rescaled from x10,000 (ceiling 1,000,000) to x1,000 so the public
- * number reads as tens of thousands rather than hundreds of thousands. All
- * stored history was divided by 10 in the same cutover by
- * `ops/rescale-scores-div10.ts`. Ranks, percentage moves and market outcomes
- * are unaffected because every consumer works on ratios; only code that holds
- * an ABSOLUTE score threshold depends on this scale, and those thresholds
- * should be derived from (or sit next to) the constants below.
+ * Nov 2026 — rescaled from x10,000 (ceiling 1,000,000) to x1,000. Stored
+ * history is divided by 10 in the same cutover by `ops/rescale-scores-div10.ts`.
  */
 
-/** Multiplier applied to the 0..100 composite to produce the Fame Index. */
-export const FAME_INDEX_SCALE = 1_000;
+import { FAME_INDEX_MAX, FAME_INDEX_SCALE } from "@shared/fame-scale";
 
-/** Hard ceiling for a Fame Index (composite of 100). */
-export const FAME_INDEX_MAX = 100 * FAME_INDEX_SCALE;
+export { FAME_INDEX_MAX, FAME_INDEX_SCALE };
 
 /**
  * Write-time sanity floor: a real ingest averages roughly 46,000 across the

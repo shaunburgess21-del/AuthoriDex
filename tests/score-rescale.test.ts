@@ -15,6 +15,7 @@ import {
   MIN_PLAUSIBLE_AVG_FAME_INDEX,
   isLegacyFameScale,
 } from "../server/scoring/scale";
+import { JACKPOT_MAX_PREDICTED_SCORE as SHARED_JACKPOT_MAX } from "../shared/fame-scale";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "../server/config/constants";
 
 // ── scale constants ────────────────────────────────────────────────────────
@@ -24,6 +25,8 @@ test("scale: ceiling and sanity floor follow the multiplier", () => {
   assert.equal(FAME_INDEX_MAX, 100_000);
   assert.equal(MIN_PLAUSIBLE_AVG_FAME_INDEX, 5_000);
   assert.equal(JACKPOT_MAX_PREDICTED_SCORE, 200_000);
+  assert.equal(JACKPOT_MAX_PREDICTED_SCORE, SHARED_JACKPOT_MAX);
+  assert.equal(JACKPOT_MAX_PREDICTED_SCORE, 2 * FAME_INDEX_MAX);
 });
 
 test("isLegacyFameScale: only a stored max above the ceiling is legacy", () => {

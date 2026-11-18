@@ -108,7 +108,12 @@ const JOB_LOCKS: ReadonlyArray<{ key: number; job: string }> = [
   { key: 5_208, job: "notifications derivation" },
 ];
 
-/** Writers to these wait until COMMIT, so no row can slip in un-rescaled mid-run. */
+/**
+ * Writers to these wait until COMMIT, so no row can slip in un-rescaled.
+ * credit_ledger and notifications are included because a bet or a fanout
+ * that commits after this transaction would otherwise keep the old numbers
+ * (their inserts don't conflict with an UPDATE of the rows that already exist).
+ */
 const LOCKED_TABLES = [
   "public.trend_snapshots",
   "public.trending_people",
@@ -116,6 +121,8 @@ const LOCKED_TABLES = [
   "public.prediction_markets",
   "public.market_bets",
   "public.scheduled_agent_actions",
+  "public.credit_ledger",
+  "public.notifications",
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -146,6 +153,23 @@ const marginPatch = (col: string): string => `CASE WHEN ${isNum(col, "margin")} 
     ELSE '{}'::jsonb END`;
 
 const keysArray = (keys: readonly string[]): string => `ARRAY[${keys.map((k) => `'${k}'`).join(", ")}]`;
+
+/**
+ * The margin value a rescaled row must hold, computed from the BACKUP
+ * (pre-rescale) metadata. Same rule as `marginPatch`: recompute from the
+ * rescaled sources when the stored margin was exactly |predicted − actual|,
+ * otherwise divide the stored margin by 10. Callers only use this when the
+ * backup row actually has a numeric margin.
+ */
+const expectedMargin = (col: string): string => `CASE
+      WHEN ${isNum(col, "predictedScore")} AND ${isNum(col, "actualScore")}
+        AND (${col} ->> 'margin')::numeric = abs((${col} ->> 'predictedScore')::numeric - (${col} ->> 'actualScore')::numeric)
+      THEN abs(${d10(`${col} ->> 'predictedScore'`)} - ${d10(`${col} ->> 'actualScore'`)})
+      ELSE ${d10(`${col} ->> 'margin'`)} END`;
+
+/** True when the live margin is missing or is not the value expectedMargin() requires. */
+const marginMismatch = (live: string, backup: string): string =>
+  `CASE WHEN ${isNum(backup, "margin")} THEN (NOT ${isNum(live, "margin")} OR (${live} ->> 'margin')::numeric IS DISTINCT FROM ${expectedMargin(backup)}) ELSE ${isNum(live, "margin")} END`;
 
 /** True when a plain rescaled key in the live row does not match round(backup / 10). */
 const keyMismatch = (live: string, backup: string, key: string): string =>
@@ -364,7 +388,7 @@ function buildSqlSteps(): SqlStep[] {
       verify: (b) => `SELECT count(*)::int AS n FROM ${b} b LEFT JOIN public.credit_ledger t ON t.id = b.id
         WHERE t.id IS NULL
            OR (t.metadata - ${keysArray([...LEDGER_KEYS, "margin"])}) IS DISTINCT FROM (b.metadata - ${keysArray([...LEDGER_KEYS, "margin"])})
-           OR (${isNum("b.metadata", "margin")}) IS DISTINCT FROM (${isNum("t.metadata", "margin")})
+           OR ${marginMismatch("t.metadata", "b.metadata")}
            OR ${LEDGER_KEYS.map((k) => keyMismatch("t.metadata", "b.metadata", k)).join("\n           OR ")}`,
     },
     {
@@ -387,7 +411,7 @@ function buildSqlSteps(): SqlStep[] {
       verify: (b) => `SELECT count(*)::int AS n FROM ${b} b LEFT JOIN public.notifications t ON t.id = b.id
         WHERE t.id IS NULL
            OR (t.metadata - ${keysArray([...NOTIFICATION_KEYS, "margin"])}) IS DISTINCT FROM (b.metadata - ${keysArray([...NOTIFICATION_KEYS, "margin"])})
-           OR (${isNum("b.metadata", "margin")}) IS DISTINCT FROM (${isNum("t.metadata", "margin")})
+           OR ${marginMismatch("t.metadata", "b.metadata")}
            OR ${NOTIFICATION_KEYS.map((k) => keyMismatch("t.metadata", "b.metadata", k)).join("\n           OR ")}`,
     },
   ];
@@ -812,6 +836,12 @@ async function dryRun(client: Client, steps: SqlStep[]): Promise<void> {
     line("engine ceiling / ingest sanity floor", `${fmt(FAME_INDEX_MAX)} / ${fmt(MIN_PLAUSIBLE_AVG_FAME_INDEX)}`);
 
     const reasons = blockers(p);
+    const bodyMisses = Object.values(bodies.misses).reduce((sum, n) => sum + n, 0);
+    if (bodyMisses > 0) {
+      reasons.push(
+        `${bodyMisses} score(s) quoted in jackpot notifications have no matching phrase, so the text would disagree with the rescaled metadata.`,
+      );
+    }
     console.log("\nDRY RUN complete — nothing was written.");
     if (reasons.length === 0) {
       console.log("--apply would proceed right now.");
@@ -880,6 +910,13 @@ async function apply(client: Client, steps: SqlStep[]): Promise<void> {
     if (notes.skipped.length > 0) {
       throw new Abort(
         `${notes.skipped.length} native market(s) have resolution notes that are not a JSON object (e.g. ${notes.skipped[0].id}).`,
+      );
+    }
+    const bodyMisses = Object.values(bodies.misses).reduce((sum, n) => sum + n, 0);
+    if (bodyMisses > 0) {
+      throw new Abort(
+        `${bodyMisses} score(s) quoted in jackpot notifications have no matching phrase. ` +
+          `Refusing to apply so the text cannot disagree with the rescaled metadata.`,
       );
     }
 

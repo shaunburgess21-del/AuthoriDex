@@ -41,6 +41,7 @@ import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { JACKPOT_MAX_PREDICTED_SCORE } from "@shared/fame-scale";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
@@ -924,8 +925,11 @@ export default function MarketDetailPage() {
   const jackpotPredictedScore = useMemo(() => {
     const parsed = Number(jackpotScoreInput);
     if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) return null;
+    if (parsed > JACKPOT_MAX_PREDICTED_SCORE) return null;
     return parsed;
   }, [jackpotScoreInput]);
+  const jackpotScoreTooHigh =
+    Number.isInteger(Number(jackpotScoreInput)) && Number(jackpotScoreInput) > JACKPOT_MAX_PREDICTED_SCORE;
 
   // One key per (market, score) intent — same-score retries replay
   // server-side instead of double-charging (see useIdempotencyKey).
@@ -1920,6 +1924,7 @@ export default function MarketDetailPage() {
                   <Input
                     type="number"
                     min="1"
+                    max={JACKPOT_MAX_PREDICTED_SCORE}
                     step="1"
                     placeholder="Enter exact score (e.g. 35200)"
                     ref={jackpotInputRef}
@@ -1928,8 +1933,10 @@ export default function MarketDetailPage() {
                     className="bg-background/50"
                     data-testid="input-jackpot-predicted-score"
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Jackpot entries are unique per score and cost Ꝟ100.
+                  <p className={`mt-1 text-xs ${jackpotScoreTooHigh ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                    {jackpotScoreTooHigh
+                      ? `The highest guess is ${JACKPOT_MAX_PREDICTED_SCORE.toLocaleString("en-US")}.`
+                      : "Jackpot entries are unique per score and cost Ꝟ100."}
                   </p>
                 </div>
 
@@ -1972,9 +1979,11 @@ export default function MarketDetailPage() {
                   )}
                   {jackpotMutation.isPending
                     ? "Submitting..."
-                    : !jackpotPredictedScore
-                      ? "Enter an exact score"
-                      : `Submit ${jackpotPredictedScore.toLocaleString("en-US")}`}
+                    : jackpotScoreTooHigh
+                      ? "Score is too high"
+                      : !jackpotPredictedScore
+                        ? "Enter an exact score"
+                        : `Submit ${jackpotPredictedScore.toLocaleString("en-US")}`}
                 </Button>
               </div>
             )}
