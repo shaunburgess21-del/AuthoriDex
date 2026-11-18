@@ -92,6 +92,7 @@ interface CurateProfileCardProps {
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: () => void;
+  onVisitProfile?: () => void;
   categoryMenuDisabled?: boolean;
 }
 
@@ -106,6 +107,7 @@ export function CurateProfileCard({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  onVisitProfile,
   categoryMenuDisabled = false,
 }: CurateProfileCardProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -329,7 +331,7 @@ export function CurateProfileCard({
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => setLocation(`/person/${person.id}`)}
+                    onClick={() => onVisitProfile ? onVisitProfile() : setLocation(`/person/${person.id}`)}
                     className="text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 text-xs"
                     data-testid={`button-visit-profile-${person.id}`}
                   >

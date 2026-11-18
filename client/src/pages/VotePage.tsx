@@ -143,6 +143,9 @@ import {
   navigateWithVoteList,
   readVoteHubReturnState,
   scrollToVoteHubAnchor,
+  voteHubSearchSection,
+  type VoteHubReturnState,
+  type VoteHubSearchSection,
 } from "@/lib/voteListNavigation";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
 import {
@@ -943,6 +946,14 @@ function clearOverlayScroll(name: string) {
   sessionStorage.removeItem(OVERLAY_SCROLL_PREFIX + name);
 }
 
+function restoredSectionSearch(
+  state: VoteHubReturnState | null,
+  section: VoteHubSearchSection,
+): string {
+  if (!state?.listSearchQuery) return "";
+  return voteHubSearchSection(state) === section ? state.listSearchQuery : "";
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -1122,7 +1133,11 @@ export default function VotePage() {
     personId: c.personId ?? null,
   }));
 
-  const [inductionSearchQuery, setInductionSearchQuery] = useState("");
+  const [voteHubReturn] = useState<VoteHubReturnState | null>(() => readVoteHubReturnState());
+
+  const [inductionSearchQuery, setInductionSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "induction"),
+  );
   const [inductionOverlayOpen, setInductionOverlayOpen] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("section") === "induction") return true;
@@ -1130,12 +1145,16 @@ export default function VotePage() {
   });
   const prevInductionOverlayOpenRef = useRef(inductionOverlayOpen);
 
-  const [topicsSearchQuery, setTopicsSearchQuery] = useState("");
+  const [topicsSearchQuery, setTopicsSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "sentiment"),
+  );
   const [topicsOverlayOpen, setTopicsOverlayOpen] = useState(() => window.history.state?.overlay === "topics");
   const prevTopicsOverlayOpenRef = useRef(topicsOverlayOpen);
   const [startPollModalOpen, setStartPollModalOpen] = useState(false);
   
-  const [matchupsSearchQuery, setMatchupsSearchQuery] = useState("");
+  const [matchupsSearchQuery, setMatchupsSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "matchup"),
+  );
   const [matchupsOverlayOpen, setMatchupsOverlayOpen] = useState(() => window.history.state?.overlay === "matchups");
   const prevMatchupsOverlayOpenRef = useRef(matchupsOverlayOpen);
   const [pollHeadline, setPollHeadline] = useState("");
@@ -1153,7 +1172,10 @@ export default function VotePage() {
   const [pollGeoEnabled, setPollGeoEnabled] = useState(false);
   const [pollGeoCountries, setPollGeoCountries] = useState<string[]>([]);
   
-  const [activeSection, setActiveSection] = useState<SectionToggle>("All");
+  const [activeSection, setActiveSection] = useState<SectionToggle>(() => {
+    const section = voteHubReturn?.activeSection;
+    return (section as SectionToggle) || "All";
+  });
 
   // Scroll-linked hide/reveal of the category chip bar only — the section
   // toggles row is a normal in-flow block that scrolls away with the page.
@@ -1191,7 +1213,9 @@ export default function VotePage() {
 
   const [rulesModalOpen, setRulesModalOpen] = useState<string | null>(null);
   const [infoModalOpen, setInfoModalOpen] = useState<"governance" | null>(null);
-  const [curateSearchQuery, setCurateSearchQuery] = useState("");
+  const [curateSearchQuery, setCurateSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "curate"),
+  );
   /** Single page-wide category filter — drives every Vote section + overlays. */
   const [globalCategoryFilter, setGlobalCategoryFilter] = useState<FilterCategory>("all");
 
@@ -1205,10 +1229,14 @@ export default function VotePage() {
   
   const [ratingOverlayOpen, setRatingOverlayOpen] = useState(() => window.history.state?.overlay === "overall-rating");
   const prevRatingOverlayOpenRef = useRef(ratingOverlayOpen);
-  const [ratingSearchQuery, setRatingSearchQuery] = useState("");
+  const [ratingSearchQuery, setRatingSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "rating"),
+  );
 
 
-  const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState("");
+  const [opinionPollsSearchQuery, setOpinionPollsSearchQuery] = useState(() =>
+    restoredSectionSearch(voteHubReturn, "opinion"),
+  );
   const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
   const prevOpinionPollsOverlayOpenRef = useRef(opinionPollsOverlayOpen);
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
@@ -1248,20 +1276,29 @@ export default function VotePage() {
   }, []);
 
   useEffect(() => {
-    const returnState = readVoteHubReturnState();
-    if (!returnState) return;
-    setActiveSection(returnState.activeSection as SectionToggle);
+    if (!voteHubReturn) return;
+    setActiveSection(voteHubReturn.activeSection as SectionToggle);
+    const searchSection = voteHubSearchSection(voteHubReturn);
+    const query = voteHubReturn.listSearchQuery;
+    if (searchSection && query) {
+      if (searchSection === "sentiment") setTopicsSearchQuery(query);
+      else if (searchSection === "matchup") setMatchupsSearchQuery(query);
+      else if (searchSection === "opinion") setOpinionPollsSearchQuery(query);
+      else if (searchSection === "rating") setRatingSearchQuery(query);
+      else if (searchSection === "induction") setInductionSearchQuery(query);
+      else setCurateSearchQuery(query);
+    }
     const runScroll = () => {
       // Prefer exact scrollY when available (person-profile Back, filtered sections).
       // Fall back to section anchor when scrollY is missing (legacy poll returns on "All").
-      if (returnState.scrollY != null && returnState.scrollY > 0) {
-        window.scrollTo(0, returnState.scrollY);
+      if (voteHubReturn.scrollY != null && voteHubReturn.scrollY > 0) {
+        window.scrollTo(0, voteHubReturn.scrollY);
       } else {
-        scrollToVoteHubAnchor(returnState.anchorHashId);
+        scrollToVoteHubAnchor(voteHubReturn.anchorHashId);
       }
     };
     requestAnimationFrame(() => requestAnimationFrame(runScroll));
-  }, []);
+  }, [voteHubReturn]);
 
   useScrollToHash([activeSection]);
 
@@ -1658,11 +1695,12 @@ export default function VotePage() {
           slugs: sentimentSlugList,
           currentSlug: slug,
           activeSection,
+          listSearchQuery: topicsSearchQuery,
         }),
         `/polls/${encodeURIComponent(slug)}`,
       );
     },
-    [sentimentSlugList, setLocation, activeSection],
+    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery],
   );
   const goMatchupDetail = useCallback(
     (slug: string) => {
@@ -1673,11 +1711,12 @@ export default function VotePage() {
           slugs: matchupSlugList,
           currentSlug: slug,
           activeSection,
+          listSearchQuery: matchupsSearchQuery,
         }),
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
-    [matchupSlugList, setLocation, activeSection],
+    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery],
   );
   const goOpinionDetail = useCallback(
     (slug: string) => {
@@ -1688,11 +1727,12 @@ export default function VotePage() {
           slugs: opinionSlugList,
           currentSlug: slug,
           activeSection,
+          listSearchQuery: opinionPollsSearchQuery,
         }),
         `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
-    [opinionSlugList, setLocation, activeSection],
+    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery],
   );
 
   // Snap view always shows the full category chip row, so each snap source
@@ -2145,6 +2185,14 @@ export default function VotePage() {
         anchorHashId,
         activeSection,
         scrollY,
+        listSearchQuery:
+          anchorHashId === "vote-rating"
+            ? ratingSearchQuery
+            : anchorHashId === "vote-induction"
+              ? inductionSearchQuery
+              : anchorHashId === "vote-curate"
+                ? curateSearchQuery
+                : "",
       });
     },
     [
@@ -2154,6 +2202,9 @@ export default function VotePage() {
       activeSection,
       applyOverlayState,
       setLocation,
+      ratingSearchQuery,
+      inductionSearchQuery,
+      curateSearchQuery,
     ],
   );
 
@@ -3346,6 +3397,7 @@ export default function VotePage() {
             categoryRaceMap={raceMap}
             leaderboardCategories={leaderboardCats}
             onBrowseFullScreen={isMobile ? (personId) => openSnapScroll("curate", personId, "browse-button") : undefined}
+            onVisitProfile={(personId) => goPersonFromVote(personId, "vote-curate")}
             activityFilter={myVotesFilter}
             votedPersonIds={curateVotedIds}
             votesPending={!!user && myVotesFilter !== "all" && !curateVotesFetched}
@@ -4157,6 +4209,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
+            listSearchQuery={matchupsSearchQuery}
             onSuggest={() => openSuggestModal(() => setMatchupSuggestOpen(true))}
             renderCard={(item, ctx) => {
               const m = matchups.find(x => x.id === item.id);
@@ -4185,6 +4238,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
+            listSearchQuery={topicsSearchQuery}
             onSuggest={() => openSuggestModal(() => setStartPollModalOpen(true))}
             renderCard={(item, _ctx) => {
               const t = dbPolls.find((x: any) => x.id === item.id);
@@ -4210,6 +4264,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
+            listSearchQuery={opinionPollsSearchQuery}
             onSuggest={() => openSuggestModal(() => setOpinionSuggestOpen(true))}
             renderCard={(item, _ctx) => {
               const p = opinionPolls.find((x: any) => x.id === item.id);
@@ -4237,6 +4292,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
+            listSearchQuery={ratingSearchQuery}
             onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-rating")}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item, _ctx) => {
@@ -4265,6 +4321,7 @@ export default function VotePage() {
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
             voteHubActiveSection={activeSection}
+            listSearchQuery={inductionSearchQuery}
             onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-induction")}
             onSuggest={() => openSuggestModal(() => setInductionSuggestOpen(true))}
             renderCard={(item, _ctx) => {
@@ -4302,6 +4359,9 @@ export default function VotePage() {
             items={curateSnapItems}
             initialItemId={snapScrollInitialId}
             initialCategoryAll={snapScrollStartOnAll}
+            voteHubActiveSection={activeSection}
+            listSearchQuery={curateSearchQuery}
+            onNavigateToPerson={(personId) => goPersonFromVote(personId, "vote-curate")}
             onSuggest={() => openSuggestModal(() => setCurateSuggestOpen(true))}
             renderCard={(item, _ctx) => {
               const person: CuratePerson = { id: item.id, name: item.title, category: item.category, imageUrl: null };
@@ -4315,6 +4375,7 @@ export default function VotePage() {
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
                   categoryMenuDisabled
+                  onVisitProfile={() => goPersonFromVote(person.id, "vote-curate")}
                 />
               );
             }}

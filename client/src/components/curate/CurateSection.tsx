@@ -34,6 +34,7 @@ interface CurateSectionProps {
   categoryRaceMap?: Map<string, string>;
   leaderboardCategories?: Set<string>;
   onBrowseFullScreen?: (personId: string) => void;
+  onVisitProfile?: (personId: string) => void;
   /** Vote-hub activity filter. Defaults to showing every profile. */
   activityFilter?: HubActivityFilter;
   /** Person ids with a saved curate vote. Empty until that query resolves. */
@@ -56,6 +57,7 @@ export function CurateSection({
   categoryRaceMap,
   leaderboardCategories,
   onBrowseFullScreen,
+  onVisitProfile,
   activityFilter = "all",
   votedPersonIds,
   votesPending = false,
@@ -176,6 +178,7 @@ export function CurateSection({
                   categoryRaceMap={categoryRaceMap}
                   leaderboardCategories={leaderboardCategories}
                   onBrowseFullScreen={onBrowseFullScreen ? () => onBrowseFullScreen(person.id) : undefined}
+                  onVisitProfile={onVisitProfile ? () => onVisitProfile(person.id) : undefined}
                 />
               </HideExitCard>
             ))}

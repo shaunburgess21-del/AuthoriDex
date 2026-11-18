@@ -63,6 +63,8 @@ interface VoteSnapScrollViewProps {
   commentMode?: SnapCommentMode;
   /** Vote hub section filter when opening detail (defaults to "All"). */
   voteHubActiveSection?: string;
+  /** Section search to restore when Back returns to the Vote hub. */
+  listSearchQuery?: string;
   /** When true, category tab starts on All (e.g. section-header expand). */
   initialCategoryAll?: boolean;
   /** Prefer parent handler so Vote can flatten snap history before /person. */
@@ -389,6 +391,7 @@ export function VoteSnapScrollView({
   onSuggest,
   commentMode = "card",
   voteHubActiveSection = "All",
+  listSearchQuery,
   initialCategoryAll = false,
   onNavigateToPerson,
   variant = "full",
@@ -1522,6 +1525,7 @@ export function VoteSnapScrollView({
         navigateToPersonFromVoteHub(setLocation, item.personId, {
           anchorHashId,
           activeSection: voteHubActiveSection,
+          listSearchQuery,
         });
       }
       return;
@@ -1536,13 +1540,14 @@ export function VoteSnapScrollView({
           slugs,
           currentSlug: item.slug,
           activeSection: voteHubActiveSection,
+          listSearchQuery,
         });
         navigateWithVoteList(setLocation, voteList, `${detailPrefix}${encodeURIComponent(item.slug)}`);
         return;
       }
     }
     setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
-  }, [activeCategory, categoryItems, getVisibleItem, onNavigateToPerson, sectionType, setLocation, voteHubActiveSection]);
+  }, [activeCategory, categoryItems, getVisibleItem, listSearchQuery, onNavigateToPerson, sectionType, setLocation, voteHubActiveSection]);
 
   const { user } = useAuth();
   const handleShare = useCallback(() => {

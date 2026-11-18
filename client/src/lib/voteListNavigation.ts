@@ -13,6 +13,8 @@ export interface VoteListHistoryState {
   scrollY: number;
   /** Section filter chip active when the detail page was opened (e.g. "All", "Matchups"). */
   activeSection: string;
+  /** Section search text to restore when returning to the Vote hub. */
+  listSearchQuery?: string;
 }
 
 export const VOTE_DETAIL_PATH_PREFIX: Record<VoteListNavType, string> = {
@@ -36,6 +38,10 @@ export interface VoteHubReturnState {
   activeSection: string;
   anchorHashId: string;
   scrollY?: number;
+  /** Which vote list `listSearchQuery` belongs to. */
+  listType?: VoteListNavType;
+  /** Section search text captured when the detail page was opened. */
+  listSearchQuery?: string;
   /** Written by writeVoteHubReturnState; used to ignore stale restores. */
   ts?: number;
 }
@@ -54,7 +60,9 @@ export function buildVoteListState(args: {
   historyDepth?: number;
   scrollY?: number;
   activeSection?: string;
+  listSearchQuery?: string;
 }): VoteListHistoryState {
+  const listSearchQuery = args.listSearchQuery?.trim() ? args.listSearchQuery : undefined;
   return {
     type: args.type,
     slugs: args.slugs,
@@ -63,6 +71,7 @@ export function buildVoteListState(args: {
     returnHashId: voteHubReturnHashForType(args.type),
     scrollY: args.scrollY ?? (typeof window !== "undefined" ? window.scrollY : 0),
     activeSection: args.activeSection ?? "All",
+    ...(listSearchQuery ? { listSearchQuery } : {}),
   };
 }
 
@@ -94,17 +103,52 @@ export function writeVoteHubReturnState(state: VoteHubReturnState): void {
   }
 }
 
+export type VoteHubSearchSection =
+  | "sentiment"
+  | "matchup"
+  | "opinion"
+  | "rating"
+  | "induction"
+  | "curate";
+
+const SEARCH_SECTION_BY_ANCHOR: Record<string, VoteHubSearchSection> = {
+  "vote-sentiment": "sentiment",
+  "vote-matchups": "matchup",
+  "vote-opinion": "opinion",
+  "vote-rating": "rating",
+  "vote-induction": "induction",
+  "vote-curate": "curate",
+};
+
+/** Which section search box a return payload should refill. */
+export function voteHubSearchSection(
+  state: Pick<VoteHubReturnState, "listType" | "anchorHashId" | "listSearchQuery"> | null | undefined,
+): VoteHubSearchSection | null {
+  if (!state?.listSearchQuery) return null;
+  if (state.listType === "sentiment" || state.listType === "matchup" || state.listType === "opinion") {
+    return state.listType;
+  }
+  return (state.anchorHashId && SEARCH_SECTION_BY_ANCHOR[state.anchorHashId]) || null;
+}
+
 /** Leave Vote hub for a person profile, stashing scroll/section for Back restore. */
 export function navigateToPersonFromVoteHub(
   setLocation: (path: string) => void,
   personId: string,
-  opts: { anchorHashId: string; activeSection: string; scrollY?: number },
+  opts: {
+    anchorHashId: string;
+    activeSection: string;
+    scrollY?: number;
+    listSearchQuery?: string;
+  },
 ): void {
+  const listSearchQuery = opts.listSearchQuery?.trim() ? opts.listSearchQuery : undefined;
   writeVoteHubReturnState({
     activeSection: opts.activeSection,
     anchorHashId: opts.anchorHashId,
     scrollY:
       opts.scrollY ?? (typeof window !== "undefined" ? window.scrollY : 0),
+    ...(listSearchQuery ? { listSearchQuery } : {}),
   });
   setLocation(`/person/${personId}`);
 }
@@ -150,6 +194,9 @@ export function navigateBackToVoteHub(
     activeSection: voteList.activeSection ?? "All",
     anchorHashId: voteList.returnHashId || voteHubReturnHashForType(voteList.type),
     scrollY: voteList.scrollY ?? 0,
+    ...(voteList.listSearchQuery
+      ? { listType: voteList.type, listSearchQuery: voteList.listSearchQuery }
+      : {}),
   });
   setLocation("/vote");
 }
