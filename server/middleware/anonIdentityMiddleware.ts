@@ -1,9 +1,11 @@
-// Phase 4 — ensure every /api/* request has an fdx_sid cookie.
+// Phase 4 — ensure every /api/* request has an fdx_sid.
 //
 // Runs ahead of optionalAuth and the anonymous-vote budget logic so
-// they can assume the cookie exists without minting it themselves.
-// Idempotent — when the cookie is already present, ensureFdxSid is a
-// pure read and no Set-Cookie is emitted.
+// they can assume the id exists without minting it themselves.
+// Idempotent — when the cookie or native X-Fdx-Sid header is already
+// present, ensureFdxSid reuses it. Native responses echo the id in
+// X-Fdx-Sid (the WebView drops the third-party cookie). Web responses
+// stay cookie-only.
 //
 // Wrapped in try/catch so a cookie-set failure (e.g. malformed upstream
 // proxy headers) never breaks an /api/ request — downstream code will

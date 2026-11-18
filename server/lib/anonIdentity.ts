@@ -17,11 +17,26 @@
 //
 // Browser flags: httpOnly, sameSite: 'lax', secure-in-production, path: '/', 1y max age.
 // Native WebView origins use SameSite=None; Secure via authCookieFlags.
+//
+// The native document origin (capacitor://localhost or https://localhost)
+// is a different site from https://voxdex.com, and iOS blocks that
+// third-party cookie. Native responses also carry the same id in
+// `X-Fdx-Sid` (see FDX_SID_HEADER). `readFdxSid` accepts that request
+// header only for native origins, and only when it is a strict UUID.
+// Web traffic never reads or emits the header.
 
 import type { Request, Response } from "express";
 import { randomUUID } from "crypto";
+import { FDX_SID_HEADER, normalizeFdxSid } from "@shared/lib/fdxSid";
+
+export { FDX_SID_HEADER };
 
 export const FDX_SID_COOKIE = "fdx_sid";
+
+export const NATIVE_CORS_ALLOW_HEADERS =
+  "Authorization, Content-Type, Idempotency-Key, Accept, X-Fdx-Sid";
+
+export const NATIVE_CORS_EXPOSE_HEADERS = FDX_SID_HEADER;
 
 /** WebView origins for the Capacitor iOS (`capacitor://`) and Android (`https://`) apps. */
 const NATIVE_APP_ORIGINS = new Set(["https://localhost", "capacitor://localhost"]);
@@ -61,36 +76,107 @@ export function authCookieFlags(req: Request): {
 export const FDX_SID_MAX_AGE = 365 * 24 * 60 * 60;
 
 /**
- * Read the fdx_sid cookie from the request, generating + setting one if
- * missing. Idempotent: if a valid cookie already exists, the existing
- * UUID is returned and no Set-Cookie header is emitted.
+ * Read the anonymous id, generating + setting one if missing.
+ * Idempotent: if a valid cookie or (native-only) `X-Fdx-Sid` header
+ * already exists, that id is returned and no new UUID is minted.
  *
- * The "valid" check is `length > 8` to match the existing `getSessionId`
- * heuristic at routes.ts:540–545 — guards against truncated or otherwise
- * malformed cookie values without a full UUID-format check.
+ * The cookie "valid" check is `length > 8` to match `getSessionId` —
+ * guards against truncated cookie values without a full UUID check.
+ * The request header is stricter: `normalizeFdxSid` only.
+ *
+ * Native responses always echo the resolved id in `X-Fdx-Sid` and are
+ * marked uncacheable so a shared cache cannot replay one device's id.
+ * Web responses do not gain that header.
  */
 export function ensureFdxSid(req: Request, res: Response): string {
-  const existing = readFdxSid(req);
-  if (existing) return existing;
+  const fromCookie = readCookieFdxSid(req);
+  const existing = fromCookie || readNativeFdxSidHeader(req);
+  if (existing) {
+    if (!fromCookie) {
+      res.cookie(FDX_SID_COOKIE, existing, {
+        ...authCookieFlags(req),
+        maxAge: FDX_SID_MAX_AGE * 1000,
+      });
+    }
+    exposeNativeFdxSid(req, res, existing);
+    return existing;
+  }
 
   const fresh = randomUUID();
   res.cookie(FDX_SID_COOKIE, fresh, {
     ...authCookieFlags(req),
     maxAge: FDX_SID_MAX_AGE * 1000,
   });
+  exposeNativeFdxSid(req, res, fresh);
   return fresh;
 }
 
 /**
- * Pure-read variant — returns the existing cookie value or `''`. Used
- * by `optionalAuth` (which only needs to read, never mint, since the
- * middleware already ran ahead of it).
+ * Pure-read variant — cookie first, then a native `X-Fdx-Sid` header.
+ * Does not mint. `optionalAuth` builds `anon_<sid>` from this, and the
+ * signup migration re-points that same id onto the new account.
  */
 export function readFdxSid(req: Request): string {
+  return readCookieFdxSid(req) || readNativeFdxSidHeader(req);
+}
+
+function readCookieFdxSid(req: Request): string {
   const header = req.headers.cookie || "";
   const match = header.match(
     new RegExp(`(?:^|;\\s*)${FDX_SID_COOKIE}=([^;]+)`),
   );
   if (match && match[1] && match[1].length > 8) return match[1];
   return "";
+}
+
+function readNativeFdxSidHeader(req: Request): string {
+  if (!isNativeAppOrigin(req)) return "";
+  return normalizeFdxSid(req.get(FDX_SID_HEADER));
+}
+
+/**
+ * Echo the id to the native WebView. Hook `write` and `end` so a later
+ * route-level `Cache-Control` cannot leave this per-device value on a
+ * shared cache entry. The value is never logged.
+ */
+function exposeNativeFdxSid(req: Request, res: Response, sid: string): void {
+  if (!isNativeAppOrigin(req)) return;
+  const exposed = normalizeFdxSid(sid);
+  if (!exposed) return;
+
+  const apply = () => {
+    if (res.headersSent) return;
+    res.setHeader(FDX_SID_HEADER, exposed);
+    res.setHeader("Cache-Control", "private, no-store");
+  };
+  apply();
+
+  if (res.locals.fdxSidHeaderApplied === true) return;
+  res.locals.fdxSidHeaderApplied = true;
+
+  const originalEnd = res.end.bind(res);
+  res.end = function endWithFdxSid(this: Response, ...args: Parameters<Response["end"]>) {
+    apply();
+    return originalEnd(...args);
+  } as Response["end"];
+
+  const originalWrite = res.write.bind(res);
+  res.write = function writeWithFdxSid(this: Response, ...args: Parameters<Response["write"]>) {
+    apply();
+    return originalWrite(...args);
+  } as Response["write"];
+}
+
+/** Credentialed CORS for the Capacitor WebView, including the anon-id header. */
+export function applyNativeCorsHeaders(res: Response, origin: string): void {
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Access-Control-Allow-Headers", NATIVE_CORS_ALLOW_HEADERS);
+  res.setHeader("Access-Control-Expose-Headers", NATIVE_CORS_EXPOSE_HEADERS);
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  );
 }

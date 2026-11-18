@@ -7015,10 +7015,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const fdxSid = readFdxSid(req);
       if (!fdxSid) {
-        // Stage 2 middleware should have set the cookie before this
-        // handler runs, so a missing fdxSid here means the client
-        // dropped cookies. Surface a fresh-budget shape so the UI
-        // doesn't gate on a transient cookie issue.
+        // No id on the request. anonIdentityMiddleware has already minted
+        // one on this response (Set-Cookie, and X-Fdx-Sid for native
+        // origins) so the client can store it before the first vote.
+        // The numbers below are that new id's starting budget. Web
+        // clients still learn the id from the cookie alone.
         return res.json({
           authenticated: false,
           used: 0,
@@ -7446,9 +7447,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Phase 4 (revised) — migrate the anonymous voting trail into the
-      // new account at signup. The fdx_sid cookie identifies any votes
-      // this user cast pre-signup; rather than discarding them (the
-      // original D8 wipe behaviour), we re-point every anon-prefixed row
+      // new account at signup. readFdxSid identifies any votes this user
+      // cast pre-signup: the fdx_sid cookie on the web, or the native
+      // X-Fdx-Sid header when the WebView dropped the cookie. Rather
+      // than discarding them (the original D8 wipe behaviour), we re-point
+      // every anon-prefixed row
       // to the real userId so the user keeps the votes they already made
       // before creating their account. This is done transactionally with
       // the profile insert. The anon budget counter is dropped and the
