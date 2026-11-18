@@ -207,8 +207,10 @@ export function requireMinTier(capability: Capability) {
 // populated req.userId, skip the redundant Supabase + DB lookup.
 //
 // req.sessionId resolution order (Phase 4):
-//   1. fdx_sid cookie — set by anonIdentityMiddleware on every /api/*
-//      request, so this is the expected path for anonymous users.
+//   1. readFdxSid — the fdx_sid cookie, or on native origins only a
+//      strict-UUID X-Fdx-Sid request header. The WebView cannot store
+//      the third-party cookie, so the header is what makes anon_<sid>
+//      stable there. Web requests ignore the header.
 //   2. anon_<base64(IP+UA)> hash — defence-in-depth fallback for the
 //      vanishingly rare case where the cookie is somehow absent (e.g.
 //      a non-/api/* route that mounts optionalAuth directly, before
