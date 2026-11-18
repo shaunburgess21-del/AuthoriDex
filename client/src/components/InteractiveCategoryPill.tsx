@@ -33,63 +33,24 @@ import {
   DrawerClose,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import {
+  beginCategoryPillBrowsePress,
+  cancelCategoryPillBrowsePress,
+  commitCategoryPillBrowse,
+  consumeCategoryPillBrowseIntent,
+  hasCategoryPillBrowseIntent,
+  isBrowseTapWithinSlop,
+  isCategoryPillDrawerDismissSuppressed,
+  markCategoryPillPassiveDismiss,
+} from "@/lib/categoryPillBrowseIntent";
+
+export { consumeCategoryPillBrowseIntent, isCategoryPillDrawerDismissSuppressed };
 
 const SIZE_CLASSES = {
   default: "px-2 py-0.5 text-[10px]",
   sm: "px-1 py-0.5 text-[9px] leading-none font-medium",
   pollCard: POLL_CARD_PILL_SIZE_CLASSES,
 } as const;
-
-const BROWSE_INTENT_TOKEN_MS = 1000;
-const PASSIVE_DISMISS_SUPPRESSION_MS = 300;
-let browseIntentExpiresAt = 0;
-let browseIntentTimeout: number | null = null;
-let passiveDismissSuppressedUntil = 0;
-let passiveDismissTimeout: number | null = null;
-
-function clearCategoryPillBrowseIntent() {
-  browseIntentExpiresAt = 0;
-  if (browseIntentTimeout !== null) {
-    window.clearTimeout(browseIntentTimeout);
-    browseIntentTimeout = null;
-  }
-}
-
-function hasCategoryPillBrowseIntent(): boolean {
-  if (Date.now() <= browseIntentExpiresAt) return true;
-  clearCategoryPillBrowseIntent();
-  return false;
-}
-
-function markCategoryPillBrowseIntent() {
-  browseIntentExpiresAt = Date.now() + BROWSE_INTENT_TOKEN_MS;
-  if (browseIntentTimeout !== null) {
-    window.clearTimeout(browseIntentTimeout);
-  }
-  browseIntentTimeout = window.setTimeout(clearCategoryPillBrowseIntent, BROWSE_INTENT_TOKEN_MS);
-}
-
-export function consumeCategoryPillBrowseIntent(): boolean {
-  const hasIntent = hasCategoryPillBrowseIntent();
-  clearCategoryPillBrowseIntent();
-  return hasIntent;
-}
-
-export function isCategoryPillDrawerDismissSuppressed(): boolean {
-  return Date.now() < passiveDismissSuppressedUntil;
-}
-
-function markCategoryPillPassiveDismiss() {
-  clearCategoryPillBrowseIntent();
-  passiveDismissSuppressedUntil = Date.now() + PASSIVE_DISMISS_SUPPRESSION_MS;
-  if (passiveDismissTimeout !== null) {
-    window.clearTimeout(passiveDismissTimeout);
-  }
-  passiveDismissTimeout = window.setTimeout(() => {
-    passiveDismissSuppressedUntil = 0;
-    passiveDismissTimeout = null;
-  }, PASSIVE_DISMISS_SUPPRESSION_MS);
-}
 
 interface InteractiveCategoryPillProps {
   category: string;
@@ -131,6 +92,9 @@ function MenuItems({
   onFilter,
   onBrowseFullScreen,
   onBrowseIntentStart,
+  onBrowsePointerUp,
+  onBrowseTouchEnd,
+  onBrowsePointerCancel,
   share,
   sharerUserId,
   reaction,
@@ -146,7 +110,10 @@ function MenuItems({
   onDetailNavigate?: () => void;
   onFilter: () => void;
   onBrowseFullScreen?: () => void;
-  onBrowseIntentStart?: () => void;
+  onBrowseIntentStart?: (event: React.PointerEvent<HTMLButtonElement> | React.TouchEvent<HTMLButtonElement>) => void;
+  onBrowsePointerUp?: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onBrowseTouchEnd?: (event: React.TouchEvent<HTMLButtonElement>) => void;
+  onBrowsePointerCancel?: () => void;
   share?: CardShareConfig;
   sharerUserId?: string | null;
   /** Current Like/Dislike state for this card (null = none). */
@@ -233,6 +200,9 @@ function MenuItems({
             className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
             onPointerDown={onBrowseIntentStart}
             onTouchStart={onBrowseIntentStart}
+            onPointerUp={onBrowsePointerUp}
+            onTouchEnd={onBrowseTouchEnd}
+            onPointerCancel={onBrowsePointerCancel}
             onClick={onBrowseFullScreen}
           >
             <Maximize2 className="h-4 w-4 opacity-60 shrink-0" />
@@ -315,6 +285,22 @@ export function InteractiveCategoryPill({
 }: InteractiveCategoryPillProps) {
   const [open, setOpen] = useState(false);
   const pendingBrowseFullScreenRef = useRef(false);
+  const browseOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const browseTapRejectedRef = useRef(false);
+  const onBrowseFullScreenRef = useRef(onBrowseFullScreen);
+  onBrowseFullScreenRef.current = onBrowseFullScreen;
+  const flushPendingBrowseFullScreenRef = useRef(() => {});
+  flushPendingBrowseFullScreenRef.current = () => {
+    // Two frames: let the drawer overlay finish retargeting the pointer
+    // release before the snap view mounts under that point.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!pendingBrowseFullScreenRef.current) return;
+        pendingBrowseFullScreenRef.current = false;
+        onBrowseFullScreenRef.current?.();
+      });
+    });
+  };
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -396,15 +382,82 @@ export function InteractiveCategoryPill({
       }
     : undefined;
 
-  const browseFullScreenHandler = onBrowseFullScreen
+  const finishBrowseSelection = () => {
+    if (pendingBrowseFullScreenRef.current) return;
+    if (browseTapRejectedRef.current) return;
+    if (!hasCategoryPillBrowseIntent()) {
+      markCategoryPillPassiveDismiss();
+      setOpen(false);
+      return;
+    }
+    // Commit before closing. The overlay's pointerup/click is a passive
+    // dismiss and must not clear this token before snap view consumes it.
+    // Flush here as well as from onOpenChange: WKWebView drops the click
+    // vaul's Close uses to emit onOpenChange after setPointerCapture.
+    commitCategoryPillBrowse();
+    pendingBrowseFullScreenRef.current = true;
+    setOpen(false);
+    // Popover (desktop web) has no drawer onOpenChange and does not open the
+    // snap overlay. Call sites only pass onBrowseFullScreen when isMobile,
+    // which is the drawer branch below.
+    if (isMobile) flushPendingBrowseFullScreenRef.current();
+  };
+
+  const rememberBrowseOrigin = (x: number, y: number) => {
+    browseOriginRef.current = { x, y };
+    browseTapRejectedRef.current = false;
+    beginCategoryPillBrowsePress();
+  };
+
+  const settleBrowseRelease = (x: number, y: number, source: "pointer" | "touch") => {
+    if (pendingBrowseFullScreenRef.current) return;
+    if (!isBrowseTapWithinSlop(browseOriginRef.current, { x, y })) {
+      // A touch pointerup can miss the slop while touchend (same gesture,
+      // original target) is still the reliable iOS signal. Only the touch
+      // release cancels, so a pointerup miss cannot eat a valid touchend.
+      browseTapRejectedRef.current = true;
+      if (source === "touch") cancelCategoryPillBrowsePress();
+      return;
+    }
+    browseTapRejectedRef.current = false;
+    finishBrowseSelection();
+  };
+
+  const browseFullScreenHandler = onBrowseFullScreen ? finishBrowseSelection : undefined;
+
+  const onBrowsePointerDown = onBrowseFullScreen
+    ? (event: React.PointerEvent<HTMLButtonElement>) => {
+        rememberBrowseOrigin(event.clientX, event.clientY);
+      }
+    : undefined;
+
+  const onBrowseTouchStart = onBrowseFullScreen
+    ? (event: React.TouchEvent<HTMLButtonElement>) => {
+        const touch = event.touches[0];
+        if (!touch) return;
+        rememberBrowseOrigin(touch.clientX, touch.clientY);
+      }
+    : undefined;
+
+  const onBrowsePointerUp = onBrowseFullScreen
+    ? (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        settleBrowseRelease(event.clientX, event.clientY, "pointer");
+      }
+    : undefined;
+
+  const onBrowseTouchEnd = onBrowseFullScreen
+    ? (event: React.TouchEvent<HTMLButtonElement>) => {
+        const touch = event.changedTouches[0];
+        if (!touch) return;
+        settleBrowseRelease(touch.clientX, touch.clientY, "touch");
+      }
+    : undefined;
+
+  const onBrowsePointerCancel = onBrowseFullScreen
     ? () => {
-        if (!hasCategoryPillBrowseIntent()) {
-          markCategoryPillPassiveDismiss();
-          setOpen(false);
-          return;
-        }
-        pendingBrowseFullScreenRef.current = true;
-        setOpen(false);
+        browseTapRejectedRef.current = true;
+        cancelCategoryPillBrowsePress();
       }
     : undefined;
 
@@ -418,12 +471,7 @@ export function InteractiveCategoryPill({
   const handleMobileOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen && pendingBrowseFullScreenRef.current) {
       setOpen(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          pendingBrowseFullScreenRef.current = false;
-          onBrowseFullScreen?.();
-        });
-      });
+      flushPendingBrowseFullScreenRef.current();
       return;
     }
 
@@ -435,7 +483,7 @@ export function InteractiveCategoryPill({
     }
 
     setOpen(nextOpen);
-  }, [onBrowseFullScreen]);
+  }, []);
 
   if (isMobile) {
     return (
@@ -462,7 +510,13 @@ export function InteractiveCategoryPill({
               reaction={currentReaction}
               onReact={handleReact}
               onDetailNavigate={detailNavHandler}
-              onBrowseIntentStart={markCategoryPillBrowseIntent}
+              onBrowseIntentStart={(event) => {
+                if ("touches" in event) onBrowseTouchStart?.(event);
+                else onBrowsePointerDown?.(event);
+              }}
+              onBrowsePointerUp={onBrowsePointerUp}
+              onBrowseTouchEnd={onBrowseTouchEnd}
+              onBrowsePointerCancel={onBrowsePointerCancel}
               onBrowseFullScreen={browseFullScreenHandler}
               onFilter={() => {
                 onFilter();
@@ -487,7 +541,13 @@ export function InteractiveCategoryPill({
           reaction={currentReaction}
           onReact={handleReact}
           onDetailNavigate={detailNavHandler}
-          onBrowseIntentStart={markCategoryPillBrowseIntent}
+          onBrowseIntentStart={(event) => {
+            if ("touches" in event) onBrowseTouchStart?.(event);
+            else onBrowsePointerDown?.(event);
+          }}
+          onBrowsePointerUp={onBrowsePointerUp}
+          onBrowseTouchEnd={onBrowseTouchEnd}
+          onBrowsePointerCancel={onBrowsePointerCancel}
           onBrowseFullScreen={browseFullScreenHandler}
           onFilter={() => {
             onFilter();
