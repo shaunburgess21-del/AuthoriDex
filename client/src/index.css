@@ -2097,3 +2097,35 @@ html.ios-shell blockquote {
     transform: translate(-50%, -50%);
   }
 }
+
+/* Snap-scroll sash (vote card ↔ comments). Unlayered so `touch-action: none`
+ * beats the base `button { touch-action: manipulation }` rule — inside an
+ * iOS snap scroller that rule lets the scroll view take the vertical drag.
+ * The control itself is 44px tall on touch; a ::before hit pad is not enough
+ * for WKWebView hit testing. Fine pointers keep the compact grip. */
+button.sash-handle {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0 1.5rem;
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: grab;
+}
+
+button.sash-handle:active {
+  cursor: grabbing;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.sash-handle {
+    min-height: 0;
+    padding: 0 1.5rem 0.625rem;
+  }
+}
