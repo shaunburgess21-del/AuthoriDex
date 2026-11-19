@@ -243,7 +243,7 @@ import { authCookieFlags, FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity"
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerUserBlockRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerUserBlockRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes, registerHelpChatRoutes } from "./route-modules";
 import { blockedAuthorSqlExclusion, omitBlockedAuthors } from "./services/user-blocks";
 import { blockedUserIdSet } from "./services/user-blocks-store";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -1351,6 +1351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerFunnelRoutes(app);
   registerStarterMixRoutes(app);
   registerCardReactionsRoutes(app);
+  registerHelpChatRoutes(app);
 
   // ---- Supabase Send Email Auth Hook -------------------------------------
   // Receives webhooks from Supabase whenever an auth email needs sending.
@@ -27034,7 +27035,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
   // Read-only view over `llm_daily_spend` for GPT paths that call
   // recordLlmUsage() (why_trending, agent_rationale, agent_comments,
   // market_resolver, profile_about, profile_about_websearch, sharp_ranker,
-  // ai_drafts, world_markets_admin) plus budget-rail features that already
+  // ai_drafts, world_markets_admin, help_chat) plus budget-rail features that already
   // write the same table (world_markets, native_markets).
   //
   //   GET /api/admin/llm-usage?days=30

@@ -5,6 +5,7 @@ import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/compone
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
+import { CornerFabSlot } from "@/components/help-chat/placement";
 
 const RE_SHOW_DAYS = 21;
 const MS_PER_DAY = 86_400_000;
@@ -92,7 +93,7 @@ function OnboardingToast({
   const viewportOffset = useVisualViewportOffset();
 
   return (
-    <div
+    <CornerFabSlot
       className="pointer-events-none fixed inset-x-0 bottom-20 z-[55] flex justify-center px-3 md:bottom-6"
       style={{
         ...(isMobile
@@ -129,7 +130,7 @@ function OnboardingToast({
           </button>
         </div>
       </motion.div>
-    </div>
+    </CornerFabSlot>
   );
 }
 

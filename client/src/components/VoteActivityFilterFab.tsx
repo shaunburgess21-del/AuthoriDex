@@ -1,5 +1,5 @@
 /**
- * Mobile hub filter pill. On Vote it sits beside Quick Vote; on Predict it
+ * Mobile hub filter pill. On Vote it stacks above Quick Vote; on Predict it
  * floats alone in the same corner. Cycles all → not yet acted → mine only.
  * The label shows for the session intro and again briefly after each tap,
  * then collapses to a dim eye — the same recede as the Quick Vote pill.

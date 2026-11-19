@@ -13,6 +13,7 @@ const MODEL_ENV_BY_SCOPE = {
   resolutionScout: "RESOLUTION_SCOUT_MODEL",
   marketScout: "MARKET_SCOUT_MODEL",
   voteScout: "VOTE_SCOUT_MODEL",
+  helpChat: "HELP_CHAT_MODEL",
 } as const;
 
 export type AiModelScope = keyof typeof MODEL_ENV_BY_SCOPE;
@@ -35,6 +36,7 @@ const SCOPE_DEFAULT_MODEL: Partial<Record<AiModelScope, string>> = {
   agentRationale: "gpt-5.4-mini",
   agentComments: "gpt-5.4-mini",
   marketResolver: "gpt-5.4-mini",
+  helpChat: "gpt-5.4-mini",
 };
 
 /** Defaults when a scope is routed to xAI/Grok. */

@@ -15,3 +15,4 @@ export { registerUserBlockRoutes } from "./user-block-routes";
 export { registerFunnelRoutes } from "./funnel-routes";
 export { registerStarterMixRoutes } from "./starter-mix-routes";
 export { registerCardReactionsRoutes } from "./card-reactions-routes";
+export { registerHelpChatRoutes } from "./help-chat-routes";

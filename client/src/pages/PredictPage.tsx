@@ -34,6 +34,7 @@ import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { VoteActivityFilterFab } from "@/components/VoteActivityFilterFab";
+import { CornerFabSlot } from "@/components/help-chat/placement";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -4385,7 +4386,7 @@ export default function PredictPage() {
       )}
 
       {user && !userBetsError && (
-        <div
+        <CornerFabSlot
           className="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[55] pointer-events-none md:bottom-6"
           style={{
             transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
@@ -4398,7 +4399,7 @@ export default function PredictPage() {
             count={activePredictions}
             onCycle={cycleMyPositionsFilter}
           />
-        </div>
+        </CornerFabSlot>
       )}
     </div>
   );

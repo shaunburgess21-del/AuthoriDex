@@ -5,7 +5,7 @@
  *  - the QuickVoteOverlay open state + history pushState back-to-close,
  *  - the post-signup restore (AUTH_APPLY_QUICK_VOTE_ONCE_KEY),
  *  - the persistent bottom-right Quick Vote pill (mobile Home + Vote),
- *    with the Vote activity-filter eye beside it when `activityFilter` is set.
+ *    with the Vote activity-filter eye stacked above it when `activityFilter` is set.
  *
  * Overlay is mobile-only (v1). On desktop the first-visit nudge deep-links to /vote.
  */
@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickVoteOverlay } from "@/components/quick-vote/QuickVoteOverlay";
+import { CornerFabSlot } from "@/components/help-chat/placement";
 import {
   VoteActivityFilterFab,
   type VoteActivityFilterFabProps,
@@ -88,8 +89,8 @@ function pillReminderShown(): boolean {
 export interface QuickVoteHostProps {
   surface: "home" | "vote";
   /**
-   * Signed-in Vote hub filter. Rendered as a pill to the left of Quick Vote
-   * while the FAB is up. Home and logged-out Vote omit it.
+   * Signed-in Vote hub filter. Stacked above Quick Vote while the FAB is up.
+   * Home and logged-out Vote omit it.
    */
   activityFilter?: VoteActivityFilterFabProps;
 }
@@ -304,7 +305,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
           The nav's height grows by env(safe-area-inset-bottom) when the
           browser toolbar hides (its top edge rises), so the pill's bottom
           offset must ride the same inset to keep a constant 16px gap. */}
-      <div
+      <CornerFabSlot
         className="fixed inset-x-0 bottom-20 md:bottom-6 z-[55] pointer-events-none"
         style={{
           ...(isMobile
@@ -348,13 +349,13 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </CornerFabSlot>
 
       {/* Persistent Quick Vote pill (mobile). Same fixed wrapper pattern as
           the nudge pill so it tracks the nav — including the safe-area inset
           the nav's height grows by. Hidden while the overlay or first-visit
           nudge is up. */}
-      <div
+      <CornerFabSlot
         className="fixed right-4 z-[55] pointer-events-none"
         style={{
           bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
@@ -370,7 +371,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="flex origin-right items-center justify-end gap-2"
+              className="flex origin-bottom-right flex-col items-end gap-2"
             >
               {activityFilter && (
                 <VoteActivityFilterFab
@@ -407,17 +408,17 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </CornerFabSlot>
 
       {activityFilter && (
-        <div className="fixed right-4 bottom-6 z-[55] pointer-events-none hidden md:flex">
+        <CornerFabSlot className="fixed right-4 bottom-6 z-[55] pointer-events-none hidden md:flex">
           <VoteActivityFilterFab
             value={activityFilter.value}
             count={activityFilter.count}
             onCycle={activityFilter.onCycle}
             pulseTick={activityFilter.pulseTick}
           />
-        </div>
+        </CornerFabSlot>
       )}
 
       {isMobile && (

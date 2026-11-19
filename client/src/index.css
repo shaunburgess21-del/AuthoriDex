@@ -1993,6 +1993,13 @@ html.android-keyboard-open [data-android-keyboard-hide] {
   pointer-events: none;
 }
 
+/* The help chat panel normally clears the bottom nav; with the nav hidden
+   for the keyboard it can sit just above the resized viewport's edge. */
+html.android-keyboard-open [data-help-chat-panel] {
+  bottom: 0.5rem;
+  max-height: calc(100dvh - 1rem);
+}
+
 html.android-keyboard-open [data-android-keyboard-scroll] {
   align-items: flex-start;
   justify-content: flex-start;

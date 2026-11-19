@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
+import { HelpChat } from "@/components/help-chat/HelpChat";
 import { SiteBanner } from "@/components/SiteBanner";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { Footer } from "@/components/Footer";
@@ -478,6 +479,7 @@ function App() {
                 </XpBurstProvider>
                 <Footer />
                 <BottomNav />
+                <HelpChat />
               </ReferralModalProvider>
             </TooltipProvider>
           </AuthProvider>
