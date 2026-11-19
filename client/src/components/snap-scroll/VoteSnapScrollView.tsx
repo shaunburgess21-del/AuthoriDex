@@ -23,6 +23,11 @@ import { CategoryTabStrip } from "./CategoryTabStrip";
 import { SnapPageVisibility } from "./SnapPageVisibility";
 import { CardComments, type CommentEntityType } from "@/components/comments/CardComments";
 import { CommunityInsights } from "@/components/CommunityInsights";
+import {
+  applySashMove,
+  releaseSash,
+  rememberSashFullHeight,
+} from "@/lib/snapSashGesture";
 
 export type SnapSectionType =
   | "matchups" | "sentiment" | "opinion"
@@ -405,15 +410,22 @@ export function VoteSnapScrollView({
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   /** Window-sash drag session on the expand/collapse handle. Card styles are
-   * mutated directly during touchmove so the card follows the finger without
-   * re-rendering; on release the existing 200ms class transition settles it. */
+   * mutated directly during the gesture so the card follows the finger without
+   * re-rendering; on release the existing 200ms class transition settles it.
+   * Touch listeners are native and non-passive — see beginSashDrag. */
   const sashDragRef = useRef<{
     el: HTMLElement | null;
+    itemId: string;
     startY: number;
     fullHeight: number;
     startExpanded: boolean;
     moved: boolean;
   } | null>(null);
+  /** Last open-card scrollHeight per item. WebKit reports 0 once max-height is 0. */
+  const sashFullHeightRef = useRef<Record<string, number>>({});
+  /** Touch end already toggled or settled; swallow the synthetic click. */
+  const sashSwallowClickRef = useRef(false);
+  const sashUnlistenRef = useRef<(() => void) | null>(null);
   const commentTapStartRef = useRef<{ itemId: string; x: number; y: number } | null>(null);
   const commentSwipeStartRef = useRef<{ itemId: string; x: number; y: number; time: number } | null>(null);
   const commentSwipeConsumedRef = useRef(false);
@@ -1555,67 +1567,177 @@ export function VoteSnapScrollView({
     if (item) sharePage(item.title, { sharerUserId: user?.id, surface: "vote_deck" });
   }, [getVisibleItem, user?.id]);
 
-  const handleDragStart = useCallback((e: React.TouchEvent, isExpanded: boolean) => {
-    // Handle wrapper ("flex justify-center") sits directly after the card wrapper.
-    const cardEl = (e.currentTarget.parentElement?.previousElementSibling ?? null) as HTMLElement | null;
+  const detachSashListeners = useCallback(() => {
+    sashUnlistenRef.current?.();
+    sashUnlistenRef.current = null;
+  }, []);
+
+  const restoreSashCard = useCallback((el: HTMLElement | null, animate: boolean) => {
+    if (!el) return;
+    el.style.transition = "";
+    if (!animate) {
+      el.style.maxHeight = "";
+      el.style.opacity = "";
+      return;
+    }
+    // Re-arm the class transition, then release inline styles next frame so
+    // the card eases from the drag position to its settled state.
+    requestAnimationFrame(() => {
+      el.style.maxHeight = "";
+      el.style.opacity = "";
+    });
+  }, []);
+
+  const applySashClientY = useCallback((clientY: number) => {
+    const drag = sashDragRef.current;
+    if (!drag) return;
+    const result = applySashMove(drag, clientY);
+    sashDragRef.current = { ...drag, ...result.session };
+    if (result.height == null || !drag.el) return;
+    drag.el.style.transition = "none";
+    drag.el.style.maxHeight = `${result.height}px`;
+    drag.el.style.opacity = String(result.opacity);
+  }, []);
+
+  const finishSashDrag = useCallback((clientY: number | null, cancelled: boolean) => {
+    const drag = sashDragRef.current;
+    sashDragRef.current = null;
+    detachSashListeners();
+    if (!drag) return;
+    // A touch sequence already settled the sash. The synthetic click must not
+    // toggle again — WKWebView sometimes still emits it, sometimes never does.
+    sashSwallowClickRef.current = true;
+    if (cancelled || clientY == null) {
+      restoreSashCard(drag.el, false);
+      return;
+    }
+    const release = releaseSash(drag, clientY);
+    if (release.type === "cancel") {
+      restoreSashCard(drag.el, false);
+      return;
+    }
+    if (release.type === "tap") {
+      restoreSashCard(drag.el, false);
+      setExpandedItemId(drag.startExpanded ? null : drag.itemId);
+      return;
+    }
+    setExpandedItemId(release.cardOpen ? null : drag.itemId);
+    restoreSashCard(drag.el, true);
+  }, [detachSashListeners, restoreSashCard]);
+
+  const armSashListeners = useCallback(() => {
+    if (sashUnlistenRef.current) return;
+
+    const onSashTouchMove = (e: TouchEvent) => {
+      if (!sashDragRef.current || e.touches.length === 0) return;
+      e.preventDefault();
+      applySashClientY(e.touches[0].clientY);
+    };
+    const onSashTouchEnd = (e: TouchEvent) => {
+      if (!sashDragRef.current) {
+        // pointerup already settled the gesture. Still kill the ghost click.
+        if (sashSwallowClickRef.current) e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      const y = e.changedTouches[0]?.clientY ?? null;
+      finishSashDrag(y, false);
+    };
+    // iOS snap scrollers often emit touchcancel instead of touchend and then
+    // drop the click. An unmoved cancel is still a tap; a drag settles from
+    // the last point instead of snapping back.
+    const onSashTouchCancel = (e: TouchEvent) => {
+      const drag = sashDragRef.current;
+      if (!drag) return;
+      const y = e.changedTouches[0]?.clientY;
+      if (y == null) {
+        finishSashDrag(drag.moved ? null : drag.startY, drag.moved);
+        return;
+      }
+      finishSashDrag(y, false);
+    };
+    // pointerup runs before touchend. Finishing here covers a WKWebView that
+    // drops touchend. finishSashDrag removes that listener and swallows the
+    // synthetic click, so the two cannot both toggle.
+    const onSashPointerUp = (e: PointerEvent) => {
+      // Mouse never starts a session. If one is active (touch/pen), settle it
+      // even when the pointer type flips — otherwise the session stays armed
+      // and the following click is ignored.
+      if (!sashDragRef.current) return;
+      finishSashDrag(e.clientY, false);
+    };
+    const onSashPointerCancel = (e: PointerEvent) => {
+      if (!sashDragRef.current) return;
+      finishSashDrag(e.clientY, false);
+    };
+
+    // touchstart is left alone. preventDefault there makes WKWebView cancel
+    // the rest of the gesture, so a drag never receives touchmove. The
+    // listener is armed on pointerdown (before touchmove) and is non-passive,
+    // which is what stops the snap scroller from taking the vertical drag.
+    window.addEventListener("touchmove", onSashTouchMove, { capture: true, passive: false });
+    window.addEventListener("touchend", onSashTouchEnd, { capture: true, passive: false });
+    window.addEventListener("touchcancel", onSashTouchCancel, { capture: true });
+    window.addEventListener("pointerup", onSashPointerUp, { capture: true });
+    window.addEventListener("pointercancel", onSashPointerCancel, { capture: true });
+    sashUnlistenRef.current = () => {
+      window.removeEventListener("touchmove", onSashTouchMove, { capture: true });
+      window.removeEventListener("touchend", onSashTouchEnd, { capture: true });
+      window.removeEventListener("touchcancel", onSashTouchCancel, { capture: true });
+      window.removeEventListener("pointerup", onSashPointerUp, { capture: true });
+      window.removeEventListener("pointercancel", onSashPointerCancel, { capture: true });
+    };
+  }, [applySashClientY, finishSashDrag]);
+
+  const beginSashDrag = useCallback((
+    clientY: number,
+    itemId: string,
+    isExpanded: boolean,
+    handleEl: HTMLElement,
+  ) => {
+    if (sashDragRef.current) return;
+    const cardEl = handleEl.closest("[data-sash-page]")?.querySelector<HTMLElement>("[data-sash-card]") ?? null;
+    let measured = cardEl?.scrollHeight ?? 0;
+    const cached = sashFullHeightRef.current[itemId];
+    if (cardEl && measured <= 0 && !(cached > 0)) {
+      const previous = cardEl.style.maxHeight;
+      cardEl.style.maxHeight = "none";
+      measured = cardEl.scrollHeight;
+      cardEl.style.maxHeight = previous;
+    }
+    const fullHeight = rememberSashFullHeight(measured, cached, isExpanded);
+    if (fullHeight > 0) sashFullHeightRef.current[itemId] = fullHeight;
     sashDragRef.current = {
       el: cardEl,
-      startY: e.touches[0].clientY,
-      // scrollHeight reads the natural content height even at max-height 0.
-      fullHeight: cardEl?.scrollHeight ?? 0,
+      itemId,
+      startY: clientY,
+      fullHeight,
       startExpanded: isExpanded,
       moved: false,
     };
-  }, []);
-
-  const handleDragMove = useCallback((e: React.TouchEvent) => {
-    const drag = sashDragRef.current;
-    if (!drag?.el || drag.fullHeight === 0) return;
-    const deltaY = e.touches[0].clientY - drag.startY;
-    if (!drag.moved && Math.abs(deltaY) > 6) drag.moved = true;
-    if (!drag.moved) return;
-    const raw = drag.startExpanded ? deltaY : drag.fullHeight + deltaY;
-    const height = Math.min(Math.max(raw, 0), drag.fullHeight);
-    drag.el.style.transition = "none";
-    drag.el.style.maxHeight = `${height}px`;
-    drag.el.style.opacity = String(height / drag.fullHeight);
-  }, []);
-
-  const handleDragEnd = useCallback((e: React.TouchEvent, itemId: string) => {
-    const drag = sashDragRef.current;
-    if (!drag) return;
-    const el = drag.el;
-    if (!drag.moved) {
-      // Tap: the click handler performs the toggle.
-      if (el) {
-        el.style.transition = "";
-        el.style.maxHeight = "";
-        el.style.opacity = "";
-      }
-      return;
-    }
-    const deltaY = e.changedTouches[0].clientY - drag.startY;
-    const raw = drag.startExpanded ? deltaY : drag.fullHeight + deltaY;
-    const height = Math.min(Math.max(raw, 0), drag.fullHeight);
-    const cardOpenPastHalf = drag.fullHeight > 0 && height > drag.fullHeight / 2;
-    setExpandedItemId(cardOpenPastHalf ? null : itemId);
-    if (el) {
-      // Re-arm the class transition, then release inline styles next frame so
-      // the card eases from the drag position to its settled state.
-      el.style.transition = "";
-      requestAnimationFrame(() => {
-        el.style.maxHeight = "";
-        el.style.opacity = "";
-      });
-    }
-  }, []);
+    armSashListeners();
+  }, [armSashListeners]);
 
   const handleHandleClick = useCallback((itemId: string, isExpanded: boolean) => {
-    const dragMoved = sashDragRef.current?.moved ?? false;
-    sashDragRef.current = null;
-    if (dragMoved) return;
+    if (sashSwallowClickRef.current) {
+      sashSwallowClickRef.current = false;
+      return;
+    }
+    // Touch owns its own toggle. This click is the mouse / keyboard path.
+    if (sashDragRef.current) return;
     setExpandedItemId(isExpanded ? null : itemId);
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      sashDragRef.current = null;
+      sashSwallowClickRef.current = false;
+      detachSashListeners();
+    }
+    return () => {
+      detachSashListeners();
+    };
+  }, [open, detachSashListeners]);
 
   const handleCommentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>, itemId: string, isExpanded: boolean) => {
     if (isInteractiveTarget(e.target)) {
@@ -1896,6 +2018,7 @@ export function VoteSnapScrollView({
                               return (
                                 <div
                                   key={item.id}
+                                  data-sash-page=""
                                   className={`snap-start flex flex-col px-3 pt-3 ${
                                     isMinimal ? "snap-page-minimal" : ""
                                   }`}
@@ -1906,6 +2029,7 @@ export function VoteSnapScrollView({
                                       {({ isNearVisible }) => (
                                         <>
                                           <div
+                                            data-sash-card=""
                                             className={`w-full max-w-lg mx-auto shrink-0 transition-all duration-200 overflow-hidden ${
                                               isExpanded ? "max-h-0 opacity-0" : "max-h-[2000px] opacity-100"
                                             }`}
@@ -1914,21 +2038,33 @@ export function VoteSnapScrollView({
                                           </div>
 
                                           <div className="flex justify-center">
-                                            <div
-                                              className="flex flex-col items-center px-6 pb-2.5 cursor-grab active:cursor-grabbing touch-none select-none"
-                                              onTouchStart={(e) => handleDragStart(e, isExpanded)}
-                                              onTouchMove={handleDragMove}
-                                              onTouchEnd={(e) => handleDragEnd(e, item.id)}
+                                            <button
+                                              type="button"
+                                              data-sash-handle=""
+                                              className="sash-handle flex flex-col items-center justify-start touch-none select-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                              style={{ touchAction: "none" }}
+                                              onPointerDown={(e) => {
+                                                // Mouse keeps the click-to-toggle path. Touch and pen
+                                                // settle on pointerup — WKWebView drops the click.
+                                                if (e.pointerType === "mouse") {
+                                                  sashSwallowClickRef.current = false;
+                                                  return;
+                                                }
+                                                beginSashDrag(e.clientY, item.id, isExpanded, e.currentTarget);
+                                              }}
+                                              onTouchStart={(e) => {
+                                                beginSashDrag(e.touches[0].clientY, item.id, isExpanded, e.currentTarget);
+                                              }}
                                               onClick={() => handleHandleClick(item.id, isExpanded)}
-                                              role="button"
                                               aria-label={isExpanded ? "Collapse" : "Expand"}
                                             >
-                                              {/* U-bracket: side rails rise to meet the card's bottom border */}
+                                              {/* U-bracket: side rails rise to meet the card's bottom border.
+                                                  The 44px target continues below the grip on touch devices. */}
                                               <div className="w-14 h-4 -mt-px border-l-2 border-r-2 border-b-2 border-muted-foreground/[0.42] rounded-b-lg flex flex-col items-center justify-center gap-[3px]">
                                                 <div className="w-8 h-[2px] rounded-full bg-muted-foreground/[0.42]" />
                                                 <div className="w-8 h-[2px] rounded-full bg-muted-foreground/[0.42]" />
                                               </div>
-                                            </div>
+                                            </button>
                                           </div>
 
                                           <div
