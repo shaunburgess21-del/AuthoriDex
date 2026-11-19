@@ -11,7 +11,7 @@ import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
-import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare } from "lucide-react";
 import { Link } from "wouter";
 import { sentimentPollShare } from "@/lib/share";
@@ -91,12 +91,20 @@ export function DiscourseCard({
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-          <span className={voted ? "" : "text-slate-600"}>
-            {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
-          </span>
-        </div>
+        {showDiscussion ? (
+          <DiscussionButton
+            count={topic.commentCount}
+            onClick={() => setDiscussionOpen(true)}
+            testId={`button-discussion-${topic.id}`}
+          />
+        ) : (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span className={voted ? "" : "text-slate-600"}>
+              {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
+            </span>
+          </div>
+        )}
         <InteractiveCategoryPill
           category={topic.category}
           onFilter={() => onFilterCategory(topic.category)}
@@ -254,11 +262,7 @@ export function DiscourseCard({
         <div className="mt-auto md:mt-2 flex items-center gap-2 pt-3 md:pt-[22px] border-t border-white/10">
             <div className="flex-1 min-w-0 flex items-center">
               {showDiscussion ? (
-                <DiscussionButton
-                  count={topic.commentCount}
-                  onClick={() => setDiscussionOpen(true)}
-                  testId={`button-discussion-${topic.id}`}
-                />
+                <CardVoteCount count={topic.totalVotes} testId={`text-votes-${topic.id}`} />
               ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">

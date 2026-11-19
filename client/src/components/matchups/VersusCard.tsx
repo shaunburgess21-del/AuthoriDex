@@ -9,7 +9,7 @@ import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { CardImage } from "@/components/ui/card-image";
 import { normalizeMarketCategory } from "@shared/constants";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
-import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { toast } from "sonner";
 import { useMatchupNeutralNudge } from "@/hooks/useMatchupNeutralNudge";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -145,12 +145,20 @@ export function VersusCard({
             />
           </div>
           <div className="flex items-center mb-3 gap-2 px-4">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span className={hasVoted ? "" : "text-slate-600"}>
-                {hasVoted ? `${matchup.totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-              </span>
-            </div>
+            {showDiscussion ? (
+              <DiscussionButton
+                count={matchup.commentCount}
+                onClick={() => setDiscussionOpen(true)}
+                testId={`button-discussion-matchup-${matchup.id}`}
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span className={hasVoted ? "" : "text-slate-600"}>
+                  {hasVoted ? `${matchup.totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className={`rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 ${footerBarClass} px-4 py-2 text-center mb-0 mt-[5px]`}>
@@ -429,11 +437,7 @@ export function VersusCard({
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0 flex items-center">
                   {showDiscussion ? (
-                    <DiscussionButton
-                      count={matchup.commentCount}
-                      onClick={() => setDiscussionOpen(true)}
-                      testId={`button-discussion-matchup-${matchup.id}`}
-                    />
+                    <CardVoteCount count={matchup.totalVotes} testId={`text-votes-matchup-${matchup.id}`} />
                   ) : null}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center justify-center">

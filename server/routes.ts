@@ -147,6 +147,7 @@ import { UNION_INCLUDE_GDELT } from "./providers/news-aggregator";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
 import { memoizeAsync, memoizeAsyncSwr } from "./services/insights/request-memo";
+import { countVisibleCommentsByParent } from "./services/comment-counts";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
 import { voidMarketBets } from "./jobs/market-resolver";
@@ -4504,23 +4505,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allIds = [...mainRows.map((r) => r.id), ...inductionIds];
 
       // 1-5 distribution counts, one bulk group-by across all listed people.
+      // Profile discussion totals ride along so the vote card can show a
+      // comment count without fetching each person's thread.
       const distributionById = new Map<string, number[]>();
+      let commentCountById = new Map<string, number>();
       if (allIds.length > 0) {
-        const distRows = await db
-          .select({
-            personId: userVotes.personId,
-            rating: userVotes.rating,
-            cnt: sql<number>`cast(count(*) as int)`,
-          })
-          .from(userVotes)
-          .where(
-            and(
-              inArray(userVotes.personId, allIds),
-              gte(userVotes.rating, 1),
-              lte(userVotes.rating, 5),
-            ),
-          )
-          .groupBy(userVotes.personId, userVotes.rating);
+        const [distRows, commentCounts] = await Promise.all([
+          db
+            .select({
+              personId: userVotes.personId,
+              rating: userVotes.rating,
+              cnt: sql<number>`cast(count(*) as int)`,
+            })
+            .from(userVotes)
+            .where(
+              and(
+                inArray(userVotes.personId, allIds),
+                gte(userVotes.rating, 1),
+                lte(userVotes.rating, 5),
+              ),
+            )
+            .groupBy(userVotes.personId, userVotes.rating),
+          countVisibleCommentsByParent("community_insight", allIds),
+        ]);
+        commentCountById = commentCounts;
         for (const row of distRows) {
           const rating = Number(row.rating);
           if (rating < 1 || rating > 5) continue;
@@ -4562,6 +4570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           approvalVotesCount: person.approvalVotesCount ?? 0,
           userApprovalRating: userRatingsById[person.id] ?? null,
           ratingDistribution: distributionById.get(person.id) ?? [0, 0, 0, 0, 0],
+          commentCount: commentCountById.get(person.id) ?? 0,
         })),
         ...inductionEntries.map((candidate) => {
           const metrics = inductionMetricsById.get(candidate.personId);
@@ -4580,6 +4589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             approvalVotesCount: metrics?.approvalVotesCount ?? 0,
             userApprovalRating: userRatingsById[candidate.personId] ?? null,
             ratingDistribution: distributionById.get(candidate.personId) ?? [0, 0, 0, 0, 0],
+            commentCount: commentCountById.get(candidate.personId) ?? 0,
           };
         }),
       ];
@@ -25161,7 +25171,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         .from(inductionCandidates)
         .where(eq(inductionCandidates.isActive, true))
         .orderBy(...orderTerms);
-      const data = await enrichInductionCandidatesWithAvatars(candidates);
+      const enriched = await enrichInductionCandidatesWithAvatars(candidates);
+      const commentCountById = await countVisibleCommentsByParent(
+        "community_insight",
+        enriched.flatMap((candidate) => (candidate.personId ? [candidate.personId] : [])),
+      );
+      const data = enriched.map((candidate) => ({
+        ...candidate,
+        commentCount: candidate.personId ? commentCountById.get(candidate.personId) ?? 0 : 0,
+      }));
       res.json({ data, totalCount: data.length });
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);

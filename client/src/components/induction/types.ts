@@ -14,6 +14,8 @@ export interface InductionCandidate {
   isActive: boolean;
   /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
   personId: string | null;
+  /** Visible comments on that person's profile thread. 0 when there is no shadow profile. */
+  commentCount?: number;
 }
 
 export interface InductionAPIResponse {
