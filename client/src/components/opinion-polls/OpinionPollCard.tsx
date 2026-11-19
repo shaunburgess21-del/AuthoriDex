@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { sortOpinionPollOptionsForCard } from "@/lib/opinionPollOptions";
-import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
@@ -281,12 +281,20 @@ export function OpinionPollCard({
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            <span className={hasVoted ? "" : "text-slate-600"}>
-              {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-            </span>
-          </div>
+          {showDiscussion ? (
+            <DiscussionButton
+              count={poll.commentCount}
+              onClick={() => setDiscussionOpen(true)}
+              testId={`button-discussion-opinion-${poll.id}`}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+              <span className={hasVoted ? "" : "text-slate-600"}>
+                {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+              </span>
+            </div>
+          )}
           <InteractiveCategoryPill
             category={categoryKey}
             onFilter={() => onFilterCategory(categoryKey)}
@@ -429,12 +437,8 @@ export function OpinionPollCard({
         {hasVoted && (
           <div className="mt-auto pt-2.5 flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center">
-              {hasVoted && showDiscussion ? (
-                <DiscussionButton
-                  count={poll.commentCount}
-                  onClick={() => setDiscussionOpen(true)}
-                  testId={`button-discussion-opinion-${poll.id}`}
-                />
+              {showDiscussion ? (
+                <CardVoteCount count={totalVotes} testId={`text-votes-opinion-${poll.id}`} />
               ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">

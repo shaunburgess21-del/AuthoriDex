@@ -312,3 +312,36 @@ export function CommunityInsights({
   );
 }
 
+/**
+ * Full-screen profile discussion (community_insight thread) for a person.
+ * Same overlay Quick Vote uses for Overall Rating cards, and the same thread
+ * rendered on the celebrity profile page. Signed-out visitors can read;
+ * posting follows the existing sign-in prompt.
+ */
+export function PersonCommentsFocusOverlay({
+  open,
+  onClose,
+  personId,
+  personName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  personId: string;
+  personName: string;
+}) {
+  return (
+    <CommentsFocusShell open={open} onClose={onClose} contextTitle={personName}>
+      {open ? (
+        <CommunityInsights
+          personId={personId}
+          personName={personName}
+          compact
+          disableFocusMode
+          focusContextTitle={personName}
+          parentExpanded={false}
+        />
+      ) : null}
+    </CommentsFocusShell>
+  );
+}
+

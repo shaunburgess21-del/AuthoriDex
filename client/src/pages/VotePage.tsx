@@ -39,7 +39,8 @@ import { useUserStats } from "@/hooks/useGamification";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { ImageLightbox } from "@/components/ImageLightbox";
-import { DiscussionButton } from "@/components/comments/DiscussionButton";
+import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
+import { PersonCommentsFocusOverlay } from "@/components/CommunityInsights";
 import { 
   Plus, 
   Vote,
@@ -212,6 +213,8 @@ interface InductionCandidate {
   votes: number;
   /** Shadow tracked_people id — target of the dormant /person/:id profile page. */
   personId: string | null;
+  /** Visible comments on that person's profile thread. */
+  commentCount?: number;
 }
 
 interface CelebrityImage {
@@ -413,6 +416,7 @@ function InductionCandidateCard({
   categoryCanonicalId?: string;
 }) {
   const [showVoteAnimation, setShowVoteAnimation] = useState(false);
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressPercent = rank === 1 ? 100 : (candidate.votes / maxVotes) * 100;
 
@@ -457,10 +461,15 @@ function InductionCandidateCard({
         )}
       </AnimatePresence>
       <div className="flex items-center justify-between gap-2 mb-4">
-        <div className={`rounded-full px-3 py-1 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}>
-          {rank === 1 && <Crown className="h-3 w-3" />}
-          #{rank}
-        </div>
+        {candidate.personId ? (
+          <DiscussionButton
+            count={candidate.commentCount}
+            onClick={() => setDiscussionOpen(true)}
+            testId={`button-discussion-induction-${candidate.id}`}
+          />
+        ) : (
+          <span className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        )}
         <InteractiveCategoryPill
           category={candidate.category}
           displayLabel={categoryDisplayLabel}
@@ -498,19 +507,28 @@ function InductionCandidateCard({
             </div>
           )}
         </Link>
-        <Link
-          href={candidate.personId ? `/person/${candidate.personId}` : `/vote/induction#induction-card-${candidate.id}`}
-          className="mt-2 md:mt-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
-          data-testid={`link-induction-name-${candidate.id}`}
-          onClick={(e) => {
-            if (candidate.personId && onVisitProfile) {
-              e.preventDefault();
-              onVisitProfile();
-            }
-          }}
-        >
-          <h3 className="font-semibold text-[16px] leading-[1.4]">{candidate.name}</h3>
-        </Link>
+        <div className="mt-2 md:mt-3 flex w-full min-w-0 items-center justify-center gap-2 px-1">
+          <div
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium flex items-center gap-1 border ${getRankBadgeStyle(rank)}`}
+            data-testid={`badge-rank-${candidate.id}`}
+          >
+            {rank === 1 && <Crown className="h-3 w-3" />}
+            #{rank}
+          </div>
+          <Link
+            href={candidate.personId ? `/person/${candidate.personId}` : `/vote/induction#induction-card-${candidate.id}`}
+            className="min-w-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+            data-testid={`link-induction-name-${candidate.id}`}
+            onClick={(e) => {
+              if (candidate.personId && onVisitProfile) {
+                e.preventDefault();
+                onVisitProfile();
+              }
+            }}
+          >
+            <h3 className="truncate font-semibold text-[16px] leading-[1.4]">{candidate.name}</h3>
+          </Link>
+        </div>
       </div>
       
       <div className="mt-auto mb-4">
@@ -520,11 +538,11 @@ function InductionCandidateCard({
             style={{ width: `${progressPercent}%` }}
           />
         </div>
-        <div className="mt-1.5 text-xs text-muted-foreground">
-          <span className="text-slate-400">
-            {candidate.votes.toLocaleString('en-US')} votes
-          </span>
-        </div>
+        {isVoted && (
+          <div className="mt-1.5">
+            <CardVoteCount count={candidate.votes} testId={`text-votes-induction-${candidate.id}`} />
+          </div>
+        )}
       </div>
       
       {isVoted ? (
@@ -548,6 +566,14 @@ function InductionCandidateCard({
         </button>
       )}
     </Card>
+    {candidate.personId ? (
+      <PersonCommentsFocusOverlay
+        open={discussionOpen}
+        onClose={() => setDiscussionOpen(false)}
+        personId={candidate.personId}
+        personName={candidate.name}
+      />
+    ) : null}
     </div>
   );
 }
@@ -1026,6 +1052,7 @@ export default function VotePage() {
       wikiSlug: string | null;
       isActive: boolean;
       personId: string | null;
+      commentCount?: number;
     }>;
   }
   
@@ -1131,6 +1158,7 @@ export default function VotePage() {
     category: c.category as InductionCandidate['category'],
     votes: c.seedVotes,
     personId: c.personId ?? null,
+    commentCount: c.commentCount ?? 0,
   }));
 
   const [voteHubReturn] = useState<VoteHubReturnState | null>(() => readVoteHubReturnState());
@@ -1414,6 +1442,7 @@ export default function VotePage() {
       approvalVotesCount: number;
       userApprovalRating: number | null;
       ratingDistribution: number[];
+      commentCount?: number;
     }>;
   }
 
@@ -3204,6 +3233,7 @@ export default function VotePage() {
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                     onRated={() => beginShapeHideExit(`rating:${person.id}`)}
                     onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    enableDiscussion
                   />
                 </HideExitCard>
               ))}
@@ -4185,6 +4215,7 @@ export default function VotePage() {
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                     onRated={() => beginShapeHideExit(`rating:${person.id}`)}
                     onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    enableDiscussion
                   />
                 ))}
               </div>

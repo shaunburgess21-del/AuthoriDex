@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
+import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
+import { PersonCommentsFocusOverlay } from "@/components/CommunityInsights";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getRatingTileColor } from "@/lib/ratingColors";
@@ -46,6 +48,8 @@ export interface OverallRatingPerson {
   approvalVotesCount?: number | null;
   userApprovalRating?: number | null;
   ratingDistribution?: number[];
+  /** Visible comments on this person's profile discussion thread. */
+  commentCount?: number;
 }
 
 export interface OverallRatingCardProps {
@@ -60,6 +64,12 @@ export interface OverallRatingCardProps {
   onRated?: () => void;
   /** Fired when an optimistic rating is rolled back, so a hide-exit can abort. */
   onRateRolledBack?: () => void;
+  /**
+   * Vote hub cards: comment button stays top-left (profile discussion overlay)
+   * and the vote total moves to the bottom-left, shown only after a rating.
+   * Snap and Quick Vote leave this off — they already have their own comment entry.
+   */
+  enableDiscussion?: boolean;
 }
 
 export function OverallRatingCard({
@@ -72,10 +82,12 @@ export function OverallRatingCard({
   categoryMenuDisabled = false,
   onRated,
   onRateRolledBack,
+  enableDiscussion = false,
 }: OverallRatingCardProps) {
   const [submittedRating, setSubmittedRating] = useState<number | null>(() =>
     readSavedRating(person.id, person.userApprovalRating ?? null),
   );
+  const [discussionOpen, setDiscussionOpen] = useState(false);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [isChanging, setIsChanging] = useState(false);
   const queryClient = useQueryClient();
@@ -271,12 +283,20 @@ export function OverallRatingCard({
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-          <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-          <span className={showResults ? "" : "text-slate-600"}>
-            {showResults ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-          </span>
-        </div>
+        {enableDiscussion ? (
+          <DiscussionButton
+            count={person.commentCount}
+            onClick={() => setDiscussionOpen(true)}
+            testId={`button-discussion-rating-${person.id}`}
+          />
+        ) : (
+          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span className={showResults ? "" : "text-slate-600"}>
+              {showResults ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+            </span>
+          </div>
+        )}
         {person.category && (
           <InteractiveCategoryPill
             category={person.category}
@@ -485,10 +505,23 @@ export function OverallRatingCard({
                 Change
               </Button>
             </div>
+            {enableDiscussion && (
+              <div className="flex items-center pt-2">
+                <CardVoteCount count={totalVotes} testId={`text-votes-rating-${person.id}`} />
+              </div>
+            )}
           </div>
         </>
       )}
     </Card>
+    {enableDiscussion && (
+      <PersonCommentsFocusOverlay
+        open={discussionOpen}
+        onClose={() => setDiscussionOpen(false)}
+        personId={person.id}
+        personName={person.name}
+      />
+    )}
     </div>
   );
 }
