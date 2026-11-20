@@ -182,14 +182,9 @@ export function OpinionPollOptionRow({
           {...pointerProps}
           onClick={(e) => guardClick(e, onVote)}
           disabled={disabled}
-          className={`flex min-w-0 flex-1 flex-col items-stretch py-1.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99] ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+          className={`flex min-w-0 flex-1 items-center py-2.5 pl-2.5 pr-2 text-left transition-transform active:scale-[0.99] ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
         >
-          <div className="flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
-            <span className="shrink-0 text-xs font-mono font-bold text-slate-600">%</span>
-          </div>
-          <div className="mt-1 h-1.5 rounded-full bg-slate-700/50" />
-          <p className="text-[10px] text-slate-600 mt-0.5">Votes</p>
+          <span className="min-w-0 flex-1 truncate text-sm">{option.name}</span>
         </button>
       </div>
     );

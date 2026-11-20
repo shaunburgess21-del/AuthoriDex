@@ -298,7 +298,7 @@ export function OverallRatingCard({
   return (
     <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[340px]"}`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[340px]"} ${feedLayout && !showResults ? "md:justify-center" : ""}`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -373,7 +373,7 @@ export function OverallRatingCard({
       </div>
 
       {!showResults ? (
-        <div className={`flex flex-col gap-3 mt-auto ${feedLayout ? "shrink-0" : ""}`}>
+        <div className={`flex flex-col gap-3 ${feedLayout ? "mt-5 shrink-0" : "mt-auto"}`}>
           <div className="grid grid-cols-5 gap-1 md:gap-1.5">
             {ZONE_LABELS.map((label, index) => {
               const isActive = selectedRating === index + 1;

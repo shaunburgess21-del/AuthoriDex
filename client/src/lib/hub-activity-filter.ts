@@ -55,11 +55,34 @@ export function hubActivityFilterFabLabel(
     : voteActivityFilterShortLabel(value);
 }
 
+/**
+ * Number on the Vote eye.
+ * Not voted counts cards still open, so a new vote lowers it by one.
+ * Votes only counts cards already voted, so a new vote raises it by one.
+ * `ownedCount` is the voted total and is what decides whether the next tap
+ * can open Votes only — that stays separate from the badge number.
+ */
+export function voteEyeBadgeCount(
+  filter: HubActivityFilter,
+  cards: readonly { voted: boolean }[],
+): { count: number; ownedCount: number } {
+  let ownedCount = 0;
+  for (const card of cards) {
+    if (card.voted) ownedCount += 1;
+  }
+  const openCount = cards.length - ownedCount;
+  return {
+    count: filter === "hide-mine" ? openCount : ownedCount,
+    ownedCount,
+  };
+}
+
 /** Accessible name for the floating filter pill, including the next tap. */
 export function hubActivityFilterFabAriaLabel(
   scope: HubActivityFilterScope,
   value: HubActivityFilter,
   count: number,
+  ownedCount?: number,
 ): string {
   if (scope === "predict") {
     if (value === "hide-mine") {
@@ -72,8 +95,9 @@ export function hubActivityFilterFabAriaLabel(
     return "All positions. Show markets you haven't predicted on.";
   }
   if (value === "hide-mine") {
-    const next = count > 0 ? "Show only votes you've cast." : "Show all votes.";
-    return `Not voted, ${count} hidden. ${next}`;
+    const owned = ownedCount ?? 0;
+    const next = owned > 0 ? "Show only votes you've cast." : "Show all votes.";
+    return `Not voted, ${count} still to vote. ${next}`;
   }
   if (value === "show-mine") {
     return `Votes only, ${count} shown. Show all votes.`;

@@ -53,6 +53,33 @@ export interface VoteHubReturnState {
 /** Expire return state so Vote → profile → elsewhere → Vote doesn't jump scroll. */
 const VOTE_HUB_RETURN_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * Browser Back is a popstate. Detail pages do not get to write return state
+ * on that path, so Vote remembers the pop and can fall back to the feed place
+ * stored while scrolling. A later pushState (a normal link) clears it.
+ */
+let pendingHistoryPop = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    pendingHistoryPop = true;
+  });
+  try {
+    const pushState = window.history.pushState.bind(window.history);
+    window.history.pushState = (...args: Parameters<History["pushState"]>) => {
+      pendingHistoryPop = false;
+      return pushState(...args);
+    };
+  } catch {
+    /* pushState can be non-writable; the session return state still restores Back. */
+  }
+}
+
+export function consumeHistoryPop(): boolean {
+  const value = pendingHistoryPop;
+  pendingHistoryPop = false;
+  return value;
+}
+
 export function voteHubReturnHashForType(type: VoteListNavType): string {
   return RETURN_HASH_BY_TYPE[type];
 }

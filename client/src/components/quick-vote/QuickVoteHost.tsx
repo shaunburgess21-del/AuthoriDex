@@ -373,6 +373,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
                 <VoteActivityFilterFab
                   value={activityFilter.value}
                   count={activityFilter.count}
+                  ownedCount={activityFilter.ownedCount}
                   onCycle={activityFilter.onCycle}
                   pulseTick={activityFilter.pulseTick}
                 />
@@ -411,6 +412,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
           <VoteActivityFilterFab
             value={activityFilter.value}
             count={activityFilter.count}
+            ownedCount={activityFilter.ownedCount}
             onCycle={activityFilter.onCycle}
             pulseTick={activityFilter.pulseTick}
           />

@@ -7,6 +7,7 @@ import {
   type HubActivityFilter,
   nextVoteActivityFilter,
   readHubActivityFilter,
+  voteEyeBadgeCount,
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "@/lib/quickVoteHideVoted";
@@ -158,10 +159,12 @@ import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import {
   buildVoteListState,
+  consumeHistoryPop,
   navigateToPersonFromVoteHub,
   navigateWithVoteList,
   readVoteHubReturnState,
   scrollToVoteHubAnchor,
+  writeVoteHubReturnState,
   voteHubSearchSection,
   type VoteHubReturnState,
   type VoteHubSearchSection,
@@ -1233,8 +1236,14 @@ export default function VotePage() {
   );
   const mixedFeedAnchorRef = useRef<string | null>(voteHubReturn?.feedCardKey ?? null);
   const [mixedFeedRestoreKey] = useState<string | null>(() => {
-    if (voteHubReturn?.activeSection !== "All") return null;
-    return voteHubReturn.feedCardKey ?? readVoteMixedFeedPlace()?.cardKey ?? null;
+    if (voteHubReturn && voteHubReturn.activeSection !== "All") return null;
+    if (voteHubReturn?.activeSection === "All") {
+      return voteHubReturn.feedCardKey ?? readVoteMixedFeedPlace()?.cardKey ?? null;
+    }
+    // Browser Back does not run the in-app return writer. The scroll listener
+    // already stored the card, and popstate says this mount is that Back.
+    if (consumeHistoryPop()) return readVoteMixedFeedPlace()?.cardKey ?? null;
+    return null;
   });
   const pinMixedFeedCard = useCallback((key: string) => {
     mixedFeedAnchorRef.current = key;
@@ -1896,6 +1905,19 @@ export default function VotePage() {
 
   const inductionVotesPending = !!user && myVotesFilter !== "all" && !inductionVotesFetched;
 
+  const stashMixedFeedReturn = useCallback(() => {
+    if (activeSection !== "All") return;
+    const feedCardKey = mixedFeedAnchorRef.current ?? undefined;
+    const query = mixedFeedSearch.trim();
+    writeVoteHubReturnState({
+      activeSection: "All",
+      anchorHashId: "vote-sentiment",
+      scrollY: window.scrollY,
+      ...(query ? { listSearchQuery: mixedFeedSearch } : {}),
+      ...(feedCardKey ? { feedCardKey } : {}),
+    });
+  }, [activeSection, mixedFeedSearch]);
+
   const sentimentSlugList = useMemo(
     () => displayTopics.map((t: any) => t.slug).filter(Boolean) as string[],
     [displayTopics],
@@ -1911,6 +1933,7 @@ export default function VotePage() {
 
   const goSentimentDetail = useCallback(
     (slug: string) => {
+      stashMixedFeedReturn();
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1924,10 +1947,11 @@ export default function VotePage() {
         `/polls/${encodeURIComponent(slug)}`,
       );
     },
-    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery, mixedFeedSearch],
+    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
   );
   const goMatchupDetail = useCallback(
     (slug: string) => {
+      stashMixedFeedReturn();
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1941,10 +1965,11 @@ export default function VotePage() {
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
-    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery, mixedFeedSearch],
+    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
   );
   const goOpinionDetail = useCallback(
     (slug: string) => {
+      stashMixedFeedReturn();
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1958,7 +1983,7 @@ export default function VotePage() {
         `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
-    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery, mixedFeedSearch],
+    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
   );
 
   // Snap view always shows the full category chip row, so each snap source
@@ -2132,6 +2157,47 @@ export default function VotePage() {
     matchupUserVotes,
     inductionVotedSet,
     curateVotedIds,
+    ratingVoteEpoch,
+  ]);
+
+  // Not voted shows how many cards are still open (a vote lowers it).
+  // Votes only shows how many are already cast (a vote raises it).
+  // Rating rows can list the same person twice; one vote should move one card.
+  const eyeBadge = useMemo(() => {
+    const seenRatings = new Set<string>();
+    const cards: { voted: boolean }[] = [];
+    for (const matchup of filteredMatchups) {
+      cards.push({ voted: !!matchupUserVotes[matchup.id] });
+    }
+    for (const topic of filteredTopics) {
+      cards.push({ voted: !!topic.userVote });
+    }
+    for (const poll of filteredOpinionPolls) {
+      cards.push({ voted: !!poll.userVote });
+    }
+    for (const person of filteredRatingCelebrities) {
+      if (seenRatings.has(person.id)) continue;
+      seenRatings.add(person.id);
+      cards.push({ voted: hasOverallRatingVote(person) });
+    }
+    for (const candidate of filteredCandidates) {
+      cards.push({ voted: inductionVotedSet.has(candidate.id) });
+    }
+    for (const person of filteredCurateCelebrities) {
+      cards.push({ voted: curateVotedIds.has(person.id) });
+    }
+    return voteEyeBadgeCount(myVotesFilter, cards);
+  }, [
+    filteredMatchups,
+    filteredTopics,
+    filteredOpinionPolls,
+    filteredRatingCelebrities,
+    filteredCandidates,
+    filteredCurateCelebrities,
+    matchupUserVotes,
+    inductionVotedSet,
+    curateVotedIds,
+    myVotesFilter,
     ratingVoteEpoch,
   ]);
 
@@ -2991,17 +3057,17 @@ export default function VotePage() {
   };
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
+    <div className="min-h-screen overflow-x-clip pb-[calc(13.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
       <SiteHeader active="vote" logoVariant="vote" backButton="none" />
       {/* Section chips stick as one band. The band slides up on scroll down
           and back on scroll up (useScrollHideTransform). */}
       <div
         ref={chipBarRef}
-        className="sticky top-16 z-40 will-change-transform"
+        className="sticky top-16 z-40 bg-background will-change-transform"
         data-testid="vote-sticky-band"
       >
         <div
-          className="bg-slate-200/50 dark:bg-black/40 border-b border-border/60"
+          className="border-b border-border/60 bg-background"
           data-testid="section-toggles-container"
         >
           <div className="container mx-auto px-2 sm:px-4 pt-3 pb-2 max-w-7xl">
@@ -4827,7 +4893,8 @@ export default function VotePage() {
           user
             ? {
                 value: myVotesFilter,
-                count: myVotesCount,
+                count: eyeBadge.count,
+                ownedCount: eyeBadge.ownedCount,
                 onCycle: cycleMyVotesFilter,
                 pulseTick: hidePulseTick,
               }

@@ -22,6 +22,11 @@ export interface VoteActivityFilterFabProps {
   scope?: HubActivityFilterScope;
   value: HubActivityFilter;
   count: number;
+  /**
+   * Voted cards, used only to describe the next tap. The badge `count` in
+   * Not voted mode is the cards still open, which is a different number.
+   */
+  ownedCount?: number;
   onCycle: () => void;
   /** Increments when a hide-mine card finishes flying out, so the pill pulses. Vote only. */
   pulseTick?: number;
@@ -31,6 +36,7 @@ export function VoteActivityFilterFab({
   scope = "vote",
   value,
   count,
+  ownedCount,
   onCycle,
   pulseTick = 0,
 }: VoteActivityFilterFabProps) {
@@ -95,7 +101,7 @@ export function VoteActivityFilterFab({
         animate={{ opacity: labelVisible ? 1 : 0.5 }}
         transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
         className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
-        aria-label={hubActivityFilterFabAriaLabel(scope, value, count)}
+        aria-label={hubActivityFilterFabAriaLabel(scope, value, count, ownedCount)}
         data-testid={testId}
       >
         {value === "hide-mine" ? (

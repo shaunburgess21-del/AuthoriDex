@@ -1,12 +1,44 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { filterCardsByVoteActivity } from "../client/src/lib/hub-activity-filter";
+import {
+  filterCardsByVoteActivity,
+  hubActivityFilterFabAriaLabel,
+  voteEyeBadgeCount,
+} from "../client/src/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "../client/src/lib/quickVoteHideVoted";
 
 const cards = [
   { id: "voted", voted: true },
   { id: "open", voted: false },
 ];
+
+describe("vote eye badge count", () => {
+  const open = [{ voted: false }, { voted: false }, { voted: true }];
+
+  it("counts cards still to vote in not-voted mode and drops after a vote", () => {
+    assert.deepEqual(voteEyeBadgeCount("hide-mine", open), { count: 2, ownedCount: 1 });
+    const after = [{ voted: true }, { voted: false }, { voted: true }];
+    assert.deepEqual(voteEyeBadgeCount("hide-mine", after), { count: 1, ownedCount: 2 });
+  });
+
+  it("counts voted cards in votes-only mode and rises after a vote", () => {
+    assert.equal(voteEyeBadgeCount("show-mine", open).count, 1);
+    const after = [{ voted: true }, { voted: false }, { voted: true }];
+    assert.equal(voteEyeBadgeCount("show-mine", after).count, 2);
+  });
+
+  it("describes the not-voted badge as cards still to vote", () => {
+    assert.equal(
+      hubActivityFilterFabAriaLabel("vote", "hide-mine", 17, 19),
+      "Not voted, 17 still to vote. Show only votes you've cast.",
+    );
+    assert.match(hubActivityFilterFabAriaLabel("vote", "hide-mine", 4, 0), /Show all votes/);
+    assert.equal(
+      hubActivityFilterFabAriaLabel("predict", "hide-mine", 3),
+      "Not predicted, 3 hidden. Show only positions you've taken.",
+    );
+  });
+});
 
 describe("filterCardsByVoteActivity", () => {
   it("keeps every card on all", () => {

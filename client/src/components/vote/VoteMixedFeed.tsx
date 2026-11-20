@@ -15,6 +15,8 @@ import {
   feedItemFillsRow,
   feedSpacerRows,
   layoutFeedRows,
+  planFeedRestore,
+  scrollYForFeedCard,
   snapFeedWindow,
   voteFeedSpan,
   writeVoteMixedFeedPlace,
@@ -88,10 +90,10 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
   const listRef = useRef<HTMLDivElement>(null);
   const heightsRef = useRef(new Map<string, number>());
   const anchorRef = useRef<string | null>(null);
+  const scrollYRef = useRef(0);
   const [measureTick, setMeasureTick] = useState(0);
   const [range, setRange] = useState(() => ({ start: 0, end: VOTE_FEED_PAGE_SIZE }));
   const filterInit = useRef(filterKey);
-  const didPlaceRestore = useRef(false);
   const didScrollRestore = useRef(false);
   const scrollLock = useRef(Boolean(restoreCardKey));
 
@@ -108,38 +110,100 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
     [spans, columns],
   );
 
+  // Mount the saved card before paint. The feed otherwise keeps ~12 cards,
+  // so a scroll that runs first has nothing to land on and stays at the top.
   useLayoutEffect(() => {
-    if (didPlaceRestore.current) return;
-    if (!restoreCardKey) {
-      scrollLock.current = false;
-      return;
-    }
-    const index = items.findIndex((item) => item.key === restoreCardKey);
-    if (index < 0) {
-      if (!loading) {
-        didPlaceRestore.current = true;
-        scrollLock.current = false;
-      }
-      return;
-    }
-    applyWindow(Math.max(0, index));
-    didPlaceRestore.current = true;
-  }, [applyWindow, items, loading, restoreCardKey]);
-
-  useLayoutEffect(() => {
-    if (!restoreCardKey || !didPlaceRestore.current || didScrollRestore.current) return;
+    if (!restoreCardKey || didScrollRestore.current) return;
+    const plan = planFeedRestore({
+      keys: items.map((item) => item.key),
+      cardKey: restoreCardKey,
+      loading,
+      spans,
+      columns,
+    });
+    if (plan.action !== "reveal") return;
+    setRange((prev) =>
+      prev.start === plan.start && prev.end === plan.end ? prev : { start: plan.start, end: plan.end },
+    );
+    if (plan.start < range.start || plan.end > range.end) return;
     const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(restoreCardKey) : restoreCardKey;
     const card = listRef.current?.querySelector<HTMLElement>(`[data-feed-key="${escaped}"]`);
     if (!card) return;
-    card.scrollIntoView({ block: "start" });
-    didScrollRestore.current = true;
-    scrollLock.current = false;
-  }, [range, items, restoreCardKey]);
+    const desired = scrollYForFeedCard(card.getBoundingClientRect().top, window.scrollY, stickyBottom());
+    if (Math.abs(window.scrollY - desired) > 32) {
+      window.scrollTo({ top: desired, behavior: "auto" });
+    }
+  }, [columns, items, loading, range.end, range.start, restoreCardKey, spans]);
+
+  // Keep correcting after paint. history.scrollRestoration is manual, and a
+  // late browser scroll can still drop the page back to 0 while data hydrates.
+  useEffect(() => {
+    if (!restoreCardKey || didScrollRestore.current) {
+      if (!restoreCardKey) scrollLock.current = false;
+      return;
+    }
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+    scrollLock.current = true;
+    let cancelled = false;
+    const started = performance.now();
+    let settledAt = 0;
+
+    const tick = () => {
+      if (cancelled || didScrollRestore.current) return;
+      const plan = planFeedRestore({
+        keys: items.map((item) => item.key),
+        cardKey: restoreCardKey,
+        loading,
+        spans,
+        columns,
+      });
+      if (plan.action === "abandon" || performance.now() - started > 2500) {
+        scrollLock.current = false;
+        didScrollRestore.current = true;
+        return;
+      }
+      if (plan.action === "wait") {
+        window.requestAnimationFrame(tick);
+        return;
+      }
+      setRange((prev) =>
+        prev.start === plan.start && prev.end === plan.end ? prev : { start: plan.start, end: plan.end },
+      );
+      const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(restoreCardKey) : restoreCardKey;
+      const card = listRef.current?.querySelector<HTMLElement>(`[data-feed-key="${escaped}"]`);
+      if (!card) {
+        window.requestAnimationFrame(tick);
+        return;
+      }
+      const sticky = stickyBottom();
+      const desired = scrollYForFeedCard(card.getBoundingClientRect().top, window.scrollY, sticky);
+      if (Math.abs(window.scrollY - desired) > 32) {
+        window.scrollTo({ top: desired, behavior: "auto" });
+        settledAt = 0;
+      } else if (settledAt === 0) {
+        settledAt = performance.now();
+      }
+      if (settledAt === 0 || performance.now() - settledAt < 800) {
+        window.requestAnimationFrame(tick);
+        return;
+      }
+      didScrollRestore.current = true;
+      scrollLock.current = false;
+    };
+
+    const frame = window.requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [columns, items, loading, restoreCardKey, spans]);
 
   useEffect(() => {
     if (filterInit.current === filterKey) return;
     filterInit.current = filterKey;
-    didPlaceRestore.current = true;
+    if (restoreCardKey && !didScrollRestore.current) return;
     didScrollRestore.current = true;
     scrollLock.current = false;
     setRange({ start: 0, end: Math.min(VOTE_FEED_PAGE_SIZE, items.length) });
@@ -189,6 +253,11 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         if (scrollLock.current || items.length === 0) return;
+        const previousY = scrollYRef.current;
+        scrollYRef.current = window.scrollY;
+        // Leaving the page scrolls to the top in one jump. That must not
+        // replace the card the visitor just opened.
+        if (previousY > 400 && window.scrollY < 8) return;
         const index = indexAtScroll();
         applyWindow(index);
         const key = items[index]?.key;
@@ -287,7 +356,11 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
   }
 
   return (
-    <section aria-label="All votes" data-testid="vote-mixed-feed" className="mb-10 mt-[5px]">
+    <section
+      aria-label="All votes"
+      data-testid="vote-mixed-feed"
+      className="mb-10 mt-[5px] max-md:pb-[calc(8.5rem+env(safe-area-inset-bottom,0px))]"
+    >
       {toolbar}
       {loading ? (
         <CardGridSkeleton count={3} />
