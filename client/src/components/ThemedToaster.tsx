@@ -1,5 +1,6 @@
 import { Toaster } from "sonner";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
+import { TOAST_TOP_OFFSET, TOAST_Z_INDEX } from "@/lib/toastPlacement";
 
 /**
  * Sonner defaults to theme="light"; sync with the app's .dark class so
@@ -17,10 +18,11 @@ export function ThemedToaster() {
       position="top-center"
       duration={4000}
       swipeDirections={["top", "left", "right"]}
-      /* Symmetric gutters so Sonner's mobile top-center layout doesn't
-       * bias the streak card toward one edge (see index.css streak-toast). */
-      offset="0.5rem"
-      mobileOffset={{ left: "0.5rem", right: "0.5rem", top: "0.5rem" }}
+      /* Below the sticky header, and under dialogs (z-50), so a streak
+       * toast cannot sit on the Rate control or the 1–5 dialog. */
+      offset={{ top: TOAST_TOP_OFFSET }}
+      mobileOffset={{ left: "0.5rem", right: "0.5rem", top: TOAST_TOP_OFFSET }}
+      style={{ zIndex: TOAST_Z_INDEX }}
     />
   );
 }

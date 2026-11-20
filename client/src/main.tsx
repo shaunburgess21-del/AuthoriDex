@@ -52,6 +52,12 @@ if (import.meta.env.DEV && typeof window !== "undefined" && "serviceWorker" in n
 
 const rootEl = document.getElementById("root")!;
 
+// Start the home chunk before React commits, so the first paint is not
+// stuck on the route suspense fallback while that module downloads.
+if (window.location.pathname === "/" || window.location.pathname === "") {
+  void import("./pages/HomePage");
+}
+
 function startApp() {
   createRoot(rootEl).render(<App />);
 
