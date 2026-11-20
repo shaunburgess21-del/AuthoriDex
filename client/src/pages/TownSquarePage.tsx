@@ -11,6 +11,7 @@ import { formatActivityAge } from "@/lib/formatDate";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { voxWord, formatVoxPrice, formatVox } from "@/lib/currency";
 import { VoxText } from "@/components/VoxText";
+import { GlossaryLegend, SHARES_AND_PNL_TERMS } from "@/components/GlossaryLegend";
 
 
 interface ActivityItem {
@@ -116,6 +117,11 @@ export default function TownSquarePage() {
               <p className="text-muted-foreground text-sm mt-0.5">
                 Latest prediction activity across all markets
               </p>
+              <GlossaryLegend
+                terms={SHARES_AND_PNL_TERMS}
+                testId="town-square-page-glossary"
+                className="mt-2"
+              />
             </div>
           </div>
           <Button

@@ -133,13 +133,18 @@ export function PositionSummaryRow({
       {(pnlText || showStake) && (
         <div className="flex shrink-0 items-end gap-2 max-[380px]:flex-col max-[380px]:items-end max-[380px]:gap-0.5">
           {pnlText && (
-            <span
-              className={cn("inline-flex items-center gap-1 text-xs font-semibold font-mono tabular-nums", pnlClass)}
+            <div
+              className="flex flex-col items-end tabular-nums"
               data-testid={testId ? `${testId}-pnl` : undefined}
             >
-              <VoxText text={pnlText} />
-              <InfoHint term="pnl" side="top" className="h-3 w-3" />
-            </span>
+              <span className="inline-flex items-center gap-0.5 text-[10px] leading-none text-muted-foreground">
+                P&L
+                <InfoHint term="pnl" side="top" className="h-3 w-3" />
+              </span>
+              <span className={cn("text-xs font-semibold font-mono leading-tight", pnlClass)}>
+                <VoxText text={pnlText} />
+              </span>
+            </div>
           )}
           {showStake && (
             <div className="flex flex-col items-end tabular-nums">

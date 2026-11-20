@@ -22,6 +22,7 @@ import {
 import { CURRENCY, formatVox, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
 import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
+import { InfoHint } from "@/components/InfoHint";
 
 
 
@@ -238,8 +239,9 @@ export function CashOutSheet({
             </div>
             <p className="text-sm font-semibold">
               <span className={sideToneClass}>{selection.sideLabel}</span>
-              <span className="text-muted-foreground font-normal">
+              <span className="inline-flex items-center gap-1 text-muted-foreground font-normal">
                 {" "}· {netShares.toFixed(2)} shares
+                <InfoHint term="shares" side="top" className="h-3 w-3" />
               </span>
             </p>
             <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-border/40">
@@ -258,7 +260,10 @@ export function CashOutSheet({
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">P&L</p>
+                <p className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  P&L
+                  <InfoHint term="pnl" side="top" className="h-3 w-3" />
+                </p>
                 <p
                   className={`font-mono font-semibold ${
                     unrealisedPnl != null ? pnlClass(unrealisedPnl) : ""

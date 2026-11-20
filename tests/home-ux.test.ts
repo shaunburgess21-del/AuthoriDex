@@ -22,7 +22,13 @@ import {
   readPublicCache,
   writePublicCache,
 } from "../server/services/public-response-cache";
-import { TOAST_TOP_OFFSET, TOAST_Z_INDEX } from "../client/src/lib/toastPlacement";
+import {
+  TOAST_TOP_MIN_CLEARANCE_PX,
+  TOAST_TOP_OFFSET,
+  TOAST_Z_INDEX,
+  DIALOG_Z_INDEX,
+  clearanceBelowSticky,
+} from "../client/src/lib/toastPlacement";
 
 const PRODUCTION_REGISTRY = [
   { id: "tech", label: "Tech", sortOrder: 10 },
@@ -130,8 +136,15 @@ describe("public leaderboard cache", () => {
 });
 
 describe("toast placement", () => {
-  it("sits below the header and under dialogs", () => {
+  it("clears sticky chrome and stays under dialogs", () => {
     assert.equal(TOAST_TOP_OFFSET, "4.75rem");
-    assert.ok(TOAST_Z_INDEX < 50);
+    assert.equal(TOAST_TOP_MIN_CLEARANCE_PX, 76);
+    assert.ok(TOAST_Z_INDEX > 50);
+    assert.ok(TOAST_Z_INDEX < DIALOG_Z_INDEX);
+    const header = { top: 49, bottom: 114, height: 65 };
+    const band = { top: 114, bottom: 177, height: 63 };
+    const lowerCard = { top: 420, bottom: 500, height: 80 };
+    assert.equal(clearanceBelowSticky([header, band, lowerCard]), 177);
+    assert.equal(clearanceBelowSticky([]), 0);
   });
 });

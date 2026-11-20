@@ -200,6 +200,7 @@ import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
 import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
 import { InfoHint } from "@/components/InfoHint";
+import { GlossaryLegend, SHARES_AND_PNL_TERMS } from "@/components/GlossaryLegend";
 
 
 type SnapOpenSource = "browse-button" | "header-icon";
@@ -3867,6 +3868,13 @@ export default function PredictPage() {
                   <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" aria-hidden />
                 </div>
               </button>
+              {!townSquareCollapsed && (
+                <GlossaryLegend
+                  terms={SHARES_AND_PNL_TERMS}
+                  testId="town-square-glossary"
+                  className="mt-2 pl-12"
+                />
+              )}
               <div
                 id="town-square-feed"
                 data-testid="town-square-feed"

@@ -82,13 +82,16 @@ test("Vox text splits the brand glyph and the won-sign fallback into a mark", ()
   assert.equal(textHasVoxMark("\uA75E100"), true);
 });
 
-test("the Vox mark is an inline SVG with no external font or image", () => {
+test("the Vox mark is an inline SVG with one bar, not a won-sign double stroke", () => {
   const source = readFileSync(new URL("../client/src/components/VoxMark.tsx", import.meta.url), "utf8");
   assert.match(source, /<svg/);
   assert.match(source, /currentColor/);
   assert.equal(source.includes("http"), false);
   assert.equal(source.includes("<img"), false);
   assert.match(source, /h-\[0\.9em\]/);
+  assert.equal(source.includes("stroke="), false);
+  const bars = source.match(/H[\d.]+V[\d.]+H[\d.]+/g) ?? [];
+  assert.equal(bars.length, 1);
 });
 
 test("client UI source does not paint the raw Vox glyph or a won sign", () => {

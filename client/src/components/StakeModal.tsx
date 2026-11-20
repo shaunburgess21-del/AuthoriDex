@@ -29,6 +29,7 @@ import { CURRENCY, formatVox, formatVoxPrice, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
+import { InfoHint } from "@/components/InfoHint";
 
 
 
@@ -924,8 +925,11 @@ export function StakeModal({
                 </div>
 
                 {hasBuyQuote && ammBuyQuote && (
-                  <p className="text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
-                    {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
+                  <p className="flex flex-wrap items-center gap-1 text-[11px] font-mono text-muted-foreground border-t border-violet-500/15 pt-1.5">
+                    <span>
+                      {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
+                    </span>
+                    <InfoHint term="shares" side="top" className="h-3 w-3" />
                     <span className="text-muted-foreground/70">
                       {" · Avg price "}
                       <VoxText text={formatVoxPrice(ammBuyQuote.pricePerShareAvg, 3)} />/share

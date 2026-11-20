@@ -2830,8 +2830,8 @@ export default function VotePage() {
               </div>
               <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0" reserveStartPadding={false}>
                 {SECTION_TOGGLES.map((section) => (
+                  <span key={section} className="inline-flex items-center gap-1 shrink-0">
                   <button
-                    key={section}
                     onClick={() => setActiveSection(section)}
                     className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       activeSection === section
@@ -2856,6 +2856,13 @@ export default function VotePage() {
                       section
                     )}
                   </button>
+                    {section === "Induction Queue" && (
+                      <InfoHint term="inductionQueue" side="bottom" className="h-3 w-3" />
+                    )}
+                    {section === "Curate Profile" && (
+                      <InfoHint term="curateProfile" side="bottom" className="h-3 w-3" />
+                    )}
+                  </span>
                 ))}
               </ScrollMaskedChipRow>
             </div>
@@ -3187,6 +3194,7 @@ export default function VotePage() {
         <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
             title="Overall Rating"
+            titleAddon={<InfoHint term="approval" side="bottom" align="start" />}
             subtitle="Community approval rating"
             icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"

@@ -141,7 +141,7 @@ export function SignupReasonModal({
         <DialogOverlay className="bg-black/50 backdrop-blur-md" />
         <DialogPrimitive.Content
           className={cn(
-            "fixed left-[50%] top-[50%] z-50 flex w-[calc(100%-2rem)] max-w-md max-h-[85vh] translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-2xl border bg-card shadow-xl",
+            "fixed left-[50%] top-[50%] z-[70] flex w-[calc(100%-2rem)] max-w-md max-h-[85vh] translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-2xl border bg-card shadow-xl",
             "duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
