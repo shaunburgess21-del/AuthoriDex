@@ -43,6 +43,12 @@ import {
   DELETED_AUTHOR_LABEL,
   presentPublicAuthor,
 } from "../services/account-deletion-utils";
+import {
+  invalidateVoicesFeedCache,
+  readVoicesFeedCache,
+  voicesFeedCacheSignature,
+  writeVoicesFeedCache,
+} from "../services/voices/feed-cache";
 
 const VOICES_POST_MAX_LENGTH = 5000;
 const DELETED_USER = DELETED_AUTHOR_LABEL;
@@ -90,31 +96,6 @@ interface ReplyDTO {
   parentVoteLabel: null;
 }
 
-// ── Short-TTL ranked-list cache for stable cursor pagination ──────────────────
-interface CachedFeed {
-  items: VoicesFeedItem[];
-  expires: number;
-}
-const FEED_CACHE = new Map<string, CachedFeed>();
-const FEED_CACHE_TTL_MS = 60_000;
-const FEED_CACHE_MAX_ENTRIES = 200;
-
-function feedSignature(opts: {
-  mode: VoicesFeedMode;
-  surfaces: VoicesSurface[] | null;
-  personIds: string[] | null;
-  categories: string[] | null;
-  userId: string | null;
-}): string {
-  return JSON.stringify({
-    m: opts.mode,
-    s: opts.surfaces ? [...opts.surfaces].sort() : null,
-    p: opts.personIds ? [...opts.personIds].sort() : null,
-    c: opts.categories ? [...opts.categories].sort() : null,
-    u: opts.userId ?? null,
-  });
-}
-
 async function getRankedList(opts: {
   mode: VoicesFeedMode;
   surfaces: VoicesSurface[] | null;
@@ -122,21 +103,12 @@ async function getRankedList(opts: {
   categories: string[] | null;
   userId: string | null;
 }): Promise<VoicesFeedItem[]> {
-  const sig = feedSignature(opts);
-  const now = Date.now();
-  const cached = FEED_CACHE.get(sig);
-  if (cached && cached.expires > now) return cached.items;
+  const sig = voicesFeedCacheSignature(opts);
+  const cached = readVoicesFeedCache(sig);
+  if (cached) return cached;
 
   const items = await rankCandidates(opts);
-  if (FEED_CACHE.size >= FEED_CACHE_MAX_ENTRIES) {
-    // Cheap eviction: drop the oldest-expiring entries.
-    const sorted = [...FEED_CACHE.entries()].sort((a, b) => a[1].expires - b[1].expires);
-    for (let i = 0; i < Math.ceil(FEED_CACHE_MAX_ENTRIES / 4); i++) {
-      const entry = sorted[i];
-      if (entry) FEED_CACHE.delete(entry[0]);
-    }
-  }
-  FEED_CACHE.set(sig, { items, expires: now + FEED_CACHE_TTL_MS });
+  writeVoicesFeedCache(sig, items);
   return items;
 }
 
@@ -413,8 +385,10 @@ async function buildCommentFeedItem(
   const replies = await loadThreadReplies(row.id, null);
   const isTopLevelProfilePost =
     row.parentType === "community_insight" && (row.parentCommentId ?? null) === null;
-  const isHidden =
-    Boolean(row.deletedAt) || row.moderationStatus === "hidden";
+  const isDeleted = Boolean(row.deletedAt);
+  const authorCanSeeHold =
+    row.moderationStatus === "hidden" && !isDeleted && userId != null && userId === row.userId;
+  const isHidden = isDeleted || (row.moderationStatus === "hidden" && !authorCanSeeHold);
   const labels = isHidden
     ? null
     : await getVoteLabelsForItems([{
@@ -442,6 +416,7 @@ async function buildCommentFeedItem(
     entity,
     badges: { topTake: false, rising: false },
     score: 0,
+    ...(authorCanSeeHold ? { pendingReview: true as const } : {}),
     userVote: null,
     parentVoteLabel: labels?.get(row.id) ?? null,
   };
@@ -461,7 +436,7 @@ export function registerVoicesRoutes(app: Express): void {
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(Math.floor(limitRaw), 50)) : 20;
 
       const opts = { mode, surfaces, personIds, categories, userId: req.userId ?? null };
-      const sig = feedSignature(opts);
+      const sig = voicesFeedCacheSignature(opts);
 
       let offset = 0;
       const cursorRaw = typeof req.query.cursor === "string" ? req.query.cursor : null;
@@ -554,7 +529,8 @@ export function registerVoicesRoutes(app: Express): void {
           parentType: "community_insight",
           parentId: person.id,
         });
-        const publicBody = modStatus === "hidden" ? "" : body;
+        invalidateVoicesFeedCache();
+        const pendingReview = modStatus === "hidden";
 
         if (modStatus === "visible") {
           try {
@@ -594,10 +570,9 @@ export function registerVoicesRoutes(app: Express): void {
           });
         }
 
-        const labelMap =
-          modStatus === "hidden"
-            ? null
-            : await getVoteLabelsForItems([{
+        const labelMap = pendingReview
+          ? null
+          : await getVoteLabelsForItems([{
                 id: newComment.id,
                 userId,
                 parentType: "community_insight",
@@ -611,12 +586,12 @@ export function registerVoicesRoutes(app: Express): void {
                 source: "insight",
                 parentType: "community_insight",
                 parentId: person.id,
-                body: publicBody,
+                body,
                 author: {
                   userId,
-                  username: modStatus === "hidden" ? DELETED_USER : (author?.username ?? null),
-                  avatarUrl: modStatus === "hidden" ? null : (author?.avatarUrl ?? null),
-                  rank: modStatus === "hidden" ? null : (author?.rank ?? null),
+                  username: author?.username ?? null,
+                  avatarUrl: author?.avatarUrl ?? null,
+                  rank: author?.rank ?? null,
                 },
                 upvotes: 0,
                 downvotes: 0,
@@ -625,6 +600,7 @@ export function registerVoicesRoutes(app: Express): void {
                 entity,
                 badges: { topTake: false, rising: false },
                 score: 0,
+                ...(pendingReview ? { pendingReview: true as const } : {}),
                 userVote: null,
                 parentVoteLabel: labelMap?.get(newComment.id) ?? null,
               } satisfies VoicesFeedItem)
@@ -650,6 +626,7 @@ export function registerVoicesRoutes(app: Express): void {
           parentType: cardType,
           parentId: resolvedParentId,
         });
+        invalidateVoicesFeedCache();
 
         const [author] = await db
           .select({ username: profiles.username })
@@ -689,6 +666,7 @@ export function registerVoicesRoutes(app: Express): void {
         parentType: "voices_post",
         parentId: VOICES_TIMELINE_ID,
       });
+      invalidateVoicesFeedCache();
 
       const [author] = await db
         .select({ username: profiles.username })

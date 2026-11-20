@@ -218,6 +218,11 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                     {postDeleted ? "[deleted user]" : item.author.username || "Anonymous"}
                   </span>
                   <span className="text-sm text-muted-foreground">{formatTimeAgo(item.createdAt)}</span>
+                  {item.pendingReview && (
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Pending review — only you can see this until it is approved
+                    </span>
+                  )}
                   {!postDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
                 </div>
                 {!postDeleted && (

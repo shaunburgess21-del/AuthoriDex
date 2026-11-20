@@ -1,4 +1,4 @@
-import { useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/queryClient";
 import type { VoicesFeedMode, VoicesFeedResponse, VoicesFilters } from "./types";
 
@@ -50,7 +50,13 @@ export function useVoicesFeed({ mode, filters }: UseVoicesFeedArgs) {
     },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    placeholderData: keepPreviousData,
+    // Keep the previous page while filters change, but not across For You /
+    // Latest / Top — otherwise Latest renders the For You list until its
+    // request returns and the two tabs look identical.
+    placeholderData: (previousData, previousQuery) => {
+      if (previousQuery?.queryKey?.[1] !== mode) return undefined;
+      return previousData;
+    },
     staleTime: 30_000,
   });
 }

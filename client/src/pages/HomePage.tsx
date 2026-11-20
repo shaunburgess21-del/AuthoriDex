@@ -1196,10 +1196,11 @@ export default function HomePage() {
                         )}
                       </div>
                     )}
-                    {displayPeople.map((person) => (
+                    {displayPeople.map((person, index) => (
                       <LeaderboardRow
                         key={person.id}
                         person={person}
+                        listIndex={index}
                         activeTab="fame"
                         isHotMover={hotMoverIds.has(person.id)}
                         onOpenInsight={() => openInsightFromTrendingPerson(person)}

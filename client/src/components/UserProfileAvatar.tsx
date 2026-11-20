@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   getAvatarInitials,
   getAvatarGradient,
   HUMAN_AVATAR_FALLBACK_CLASS,
 } from "@/lib/avatar";
+import { imageRevealStatus } from "@/lib/imageReveal";
 import { cn } from "@/lib/utils";
 
 type UserProfileAvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
@@ -58,16 +59,20 @@ export function UserProfileAvatar({
   const gradient = getAvatarGradient(name);
   const initials = getAvatarInitials(name);
 
+  const imgRef = useRef<HTMLImageElement>(null);
   const [remoteStatus, setRemoteStatus] = useState<RemoteImageStatus>(() =>
     avatarUrl ? "loading" : "idle",
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!avatarUrl) {
       setRemoteStatus("idle");
       return;
     }
-    setRemoteStatus("loading");
+    const status = imageRevealStatus(imgRef.current);
+    if (status === "loaded") setRemoteStatus("loaded");
+    else if (status === "error") setRemoteStatus("error");
+    else setRemoteStatus("loading");
   }, [avatarUrl]);
 
   const initialsEl = (
@@ -111,6 +116,7 @@ export function UserProfileAvatar({
         />
       )}
       <img
+        ref={imgRef}
         key={avatarUrl}
         src={avatarUrl}
         alt={name || "User avatar"}

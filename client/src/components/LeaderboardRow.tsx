@@ -11,6 +11,10 @@ import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import {
+  LEADERBOARD_AVATAR_IMAGE_WIDTH,
+  leaderboardAvatarPriority,
+} from "@/lib/leaderboardImageLoading";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -42,6 +46,8 @@ interface LeaderboardRowProps {
   isHotMover?: boolean;
   onOpenInsight: () => void;
   onVoteClick?: () => void;
+  /** Zero-based position in the visible leaderboard. Drives photo priority. */
+  listIndex?: number;
 }
 
 const EVER_VOTED_KEY = "authoridex-has-ever-voted";
@@ -243,6 +249,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
   isHotMover = false,
   onOpenInsight,
   onVoteClick,
+  listIndex,
 }: LeaderboardRowProps) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -423,6 +430,8 @@ export const LeaderboardRow = memo(function LeaderboardRow({
             avatar={person.avatar}
             imageSlug={(person as any).imageSlug}
             size="md"
+            imagePriority={listIndex == null ? "lazy" : leaderboardAvatarPriority(listIndex)}
+            imageWidth={LEADERBOARD_AVATAR_IMAGE_WIDTH}
             className="h-12 w-12 lg:h-[58px] lg:w-[58px] rounded-none rounded-r-md"
           />
         </div>

@@ -1421,6 +1421,7 @@ export default function PersonDetailPage() {
               imageSlug={person.imageSlug}
               imageContext="expanded"
               size="xl"
+              imagePriority="high"
               onExpand={(url) => setExpandedProfileImage(url)}
             />
             <div className="flex-1 flex flex-col justify-between min-h-[5rem]">
