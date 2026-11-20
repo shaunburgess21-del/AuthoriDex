@@ -36,9 +36,11 @@ export function isGloballyVisible(
 }
 
 /**
- * Whether a card should be shown to a viewer based on country of residence.
+ * Whether a card should be shown in a feed based on the viewer's country.
  * - Empty allowlist → everyone
- * - Non-empty allowlist → only matching residence; missing residence → hidden
+ * - Non-empty allowlist → only a matching country; missing country → hidden
+ *
+ * Direct card reads do not use this. A shared link resolves either way.
  */
 export function isCardVisibleToUser(
   visibleCountries: string[] | null | undefined,
@@ -48,4 +50,20 @@ export function isCardVisibleToUser(
   if (!userResidence) return false;
   const residence = userResidence.trim().toUpperCase();
   return visibleCountries!.some((c) => c.toUpperCase() === residence);
+}
+
+export type VoteCardReadScope = "feed" | "direct";
+
+/**
+ * Country targeting filters feeds, lists, and discovery. A direct read
+ * (slug or id) is never hidden. Staff bypass skips the feed filter too.
+ */
+export function isVoteCardHiddenFromViewer(
+  scope: VoteCardReadScope,
+  visibleCountries: string[] | null | undefined,
+  viewerCountry: string | null | undefined,
+  bypass = false,
+): boolean {
+  if (scope === "direct" || bypass) return false;
+  return !isCardVisibleToUser(visibleCountries, viewerCountry);
 }

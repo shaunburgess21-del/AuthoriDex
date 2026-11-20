@@ -231,6 +231,7 @@ import {
   isMarketGeoHidden,
   GeoNotEligibleError,
   GeoNotFoundError,
+  VOTE_CARD_GEO,
 } from "./lib/geoVisibility";
 import {
   isCardVisibleToUser,
@@ -6522,7 +6523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Public API: Only show live and inactive matchups (not draft/hidden/archived)
       matchupList = matchupList.filter(f => f.visibility === 'live' || f.visibility === 'inactive');
 
-      const geo = await resolveUserGeoContext(req);
+      const geo = await resolveUserGeoContext(req, VOTE_CARD_GEO);
       if (!geo.bypass) {
         matchupList = matchupList.filter((m) =>
           isCardVisibleToUser(m.visibleCountries, geo.residence),
@@ -6667,25 +6668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/matchups/by-slug/:slug", optionalAuth, async (req, res) => {
     try {
       const { slug } = req.params;
-      const authReq = req as AuthRequest;
 
       const matchup = await resolvePublicMatchupBySlugOrId(slug);
       if (!matchup) {
         return res.status(404).json({ error: "Matchup not found" });
       }
 
-      const geo = await resolveUserGeoContext(authReq);
-      if (!geo.bypass) {
-        try {
-          assertCardVisibleForRead(matchup.visibleCountries, geo.residence);
-        } catch (e) {
-          if (e instanceof GeoNotFoundError) {
-            return res.status(404).json({ error: "Matchup not found" });
-          }
-          throw e;
-        }
-      }
-
+      // Shared links always resolve. Country targeting filters the feed only.
       const celebrities = await db.select({
         id: trackedPeople.id,
         name: trackedPeople.name,
@@ -6828,7 +6817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Matchup not found" });
       }
 
-      const geo = await resolveUserGeoContext(req);
+      const geo = await resolveUserGeoContext(req, VOTE_CARD_GEO);
       if (!geo.bypass) {
         try {
           assertCardVisibleForAction(matchup.visibleCountries, geo.residence);
@@ -16051,7 +16040,7 @@ Target length: about 90-150 words.`;
   app.get("/api/trending-polls", optionalAuth, async (req, res) => {
     try {
       const userId = (req as AuthRequest).userId || null;
-      const geo = await resolveUserGeoContext(req as AuthRequest);
+      const geo = await resolveUserGeoContext(req as AuthRequest, VOTE_CARD_GEO);
 
       const orderTerms = await orderRecencyForUser(
         req as AuthRequest,
@@ -16235,18 +16224,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Poll not found" });
       }
 
-      const geo = await resolveUserGeoContext(authReq);
-      if (!geo.bypass) {
-        try {
-          assertCardVisibleForRead(poll.visibleCountries, geo.residence);
-        } catch (e) {
-          if (e instanceof GeoNotFoundError) {
-            return res.status(404).json({ error: "Poll not found" });
-          }
-          throw e;
-        }
-      }
-
+      // Shared links always resolve. Country targeting filters the feed only.
       const realVotes = await db
         .select({
           choice: trendingPollVotes.choice,
@@ -16334,7 +16312,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Poll not found" });
       }
 
-      const geo = await resolveUserGeoContext(req);
+      const geo = await resolveUserGeoContext(req, VOTE_CARD_GEO);
       if (!geo.bypass) {
         try {
           assertCardVisibleForAction(poll.visibleCountries, geo.residence);
@@ -17241,7 +17219,7 @@ Target length: about 90-150 words.`;
       // of paying for a duplicate Supabase getUser() round-trip.
       const userId = (req as AuthRequest).userId ?? null;
       const opinionVoterId = userId || (req as AuthRequest).sessionId || null;
-      const geo = await resolveUserGeoContext(req as AuthRequest);
+      const geo = await resolveUserGeoContext(req as AuthRequest, VOTE_CARD_GEO);
 
       const orderTerms = await orderRecencyForUser(
         req as AuthRequest,
@@ -17393,18 +17371,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Opinion poll not found" });
       }
 
-      const geo = await resolveUserGeoContext(authReq);
-      if (!geo.bypass) {
-        try {
-          assertCardVisibleForRead(poll.visibleCountries, geo.residence);
-        } catch (e) {
-          if (e instanceof GeoNotFoundError) {
-            return res.status(404).json({ error: "Opinion poll not found" });
-          }
-          throw e;
-        }
-      }
-
+      // Shared links always resolve. Country targeting filters the feed only.
       const options = await db
         .select({
           id: opinionPollOptions.id,
@@ -17509,7 +17476,7 @@ Target length: about 90-150 words.`;
         return res.status(404).json({ error: "Poll not found" });
       }
 
-      const geo = await resolveUserGeoContext(req);
+      const geo = await resolveUserGeoContext(req, VOTE_CARD_GEO);
       if (!geo.bypass) {
         try {
           assertCardVisibleForAction(poll.visibleCountries, geo.residence);

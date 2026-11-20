@@ -2,6 +2,11 @@ import { eq, sql, type SQL, type AnyColumn } from "drizzle-orm";
 import { db } from "../db";
 import { profiles } from "@shared/schema";
 import { isCardVisibleToUser, isGloballyVisible } from "@shared/geoVisibility";
+import {
+  normalizeStoredResidence,
+  pickViewerCountry,
+  readIpCountry,
+} from "@shared/viewerCountry";
 import type { AuthRequest } from "../auth-middleware";
 import { isStaffRole } from "../utils/authz";
 
@@ -10,11 +15,21 @@ export interface UserGeoContext {
   bypass: boolean;
 }
 
+/**
+ * Vote cards (matchups, sentiment polls, opinion polls) pass this so an
+ * anonymous viewer, or a signed-in user with no residence, is filtered by
+ * the request IP country. Prediction markets stay residence-only.
+ */
+export const VOTE_CARD_GEO = { ipFallback: true } as const;
+
 export function shouldBypassGeoFilter(req: AuthRequest): boolean {
   return isStaffRole(req.userRole);
 }
 
-type GeoCacheBag = AuthRequest & { __geoContext?: UserGeoContext };
+type GeoCacheBag = AuthRequest & {
+  __geoContext?: UserGeoContext;
+  __geoContextIp?: UserGeoContext;
+};
 
 export class GeoNotEligibleError extends Error {
   readonly code = "geo_not_eligible" as const;
@@ -33,34 +48,42 @@ export class GeoNotFoundError extends Error {
 }
 
 /**
- * Resolve viewer country of residence for the current request.
+ * Resolve the viewer's country for the current request.
  * Memoised on the request object (same pattern as resolveBlendState).
+ *
+ * Residence is the signed-in `countryOfResidence` when it is set. With
+ * `ipFallback`, an anonymous viewer or an account with no residence uses
+ * the hosting geo header instead. Staff bypass is unchanged: callers skip
+ * the filter when `bypass` is true.
  */
-export async function resolveUserGeoContext(req: AuthRequest): Promise<UserGeoContext> {
+export async function resolveUserGeoContext(
+  req: AuthRequest,
+  options?: { ipFallback?: boolean },
+): Promise<UserGeoContext> {
   const bag = req as GeoCacheBag;
-  if (bag.__geoContext) return bag.__geoContext;
+  const ipFallback = options?.ipFallback === true;
+  const cached = ipFallback ? bag.__geoContextIp : bag.__geoContext;
+  if (cached) return cached;
 
   const bypass = shouldBypassGeoFilter(req);
+  let residence: string | null = null;
   const userId = req.userId;
-  if (!userId) {
-    const ctx: UserGeoContext = { residence: null, bypass };
-    bag.__geoContext = ctx;
-    return ctx;
+  if (userId) {
+    const [row] = await db
+      .select({ countryOfResidence: profiles.countryOfResidence })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+    residence = normalizeStoredResidence(row?.countryOfResidence);
   }
 
-  const [row] = await db
-    .select({ countryOfResidence: profiles.countryOfResidence })
-    .from(profiles)
-    .where(eq(profiles.id, userId))
-    .limit(1);
-
-  const residence =
-    row?.countryOfResidence && typeof row.countryOfResidence === "string"
-      ? row.countryOfResidence.trim().toUpperCase()
-      : null;
+  if (ipFallback) {
+    residence = pickViewerCountry(residence, readIpCountry(req.headers));
+  }
 
   const ctx: UserGeoContext = { residence, bypass };
-  bag.__geoContext = ctx;
+  if (ipFallback) bag.__geoContextIp = ctx;
+  else bag.__geoContext = ctx;
   return ctx;
 }
 

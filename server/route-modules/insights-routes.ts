@@ -8,6 +8,7 @@ import {
 } from "@shared/insights/filters";
 import type { InsightsDivergenceType } from "@shared/insights/types";
 import { optionalAuth, type AuthRequest } from "../auth-middleware";
+import { resolveUserGeoContext, VOTE_CARD_GEO } from "../lib/geoVisibility";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { insightsEvents, userFavourites } from "@shared/schema";
@@ -229,9 +230,13 @@ export function registerInsightsRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/insights/vote/top", async (_req, res) => {
+  app.get("/api/insights/vote/top", async (req, res) => {
     try {
-      const data = await loadTopVoted();
+      const geo = await resolveUserGeoContext(req as AuthRequest, VOTE_CARD_GEO);
+      const data = await loadTopVoted(5, {
+        country: geo.residence,
+        bypass: geo.bypass,
+      });
       res.json({ data });
     } catch (error) {
       console.error("[insights] vote top", error);
