@@ -19,6 +19,10 @@ import { ShareCardProvider } from "@/contexts/ShareCardContext";
 import { ReferralModalProvider } from "@/components/referral/ReferralModalProvider";
 import { ReferralPromptGate } from "@/components/referral/ReferralPromptGate";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SiteHeader } from "@/components/SiteHeader";
+import { LeaderboardRowSkeleton } from "@/components/ui/card-skeletons";
+import { AnonFirstVoteNudge } from "@/components/AnonFirstVoteNudge";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
 import { useNotificationsRealtime } from "@/hooks/useNotificationsRealtime";
 import { RANK_UP_EVENT, type RankUpPayload } from "@/lib/rank-up-events";
@@ -102,6 +106,17 @@ const RankUpModal = lazyWithRetry(() =>
 );
 
 function PageFallback() {
+  const [location] = useLocation();
+  if (location === "/" || location === "") {
+    return (
+      <div className="min-h-screen pb-20">
+        <SiteHeader active="home" backButton="none" />
+        <div className="container mx-auto max-w-7xl px-2 pt-4 sm:px-4">
+          <LeaderboardRowSkeleton count={8} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
       <Skeleton className="h-8 w-48 rounded-lg" />
@@ -109,6 +124,39 @@ function PageFallback() {
       <Skeleton className="h-64 w-full max-w-md rounded-xl" />
     </div>
   );
+}
+
+/** Warm Top Predictors after the home board has had a chance to paint. */
+function WarmTopPredictors() {
+  useEffect(() => {
+    const run = () => {
+      void import("@/pages/UserLeaderboardPage");
+      void queryClient.prefetchQuery({
+        queryKey: ["/api/leaderboard/users", "all", ""],
+        staleTime: 30_000,
+        queryFn: async () => {
+          const headers = await getAuthHeaders();
+          const res = await fetch("/api/leaderboard/users?period=all&page=0&limit=25", {
+            credentials: "include",
+            headers,
+          });
+          if (!res.ok) throw new Error("Failed to prefetch predictors");
+          return res.json();
+        },
+      });
+    };
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (win.requestIdleCallback) {
+      const id = win.requestIdleCallback(run, { timeout: 2500 });
+      return () => win.cancelIdleCallback?.(id);
+    }
+    const timer = window.setTimeout(run, 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return null;
 }
 
 function Router() {
@@ -470,6 +518,8 @@ function App() {
                   <ShareCardProvider>
                     <SiteBanner />
                     <OfflineBanner />
+                    <AnonFirstVoteNudge />
+                    <WarmTopPredictors />
                     <div className="min-h-0 pt-[calc(var(--site-banner-height,0px)+var(--offline-banner-height,0px))]">
                       <ErrorBoundary>
                         <Router />

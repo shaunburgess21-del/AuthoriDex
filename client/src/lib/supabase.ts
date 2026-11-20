@@ -1,8 +1,13 @@
 import { Capacitor } from '@capacitor/core';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_AUTH_STORAGE_KEY } from "./authSession";
 
 /** Persisted session key. PKCE verifier is `${key}-code-verifier`. */
-export const SUPABASE_AUTH_STORAGE_KEY = 'authoridex-auth';
+export {
+  SUPABASE_AUTH_STORAGE_KEY,
+  hasPersistedAuthSession,
+  sessionJsonHasAccessToken,
+} from "./authSession";
 
 let supabasePromise: Promise<SupabaseClient> | null = null;
 

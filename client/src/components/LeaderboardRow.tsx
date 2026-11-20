@@ -12,6 +12,10 @@ import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { InfoHint } from "@/components/InfoHint";
+import {
+  LEADERBOARD_AVATAR_IMAGE_WIDTH,
+  leaderboardAvatarPriority,
+} from "@/lib/leaderboardImageLoading";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -43,6 +47,8 @@ interface LeaderboardRowProps {
   isHotMover?: boolean;
   onOpenInsight: () => void;
   onVoteClick?: () => void;
+  /** Zero-based position in the visible leaderboard. Drives photo priority. */
+  listIndex?: number;
 }
 
 const EVER_VOTED_KEY = "authoridex-has-ever-voted";
@@ -143,7 +149,7 @@ function LeaderboardYourVoteCell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="w-[88px] shrink-0 flex justify-end">
+    <div className="w-[4.75rem] sm:w-[88px] shrink-0 flex justify-end" data-rate-control>
       {hasVoted && sentimentScore != null ? (
         <Popover modal open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -244,6 +250,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
   isHotMover = false,
   onOpenInsight,
   onVoteClick,
+  listIndex,
 }: LeaderboardRowProps) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -392,7 +399,10 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         tabIndex={0}
         aria-label={`View insights for ${person.name}`}
         className={`lb-row-enter lb-row-card ${rowVariantClass} flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
-        onClick={onOpenInsight}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest?.("[data-rate-control], button, a")) return;
+          onOpenInsight();
+        }}
         // No-op touch handler: iOS Safari only applies :active (the press
         // glow/expand in .lb-row-card) to non-form elements that have a touch
         // listener attached.
@@ -424,6 +434,8 @@ export const LeaderboardRow = memo(function LeaderboardRow({
             avatar={person.avatar}
             imageSlug={(person as any).imageSlug}
             size="md"
+            imagePriority={listIndex == null ? "lazy" : leaderboardAvatarPriority(listIndex)}
+            imageWidth={LEADERBOARD_AVATAR_IMAGE_WIDTH}
             className="h-12 w-12 lg:h-[58px] lg:w-[58px] rounded-none rounded-r-md"
           />
         </div>
@@ -548,7 +560,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
                 </span>
               </TouchTooltip>
             </div>
-            <div className="hidden md:flex">
+            <div className="flex">
               <LeaderboardYourVoteCell
                 person={person}
                 sentimentScore={sentimentScore}

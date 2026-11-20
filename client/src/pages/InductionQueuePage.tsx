@@ -12,6 +12,11 @@ import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { writeVoteHubReturnState } from "@/lib/voteListNavigation";
 import { searchByName } from "@/lib/inductionSearch";
+import {
+  INDUCTION_VOTES_QUERY_KEY,
+  mergeInductionVotedIds,
+  stageInductionVote,
+} from "@/lib/inductionVotedState";
 import { hapticSuccess } from "@/lib/haptic";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -53,7 +58,7 @@ type TrendingResponse = { data: LeaderboardMatch[] } | LeaderboardMatch[];
 export default function InductionQueuePage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, user } = useAuth();
   const { trigger: triggerXpBurst } = useXpBurst();
   const budget = useAnonBudget();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +72,8 @@ export default function InductionQueuePage() {
   const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES);
   const [gridCount, setGridCount] = useState(INITIAL_GRID_COUNT);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+  const [pendingVoteIds, setPendingVoteIds] = useState<Set<string>>(() => new Set());
+  const inductionAuthUserRef = useRef<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestPrefillName, setSuggestPrefillName] = useState("");
   // Kept after close (open: false) so the dialog's exit animation still has content.
@@ -98,8 +104,9 @@ export default function InductionQueuePage() {
   });
 
   const { data: myVoteIds } = useQuery<string[]>({
-    queryKey: ["/api/me/induction-votes"],
+    queryKey: INDUCTION_VOTES_QUERY_KEY,
     enabled: isLoggedIn,
+    staleTime: 0,
   });
 
   // Only needed to tell people "they're already on the leaderboard".
@@ -109,13 +116,17 @@ export default function InductionQueuePage() {
     staleTime: 5 * 60_000,
   });
 
+  const inductionAuthUserId = user?.id ?? null;
   useEffect(() => {
-    if (!isLoggedIn) {
-      setVotedIds(new Set());
-      return;
-    }
-    if (myVoteIds) setVotedIds(new Set(myVoteIds));
-  }, [isLoggedIn, myVoteIds]);
+    if (inductionAuthUserRef.current === inductionAuthUserId) return;
+    inductionAuthUserRef.current = inductionAuthUserId;
+    setPendingVoteIds(new Set());
+  }, [inductionAuthUserId]);
+
+  const votedIds = useMemo(
+    () => mergeInductionVotedIds(isLoggedIn ? myVoteIds : undefined, pendingVoteIds),
+    [isLoggedIn, myVoteIds, pendingVoteIds],
+  );
 
   const ranked = useMemo<RankedCandidate[]>(() => {
     if (!inductionData?.data) return [];
@@ -299,11 +310,14 @@ export default function InductionQueuePage() {
     },
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: ["/api/vote/induction"] });
+      await queryClient.cancelQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
+      const previousVotes = stageInductionVote(queryClient, id);
       queryClient.setQueryData<InductionAPIResponse>(["/api/vote/induction"], (prev) =>
         prev
           ? { ...prev, data: prev.data.map((c) => (c.id === id ? { ...c, seedVotes: c.seedVotes + 1 } : c)) }
           : prev,
       );
+      return { previousVotes };
     },
     onSuccess: (data) => {
       hapticSuccess();
@@ -314,12 +328,15 @@ export default function InductionQueuePage() {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
-    onError: (err: any, id: string) => {
-      setVotedIds((prev) => {
+    onError: (err: any, id: string, context) => {
+      setPendingVoteIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
+      if (context && "previousVotes" in context) {
+        queryClient.setQueryData(INDUCTION_VOTES_QUERY_KEY, context.previousVotes);
+      }
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else if (isBudgetExhaustedVoteError(err)) {
@@ -339,7 +356,7 @@ export default function InductionQueuePage() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+      queryClient.invalidateQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
     },
   });
 
@@ -362,7 +379,12 @@ export default function InductionQueuePage() {
       });
       return;
     }
-    setVotedIds((prev) => new Set(prev).add(id));
+    setPendingVoteIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     if (!opts?.silent) {
       showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     }

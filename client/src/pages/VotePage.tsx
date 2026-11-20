@@ -11,6 +11,11 @@ import {
 } from "@/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "@/lib/quickVoteHideVoted";
 import {
+  INDUCTION_VOTES_QUERY_KEY,
+  mergeInductionVotedIds,
+  stageInductionVote,
+} from "@/lib/inductionVotedState";
+import {
   CURATE_VOTED_PERSONS_KEY,
   type CurateVotedPersonsResponse,
 } from "@/lib/curateVotedPeople";
@@ -1026,7 +1031,8 @@ export default function VotePage() {
   const { trigger: triggerXpBurst } = useXpBurst();
   const { vote: voteOnOpinionPoll, removeVote: removeOpinionPollVote } = useOpinionPollVoteMutation();
 
-  const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
+  const [pendingInductionIds, setPendingInductionIds] = useState<Set<string>>(() => new Set());
+  const inductionAuthUserRef = useRef<string | null>(null);
 
   /**
    * Current Vote hub UI state as a serializable snapshot. Read synchronously at click time
@@ -1063,8 +1069,11 @@ export default function VotePage() {
   });
 
   const { data: myInductionVoteIds, isFetched: inductionVotesFetched } = useQuery<string[]>({
-    queryKey: ["/api/me/induction-votes"],
+    queryKey: INDUCTION_VOTES_QUERY_KEY,
     enabled: !!user,
+    // The default 2 minute stale window kept a pre-vote id list on screen
+    // after switching sections. This list is small; always treat it as stale.
+    staleTime: 0,
   });
 
   const { data: curateVotedData, isFetched: curateVotesFetched } = useQuery<CurateVotedPersonsResponse>({
@@ -1082,26 +1091,20 @@ export default function VotePage() {
   // assigned once that queue is created, and the callback only fires later.
   const cancelHideExitRef = useRef<(key: string) => void>(() => {});
 
+  const inductionAuthUserId = user?.id ?? null;
   useEffect(() => {
-    if (!user) {
-      setVotedIds(new Set());
-      return;
-    }
-    if (Array.isArray(myInductionVoteIds)) {
-      setVotedIds(new Set(myInductionVoteIds));
-    }
-  }, [user, myInductionVoteIds]);
+    if (inductionAuthUserRef.current === inductionAuthUserId) return;
+    inductionAuthUserRef.current = inductionAuthUserId;
+    setPendingInductionIds(new Set());
+  }, [inductionAuthUserId]);
 
-  // Server rows plus any optimistic add that has not been refetched yet.
-  // Reading this during render avoids a frame where the filter still thinks
-  // nobody has voted after the query resolves and before the effect copies it.
-  const inductionVotedSet = useMemo(() => {
-    // Signed-out cards only know about votes cast this session (votedIds).
-    if (!user) return votedIds;
-    const merged = new Set(Array.isArray(myInductionVoteIds) ? myInductionVoteIds : []);
-    votedIds.forEach((id) => merged.add(id));
-    return merged;
-  }, [user, myInductionVoteIds, votedIds]);
+  // Server rows plus any optimistic add. Pending ids stay until the
+  // account changes or the vote fails, so a stale refetch cannot paint
+  // the card unvoted when the section remounts.
+  const inductionVotedSet = useMemo(
+    () => mergeInductionVotedIds(user ? myInductionVoteIds : undefined, pendingInductionIds),
+    [user, myInductionVoteIds, pendingInductionIds],
+  );
 
   const budget = useAnonBudget();
 
@@ -1110,25 +1113,33 @@ export default function VotePage() {
       const res = await apiRequest('POST', `/api/vote/induction/${id}/vote`);
       return res.json();
     },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
+      const previous = stageInductionVote(queryClient, id);
+      return { previous };
+    },
     onSuccess: (data) => {
       hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ['/api/vote/induction'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/me/induction-votes'] });
+      queryClient.invalidateQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
-    onError: (err, candidateId) => {
+    onError: (err, candidateId, context) => {
       hapticError();
       cancelHideExitRef.current(`induction:${candidateId}`);
-      setVotedIds((prev) => {
+      setPendingInductionIds((prev) => {
         const next = new Set(prev);
         next.delete(candidateId);
         return next;
       });
+      if (context && "previous" in context) {
+        queryClient.setQueryData(INDUCTION_VOTES_QUERY_KEY, context.previous);
+      }
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation, { voteUi: voteLoginSnapshotRef.current })));
       } else if (isBudgetExhaustedVoteError(err)) {
@@ -2389,10 +2400,11 @@ export default function VotePage() {
       return;
     }
     beginShapeHideExit(`induction:${candidateId}`);
-    setVotedIds(prev => {
-      const newSet = new Set(prev);
-      newSet.add(candidateId);
-      return newSet;
+    setPendingInductionIds((prev) => {
+      if (prev.has(candidateId)) return prev;
+      const next = new Set(prev);
+      next.add(candidateId);
+      return next;
     });
     showVoteToast("induction", "Vote recorded!", { description: "Your Induction Queue vote has been counted." });
     inductionVoteMutation.mutate(candidateId);

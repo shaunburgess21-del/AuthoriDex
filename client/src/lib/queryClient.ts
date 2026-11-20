@@ -1,6 +1,10 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getPublishedReachability, isTransportFailure, transportFailureDescription } from "./networkStatus";
+import { isTransportFailure, transportFailureDescription } from "./networkStatus";
+import { queryRetryDelay, shouldRetryQuery } from "./queryRetry";
 import { getSupabase } from "./supabase";
+import { hasPersistedAuthSession } from "./authSession";
+
+export { queryRetryDelay, shouldRetryQuery };
 
 export class ApiError extends Error {
   status: number;
@@ -93,32 +97,8 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-const MAX_QUERY_RETRIES = 3;
-
-/**
- * Retry transient failures (network, 5xx, 408, 429). Skip retries for typical client errors (4xx except 408/429) and 401/403/404.
- * A confirmed Android offline link does not retry; the reconnect path refetches once.
- */
-export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
-  if (getPublishedReachability() === "offline") return false;
-  if (failureCount >= MAX_QUERY_RETRIES) return false;
-  if (!(error instanceof Error)) return true;
-  const m = error.message;
-  const statusMatch = /^(\d{3}):/.exec(m);
-  if (statusMatch) {
-    const code = parseInt(statusMatch[1], 10);
-    if (code === 401 || code === 403 || code === 404) return false;
-    if (code === 408 || code === 429) return true;
-    if (code >= 400 && code < 500) return false;
-  }
-  return true;
-}
-
-export function queryRetryDelay(attemptIndex: number): number {
-  return Math.min(1000 * 2 ** attemptIndex, 10_000);
-}
-
 export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!hasPersistedAuthSession()) return {};
   try {
     const supabase = await getSupabase();
     const { data: { session } } = await supabase.auth.getSession();
@@ -193,12 +173,13 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  async ({ queryKey, signal }) => {
     const url = queryKey.join("/") as string;
     const authHeaders = await getAuthHeaders();
     const res = await fetch(url, {
       credentials: "include",
       headers: authHeaders,
+      signal,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

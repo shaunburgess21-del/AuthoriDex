@@ -114,6 +114,8 @@ export interface VoicesFeedItem {
   entity: VoicesEntity;
   badges: { topTake: boolean; rising: boolean };
   score: number;
+  /** Author-only. Set when moderation held the post; hidden from everyone else. */
+  pendingReview?: boolean;
   userVote?: "up" | null;
   /** Author's own vote on the parent card (null for timeline posts). */
   parentVoteLabel?: ParentVoteLabel | null;

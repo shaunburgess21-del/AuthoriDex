@@ -66,6 +66,7 @@ import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { INDUCTION_VOTES_QUERY_KEY, stageInductionVote } from "@/lib/inductionVotedState";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -960,8 +961,9 @@ export default function PersonDetailPage() {
   // same endpoint, same induction_votes table, same anon-budget gating).
   const [inductionVotedLocal, setInductionVotedLocal] = useState(false);
   const { data: myInductionVoteIds } = useQuery<string[]>({
-    queryKey: ["/api/me/induction-votes"],
+    queryKey: INDUCTION_VOTES_QUERY_KEY,
     enabled: isInduction && !!user,
+    staleTime: 0,
   });
   const hasVotedToInduct =
     inductionVotedLocal ||
@@ -972,18 +974,26 @@ export default function PersonDetailPage() {
       const res = await apiRequest("POST", `/api/vote/induction/${candidateId}/vote`);
       return res.json();
     },
+    onMutate: async (candidateId: string) => {
+      await queryClient.cancelQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
+      const previous = stageInductionVote(queryClient, candidateId);
+      return { previous };
+    },
     onSuccess: (data) => {
       hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: ["/api/vote/induction"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/me/induction-votes"] });
+      queryClient.invalidateQueries({ queryKey: INDUCTION_VOTES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: [`/api/trending/${params?.id}`] });
       if (data?.xp?.xpAwarded) {
         triggerXpBurst(data.xp.xpAwarded, undefined, data.xp.reason);
       }
     },
-    onError: (err: any, candidateId: string) => {
+    onError: (err: any, candidateId: string, context) => {
       setInductionVotedLocal(false);
+      if (context && "previous" in context) {
+        queryClient.setQueryData(INDUCTION_VOTES_QUERY_KEY, context.previous);
+      }
       if (isUnauthorizedApiError(err)) {
         toast(signInToVoteTitle, signInToVoteToastOptions(() => navigateToLogin(setLocation)));
       } else if (isBudgetExhaustedVoteError(err)) {
@@ -1408,6 +1418,7 @@ export default function PersonDetailPage() {
               imageSlug={person.imageSlug}
               imageContext="expanded"
               size="xl"
+              imagePriority="high"
               onExpand={(url) => setExpandedProfileImage(url)}
             />
             <div className="flex-1 flex flex-col justify-between min-h-[5rem]">

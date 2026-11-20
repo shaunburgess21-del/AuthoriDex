@@ -6,6 +6,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 import { anonIdentityMiddleware } from "./middleware/anonIdentityMiddleware";
+import { isPersonalizedVoteGet } from "./lib/personalVoteCache";
 import { applyNativeCorsHeaders, isNativeAppOrigin } from "./lib/anonIdentity";
 
 import { log, logger, requestIdMiddleware } from "./log";
@@ -589,6 +590,17 @@ app.use("/api/", async (req: AuthRequest, _res, next) => {
 // optionalAuth + the anonymous-vote budget can rely on it without
 // minting on demand. See server/lib/anonIdentity.ts for rationale.
 app.use("/api/", anonIdentityMiddleware);
+
+// Ballot reads include the caller's own vote. Keep them out of any
+// shared or heuristic cache so a new account cannot replay a previous
+// visitor's "already voted" payload.
+app.use("/api/", (req, res, next) => {
+  const path = (req.originalUrl || req.url || "").split("?")[0];
+  if (isPersonalizedVoteGet(req.method, path)) {
+    res.setHeader("Cache-Control", "private, no-store");
+  }
+  next();
+});
 
 const skipRateLimit = (req: Request) => {
   const p = req.path;

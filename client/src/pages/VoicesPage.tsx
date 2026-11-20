@@ -201,12 +201,13 @@ export default function VoicesPage() {
             } />
           ) : (
             <>
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <VoiceCard
                   key={`${item.source}:${item.id}`}
                   item={item}
                   onOpen={setSelected}
                   onVote={handleVote}
+                  imagePriority={index < 3}
                 />
               ))}
               <div ref={sentinelRef} className="flex min-h-10 justify-center py-4">
