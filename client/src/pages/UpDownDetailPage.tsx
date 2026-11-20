@@ -1,3 +1,4 @@
+import { VoxText } from "@/components/VoxText";
 import { lazy, Suspense, useState, useMemo, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ import {
   snapshotFromApi,
 } from "@/lib/ammClient";
 import {
+
   ArrowLeft,
   TrendingUp,
   TrendingDown,
@@ -737,7 +739,7 @@ export default function UpDownDetailPage() {
                   {volText && (
                     <div>
                       <p className="text-sm md:text-base font-bold font-mono text-violet-600 dark:text-violet-400">
-                        {volText}
+                        <VoxText text={volText} />
                       </p>
                       <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
                         Volume
@@ -790,7 +792,7 @@ export default function UpDownDetailPage() {
                       {priceToPercent(upPrice, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {formatVoxPrice(upPrice, 3)} / share
+                      <VoxText text={formatVoxPrice(upPrice, 3)} /> / share
                     </p>
                   </div>
                   <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
@@ -799,7 +801,7 @@ export default function UpDownDetailPage() {
                       {priceToPercent(downPrice, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {formatVoxPrice(downPrice, 3)} / share
+                      <VoxText text={formatVoxPrice(downPrice, 3)} /> / share
                     </p>
                   </div>
                 </div>
@@ -860,7 +862,7 @@ export default function UpDownDetailPage() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold">{label} on {firstName}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                              {pos.netShares.toFixed(2)} shares · avg <VoxText text={formatVoxPrice(pos.avgEntryPrice, 3)} /> · cost <VoxText text={formatVoxPrice(pos.netCreditsIn, 0)} />
                             </p>
                             <p className="text-[11px] text-muted-foreground">
                               Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(sidePrice, 0)}
@@ -875,15 +877,15 @@ export default function UpDownDetailPage() {
                                 the second line ties the resolution back
                                 to the user's pick. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~<VoxText text={formatVoxPrice(pos.currentValue)} />{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                ({formatVoxDelta(unrealisedPnl)})
+                                (<VoxText text={formatVoxDelta(unrealisedPnl)} />)
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {label} wins: {formatVoxPrice(pos.netShares)}{" "}
+                              If {label} wins: <VoxText text={formatVoxPrice(pos.netShares)} />{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({formatVoxDelta(maxProfitIfWin)})
+                                (<VoxText text={formatVoxDelta(maxProfitIfWin)} />)
                               </span>
                             </p>
                           </div>
@@ -902,7 +904,7 @@ export default function UpDownDetailPage() {
                               className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
                             >
                               <Banknote className="h-3.5 w-3.5" />
-                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                              <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
                             </Button>
                             <Button
                               size="sm"
@@ -1129,7 +1131,7 @@ export default function UpDownDetailPage() {
                 <p className="text-sm font-semibold">Open stake on this market</p>
               </div>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {formatVox(Number(userBet.stakeAmount || 0))}
+                <VoxText text={formatVox(Number(userBet.stakeAmount || 0))} />
               </p>
             </div>
           ) : (

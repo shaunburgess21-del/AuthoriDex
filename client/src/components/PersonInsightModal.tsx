@@ -15,6 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { navigateToLogin } from "@/lib/authReturn";
 import { queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
+import { InfoHint } from "@/components/InfoHint";
 
 /**
  * Snapshot-of-a-person modal shown when clicking a leaderboard / mover row.
@@ -432,7 +433,11 @@ function InsightPanelContent({
                     key={signal.label}
                     className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/15 text-green-600 dark:text-green-400"
                   >
-                    {signal.label} {formatPct(signal.deltaPct)}
+                    <span className="inline-flex items-center gap-1">
+                      {signal.label} {formatPct(signal.deltaPct)}
+                      {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
+                      {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -447,7 +452,11 @@ function InsightPanelContent({
                     key={signal.label}
                     className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/15 text-red-600 dark:text-red-400"
                   >
-                    {signal.label} {formatPct(signal.deltaPct)}
+                    <span className="inline-flex items-center gap-1">
+                      {signal.label} {formatPct(signal.deltaPct)}
+                      {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
+                      {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
+                    </span>
                   </span>
                 ))}
               </div>

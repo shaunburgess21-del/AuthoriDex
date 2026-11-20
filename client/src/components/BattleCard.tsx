@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Clock } from "lucide-react";
 import { formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 export interface HeadToHeadBattle {
   id: string;
@@ -67,7 +69,7 @@ export function BattleCard({ battle, compact = false }: BattleCardProps) {
         
         <div className="text-center mb-3">
           <span className="text-sm font-semibold text-primary">
-            Pool: {formatVox(battle.totalPool)}
+            Pool: <VoxText text={formatVox(battle.totalPool)} />
           </span>
         </div>
         

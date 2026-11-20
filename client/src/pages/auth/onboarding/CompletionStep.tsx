@@ -23,6 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { redirectAfterLogin, hasPendingAuthReturnSnapshot } from "@/lib/authReturn";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
 import { formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
 
 interface BadgeRow {
   key: string;
@@ -212,7 +213,7 @@ function RewardRow({ icon, label, value, delay }: RewardRowProps) {
           {label}
         </p>
         <p className="truncate text-lg font-semibold text-foreground">
-          {value}
+          <VoxText text={value} />
         </p>
       </div>
     </motion.div>

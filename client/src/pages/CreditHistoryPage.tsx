@@ -8,6 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCreditHistory } from "@/hooks/useGamification";
 import { bucketForTxnType, labelForTxnType } from "@shared/credit-config";
 import { CURRENCY, formatVox, voxWord } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 /**
  * Per-user Vox history. Mirrors the data shown by the admin
@@ -83,7 +85,7 @@ export default function CreditHistoryPage() {
             </p>
           </div>
           <p className="text-4xl font-bold font-mono text-violet-600 dark:text-violet-400">
-            {formatVox(balance)}
+            <VoxText text={formatVox(balance)} />
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             Spend Vox on predictions; earn it by voting, commenting,
@@ -206,7 +208,7 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
           {amountStr}
         </p>
         <p className="text-[11px] text-muted-foreground font-mono hidden sm:block">
-          balance {formatVox(row.balanceAfter)}
+          balance <VoxText text={formatVox(row.balanceAfter)} />
         </p>
       </div>
     </>

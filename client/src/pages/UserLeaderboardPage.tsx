@@ -1,3 +1,4 @@
+import { VoxMark } from "@/components/VoxMark";
 import { useMemo, useRef, useState, useCallback } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -23,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+
   Trophy,
   Search,
   TrendingUp,
@@ -183,8 +185,8 @@ function PnLCell({
         <div className="cursor-help">{body}</div>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">
-        <div>Realised: {CURRENCY.symbol}{fmt(realised ?? 0)}</div>
-        <div>Unrealised: {CURRENCY.symbol}{fmt(unrealised ?? 0)}</div>
+        <div>Realised: <VoxMark />{fmt(realised ?? 0)}</div>
+        <div>Unrealised: <VoxMark />{fmt(unrealised ?? 0)}</div>
       </TooltipContent>
     </Tooltip>
   );

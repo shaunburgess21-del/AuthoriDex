@@ -11,6 +11,7 @@ import { getCategoryTextColor } from "@/components/CategoryPill";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { InfoHint } from "@/components/InfoHint";
 
 const SEGMENT_COLORS_5 = ['#FF0000', '#FF9100', '#FFC400', '#76FF03', '#00C853'];
 
@@ -513,10 +514,11 @@ export const LeaderboardRow = memo(function LeaderboardRow({
           <>
             <div className="text-right min-w-[4.5rem] max-w-[6.5rem] sm:min-w-[5rem] sm:max-w-none sm:w-[120px] lg:w-[140px] shrink-0">
               <p
-                className={`font-mono font-bold text-lg sm:text-2xl tabular-nums leading-none tracking-tight text-muted-foreground ${scoreFlash ? 'number-flash' : ''}`}
+                className={`inline-flex items-center justify-end gap-1 font-mono font-bold text-lg sm:text-2xl tabular-nums leading-none tracking-tight text-muted-foreground ${scoreFlash ? 'number-flash' : ''}`}
                 data-testid={`text-score-${person.id}`}
               >
                 {fameScore.toLocaleString('en-US')}
+                <InfoHint term="trendScore" side="left" className="h-3 w-3" />
               </p>
             </div>
             <div className="hidden md:flex justify-end items-center w-[96px] shrink-0">
@@ -566,20 +568,16 @@ export const LeaderboardRow = memo(function LeaderboardRow({
               </p>
             </div>
             <div className="text-right hidden sm:block w-[120px] shrink-0">
-              <TouchTooltip
-                content={`${person.name}'s approval rating from community votes`}
-                side="top"
-              >
-                <p className="font-mono font-bold text-2xl tabular-nums cursor-help">
-                  {person.approvalAvgRating != null ? (
-                    <span>
-                      <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-muted-foreground">/5</span>
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </p>
-              </TouchTooltip>
+              <p className="inline-flex items-center justify-end gap-1 font-mono font-bold text-2xl tabular-nums">
+                {person.approvalAvgRating != null ? (
+                  <span>
+                    <span style={{ color: getApprovalColor(person.approvalAvgRating) }}>{person.approvalAvgRating.toFixed(1)}</span><span className="text-muted-foreground">/5</span>
+                  </span>
+                ) : (
+                  '—'
+                )}
+                <InfoHint term="approval" side="left" className="h-3 w-3" />
+              </p>
               <p className="text-xs text-muted-foreground uppercase tracking-wide lg:hidden">
                 Approval
               </p>

@@ -197,6 +197,10 @@ import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import { consumeCategoryPillBrowseIntent } from "@/components/InteractiveCategoryPill";
 import { isOverlayDismissSuppressed } from "@/lib/overlayDismissSuppress";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+import { InfoHint } from "@/components/InfoHint";
+
 
 type SnapOpenSource = "browse-button" | "header-icon";
 // "community" was removed when World mode gained an uncapped feed — the
@@ -3144,7 +3148,7 @@ export default function PredictPage() {
                       : "text-violet-700 dark:text-violet-500"
                   }`}
                 />
-                <span className="font-mono font-bold text-sm">{formatVox(walletCredits)}</span>
+                <span className="font-mono font-bold text-sm"><VoxText text={formatVox(walletCredits)} /></span>
               </button>
             )}
           </div>
@@ -3259,7 +3263,7 @@ export default function PredictPage() {
                       : "text-violet-700 dark:text-violet-500"
                   }`}
                 >
-                  {formatVox(walletCredits)}
+                  <VoxText text={formatVox(walletCredits)} />
                 </span>
               </button>
             )}
@@ -3277,233 +3281,16 @@ export default function PredictPage() {
           )}
         </div>
       </div>
-      <div className="container mx-auto px-3 sm:px-4 max-w-7xl pt-2 pb-1">
-        <p className="text-center text-[11px] leading-relaxed text-muted-foreground/70">
-          Vox is VoxDex&apos;s virtual currency — no cash value, no real-money payouts.
+      <div className="container mx-auto px-3 sm:px-4 max-w-7xl pt-3 pb-1">
+        <p
+          className="mx-auto flex w-fit max-w-full items-center justify-center gap-1.5 rounded-full border border-border/70 bg-muted/50 px-3 py-1.5 text-center text-xs leading-snug text-muted-foreground"
+          data-testid="vox-virtual-currency-note"
+        >
+          <VoxMark className="text-foreground/80" />
+          <span>Vox is a virtual currency. It has no cash value.</span>
+          <InfoHint term="vox" side="bottom" />
         </p>
       </div>
-      {((predictView === "weekly" && selectedType === "all") || predictView === "world") && (
-        <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
-          {/* Town Square - below section filters, above weekly timer */}
-          <div
-            className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue"
-            data-testid="town-square-card"
-            data-collapsed={townSquareCollapsed ? "true" : "false"}
-          >
-            <div className={`px-3 sm:px-4 ${townSquareCollapsed ? "py-2.5" : "pt-5 pb-4"}`}>
-              <button
-                type="button"
-                className="flex w-full items-center gap-3 rounded-lg border-0 bg-transparent p-0 text-left font-inherit text-inherit select-none group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                onClick={toggleTownSquare}
-                aria-expanded={!townSquareCollapsed}
-                aria-controls="town-square-feed"
-                data-testid="town-square-header"
-              >
-                <div className={`rounded-lg flex items-center justify-center pulse-icon-blue shrink-0 ${townSquareCollapsed ? "h-7 w-7" : "h-9 w-9"}`}>
-                  <Users className="h-4 w-4 text-slate-300" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  {townSquareCollapsed ? (
-                    <p className="truncate text-sm font-semibold text-foreground dark:text-slate-100">
-                      Town Square
-                      <span className="font-normal text-muted-foreground dark:text-slate-400">
-                        {" · "}
-                        {townSquareCollapsedHint({
-                          pending: recentActivityPending,
-                          failed: !!recentActivityError,
-                          count: Math.min(activityItems.length, 8),
-                          latestName: activityItems[0]?.displayName,
-                        })}
-                      </span>
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</p>
-                      <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
-                    </>
-                  )}
-                </div>
-                <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ease-out motion-reduce:transition-none shrink-0 ${townSquareCollapsed ? "" : "rotate-180"}`}>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" aria-hidden />
-                </div>
-              </button>
-              <div
-                id="town-square-feed"
-                data-testid="town-square-feed"
-                className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${townSquareCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
-              >
-                <div
-                  ref={townSquareFeedRef}
-                  className="min-h-0 overflow-hidden"
-                  aria-hidden={townSquareCollapsed}
-                >
-                <div className={townSquareCollapsed ? undefined : "mt-4"}>
-                  <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
-                    {recentActivityError ? (
-                      <div className="p-6 text-center">
-                        <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
-                        <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
-                        <Button onClick={() => refetchRecentActivity()} size="sm">
-                          Retry
-                        </Button>
-                      </div>
-                    ) : recentActivityPending ? (
-                      <div className="divide-y divide-border/50">
-                        {[0, 1, 2].map((i) => (
-                          <div key={i} className="flex items-start gap-3 px-4 py-3">
-                            <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
-                            <div className="min-w-0 flex-1 space-y-2">
-                              <Skeleton className="h-4 w-2/3" />
-                              <Skeleton className="h-3 w-full" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : activityItems.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                        No recent activity yet
-                      </p>
-                    ) : (
-                      <>
-                      <div className="divide-y divide-border/50">
-                        {activityItems.slice(0, 8).map((item) => {
-                          const actionType = item.actionType ?? "parimutuel";
-                          const isAmmBuy = actionType === "buy";
-                          const isAmmSell = actionType === "sell";
-                          const pricePerShareLabel =
-                            item.pricePerShare != null
-                              ? formatVoxPrice(item.pricePerShare, 2)
-                              : null;
-                          const shareCountLabel =
-                            item.shareCount != null
-                              ? Math.round(item.shareCount).toLocaleString()
-                              : null;
-                          const badge = ACTIVITY_MARKET_BADGE[item.marketType];
-                          const showPostTradeArrow =
-                            item.postTradePrice != null &&
-                            item.pricePerShare != null &&
-                            Math.abs(item.postTradePrice - item.pricePerShare) >= 0.01;
-                          const dotColor = isAmmBuy
-                            ? "bg-emerald-500"
-                            : isAmmSell
-                              ? "bg-amber-500"
-                              : "bg-muted-foreground/50";
-                          const proceeds =
-                            isAmmSell && item.payoutAmount != null
-                              ? Math.round(item.payoutAmount)
-                              : null;
-                          return (
-                            <div
-                              key={item.id}
-                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
-                              data-testid={`recent-activity-${item.id}`}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => {
-                                setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
-                                }
-                              }}
-                            >
-                              <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                                <UserSocialAvatar
-                                  displayName={item.displayName}
-                                  avatarUrl={item.avatarUrl}
-                                  className="h-9 w-9 shrink-0"
-                                  onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
-                                />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="mb-1 flex items-center gap-2 flex-wrap">
-                                  <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
-                                  <button
-                                    className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      item.username && item.isPublic && setLocation(`/u/${item.username}`);
-                                    }}
-                                    aria-disabled={!(item.username && item.isPublic)}
-                                  >
-                                    {item.displayName}
-                                  </button>
-                                  <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
-                                </div>
-                                <p className="text-sm text-foreground line-clamp-1 hover:underline">
-                                  {isAmmBuy && shareCountLabel ? (
-                                    <>
-                                      bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
-                                      <span className="font-semibold">{item.choiceLabel}</span>
-                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
-                                      {showPostTradeArrow && item.postTradePrice != null && (
-                                        <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
-                                      )} on {item.marketTitle}
-                                    </>
-                                  ) : isAmmSell && shareCountLabel ? (
-                                    <>
-                                      sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
-                                      <span className="font-semibold">{item.choiceLabel}</span>
-                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
-                                      {showPostTradeArrow && item.postTradePrice != null && (
-                                        <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
-                                      )} on {item.marketTitle}
-                                    </>
-                                  ) : (
-                                    <>
-                                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
-                                    </>
-                                  )}
-                                  {badge && (
-                                    <span className={`ml-1 text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${badge.className}`}>
-                                      {badge.label}
-                                    </span>
-                                  )}
-                                </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  {isAmmSell && proceeds != null ? (
-                                    <>
-                                      Received <span className="font-medium">{voxWord(proceeds)}</span>
-                                      {item.realisedPnl != null && (
-                                        <span className={item.realisedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
-                                          {" · "}{item.realisedPnl >= 0 ? "+" : "−"}{formatVox(Math.abs(item.realisedPnl))} P&L
-                                        </span>
-                                      )}
-                                    </>
-                                  ) : isAmmBuy ? (
-                                    <>Spent <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
-                                  ) : (
-                                    <>Staked <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="border-t border-border/50 px-4 py-2.5 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLocation("/predict/activity");
-                          }}
-                          className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
-                        >
-                          Show more activity →
-                        </button>
-                      </div>
-                      </>
-                    )}
-                  </Card>
-                </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {showPredictMultiFailureBanner && (
           <div
@@ -3707,6 +3494,7 @@ export default function PredictPage() {
           <section id="h2h" data-hash-anchor className="mb-10">
             <UnifiedSectionHeader
               title="Head-to-Head Battles"
+              titleAddon={<InfoHint term="h2h" side="bottom" align="start" />}
               subtitle="Who will finish with the higher Trend Score?"
               icon={<Swords className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
               accent="blue"
@@ -4033,6 +3821,229 @@ export default function PredictPage() {
             </section>
           </div>
         )}
+
+      {((predictView === "weekly" && selectedType === "all") || predictView === "world") && (
+        <div className="container mx-auto px-2 sm:px-4 max-w-7xl pt-[15px] pb-[5px]">
+          {/* Town Square - below the market cards */}
+          <div
+            className="mb-[17px] mt-[5px] min-w-0 shrink-0 rounded-xl pulse-card-blue"
+            data-testid="town-square-card"
+            data-collapsed={townSquareCollapsed ? "true" : "false"}
+          >
+            <div className={`px-3 sm:px-4 ${townSquareCollapsed ? "py-2.5" : "pt-5 pb-4"}`}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-lg border-0 bg-transparent p-0 text-left font-inherit text-inherit select-none group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={toggleTownSquare}
+                aria-expanded={!townSquareCollapsed}
+                aria-controls="town-square-feed"
+                data-testid="town-square-header"
+              >
+                <div className={`rounded-lg flex items-center justify-center pulse-icon-blue shrink-0 ${townSquareCollapsed ? "h-7 w-7" : "h-9 w-9"}`}>
+                  <Users className="h-4 w-4 text-slate-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  {townSquareCollapsed ? (
+                    <p className="truncate text-sm font-semibold text-foreground dark:text-slate-100">
+                      Town Square
+                      <span className="font-normal text-muted-foreground dark:text-slate-400">
+                        {" · "}
+                        {townSquareCollapsedHint({
+                          pending: recentActivityPending,
+                          failed: !!recentActivityError,
+                          count: Math.min(activityItems.length, 8),
+                          latestName: activityItems[0]?.displayName,
+                        })}
+                      </span>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-foreground dark:text-slate-100">Town Square</p>
+                      <p className="text-[10px] text-muted-foreground dark:text-slate-500 uppercase tracking-wider">Recent prediction activity across live markets</p>
+                    </>
+                  )}
+                </div>
+                <div className={`h-6 w-6 rounded-md flex items-center justify-center bg-muted/50 dark:bg-slate-700/30 transition-transform duration-200 ease-out motion-reduce:transition-none shrink-0 ${townSquareCollapsed ? "" : "rotate-180"}`}>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-200 transition-colors" aria-hidden />
+                </div>
+              </button>
+              <div
+                id="town-square-feed"
+                data-testid="town-square-feed"
+                className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${townSquareCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
+              >
+                <div
+                  ref={townSquareFeedRef}
+                  className="min-h-0 overflow-hidden"
+                  aria-hidden={townSquareCollapsed}
+                >
+                <div className={townSquareCollapsed ? undefined : "mt-4"}>
+                  <Card className="border-border/50 dark:border-slate-700/50 bg-muted/30 dark:bg-slate-800/30">
+                    {recentActivityError ? (
+                      <div className="p-6 text-center">
+                        <p className="text-destructive mb-2">Couldn&apos;t load Town Square</p>
+                        <p className="text-muted-foreground text-sm mb-4">Please try again in a moment.</p>
+                        <Button onClick={() => refetchRecentActivity()} size="sm">
+                          Retry
+                        </Button>
+                      </div>
+                    ) : recentActivityPending ? (
+                      <div className="divide-y divide-border/50">
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className="flex items-start gap-3 px-4 py-3">
+                            <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <Skeleton className="h-4 w-2/3" />
+                              <Skeleton className="h-3 w-full" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : activityItems.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        No recent activity yet
+                      </p>
+                    ) : (
+                      <>
+                      <div className="divide-y divide-border/50">
+                        {activityItems.slice(0, 8).map((item) => {
+                          const actionType = item.actionType ?? "parimutuel";
+                          const isAmmBuy = actionType === "buy";
+                          const isAmmSell = actionType === "sell";
+                          const pricePerShareLabel =
+                            item.pricePerShare != null
+                              ? formatVoxPrice(item.pricePerShare, 2)
+                              : null;
+                          const shareCountLabel =
+                            item.shareCount != null
+                              ? Math.round(item.shareCount).toLocaleString()
+                              : null;
+                          const badge = ACTIVITY_MARKET_BADGE[item.marketType];
+                          const showPostTradeArrow =
+                            item.postTradePrice != null &&
+                            item.pricePerShare != null &&
+                            Math.abs(item.postTradePrice - item.pricePerShare) >= 0.01;
+                          const dotColor = isAmmBuy
+                            ? "bg-emerald-500"
+                            : isAmmSell
+                              ? "bg-amber-500"
+                              : "bg-muted-foreground/50";
+                          const proceeds =
+                            isAmmSell && item.payoutAmount != null
+                              ? Math.round(item.payoutAmount)
+                              : null;
+                          return (
+                            <div
+                              key={item.id}
+                              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 cursor-pointer focus-within:bg-muted/30"
+                              data-testid={`recent-activity-${item.id}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setLocation(getRecentActivityMarketPath(item.marketSlug, item.marketType, item.marketId));
+                                }
+                              }}
+                            >
+                              <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                                <UserSocialAvatar
+                                  displayName={item.displayName}
+                                  avatarUrl={item.avatarUrl}
+                                  className="h-9 w-9 shrink-0"
+                                  onClick={item.username && item.isPublic ? () => setLocation(`/u/${item.username}`) : undefined}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="mb-1 flex items-center gap-2 flex-wrap">
+                                  <span className={`h-2 w-2 rounded-full ${dotColor}`} aria-hidden="true" />
+                                  <button
+                                    className={`text-sm font-medium ${item.username && item.isPublic ? "hover:underline cursor-pointer" : "cursor-default"}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      item.username && item.isPublic && setLocation(`/u/${item.username}`);
+                                    }}
+                                    aria-disabled={!(item.username && item.isPublic)}
+                                  >
+                                    {item.displayName}
+                                  </button>
+                                  <span className="text-[11px] text-muted-foreground">{formatActivityAge(item.createdAt)}</span>
+                                </div>
+                                <p className="text-sm text-foreground line-clamp-1 hover:underline">
+                                  {isAmmBuy && shareCountLabel ? (
+                                    <>
+                                      bought <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                                      <span className="font-semibold">{item.choiceLabel}</span>
+                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
+                                      {showPostTradeArrow && item.postTradePrice != null && (
+                                        <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
+                                      )} on {item.marketTitle}
+                                    </>
+                                  ) : isAmmSell && shareCountLabel ? (
+                                    <>
+                                      sold <span className="font-semibold">{shareCountLabel} shares</span> of{" "}
+                                      <span className="font-semibold">{item.choiceLabel}</span>
+                                      {pricePerShareLabel ? <> for {pricePerShareLabel}/share</> : null}
+                                      {showPostTradeArrow && item.postTradePrice != null && (
+                                        <span className="text-muted-foreground/70"> → {Math.round(item.postTradePrice * 100)}%</span>
+                                      )} on {item.marketTitle}
+                                    </>
+                                  ) : (
+                                    <>
+                                      backed <span className="font-semibold">{item.choiceLabel}</span> on {item.marketTitle}
+                                    </>
+                                  )}
+                                  {badge && (
+                                    <span className={`ml-1 text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${badge.className}`}>
+                                      {badge.label}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {isAmmSell && proceeds != null ? (
+                                    <>
+                                      Received <span className="font-medium">{voxWord(proceeds)}</span>
+                                      {item.realisedPnl != null && (
+                                        <span className={item.realisedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                                          {" · "}{item.realisedPnl >= 0 ? "+" : "−"}<VoxText text={formatVox(Math.abs(item.realisedPnl))} /> P&L
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : isAmmBuy ? (
+                                    <>Spent <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
+                                  ) : (
+                                    <>Staked <span className="font-medium">{voxWord(item.stakeAmount)}</span></>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="border-t border-border/50 px-4 py-2.5 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocation("/predict/activity");
+                          }}
+                          className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors"
+                        >
+                          Show more activity →
+                        </button>
+                      </div>
+                      </>
+                    )}
+                  </Card>
+                </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
         <div className="text-center pb-8">
           <button 

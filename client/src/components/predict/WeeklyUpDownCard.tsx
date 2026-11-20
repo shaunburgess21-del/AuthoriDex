@@ -13,6 +13,8 @@ import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
 import { formatVoxCompact } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+import { useStablePress } from "@/hooks/useStablePress";
 import { upDownShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
 
@@ -88,6 +90,8 @@ export function WeeklyUpDownCard({
    */
   unrealisedPnl?: number | null;
 }) {
+  const pressUpLabel = useStablePress(() => onSelect?.("up"));
+  const pressDownLabel = useStablePress(() => onSelect?.("down"));
   const delta = market.currentScore - market.baselineScore;
   const pctDelta = market.baselineScore > 0 ? ((delta / market.baselineScore) * 100).toFixed(1) : "0";
   const cadenceLabel = (market.cadence || "weekly").charAt(0).toUpperCase() + (market.cadence || "weekly").slice(1);
@@ -216,7 +220,7 @@ export function WeeklyUpDownCard({
           return (
             <span className="text-xs text-muted-foreground">
               <span className="text-muted-foreground/40">·</span>{" "}
-              <span className="font-mono">{volText}</span> vol
+              <span className="font-mono"><VoxText text={volText} /></span> vol
             </span>
           );
         })()}
@@ -230,8 +234,22 @@ export function WeeklyUpDownCard({
           />
         </div>
         <div className="flex items-center justify-between gap-2 text-[11px] mt-1">
-          <span className="text-green-500 font-semibold">Up {Math.round(upPrice * 100)}%</span>
-          <span className="text-red-500 font-semibold">Down {Math.round(downPrice * 100)}%</span>
+          <button
+            type="button"
+            className="text-green-500 font-semibold"
+            {...(isMarketClosed ? {} : pressUpLabel)}
+            data-testid={`label-up-${market.id}`}
+          >
+            Up {Math.round(upPrice * 100)}%
+          </button>
+          <button
+            type="button"
+            className="text-red-500 font-semibold"
+            {...(isMarketClosed ? {} : pressDownLabel)}
+            data-testid={`label-down-${market.id}`}
+          >
+            Down {Math.round(downPrice * 100)}%
+          </button>
         </div>
       </div>
 

@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
+
 
 /**
  * Aspect presets used by the share pipeline. Sizes are the target PNG output
@@ -373,7 +377,7 @@ function WinLayout({
                 lineHeight: 1,
               }}
             >
-              +{CURRENCY.symbol}{pnl.toLocaleString()}
+              +<VoxMark />{pnl.toLocaleString()}
             </p>
             <p
               className={cn(
@@ -381,7 +385,7 @@ function WinLayout({
                 isLandscape ? "text-[18px]" : "text-[22px]",
               )}
             >
-              on a {formatVox(data.stakeAmount)} stake
+              on a <VoxText text={formatVox(data.stakeAmount)} /> stake
             </p>
           </div>
 
@@ -778,7 +782,7 @@ function TradeLayout({
                     className="font-bold text-white"
                     style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                   >
-                    {CURRENCY.symbol}{data.potentialPayout.toLocaleString()}
+                    <VoxMark />{data.potentialPayout.toLocaleString()}
                   </span>{" "}
                   if {payoutWinCopy(data.direction, data.entryLabel)}
                 </span>
@@ -955,7 +959,7 @@ function PositionLayout({
                 isLandscape ? "text-[18px]" : "text-[22px]",
               )}
             >
-              shares · cost {formatVox(displayedCost)} @ {avgPct} avg
+              shares · cost <VoxText text={formatVox(displayedCost)} /> @ {avgPct} avg
             </p>
 
             {/* Live MTM row — cost basis, current value, unrealised delta */}
@@ -976,7 +980,7 @@ function PositionLayout({
                   className="font-bold text-white"
                   style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                 >
-                  {formatVox(Math.round(data.currentValue))}
+                  <VoxText text={formatVox(Math.round(data.currentValue))} />
                 </span>
               </div>
               <div className="flex flex-col gap-1">
@@ -1039,7 +1043,7 @@ function PositionLayout({
                     className="font-bold text-white"
                     style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}
                   >
-                    {CURRENCY.symbol}{data.potentialPayout.toLocaleString()}
+                    <VoxMark />{data.potentialPayout.toLocaleString()}
                   </span>{" "}
                   if {payoutWinCopy(data.direction, data.entryLabel)}
                 </span>

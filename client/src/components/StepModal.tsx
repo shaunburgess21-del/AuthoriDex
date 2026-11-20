@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { cn } from "@/lib/utils";
+import { VoxText } from "@/components/VoxText";
 
 export type StepModalStep = {
   icon: ReactNode;
@@ -183,10 +184,10 @@ export function StepModal({
                       </div>
                     </div>
                     <h2 className="mb-3 text-center text-xl font-bold leading-tight text-foreground">
-                      {step.headline}
+                      <VoxText text={step.headline} />
                     </h2>
                     <div className="mx-auto max-w-xs text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
-                      {step.body}
+                      {typeof step.body === "string" ? <VoxText text={step.body} /> : step.body}
                     </div>
                   </motion.div>
                 </AnimatePresence>

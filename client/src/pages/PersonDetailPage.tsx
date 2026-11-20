@@ -19,7 +19,8 @@ import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
-import { TrendScoreInfoIcon } from "@/components/TrendScoreInfo";
+import { InfoHint } from "@/components/InfoHint";
+import { categoryRankLabel, overallRankLabel } from "@/lib/profile-rank-label";
 import { ApprovalRatingInfoIcon } from "@/components/ApprovalRatingInfo";
 import { CardSection } from "@/components/CardSection";
 import { ImageLightbox } from "@/components/ImageLightbox";
@@ -749,31 +750,17 @@ function ViewAllPollsOverlay({
   );
 }
 
-function CategoryRankPill({ category, rank, personName }: { category: string; rank: number; personName: string }) {
+function CategoryRankPill({ category, rank }: { category: string; rank: number }) {
   const catStyle = getCategoryStyle(category);
   return (
-    <TouchTooltip
-      content={
-        <div className="space-y-1.5 normal-case tracking-normal">
-          <p className="font-semibold text-sm">{category} Rank</p>
-          <p className="text-xs text-muted-foreground">
-            {personName}'s position within the {category} category, ranked against others in the same field.
-          </p>
-        </div>
-      }
-      side="bottom"
-      align="start"
-      contentClassName="max-w-[240px]"
-      showCloseButton
+    <span
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold ${catStyle.bg} border ${catStyle.border} ${catStyle.text}`}
+      data-testid="text-header-category-rank"
     >
-      <span
-        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold cursor-help ${catStyle.bg} border ${catStyle.border} ${catStyle.text}`}
-        data-testid="text-header-category-rank"
-      >
-        <Trophy className="h-3 w-3" />
-        #{rank}
-      </span>
-    </TouchTooltip>
+      <Trophy className="h-3 w-3" />
+      {categoryRankLabel(category, rank)}
+      <InfoHint term="categoryRank" side="bottom" align="start" className="h-3 w-3" />
+    </span>
   );
 }
 
@@ -1436,7 +1423,6 @@ export default function PersonDetailPage() {
                     <CategoryRankPill
                       category={person.category}
                       rank={person.categoryRank}
-                      personName={person.name}
                     />
                   )}
                 </div>
@@ -1468,28 +1454,14 @@ export default function PersonDetailPage() {
                       </div>
                     </TouchTooltip>
                   ) : (
-                  <TouchTooltip
-                    content={
-                      <div className="space-y-1.5 normal-case tracking-normal">
-                        <p className="font-semibold text-sm">Overall Rank</p>
-                        <p className="text-xs text-muted-foreground">
-                          {person.name}'s position across all categories on the VoxDex leaderboard, based on their aggregated Trend Score.
-                        </p>
-                      </div>
-                    }
-                    side="bottom"
-                    align="start"
-                    contentClassName="max-w-[240px]"
-                    showCloseButton
-                  >
                     <div
-                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-mono text-xs sm:text-sm font-semibold cursor-help"
+                      className="inline-flex items-center gap-1.5 px-2 sm:px-3 min-h-9 rounded-md bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 font-mono text-xs sm:text-sm font-semibold"
                       data-testid="text-header-rank"
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span><span className="hidden sm:inline">Overall </span>{person.rank ? `#${person.rank}` : 'New'}</span>
+                      <span>{overallRankLabel(person.rank)}</span>
+                      <InfoHint term="overallRank" side="bottom" align="start" className="h-3 w-3" />
                     </div>
-                  </TouchTooltip>
                   )}
                 </div>
                 <div className="flex flex-row gap-2">
@@ -1546,7 +1518,7 @@ export default function PersonDetailPage() {
               <p className="text-sm text-muted-foreground uppercase tracking-wide">
                 Trend Score
               </p>
-              <TrendScoreInfoIcon testId="icon-trend-score-profile" className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+              <InfoHint term="trendScore" testId="icon-trend-score-profile" className="h-3 w-3" />
             </div>
             <p className="text-3xl font-mono font-bold" data-testid="text-trend-score">
               {(person.fameIndex ?? Math.round(person.trendScore ?? 0)).toLocaleString('en-US')}

@@ -23,6 +23,9 @@ import { formatVox, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { hapticSuccess } from "@/lib/haptic";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
 
 // Referral reward derives from credit-config so the out-of-Vox nudge
 // tracks the real award amount (same pattern as ReferAFriendCard).
@@ -393,7 +396,7 @@ export function JackpotEntryModal({
                   <>
                     Pool:{" "}
                     <span className="font-mono font-medium text-foreground">
-                      {formatVox(userEntries.totalPool)}
+                      <VoxText text={formatVox(userEntries.totalPool)} />
                     </span>
                   </>
                 )}
@@ -521,12 +524,12 @@ export function JackpotEntryModal({
             <div className="space-y-2 p-3 rounded-lg bg-muted/30 border">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Entry cost</span>
-                <span className="font-semibold">{formatVox(JACKPOT_TICKET_COST)}</span>
+                <span className="font-semibold"><VoxText text={formatVox(JACKPOT_TICKET_COST)} /></span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Your balance</span>
                 <span className={`font-semibold ${userCredits < JACKPOT_TICKET_COST ? "text-red-600 dark:text-red-400" : ""}`}>
-                  {formatVox(userCredits)}
+                  <VoxText text={formatVox(userCredits)} />
                 </span>
               </div>
             </div>
@@ -541,7 +544,7 @@ export function JackpotEntryModal({
                 <div className="flex items-start gap-3">
                   <Gift className="h-4 w-4 mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
                   <p className="text-xs text-muted-foreground flex-1">
-                    Need {formatVox(JACKPOT_TICKET_COST)} to enter. Invite a
+                    Need <VoxText text={formatVox(JACKPOT_TICKET_COST)} /> to enter. Invite a
                     friend — you both get {voxWord(REFERRAL_REWARD)}.
                   </p>
                 </div>
@@ -587,7 +590,7 @@ export function JackpotEntryModal({
               ) : (
                 <Crown className="h-4 w-4 mr-2" />
               )}
-              Enter Jackpot — Ꝟ100
+              Enter Jackpot — <VoxMark />100
             </Button>
             <p className="text-[10px] text-muted-foreground/60 text-center -mt-0.5">
               Vox is VoxDex&apos;s virtual currency — no cash value.

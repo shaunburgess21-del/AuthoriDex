@@ -11,6 +11,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Crown, ChevronDown, Search, Lock, Clock } from "lucide-react";
 import { TrendingPerson } from "@shared/schema";
 import type { MarketStatus } from "@/hooks/useMarketCycle";
+import { VoxMark } from "@/components/VoxMark";
 
 export interface WeeklyJackpotCardProps {
   onEnterJackpot: () => void;
@@ -278,7 +279,7 @@ export function WeeklyJackpotCard({
                 </div>
               ))}
             <p className={`text-sm font-semibold text-amber-500 ${compact ? "" : "lg:text-right"}`}>
-              Pool: Ꝟ50,000+
+              Pool: <VoxMark />50,000+
             </p>
           </div>
         </div>

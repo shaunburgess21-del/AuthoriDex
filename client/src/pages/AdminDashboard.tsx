@@ -212,6 +212,8 @@ import { CreateMarketModal } from "@/pages/admin/CreateMarketModal";
 import { RelatedCelebritiesField } from "@/pages/admin/RelatedCelebritiesField";
 import { WorldMarketsSection } from "@/pages/admin/WorldMarketsSection";
 import { NativeMarketRow } from "@/pages/admin/NativeMarketRow";
+import { VoxText } from "@/components/VoxText";
+
 
 /**
  * One-shot deep-link params so ops emails can land the founder directly on
@@ -5482,7 +5484,7 @@ export default function AdminDashboard() {
                                 {user.role}
                               </Badge>
                               <span className="whitespace-nowrap">{user.xpPoints} XP</span>
-                              <span className="whitespace-nowrap">{formatVox(user.predictCredits)}</span>
+                              <span className="whitespace-nowrap"><VoxText text={formatVox(user.predictCredits)} /></span>
                               {user.createdAt && (
                                 <span className="whitespace-nowrap" data-testid={`user-joined-${user.id}`}>
                                   Joined {formatDate(user.createdAt)}
@@ -5518,7 +5520,7 @@ export default function AdminDashboard() {
                                   className={`text-xs whitespace-nowrap ${user.drift < 0 ? "border-red-500/50 text-red-600 dark:text-red-400" : "border-amber-500/50 text-amber-600 dark:text-amber-400"}`}
                                   data-testid={`badge-drift-${user.id}`}
                                 >
-                                  Drift: {user.drift > 0 ? "+" : ""}{formatVox(user.drift)}
+                                  Drift: {user.drift > 0 ? "+" : ""}<VoxText text={formatVox(user.drift)} />
                                 </Badge>
                               )}
                             </div>
@@ -7402,7 +7404,7 @@ export default function AdminDashboard() {
             <DialogDescription>
               Modify Vox for {selectedUser?.username || "user"}
               <br />
-              Current balance: {formatVox(selectedUser?.predictCredits || 0)}
+              Current balance: <VoxText text={formatVox(selectedUser?.predictCredits || 0)} />
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -7492,7 +7494,7 @@ export default function AdminDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wallet (authoritative)</span>
-                <span className="font-medium">{formatVox(reconcileDriftTarget.predictCredits)}</span>
+                <span className="font-medium"><VoxText text={formatVox(reconcileDriftTarget.predictCredits)} /></span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Ledger sum (current)</span>
@@ -7509,7 +7511,7 @@ export default function AdminDashboard() {
                   data-testid="text-drift-reconcile-delta"
                 >
                   {(reconcileDriftTarget.drift ?? 0) > 0 ? "+" : ""}
-                  {formatVox(reconcileDriftTarget.drift ?? 0)}
+                  <VoxText text={formatVox(reconcileDriftTarget.drift ?? 0)} />
                 </span>
               </div>
             </div>

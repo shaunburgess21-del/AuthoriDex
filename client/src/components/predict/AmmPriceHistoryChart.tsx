@@ -29,6 +29,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePriceHistory } from "@/lib/ammClient";
 import { formatVoxPrice } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -82,7 +84,7 @@ function ChartTooltip({ active, payload, series }: any) {
             <span style={{ color: s.color }}>● </span>
             {s.label}{" "}
             <span className="font-semibold">{(p * 100).toFixed(1)}%</span>
-            <span className="text-muted-foreground/70"> · {formatVoxPrice(p, 3)}</span>
+            <span className="text-muted-foreground/70"> · <VoxText text={formatVoxPrice(p, 3)} /></span>
           </p>
         );
       })}

@@ -45,6 +45,8 @@ import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { appendShareAttribution } from "@/lib/share";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
+import { VoxText } from "@/components/VoxText";
+
 
 type UserPrediction = MyPredictionCardData;
 
@@ -1539,16 +1541,16 @@ function AmmOpenPositionCard({
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost basis</p>
-            <p className="font-mono font-semibold">{formatVoxPrice(position.netCreditsIn)}</p>
+            <p className="font-mono font-semibold"><VoxText text={formatVoxPrice(position.netCreditsIn)} /></p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Now ≈</p>
-            <p className="font-mono font-semibold">{formatVoxPrice(position.currentValue)}</p>
+            <p className="font-mono font-semibold"><VoxText text={formatVoxPrice(position.currentValue)} /></p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">If win</p>
             <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-              {formatVoxPrice(position.netShares)}
+              <VoxText text={formatVoxPrice(position.netShares)} />
             </p>
           </div>
         </div>
@@ -1596,7 +1598,7 @@ function AmmOpenPositionCard({
             ) : (
               <>
                 <Banknote className="h-3.5 w-3.5" />
-                Cash out ~{formatVox(Math.round(position.currentValue))}
+                Cash out ~<VoxText text={formatVox(Math.round(position.currentValue))} />
               </>
             )}
           </Button>
@@ -1883,7 +1885,7 @@ function OpenTabPanel({
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <Coins className="h-4 w-4 mx-auto text-amber-500" />
           <p className="text-2xl font-mono font-bold tabular-nums">
-            {formatVox(totalStake)}
+            <VoxText text={formatVox(totalStake)} />
           </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
             Vox at stake
@@ -1892,7 +1894,7 @@ function OpenTabPanel({
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <TrendingUp className="h-4 w-4 mx-auto text-emerald-500" />
           <p className="text-2xl font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-            +{formatVox(projectedPayout - totalStake)}
+            +<VoxText text={formatVox(projectedPayout - totalStake)} />
           </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
             If all win

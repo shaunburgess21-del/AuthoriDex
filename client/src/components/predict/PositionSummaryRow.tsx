@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { formatVox, formatVoxDelta } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { isValidElement, type CSSProperties, type ReactNode } from "react";
+import { VoxText } from "@/components/VoxText";
+import { InfoHint } from "@/components/InfoHint";
+
 
 /**
  * Shared "Your pick" footer shell used by World Market, H2H, Category
@@ -131,17 +134,18 @@ export function PositionSummaryRow({
         <div className="flex shrink-0 items-end gap-2 max-[380px]:flex-col max-[380px]:items-end max-[380px]:gap-0.5">
           {pnlText && (
             <span
-              className={cn("text-xs font-semibold font-mono tabular-nums", pnlClass)}
+              className={cn("inline-flex items-center gap-1 text-xs font-semibold font-mono tabular-nums", pnlClass)}
               data-testid={testId ? `${testId}-pnl` : undefined}
             >
-              {pnlText}
+              <VoxText text={pnlText} />
+              <InfoHint term="pnl" side="top" className="h-3 w-3" />
             </span>
           )}
           {showStake && (
             <div className="flex flex-col items-end tabular-nums">
               <span className="text-[10px] leading-none text-muted-foreground">Stake</span>
               <span className="text-xs font-semibold leading-tight text-foreground">
-                {formatVox(stakeAmount as number)}
+                <VoxText text={formatVox(stakeAmount as number)} />
               </span>
             </div>
           )}

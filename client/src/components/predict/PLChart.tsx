@@ -10,6 +10,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import { CURRENCY, voxWord } from "@/lib/currency";
+import { VoxMark } from "@/components/VoxMark";
+
 
 interface PLPrediction {
   createdAt: string;
@@ -92,7 +94,7 @@ export function PLChart({ predictions, height = 240 }: PLChartProps) {
       <div className="flex items-center justify-between px-1">
         <p className="text-xs font-medium text-foreground">Cumulative P/L</p>
         <p className={`text-sm font-mono font-bold ${latestValue >= 0 ? "text-green-500" : "text-red-500"}`}>
-          {latestValue >= 0 ? "+" : "\u2212"}{CURRENCY.symbol}{Math.abs(latestValue).toLocaleString("en-US")}
+          {latestValue >= 0 ? "+" : "\u2212"}<VoxMark />{Math.abs(latestValue).toLocaleString("en-US")}
         </p>
       </div>
       <div style={{ height }}>

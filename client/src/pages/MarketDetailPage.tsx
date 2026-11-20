@@ -1,3 +1,5 @@
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
@@ -52,6 +54,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { marketOgImagePath } from "@shared/market-og";
 import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
+
   ArrowLeft,
   Star,
   Clock,
@@ -1670,7 +1673,7 @@ export default function MarketDetailPage() {
                       className="text-[10px] tabular-nums text-muted-foreground border-border/50"
                       data-testid="community-live-market-volume"
                     >
-                      {liveVolumeLabel} vol
+                      <VoxText text={liveVolumeLabel} /> vol
                     </Badge>
                   )}
                   {traderCount > 0 && (
@@ -1720,21 +1723,21 @@ export default function MarketDetailPage() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{entry.label}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                              {pos.netShares.toFixed(2)} shares · avg <VoxText text={formatVoxPrice(pos.avgEntryPrice, 3)} /> · cost <VoxText text={formatVoxPrice(pos.netCreditsIn, 0)} />
                             </p>
                             <p className="text-[11px] text-muted-foreground">
                               Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(Number(ammPriceMap[pos.entryId] ?? pos.currentPrice), 0)}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~<VoxText text={formatVoxPrice(pos.currentValue)} />{" "}
                               <span className={`font-mono font-medium ${pnlClass}`}>
-                                ({formatVoxDelta(unrealisedPnl)})
+                                (<VoxText text={formatVoxDelta(unrealisedPnl)} />)
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {entry.label} wins: {formatVoxPrice(pos.netShares)}{" "}
+                              If {entry.label} wins: <VoxText text={formatVoxPrice(pos.netShares)} />{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({formatVoxDelta(maxProfitIfWin)})
+                                (<VoxText text={formatVoxDelta(maxProfitIfWin)} />)
                               </span>
                             </p>
                           </div>
@@ -1747,7 +1750,7 @@ export default function MarketDetailPage() {
                               className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
                             >
                               <Banknote className="h-3.5 w-3.5" />
-                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                              <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
                             </Button>
                             <Button
                               size="sm"
@@ -1797,7 +1800,7 @@ export default function MarketDetailPage() {
                         </div>
                         <span className="font-mono font-bold text-sm w-12 text-right tabular-nums">{entry.percentage}%</span>
                         <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
-                          {formatVoxPrice(livePrice)}
+                          <VoxText text={formatVoxPrice(livePrice)} />
                         </span>
                         <Button
                           size="sm"
@@ -1838,7 +1841,7 @@ export default function MarketDetailPage() {
                       >
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
                         <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums">{formatVoxPrice(livePrice)} / share</p>
+                        <p className="text-[10px] text-muted-foreground tabular-nums"><VoxText text={formatVoxPrice(livePrice)} /> / share</p>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1855,7 +1858,7 @@ export default function MarketDetailPage() {
                 </div>
               )}
               <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                Live LMSR pricing — each share pays Ꝟ1 if the outcome wins.
+                Live LMSR pricing — each share pays <VoxMark />1 if the outcome wins.
               </p>
             </Card>
           );
@@ -1936,7 +1939,7 @@ export default function MarketDetailPage() {
                   <p className={`mt-1 text-xs ${jackpotScoreTooHigh ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
                     {jackpotScoreTooHigh
                       ? `The highest guess is ${JACKPOT_MAX_PREDICTED_SCORE.toLocaleString("en-US")}.`
-                      : "Jackpot entries are unique per score and cost Ꝟ100."}
+                      : <>Jackpot entries are unique per score and cost <VoxMark />100.</>}
                   </p>
                 </div>
 
@@ -2152,7 +2155,7 @@ export default function MarketDetailPage() {
                             )}
                             {w.payout != null && (
                               <span className="font-mono font-semibold text-amber-700 dark:text-amber-300">
-                                {formatVox(w.payout)}
+                                <VoxText text={formatVox(w.payout)} />
                               </span>
                             )}
                           </span>
@@ -2184,7 +2187,7 @@ export default function MarketDetailPage() {
                       )}
                       {totalPool != null && (
                         <span className="mr-2">
-                          Pool {formatVox(totalPool)}
+                          Pool <VoxText text={formatVox(totalPool)} />
                         </span>
                       )}
                       {tied != null && tied > 1 && (

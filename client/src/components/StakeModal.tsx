@@ -27,6 +27,10 @@ import {
 } from "@/lib/ammClient";
 import { CURRENCY, formatVox, formatVoxPrice, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
+
 
 // Referral reward derives from credit-config so the out-of-Vox nudge
 // tracks the real award amount (same pattern as ReferAFriendCard).
@@ -348,7 +352,7 @@ export function StakeModal({
             )}
           </DialogTitle>
           <DialogDescription>
-            {missionText}
+            <VoxText text={missionText} />
           </DialogDescription>
         </DialogHeader>
 
@@ -407,7 +411,7 @@ export function StakeModal({
                   {priceToPercent(price, 0)}
                 </p>
                 <p className="text-[11px] font-mono font-semibold">
-                  {formatVoxPrice(price, 3)}/share
+                  <VoxText text={formatVoxPrice(price, 3)} />/share
                 </p>
               </>
             );
@@ -901,11 +905,11 @@ export function StakeModal({
                     </div>
                     {hasBuyQuote && ammBuyQuote ? (
                       <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
-                        ~{formatVox(Math.floor(ammBuyQuote.shares))}
+                        ~<VoxText text={formatVox(Math.floor(ammBuyQuote.shares))} />
                       </p>
                     ) : (
                       <p className="text-2xl font-bold leading-tight font-mono text-muted-foreground/50">
-                        {CURRENCY.symbol}—
+                        <VoxMark />—
                       </p>
                     )}
                   </div>
@@ -914,7 +918,7 @@ export function StakeModal({
                       className="shrink-0 inline-flex items-center rounded-full bg-green-500/15 text-green-700 dark:text-green-400 px-2 py-0.5 text-[10px] font-mono font-semibold"
                       data-testid="amm-receipt-net"
                     >
-                      +{CURRENCY.symbol}{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net
+                      +<VoxMark />{Math.max(0, Math.floor(ammBuyQuote.shares) - ammBuyQuote.chargeCredits).toLocaleString("en-US")} net
                     </span>
                   )}
                 </div>
@@ -924,7 +928,7 @@ export function StakeModal({
                     {ammBuyQuote.shares.toFixed(2)} {sideShareLabel}
                     <span className="text-muted-foreground/70">
                       {" · Avg price "}
-                      {formatVoxPrice(ammBuyQuote.pricePerShareAvg, 3)}/share
+                      <VoxText text={formatVoxPrice(ammBuyQuote.pricePerShareAvg, 3)} />/share
                     </span>
                   </p>
                 )}
@@ -950,12 +954,12 @@ export function StakeModal({
                       className="text-[11px] text-muted-foreground border-t border-violet-500/15 pt-1.5"
                       data-testid="amm-receipt-illustrative"
                     >
-                      At {formatVoxPrice(ammEntryPrice, 3)}/share,{" "}
-                      {formatVox(illustrativeStake)} buys about{" "}
+                      At <VoxText text={formatVoxPrice(ammEntryPrice, 3)} />/share,{" "}
+                      <VoxText text={formatVox(illustrativeStake)} /> buys about{" "}
                       {sharesLabel} shares
-                      {" → "}~{payoutLabel} if this wins.
+                      {" → "}~<VoxText text={payoutLabel} /> if this wins.
                       <span className="block mt-0.5 text-muted-foreground/70 italic">
-                        Enter at least {formatVox(MIN_STAKE)} for an exact quote. Winning shares pay {CURRENCY.symbol}1 each.
+                        Enter at least <VoxText text={formatVox(MIN_STAKE)} /> for an exact quote. Winning shares pay <VoxMark />1 each.
                       </span>
                     </p>
                   );
@@ -963,7 +967,7 @@ export function StakeModal({
 
                 {!hasBuyQuote && !(ammEntryPrice > 0) && (
                   <p className="text-[11px] text-muted-foreground/70 italic border-t border-violet-500/15 pt-1.5">
-                    Enter at least {formatVox(MIN_STAKE)} to see your potential payout.
+                    Enter at least <VoxText text={formatVox(MIN_STAKE)} /> to see your potential payout.
                   </p>
                 )}
 
@@ -1034,7 +1038,7 @@ export function StakeModal({
           <div className="flex items-center justify-between text-xs pt-2 border-t">
             <div>
               <span className="text-muted-foreground">Current Balance: </span>
-              <span className="font-mono font-medium">{formatVox(walletBalance)}</span>
+              <span className="font-mono font-medium"><VoxText text={formatVox(walletBalance)} /></span>
             </div>
             <div>
               <span className="text-muted-foreground">After Buy: </span>

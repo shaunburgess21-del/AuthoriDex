@@ -44,6 +44,9 @@ import { CURRENCY, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
+import { VoxMark } from "@/components/VoxMark";
+import { InfoHint } from "@/components/InfoHint";
+
 
 // Referral reward derives from credit-config so the menu label tracks the
 // real award amount (same pattern as ReferAFriendCard / the modal).
@@ -76,7 +79,10 @@ function XPProgressBar({ xp }: { xp: number }) {
   if (!ranks || ranks.length === 0) {
     return (
       <div className="flex items-center justify-end text-xs">
-        <span className="font-mono text-amber-600 dark:text-amber-400">{xp.toLocaleString('en-US')} XP</span>
+        <span className="inline-flex items-center gap-1 font-mono text-amber-600 dark:text-amber-400">
+          {xp.toLocaleString('en-US')} XP
+          <InfoHint term="xp" side="left" className="h-3 w-3" />
+        </span>
       </div>
     );
   }
@@ -95,7 +101,10 @@ function XPProgressBar({ xp }: { xp: number }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-end text-xs">
-        <span className="font-mono text-amber-600 dark:text-amber-400">{xp.toLocaleString('en-US')} XP</span>
+        <span className="inline-flex items-center gap-1 font-mono text-amber-600 dark:text-amber-400">
+          {xp.toLocaleString('en-US')} XP
+          <InfoHint term="xp" side="left" className="h-3 w-3" />
+        </span>
       </div>
       <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
         <div
@@ -310,10 +319,13 @@ function UserMenuContent({
         >
           <div className="flex items-center gap-2">
             <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-sm text-muted-foreground">Vox</span>
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+              Vox
+              <InfoHint term="vox" side="bottom" className="h-3 w-3" />
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-mono font-bold text-sm">{CURRENCY.symbol}{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
+            <span className="font-mono font-bold text-sm"><VoxMark />{(profile?.predictCredits || 0).toLocaleString('en-US')}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>

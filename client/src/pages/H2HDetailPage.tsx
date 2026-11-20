@@ -1,3 +1,4 @@
+import { VoxText } from "@/components/VoxText";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +48,7 @@ import {
   snapshotFromApi,
 } from "@/lib/ammClient";
 import {
+
   ArrowLeft,
   Swords,
   Clock,
@@ -819,7 +821,7 @@ export default function H2HDetailPage() {
                       {priceToPercent(p1Price, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {formatVoxPrice(p1Price, 3)} / share
+                      <VoxText text={formatVoxPrice(p1Price, 3)} /> / share
                     </p>
                   </div>
                   <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3">
@@ -828,7 +830,7 @@ export default function H2HDetailPage() {
                       {priceToPercent(p2Price, 0)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
-                      {formatVoxPrice(p2Price, 3)} / share
+                      <VoxText text={formatVoxPrice(p2Price, 3)} /> / share
                     </p>
                   </div>
                 </div>
@@ -856,7 +858,7 @@ export default function H2HDetailPage() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold truncate">{smartName(person.name)}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                              {pos.netShares.toFixed(2)} shares · avg <VoxText text={formatVoxPrice(pos.avgEntryPrice, 3)} /> · cost <VoxText text={formatVoxPrice(pos.netCreditsIn, 0)} />
                             </p>
                             <p className="text-[11px] text-muted-foreground">
                               Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(sidePrice, 0)}
@@ -867,15 +869,15 @@ export default function H2HDetailPage() {
                                 Up/Down detail page: what you'd get if you sold
                                 now, and what the position pays if it wins. */}
                             <p className="text-[11px] text-muted-foreground">
-                              Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                              Cash out now: ~<VoxText text={formatVoxPrice(pos.currentValue)} />{" "}
                               <span className={`font-mono font-medium ${pnlColor}`}>
-                                ({formatVoxDelta(unrealisedPnl)})
+                                (<VoxText text={formatVoxDelta(unrealisedPnl)} />)
                               </span>
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              If {smartName(person.name)} wins: {formatVoxPrice(pos.netShares)}{" "}
+                              If {smartName(person.name)} wins: <VoxText text={formatVoxPrice(pos.netShares)} />{" "}
                               <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                ({formatVoxDelta(maxProfitIfWin)})
+                                (<VoxText text={formatVoxDelta(maxProfitIfWin)} />)
                               </span>
                             </p>
                           </div>
@@ -891,7 +893,7 @@ export default function H2HDetailPage() {
                               className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
                             >
                               <Banknote className="h-3.5 w-3.5" />
-                              <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                              <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
                             </Button>
                             <Button
                               size="sm"

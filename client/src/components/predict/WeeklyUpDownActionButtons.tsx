@@ -5,6 +5,10 @@ import { ClosedMarketActionTrigger } from "./ClosedMarketActionTrigger";
 import { WeeklyUpDownYourPositionPanel } from "./WeeklyUpDownYourPositionPanel";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { formatVoxPrice } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+import { useStablePress } from "@/hooks/useStablePress";
+import { InfoHint } from "@/components/InfoHint";
+
 
 export function WeeklyUpDownActionButtons({
   marketId,
@@ -38,6 +42,9 @@ export function WeeklyUpDownActionButtons({
    *  summary hasn't loaded yet. */
   unrealisedPnl?: number | null;
 }) {
+  const pressUp = useStablePress(() => onSelect?.("up"));
+  const pressDown = useStablePress(() => onSelect?.("down"));
+
   if (!isMarketClosed && pendingPosition) {
     return (
       <WeeklyUpDownYourPositionPanel
@@ -82,8 +89,9 @@ export function WeeklyUpDownActionButtons({
       <div className="grid grid-cols-2 gap-2">
         <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
           <Button
-            className="bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto flex flex-col items-center justify-center gap-0.5"
-            onClick={() => onSelect?.("up")}
+            type="button"
+            className="w-full bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] hover:border-[#00C853]/80 hover:bg-[#00C853]/20 py-3 md:py-2 h-auto flex flex-col items-center justify-center gap-0.5"
+            {...(isMarketClosed ? {} : pressUp)}
             data-testid={`button-up-${marketId}`}
           >
             <span className="flex items-center gap-1 leading-none">
@@ -92,15 +100,16 @@ export function WeeklyUpDownActionButtons({
             </span>
             {showAmmPrices && (
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(upPrice)}/share
+                <VoxText text={formatVoxPrice(upPrice)} />/share
               </span>
             )}
           </Button>
         </ClosedMarketActionTrigger>
         <ClosedMarketActionTrigger isClosed={isMarketClosed} message={closedMessage} side="top" align="center">
           <Button
-            className="bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto flex flex-col items-center justify-center gap-0.5"
-            onClick={() => onSelect?.("down")}
+            type="button"
+            className="w-full bg-[#FF0000]/10 border border-[#FF0000]/50 text-[#FF0000] hover:border-[#FF0000]/80 hover:bg-[#FF0000]/20 py-3 md:py-2 h-auto flex flex-col items-center justify-center gap-0.5"
+            {...(isMarketClosed ? {} : pressDown)}
             data-testid={`button-down-${marketId}`}
           >
             <span className="flex items-center gap-1 leading-none">
@@ -109,12 +118,18 @@ export function WeeklyUpDownActionButtons({
             </span>
             {showAmmPrices && (
               <span className="text-[10px] font-mono opacity-80 leading-none">
-                {formatVoxPrice(downPrice)}/share
+                <VoxText text={formatVoxPrice(downPrice)} />/share
               </span>
             )}
           </Button>
         </ClosedMarketActionTrigger>
       </div>
+      {showAmmPrices ? (
+        <p className="mt-1.5 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
+          Price per share
+          <InfoHint term="shares" side="top" align="end" className="h-3 w-3" />
+        </p>
+      ) : null}
     </div>
   );
 }
