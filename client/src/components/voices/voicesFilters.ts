@@ -22,6 +22,7 @@ export const VOICES_POST_TYPE_TOGGLES: readonly VoicesPostTypeToggle[] = [
   {
     id: "polls",
     label: "Polls",
+    // Sentiment + opinion only. world_market is the Predictions toggle.
     surfaces: ["sentiment_poll", "opinion_poll"],
     testId: "voices-post-type-polls",
   },
@@ -67,11 +68,20 @@ export interface VoicesEmptyCopy {
   body: string | null;
 }
 
+/**
+ * A toggle is on when any of its surfaces are selected, so a partial URL
+ * (just sentiment_poll) still shows the Polls chip and counts as one.
+ * Toggles do not share surfaces: world_market never turns Polls on.
+ */
 export function postTypeIsOn(
   surfaces: readonly string[],
   toggleSurfaces: readonly string[],
 ): boolean {
   return toggleSurfaces.some((surface) => surfaces.includes(surface));
+}
+
+export function postTypeToggleById(id: string): VoicesPostTypeToggle | undefined {
+  return VOICES_POST_TYPE_TOGGLES.find((toggle) => toggle.id === id);
 }
 
 export function withoutPostType(
@@ -308,6 +318,65 @@ export function writeVoicesQuery(
     parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
   }
   return parts.length > 0 ? `?${parts.join("&")}` : "";
+}
+
+/** Feed request query. Same surface keys as the page URL, plus paging. */
+export function voicesFeedSearchParams(
+  mode: VoicesFeedMode,
+  filters: VoicesFilters,
+  cursor: string | null = null,
+): string {
+  const params = new URLSearchParams();
+  params.set("mode", mode);
+  params.set("limit", "20");
+  if (filters.surfaces.length > 0) params.set("surfaces", filters.surfaces.join(","));
+  if (filters.personIds.length > 0) params.set("personIds", filters.personIds.join(","));
+  if (filters.categories.length > 0) params.set("categories", filters.categories.join(","));
+  if (cursor) params.set("cursor", cursor);
+  return params.toString();
+}
+
+export type VoicesHistoryAction = "push" | "replace" | "none";
+
+/**
+ * One history entry per committed filter state.
+ * The first sync replaces, so a non-canonical URL does not add an entry.
+ * While the mobile panel is open, edits stay out of the stack (a celebrity
+ * search keystroke must not become its own entry). Closing the panel or
+ * Show results commits once. Desktop changes are committed immediately.
+ */
+export function nextVoicesHistoryAction(args: {
+  currentSearch: string;
+  mode: VoicesFeedMode;
+  filters: VoicesFilters;
+  canonicalize: boolean;
+  defer: boolean;
+}): { action: VoicesHistoryAction; search: string } {
+  const search = writeVoicesQuery(args.currentSearch, {
+    mode: args.mode,
+    filters: args.filters,
+  });
+  if (args.defer) return { action: "none", search };
+  if (search === args.currentSearch) return { action: "none", search };
+  if (args.canonicalize) return { action: "replace", search };
+  return { action: "push", search };
+}
+
+/**
+ * Empty-state Clear filters sits under the composer. Focusing the composer
+ * ("Post the first take") opens an action row; blurring it collapses that
+ * row and slides the button out from under the pointer, so the click never
+ * lands. Commit on pointerdown and cancel the focus change. A later click
+ * (or a keyboard click that never saw a pointer) clears too — setting the
+ * same empty filters twice is a no-op.
+ */
+export function emptyStateClearGesture(event: {
+  type: "pointerdown" | "click";
+  button?: number;
+}): { clear: boolean; preventFocusChange: boolean } {
+  if (event.type === "click") return { clear: true, preventFocusChange: false };
+  if ((event.button ?? 0) !== 0) return { clear: false, preventFocusChange: false };
+  return { clear: true, preventFocusChange: true };
 }
 
 /**

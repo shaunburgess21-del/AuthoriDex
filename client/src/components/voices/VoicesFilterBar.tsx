@@ -21,6 +21,7 @@ import {
   favouritePersonIds,
   favouritesSelectionActive,
   postTypeIsOn,
+  postTypeToggleById,
   togglePostType,
   voiceFilterPersonSlots,
   voicesFilterButtonLabel,
@@ -46,6 +47,12 @@ interface VoicesFilterBarProps {
   /** Signed-in favourites request still in flight — avoid a flash of one chip per id. */
   favouritesResolving?: boolean;
   onToggleFavourites: () => void;
+  /**
+   * True while the mobile sheet is open. The page defers history pushes
+   * until the sheet closes so celebrity search and in-sheet toggles share
+   * one entry. Desktop stays false and commits each change.
+   */
+  onHistoryDeferChange?: (defer: boolean) => void;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -258,6 +265,7 @@ export function VoicesFilterBar({
   favouriteIds,
   favouritesResolving = false,
   onToggleFavourites,
+  onHistoryDeferChange,
 }: VoicesFilterBarProps) {
   const [open, setOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
@@ -265,6 +273,9 @@ export function VoicesFilterBar({
   const panelRef = useRef<HTMLDivElement>(null);
   const sheetFrame = useSheetFrame(open && mobile);
   const pinned = usePinnedPanelStyle(open && !mobile, buttonRef);
+  useEffect(() => {
+    onHistoryDeferChange?.(open && mobile);
+  }, [open, mobile, onHistoryDeferChange]);
   const registry = useCategoryRegistry();
 
   const registryLabels = useMemo(() => {
@@ -352,12 +363,13 @@ export function VoicesFilterBar({
                 type="button"
                 aria-pressed={on}
                 data-testid={toggle.testId}
-                onClick={() =>
+                onClick={() => {
+                  const known = postTypeToggleById(toggle.id) ?? toggle;
                   onChange({
                     ...filters,
-                    surfaces: togglePostType(filters.surfaces, toggle.surfaces),
-                  })
-                }
+                    surfaces: togglePostType(filters.surfaces, known.surfaces),
+                  });
+                }}
                 className={cn(
                   "border px-3 py-1.5 text-xs font-medium transition-colors",
                   CATEGORY_CHIP_RADIUS,
