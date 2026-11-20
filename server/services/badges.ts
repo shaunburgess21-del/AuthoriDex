@@ -52,6 +52,8 @@ import {
   isAvatarCustomizationEligible,
   type AvatarCustomizationCheckOpts,
 } from "@shared/avatar-customization";
+import { badgeKeysForVoteTotal } from "@shared/lib/user-ballots";
+import { countUserBallots } from "./user-ballot-count";
 
 export type { AvatarCustomizationSource } from "@shared/avatar-customization";
 export type TryAwardAvatarCustomizationOpts = AvatarCustomizationCheckOpts;
@@ -205,15 +207,6 @@ export const badgeService = new BadgeService();
  * Per-surface check helpers.
  * ---------------------------------------------------------------- */
 
-const VOTE_COUNT_BADGES: Array<{ threshold: number; key: string }> = [
-  { threshold: 1, key: "first_vote" },
-  { threshold: 25, key: "quarter_century" },
-  { threshold: 100, key: "century_citizen" },
-  { threshold: 500, key: "dedicated_voter" },
-  { threshold: 1000, key: "voxmax_voter" },
-  { threshold: 10000, key: "legend_of_ballot" },
-];
-
 const PREDICTION_COUNT_BADGES: Array<{ threshold: number; key: string }> = [
   { threshold: 50, key: "forecaster_1" },
   { threshold: 500, key: "forecaster_2" },
@@ -241,8 +234,11 @@ const SUGGESTION_APPROVED_BADGES: Array<{ threshold: number; key: string }> = [
 export async function checkAndAwardVoteBadges(userId: string): Promise<void> {
   if (!userId) return;
   try {
-    // Single pass to compute total + per-type bucket — vote sections
-    // and the induction/curation counts fall out of the same scan.
+    // Unique ballots across every vote surface. The `votes` table only
+    // stores matchups for real users, so counting it alone made First
+    // Vote wait until a later matchup.
+    const total = await countUserBallots(userId);
+
     const typeRows = await db
       .select({
         voteType: votes.voteType,
@@ -252,13 +248,11 @@ export async function checkAndAwardVoteBadges(userId: string): Promise<void> {
       .where(eq(votes.userId, userId))
       .groupBy(votes.voteType);
 
-    let total = 0;
     let inductionCount = 0;
     let curationCount = 0;
     const distinctTypes = new Set<string>();
     for (const row of typeRows) {
       const c = Number(row.count) || 0;
-      total += c;
       distinctTypes.add(row.voteType);
       if (row.voteType === "induction") inductionCount += c;
       if (row.voteType === "image_curate") curationCount += c;
@@ -266,12 +260,10 @@ export async function checkAndAwardVoteBadges(userId: string): Promise<void> {
 
     // Threshold sweeps — awardBadge() is idempotent so awarding on
     // every check is fine; the duplicate guard short-circuits.
-    for (const t of VOTE_COUNT_BADGES) {
-      if (total >= t.threshold) {
-        await badgeService.awardBadge(userId, t.key, undefined, {
-          totalVotes: total,
-        });
-      }
+    for (const key of badgeKeysForVoteTotal(total)) {
+      await badgeService.awardBadge(userId, key, undefined, {
+        totalVotes: total,
+      });
     }
     if (distinctTypes.size >= 4) {
       await badgeService.awardBadge(userId, "well_rounded", undefined, {
