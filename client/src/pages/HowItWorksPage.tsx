@@ -62,7 +62,7 @@ import {
   PROFILE_THEME_MIN_TIER,
 } from "@shared/profile-theme-config";
 import { cn } from "@/lib/utils";
-import { CURRENCY, formatVox } from "@/lib/currency";
+import { formatVox } from "@/lib/currency";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { ReferAFriendCard } from "@/components/ReferAFriendCard";
 import { REFERRAL_PANEL_GLOW_CLASS } from "@/components/referral/ReferralFriendPanel";
@@ -1077,8 +1077,8 @@ function CreditsSection() {
               you can predict immediately.
             </ConceptTile>
             <ConceptTile icon={Trophy} label="Prediction payouts" accent={accent}>
-              Winning predictions return Vox plus your share of the pool when
-              the market settles.
+              A winning share pays 1 Vox. Weekly Jackpot is the one shared
+              pool, for the closest closing score.
             </ConceptTile>
             <ConceptTile icon={Sparkles} label="Engagement earn loop" accent={accent}>
               Vote, post insights, comment, and hit streak milestones for small
@@ -1720,30 +1720,42 @@ function VoteSection({
             </thead>
             <tbody>
               {VOTE_SURFACES.map((row) => {
-                const xp = xpActions.find(
-                  (action) => action.actionKey === row.xpActionKey,
-                );
+                const xp = row.xpActionKey
+                  ? xpActions.find((action) => action.actionKey === row.xpActionKey)
+                  : undefined;
+                const earns = row.xpActionKey != null;
                 return (
                   <tr key={row.surface} className="border-t border-border/60 align-middle">
                     <td className={cn("pl-5 pr-3 py-3.5 align-middle font-medium")}>
-                      {row.surface}
+                      <div>{row.surface}</div>
+                      {row.detail ? (
+                        <div className="text-xs font-normal text-muted-foreground">{row.detail}</div>
+                      ) : null}
                     </td>
                     <td className={cn("text-muted-foreground", KB_TD)}>{row.where}</td>
                     <td className={cn("text-right", KB_TD)}>
-                      <span
-                        className="font-mono font-semibold"
-                        style={{ color: accent }}
-                      >
-                        +{xp?.xpValue ?? 0}
-                      </span>
+                      {earns ? (
+                        <span
+                          className="font-mono font-semibold"
+                          style={{ color: accent }}
+                        >
+                          +{xp?.xpValue ?? 0}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className={cn("text-right text-muted-foreground", KB_TD)}>
-                      {formatCap(xp?.dailyCap ?? null)}
+                      {earns ? formatCap(xp?.dailyCap ?? null) : "—"}
                     </td>
                     <td className={cn("text-right", KB_TD)}>
-                      <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
-                        +<VoxMark />{voteCreditAction?.proposedCredits ?? 2}
-                      </span>
+                      {earns ? (
+                        <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
+                          +<VoxMark />{voteCreditAction?.proposedCredits ?? 2}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1967,27 +1979,6 @@ function PredictSection({
           when your market goes live. World markets carry the most editorial
           weight on VoxDex — only the best suggestions make it through.
         </p>
-      </InfoCallout>
-
-      <InfoCallout accent={accent}>
-        <p>
-          Advanced prediction markets unlock at{" "}
-          <button
-            type="button"
-            onClick={() => onJumpToTab("ranks")}
-            className="underline-offset-2 hover:underline text-foreground/80"
-          >
-            Analyst rank
-          </button>{" "}
-          (Tier 4 — 15,000 XP). Higher-stakes markets are reserved for
-          credentialed predictors.
-        </p>
-        <Badge
-          variant="outline"
-          className="text-[10px] border-amber-500/40 text-amber-600 dark:text-amber-300"
-        >
-          Coming soon
-        </Badge>
       </InfoCallout>
 
       <Card className={cn("space-y-2 p-4 shadow-none", glowClassFor("predict"), "pulse-card-flush")}>

@@ -9,6 +9,16 @@ const capacitorBuild = process.env.CAPACITOR_BUILD === "1";
 export default defineConfig({
   plugins: [
     {
+      name: "sonner-app-toast",
+      enforce: "pre",
+      resolveId(id) {
+        if (id === "sonner") {
+          return path.resolve(import.meta.dirname, "client", "src", "lib", "app-toast.ts");
+        }
+        return null;
+      },
+    },
+    {
       name: "native-first-paint",
       transformIndexHtml: {
         order: "pre",

@@ -12,6 +12,7 @@ export default function TermsPage() {
       effectiveDate={EFFECTIVE_DATE}
       markdown={termsMarkdown}
       backButtonTestId="button-terms-back"
+      navigation="site"
     />
   );
 }

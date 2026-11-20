@@ -89,6 +89,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { toast } from "sonner";
+import { SuggestionSentDialog, awardedSuggestionXp } from "@/components/suggest/SuggestionSentDialog";
 import { showVoteToast } from "@/lib/vote-toast";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
@@ -1280,6 +1281,7 @@ export default function VotePage() {
   const [opinionPollsOverlayOpen, setOpinionPollsOverlayOpen] = useState(() => window.history.state?.overlay === "opinion-polls");
   const prevOpinionPollsOverlayOpenRef = useRef(opinionPollsOverlayOpen);
   const [opinionSuggestOpen, setOpinionSuggestOpen] = useState(false);
+  const [suggestionSentXp, setSuggestionSentXp] = useState<number | null>(null);
   const [opinionSuggestTitle, setOpinionSuggestTitle] = useState("");
   const [opinionSuggestDescription, setOpinionSuggestDescription] = useState("");
   const [opinionSuggestCategory, setOpinionSuggestCategory] = useState("misc");
@@ -2601,7 +2603,7 @@ export default function VotePage() {
       setPollCustomDate("");
       setPollGeoEnabled(false);
       setPollGeoCountries([]);
-      toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
+      setSuggestionSentXp(awardedSuggestionXp(suggestData));
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
@@ -2665,7 +2667,7 @@ export default function VotePage() {
       setMatchupGeoEnabled(false);
       setMatchupGeoCountries([]);
       setMatchupSuggestOpen(false);
-      toast("Matchup suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
+      setSuggestionSentXp(awardedSuggestionXp(suggestData));
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
@@ -2709,7 +2711,7 @@ export default function VotePage() {
       setCurateImageFile(null);
       setCurateImageSource("");
       setCurateSuggestOpen(false);
-      toast("Image suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
+      setSuggestionSentXp(awardedSuggestionXp(suggestData));
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
@@ -2781,7 +2783,7 @@ export default function VotePage() {
       setOpinionGeoEnabled(false);
       setOpinionGeoCountries([]);
       setOpinionSuggestOpen(false);
-      toast("Poll suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
+      setSuggestionSentXp(awardedSuggestionXp(suggestData));
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
@@ -4428,6 +4430,14 @@ export default function VotePage() {
           />
         </>
       )}
+
+      <SuggestionSentDialog
+        open={suggestionSentXp != null}
+        xp={suggestionSentXp ?? 0}
+        onOpenChange={(open) => {
+          if (!open) setSuggestionSentXp(null);
+        }}
+      />
 
       <QuickVoteHost
         surface="vote"

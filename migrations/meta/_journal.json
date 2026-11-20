@@ -687,6 +687,13 @@
       "when": 1790985600000,
       "tag": "0103_user_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1790985800000,
+      "tag": "0104_private_profile_defaults",
+      "breakpoints": true
     }
   ]
 }

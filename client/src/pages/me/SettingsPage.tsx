@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  ArrowLeft,
   Settings,
   User,
   Bell,
@@ -33,6 +32,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { SiteHeader } from "@/components/SiteHeader";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
@@ -200,7 +200,9 @@ export default function SettingsPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen pb-20 md:pb-0">
+        <SiteHeader />
+        <div className="flex items-center justify-center px-4 py-16">
         <Card className="p-8 text-center max-w-md">
           <Settings className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
           <h2 className="text-xl font-semibold mb-2">Sign in to access settings</h2>
@@ -208,43 +210,32 @@ export default function SettingsPage() {
             Sign In
           </Button>
         </Card>
+        </div>
       </div>
     );
   }
 
   if (profileLoading && !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen pb-20 md:pb-0">
+        <SiteHeader />
+        <div className="flex items-center justify-center px-4 py-16">
         <Card className="p-8 text-center max-w-md">
           <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-muted-foreground" />
           <h2 className="text-xl font-semibold mb-2">Loading your settings</h2>
           <p className="text-muted-foreground">Please wait a moment.</p>
         </Card>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (window.history.length > 1) window.history.back();
-              else setLocation("/me");
-            }}
-            aria-label="Go back"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="font-semibold">Settings</h1>
-        </div>
-      </header>
+      <SiteHeader />
 
       <div className="container mx-auto px-2 sm:px-4 py-6 max-w-[964px] space-y-5">
+        <h1 className="font-serif text-2xl font-bold tracking-tight">Settings</h1>
         <SettingsTabsBar
           tabs={TABS}
           activeTab={activeTab}

@@ -55,10 +55,18 @@ export const contactSubmissionSchema = z.object({
     .or(z.literal("")),
 
   // Required so the team can actually reply. 254 is the RFC-5321
-  // max for an email address.
-  email: z.string().trim().email().max(254),
+  // max for an email address. Empty is its own message — `.email()`
+  // alone reports "Invalid email" for a blank field.
+  email: z
+    .string({ required_error: "Email is required" })
+    .trim()
+    .min(1, "Email is required")
+    .email("Enter a valid email")
+    .max(254, "Enter a valid email"),
 
-  topic: z.enum(CONTACT_TOPICS),
+  topic: z.enum(CONTACT_TOPICS, {
+    errorMap: () => ({ message: "Choose a topic" }),
+  }),
 
   subject: z.string().trim().min(2).max(120),
 

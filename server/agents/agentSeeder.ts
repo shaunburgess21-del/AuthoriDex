@@ -512,6 +512,8 @@ export async function seedAgents(): Promise<{
             avatarUrl,
             avatarSeed,
             isPublic: true,
+            // Human signups default these to false. Agents stay visible.
+            positionsPublic: true,
             role: "user",
             rank: seed.rank,
             xpPoints: seed.xpPoints,

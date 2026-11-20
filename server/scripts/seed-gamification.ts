@@ -35,10 +35,10 @@ async function seedXpActions() {
     // cap, which made vote choice feel like an XP optimisation
     // problem ("induction is worth more, skip sentiment"). Flat
     // values let users vote where the content interests them.
-    { actionKey: 'vote_sentiment', displayName: 'Sentiment Vote', xpValue: 20, dailyCap: 20, description: 'Vote on celebrity sentiment (1-10 scale)' },
+    { actionKey: 'vote_sentiment', displayName: 'Sentiment Vote', xpValue: 20, dailyCap: 20, description: 'Agree, Neutral, or Disagree on a sentiment poll' },
     { actionKey: 'vote_face_off', displayName: 'Matchup Vote', xpValue: 20, dailyCap: 20, description: 'Vote in a Matchup' },
     { actionKey: 'vote_induction', displayName: 'Induction Vote', xpValue: 20, dailyCap: 10, description: 'Vote on candidate for main leaderboard' },
-    { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 20, description: 'Vote on whether a profile image should be featured' },
+    { actionKey: 'vote_curation', displayName: 'Image Curation Vote', xpValue: 20, dailyCap: 20, description: 'Choose which profile photo should be featured' },
     { actionKey: 'vote_opinion', displayName: 'Opinion Poll Vote', xpValue: 20, dailyCap: 20, description: 'Vote on an opinion poll' },
 
     // Content Creation Actions

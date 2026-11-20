@@ -1651,10 +1651,13 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid hsl(var(--border) / 0.55);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.35;
   box-shadow:
-    0 12px 32px -8px rgb(0 0 0 / 0.16),
-    0 2px 8px rgb(0 0 0 / 0.06);
+    0 8px 20px -10px rgb(0 0 0 / 0.18),
+    0 1px 4px rgb(0 0 0 / 0.06);
   color: hsl(var(--foreground));
 }
 
@@ -1670,10 +1673,14 @@ html [data-sonner-toaster][data-sonner-theme="dark"] [data-sonner-toast][data-st
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-title] {
   color: hsl(var(--foreground));
   font-weight: 600;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-description] {
   color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 /* Semantic tints — a translucent wash layered over the glass base so
@@ -1876,10 +1883,15 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
   }
 }
 
-/* StreakToast — slot width must match STREAK_TOAST_WIDTH_CSS in streak-config.ts */
+/* StreakToast — slot width must match STREAK_TOAST_WIDTH_CSS in streak-config.ts.
+ * Centering applies when the toaster is center-anchored (desktop under the
+ * header, phones at the bottom). */
 [data-sonner-toast].streak-toast-host {
   width: min(384px, calc(100vw - 1rem)) !important;
   max-width: calc(100vw - 1rem) !important;
+}
+
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast].streak-toast-host {
   margin-inline: auto !important;
   left: 50% !important;
   right: auto !important;
@@ -1889,7 +1901,7 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
  * mobile-offset-left and sets each toast to left:0; right:0 — which reads
  * as off-center for our fixed-width StreakToast card on phones. */
 @media (max-width: 600px) {
-  [data-sonner-toast].streak-toast-host {
+  [data-sonner-toaster][data-x-position="center"] [data-sonner-toast].streak-toast-host {
     left: 50% !important;
     right: auto !important;
     width: min(384px, calc(100vw - 1rem)) !important;
@@ -1901,13 +1913,16 @@ html [data-sonner-theme="dark"] .streak-toast-surface--milestone {
 [data-sonner-toast].badge-toast-host {
   width: min(356px, calc(100vw - 1rem)) !important;
   max-width: calc(100vw - 1rem) !important;
+}
+
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast].badge-toast-host {
   margin-inline: auto !important;
   left: 50% !important;
   right: auto !important;
 }
 
 @media (max-width: 600px) {
-  [data-sonner-toast].badge-toast-host {
+  [data-sonner-toaster][data-x-position="center"] [data-sonner-toast].badge-toast-host {
     left: 50% !important;
     right: auto !important;
     width: min(356px, calc(100vw - 1rem)) !important;
@@ -2019,11 +2034,45 @@ html [data-sonner-toaster][data-y-position="top"] {
   z-index: 40 !important;
 }
 
+html [data-sonner-toaster][data-y-position="bottom"] {
+  z-index: 40 !important;
+}
+
 /* Keep the right-hand Rate column clickable. The toaster is centered with
    translateX(-50%); shifting its anchor left uncovers ~8.5rem on the right. */
 @media (min-width: 768px) {
   html [data-sonner-toaster][data-x-position="center"] {
     left: calc(50% - 4.25rem) !important;
+  }
+}
+
+/* Phone toasts sit above the tab bar. The offset is that clearance
+ * (5.5rem); this only adds the inset Capacitor / the iOS shell publish
+ * as --safe-area-inset-bottom. Website and PWA leave that variable unset. */
+html [data-sonner-toaster][data-y-position="bottom"] {
+  bottom: calc(var(--offset-bottom, 1rem) + var(--safe-area-inset-bottom, 0px)) !important;
+}
+
+html [data-sonner-toaster][data-x-position="right"] {
+  right: calc(var(--offset-right, 1rem) + var(--safe-area-inset-right, 0px)) !important;
+}
+
+/* Phones: Sonner stretches a bottom-center toaster edge to edge under
+ * 600px. Keep a compact card, centered, so it doesn't read as a banner. */
+@media (max-width: 767px) {
+  html [data-sonner-toaster][data-y-position="bottom"][data-x-position="center"] {
+    width: min(320px, calc(100vw - 1.5rem - var(--safe-area-inset-left, 0px) - var(--safe-area-inset-right, 0px))) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+  }
+
+  html [data-sonner-toaster][data-y-position="bottom"][data-x-position="center"] [data-sonner-toast][data-styled="true"]:not([data-swipe-out="true"]) {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    right: auto !important;
+    transform: var(--y) translateY(var(--swipe-amount-y, 0px)) translateX(var(--swipe-amount-x, 0px)) !important;
   }
 }
 
@@ -2040,6 +2089,27 @@ html.ios-shell select {
   html [data-sonner-toaster][data-y-position="top"] {
     top: calc(var(--mobile-offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;
   }
+
+  html [data-sonner-toaster][data-y-position="bottom"] {
+    bottom: calc(var(--mobile-offset-bottom, 1rem) + var(--safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Contact honeypot. Off-screen, not display:none, so a bot that fills
+ * every input still trips it. aria-hidden on the wrapper keeps it out
+ * of the accessibility tree. */
+.contact-honeypot {
+  position: absolute !important;
+  left: -10000px !important;
+  top: auto !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 /* iOS Capacitor chrome. html.ios-shell is added only by the native iOS

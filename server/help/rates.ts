@@ -40,10 +40,10 @@ const HIDDEN_XP_KEYS = new Set(["legacy_migration", "admin_adjustment"]);
 const HIDDEN_VOX_CATEGORIES = new Set(["SPECIAL"]);
 
 const FALLBACK_XP: HelpXpRate[] = [
-  { key: "vote_sentiment", label: "Sentiment Vote", xp: 20, dailyCap: 20, description: "Vote on celebrity sentiment (1-10 scale)" },
+  { key: "vote_sentiment", label: "Sentiment Vote", xp: 20, dailyCap: 20, description: "Agree, Neutral, or Disagree on a sentiment poll" },
   { key: "vote_face_off", label: "Matchup Vote", xp: 20, dailyCap: 20, description: "Vote in a Matchup" },
   { key: "vote_induction", label: "Induction Vote", xp: 20, dailyCap: 10, description: "Vote on candidate for main leaderboard" },
-  { key: "vote_curation", label: "Image Curation Vote", xp: 20, dailyCap: 20, description: "Vote on whether a profile image should be featured" },
+  { key: "vote_curation", label: "Image Curation Vote", xp: 20, dailyCap: 20, description: "Choose which profile photo should be featured" },
   { key: "vote_opinion", label: "Opinion Poll Vote", xp: 20, dailyCap: 20, description: "Vote on an opinion poll" },
   { key: "post_insight", label: "Post Insight", xp: 50, dailyCap: 5, description: "Post a community insight" },
   { key: "post_comment", label: "Post Comment", xp: 15, dailyCap: 10, description: "Comment on any discussion thread (min 20 chars, cap 10/day)" },

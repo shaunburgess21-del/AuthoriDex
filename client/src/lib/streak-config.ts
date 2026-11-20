@@ -17,6 +17,7 @@ export {
 } from "@shared/streak-config";
 
 import { STREAK_MILESTONES } from "@shared/streak-config";
+import { TOAST_RICH_DURATION_MS } from "@/lib/toast-policy";
 
 /**
  * Days inside the current cycle that get warmer "celebration" copy.
@@ -36,15 +37,15 @@ export const STREAK_REWARD_TEASE = "Take action on the site to earn Vox.";
 export const STREAK_TARGET_REWARD_COPY =
   "Hit your next milestone to unlock bonus XP.";
 
-/** Sonner duration in ms — long enough to read timeline dots + milestone copy. */
-export const STREAK_TOAST_DURATION_MS = 8000;
+/** Sonner duration. Long enough to see the timeline, short of the old 8s linger. */
+export const STREAK_TOAST_DURATION_MS = TOAST_RICH_DURATION_MS;
 
 /** Sonner `--width` and StreakToast card width — keep in sync. */
 export const STREAK_TOAST_WIDTH_CSS = "min(384px, calc(100vw - 1rem))";
 
 /**
- * Delay between the XP burst (viewport-center floater) and the toast
- * (top-center card). Lets the eye register the burst first, then read
+ * Delay between the XP burst (viewport-center floater) and the toast.
+ * Lets the eye register the burst first, then read
  * the context, instead of both elements competing for attention at t=0.
  */
 export const STREAK_TOAST_DELAY_MS = 400;
