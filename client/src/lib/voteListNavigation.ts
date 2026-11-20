@@ -15,6 +15,8 @@ export interface VoteListHistoryState {
   activeSection: string;
   /** Section search text to restore when returning to the Vote hub. */
   listSearchQuery?: string;
+  /** Mixed All-feed card (`kind:id`) to put back on screen. */
+  feedCardKey?: string;
 }
 
 export const VOTE_DETAIL_PATH_PREFIX: Record<VoteListNavType, string> = {
@@ -42,6 +44,8 @@ export interface VoteHubReturnState {
   listType?: VoteListNavType;
   /** Section search text captured when the detail page was opened. */
   listSearchQuery?: string;
+  /** Mixed All-feed card (`kind:id`) to put back on screen. */
+  feedCardKey?: string;
   /** Written by writeVoteHubReturnState; used to ignore stale restores. */
   ts?: number;
 }
@@ -61,6 +65,7 @@ export function buildVoteListState(args: {
   scrollY?: number;
   activeSection?: string;
   listSearchQuery?: string;
+  feedCardKey?: string;
 }): VoteListHistoryState {
   const listSearchQuery = args.listSearchQuery?.trim() ? args.listSearchQuery : undefined;
   return {
@@ -72,6 +77,7 @@ export function buildVoteListState(args: {
     scrollY: args.scrollY ?? (typeof window !== "undefined" ? window.scrollY : 0),
     activeSection: args.activeSection ?? "All",
     ...(listSearchQuery ? { listSearchQuery } : {}),
+    ...(args.feedCardKey ? { feedCardKey: args.feedCardKey } : {}),
   };
 }
 
@@ -140,6 +146,7 @@ export function navigateToPersonFromVoteHub(
     activeSection: string;
     scrollY?: number;
     listSearchQuery?: string;
+    feedCardKey?: string;
   },
 ): void {
   const listSearchQuery = opts.listSearchQuery?.trim() ? opts.listSearchQuery : undefined;
@@ -149,6 +156,7 @@ export function navigateToPersonFromVoteHub(
     scrollY:
       opts.scrollY ?? (typeof window !== "undefined" ? window.scrollY : 0),
     ...(listSearchQuery ? { listSearchQuery } : {}),
+    ...(opts.feedCardKey ? { feedCardKey: opts.feedCardKey } : {}),
   });
   setLocation(`/person/${personId}`);
 }
@@ -197,6 +205,7 @@ export function navigateBackToVoteHub(
     ...(voteList.listSearchQuery
       ? { listType: voteList.type, listSearchQuery: voteList.listSearchQuery }
       : {}),
+    ...(voteList.feedCardKey ? { feedCardKey: voteList.feedCardKey } : {}),
   });
   setLocation("/vote");
 }

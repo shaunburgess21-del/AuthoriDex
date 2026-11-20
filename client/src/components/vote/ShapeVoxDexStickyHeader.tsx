@@ -2,9 +2,11 @@ import { Sparkles } from "lucide-react";
 
 interface ShapeVoxDexStickyHeaderProps {
   onInfoClick?: () => void;
+  /** Replaces both breakpoint subtitles. The All feed uses this once ratings move into the mix. */
+  subtitle?: string;
 }
 
-export function ShapeVoxDexStickyHeader({ onInfoClick }: ShapeVoxDexStickyHeaderProps) {
+export function ShapeVoxDexStickyHeader({ onInfoClick, subtitle }: ShapeVoxDexStickyHeaderProps) {
   const iconBox = (
     <Sparkles className="size-5 text-cyan-600 dark:text-cyan-400 md:size-6" />
   );
@@ -45,12 +47,20 @@ export function ShapeVoxDexStickyHeader({ onInfoClick }: ShapeVoxDexStickyHeader
             <p className="min-w-0 truncate text-base font-semibold text-foreground text-center md:col-start-2 md:row-start-1 md:text-left md:text-lg md:font-bold">
               Shape the VoxDex
             </p>
-            <p className="min-w-0 max-w-[min(100%,20rem)] truncate text-xs text-muted-foreground text-center md:hidden">
-              Rate, curate, and shape the leaderboard
-            </p>
-            <p className="hidden min-w-0 truncate text-sm text-muted-foreground md:col-start-2 md:row-start-2 md:block md:text-left md:text-base">
-              Weigh in on ratings, influence who makes the leaderboard, curate their profile images
-            </p>
+            {subtitle ? (
+              <p className="min-w-0 max-w-[22rem] text-xs leading-snug text-muted-foreground text-center line-clamp-2 md:col-start-2 md:row-start-2 md:max-w-none md:text-left md:text-base">
+                {subtitle}
+              </p>
+            ) : (
+              <>
+                <p className="min-w-0 max-w-[min(100%,20rem)] truncate text-xs text-muted-foreground text-center md:hidden">
+                  Rate, curate, and shape the leaderboard
+                </p>
+                <p className="hidden min-w-0 truncate text-sm text-muted-foreground md:col-start-2 md:row-start-2 md:block md:text-left md:text-base">
+                  Weigh in on ratings, influence who makes the leaderboard, curate their profile images
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>

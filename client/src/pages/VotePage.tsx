@@ -134,6 +134,17 @@ import { useMatchupVotes } from "@/hooks/useMatchupVotes";
 import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
+import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
+import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
+import {
+  VOTE_SECTION_CUE_LABELS,
+  applyVoteFeedFilters,
+  interleaveVoteFeed,
+  readVoteMixedFeedPlace,
+  writeVoteMixedFeedPlace,
+  type VoteFeedFilter,
+  type VoteFeedFilterable,
+} from "@/lib/voteMixedFeed";
 import {
   navigateToLogin,
   AUTH_APPLY_VOTE_UI_ONCE_KEY,
@@ -1217,6 +1228,18 @@ export default function VotePage() {
     const section = voteHubReturn?.activeSection;
     return (section as SectionToggle) || "All";
   });
+  const [mixedFeedSearch, setMixedFeedSearch] = useState(() =>
+    voteHubReturn?.activeSection === "All" ? voteHubReturn.listSearchQuery ?? "" : "",
+  );
+  const mixedFeedAnchorRef = useRef<string | null>(voteHubReturn?.feedCardKey ?? null);
+  const [mixedFeedRestoreKey] = useState<string | null>(() => {
+    if (voteHubReturn?.activeSection !== "All") return null;
+    return voteHubReturn.feedCardKey ?? readVoteMixedFeedPlace()?.cardKey ?? null;
+  });
+  const pinMixedFeedCard = useCallback((key: string) => {
+    mixedFeedAnchorRef.current = key;
+    writeVoteMixedFeedPlace(key);
+  }, []);
 
   // Scroll-linked hide/reveal of the category chip bar only — the section
   // toggles row is a normal in-flow block that scrolls away with the page.
@@ -1322,6 +1345,9 @@ export default function VotePage() {
     setActiveSection(voteHubReturn.activeSection as SectionToggle);
     const searchSection = voteHubSearchSection(voteHubReturn);
     const query = voteHubReturn.listSearchQuery;
+    if (voteHubReturn.activeSection === "All" && query) {
+      setMixedFeedSearch(query);
+    }
     if (searchSection && query) {
       if (searchSection === "sentiment") setTopicsSearchQuery(query);
       else if (searchSection === "matchup") setMatchupsSearchQuery(query);
@@ -1331,6 +1357,12 @@ export default function VotePage() {
       else setCurateSearchQuery(query);
     }
     const runScroll = () => {
+      // The mixed feed mounts the saved card and scrolls it into view.
+      // A raw scrollY would clamp while only the first page of cards exists.
+      const restoreMixedFeed =
+        voteHubReturn.activeSection === "All" &&
+        !!(voteHubReturn.feedCardKey || readVoteMixedFeedPlace()?.cardKey);
+      if (restoreMixedFeed) return;
       // Prefer exact scrollY when available (person-profile Back, filtered sections).
       // Fall back to section anchor when scrollY is missing (legacy poll returns on "All").
       if (voteHubReturn.scrollY != null && voteHubReturn.scrollY > 0) {
@@ -1703,6 +1735,154 @@ export default function VotePage() {
     [filteredRatingCelebrities, myVotesFilter, voteActivityLifecycle, ratingVoteEpoch],
   );
 
+  const mixedFeedEntries = useMemo(() => {
+    const filter: VoteFeedFilter = {
+      category: globalCategoryFilter,
+      search: mixedFeedSearch,
+      activity: "all",
+      matchesCategory: (primary, secondary, category) =>
+        matchesRegistryCategoryFilter(
+          primary,
+          (secondary ?? []).filter((value): value is string => typeof value === "string"),
+          category,
+        ),
+    };
+    const trending = globalCategoryFilter === "trending";
+
+    const matchupSource = matchups.filter((matchup) => matchup.isActive);
+    if (trending) {
+      matchupSource.sort((a, b) => (b.totalVotes ?? 0) - (a.totalVotes ?? 0));
+    }
+    const matchupRows = filterCardsByVoteActivity(
+      applyVoteFeedFilters(
+        matchupSource.map((item) => ({
+          id: item.id,
+          item,
+          category: item.category,
+          secondaryCategories: (item as { secondaryCategories?: string[] }).secondaryCategories,
+          searchText: [item.title, item.optionAText, item.optionBText].filter(Boolean).join("\n"),
+          voted: !!matchupUserVotes[item.id],
+          favorite: involvesAnyFavorite(favoriteIds, [
+            item.personAId,
+            item.personBId,
+            ...(item.relatedPersonIds || []),
+          ]),
+        })),
+        filter,
+      ),
+      myVotesFilter,
+      (row) => row.voted,
+      { keyOf: (row) => `matchups:${row.id}`, ...voteActivityLifecycle },
+    );
+
+    const sentimentSource = [...dbPolls];
+    if (trending) {
+      sentimentSource.sort((a: any, b: any) => (b.totalVotes ?? 0) - (a.totalVotes ?? 0));
+    }
+    const sentimentRows = filterCardsByVoteActivity(
+      applyVoteFeedFilters(
+        sentimentSource.map((item: any) => ({
+          id: String(item.id),
+          item,
+          category: item.category as string | null,
+          secondaryCategories: item.secondaryCategories as string[] | undefined,
+          searchText: [item.headline, item.description].filter(Boolean).join("\n"),
+          voted: !!item.userVote,
+          favorite: involvesAnyFavorite(favoriteIds, [item.personId, ...(item.relatedPersonIds || [])]),
+        })),
+        filter,
+      ),
+      myVotesFilter,
+      (row) => row.voted,
+      { keyOf: (row) => `sentiment:${row.id}`, ...voteActivityLifecycle },
+    );
+
+    const opinionSource = [...opinionPolls];
+    if (trending) {
+      opinionSource.sort((a: any, b: any) => (b.totalVotes ?? 0) - (a.totalVotes ?? 0));
+    }
+    const opinionRows = filterCardsByVoteActivity(
+      applyVoteFeedFilters(
+        opinionSource.map((item: any) => ({
+          id: String(item.id),
+          item,
+          category: item.category as string | null,
+          secondaryCategories: item.secondaryCategories as string[] | undefined,
+          searchText: [item.title, item.description].filter(Boolean).join("\n"),
+          voted: !!item.userVote,
+          favorite: involvesAnyFavorite(favoriteIds, [
+            ...(item.options || []).map((option: { personId?: string | null }) => option.personId),
+            ...(item.relatedPersonIds || []),
+          ]),
+        })),
+        filter,
+      ),
+      myVotesFilter,
+      (row) => row.voted,
+      { keyOf: (row) => `opinion:${row.id}`, ...voteActivityLifecycle },
+    );
+
+    const ratingSource = [...ratingCelebrities];
+    if (trending) {
+      ratingSource.sort((a, b) => {
+        const votesDiff = (b.approvalVotesCount ?? 0) - (a.approvalVotesCount ?? 0);
+        if (votesDiff !== 0) return votesDiff;
+        return Number(b.fameIndex ?? 0) - Number(a.fameIndex ?? 0);
+      });
+    }
+    const ratingRows = filterCardsByVoteActivity(
+      applyVoteFeedFilters(
+        ratingSource.map((item) => ({
+          id: item.id,
+          item,
+          category: item.category,
+          secondaryCategories: item.secondaryCategories,
+          searchText: item.name,
+          voted: hasOverallRatingVote(item),
+          favorite: favoriteIds.has(item.id),
+        })),
+        filter,
+      ),
+      myVotesFilter,
+      (row) => row.voted,
+      { keyOf: (row) => `rating:${row.id}`, ...voteActivityLifecycle },
+    );
+
+    return interleaveVoteFeed(
+      {
+        matchup: matchupRows,
+        sentiment: sentimentRows,
+        opinion: opinionRows,
+        rating: ratingRows,
+      },
+      { categoryOf: (row) => row.item.category },
+    ).map((entry) => ({
+      key: `${entry.kind}:${entry.id}`,
+      kind: entry.kind,
+      id: entry.id,
+      item: entry.item.item,
+    }));
+  }, [
+    dbPolls,
+    favoriteIds,
+    globalCategoryFilter,
+    matchupUserVotes,
+    matchups,
+    matchesRegistryCategoryFilter,
+    mixedFeedSearch,
+    myVotesFilter,
+    opinionPolls,
+    ratingCelebrities,
+    ratingVoteEpoch,
+    voteActivityLifecycle,
+  ]);
+
+  const mixedFeedLoading =
+    (matchupsLoading && matchups.length === 0) ||
+    (pollsLoading && dbPolls.length === 0) ||
+    (opinionPollsLoading && opinionPolls.length === 0) ||
+    (ratingLoading && ratingCelebrities.length === 0);
+
   const displayCandidates = useMemo(
     () =>
       filterCardsByVoteActivity(
@@ -1738,12 +1918,13 @@ export default function VotePage() {
           slugs: sentimentSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: topicsSearchQuery,
+          listSearchQuery: activeSection === "All" ? mixedFeedSearch : topicsSearchQuery,
+          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
         }),
         `/polls/${encodeURIComponent(slug)}`,
       );
     },
-    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery],
+    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery, mixedFeedSearch],
   );
   const goMatchupDetail = useCallback(
     (slug: string) => {
@@ -1754,12 +1935,13 @@ export default function VotePage() {
           slugs: matchupSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: matchupsSearchQuery,
+          listSearchQuery: activeSection === "All" ? mixedFeedSearch : matchupsSearchQuery,
+          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
         }),
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
-    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery],
+    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery, mixedFeedSearch],
   );
   const goOpinionDetail = useCallback(
     (slug: string) => {
@@ -1770,12 +1952,13 @@ export default function VotePage() {
           slugs: opinionSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: opinionPollsSearchQuery,
+          listSearchQuery: activeSection === "All" ? mixedFeedSearch : opinionPollsSearchQuery,
+          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
         }),
         `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
-    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery],
+    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery, mixedFeedSearch],
   );
 
   // Snap view always shows the full category chip row, so each snap source
@@ -2229,13 +2412,16 @@ export default function VotePage() {
         activeSection,
         scrollY,
         listSearchQuery:
-          anchorHashId === "vote-rating"
-            ? ratingSearchQuery
-            : anchorHashId === "vote-induction"
-              ? inductionSearchQuery
-              : anchorHashId === "vote-curate"
-                ? curateSearchQuery
-                : "",
+          activeSection === "All"
+            ? mixedFeedSearch
+            : anchorHashId === "vote-rating"
+              ? ratingSearchQuery
+              : anchorHashId === "vote-induction"
+                ? inductionSearchQuery
+                : anchorHashId === "vote-curate"
+                  ? curateSearchQuery
+                  : "",
+        feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
       });
     },
     [
@@ -2248,6 +2434,7 @@ export default function VotePage() {
       ratingSearchQuery,
       inductionSearchQuery,
       curateSearchQuery,
+      mixedFeedSearch,
     ],
   );
 
@@ -2829,8 +3016,18 @@ export default function VotePage() {
                 />
               </div>
               <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0" reserveStartPadding={false}>
-                {SECTION_TOGGLES.map((section) => (
+                {SECTION_TOGGLES.map((section) => {
+                  const cueKind = voteSectionCueKind(section);
+                  const cueLabel = VOTE_SECTION_CUE_LABELS[section];
+                  return (
                   <span key={section} className="inline-flex items-center gap-1 shrink-0">
+                  {section === "Induction Queue" && (
+                    <span
+                      aria-hidden
+                      className="mx-1 h-5 w-px shrink-0 self-center bg-border"
+                      data-testid="chip-divider-shape"
+                    />
+                  )}
                   <button
                     onClick={() => setActiveSection(section)}
                     className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
@@ -2841,10 +3038,7 @@ export default function VotePage() {
                     data-testid={`toggle-section-${section.toLowerCase().replace(/['\s]/g, '-')}`}
                   >
                     {section === "All" && <Sparkles className="h-4 w-4" />}
-                    {section === "Matchups" && <Swords className="h-4 w-4" />}
-                    {section === "Sentiment Polls" && <MessageSquare className="h-4 w-4" />}
-                    {section === "Opinion Polls" && <Vote className="h-4 w-4" />}
-                    {section === "Overall Rating" && <ThumbsUp className="h-4 w-4" />}
+                    {cueKind && <VoteTypeCueIcon kind={cueKind} className="h-4 w-4" />}
                     {section === "Induction Queue" && <UserPlus className="h-4 w-4" />}
                     {section === "Curate Profile" && <ImageIcon className="h-4 w-4" />}
                     {section === "All" ? (
@@ -2853,7 +3047,7 @@ export default function VotePage() {
                         <span className="hidden sm:inline">All Votes</span>
                       </>
                     ) : (
-                      section
+                      cueLabel ?? section
                     )}
                   </button>
                     {section === "Induction Queue" && (
@@ -2863,7 +3057,8 @@ export default function VotePage() {
                       <InfoHint term="curateProfile" side="bottom" className="h-3 w-3" />
                     )}
                   </span>
-                ))}
+                  );
+                })}
               </ScrollMaskedChipRow>
             </div>
           </div>
@@ -2871,7 +3066,7 @@ export default function VotePage() {
       </div>
       <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
-        {(activeSection === "All" || activeSection === "Sentiment Polls") && (
+        {activeSection === "Sentiment Polls" && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
             title="Sentiment Polls"
@@ -2974,7 +3169,7 @@ export default function VotePage() {
         )}
 
         {/* ZONE 1: Public Opinion - Matchups Section (Second) */}
-        {(activeSection === "All" || activeSection === "Matchups") && (
+        {activeSection === "Matchups" && (
         <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="Matchups"
@@ -3081,7 +3276,7 @@ export default function VotePage() {
         )}
 
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
-        {(activeSection === "All" || activeSection === "Opinion Polls") && (
+        {activeSection === "Opinion Polls" && (
         <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="Opinion Polls"
@@ -3185,12 +3380,191 @@ export default function VotePage() {
         </section>
         )}
 
-        {/* Shape the VoxDex: sticky splitter + Overall Rating, Induction, Curate */}
+        {activeSection === "All" && (
+          <VoteMixedFeed
+            items={mixedFeedEntries}
+            loading={mixedFeedLoading}
+            filterKey={`${globalCategoryFilter}|${mixedFeedSearch}|${myVotesFilter}`}
+            restoreCardKey={mixedFeedRestoreKey}
+            onAnchorChange={pinMixedFeedCard}
+            toolbar={
+              <div className="mb-4">
+                <SectionSearchRow
+                  value={mixedFeedSearch}
+                  onChange={setMixedFeedSearch}
+                  placeholder="Search votes"
+                  testId="filter-mixed-feed-search"
+                />
+              </div>
+            }
+            empty={
+              (topicsOfflineKind || opinionOfflineKind) &&
+              matchups.length === 0 &&
+              ratingCelebrities.length === 0 &&
+              dbPolls.length === 0 &&
+              opinionPolls.length === 0 ? (
+                <OfflineInlineNotice
+                  kind={topicsOfflineKind || opinionOfflineKind || "unreachable"}
+                  onRetry={
+                    (topicsOfflineKind || opinionOfflineKind) === "unreachable"
+                      ? () => {
+                          void refetchTopics();
+                          void refetchOpinionPolls();
+                        }
+                      : undefined
+                  }
+                />
+              ) : (
+                <p className="py-8 text-center text-muted-foreground" data-testid="vote-mixed-feed-empty">
+                  No votes match these filters.
+                </p>
+              )
+            }
+            renderItem={(entry, { imagePriority }) => {
+              const loadingMode = imagePriority ? "eager" : "lazy";
+              if (entry.kind === "matchup") {
+                const matchup = entry.item as VersusCardMatchup;
+                return (
+                  <HideExitCard
+                    isMobile={isMobile}
+                    animateOnMobile
+                    exiting={isHideExiting(`matchups:${matchup.id}`)}
+                  >
+                    <VersusCard
+                      matchup={matchup}
+                      userVote={matchupUserVotes[matchup.id] || null}
+                      onVote={(id, option) => {
+                        pinMixedFeedCard(entry.key);
+                        handleMatchupVote(id, option);
+                      }}
+                      onRemoveVote={handleMatchupRemoveVote}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      onNavigateToDetail={
+                        matchup.slug
+                          ? () => {
+                              pinMixedFeedCard(entry.key);
+                              goMatchupDetail(matchup.slug!);
+                            }
+                          : undefined
+                      }
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
+                      enableDiscussion
+                      priority={imagePriority}
+                      showTypeCue
+                      feedLayout
+                    />
+                  </HideExitCard>
+                );
+              }
+              if (entry.kind === "sentiment") {
+                const topic = entry.item as any;
+                return (
+                  <HideExitCard
+                    isMobile={isMobile}
+                    animateOnMobile
+                    exiting={isHideExiting(`sentiment:${topic.id}`)}
+                  >
+                    <DiscourseCard
+                      topic={topic}
+                      onVote={(choice) => handleDiscourseVote(topic.id, choice)}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      onNavigateToPollDetail={
+                        topic.slug
+                          ? () => {
+                              pinMixedFeedCard(entry.key);
+                              goSentimentDetail(topic.slug);
+                            }
+                          : undefined
+                      }
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
+                      enableDiscussion
+                      showTypeCue
+                      feedLayout
+                      imageLoading={loadingMode}
+                    />
+                  </HideExitCard>
+                );
+              }
+              if (entry.kind === "opinion") {
+                const poll = entry.item as any;
+                return (
+                  <HideExitCard
+                    isMobile={isMobile}
+                    animateOnMobile
+                    exiting={isHideExiting(`opinion:${poll.id}`)}
+                  >
+                    <OpinionPollCard
+                      poll={poll}
+                      onVote={handleOpinionVote}
+                      onRemoveVote={removeOpinionPollVote}
+                      onFilterCategory={handleCategoryPillFilter}
+                      categoryRaceMap={raceMap}
+                      leaderboardCategories={leaderboardCats}
+                      onNavigateToDetail={
+                        poll.slug
+                          ? () => {
+                              pinMixedFeedCard(entry.key);
+                              goOpinionDetail(poll.slug);
+                            }
+                          : undefined
+                      }
+                      onBrowseFullScreen={isMobile ? () => openSnapScroll("opinion", poll.id, "browse-button") : undefined}
+                      enableDiscussion
+                      showTypeCue
+                      feedLayout
+                      imageLoading={loadingMode}
+                    />
+                  </HideExitCard>
+                );
+              }
+              const person = entry.item as (typeof ratingCelebrities)[number];
+              return (
+                <HideExitCard
+                  isMobile={isMobile}
+                  animateOnMobile
+                  exiting={isHideExiting(`rating:${person.id}`)}
+                >
+                  <OverallRatingCard
+                    person={person}
+                    onVisitProfile={() => {
+                      pinMixedFeedCard(entry.key);
+                      goPersonFromVote(person.id, "vote-rating");
+                    }}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
+                    onRated={() => beginShapeHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    enableDiscussion
+                    showTypeCue
+                    feedLayout
+                    imagePriority={imagePriority ? "high" : "lazy"}
+                  />
+                </HideExitCard>
+              );
+            }}
+          />
+        )}
+
+        {/* Shape the VoxDex: sticky splitter + Induction and Curate on All.
+            Single-type chips keep the header with their own section. */}
         {(activeSection === "All" || isShapeVoxDexSection(activeSection)) && (
         <div data-testid="shape-voxdex-sticky-scope">
-          <ShapeVoxDexStickyHeader onInfoClick={() => setInfoModalOpen("governance")} />
+          <ShapeVoxDexStickyHeader
+            onInfoClick={() => setInfoModalOpen("governance")}
+            subtitle={
+              activeSection === "All"
+                ? "Decide who joins the leaderboard and pick their profile photos"
+                : undefined
+            }
+          />
 
-        {(activeSection === "All" || activeSection === "Overall Rating") && (
+        {activeSection === "Overall Rating" && (
         <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
             title="Overall Rating"

@@ -26,6 +26,7 @@ import { CardVoteCount, DiscussionButton } from "@/components/comments/Discussio
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
+import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -82,6 +83,9 @@ export function OpinionPollCard({
   onBrowseFullScreen,
   enableDiscussion = false,
   categoryMenuDisabled = false,
+  showTypeCue = false,
+  feedLayout = false,
+  imageLoading,
 }: {
   poll: OpinionPollCardPoll;
   onVote: (pollSlug: string, optionId: string) => Promise<void>;
@@ -93,6 +97,11 @@ export function OpinionPollCard({
   onBrowseFullScreen?: () => void;
   enableDiscussion?: boolean;
   categoryMenuDisabled?: boolean;
+  /** Mixed All feed only: icon + "Pick one" between comments and the category pill. */
+  showTypeCue?: boolean;
+  /** Mixed All feed only: fixed desktop height, top options, "+N more" expands in place. */
+  feedLayout?: boolean;
+  imageLoading?: "eager" | "lazy";
 }) {
   const [, setLocation] = useLocation();
   const [voted, setVoted] = useState<string | null>(poll.userVote || null);
@@ -102,6 +111,7 @@ export function OpinionPollCard({
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [optionsDrawerOpen, setOptionsDrawerOpen] = useState(false);
   const [optionsViewMode, setOptionsViewMode] = useState<OptionsViewMode>("list");
+  const [feedExpanded, setFeedExpanded] = useState(false);
   const [galleryScrollTargetId, setGalleryScrollTargetId] = useState<string | null>(null);
   const galleryOptionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [pendingChangeOption, setPendingChangeOption] = useState<typeof options[number] | null>(null);
@@ -116,8 +126,9 @@ export function OpinionPollCard({
   // update dynamically as votes come in. Pre-vote we keep the authored
   // orderIndex so we don't telegraph popular picks before voting.
   const displayOptions = sortOpinionPollOptionsForCard(options, voted);
-  const visibleOptions = displayOptions.slice(0, OPINION_POLL_PREVIEW_COUNT);
-  const remainingCount = Math.max(0, options.length - OPINION_POLL_PREVIEW_COUNT);
+  const previewCount = feedLayout && feedExpanded ? displayOptions.length : OPINION_POLL_PREVIEW_COUNT;
+  const visibleOptions = displayOptions.slice(0, previewCount);
+  const remainingCount = Math.max(0, options.length - visibleOptions.length);
   const categoryKey = poll.category ?? "";
 
   useEffect(() => {
@@ -275,9 +286,9 @@ export function OpinionPollCard({
   );
 
   return (
-    <div className="hub-card-slot relative h-full overflow-visible">
+    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : "overflow-visible"}`}>
       <Card
-        className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[420px] md:min-h-0 flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+        className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[420px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[420px] md:min-h-0"}`}
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -295,6 +306,11 @@ export function OpinionPollCard({
               </span>
             </div>
           )}
+          {showTypeCue ? (
+            <div className="flex min-w-0 flex-1 justify-center px-1">
+              <VoteTypeCue kind="opinion" />
+            </div>
+          ) : null}
           <InteractiveCategoryPill
             category={categoryKey}
             onFilter={() => onFilterCategory(categoryKey)}
@@ -341,6 +357,8 @@ export function OpinionPollCard({
                   src={getDisplayImageUrl(headerImageSrc, { width: 200 })}
                   alt={poll.title}
                   className="w-full h-full object-cover"
+                  loading={imageLoading}
+                  decoding={imageLoading ? "async" : undefined}
                   onError={onHeaderImageError}
                 />
               </div>
@@ -367,8 +385,9 @@ export function OpinionPollCard({
           )
         )}
 
+        <div className={feedLayout ? "mt-auto flex min-h-0 flex-1 flex-col justify-end" : undefined}>
         {!hasVoted ? (
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", feedLayout && feedExpanded && "min-h-0 flex-1 overflow-y-auto md:max-h-full")}>
             {visibleOptions.map((option, idx) => {
               const orderLabel = (option.orderIndex ?? idx) + 1;
               return (
@@ -381,13 +400,14 @@ export function OpinionPollCard({
                   onVote={(e) => handleVote(option.id, e)}
                   onExpandImage={() => openCardOptionImageReview(option.id)}
                   imageInteraction="gallery"
+                  imageLoading={imageLoading}
                   testIdPrefix="opinion-poll-option"
                 />
               );
             })}
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className={cn("space-y-1.5", feedLayout && feedExpanded && "min-h-0 flex-1 overflow-y-auto md:max-h-full")}>
             {visibleOptions.map((option, idx) => {
               const isSelected = voted === option.id;
               const percent = totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0;
@@ -405,6 +425,7 @@ export function OpinionPollCard({
                   onChangeVote={(e) => openChangeDialog(option, e)}
                   onExpandImage={() => openCardOptionImageReview(option.id)}
                   imageInteraction="gallery"
+                  imageLoading={imageLoading}
                   testIdPrefix="opinion-poll-result"
                 />
               );
@@ -412,7 +433,7 @@ export function OpinionPollCard({
           </div>
         )}
 
-        {!hasVoted && remainingCount > 0 && (
+        {!hasVoted && remainingCount > 0 && !feedLayout && (
           <div className="mt-1.5 flex-1 flex flex-col min-h-0">
             <button
               type="button"
@@ -434,6 +455,18 @@ export function OpinionPollCard({
           </div>
         )}
 
+        {feedLayout && (remainingCount > 0 || feedExpanded) && options.length > OPINION_POLL_PREVIEW_COUNT && (
+          <button
+            type="button"
+            onClick={() => setFeedExpanded((open) => !open)}
+            className="mt-1.5 shrink-0 self-center text-xs font-medium text-cyan-600 hover:underline dark:text-cyan-400"
+            data-testid={`link-more-options-${poll.id}`}
+          >
+            {feedExpanded ? "Show less" : `+${remainingCount} more`}
+          </button>
+        )}
+        </div>
+
         {hasVoted && (
           <div className="mt-auto pt-2.5 flex items-center gap-2">
             <div className="flex-1 min-w-0 flex items-center">
@@ -442,7 +475,7 @@ export function OpinionPollCard({
               ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">
-              {remainingCount > 0 && (
+              {remainingCount > 0 && !feedLayout && (
                 <button
                   type="button"
                   onClick={() => {

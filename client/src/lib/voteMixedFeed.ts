@@ -1,0 +1,359 @@
+/**
+ * Client-side mix for the Vote hub All view.
+ *
+ * The four source lists stay in their existing order. This module only
+ * interleaves them, spaces the large rating list, and applies the same
+ * category / search / my-votes predicates the section views already use.
+ * It does not fetch, vote, or touch cache.
+ */
+
+export const VOTE_FEED_PAGE_SIZE = 12;
+
+/** Desktop row size. Must match the mixed-feed card class `md:h-[32rem]`. */
+export const VOTE_FEED_ROW_HEIGHT = "32rem";
+/** Desktop grid gap. Must match `md:gap-5` on the mixed feed. */
+export const VOTE_FEED_ROW_GAP = "1.25rem";
+
+export type VoteFeedKind = "matchup" | "sentiment" | "opinion" | "rating";
+
+export const VOTE_FEED_ROUND: readonly VoteFeedKind[] = [
+  "matchup",
+  "sentiment",
+  "opinion",
+  "rating",
+];
+
+export const VOTE_FEED_CUE_LABELS = {
+  matchup: "Head-to-head",
+  sentiment: "Agree?",
+  opinion: "Pick one",
+  rating: "Rate",
+} as const;
+
+/** Chip keys stay the section toggles. Only the visible label changes. */
+export const VOTE_SECTION_CUE_LABELS: Record<string, string> = {
+  "Sentiment Polls": VOTE_FEED_CUE_LABELS.sentiment,
+  Matchups: VOTE_FEED_CUE_LABELS.matchup,
+  "Opinion Polls": VOTE_FEED_CUE_LABELS.opinion,
+  "Overall Rating": VOTE_FEED_CUE_LABELS.rating,
+};
+
+export type VoteFeedSpan = 1 | 2;
+
+export function voteFeedSpan(kind: VoteFeedKind): VoteFeedSpan {
+  return kind === "matchup" ? 2 : 1;
+}
+
+export interface VoteFeedEntry<T> {
+  kind: VoteFeedKind;
+  id: string;
+  item: T;
+}
+
+export interface VoteFeedLists<M, S, O, R> {
+  matchup: readonly M[];
+  sentiment: readonly S[];
+  opinion: readonly O[];
+  rating: readonly R[];
+}
+
+type FeedCursor = Record<VoteFeedKind, number>;
+
+/**
+ * Remaining ratings after the other types run out.
+ * Multiple categories are dealt round-robin so the tail alternates.
+ * A single category is woven from the front and back so neighbors are not
+ * adjacent ranks in the source list.
+ */
+export function distributeRatingTail<T>(
+  items: readonly T[],
+  categoryOf: (item: T) => string | null | undefined,
+): T[] {
+  if (items.length <= 2) return items.slice();
+
+  const groups = new Map<string, T[]>();
+  const order: string[] = [];
+  for (const item of items) {
+    const key = (categoryOf(item) ?? "").trim();
+    let bucket = groups.get(key);
+    if (!bucket) {
+      bucket = [];
+      groups.set(key, bucket);
+      order.push(key);
+    }
+    bucket.push(item);
+  }
+
+  if (groups.size <= 1) {
+    const woven: T[] = [];
+    let lo = 0;
+    let hi = items.length - 1;
+    while (lo <= hi) {
+      woven.push(items[lo]);
+      lo += 1;
+      if (lo <= hi) {
+        woven.push(items[hi]);
+        hi -= 1;
+      }
+    }
+    return woven;
+  }
+
+  const out: T[] = [];
+  while (out.length < items.length) {
+    let progressed = false;
+    for (const key of order) {
+      const bucket = groups.get(key);
+      if (!bucket?.length) continue;
+      const next = bucket.shift();
+      if (next) {
+        out.push(next);
+        progressed = true;
+      }
+    }
+    if (!progressed) break;
+  }
+  return out;
+}
+
+/**
+ * Repeating order: matchup, sentiment, opinion, rating.
+ * While any non-rating list still has items, each round emits at most one rating.
+ * Ratings left over are distributed so the tail is not one unbroken block.
+ */
+export function interleaveVoteFeed<
+  M extends { id: string },
+  S extends { id: string },
+  O extends { id: string },
+  R extends { id: string },
+>(
+  lists: VoteFeedLists<M, S, O, R>,
+  options?: { categoryOf?: (item: R) => string | null | undefined },
+): Array<
+  | { kind: "matchup"; id: string; item: M }
+  | { kind: "sentiment"; id: string; item: S }
+  | { kind: "opinion"; id: string; item: O }
+  | { kind: "rating"; id: string; item: R }
+> {
+  const cursor: FeedCursor = { matchup: 0, sentiment: 0, opinion: 0, rating: 0 };
+  const out: Array<
+    | { kind: "matchup"; id: string; item: M }
+    | { kind: "sentiment"; id: string; item: S }
+    | { kind: "opinion"; id: string; item: O }
+    | { kind: "rating"; id: string; item: R }
+  > = [];
+
+  const othersRemain = () =>
+    cursor.matchup < lists.matchup.length ||
+    cursor.sentiment < lists.sentiment.length ||
+    cursor.opinion < lists.opinion.length;
+
+  while (othersRemain()) {
+    if (cursor.matchup < lists.matchup.length) {
+      const item = lists.matchup[cursor.matchup];
+      out.push({ kind: "matchup", id: item.id, item });
+      cursor.matchup += 1;
+    }
+    if (cursor.sentiment < lists.sentiment.length) {
+      const item = lists.sentiment[cursor.sentiment];
+      out.push({ kind: "sentiment", id: item.id, item });
+      cursor.sentiment += 1;
+    }
+    if (cursor.opinion < lists.opinion.length) {
+      const item = lists.opinion[cursor.opinion];
+      out.push({ kind: "opinion", id: item.id, item });
+      cursor.opinion += 1;
+    }
+    if (cursor.rating < lists.rating.length) {
+      const item = lists.rating[cursor.rating];
+      out.push({ kind: "rating", id: item.id, item });
+      cursor.rating += 1;
+    }
+  }
+
+  const categoryOf = options?.categoryOf ?? ((item: R) => (item as { category?: string | null }).category);
+  const rest = lists.rating.slice(cursor.rating);
+  for (const item of distributeRatingTail(rest, categoryOf)) {
+    out.push({ kind: "rating", id: item.id, item });
+  }
+  return out;
+}
+
+export type VoteFeedActivityFilter = "all" | "show-mine" | "hide-mine";
+
+export interface VoteFeedFilterable {
+  id: string;
+  category?: string | null;
+  secondaryCategories?: readonly (string | null | undefined)[] | null;
+  searchText: string;
+  voted: boolean;
+  favorite: boolean;
+}
+
+export interface VoteFeedFilter {
+  category: string;
+  search: string;
+  activity: VoteFeedActivityFilter;
+  matchesCategory?: (
+    primary: string | null | undefined,
+    secondary: readonly (string | null | undefined)[] | null | undefined,
+    category: string,
+  ) => boolean;
+}
+
+function defaultCategoryMatch(item: VoteFeedFilterable, category: string): boolean {
+  if ((item.category ?? "") === category) return true;
+  return (item.secondaryCategories ?? []).some((value) => value === category);
+}
+
+/** Category, search, and my-votes (All / Not voted / Votes only). */
+export function matchesVoteFeedFilters(item: VoteFeedFilterable, filter: VoteFeedFilter): boolean {
+  const category = filter.category;
+  if (category === "favorites") {
+    if (!item.favorite) return false;
+  } else if (category !== "all" && category !== "trending") {
+    const ok = filter.matchesCategory
+      ? filter.matchesCategory(item.category, item.secondaryCategories, category)
+      : defaultCategoryMatch(item, category);
+    if (!ok) return false;
+  }
+
+  const query = filter.search.trim().toLowerCase();
+  if (query && !item.searchText.toLowerCase().includes(query)) return false;
+
+  if (filter.activity === "show-mine" && !item.voted) return false;
+  if (filter.activity === "hide-mine" && item.voted) return false;
+  return true;
+}
+
+export function applyVoteFeedFilters<T extends VoteFeedFilterable>(
+  items: readonly T[],
+  filter: VoteFeedFilter,
+): T[] {
+  return items.filter((item) => matchesVoteFeedFilters(item, filter));
+}
+
+export interface FeedRowLayout {
+  rowOfIndex: number[];
+  rowCount: number;
+}
+
+/** Pack cards into rows. Matchups span 2 columns on desktop; mobile is one column. */
+export function layoutFeedRows(spans: readonly VoteFeedSpan[], columns: 1 | 2): FeedRowLayout {
+  const rowOfIndex: number[] = [];
+  let row = 0;
+  let col = 0;
+  for (const span of spans) {
+    const width = columns === 1 ? 1 : span;
+    if (col > 0 && col + width > columns) {
+      row += 1;
+      col = 0;
+    }
+    rowOfIndex.push(row);
+    col += width;
+    if (col >= columns) {
+      row += 1;
+      col = 0;
+    }
+  }
+  const rowCount = spans.length === 0 ? 0 : col === 0 ? row : row + 1;
+  return { rowOfIndex, rowCount };
+}
+
+/** About `size` cards, snapped so a desktop row is not split across the window. */
+export function snapFeedWindow(
+  spans: readonly VoteFeedSpan[],
+  anchorIndex: number,
+  columns: 1 | 2,
+  size = VOTE_FEED_PAGE_SIZE,
+): { start: number; end: number } {
+  const count = spans.length;
+  if (count === 0) return { start: 0, end: 0 };
+  const { rowOfIndex } = layoutFeedRows(spans, columns);
+  const anchor = Math.min(Math.max(anchorIndex, 0), count - 1);
+  let start = anchor;
+  while (start > 0 && rowOfIndex[start - 1] === rowOfIndex[start]) start -= 1;
+
+  let end = Math.min(count, Math.max(start + size, anchor + 1));
+  if (end < count && end > 0) {
+    const row = rowOfIndex[end - 1];
+    while (end < count && rowOfIndex[end] === row) end += 1;
+  }
+
+  if (end - start < size && start > 0) {
+    let next = start;
+    let pulled = 0;
+    const need = size - (end - start);
+    while (next > 0 && pulled < need) {
+      next -= 1;
+      pulled += 1;
+    }
+    while (next > 0 && rowOfIndex[next - 1] === rowOfIndex[next]) next -= 1;
+    start = next;
+  }
+
+  return { start, end };
+}
+
+/** True when this card is the only one in its desktop row, so it should span the row. */
+export function feedItemFillsRow(
+  spans: readonly VoteFeedSpan[],
+  index: number,
+  columns: 1 | 2,
+): boolean {
+  if (index < 0 || index >= spans.length) return false;
+  if (columns !== 2) return false;
+  if (spans[index] === 2) return true;
+  const { rowOfIndex } = layoutFeedRows(spans, 2);
+  const row = rowOfIndex[index];
+  let count = 0;
+  for (const value of rowOfIndex) {
+    if (value === row) count += 1;
+  }
+  return count === 1;
+}
+
+export function feedSpacerRows(
+  spans: readonly VoteFeedSpan[],
+  start: number,
+  end: number,
+  columns: 1 | 2,
+): { top: number; bottom: number } {
+  const { rowOfIndex, rowCount } = layoutFeedRows(spans, columns);
+  if (spans.length === 0 || end <= start) return { top: 0, bottom: rowCount };
+  const top = rowOfIndex[start] ?? 0;
+  const lastRow = rowOfIndex[Math.min(end, spans.length) - 1] ?? 0;
+  return { top, bottom: Math.max(0, rowCount - lastRow - 1) };
+}
+
+const FEED_PLACE_KEY = "voteMixedFeedPlace";
+const FEED_PLACE_TTL_MS = 5 * 60 * 1000;
+
+export interface VoteMixedFeedPlace {
+  cardKey: string;
+  ts: number;
+}
+
+export function writeVoteMixedFeedPlace(cardKey: string): void {
+  if (typeof sessionStorage === "undefined" || !cardKey) return;
+  try {
+    const place: VoteMixedFeedPlace = { cardKey, ts: Date.now() };
+    sessionStorage.setItem(FEED_PLACE_KEY, JSON.stringify(place));
+  } catch {
+    /* private mode */
+  }
+}
+
+export function readVoteMixedFeedPlace(): VoteMixedFeedPlace | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(FEED_PLACE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as VoteMixedFeedPlace;
+    if (!parsed?.cardKey || typeof parsed.ts !== "number") return null;
+    if (Date.now() - parsed.ts > FEED_PLACE_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
