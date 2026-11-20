@@ -1,13 +1,14 @@
 /**
  * Mobile hub filter pill. On Vote it stacks above Quick Vote; on Predict it
  * floats alone in the same corner. Cycles all → not yet acted → mine only.
- * The label shows for the session intro and again briefly after each tap,
- * then collapses to a dim eye — the same recede as the Quick Vote pill.
+ * The label shows during the shared corner intro and again briefly after
+ * each tap, then collapses to a dim eye — the same recede as the Quick Vote pill.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useAnimationControls } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCornerPillIntro } from "@/lib/cornerPillIntro";
 import {
   hubActivityFilterFabAriaLabel,
   hubActivityFilterFabLabel,
@@ -15,11 +16,6 @@ import {
   type HubActivityFilterScope,
 } from "@/lib/hub-activity-filter";
 
-const INTRO_AT_KEY: Record<HubActivityFilterScope, string> = {
-  vote: "voxdex_vote_filter_pill_intro_at",
-  predict: "voxdex_predict_filter_pill_intro_at",
-};
-const INTRO_MS = 3000;
 const LABEL_HOLD_MS = 1600;
 
 export interface VoteActivityFilterFabProps {
@@ -38,16 +34,20 @@ export function VoteActivityFilterFab({
   onCycle,
   pulseTick = 0,
 }: VoteActivityFilterFabProps) {
-  const [labelVisible, setLabelVisible] = useState(false);
+  const [tapLabelVisible, setTapLabelVisible] = useState(false);
   const timerRef = useRef<number | null>(null);
   const pulse = useAnimationControls();
+  // Vote and Predict count as separate pills, so the first visit to each
+  // page still gets an intro.
+  const introVisible = useCornerPillIntro(scope === "predict" ? "predict-eye" : "vote-eye", true);
+  const labelVisible = introVisible || tapLabelVisible;
 
   const revealFor = useCallback((ms: number) => {
-    setLabelVisible(true);
+    setTapLabelVisible(true);
     if (timerRef.current != null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      setLabelVisible(false);
+      setTapLabelVisible(false);
     }, ms);
   }, []);
 
@@ -57,35 +57,6 @@ export function VoteActivityFilterFab({
     },
     [],
   );
-
-  // Label shows once at the start of a session, then collapses. Remounts
-  // (overlay open/close) only finish whatever time is left. Vote and Predict
-  // keep separate clocks so opening one page does not spend the other's intro.
-  const introKey = INTRO_AT_KEY[scope];
-  useLayoutEffect(() => {
-    let started: number | null = null;
-    try {
-      const raw = sessionStorage.getItem(introKey);
-      if (raw) {
-        const n = Number(raw);
-        if (Number.isFinite(n)) started = n;
-      }
-    } catch {
-      // Private mode — intro still plays, it just won't be shared across pages.
-    }
-
-    if (started == null) {
-      started = Date.now();
-      try {
-        sessionStorage.setItem(introKey, String(started));
-      } catch {
-        // Private mode.
-      }
-    }
-
-    const remaining = INTRO_MS - (Date.now() - started);
-    if (remaining > 0) revealFor(remaining);
-  }, [introKey, revealFor]);
 
   // Tap confirmation: the new state's label expands, then recedes.
   const prevValueRef = useRef(value);

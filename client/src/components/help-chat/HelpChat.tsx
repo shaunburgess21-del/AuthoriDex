@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { helpFabStackPx, useCornerFabOffset } from "@/components/help-chat/placement";
 import { HelpRichText } from "@/components/help-chat/HelpRichText";
 import { friendlyHelpError } from "@/lib/helpChatFormat";
+import { useCornerPillIntro } from "@/lib/cornerPillIntro";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -40,10 +41,6 @@ const SUGGESTIONS = [
 /** Matches the server: the last 8 turns, questions up to 500 characters. */
 const MAX_SENT_TURNS = 8;
 const MAX_QUESTION_CHARS = 500;
-
-/** Same session intro as Quick Vote and the eye filter: label for 3s, then the icon. */
-const INTRO_AT_KEY = "voxdex_help_chat_pill_intro_at";
-const INTRO_MS = 3000;
 
 /** Gap between the panel and the top of the on-screen keyboard. */
 const KEYBOARD_GAP_PX = 8;
@@ -107,41 +104,6 @@ function useKeyboardPanelBox(enabled: boolean): { bottom: number; maxHeight: num
   return box;
 }
 
-/** One labelled intro per browser session, shared across pages. */
-function useSessionIntro(active: boolean): boolean {
-  const [visible, setVisible] = useState(false);
-  useLayoutEffect(() => {
-    if (!active) return;
-    let started: number | null = null;
-    try {
-      const raw = sessionStorage.getItem(INTRO_AT_KEY);
-      if (raw) {
-        const n = Number(raw);
-        if (Number.isFinite(n)) started = n;
-      }
-    } catch {
-      // Private mode — the intro still plays, it just is not shared across pages.
-    }
-    if (started == null) {
-      started = Date.now();
-      try {
-        sessionStorage.setItem(INTRO_AT_KEY, String(started));
-      } catch {
-        // Private mode.
-      }
-    }
-    const remaining = INTRO_MS - (Date.now() - started);
-    if (remaining <= 0) {
-      setVisible(false);
-      return;
-    }
-    setVisible(true);
-    const timer = window.setTimeout(() => setVisible(false), remaining);
-    return () => window.clearTimeout(timer);
-  }, [active]);
-  return visible;
-}
-
 export function HelpChat() {
   const [location] = useLocation();
   const isMobile = useIsMobile();
@@ -156,7 +118,7 @@ export function HelpChat() {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const hidden = hideOnThisRoute(location);
-  const labelVisible = useSessionIntro(!hidden);
+  const labelVisible = useCornerPillIntro("help-chat", !hidden);
   const keyboardBox = useKeyboardPanelBox(open && isMobile);
 
   const ask = useMutation({

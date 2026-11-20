@@ -19,6 +19,7 @@ import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { useAuth } from "@/contexts/AuthContext";
 import { QuickVoteOverlay } from "@/components/quick-vote/QuickVoteOverlay";
 import { CornerFabSlot } from "@/components/help-chat/placement";
+import { useCornerPillIntro } from "@/lib/cornerPillIntro";
 import {
   VoteActivityFilterFab,
   type VoteActivityFilterFabProps,
@@ -43,11 +44,10 @@ const SCROLL_TRIGGER_DELTA_PX = 48;
 
 /** Set once the visitor opens Quick Vote (pill, nudge, or restore). */
 const QUICK_VOTE_OPENED_KEY = "voxdex_quick_vote_opened";
-/** Session clock for the one labelled intro, shared across Home and Vote. */
+/** When the pill first appeared this session; the reminder counts from here. */
 const PILL_INTRO_AT_KEY = "voxdex_quick_vote_pill_intro_at";
 /** Session flag so the later label pulse fires at most once. */
 const PILL_REMINDER_SHOWN_KEY = "voxdex_quick_vote_pill_reminder_shown";
-const PILL_INTRO_MS = 3000;
 const PILL_REMINDER_DELAY_MS = 45000;
 const PILL_REMINDER_HOLD_MS = 2500;
 
@@ -249,13 +249,17 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
   }, [openOverlay]);
 
   // The pill stays mounted and tappable, collapsed to a dim icon. The full
-  // "Quick Vote" label shows once at the start of a session (3s), then once
-  // more ~45s later if they still haven't opened it. Scrolling never expands it.
-  // Visitors who have opened Quick Vote stay on the icon.
-  const [pillProminent, setPillProminent] = useState(false);
+  // "Quick Vote" label shows during the shared corner intro (in step with the
+  // other corner pills), then once more ~45s later if they still haven't
+  // opened it. Scrolling never expands it. Visitors who have opened Quick
+  // Vote stay on the icon.
+  const introEnabled = showFab && !hasOpenedQuickVote();
+  const introProminent = useCornerPillIntro("quick-vote", introEnabled);
+  const [reminderProminent, setReminderProminent] = useState(false);
+  const pillProminent = introProminent || reminderProminent;
   useLayoutEffect(() => {
-    if (!showFab || hasOpenedQuickVote()) {
-      setPillProminent(false);
+    if (!introEnabled) {
+      setReminderProminent(false);
       return;
     }
 
@@ -266,16 +270,8 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
       try {
         sessionStorage.setItem(PILL_INTRO_AT_KEY, String(started));
       } catch {
-        // Private mode — intro still plays, it just won't be shared across pages.
+        // Private mode — the reminder clock just restarts on the next page.
       }
-    }
-
-    const introRemaining = PILL_INTRO_MS - (Date.now() - started);
-    if (introRemaining > 0) {
-      setPillProminent(true);
-      timers.push(window.setTimeout(() => setPillProminent(false), introRemaining));
-    } else {
-      setPillProminent(false);
     }
 
     if (!pillReminderShown()) {
@@ -287,15 +283,15 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
         } catch {
           // Still show the pulse; a later page in this session may repeat it.
         }
-        setPillProminent(true);
-        timers.push(window.setTimeout(() => setPillProminent(false), PILL_REMINDER_HOLD_MS));
+        setReminderProminent(true);
+        timers.push(window.setTimeout(() => setReminderProminent(false), PILL_REMINDER_HOLD_MS));
       }, wait));
     }
 
     return () => {
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [showFab]);
+  }, [introEnabled]);
 
   return (
     <>
