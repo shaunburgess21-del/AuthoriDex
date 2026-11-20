@@ -113,6 +113,7 @@ export function OpinionPollOptionRow({
   testIdPrefix,
   disabled = false,
   imageInteraction = "lightbox",
+  imageLoading,
 }: {
   pollId: string;
   option: OpinionPollOptionRowOption;
@@ -126,6 +127,8 @@ export function OpinionPollOptionRow({
   testIdPrefix: string;
   disabled?: boolean;
   imageInteraction?: OpinionPollOptionImageInteraction;
+  /** Mixed feed sets this so option photos are not all fetched at once. */
+  imageLoading?: "eager" | "lazy";
 }) {
   const { pointerProps, guardClick } = useTapClickGuard();
   const opensGallery = imageInteraction === "gallery";
@@ -141,7 +144,13 @@ export function OpinionPollOptionRow({
         opensGallery ? "cursor-pointer" : "cursor-zoom-in",
       )}
     >
-      <img src={getDisplayImageUrl(option.imageUrl!, { width: 200 })} alt={option.name} className="absolute inset-0 h-full w-full object-cover" />
+      <img
+        src={getDisplayImageUrl(option.imageUrl!, { width: 200 })}
+        alt={option.name}
+        className="absolute inset-0 h-full w-full object-cover"
+        loading={imageLoading}
+        decoding={imageLoading ? "async" : undefined}
+      />
       {opensGallery ? (
         <span
           aria-hidden

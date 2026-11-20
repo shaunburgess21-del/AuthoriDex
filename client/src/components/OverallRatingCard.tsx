@@ -5,6 +5,8 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
+import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import type { LeaderboardAvatarPriority } from "@/lib/leaderboardImageLoading";
 import { PersonCommentsFocusOverlay } from "@/components/CommunityInsights";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -77,6 +79,11 @@ export interface OverallRatingCardProps {
    * Snap and Quick Vote leave this off — they already have their own comment entry.
    */
   enableDiscussion?: boolean;
+  /** Mixed All feed only: icon + "Rate" between comments and the category pill. */
+  showTypeCue?: boolean;
+  /** Mixed All feed only: fill a fixed desktop row and pin the rating controls. */
+  feedLayout?: boolean;
+  imagePriority?: LeaderboardAvatarPriority;
 }
 
 export function OverallRatingCard({
@@ -90,6 +97,9 @@ export function OverallRatingCard({
   onRated,
   onRateRolledBack,
   enableDiscussion = false,
+  showTypeCue = false,
+  feedLayout = false,
+  imagePriority = "lazy",
 }: OverallRatingCardProps) {
   const [submittedRating, setSubmittedRating] = useState<number | null>(() =>
     readSavedRating(person.id, person.userApprovalRating ?? null),
@@ -286,9 +296,9 @@ export function OverallRatingCard({
   const avgColor = avgRating != null ? RATING_COLORS[Math.round(avgRating) - 1] : undefined;
 
   return (
-    <div className="hub-card-slot relative h-full">
+    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[340px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${showResults ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[340px]"}`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -306,6 +316,11 @@ export function OverallRatingCard({
             </span>
           </div>
         )}
+        {showTypeCue ? (
+          <div className="flex min-w-0 flex-1 justify-center px-1">
+            <VoteTypeCue kind="rating" />
+          </div>
+        ) : null}
         {person.category && (
           <InteractiveCategoryPill
             category={person.category}
@@ -329,6 +344,7 @@ export function OverallRatingCard({
           name={person.name}
           avatar={person.avatar}
           className="h-20 w-20 md:h-16 md:w-16"
+          imagePriority={imagePriority}
         />
         <div className="flex-1 min-w-0">
           <h3 className="font-serif font-bold text-xl md:text-lg leading-tight group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
@@ -357,7 +373,7 @@ export function OverallRatingCard({
       </div>
 
       {!showResults ? (
-        <div className="flex flex-col gap-3 mt-auto">
+        <div className={`flex flex-col gap-3 mt-auto ${feedLayout ? "shrink-0" : ""}`}>
           <div className="grid grid-cols-5 gap-1 md:gap-1.5">
             {ZONE_LABELS.map((label, index) => {
               const isActive = selectedRating === index + 1;

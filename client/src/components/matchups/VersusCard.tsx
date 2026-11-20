@@ -20,6 +20,7 @@ import {
 import { matchupShare } from "@/lib/share";
 import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
+import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -67,6 +68,8 @@ export function VersusCard({
   enableVsShimmer = true,
   enableHoverNudge = false,
   categoryMenuDisabled = false,
+  showTypeCue = false,
+  feedLayout = false,
 }: {
   matchup: VersusCardMatchup;
   userVote: string | null;
@@ -88,6 +91,10 @@ export function VersusCard({
   enableHoverNudge?: boolean;
   /** Static category chip in snap view (no drawer menu). */
   categoryMenuDisabled?: boolean;
+  /** Mixed All feed only: icon + "Head-to-head" between comments and the category pill. */
+  showTypeCue?: boolean;
+  /** Mixed All feed only: fill a fixed desktop row and pin the vote bar. */
+  feedLayout?: boolean;
 }) {
   const hasVoted = userVote !== null;
   const votedA = userVote === "option_a";
@@ -119,8 +126,8 @@ export function VersusCard({
   };
 
   return (
-    <div ref={neutralNudge.cardRef} className="hub-card-slot relative h-full">
-      <Card className="hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm h-full flex flex-col rounded-[12px] md:rounded-xl min-h-[390px] md:min-h-0">
+    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
+      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
         <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>
@@ -145,7 +152,7 @@ export function VersusCard({
               data-testid={`badge-matchup-${matchup.id}`}
             />
           </div>
-          <div className="flex items-center mb-3 gap-2 px-4">
+          <div className={`flex items-center mb-3 gap-2 px-4 ${showTypeCue ? "pr-28" : ""}`}>
             {showDiscussion ? (
               <DiscussionButton
                 count={matchup.commentCount}
@@ -160,6 +167,11 @@ export function VersusCard({
                 </span>
               </div>
             )}
+            {showTypeCue ? (
+              <span className="ml-auto">
+                <VoteTypeCue kind="matchup" />
+              </span>
+            ) : null}
           </div>
 
           <div className={`rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 ${footerBarClass} px-4 py-2 text-center mb-0 mt-[5px]`}>
@@ -187,8 +199,8 @@ export function VersusCard({
             )}
           </div>
 
-          <div className="relative">
-            <div className="flex items-stretch gap-0">
+          <div className={`relative ${feedLayout ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+            <div className={`flex items-stretch gap-0 ${feedLayout ? "min-h-0 flex-1" : ""}`}>
             <button
               type="button"
               onClick={(e) => {
@@ -205,7 +217,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-a-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""}`} style={{ minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -245,7 +257,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-b-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""}`} style={{ minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -376,7 +388,7 @@ export function VersusCard({
             </div>
           </div>
 
-          <div className="mt-auto pt-3 px-4">
+          <div className="mt-auto shrink-0 pt-3 px-4">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">

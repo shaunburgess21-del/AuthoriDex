@@ -13,6 +13,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare } from "lucide-react";
+import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
 import { Link } from "wouter";
 import { sentimentPollShare } from "@/lib/share";
 import {
@@ -31,6 +32,9 @@ export function DiscourseCard({
   onBrowseFullScreen,
   enableDiscussion = false,
   categoryMenuDisabled = false,
+  showTypeCue = false,
+  feedLayout = false,
+  imageLoading,
 }: {
   topic: any;
   onVote: (choice: 'agree' | 'neutral' | 'disagree') => Promise<void>;
@@ -42,6 +46,12 @@ export function DiscourseCard({
   onBrowseFullScreen?: () => void;
   enableDiscussion?: boolean;
   categoryMenuDisabled?: boolean;
+  /** Mixed All feed only: icon + "Agree?" between comments and the category pill. */
+  showTypeCue?: boolean;
+  /** Mixed All feed only: fill a fixed desktop row and pin the vote controls. */
+  feedLayout?: boolean;
+  /** Set by the mixed feed so off-screen cards stay lazy. */
+  imageLoading?: "eager" | "lazy";
 }) {
   const [voted, setVoted] = useState<'agree' | 'neutral' | 'disagree' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -85,9 +95,9 @@ export function DiscourseCard({
   };
 
   return (
-    <div className="hub-card-slot relative h-full">
+    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
     <Card 
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm h-full min-h-[390px] md:min-h-[300px] flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[300px]"}`}
       data-testid={`card-discourse-${topic.id}`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -105,6 +115,11 @@ export function DiscourseCard({
             </span>
           </div>
         )}
+        {showTypeCue ? (
+          <div className="flex min-w-0 flex-1 justify-center px-1">
+            <VoteTypeCue kind="sentiment" />
+          </div>
+        ) : null}
         <InteractiveCategoryPill
           category={topic.category}
           onFilter={() => onFilterCategory(topic.category)}
@@ -140,6 +155,8 @@ export function DiscourseCard({
                 src={currentImgSrc}
                 alt={topic.personName || topic.headline}
                 className="w-full h-full object-cover"
+                loading={imageLoading}
+                decoding={imageLoading ? "async" : undefined}
                 onError={handleImgError}
               />
             </div>
@@ -178,7 +195,7 @@ export function DiscourseCard({
       )}
       
       {!voted ? (
-        <div className="flex flex-col gap-3 mt-auto">
+        <div className={`flex flex-col gap-3 mt-auto ${feedLayout ? "shrink-0" : ""}`}>
           <button
             onClick={() => handleVote('agree')}
             className="w-full flex items-center justify-center gap-3 px-4 py-3.5 md:py-2.5 rounded-md bg-[#00C853]/10 border border-[#00C853]/50 text-[#00C853] text-sm font-medium transition-all duration-300 hover:border-[#00C853]/80 hover:bg-[#00C853]/20"

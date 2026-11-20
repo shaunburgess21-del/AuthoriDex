@@ -20,13 +20,19 @@ const HIDE_EXIT_LAYOUT_TRANSITION = { duration: 0.3, ease: "easeOut" } as const;
 export function HideExitCard({
   isMobile,
   exiting,
+  animateOnMobile = false,
   children,
 }: {
   isMobile: boolean;
   exiting: boolean;
+  /**
+   * Vertical lists have no carousel to slide. Play the same fly on mobile
+   * so a voted card still leaves the feed.
+   */
+  animateOnMobile?: boolean;
   children: ReactNode;
 }) {
-  const flying = exiting && !isMobile;
+  const flying = exiting && (!isMobile || animateOnMobile);
   return (
     <motion.div
       layout={isMobile ? false : "position"}
