@@ -27,6 +27,8 @@ import { buildPositionShareData, inferDirection } from "@/lib/share-data";
 import { appendShareAttribution } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/ui/CountryFlag";
+import { InfoHint } from "@/components/InfoHint";
+import { GlossaryLegend, SHARES_AND_PNL_TERMS } from "@/components/GlossaryLegend";
 import { getCountryName, resolveCountryCode } from "@shared/countries";
 import { getEthnicityLabel } from "@shared/ethnicity";
 import { CURRENCY, formatVox } from "@/lib/currency";
@@ -464,6 +466,7 @@ function OpenPositionsSection({ username }: { username: string }) {
           <p className="text-[11px] text-muted-foreground mt-0.5">
             Live value across every open prediction{isOwnProfile ? " you're currently in" : ""}.
           </p>
+          <GlossaryLegend terms={SHARES_AND_PNL_TERMS} testId="profile-positions-glossary" className="mt-1.5" />
         </div>
         {positions.length > 0 && (
           <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg text-xs">
@@ -1082,7 +1085,10 @@ function ProfileIdentityCard({
           <p className={`text-xl font-bold ${pnl > 0 ? "text-emerald-600 dark:text-emerald-400" : pnl < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
             {pnl > 0 ? "+" : ""}{pnl.toLocaleString()}
           </p>
-          <p className="text-[10px] text-muted-foreground">P&L</p>
+          <p className="inline-flex items-center justify-center gap-0.5 text-[10px] text-muted-foreground">
+            P&L
+            <InfoHint term="pnl" side="top" className="h-3 w-3" />
+          </p>
         </div>
         <div className="p-3 rounded-lg bg-muted/50 text-center">
           <BarChart3 className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />

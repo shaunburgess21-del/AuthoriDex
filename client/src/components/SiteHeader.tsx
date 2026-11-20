@@ -79,8 +79,8 @@ export function SiteHeader({
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl pl-[var(--safe-area-inset-left,_0px)] pr-[var(--safe-area-inset-right,_0px)]">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
-        <div className="flex items-center gap-2 min-w-0 justify-self-start">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-2 md:grid md:grid-cols-[1fr_auto_1fr] md:gap-3">
+        <div className="flex items-center gap-2 min-w-0 shrink-0 justify-self-start">
           {backButton !== "none" && (
             <Button
               variant="ghost"
@@ -111,7 +111,7 @@ export function SiteHeader({
         </div>
 
         <nav
-          className="hidden md:flex items-center gap-1 justify-self-center"
+          className="hidden md:flex items-center gap-0.5 justify-self-center"
           data-testid="site-header-nav"
         >
           {NAV_ITEMS.map((item) => {
@@ -120,7 +120,7 @@ export function SiteHeader({
               <Link key={item.key} href={item.href}>
                 <Button
                   variant="ghost"
-                  className={cn("text-base px-3", isActive && ACTIVE_CLASS[item.key])}
+                  className={cn("text-sm px-2 lg:text-base lg:px-3", isActive && ACTIVE_CLASS[item.key])}
                   data-testid={item.testId}
                 >
                   {item.label}
@@ -130,7 +130,7 @@ export function SiteHeader({
           })}
         </nav>
 
-        <div className="flex items-center gap-2 md:gap-3 justify-self-end">
+        <div className="flex shrink-0 items-center gap-2 md:gap-3 justify-self-end">
           {mobileExtras}
           <HeaderUserActions />
         </div>

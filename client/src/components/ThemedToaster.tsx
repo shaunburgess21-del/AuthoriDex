@@ -1,7 +1,12 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { useLocation } from "wouter";
 import { Toaster } from "sonner";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
-import { TOAST_TOP_OFFSET, TOAST_Z_INDEX } from "@/lib/toastPlacement";
+import {
+  measuredToastTopClearance,
+  TOAST_TOP_OFFSET,
+  TOAST_Z_INDEX,
+} from "@/lib/toastPlacement";
 import {
   TOAST_DESKTOP_MIN_PX,
   TOAST_DURATION_MS,
@@ -13,22 +18,21 @@ import {
 /**
  * One toast system.
  *
- * Wide screens sit just below the sticky header and are shifted left of
- * the leaderboard Rate column (see index.css). Phones sit at the bottom,
- * above the tab bar. Both are compact, about 3 seconds, and under dialogs
- * (z-50) so a card cannot cover Rate or a 1–5 dialog.
- *
- * Safe-area insets are added in index.css on top of these offsets
- * (Android writes `--safe-area-inset-*`; the iOS shell maps
- * `env(safe-area-inset-*)` onto the same variables).
+ * Wide screens sit below the sticky header and any sticky sub-bar
+ * (vote categories, predict filters, voices filters). The toaster's
+ * z-index is above that chrome, so a bar cannot paint over the text.
+ * Phones sit at the bottom, above the tab bar, plus the safe-area inset
+ * from index.css. Dialogs use a higher layer so a card cannot cover Rate.
  */
 export function ThemedToaster() {
   const { theme } = useThemeToggle();
+  const [location] = useLocation();
   const [position, setPosition] = useState<ToastAnchor>(() =>
     toastPositionForWidth(
       typeof window === "undefined" ? TOAST_DESKTOP_MIN_PX : window.innerWidth,
     ),
   );
+  const [topClearance, setTopClearance] = useState<string>(TOAST_TOP_OFFSET);
 
   useEffect(() => {
     const mq = window.matchMedia(`(min-width: ${TOAST_DESKTOP_MIN_PX}px)`);
@@ -38,9 +42,32 @@ export function ThemedToaster() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  useEffect(() => {
+    if (position !== "top-center") return;
+    let frame = 0;
+    const measure = () => {
+      const next = `${measuredToastTopClearance()}px`;
+      setTopClearance((prev) => (prev === next ? prev : next));
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const late = window.setTimeout(measure, 350);
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(late);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [position, location]);
+
   const belowHeader = position === "top-center";
   const offset = belowHeader
-    ? { top: TOAST_TOP_OFFSET, right: "0.75rem", bottom: "1rem", left: "0.75rem" }
+    ? { top: topClearance, right: "0.75rem", bottom: "1rem", left: "0.75rem" }
     : { top: "1rem", right: "0.75rem", bottom: TOAST_MOBILE_BOTTOM_OFFSET, left: "0.75rem" };
 
   return (

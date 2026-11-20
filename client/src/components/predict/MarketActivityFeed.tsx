@@ -9,6 +9,7 @@ import { Activity } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { apiRequest } from "@/lib/queryClient";
 import { voxWord } from "@/lib/currency";
+import { GlossaryLegend } from "@/components/GlossaryLegend";
 
 interface MarketTrade {
   id: string;
@@ -92,15 +93,25 @@ export function MarketActivityFeed({
           subtitle="Latest market activity from the crowd"
           accent="predict"
           trailing={
-            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 ml-auto">
-              Live
-            </Badge>
+            <>
+              <GlossaryLegend
+                terms={[{ term: "shares", label: "shares" }]}
+                testId="market-activity-glossary"
+              />
+              <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 ml-auto">
+                Live
+              </Badge>
+            </>
           }
         />
       ) : (
         <div className="flex items-center gap-2 mb-3">
           <Activity className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <h3 className="text-sm font-semibold">Recent Trades</h3>
+          <GlossaryLegend
+            terms={[{ term: "shares", label: "shares" }]}
+            testId="market-activity-glossary"
+          />
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-auto">
             Live
           </span>

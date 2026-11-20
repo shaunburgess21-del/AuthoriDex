@@ -43,7 +43,7 @@ const TooltipTrigger = TooltipPrimitive.Trigger
 export const tooltipSurfaceClass = cn(
   // Layout — these are simple Tailwind utilities (no commas) so they
   // generate fine.
-  "z-50 max-w-xs rounded-lg px-3 py-2 text-sm",
+  "z-[100] max-w-xs rounded-lg px-3 py-2 text-sm",
   "text-popover-foreground",
   // Visual skin (defined in index.css)
   "tooltip-surface",

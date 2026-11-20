@@ -39,14 +39,16 @@ export function HeaderUserActions({ bellSize = "default", className }: HeaderUse
   const showAuth = !loading && !isLoggedIn;
 
   return (
-    <div className={cn("flex items-center gap-1.5 sm:gap-2", className)}>
+    <div className={cn("flex shrink-0 items-center gap-1.5 sm:gap-2", className)}>
       {showAuth && (
         <>
+          {/* Sign in drops only under 360px, where the logo, Sign up, and
+              menu already fill the row. Sign up stays at every width. */}
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-xs sm:px-3 sm:text-sm"
+            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs max-[359px]:hidden"
             data-testid="button-header-sign-in"
             onClick={() => navigateToLogin(setLocation)}
           >
@@ -55,7 +57,7 @@ export function HeaderUserActions({ bellSize = "default", className }: HeaderUse
           <Button
             type="button"
             size="sm"
-            className="h-8 px-2 text-xs sm:px-3 sm:text-sm"
+            className="h-8 shrink-0 whitespace-nowrap px-2 text-xs"
             data-testid="button-header-sign-up"
             onClick={() => navigateToLogin(setLocation, { mode: "signup" })}
           >
