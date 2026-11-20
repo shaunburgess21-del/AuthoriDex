@@ -409,6 +409,34 @@ test("sheet keyboard offset lifts the panel above the visual viewport", () => {
   );
 });
 
+test("Favourites sits on the mode row and stays a personIds toggle", () => {
+  const bar = readFileSync(
+    new URL("../client/src/components/voices/VoicesFilterBar.tsx", import.meta.url),
+    "utf8",
+  );
+  const page = readFileSync(
+    new URL("../client/src/pages/VoicesPage.tsx", import.meta.url),
+    "utf8",
+  );
+  const rowStart = bar.indexOf('data-testid="voices-mode-row"');
+  const filterStart = bar.indexOf('data-testid="voices-filter-button"');
+  const chipStart = bar.indexOf('data-testid="voices-favourites-chip"');
+  assert.ok(rowStart >= 0 && chipStart > rowStart && chipStart < filterStart);
+  assert.match(bar.slice(rowStart, filterStart), /Favourites/);
+  assert.doesNotMatch(bar, /My favourites/);
+  assert.match(bar, /modeTabClass\(mode === item\.id\)/);
+  assert.match(bar, /modeTabClass\(favouritesActive\)/);
+  assert.match(
+    bar,
+    /postTypeChips\.length > 0 \|\| visiblePeople\.length > 0 \|\| filters\.categories\.length > 0/,
+  );
+  assert.match(bar, /data-testid="voices-filter-count"/);
+  assert.match(bar, /hidden sm:inline/);
+  assert.match(page, /onToggleFavourites=\{toggleFavourites\}/);
+  assert.match(page, /shouldShowFavouritesChip\(hasSession, favouriteIds\.length\)/);
+  assert.doesNotMatch(page, /mode:\s*"favourites"/);
+});
+
 test("filter bar renders the Polls test hook inside a body portal", () => {
   const bar = readFileSync(
     new URL("../client/src/components/voices/VoicesFilterBar.tsx", import.meta.url),

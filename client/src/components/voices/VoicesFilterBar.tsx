@@ -35,6 +35,17 @@ const MODES: Array<{ id: VoicesFeedMode; label: string }> = [
   { id: "top", label: "Top" },
 ];
 
+/** Same paint for For You / Latest / Top and the Favourites toggle. */
+function modeTabClass(active: boolean): string {
+  return cn(
+    "inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap border px-1 text-xs font-medium transition-colors min-[360px]:px-1.5 min-[400px]:px-2 sm:px-3",
+    CATEGORY_CHIP_RADIUS,
+    active
+      ? "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+      : "border-transparent text-muted-foreground hover:text-foreground",
+  );
+}
+
 interface VoicesFilterBarProps {
   filters: VoicesFilters;
   onChange: (next: VoicesFilters) => void;
@@ -402,7 +413,7 @@ export function VoicesFilterBar({
             )}
           >
             <Star className={cn("h-3.5 w-3.5", favouritesActive && "fill-current")} />
-            My favourites
+            Favourites
           </button>
         )}
         <CelebritySearch excludeIds={filters.personIds} onSelect={addPerson} />
@@ -542,25 +553,31 @@ export function VoicesFilterBar({
 
   return (
     <div className="space-y-2" data-testid="voices-filter-bar">
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex flex-nowrap items-center gap-1 sm:gap-2" data-testid="voices-mode-row">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] min-[400px]:gap-1 [&::-webkit-scrollbar]:hidden">
           {MODES.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => onModeChange(item.id)}
-              className={cn(
-                "inline-flex h-8 shrink-0 items-center border px-3 text-xs font-medium transition-colors",
-                CATEGORY_CHIP_RADIUS,
-                mode === item.id
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
+              className={modeTabClass(mode === item.id)}
               data-testid={`voices-mode-${item.id}`}
             >
               {item.label}
             </button>
           ))}
+          {showFavourites && (
+            <button
+              type="button"
+              onClick={onToggleFavourites}
+              aria-pressed={favouritesActive}
+              data-testid="voices-favourites-chip"
+              className={modeTabClass(favouritesActive)}
+            >
+              <Star className={cn("h-3 w-3 shrink-0", favouritesActive && "fill-current")} />
+              Favourites
+            </button>
+          )}
         </div>
         <Button
           ref={buttonRef}
@@ -568,40 +585,30 @@ export function VoicesFilterBar({
           variant="outline"
           size="sm"
           className={cn(
-            "h-8 shrink-0 gap-1.5 font-normal",
+            "h-8 shrink-0 gap-1 px-2 font-normal sm:gap-1.5 sm:px-3",
             count > 0 && "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300",
           )}
           aria-expanded={open}
           aria-controls="voices-filter-panel"
+          aria-label={voicesFilterButtonLabel(count)}
           onClick={() => setOpen((value) => !value)}
           data-testid="voices-filter-button"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
-          {voicesFilterButtonLabel(count)}
+          <span className="hidden sm:inline">{voicesFilterButtonLabel(count)}</span>
+          {count > 0 && (
+            <span
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500/25 px-1 text-[10px] font-semibold leading-none sm:hidden"
+              data-testid="voices-filter-count"
+            >
+              {count}
+            </span>
+          )}
         </Button>
       </div>
 
-      {(showFavourites || postTypeChips.length > 0 || visiblePeople.length > 0 || filters.categories.length > 0) && (
-        <div className="flex flex-wrap gap-1.5">
-          {showFavourites && (
-            <button
-              type="button"
-              onClick={onToggleFavourites}
-              aria-pressed={favouritesActive}
-              data-testid="voices-favourites-chip"
-              className={cn(
-                "inline-flex items-center gap-1 border px-2.5 py-0.5 text-xs font-medium",
-                CATEGORY_CHIP_RADIUS,
-                favouritesActive
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Star className={cn("h-3 w-3", favouritesActive && "fill-current")} />
-              My favourites
-              {favouritesActive && <X className="h-3 w-3" aria-hidden="true" />}
-            </button>
-          )}
+      {(postTypeChips.length > 0 || visiblePeople.length > 0 || filters.categories.length > 0) && (
+        <div className="flex flex-wrap gap-1.5" data-testid="voices-active-filters">
           {postTypeChips.map((toggle) => (
             <Badge key={toggle.id} variant="secondary" className="gap-1 font-normal" data-testid={`voices-chip-post-${toggle.id}`}>
               {toggle.label}
