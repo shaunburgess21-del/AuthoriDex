@@ -19,6 +19,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link, useLocation } from "wouter";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { hapticSuccess } from "@/lib/haptic";
+import {
+  patchOverallRatingsCache,
+  projectRatingDistribution,
+  ratingDistributionStats,
+  restoreOverallRatings,
+  snapshotOverallRatings,
+} from "@/lib/overallRatingDistribution";
 
 const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"] as const;
 const RATING_COLORS = [1, 2, 3, 4, 5].map((r) => getRatingTileColor(r));
@@ -112,12 +119,12 @@ export function OverallRatingCard({
   // Anon (and pre-refetch) fallback: the profile widget persists the last
   // submitted rating in localStorage under this same key. First paint already
   // reads it via useState; this covers person/user identity changes.
+  // A missing key must clear the card — account switches wipe that storage
+  // so a new login does not keep the previous viewer's rating.
   useEffect(() => {
     if (person.userApprovalRating != null) return;
-    const saved = readSavedRating(person.id, null);
-    if (saved != null) setSubmittedRating(saved);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [person.id, user?.id]);
+    setSubmittedRating(readSavedRating(person.id, null));
+  }, [person.id, user?.id, person.userApprovalRating]);
 
   // Same-page sync with the profile widget / other card instances.
   useEffect(() => {
@@ -136,18 +143,16 @@ export function OverallRatingCard({
     return () => window.removeEventListener("sentiment-vote-updated", handler);
   }, [person.id]);
 
-  // Community distribution from the list payload. If the server hasn't seen
-  // any votes yet but the user just voted, bump locally so the results view
-  // isn't empty while the list refetches.
-  const counts = [...(person.ratingDistribution?.length === 5 ? person.ratingDistribution : [0, 0, 0, 0, 0])];
-  const serverTotal = counts.reduce((a, b) => a + b, 0);
-  if (submittedRating != null && serverTotal === 0) {
-    counts[submittedRating - 1] += 1;
-  }
-  const totalVotes = counts.reduce((a, b) => a + b, 0);
-  const avgRating = totalVotes > 0
-    ? counts.reduce((sum, c, i) => sum + c * (i + 1), 0) / totalVotes
-    : null;
+  // Fold the rating this card is showing into the list distribution.
+  // A 3/5 on a book that already has Love votes has to move Neutral,
+  // the average, and the count immediately — and must not be added a
+  // second time once the refetch includes that same vote.
+  const counts = projectRatingDistribution(
+    person.ratingDistribution,
+    person.userApprovalRating,
+    submittedRating,
+  );
+  const { total: totalVotes, average: avgRating } = ratingDistributionStats(counts);
   const pcts = counts.map((c) => (totalVotes > 0 ? Math.round((c / totalVotes) * 100) : 0));
 
   const ratingMutation = useMutation({
@@ -157,7 +162,10 @@ export function OverallRatingCard({
     },
     onMutate: ({ rating }) => {
       const voteStorageKey = `sentiment-vote-${person.id}`;
+      const ratingsSnapshot = snapshotOverallRatings(queryClient);
+      patchOverallRatingsCache(queryClient, person.id, rating);
       const snapshot = {
+        ratingsSnapshot,
         previousSubmitted: submittedRating,
         previousChanging: isChanging,
         previousStorage: ((): string | null => {
@@ -203,6 +211,7 @@ export function OverallRatingCard({
     },
     onError: (error: any, variables, context) => {
       if (context) {
+        if (context.ratingsSnapshot) restoreOverallRatings(queryClient, context.ratingsSnapshot);
         setSubmittedRating(context.previousSubmitted);
         setIsChanging(context.previousChanging);
         try {

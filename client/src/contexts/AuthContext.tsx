@@ -114,6 +114,28 @@ function invalidatePersonalisedFeeds() {
   }
 }
 
+/**
+ * Responses that embed the caller's own ballot. Drop them on an account
+ * change so a new login cannot paint the previous viewer's "already voted"
+ * state (the query keys are not scoped by user id).
+ */
+const PERSONAL_VOTE_QUERY_KEYS = [
+  ["/api/trending-polls"],
+  ["/api/opinion-polls"],
+  ["/api/matchups"],
+  ["/api/matchups/user-votes"],
+  ["/api/vote/overall-ratings"],
+  ["/api/me/induction-votes"],
+  ["/api/me/curate-voted-person-ids"],
+  ["/api/celebrity"],
+] as const;
+
+function dropPersonalizedVoteQueries() {
+  for (const queryKey of PERSONAL_VOTE_QUERY_KEYS) {
+    queryClient.removeQueries({ queryKey: [...queryKey] });
+  }
+}
+
 function clearLocalVoteCache() {
   try {
     const keysToRemove: string[] = [];
@@ -261,6 +283,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const prevUserId = sessionUserIdRef.current;
             const newUserId = newSession?.user?.id ?? null;
 
+            const switchedAccount = newUserId !== prevUserId;
+            // Drop device-level rating keys before React paints the new
+            // identity. Otherwise Overall Rating cards adopt the previous
+            // viewer's localStorage vote for this session.
+            if (switchedAccount) clearLocalVoteCache();
+
             setSession(newSession);
             setUser(newSession?.user ?? null);
             sessionUserIdRef.current = newUserId;
@@ -269,15 +297,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // Supabase may emit SIGNED_IN when restoring an existing session or
               // refocusing a tab. Only invalidate when the authenticated user actually
               // changes so the home leaderboard does not flash a second full-page load.
-              if (newUserId && newUserId !== prevUserId) {
+              // Profile sync runs first: a brand-new account migrates this browser's
+              // anon_<fdx_sid> ballots inside that call, and the vote caches must
+              // refetch after that reassignment rather than before it.
+              await syncProfile(newSession.access_token);
+              if (switchedAccount) {
+                dropPersonalizedVoteQueries();
                 queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
                 queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
                 // Personalised feeds must re-rank for the newly signed-in user.
                 invalidatePersonalisedFeeds();
               }
-              await syncProfile(newSession.access_token);
             } else if (!newSession) {
               clearLocalVoteCache();
+              dropPersonalizedVoteQueries();
               queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
               queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
               // Drop personalised order back to anonymous on sign-out.
@@ -312,6 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       clearLocalVoteCache();
+      dropPersonalizedVoteQueries();
       sessionUserIdRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });

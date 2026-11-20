@@ -59,6 +59,7 @@ import {
   awardMarketSuggestionApprovedCredits,
   maybeFireReferralCredit,
 } from "./services/credits-earn";
+import { countUserBallots, syncUserBallotCount } from "./services/user-ballot-count";
 import {
   badgeService,
   checkAndAwardVoteBadges,
@@ -4346,6 +4347,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await recomputeCelebrityMetrics(celebrityId);
 
+      // Overall rating lives in user_votes, not the matchup `votes` table.
+      // Sync the unique-ballot counter and award First Vote from that total
+      // so a 1–5 rating is a real ballot, including when it is the first one.
+      if (req.userId) {
+        try {
+          await syncUserBallotCount(req.userId);
+        } catch (countError) {
+          console.warn("[approval-rating] ballot count sync failed", countError);
+        }
+        await checkAndAwardVoteBadges(req.userId);
+      }
+
       res.json({ success: true, rating, budget: budgetSnapshot });
     } catch (error: any) {
       console.error("[approval-rating POST] Error:", error);
@@ -7476,8 +7489,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fdxSidForCleanup = readFdxSid(req);
       const anonWriterId = fdxSidForCleanup ? `anon_${fdxSidForCleanup}` : "";
 
-      let migratedVoteCount = 0;
-
       await db.transaction(async (tx) => {
         await tx.insert(profiles).values(newProfile);
         await tx.insert(creditLedger).values(initialGrantEntry).onConflictDoNothing();
@@ -7490,66 +7501,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // UPDATE can never violate a unique constraint even if this path
           // is ever reached for a non-empty account.
           await tx.delete(votes).where(eq(votes.userId, userId));
-          const migratedMatchupVotes = await tx
+          await tx
             .update(votes)
             .set({ userId })
-            .where(eq(votes.userId, anonWriterId))
-            .returning({ id: votes.id });
+            .where(eq(votes.userId, anonWriterId));
 
           await tx.delete(trendingPollVotes).where(eq(trendingPollVotes.userId, userId));
-          const migratedTrendingVotes = await tx
+          await tx
             .update(trendingPollVotes)
             .set({ userId })
-            .where(eq(trendingPollVotes.userId, anonWriterId))
-            .returning({ id: trendingPollVotes.id });
+            .where(eq(trendingPollVotes.userId, anonWriterId));
 
           await tx.delete(opinionPollVotes).where(eq(opinionPollVotes.userId, userId));
-          const migratedOpinionVotes = await tx
+          await tx
             .update(opinionPollVotes)
             .set({ userId })
-            .where(eq(opinionPollVotes.userId, anonWriterId))
-            .returning({ id: opinionPollVotes.id });
+            .where(eq(opinionPollVotes.userId, anonWriterId));
 
           await tx.delete(inductionVotes).where(eq(inductionVotes.userId, userId));
-          const migratedInductionVotes = await tx
+          await tx
             .update(inductionVotes)
             .set({ userId })
-            .where(eq(inductionVotes.userId, anonWriterId))
-            .returning({ id: inductionVotes.id });
+            .where(eq(inductionVotes.userId, anonWriterId));
 
           await tx.delete(userVotes).where(eq(userVotes.userId, userId));
-          const migratedApprovalVotes = await tx
+          await tx
             .update(userVotes)
             .set({ userId })
-            .where(eq(userVotes.userId, anonWriterId))
-            .returning({ id: userVotes.id });
+            .where(eq(userVotes.userId, anonWriterId));
 
           await tx.delete(celebrityValueVotes).where(eq(celebrityValueVotes.userId, userId));
-          const migratedValueVotes = await tx
+          await tx
             .update(celebrityValueVotes)
             .set({ userId })
-            .where(eq(celebrityValueVotes.userId, anonWriterId))
-            .returning({ id: celebrityValueVotes.id });
+            .where(eq(celebrityValueVotes.userId, anonWriterId));
 
           // Anon budget counter is keyed on fdx_sid and is meaningless
           // once the user is authenticated — drop it.
           await tx.delete(anonVoteBudget).where(eq(anonVoteBudget.fdxSid, fdxSidForCleanup));
 
-          migratedVoteCount =
-            migratedMatchupVotes.length +
-            migratedTrendingVotes.length +
-            migratedOpinionVotes.length +
-            migratedInductionVotes.length +
-            migratedApprovalVotes.length +
-            migratedValueVotes.length;
-
-          // Reflect the carried-over activity on the brand-new profile
-          // (inserted above with totalVotes: 0) so the user's stats
-          // include the votes they made before signing up.
-          if (migratedVoteCount > 0) {
+          // Same visitor only: these rows were written under anon_<this
+          // request's fdx_sid>. Recount so Votes Cast includes every
+          // ballot table, not just the ones this block happened to touch.
+          const ballotCount = await countUserBallots(userId, tx);
+          if (ballotCount > 0) {
             await tx
               .update(profiles)
-              .set({ totalVotes: migratedVoteCount })
+              .set({ totalVotes: ballotCount })
               .where(eq(profiles.id, userId));
           }
         }
@@ -7637,8 +7635,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(and(eq(unifiedComments.userId, userId), isNull(unifiedComments.deletedAt)));
 
       const { isAgent, ...publicProfile } = profile[0];
+      // Votes Cast is the live unique-ballot total. Older rows (overall
+      // ratings in particular) were never added to profiles.total_votes;
+      // reading the tables here corrects the tile without a migration.
+      let totalVotes = publicProfile.totalVotes ?? 0;
+      try {
+        totalVotes = await syncUserBallotCount(userId);
+      } catch (countError) {
+        console.warn("[profile] ballot count sync failed", countError);
+      }
       res.json({
         ...stripRecoveryEmailVerificationFields(publicProfile),
+        totalVotes,
         totalComments: commentCountRow?.value ?? 0,
       });
     } catch (error: any) {
@@ -22485,6 +22493,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
             UNION ALL SELECT user_id FROM opinion_poll_votes
             UNION ALL SELECT user_id FROM image_votes
             UNION ALL SELECT user_id FROM induction_votes
+            UNION ALL SELECT user_id FROM user_votes
           ),
           counts AS (
             SELECT user_id, COUNT(*)::int AS cnt FROM all_votes GROUP BY user_id
