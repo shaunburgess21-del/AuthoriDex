@@ -2,7 +2,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { isTransportFailure, transportFailureDescription } from "./networkStatus";
 import { queryRetryDelay, shouldRetryQuery } from "./queryRetry";
 import { getSupabase } from "./supabase";
-import { hasPersistedAuthSession } from "./authSession";
+import { authSessionBlockActive, hasPersistedAuthSession } from "./authSession";
 
 export { queryRetryDelay, shouldRetryQuery };
 
@@ -98,6 +98,8 @@ async function throwIfResNotOk(res: Response) {
 }
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
+  // Once logout starts, refetches must not send the token a refresh just rotated.
+  if (authSessionBlockActive()) return {};
   if (!hasPersistedAuthSession()) return {};
   try {
     const supabase = await getSupabase();

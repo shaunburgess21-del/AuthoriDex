@@ -9,6 +9,7 @@ import {
   isNativeOAuthUserCancel,
   type NativeOAuthLaunch,
 } from "@/lib/nativeOAuthLaunch";
+import { authSessionBlockActive, clearSignedOutLocalStorage } from "@/lib/authSession";
 import { SUPABASE_AUTH_STORAGE_KEY, getSupabase } from "@/lib/supabase";
 
 export { NATIVE_OAUTH_REDIRECT } from "@/lib/nativeOAuthLaunch";
@@ -108,6 +109,11 @@ async function closeOAuthBrowser(): Promise<void> {
 
 async function completeNativeOAuthReturn(parsed: NativeOAuthCallback): Promise<void> {
   try {
+    // Logout wins over a deep-link return that is still in flight or replayed
+    // from the launch URL. A new Google sign-in releases the block in
+    // signInWithOAuth before this can run.
+    if (authSessionBlockActive()) return;
+
     if (parsed.status === "error") {
       toast.error("Google sign-in failed", { description: parsed.message });
       return;
@@ -133,6 +139,15 @@ async function completeNativeOAuthReturn(parsed: NativeOAuthCallback): Promise<v
     }
 
     const { error } = await supabase.auth.exchangeCodeForSession(parsed.code);
+    if (authSessionBlockActive()) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      try {
+        clearSignedOutLocalStorage(window.localStorage);
+      } catch {
+        /* storage unavailable */
+      }
+      return;
+    }
     if (error) {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
