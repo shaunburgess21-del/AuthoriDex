@@ -1,12 +1,24 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
-import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
 import { queryClient } from "@/lib/queryClient";
 import {
   getStoredReferralCode,
   clearStoredReferralCode,
 } from "@/lib/referral-capture";
+import {
+  authSessionBlockActive,
+  clearPersonalizedVoteStorage,
+  clearPersistedAuthStorage,
+  clearSignedOutSessionStorage,
+  holdAuthSessionBlock,
+  holdAuthWriteBlock,
+  shouldApplyProfileResponse,
+  shouldDiscardAuthRestore,
+  shouldDropQueryOnSignOut,
+  stripAuthCallbackFromHref,
+  tearDownAuthSession,
+} from "@/lib/authSession";
 
 export interface UserProfile {
   id: string;
@@ -138,16 +150,44 @@ function dropPersonalizedVoteQueries() {
 
 function clearLocalVoteCache() {
   try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("sentiment-vote-")) {
-        keysToRemove.push(key);
-      }
-    }
-    for (const key of keysToRemove) localStorage.removeItem(key);
+    clearPersonalizedVoteStorage(window.localStorage);
   } catch {
     /* ignore */
+  }
+}
+
+function dropSignedOutQueries() {
+  queryClient.removeQueries({
+    predicate: (query) => shouldDropQueryOnSignOut(query.queryKey),
+  });
+  queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+  invalidatePersonalisedFeeds();
+}
+
+/** UI, vote cache, and auth-flow leftovers. Does not delete the Supabase session key. */
+function markSignedOutLocally(profileEpoch: { current: number }, sessionUserId: { current: string | null }, apply: () => void) {
+  profileEpoch.current += 1;
+  holdAuthWriteBlock();
+  sessionUserId.current = null;
+  apply();
+  try {
+    clearPersonalizedVoteStorage(window.localStorage);
+    clearSignedOutSessionStorage(window.sessionStorage);
+    const next = stripAuthCallbackFromHref(window.location.href);
+    if (next) window.history.replaceState(window.history.state, "", next);
+  } catch {
+    /* private mode */
+  }
+  dropSignedOutQueries();
+}
+
+/** After the refresh token has been revoked, hide and delete the persisted session. */
+function sealSignedOutSession() {
+  holdAuthSessionBlock();
+  try {
+    clearPersistedAuthStorage(window.localStorage);
+  } catch {
+    /* private mode */
   }
 }
 
@@ -160,8 +200,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileJustCreated, setProfileJustCreated] = useState<boolean | null>(null);
   /** Tracks the last known auth user id so we only bust leaderboard caches on real transitions. */
   const sessionUserIdRef = useRef<string | null>(null);
+  /** Bumped on logout so an in-flight /api/profile/me response cannot restore the account. */
+  const profileEpoch = useRef(0);
 
   const syncProfile = useCallback(async (accessToken: string, retries = 3) => {
+    const epoch = profileEpoch.current;
+    if (!shouldApplyProfileResponse(epoch, epoch)) return;
     try {
       setProfileLoading(true);
 
@@ -201,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               ? (data as { created: boolean }).created
               : false,
           );
+          if (!shouldApplyProfileResponse(epoch, profileEpoch.current)) return;
           setProfile(profileData);
           setProfileJustCreated(created);
           return;
@@ -217,11 +262,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error syncing profile:", error);
     } finally {
-      setProfileLoading(false);
+      if (shouldApplyProfileResponse(epoch, profileEpoch.current) || authSessionBlockActive()) {
+        setProfileLoading(false);
+      }
     }
   }, []);
 
   const fetchProfile = useCallback(async (accessToken: string) => {
+    const epoch = profileEpoch.current;
+    if (!shouldApplyProfileResponse(epoch, epoch)) return;
     try {
       setProfileLoading(true);
 
@@ -231,8 +280,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
+      if (!shouldApplyProfileResponse(epoch, profileEpoch.current)) return;
+
       if (response.ok) {
         const profileData = await response.json();
+        if (!shouldApplyProfileResponse(epoch, profileEpoch.current)) return;
         setProfile(profileData);
         // Returning users on a refresh: the row already exists, so the verify
         // page won't send anyone to /login/welcome. Mark as not-created.
@@ -243,7 +295,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error fetching profile:", error);
     } finally {
-      setProfileLoading(false);
+      if (shouldApplyProfileResponse(epoch, profileEpoch.current) || authSessionBlockActive()) {
+        setProfileLoading(false);
+      }
     }
   }, [syncProfile]);
 
@@ -253,36 +307,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [session?.access_token, fetchProfile]);
 
+  const applySignedOutState = useCallback(() => {
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setProfileJustCreated(null);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
+    let subscription: { unsubscribe: () => void } | null = null;
 
     async function initialize() {
       try {
         const supabase = await getSupabase();
+        if (!mounted) return;
 
+        // Subscribe before yielding again. Logout during the profile fetch
+        // used to run with no listener, so SIGNED_OUT never cleared `user`
+        // and the late /api/profile/me response painted the account again.
         const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!mounted) return;
 
-        if (mounted) {
-          setSession(currentSession);
-          setUser(currentSession?.user ?? null);
-          sessionUserIdRef.current = currentSession?.user?.id ?? null;
-          setLoading(false);
-
-          if (currentSession?.access_token) {
-            await fetchProfile(currentSession.access_token);
-            // Session was restored after a refresh; any feed query that
-            // already fetched anonymously (before the session resolved)
-            // must refetch with the auth header to get personalised order.
-            invalidatePersonalisedFeeds();
-          }
-        }
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          async (_event, newSession) => {
+        const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
             if (!mounted) return;
-            const prevUserId = sessionUserIdRef.current;
-            const newUserId = newSession?.user?.id ?? null;
 
+            if (!newSession) {
+              // Startup with no session must not wipe anonymous ballot keys.
+              // A real sign-out has either started the write block or still
+              // has a user id on this tab (including a broadcast from another tab).
+              const endedSession =
+                authSessionBlockActive() || sessionUserIdRef.current !== null;
+              if (endedSession) {
+                markSignedOutLocally(profileEpoch, sessionUserIdRef, applySignedOutState);
+                sealSignedOutSession();
+              } else {
+                applySignedOutState();
+              }
+              return;
+            }
+
+            if (shouldDiscardAuthRestore(true)) {
+              // Refresh or replayed OAuth finished after logout. Do not seal
+              // here — the click handler still has to read the refresh token
+              // and revoke it. The write block already drops the save.
+              applySignedOutState();
+              return;
+            }
+
+            const prevUserId = sessionUserIdRef.current;
+            const newUserId = newSession.user?.id ?? null;
             const switchedAccount = newUserId !== prevUserId;
             // Drop device-level rating keys before React paints the new
             // identity. Otherwise Overall Rating cards adopt the previous
@@ -290,10 +365,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (switchedAccount) clearLocalVoteCache();
 
             setSession(newSession);
-            setUser(newSession?.user ?? null);
+            setUser(newSession.user ?? null);
             sessionUserIdRef.current = newUserId;
 
-            if (newSession?.access_token && _event === "SIGNED_IN") {
+            if (newSession.access_token && event === "SIGNED_IN") {
               // Supabase may emit SIGNED_IN when restoring an existing session or
               // refocusing a tab. Only invalidate when the authenticated user actually
               // changes so the home leaderboard does not flash a second full-page load.
@@ -301,6 +376,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // anon_<fdx_sid> ballots inside that call, and the vote caches must
               // refetch after that reassignment rather than before it.
               await syncProfile(newSession.access_token);
+              if (!mounted || shouldDiscardAuthRestore(true)) {
+                applySignedOutState();
+                return;
+              }
               if (switchedAccount) {
                 dropPersonalizedVoteQueries();
                 queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
@@ -308,22 +387,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Personalised feeds must re-rank for the newly signed-in user.
                 invalidatePersonalisedFeeds();
               }
-            } else if (!newSession) {
-              clearLocalVoteCache();
-              dropPersonalizedVoteQueries();
-              queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-              queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
-              // Drop personalised order back to anonymous on sign-out.
-              invalidatePersonalisedFeeds();
-              setProfile(null);
-              setProfileJustCreated(null);
             }
           }
         );
+        subscription = sub;
+        if (!mounted) {
+          sub.unsubscribe();
+          return;
+        }
 
-        return () => {
-          subscription.unsubscribe();
-        };
+        // getSession can resolve after a logout that started on a remount.
+        // Applying it would put the account back.
+        if (authSessionBlockActive()) {
+          setLoading(false);
+          return;
+        }
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        sessionUserIdRef.current = currentSession?.user?.id ?? null;
+        setLoading(false);
+
+        if (currentSession?.access_token) {
+          void fetchProfile(currentSession.access_token);
+          // Session was restored after a refresh; any feed query that
+          // already fetched anonymously (before the session resolved)
+          // must refetch with the auth header to get personalised order.
+          invalidatePersonalisedFeeds();
+        }
       } catch (error) {
         console.error("Auth initialization error:", error);
         if (mounted) {
@@ -332,31 +423,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    initialize();
+    void initialize();
 
     return () => {
       mounted = false;
+      subscription?.unsubscribe();
     };
-  }, [fetchProfile, syncProfile]);
+  }, [applySignedOutState, fetchProfile, syncProfile]);
 
   const signOut = async () => {
+    // Header drops immediately. The write block is up before the first await
+    // so a refresh that resolves while revoke is in flight cannot save.
+    markSignedOutLocally(profileEpoch, sessionUserIdRef, applySignedOutState);
     try {
       const supabase = await getSupabase();
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      clearLocalVoteCache();
-      dropPersonalizedVoteQueries();
-      sessionUserIdRef.current = null;
-      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/celebrity"] });
-      setProfile(null);
-      setProfileJustCreated(null);
+      await tearDownAuthSession(supabase.auth, window.localStorage);
     } catch (err) {
       console.error("Sign-out failed:", err);
-      toast.error("Sign-out failed", {
-        description: "Please try again in a moment.",
-      });
-      throw err;
+    } finally {
+      sealSignedOutSession();
     }
   };
 

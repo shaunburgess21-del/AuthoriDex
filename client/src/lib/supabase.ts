@@ -1,6 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_AUTH_STORAGE_KEY } from "./authSession";
+import {
+  SUPABASE_AUTH_STORAGE_KEY,
+  createGuardedAuthStorage,
+  releaseAuthSessionBlockOnSignIn,
+} from "./authSession";
 
 /** Persisted session key. PKCE verifier is `${key}-code-verifier`. */
 export {
@@ -26,14 +30,21 @@ async function createSupabaseClient(): Promise<SupabaseClient> {
   // URL, and custom-scheme redirects drop URL fragments.
   const native = Capacitor.isNativePlatform();
   
-  return createClient(url, anonKey, {
+  // Guarded storage drops auth-key writes once logout starts, so an in-flight
+  // refresh cannot put the session back. Sign-in methods release that block.
+  const client = createClient(url, anonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       storageKey: SUPABASE_AUTH_STORAGE_KEY,
+      ...(typeof window !== "undefined"
+        ? { storage: createGuardedAuthStorage(window.localStorage) }
+        : {}),
       ...(native ? { flowType: 'pkce' as const, detectSessionInUrl: false } : {}),
     }
   });
+  releaseAuthSessionBlockOnSignIn(client.auth);
+  return client;
 }
 
 export async function getSupabase(): Promise<SupabaseClient> {
