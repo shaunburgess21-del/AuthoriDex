@@ -36,6 +36,7 @@ test("the innermost vertical scroller wins, otherwise the window", () => {
 
 test("tab screens use the window, and the open panels are the real scrollers", () => {
   const home = read("../client/src/pages/HomePage.tsx");
+  const homeTrends = read("../client/src/components/home/TrendGraphOverlay.tsx");
   const vote = read("../client/src/pages/VotePage.tsx");
   const predict = read("../client/src/pages/PredictPage.tsx");
   const voices = read("../client/src/pages/VoicesPage.tsx");
@@ -43,7 +44,7 @@ test("tab screens use the window, and the open panels are the real scrollers", (
   const nav = read("../client/src/components/BottomNav.tsx");
 
   assert.match(home, /home-shell min-h-screen/);
-  assert.match(home, /fixed inset-0 z-50 bg-background\/95 backdrop-blur-xl overflow-y-auto/);
+  assert.match(homeTrends, /fixed inset-0 z-50 bg-background\/95 backdrop-blur-xl overflow-y-auto/);
   assert.match(vote, /min-h-screen pb-20 md:pb-0 overflow-x-clip/);
   assert.match(vote, /flex-1 overflow-y-auto/);
   assert.match(predict, /min-h-screen pb-20 md:pb-0 overflow-x-clip/);

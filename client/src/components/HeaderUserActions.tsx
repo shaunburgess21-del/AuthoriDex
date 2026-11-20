@@ -1,6 +1,10 @@
+import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { useAuth } from "@/contexts/AuthContext";
+import { navigateToLogin } from "@/lib/authReturn";
 
 interface HeaderUserActionsProps {
   /**
@@ -30,8 +34,35 @@ interface HeaderUserActionsProps {
  * logged-out vs logged-in state via the menu/profile toggle).
  */
 export function HeaderUserActions({ bellSize = "default", className }: HeaderUserActionsProps) {
+  const { isLoggedIn, loading } = useAuth();
+  const [, setLocation] = useLocation();
+  const showAuth = !loading && !isLoggedIn;
+
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    <div className={cn("flex items-center gap-1.5 sm:gap-2", className)}>
+      {showAuth && (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs sm:px-3 sm:text-sm"
+            data-testid="button-header-sign-in"
+            onClick={() => navigateToLogin(setLocation)}
+          >
+            Sign in
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 px-2 text-xs sm:px-3 sm:text-sm"
+            data-testid="button-header-sign-up"
+            onClick={() => navigateToLogin(setLocation, { mode: "signup" })}
+          >
+            Sign up
+          </Button>
+        </>
+      )}
       <NotificationBell size={bellSize} />
       <UserMenu />
     </div>

@@ -18,10 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { getAuthHeaders } from "@/lib/queryClient";
-import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { normalizeMarketCategory } from "@shared/constants";
+import { getCategoryBucketId } from "@shared/constants";
+import { buildLeaderboardCategoryFilters } from "@shared/leaderboard-category-filters";
 import type { TrendingPerson } from "@shared/schema";
 import { insightsCrowdBoardCardClass, InsightsCrowdTopAccentBar } from "./insights-ui";
 
@@ -38,7 +38,6 @@ type SortDirection = "desc" | "asc";
 export function ApprovalTab() {
   const [, setLocation] = useLocation();
   const isMobile = useIsMobile();
-  const leaderboardCategories = useLeaderboardCategories();
   const categoryRegistry = useCategoryRegistry();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -50,7 +49,7 @@ export function ApprovalTab() {
     const lowered = raw.toLowerCase();
     if (lowered === "trending") return "all";
     if (lowered === "all" || lowered === "favorites") return lowered;
-    return normalizeMarketCategory(raw);
+    return getCategoryBucketId(raw);
   });
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [votingModalOpen, setVotingModalOpen] = useState(false);
@@ -120,25 +119,14 @@ export function ApprovalTab() {
     [categoryRegistry],
   );
 
-  const leaderboardFilterCategories = useMemo(() => {
-    const pinned = [
-      { value: "all", label: "All Categories" },
-      { value: "favorites", label: "Favorites" },
-    ];
-    const dynamic = Array.from(leaderboardCategories ?? [])
-      .filter((id) => id && id !== "all" && id !== "favorites" && id !== "trending")
-      .sort((a, b) => resolveCategoryLabel(a).localeCompare(resolveCategoryLabel(b)))
-      .map((id) => ({ value: id, label: resolveCategoryLabel(id) }));
-    if (
-      category !== "all" &&
-      category !== "favorites" &&
-      category !== "trending" &&
-      !dynamic.some((c) => c.value === category)
-    ) {
-      dynamic.unshift({ value: category, label: resolveCategoryLabel(category) });
-    }
-    return [...pinned, ...dynamic];
-  }, [leaderboardCategories, category, resolveCategoryLabel]);
+  const leaderboardFilterCategories = useMemo(
+    () =>
+      buildLeaderboardCategoryFilters(
+        categoryRegistry.isReady ? categoryRegistry.categories : null,
+        category,
+      ),
+    [categoryRegistry.isReady, categoryRegistry.categories, category],
+  );
 
   const activeCategoryLabel = useMemo(() => {
     if (category === "all") return "All Categories";

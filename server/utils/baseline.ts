@@ -27,36 +27,36 @@ export async function getBaselineDiagnostics(totalPeopleCount?: number): Promise
   const time24hAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const time7dAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const [latestRun] = await db
-    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
-    .from(ingestionRuns)
-    .where(eq(ingestionRuns.status, "completed"))
-    .orderBy(desc(ingestionRuns.finishedAt))
-    .limit(1);
-
-  const [baselineRun24h] = await db
-    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
-    .from(ingestionRuns)
-    .where(and(
-      eq(ingestionRuns.status, "completed"),
-      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
-      gt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() - BASELINE_24H_WINDOW_MS)),
-      lt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() + BASELINE_24H_WINDOW_MS))
-    ))
-    .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time24hAgo}::timestamp))`)
-    .limit(1);
-
-  const [baselineRun7d] = await db
-    .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
-    .from(ingestionRuns)
-    .where(and(
-      eq(ingestionRuns.status, "completed"),
-      eq(ingestionRuns.scoreVersion, SCORE_VERSION),
-      gt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() - BASELINE_7D_WINDOW_MS)),
-      lt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() + BASELINE_7D_WINDOW_MS))
-    ))
-    .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time7dAgo}::timestamp))`)
-    .limit(1);
+  const [[latestRun], [baselineRun24h], [baselineRun7d]] = await Promise.all([
+    db
+      .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+      .from(ingestionRuns)
+      .where(eq(ingestionRuns.status, "completed"))
+      .orderBy(desc(ingestionRuns.finishedAt))
+      .limit(1),
+    db
+      .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+      .from(ingestionRuns)
+      .where(and(
+        eq(ingestionRuns.status, "completed"),
+        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+        gt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() - BASELINE_24H_WINDOW_MS)),
+        lt(ingestionRuns.finishedAt, new Date(time24hAgo.getTime() + BASELINE_24H_WINDOW_MS))
+      ))
+      .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time24hAgo}::timestamp))`)
+      .limit(1),
+    db
+      .select({ id: ingestionRuns.id, finishedAt: ingestionRuns.finishedAt })
+      .from(ingestionRuns)
+      .where(and(
+        eq(ingestionRuns.status, "completed"),
+        eq(ingestionRuns.scoreVersion, SCORE_VERSION),
+        gt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() - BASELINE_7D_WINDOW_MS)),
+        lt(ingestionRuns.finishedAt, new Date(time7dAgo.getTime() + BASELINE_7D_WINDOW_MS))
+      ))
+      .orderBy(sql`ABS(EXTRACT(EPOCH FROM ${ingestionRuns.finishedAt} - ${time7dAgo}::timestamp))`)
+      .limit(1),
+  ]);
 
   let coveragePct = 0;
   if (baselineRun24h && totalPeopleCount && totalPeopleCount > 0) {

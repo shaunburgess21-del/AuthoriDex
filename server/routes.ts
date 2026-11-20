@@ -147,6 +147,14 @@ import { UNION_INCLUDE_GDELT } from "./providers/news-aggregator";
 import { fetchTrendsTopicSuggestions, isSerpApiTrendsConfigured } from "./providers/serpapi-trends";
 import pLimit from "p-limit";
 import { memoizeAsync, memoizeAsyncSwr } from "./services/insights/request-memo";
+import {
+  PUBLIC_FAME_LEADERBOARD_CACHE_CONTROL,
+  PUBLIC_FAME_LEADERBOARD_CACHE_MS,
+  PUBLIC_PREDICTORS_CACHE_CONTROL,
+  publicFameLeaderboardCacheKey,
+  readPublicCache,
+  writePublicCache,
+} from "./services/public-response-cache";
 import { countVisibleCommentsByParent } from "./services/comment-counts";
 import { buildOpeningScores } from "./native-markets/openingScores";
 import { generateWeeklyUpDown, generateWeeklyJackpot, generateWeeklyH2H, generateWeeklyGainer, getWeekContext, ensureWeeklyMarketsForCurrentWeek } from "./jobs/market-generator";
@@ -4884,6 +4892,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = parseBoundedInt(req.query.offset, 0, 0, LEADERBOARD_MAX_OFFSET);
       const userId = req.userId;
 
+      const publicCacheKey = publicFameLeaderboardCacheKey({
+        tab,
+        sortDir,
+        category,
+        search,
+        limit,
+        offset,
+      });
+      if (publicCacheKey) {
+        const cached = readPublicCache<Record<string, unknown>>(publicCacheKey);
+        if (cached) {
+          res.setHeader("Cache-Control", PUBLIC_FAME_LEADERBOARD_CACHE_CONTROL);
+          return res.json(cached);
+        }
+      }
+
+      // Rank map does not depend on this request. Start it now so it overlaps
+      // the category scan and the row query instead of running after both.
+      const rankMapPromise = getSnapshotRankMap();
+
       // Build conditions arrays:
       // - conditions: all filters (including search) for paged results
       // - nonSearchConditions: filters except search for global rank maps
@@ -5045,7 +5073,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       query = query.limit(limit).offset(offset) as typeof query;
 
-      const results = await query;
+      const [results, prevRankLookup, baselineMeta] = await Promise.all([
+        query,
+        rankMapPromise,
+        getBaselineDiagnostics(totalCount),
+      ]);
 
       let userValueVotes: Record<string, string> = {};
       if (userId && tab === 'value') {
@@ -5073,7 +5105,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const prevRankLookup = await getSnapshotRankMap();
       const baselineStatus = prevRankLookup.size > 0 ? "normal" : "degraded";
 
       let approvalRankById = new Map<string, number>();
@@ -5130,13 +5161,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      const baselineMeta = await getBaselineDiagnostics(totalCount);
       const baselineDegraded = baselineMeta.baseline24hStatus !== "normal";
       const safeLeaderboard = baselineDegraded
         ? leaderboard.map(p => ({ ...p, change24h: null, change7d: null }))
         : leaderboard;
 
-      res.json({
+      const payload = {
         tab,
         sortDir,
         total: safeLeaderboard.length,
@@ -5153,7 +5183,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fallbackUsed: false,
           fallbackRunId: null,
         },
-      });
+      };
+      if (publicCacheKey) {
+        writePublicCache(publicCacheKey, payload, PUBLIC_FAME_LEADERBOARD_CACHE_MS);
+        res.setHeader("Cache-Control", PUBLIC_FAME_LEADERBOARD_CACHE_CONTROL);
+      } else if (category && category.toLowerCase() === "favorites") {
+        res.setHeader("Cache-Control", "private, no-store");
+      } else {
+        res.setHeader("Cache-Control", "private, max-age=15");
+      }
+      res.json(payload);
     } catch (error: any) {
       console.error("[leaderboard] Error:", error);
       res.status(500).json({ error: "Failed to fetch leaderboard" });
@@ -5238,6 +5277,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = ranked.slice(page * limit, page * limit + limit);
 
+      if (!viewerId) {
+        res.setHeader("Cache-Control", PUBLIC_PREDICTORS_CACHE_CONTROL);
+      } else {
+        res.setHeader("Cache-Control", "private, max-age=15");
+      }
+      res.setHeader("Vary", "Authorization");
       res.json({ data, total, userEntry });
     } catch (error: any) {
       console.error("[leaderboard/users] Error:", error);
@@ -5282,42 +5327,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       //                 denominator. Excludes 'settled' (AMM partial
       //                 exits): the underlying buy will resolve later
       //                 and count then.
-      const statsRows = await db
-        .select({
-          userId: marketBets.userId,
-          jackpotPnl: sql<number>`
-            SUM(CASE
-                  WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
-                    THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
-                  WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'lost'
-                    THEN -${marketBets.stakeAmount}
-                  ELSE 0
-                END)`.as('jackpot_pnl'),
-          jackpotVolume: sql<number>`SUM(CASE
-            WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
-              THEN ${marketBets.stakeAmount}
-            ELSE 0
-          END)`.as('jackpot_volume'),
-          winCount: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} = 'won')`.as('win_count'),
-          totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost'))`.as('total_resolved'),
-        })
-        .from(marketBets)
-        .where(and(
-          inArray(marketBets.status, ['won', 'lost', 'settled']),
-          periodFilter
-        ))
-        .groupBy(marketBets.userId)
-        .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost', 'settled')) > 0`);
-
-      // AMM realised + unrealised P&L for everyone with AMM activity.
-      // No userIds filter: we want AMM-only traders (no jackpot
-      // history) to appear on the board too. The helper does
-      // weighted-avg-cost accounting and honours `settledAfter` for
-      // realised contributions; unrealised MTM is always current state.
-      const { loadAmmAggregatePnlPerUser } = await import(
-        "./services/amm-positions"
-      );
-      const ammByUser = await loadAmmAggregatePnlPerUser({ settledAfter });
+      // Jackpot SQL and the AMM scan do not depend on each other. Running
+      // them together is what cuts a cold Top Predictors load; the numbers
+      // themselves are unchanged.
+      const [statsRows, ammByUser] = await Promise.all([
+        db
+          .select({
+            userId: marketBets.userId,
+            jackpotPnl: sql<number>`
+              SUM(CASE
+                    WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'won'
+                      THEN COALESCE(${marketBets.payoutAmount}, ${marketBets.potentialPayout}, 0) - ${marketBets.stakeAmount}
+                    WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} = 'lost'
+                      THEN -${marketBets.stakeAmount}
+                    ELSE 0
+                  END)`.as('jackpot_pnl'),
+            jackpotVolume: sql<number>`SUM(CASE
+              WHEN ${marketBets.actionType} = 'parimutuel' AND ${marketBets.status} IN ('won','lost')
+                THEN ${marketBets.stakeAmount}
+              ELSE 0
+            END)`.as('jackpot_volume'),
+            winCount: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} = 'won')`.as('win_count'),
+            totalResolved: sql<number>`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost'))`.as('total_resolved'),
+          })
+          .from(marketBets)
+          .where(and(
+            inArray(marketBets.status, ['won', 'lost', 'settled']),
+            periodFilter
+          ))
+          .groupBy(marketBets.userId)
+          .having(sql`COUNT(*) FILTER (WHERE ${marketBets.status} IN ('won', 'lost', 'settled')) > 0`),
+        import("./services/amm-positions").then((m) =>
+          m.loadAmmAggregatePnlPerUser({ settledAfter }),
+        ),
+      ]);
 
       // Fold AMM-only traders into statsRows so they appear on the
       // board with zero jackpot P&L. Without this, fresh AMM-only
@@ -5433,6 +5476,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
   }
+
+  // Fill the all-time predictors memo during boot so the first visit is not
+  // the one that pays the AMM scan. Same key and loader as the route.
+  setTimeout(() => {
+    memoizeAsyncSwr(
+      "leaderboard:users:all",
+      USER_LEADERBOARD_MEMO_MS,
+      USER_LEADERBOARD_STALE_MAX_MS,
+      () => computeUserLeaderboardBase("all"),
+    ).catch((err) => {
+      console.warn("[leaderboard/users] warm failed", err instanceof Error ? err.message : err);
+    });
+  }, 1500);
 
   // POST /api/celebrity-metrics/sync - Sync all celebrity metrics (admin)
   app.post("/api/celebrity-metrics/sync", requireAuth, requireAdmin, async (req, res) => {

@@ -9,6 +9,7 @@ import {
   UserPlus,
   ImageIcon,
   ChevronRight,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -131,7 +132,7 @@ function HomeApprovalSnapshot() {
         <h3 className="text-sm font-semibold">Approval rating</h3>
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Use <span className="font-medium text-foreground">Rate</span> on a row to cast your own 1–5 vote, which feeds into that person&apos;s approval rating.
+        <span className="font-medium text-foreground">Rate</span> opens a 1–5 scale. Your number feeds that person&apos;s approval rating. You can rate before you sign up.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         <span className="font-medium text-foreground">Approval</span> ratings are aggregated from the VoxDex community and shown out of 5.
@@ -163,19 +164,22 @@ export function YourVoteColumnHeaderButton({
   testId?: string;
 }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      className={cn(
-        "h-9 min-h-9 w-auto shrink-0 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground",
-        className,
-      )}
-      aria-label="About approval rating and Rate on the leaderboard"
-      data-testid={testId}
-      onClick={onClick}
-    >
-      Your Vote
-    </Button>
+    <div className={cn("flex items-center justify-end", className)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0 text-muted-foreground"
+        aria-label="How approval ratings work"
+        data-testid={testId}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+      >
+        <Info className="h-3.5 w-3.5" />
+      </Button>
+    </div>
   );
 }
 

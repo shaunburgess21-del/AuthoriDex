@@ -142,7 +142,7 @@ function LeaderboardYourVoteCell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="w-[88px] shrink-0 flex justify-end">
+    <div className="w-[4.75rem] sm:w-[88px] shrink-0 flex justify-end" data-rate-control>
       {hasVoted && sentimentScore != null ? (
         <Popover modal open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -391,7 +391,10 @@ export const LeaderboardRow = memo(function LeaderboardRow({
         tabIndex={0}
         aria-label={`View insights for ${person.name}`}
         className={`lb-row-enter lb-row-card ${rowVariantClass} flex items-center gap-3 sm:gap-4 lg:gap-5 pl-2 pr-2 py-4 sm:pl-3 sm:pr-6 sm:py-5 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
-        onClick={onOpenInsight}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest?.("[data-rate-control], button, a")) return;
+          onOpenInsight();
+        }}
         // No-op touch handler: iOS Safari only applies :active (the press
         // glow/expand in .lb-row-card) to non-form elements that have a touch
         // listener attached.
@@ -546,7 +549,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
                 </span>
               </TouchTooltip>
             </div>
-            <div className="hidden md:flex">
+            <div className="flex">
               <LeaderboardYourVoteCell
                 person={person}
                 sentimentScore={sentimentScore}

@@ -47,7 +47,7 @@ export function FilterDropdown({
           <SlidersHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48 z-[60]">
+      <DropdownMenuContent align="start" className="z-[60] max-h-[min(70vh,24rem)] w-48 overflow-y-auto">
         {showSortSection && (
           <>
             <DropdownMenuLabel>Sort</DropdownMenuLabel>

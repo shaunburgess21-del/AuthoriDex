@@ -1,6 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getPublishedReachability, isTransportFailure, transportFailureDescription } from "./networkStatus";
 import { getSupabase } from "./supabase";
+import { hasPersistedAuthSession } from "./authSession";
 
 export class ApiError extends Error {
   status: number;
@@ -119,6 +120,7 @@ export function queryRetryDelay(attemptIndex: number): number {
 }
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!hasPersistedAuthSession()) return {};
   try {
     const supabase = await getSupabase();
     const { data: { session } } = await supabase.auth.getSession();

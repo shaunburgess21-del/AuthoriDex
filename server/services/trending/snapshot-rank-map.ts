@@ -7,8 +7,16 @@ import { SCORE_VERSION } from "../../scoring/normalize";
 // Pinned baseline: only re-selects when a new completed ingestion run is detected.
 let _cachedPrevRanks: Map<string, number> | null = null;
 let _lastCompletedRunId: string | null = null;
+let _latestRunIdMemo: string | null = null;
+let _latestRunFetchedAt = 0;
+/** Ingest is hourly. A short memo avoids a run-id query on every leaderboard hit. */
+const LATEST_RUN_TTL_MS = 15_000;
 
 export async function getLatestCompletedRunId(): Promise<string | null> {
+  const now = Date.now();
+  if (_latestRunFetchedAt !== 0 && now - _latestRunFetchedAt < LATEST_RUN_TTL_MS) {
+    return _latestRunIdMemo;
+  }
   try {
     const [row] = await db
       .select({ id: ingestionRuns.id })
@@ -16,9 +24,11 @@ export async function getLatestCompletedRunId(): Promise<string | null> {
       .where(eq(ingestionRuns.status, "completed"))
       .orderBy(desc(ingestionRuns.finishedAt))
       .limit(1);
-    return row?.id ?? null;
+    _latestRunIdMemo = row?.id ?? null;
+    _latestRunFetchedAt = Date.now();
+    return _latestRunIdMemo;
   } catch {
-    return null;
+    return _latestRunIdMemo;
   }
 }
 
