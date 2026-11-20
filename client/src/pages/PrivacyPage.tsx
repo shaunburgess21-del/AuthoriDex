@@ -12,6 +12,7 @@ export default function PrivacyPage() {
       effectiveDate={EFFECTIVE_DATE}
       markdown={privacyMarkdown}
       backButtonTestId="button-privacy-back"
+      navigation="site"
     />
   );
 }

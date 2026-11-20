@@ -91,10 +91,10 @@ export interface XpActionRow {
 
 /** Mirror of server/scripts/seed-gamification.ts → seedXpActions. */
 export const XP_ACTIONS: XpActionRow[] = [
-  { actionKey: "vote_sentiment", displayName: "Sentiment Vote", xpValue: 20, dailyCap: 20, description: "Vote on celebrity sentiment (1-10 scale)", category: "Voting" },
+  { actionKey: "vote_sentiment", displayName: "Sentiment Vote", xpValue: 20, dailyCap: 20, description: "Agree, Neutral, or Disagree on a sentiment poll", category: "Voting" },
   { actionKey: "vote_face_off", displayName: "Matchup Vote", xpValue: 20, dailyCap: 20, description: "Vote in a Matchup", category: "Voting" },
   { actionKey: "vote_induction", displayName: "Induction Vote", xpValue: 20, dailyCap: 10, description: "Vote on candidate for main leaderboard", category: "Voting" },
-  { actionKey: "vote_curation", displayName: "Image Curation Vote", xpValue: 20, dailyCap: 20, description: "Vote on whether a profile image should be featured", category: "Voting" },
+  { actionKey: "vote_curation", displayName: "Image Curation Vote", xpValue: 20, dailyCap: 20, description: "Choose which profile photo should be featured", category: "Voting" },
   { actionKey: "vote_opinion", displayName: "Opinion Poll Vote", xpValue: 20, dailyCap: 20, description: "Vote on an opinion poll", category: "Voting" },
 
   { actionKey: "post_insight", displayName: "Post Insight", xpValue: 50, dailyCap: 5, description: "Post a community insight", category: "Content" },
@@ -197,14 +197,17 @@ export function getRankConfig(name: string | null | undefined): {
 export interface VoteSurfaceRow {
   surface: string;
   where: string;
-  xpActionKey: string;
+  /** Null when the vote is saved but does not award XP. */
+  xpActionKey: string | null;
+  detail?: string;
 }
 
 export const VOTE_SURFACES: VoteSurfaceRow[] = [
-  { surface: "Sentiment vote (1–10)", where: "Celebrity profile → Vote tab", xpActionKey: "vote_sentiment" },
+  { surface: "Sentiment poll", where: "/vote → Sentiment Polls, or a profile's Vote tab", xpActionKey: "vote_sentiment", detail: "Agree, Neutral, or Disagree" },
+  { surface: "Overall rating (1–5)", where: "/vote → Overall Rating, or a profile's Vote tab", xpActionKey: null, detail: "Hate to Love. Saved, no XP." },
   { surface: "Matchup vote (head-to-head)", where: "/vote → Matchups", xpActionKey: "vote_face_off" },
-  { surface: "Induction vote", where: "/vote/induction (candidates for the main leaderboard)", xpActionKey: "vote_induction" },
-  { surface: "Image curation (hot-or-not)", where: "Celebrity profile → Vote tab → image votes", xpActionKey: "vote_curation" },
+  { surface: "Induction vote", where: "/vote → Induction Queue", xpActionKey: "vote_induction" },
+  { surface: "Profile photo vote", where: "/vote → Curate Profile", xpActionKey: "vote_curation", detail: "Tap the photo that should be featured" },
   { surface: "Opinion poll vote", where: "/vote → Opinion Polls", xpActionKey: "vote_opinion" },
 ];
 
@@ -218,7 +221,7 @@ export interface PredictSurfaceRow {
 
 export const PREDICT_SURFACES: PredictSurfaceRow[] = [
   { surface: "Place a prediction (any market)", where: "/predict and per-market detail pages", xpActionKey: "place_prediction", notes: "Costs Vox to stake" },
-  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Once per market; winning stake + share of pool returned to balance" },
+  { surface: "Prediction settles in your favour", where: "Awarded automatically by the market resolver", xpActionKey: "prediction_win", notes: "Once per market. Each winning share pays 1 Vox. Weekly Jackpot pays the shared pool." },
   { surface: "Suggest a world / open market", where: "/predict → suggest, then admin review", xpActionKey: "submit_suggestion", notes: "Admin-reviewed before publish" },
   { surface: "Your market suggestion is approved", where: "Bonus when admins publish your suggested market", xpActionKey: "market_suggestion_approved", notes: "+100 Vox paid alongside" },
 ];

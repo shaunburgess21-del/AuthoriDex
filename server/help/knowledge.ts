@@ -61,11 +61,12 @@ Some people are not on the main leaderboard yet. They sit in the induction queue
     body: `Voting is free. It does not cost Vox. Signed-in votes earn XP and a small amount of Vox, within daily caps.
 
 Where to vote:
-- Sentiment vote (1–10) — a celebrity profile's Vote tab.
+- Sentiment polls — Agree, Neutral, or Disagree, on /vote and on a celebrity profile's Vote tab.
+- Overall rating — 1 to 5, from Hate to Love, on /vote and on a celebrity profile's Vote tab. This is separate from a sentiment poll.
 - Matchups (head-to-head) — /vote.
 - Opinion polls — /vote.
-- Induction votes, for candidates for the main leaderboard — /vote/induction.
-- Image curation, whether a profile image should be featured — a celebrity profile's Vote tab.
+- Induction votes, for candidates for the main leaderboard — /vote, also at /vote/induction.
+- Profile photo votes — pick which photo should be featured, on /vote under Curate Profile. Tap the photo. It is not a left/right swipe.
 
 Sentiment, matchups, opinion polls, ratings, and predictions are one person, one vote. They are never weighted by rank. Rank only changes the weight of curatorial votes: induction, and image curation.
 

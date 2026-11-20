@@ -19,7 +19,7 @@ import {
 import { ensurePublicImagesBucket, PUBLIC_IMAGES_BUCKET } from "./lib/publicImagesStorage";
 import { handleMulterUploadErrors, multerUploadErrorHandler } from "./lib/multerUploadErrors";
 import { isUniqueViolation, pgConstraintName } from "./lib/pg-errors";
-import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, moderationEvents, llmDailySpend, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
+import { anonVoteBudget, trendSnapshots, trackedPeople, comments as unifiedComments, commentVotes, matchups, votes, voteActions, xpActions, xpLedger, ranks as schemaRanks, celebrityImages, profiles, NEW_ACCOUNT_IS_PUBLIC, NEW_ACCOUNT_POSITIONS_PUBLIC, userFavourites, trendingPeople, creditLedger, creditActions, badges as badgesTable, userBadges, adminAuditLog, predictionMarkets, marketEntries, marketBets, marketAmmState, ammPriceSnapshots, ammHealthCheckRuns, pageViews, apiCache, sentimentVotes, celebrityMetrics, celebrityValueVotes, userVotes, trendingPolls, trendingPollVotes, ingestionRuns, inductionCandidates, opinionPolls, opinionPollOptions, opinionPollVotes, opinionPollOptionSuggestions, opinionPollOptionSuggestionVotes, imageVotes, imageFlags, inductionVotes, cardRelatedPeople, approvalSnapshots, commentReports, suggestions, profileItemPrivacy, contentCategories, userCategoryEngagement, emailUnsubscribeState, emailSendLog, moderationEvents, llmDailySpend, insertCommentVoteSchema, insertVoteSchema, type CelebrityProfile, type InsertCelebrityProfile, type Matchup, type Vote, type Profile, type TrendingPoll } from "@shared/schema";
 import {
   applyTextModeration,
   isAllowedAvatarsBucketUrl,
@@ -7512,7 +7512,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Google/OAuth picture URLs or WelcomeStep skips PNG upload.
         avatarUrl: null,
         avatarSeed: `${userId}:default:v1`,
-        isPublic: true,
+        // New accounts only. Existing rows are never updated here.
+        // Column defaults match (migration 0104); set both explicitly so
+        // a signup is private even before that migration is applied.
+        isPublic: NEW_ACCOUNT_IS_PUBLIC,
+        positionsPublic: NEW_ACCOUNT_POSITIONS_PUBLIC,
         role: "user",
         rank: "Citizen",
         xpPoints: 0,

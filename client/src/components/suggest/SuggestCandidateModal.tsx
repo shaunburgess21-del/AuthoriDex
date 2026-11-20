@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Drawer } from "vaul";
 import { UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
+import { SuggestionSentDialog, awardedSuggestionXp } from "@/components/suggest/SuggestionSentDialog";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
   const [category, setCategory] = useState("");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sentXp, setSentXp] = useState<number | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -69,7 +71,7 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
       setReason("");
       onOpenChange(false);
       onSubmitted?.();
-      toast("Candidate suggested!", { description: "We'll review it shortly. You earned 5 XP!" });
+      setSentXp(awardedSuggestionXp(suggestData));
     } catch (err: any) {
       toast.error("Submission failed", { description: err?.message ?? "Something went wrong. Please try again." });
     } finally {
@@ -78,6 +80,14 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
   };
 
   return (
+    <>
+    <SuggestionSentDialog
+      open={sentXp != null}
+      xp={sentXp ?? 0}
+      onOpenChange={(next) => {
+        if (!next) setSentXp(null);
+      }}
+    />
     <Drawer.Root open={open} onOpenChange={onOpenChange}>
       <Drawer.Portal>
         <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
@@ -147,5 +157,6 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+    </>
   );
 }

@@ -494,10 +494,7 @@ function App() {
                   menu all open the same instance via `useReferralModal()`. */}
               <ReferralModalProvider>
                 <ScrollToTop />
-                {/* duration: Sonner default 4000ms felt too brief on slow reads;
-                    5000ms was comfortable but a touch long — 4000ms matches the
-                    library default while staying readable. closeButton + swipe
-                    (see swipeDirections) let users dismiss early on desktop/touch. */}
+                {/* Timing, placement, and dedupe live in ThemedToaster + app-toast. */}
                 <ThemedToaster />
                 <PWAUpdatePrompt />
                 <NewUserGate />

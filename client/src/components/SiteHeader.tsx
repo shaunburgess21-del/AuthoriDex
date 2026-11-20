@@ -31,6 +31,8 @@ interface SiteHeaderProps {
    * header); `"none"` omits the button entirely (used by the Home page).
    */
   backButton?: "mobile" | "always" | "none";
+  /** Overrides the back button test id. Defaults to `button-back`. */
+  backTestId?: string;
 }
 
 const ACTIVE_CLASS: Record<ActiveNav, string> = {
@@ -60,6 +62,7 @@ export function SiteHeader({
   onHomeClick,
   mobileExtras,
   backButton = "mobile",
+  backTestId = "button-back",
 }: SiteHeaderProps) {
   const [, setLocation] = useLocation();
 
@@ -91,7 +94,7 @@ export function SiteHeader({
                 }
               }}
               aria-label="Go back"
-              data-testid="button-back"
+              data-testid={backTestId}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>

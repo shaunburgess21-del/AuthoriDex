@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { SiteHeader } from "@/components/SiteHeader";
 import { cn } from "@/lib/utils";
 
 const linkClass =
@@ -131,6 +132,11 @@ export type LegalDocumentPageProps = {
   effectiveDate?: string;
   markdown: string;
   backButtonTestId?: string;
+  /**
+   * `site` renders the normal header (logo, section nav, account).
+   * `back` keeps the document-only bar used by narrower policy pages.
+   */
+  navigation?: "site" | "back";
 };
 
 export function LegalDocumentPage({
@@ -139,6 +145,7 @@ export function LegalDocumentPage({
   effectiveDate,
   markdown,
   backButtonTestId,
+  navigation = "back",
 }: LegalDocumentPageProps) {
   const [, setLocation] = useLocation();
 
@@ -155,23 +162,32 @@ export function LegalDocumentPage({
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto flex h-14 items-center gap-3 px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleBack}
-            aria-label="Go back"
-            data-testid={backButtonTestId}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="font-semibold">{title}</h1>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      {navigation === "site" ? (
+        <SiteHeader backButton="mobile" backTestId={backButtonTestId} />
+      ) : (
+        <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-xl">
+          <div className="container mx-auto flex h-14 items-center gap-3 px-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleBack}
+              aria-label="Go back"
+              data-testid={backButtonTestId}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="font-semibold">{title}</h1>
+          </div>
+        </header>
+      )}
 
       <main className="mx-auto max-w-[700px] px-4 py-8">
+        {navigation === "site" ? (
+          <h1 className="mb-6 font-serif text-3xl font-bold tracking-tight text-foreground">
+            {title}
+          </h1>
+        ) : null}
         <div className="mb-8 space-y-1 text-sm text-muted-foreground">
           <p>Last updated: {lastUpdated}</p>
           {effectiveDate ? <p>Effective date: {effectiveDate}</p> : null}

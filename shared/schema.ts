@@ -939,6 +939,14 @@ export type ShareClick = typeof shareClicks.$inferSelect;
 export type InsertShareClick = z.infer<typeof insertShareClickSchema>;
 
 // User Profiles - linked to Supabase Auth, stores profile info and role
+
+/**
+ * Privacy defaults for accounts created from this point on.
+ * Existing rows are not rewritten. See migrations/0104_private_profile_defaults.sql.
+ */
+export const NEW_ACCOUNT_IS_PUBLIC = false;
+export const NEW_ACCOUNT_POSITIONS_PUBLIC = false;
+
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey(), // Supabase Auth user ID (not auto-generated)
   username: text("username").unique(),
@@ -950,11 +958,16 @@ export const profiles = pgTable("profiles", {
   fullName: text("full_name"),
   avatarUrl: text("avatar_url"),
   avatarSeed: text("avatar_seed"),
-  isPublic: boolean("is_public").notNull().default(true),
+  // New accounts only. SET DEFAULT does not rewrite existing rows —
+  // migrations/0104_private_profile_defaults.sql. The signup insert sets
+  // both columns explicitly as well.
+  isPublic: boolean("is_public").notNull().default(NEW_ACCOUNT_IS_PUBLIC),
   // Controls visibility of *open* AMM positions and the user's identity
   // on per-market trade feeds, Town Square, and the leaderboard. Settled
-  // history stays public regardless. Migration: 0055.
-  positionsPublic: boolean("positions_public").notNull().default(true),
+  // history stays public regardless. Migration: 0055 added the column
+  // (default true for accounts that already existed). 0104 flips the
+  // default for new accounts only.
+  positionsPublic: boolean("positions_public").notNull().default(NEW_ACCOUNT_POSITIONS_PUBLIC),
   role: text("role").notNull().default("user"), // 'user', 'admin', 'moderator'
   rank: text("rank").notNull().default("Citizen"), // From ranks table: Citizen, Aspirant, Insider, etc.
   // Highest rank the user has ever reached. Lazily promoted whenever

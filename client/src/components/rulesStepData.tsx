@@ -49,8 +49,8 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Zap />,
-        headline: "Earn +25 XP Per Vote",
-        body: "Every vote earns XP. Suggest your own poll topics and earn bonus XP when they go live.",
+        headline: "Earn +20 XP Per Vote",
+        body: "Every sentiment vote earns XP, up to 20 a day. Suggest a poll and earn bonus XP when it goes live.",
       },
     ],
   },
@@ -70,8 +70,8 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Sparkles />,
-        headline: "Earn +15 XP Per Vote",
-        body: "Every matchup vote earns XP. Suggest your own matchups and earn even more.",
+        headline: "Earn +20 XP Per Vote",
+        body: "Every matchup vote earns XP, up to 20 a day. Suggest your own matchups and earn a bonus when one goes live.",
       },
     ],
   },
@@ -91,8 +91,8 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Sparkles />,
-        headline: "Earn +15 XP Per Vote",
-        body: "Vote, earn XP, and suggest your own polls for the community.",
+        headline: "Earn +20 XP Per Vote",
+        body: "Every opinion-poll vote earns XP, up to 20 a day. Suggest a poll for the community.",
       },
     ],
   },
@@ -133,8 +133,8 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <Zap />,
-        headline: "Earn +30 XP Per Vote",
-        body: "Induction votes are the highest-earning votes on VoxDex.",
+        headline: "Earn +20 XP Per Vote",
+        body: "Each induction vote earns the same XP as other votes, up to 10 a day.",
       },
     ],
   },
@@ -149,8 +149,8 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       },
       {
         icon: <ArrowLeftRight />,
-        headline: "Swipe to Vote",
-        body: "Swipe left or right on profile photos. The community winner becomes the official image.",
+        headline: "Tap to Choose",
+        body: "Tap the photo you want featured. The community favourite becomes the profile image.",
       },
       {
         icon: <Sparkles />,

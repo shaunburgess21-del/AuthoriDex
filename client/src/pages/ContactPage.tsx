@@ -123,7 +123,7 @@ interface ContactFormProps {
 function ContactForm({ initialEmail, initialName }: ContactFormProps) {
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
-  const [topic, setTopic] = useState<ContactTopic>("general");
+  const [topic, setTopic] = useState<ContactTopic | "">("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   // Honeypot. Real users never see it; bots that fill every field
@@ -198,7 +198,7 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
     setSubmitted(false);
     setSubject("");
     setMessage("");
-    setTopic("general");
+    setTopic("");
     setErrors({});
   };
 
@@ -255,7 +255,7 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
             />
           </Field>
 
-          <Field id="contact-email" label="Email" error={errors.email}>
+          <Field id="contact-email" label="Email" required error={errors.email}>
             <Input
               id="contact-email"
               type="email"
@@ -264,6 +264,7 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
               placeholder="you@example.com"
               autoComplete="email"
               required
+              aria-required="true"
               aria-invalid={!!errors.email}
               data-testid="input-contact-email"
             />
@@ -276,7 +277,7 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
           error={errors.topic}
         >
           <Select
-            value={topic}
+            value={topic || undefined}
             onValueChange={(value) => setTopic(value as ContactTopic)}
           >
             <SelectTrigger
@@ -344,19 +345,10 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
           />
         </Field>
 
-        {/* Honeypot — visually hidden, hidden from assistive tech, and
-            tab-skipped. Real users will never fill it; spam bots that
-            crawl every input will, and the server drops those silently. */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            left: "-10000px",
-            width: "1px",
-            height: "1px",
-            overflow: "hidden",
-          }}
-        >
+        {/* Honeypot. Kept in the DOM so bots that fill every field trip
+            the server check. Clipped off-screen (not display:none) and
+            removed from the accessibility tree. */}
+        <div className="contact-honeypot" aria-hidden="true">
           <label htmlFor="contact-website">
             Leave this field empty
             <input
@@ -367,6 +359,7 @@ function ContactForm({ initialEmail, initialName }: ContactFormProps) {
               autoComplete="off"
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
+              data-testid="input-contact-website"
             />
           </label>
         </div>
@@ -413,17 +406,24 @@ interface FieldProps {
   id: string;
   label: string;
   optional?: boolean;
+  required?: boolean;
   error?: string;
   hint?: string;
   children: React.ReactNode;
 }
 
-function Field({ id, label, optional, error, hint, children }: FieldProps) {
+function Field({ id, label, optional, required, error, hint, children }: FieldProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={id} className="text-sm font-medium">
           {label}
+          {required ? (
+            <>
+              <span className="text-destructive" aria-hidden="true"> *</span>
+              <span className="sr-only"> (required)</span>
+            </>
+          ) : null}
           {optional ? (
             <span className="ml-1 text-xs font-normal text-muted-foreground">
               (optional)
