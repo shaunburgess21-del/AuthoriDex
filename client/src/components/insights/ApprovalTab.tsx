@@ -287,10 +287,11 @@ export function ApprovalTab() {
               )}
 
               <div className="lb-row-list pt-2 sm:pt-3 space-y-1.5">
-                {allPeople.map((person) => (
+                {allPeople.map((person, index) => (
                   <LeaderboardRow
                     key={person.id}
                     person={person}
+                    listIndex={index}
                     activeTab="approval"
                     onOpenInsight={() => handleRowOpenInsight(person)}
                     onVoteClick={() => handleVoteClick(person.id)}

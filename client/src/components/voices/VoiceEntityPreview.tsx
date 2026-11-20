@@ -34,6 +34,8 @@ const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
 interface VoiceEntityPreviewProps {
   entity: VoicesEntity;
   itemId: string;
+  /** First cards on the page: load the panel image immediately. */
+  imagePriority?: boolean;
 }
 
 /**
@@ -43,7 +45,7 @@ interface VoiceEntityPreviewProps {
  * the original compact chip. Always deep-links to the source card (stops
  * propagation so the tap doesn't open the reply overlay).
  */
-export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) {
+export function VoiceEntityPreview({ entity, itemId, imagePriority = false }: VoiceEntityPreviewProps) {
   const isMatchup = entity.refType === "matchup";
   const hasMatchupMedia =
     isMatchup && entity.media && (entity.media.optionAImage || entity.media.optionBImage);
@@ -69,12 +71,12 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
         <div className="relative flex min-h-0 flex-1">
           <div className="relative h-full min-h-0 w-1/2 overflow-hidden">
             <div className="absolute inset-0">
-              <CardImage src={optionAImage ?? ""} alt={optionAText} width={320} />
+              <CardImage src={optionAImage ?? ""} alt={optionAText} width={320} emptyLabel={optionAText} priority={imagePriority} />
             </div>
           </div>
           <div className="relative h-full min-h-0 w-1/2 overflow-hidden border-l border-white/[0.08]">
             <div className="absolute inset-0">
-              <CardImage src={optionBImage ?? ""} alt={optionBText} width={320} />
+              <CardImage src={optionBImage ?? ""} alt={optionBText} width={320} emptyLabel={optionBText} priority={imagePriority} />
             </div>
           </div>
           {/* VS centered on the image area (not the name footer) */}
@@ -139,6 +141,8 @@ export function VoiceEntityPreview({ entity, itemId }: VoiceEntityPreviewProps) 
               alt={entity.title}
               width={288}
               fallbackSrc={entity.fallbackImageUrl}
+              emptyLabel={entity.title}
+              priority={imagePriority}
             />
           </div>
         </div>

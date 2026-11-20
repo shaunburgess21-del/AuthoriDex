@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   getDisplayImageUrl,
   getDisplaySrcSet,
 } from "@/lib/imageTransform";
 import { useMatchupImageCandidates } from "@/lib/imageResolver";
+import { imageRevealStatus } from "@/lib/imageReveal";
 
 export interface CardImageProps {
   src: string;
@@ -19,6 +20,8 @@ export interface CardImageProps {
   priority?: boolean;
   /** Display width hint used for responsive transforms (when enabled). */
   width?: number;
+  /** Shown on the gradient when every candidate URL fails. */
+  emptyLabel?: string;
 }
 
 /**
@@ -37,27 +40,59 @@ export function CardImage({
   fallbackSrc,
   priority = false,
   width,
+  emptyLabel,
 }: CardImageProps) {
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const handledSrc = useRef<string | null>(null);
   const { src: activeSrc, onError, exhausted } = useMatchupImageCandidates(
     src,
     fallbackSrc,
   );
 
-  useEffect(() => {
-    setLoaded(false);
-  }, [activeSrc]);
+  const displaySrc = activeSrc
+    ? getDisplayImageUrl(activeSrc, width ? { width } : undefined)
+    : null;
 
-  if (!activeSrc || exhausted) {
+  const advancePast = (failedSrc: string | null) => {
+    if (!failedSrc || handledSrc.current === failedSrc) return;
+    handledSrc.current = failedSrc;
+    onError();
+  };
+
+  useLayoutEffect(() => {
+    const status = imageRevealStatus(imgRef.current);
+    if (status === "loaded") {
+      setLoaded(true);
+      return;
+    }
+    if (status === "error") {
+      advancePast(displaySrc);
+      return;
+    }
+    setLoaded(false);
+  }, [activeSrc, displaySrc, onError]);
+
+  if (!activeSrc || !displaySrc || exhausted) {
+    const initials = (emptyLabel ?? "")
+      .split(" ")
+      .map((part) => part[0])
+      .filter(Boolean)
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
     return (
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-br from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"
-      />
+        className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"
+      >
+        {initials ? (
+          <span className="text-lg font-semibold text-muted-foreground/80">{initials}</span>
+        ) : null}
+      </div>
     );
   }
 
-  const displaySrc = getDisplayImageUrl(activeSrc, width ? { width } : undefined);
   const srcSet = width ? getDisplaySrcSet(activeSrc, { width }) : undefined;
 
   return (
@@ -69,6 +104,7 @@ export function CardImage({
         />
       )}
       <img
+        ref={imgRef}
         key={displaySrc}
         src={displaySrc}
         srcSet={srcSet}
@@ -77,9 +113,9 @@ export function CardImage({
         fetchPriority={priority ? "high" : "auto"}
         decoding="async"
         onLoad={() => setLoaded(true)}
-        onError={onError}
+        onError={() => advancePast(displaySrc)}
         className={cn(
-          "h-full w-full object-cover transition-opacity duration-300",
+          "absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
           loaded ? "opacity-100" : "opacity-0",
           className,
         )}

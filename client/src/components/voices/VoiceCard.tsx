@@ -1,4 +1,4 @@
-import { Crown, Flame, Heart, MessageCircle } from "lucide-react";
+import { Clock, Crown, Flame, Heart, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
@@ -16,9 +16,10 @@ interface VoiceCardProps {
   item: VoicesFeedItem;
   onOpen: (item: VoicesFeedItem) => void;
   onVote: (item: VoicesFeedItem) => void;
+  imagePriority?: boolean;
 }
 
-export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
+export function VoiceCard({ item, onOpen, onVote, imagePriority = false }: VoiceCardProps) {
   const isDeleted = Boolean(item.body) === false;
   const hasUpvoted = item.userVote === "up";
   const isTimeline = item.entity.refType === "timeline";
@@ -55,6 +56,16 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
               {formatTimeAgo(item.createdAt)}
             </span>
             {!isDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
+            {item.pendingReview && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] text-amber-700 dark:text-amber-300"
+                data-testid={`voice-card-pending-${item.id}`}
+              >
+                <Clock className="h-3 w-3" />
+                Pending review
+              </Badge>
+            )}
             {item.badges.topTake && (
               <Badge
                 variant="outline"
@@ -85,7 +96,9 @@ export function VoiceCard({ item, onOpen, onVote }: VoiceCardProps) {
           </p>
 
           {/* Context preview (deep link to source) */}
-          {!isTimeline && <VoiceEntityPreview entity={item.entity} itemId={item.id} />}
+          {!isTimeline && (
+            <VoiceEntityPreview entity={item.entity} itemId={item.id} imagePriority={imagePriority} />
+          )}
 
           {/* Actions */}
           <div className="mt-3 flex items-center gap-4 text-muted-foreground">

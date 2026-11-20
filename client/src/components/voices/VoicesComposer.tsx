@@ -15,6 +15,7 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
 import { PersonSearchPopover, type PersonResult } from "./PersonSearchPopover";
 import type { VoicesFeedItem } from "./types";
+import { withPostedVoice, type VoicesFeedPages } from "./seedPostedVoice";
 import { VOICES_COMPOSER_INPUT_CLASS } from "./voicesSurface";
 
 interface VoicesComposerProps {
@@ -42,15 +43,33 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
       const res = await apiRequest("POST", "/api/voices/posts", payload);
       return (await res.json()) as { item: VoicesFeedItem | null };
     },
-    onSuccess: (data) => {
-      toast(attachPerson ? `Posted to ${attachPerson.name}'s profile` : "Posted to Voices");
+    onSuccess: async (data) => {
+      const item = data.item ?? null;
+      if (item?.pendingReview) {
+        toast("Your post is pending review", {
+          description: "Only you can see it until it is approved.",
+        });
+      } else {
+        toast(attachPerson ? `Posted to ${attachPerson.name}'s profile` : "Posted to Voices");
+      }
       setBody("");
       setAttachPerson(null);
       setTimelinePickerOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+      const keepOwnPost = () => {
+        if (!item) return;
+        queryClient.setQueriesData<VoicesFeedPages>(
+          { queryKey: ["/api/voices/feed"] },
+          (prev) => withPostedVoice(prev, item),
+        );
+      };
+      keepOwnPost();
+      await queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+      // A refetch can still miss the post if another server process served a
+      // stale ranked list. Put it back without reordering a list that has it.
+      keepOwnPost();
       queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
-      onPosted?.(data.item ?? null);
+      onPosted?.(item);
     },
     onError: () => {
       toast.error("Could not post. Please try again.");

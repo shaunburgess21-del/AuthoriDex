@@ -13,6 +13,7 @@ import {
 } from "./entities";
 import type { ParentVoteLabel } from "../commentVoteLabels";
 import { presentPublicAuthor } from "../account-deletion-utils";
+import { rankVoiceOrder, voiceVisibleToViewer } from "./rank-order";
 
 export type VoicesFeedMode = "for-you" | "latest" | "top";
 export type VoicesFeedSource = "comment" | "insight";
@@ -43,6 +44,12 @@ export interface VoicesFeedItem {
   entity: VoicesEntity;
   badges: { topTake: boolean; rising: boolean };
   score: number;
+  /**
+   * True when moderation held this post (`hidden`) and the viewer is the
+   * author. Everyone else never receives the row. There is no separate
+   * new-account queue.
+   */
+  pendingReview?: boolean;
   userVote?: "up" | null;
   /** Author's own vote on the parent card (null for timeline posts). */
   parentVoteLabel?: ParentVoteLabel;
@@ -65,18 +72,6 @@ export interface RankOptions {
 const RECENCY_DAYS = 45;
 /** Hard cap on candidates gathered per source before ranking. */
 const MAX_CANDIDATES = 600;
-/** Each reply is worth this many net upvotes when scoring engagement. */
-const REPLY_WEIGHT = 1.5;
-/** Hacker-News style time-decay exponent. */
-const GRAVITY = 1.45;
-/** Max items surfaced per parent entity in for-you / top (diversity cap). */
-const MAX_PER_ENTITY = 3;
-/** Rising = young + already gathering engagement. */
-const RISING_MAX_AGE_HOURS = 36;
-const RISING_MIN_ENGAGEMENT = 4;
-// Personalization boosts (multiplicative on the hot score).
-const INTEREST_BOOST = 0.5;
-const FAVORITE_BOOST = 0.75;
 
 interface Candidate {
   id: string;
@@ -91,22 +86,10 @@ interface Candidate {
   replyCount: number;
   createdAt: Date;
   entity: VoicesEntity;
+  pendingReview: boolean;
 }
 
-function ageHoursOf(createdAt: Date, now: number): number {
-  return Math.max(0, (now - createdAt.getTime()) / 3_600_000);
-}
-
-function engagementOf(c: Candidate): number {
-  const net = c.upvotes - c.downvotes;
-  return net + c.replyCount * REPLY_WEIGHT;
-}
-
-function hotScore(c: Candidate, now: number): number {
-  return (engagementOf(c) + 1) / Math.pow(ageHoursOf(c.createdAt, now) + 2, GRAVITY);
-}
-
-async function loadCommentCandidates(): Promise<Candidate[]> {
+async function loadCommentCandidates(viewerId: string | null): Promise<Candidate[]> {
   const since = new Date(Date.now() - RECENCY_DAYS * 86_400_000);
 
   const rows = await db
@@ -119,6 +102,7 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
       upvotes: unifiedComments.upvotes,
       downvotes: unifiedComments.downvotes,
       createdAt: unifiedComments.createdAt,
+      moderationStatus: unifiedComments.moderationStatus,
       authorUsername: profiles.username,
       authorAvatarUrl: profiles.avatarUrl,
       authorRank: profiles.rank,
@@ -144,6 +128,8 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
 
   const candidates: Candidate[] = [];
   for (const r of rows) {
+    const visibility = voiceVisibleToViewer(r.moderationStatus, r.userId, viewerId);
+    if (!visibility.include) continue;
     const key = entityKey(r.parentType, r.parentId);
     const entity = entities.get(key);
     if (!entity) continue; // parent deleted / unresolvable — skip silently
@@ -175,6 +161,7 @@ async function loadCommentCandidates(): Promise<Candidate[]> {
       replyCount: replyCounts.get(r.id) ?? 0,
       createdAt: r.createdAt,
       entity,
+      pendingReview: visibility.pendingReview,
     });
   }
   return candidates;
@@ -236,17 +223,6 @@ async function loadPersonalization(userId: string | null): Promise<Personalizati
   }
 }
 
-function personalBoost(entity: VoicesEntity, p: Personalization): number {
-  let boost = 0;
-  if (entity.category && p.interests.has(normalizeMarketCategory(entity.category))) {
-    boost += INTEREST_BOOST;
-  }
-  if (entity.personIds.some((id) => p.favorites.has(id))) {
-    boost += FAVORITE_BOOST;
-  }
-  return boost;
-}
-
 function passesFilters(c: Candidate, opts: RankOptions): boolean {
   if (opts.surfaces && !opts.surfaces.includes(c.entity.surface)) return false;
   if (opts.personIds && opts.personIds.length > 0) {
@@ -276,6 +252,7 @@ function toFeedItem(c: Candidate, score: number, topTake: boolean, rising: boole
     entity: c.entity,
     badges: { topTake, rising },
     score,
+    ...(c.pendingReview ? { pendingReview: true } : {}),
   };
 }
 
@@ -288,55 +265,38 @@ function toFeedItem(c: Candidate, score: number, topTake: boolean, rising: boole
  */
 export async function rankCandidates(opts: RankOptions): Promise<VoicesFeedItem[]> {
   const [commentCandidates, personalization] = await Promise.all([
-    loadCommentCandidates(),
+    loadCommentCandidates(opts.userId),
     loadPersonalization(opts.userId),
   ]);
 
   const now = Date.now();
-  const candidates = commentCandidates.filter((c) =>
-    passesFilters(c, opts),
+  const candidates = commentCandidates.filter((c) => passesFilters(c, opts));
+  const order = rankVoiceOrder(
+    candidates.map((c) => ({
+      id: c.id,
+      entityRefKey: c.entityRefKey,
+      upvotes: c.upvotes,
+      downvotes: c.downvotes,
+      replyCount: c.replyCount,
+      createdAtMs: c.createdAt.getTime(),
+      authorUserId: c.author.userId,
+      category: c.entity.category,
+      personIds: c.entity.personIds,
+    })),
+    {
+      mode: opts.mode,
+      now,
+      userId: opts.userId,
+      personalization,
+    },
   );
 
-  // Score per mode.
-  const scored = candidates.map((c) => {
-    let score: number;
-    if (opts.mode === "latest") {
-      score = c.createdAt.getTime();
-    } else if (opts.mode === "top") {
-      score = engagementOf(c);
-    } else {
-      score = hotScore(c, now) * (1 + personalBoost(c.entity, personalization));
-    }
-    const age = ageHoursOf(c.createdAt, now);
-    const rising = age <= RISING_MAX_AGE_HOURS && engagementOf(c) >= RISING_MIN_ENGAGEMENT;
-    return { c, score, rising };
-  });
-
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return b.c.createdAt.getTime() - a.c.createdAt.getTime();
-  });
-
-  // Top Take = best-ranked item per parent entity. Diversity cap applies in
-  // ranked modes so one busy card can't dominate the feed.
-  const seenTopTake = new Set<string>();
-  const perEntityCount = new Map<string, number>();
-  const applyCap = opts.mode !== "latest";
-
+  const byId = new Map(candidates.map((c) => [c.id, c]));
   const out: VoicesFeedItem[] = [];
-  for (const s of scored) {
-    const key = s.c.entityRefKey;
-    const isTopTake = key !== "timeline:global" && !seenTopTake.has(key);
-    if (isTopTake) seenTopTake.add(key);
-
-    if (applyCap) {
-      const cnt = perEntityCount.get(key) ?? 0;
-      if (cnt >= MAX_PER_ENTITY) continue;
-      perEntityCount.set(key, cnt + 1);
-    }
-
-    out.push(toFeedItem(s.c, s.score, isTopTake, s.rising));
+  for (const ranked of order) {
+    const candidate = byId.get(ranked.id);
+    if (!candidate) continue;
+    out.push(toFeedItem(candidate, ranked.score, ranked.topTake, ranked.rising));
   }
-
   return out;
 }
