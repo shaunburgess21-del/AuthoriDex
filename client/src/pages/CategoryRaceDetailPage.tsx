@@ -1,3 +1,4 @@
+import { VoxText } from "@/components/VoxText";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +46,7 @@ import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
 import {
+
   ArrowLeft,
   Crown,
   Users,
@@ -745,7 +747,7 @@ export default function CategoryRaceDetailPage() {
                           className="text-[10px] tabular-nums text-muted-foreground border-border/50"
                           data-testid="race-live-market-volume"
                         >
-                          {liveVolumeLabel} vol
+                          <VoxText text={liveVolumeLabel} /> vol
                         </Badge>
                       )}
                       {totalParticipants > 0 && (
@@ -801,21 +803,21 @@ export default function CategoryRaceDetailPage() {
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-semibold truncate">{candidateName}</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {pos.netShares.toFixed(2)} shares · avg {formatVoxPrice(pos.avgEntryPrice, 3)} · cost {formatVoxPrice(pos.netCreditsIn, 0)}
+                                  {pos.netShares.toFixed(2)} shares · avg <VoxText text={formatVoxPrice(pos.avgEntryPrice, 3)} /> · cost <VoxText text={formatVoxPrice(pos.netCreditsIn, 0)} />
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
                                   Entered ~{priceToPercent(pos.avgEntryPrice, 0)} → now {priceToPercent(Number(ammPriceMap?.[pos.entryId] ?? pos.currentPrice), 0)}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Cash out now: ~{formatVoxPrice(pos.currentValue)}{" "}
+                                  Cash out now: ~<VoxText text={formatVoxPrice(pos.currentValue)} />{" "}
                                   <span className={`font-mono font-medium ${pnlClass}`}>
-                                    ({formatVoxDelta(unrealisedPnl)})
+                                    (<VoxText text={formatVoxDelta(unrealisedPnl)} />)
                                   </span>
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  If {candidateName} wins: {formatVoxPrice(pos.netShares)}{" "}
+                                  If {candidateName} wins: <VoxText text={formatVoxPrice(pos.netShares)} />{" "}
                                   <span className="font-mono font-medium text-green-700 dark:text-green-500">
-                                    ({formatVoxDelta(maxProfitIfWin)})
+                                    (<VoxText text={formatVoxDelta(maxProfitIfWin)} />)
                                   </span>
                                 </p>
                               </div>
@@ -829,7 +831,7 @@ export default function CategoryRaceDetailPage() {
                                 className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
                               >
                                 <Banknote className="h-3.5 w-3.5" />
-                                <span>Cash out ~{formatVox(Math.round(pos.currentValue))}</span>
+                                <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
                               </Button>
                               <Button
                                 size="sm"

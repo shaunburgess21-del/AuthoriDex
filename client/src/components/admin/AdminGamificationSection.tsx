@@ -65,6 +65,8 @@ import { STREAK_MILESTONE_BADGE_KEYS } from "@shared/badge-config";
 import { AdminCreditsSection } from "./AdminCreditsSection";
 import { AdminBadgesSection } from "./AdminBadgesSection";
 import { BadgeCard, type BadgeCardData } from "@/components/BadgeCard";
+import { VoxMark } from "@/components/VoxMark";
+
 
 // -----------------------------------------------------------------------------
 // Types
@@ -1133,7 +1135,7 @@ function StreaksPanel() {
                     +{m.xp.toLocaleString()} XP
                   </td>
                   <td className="px-2 py-1 text-right tabular-nums">
-                    +{CURRENCY.symbol}{m.credits.toLocaleString()}
+                    +<VoxMark />{m.credits.toLocaleString()}
                   </td>
                   <td className="px-2 py-1">
                     {m.badgeKey ? (

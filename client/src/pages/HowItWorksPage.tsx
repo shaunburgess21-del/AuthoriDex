@@ -71,6 +71,10 @@ import { HowItWorksWelcomeModal } from "@/components/HowItWorksWelcomeModal";
 import type { OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { SiteHeader } from "@/components/SiteHeader";
 import { hapticSelection } from "@/lib/haptic";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
+
 
 /**
  * Tier at which a member's rank qualifier starts appearing inline on their
@@ -348,7 +352,7 @@ function StatPill(
         </span>
         <span className="flex flex-col items-end leading-tight">
           <span className="font-mono text-sm font-semibold text-slate-800 dark:text-white">
-            {value}
+            <VoxText text={value} />
           </span>
           {sublabel && (
             <span className="text-[10px] text-muted-foreground">{sublabel}</span>
@@ -371,7 +375,7 @@ function StatPill(
       </span>
       <span className="flex flex-col items-end leading-tight">
         <span className="font-mono text-sm font-semibold" style={{ color: accent }}>
-          {value}
+          <VoxText text={value} />
         </span>
         {sublabel && (
           <span className="text-[10px] text-muted-foreground">{sublabel}</span>
@@ -1009,8 +1013,8 @@ function EarnVoxReferralSlot() {
       <h3 className="font-semibold">Refer a Friend</h3>
       <p className="text-sm text-muted-foreground">
         Create an account to get your personal referral link. Friends who join
-        through it start with {formatVox(headStart)} (
-        {formatVox(SIGNUP_CREDIT_GRANT)} signup grant + {formatVox(referralBonus)}{" "}
+        through it start with <VoxText text={formatVox(headStart)} /> (
+        <VoxText text={formatVox(SIGNUP_CREDIT_GRANT)} /> signup grant + <VoxText text={formatVox(referralBonus)} />{" "}
         bonus) — and you earn Vox when they make their first move.
       </p>
       <Button
@@ -1069,7 +1073,7 @@ function CreditsSection() {
           </p>
           <div className="grid gap-2.5 sm:grid-cols-2">
             <ConceptTile icon={Gift} label="Signup grant" accent={accent}>
-              Every new account starts with {formatVox(SIGNUP_CREDIT_GRANT)} so
+              Every new account starts with <VoxText text={formatVox(SIGNUP_CREDIT_GRANT)} /> so
               you can predict immediately.
             </ConceptTile>
             <ConceptTile icon={Trophy} label="Prediction payouts" accent={accent}>
@@ -1460,10 +1464,10 @@ function CreditEarnTable({ accent }: { accent: string }) {
         return (
           <p className="text-xs text-muted-foreground">
             Share any VoxDex card or page to earn Vox when someone follows
-            your link. Refer a friend and earn {formatVox(referralReward)}{" "}
+            your link. Refer a friend and earn <VoxText text={formatVox(referralReward)} />{" "}
             when they make their first move — they get{" "}
-            {formatVox(headStart)} to start ({formatVox(SIGNUP_CREDIT_GRANT)}{" "}
-            signup grant + {formatVox(referralBonus)} bonus).
+            <VoxText text={formatVox(headStart)} /> to start (<VoxText text={formatVox(SIGNUP_CREDIT_GRANT)} />{" "}
+            signup grant + <VoxText text={formatVox(referralBonus)} /> bonus).
           </p>
         );
       })()}
@@ -1738,7 +1742,7 @@ function VoteSection({
                     </td>
                     <td className={cn("text-right", KB_TD)}>
                       <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
-                        +{CURRENCY.symbol}{voteCreditAction?.proposedCredits ?? 2}
+                        +<VoxMark />{voteCreditAction?.proposedCredits ?? 2}
                       </span>
                     </td>
                   </tr>
@@ -1770,7 +1774,7 @@ function VoteSection({
             +{suggestionApprovedXp?.xpValue ?? 50} XP bonus when it goes live.
           </ConceptTile>
           <ConceptTile icon={Coins} label="Vox bonus" accent={accent}>
-            Approved suggestions also earn +{CURRENCY.symbol}
+            Approved suggestions also earn +<VoxMark />
             {suggestionApprovedCredits?.proposedCredits ?? 50}, no daily cap.
           </ConceptTile>
         </div>
@@ -1840,7 +1844,7 @@ function PredictSection({
     if (xpActionKey === "market_suggestion_approved") {
       return (
         <span className="font-mono font-semibold text-violet-500 dark:text-violet-300">
-          +{CURRENCY.symbol}{marketSuggestionCredits?.proposedCredits ?? 100}
+          +<VoxMark />{marketSuggestionCredits?.proposedCredits ?? 100}
         </span>
       );
     }
@@ -1877,11 +1881,11 @@ function PredictSection({
         </div>
         <div className="grid gap-2.5 sm:grid-cols-2">
           <ConceptTile icon={Gauge} label="Live-price shares" accent={accent}>
-            Each winning share pays Ꝟ1 at settlement. Price = implied odds — a
-            Ꝟ0.30 share means a ~30% chance.
+            Each winning share pays <VoxMark />1 at settlement. Price = implied odds — a
+            <VoxMark />0.30 share means a ~30% chance.
           </ConceptTile>
           <ConceptTile icon={Trophy} label="Cheaper pays bigger" accent={accent}>
-            A contrarian pick at Ꝟ0.20 pays 5×; the Ꝟ0.80 favourite pays 1.25×.
+            A contrarian pick at <VoxMark />0.20 pays 5×; the <VoxMark />0.80 favourite pays 1.25×.
             Sell anytime before close.
           </ConceptTile>
           <ConceptTile icon={Sparkles} label="Weekly Jackpot" accent={accent}>
@@ -1958,7 +1962,7 @@ function PredictSection({
           </span>{" "}
           and{" "}
           <span className="font-mono text-violet-500 dark:text-violet-300">
-            +{CURRENCY.symbol}{marketSuggestionCredits?.proposedCredits ?? 100}
+            +<VoxMark />{marketSuggestionCredits?.proposedCredits ?? 100}
           </span>{" "}
           when your market goes live. World markets carry the most editorial
           weight on VoxDex — only the best suggestions make it through.

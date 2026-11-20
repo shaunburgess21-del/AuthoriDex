@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
 import { CURRENCY } from "@/lib/currency";
+import { VoxMark } from "@/components/VoxMark";
+
 
 // XP values mirror server/scripts/seed-gamification.ts. Kept inline
 // (rather than imported from gamification-content.ts) to avoid a
@@ -70,7 +72,7 @@ export function ProfileCompletionCard() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-sm">Complete your profile</p>
           <p className="text-xs text-muted-foreground">
-            Earn up to {TOTAL_PROFILE_XP} XP + {CURRENCY.symbol}{TOTAL_PROFILE_CREDITS}
+            Earn up to {TOTAL_PROFILE_XP} XP + <VoxMark />{TOTAL_PROFILE_CREDITS}
             {" "}as you fill in your profile.
           </p>
           <div className="mt-2 flex items-center gap-2">

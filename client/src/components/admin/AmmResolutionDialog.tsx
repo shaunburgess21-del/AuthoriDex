@@ -51,6 +51,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabase } from "@/lib/supabase";
+import { VoxMark } from "@/components/VoxMark";
+import { VoxText } from "@/components/VoxText";
+
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const supabase = await getSupabase();
@@ -623,7 +626,7 @@ export function AmmResolutionDialog({
               </Badge>
             )}
             {typeof market.pool === "number" && (
-              <span className="flex items-center gap-1"><Coins className="h-3.5 w-3.5" /> {CURRENCY.symbol}{market.pool} pool</span>
+              <span className="flex items-center gap-1"><Coins className="h-3.5 w-3.5" /> <VoxMark />{market.pool} pool</span>
             )}
             {typeof market.uniqueBettors === "number" && (
               <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {market.uniqueBettors} bettors</span>
@@ -632,7 +635,7 @@ export function AmmResolutionDialog({
           {isAmm && (
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300 leading-relaxed">
               This is an AMM market. Settling pays each holder of the winning side
-              <span className="font-mono"> Ꝟ1 per share</span>; voiding refunds every position at its cost basis. The house keeps the rest as market-maker P/L.
+              <span className="font-mono"> <VoxMark />1 per share</span>; voiding refunds every position at its cost basis. The house keeps the rest as market-maker P/L.
             </div>
           )}
 
@@ -780,7 +783,7 @@ export function AmmResolutionDialog({
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
                           <span>{entry.betCount} bets</span>
-                          <span>{CURRENCY.symbol}{entry.totalStaked} ({stakePercent}%)</span>
+                          <span><VoxMark />{entry.totalStaked} ({stakePercent}%)</span>
                         </div>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
@@ -796,7 +799,7 @@ export function AmmResolutionDialog({
                             </div>
                             <div>
                               <p className="text-muted-foreground">Total Payouts</p>
-                              <p className="font-medium">{CURRENCY.symbol}{entry.totalPayouts}</p>
+                              <p className="font-medium"><VoxMark />{entry.totalPayouts}</p>
                             </div>
                             <div>
                               <p className="text-muted-foreground">Remainder</p>
@@ -809,7 +812,7 @@ export function AmmResolutionDialog({
                               {entry.payoutDetails.map((p, i) => (
                                 <div key={p.userId || `payout-${i}`} className="flex items-center justify-between text-xs">
                                   <span className="text-muted-foreground">{p.username}</span>
-                                  <span className="font-medium">{CURRENCY.symbol}{p.stake} → {CURRENCY.symbol}{p.payout}</span>
+                                  <span className="font-medium"><VoxMark />{p.stake} → <VoxMark />{p.payout}</span>
                                 </div>
                               ))}
                             </div>
@@ -879,9 +882,9 @@ export function AmmResolutionDialog({
         {settleMutation.isPending
           ? "Resolving..."
           : selectedPreview
-            ? `Resolve — ${CURRENCY.symbol}${selectedPreview.totalPayouts} to ${selectedPreview.winnersCount} winner${selectedPreview.winnersCount !== 1 ? "s" : ""}`
+            ? <>Resolve — <VoxText text={`${CURRENCY.symbol}${selectedPreview.totalPayouts}`} /> to {selectedPreview.winnersCount} winner{selectedPreview.winnersCount !== 1 ? "s" : ""}</>
             : isAmm && selectedEntry
-              ? "Resolve — pay Ꝟ1 per winning share"
+              ? <>Resolve — pay <VoxMark />1 per winning share</>
               : "Select an outcome"}
       </Button>
     </>

@@ -9,6 +9,8 @@ import {
 } from "@/components/predict/MarketThumbCollage";
 import { cn } from "@/lib/utils";
 import { formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 export type RelatedCarouselItem = {
   id: string;
@@ -330,7 +332,7 @@ export function RelatedItemsCarousel({
                           )}
                           {typeof m.creditPool === "number" && m.creditPool > 0 && (
                             <span className="font-mono shrink-0 tabular-nums">
-                              {formatVox(m.creditPool)}
+                              <VoxText text={formatVox(m.creditPool)} />
                             </span>
                           )}
                           {typeof m.voteCount === "number" &&

@@ -22,6 +22,10 @@ import { formatTimeAgo } from "@/lib/formatDate";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { TouchTooltip } from "@/components/ui/touch-tooltip";
 import { CURRENCY, formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
+
 
 /**
  * Unified "My Position" card for every market detail page.
@@ -364,7 +368,7 @@ function PositionHeader({
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
             <Wallet className="h-3 w-3 inline-block mr-1 -mt-0.5" />
-            <span className="font-mono tabular-nums">{formatVox(totalStake)}</span> staked
+            <span className="font-mono tabular-nums"><VoxText text={formatVox(totalStake)} /></span> staked
           </p>
         </div>
       </div>
@@ -411,7 +415,7 @@ function PositionHeader({
           </p>
           {!isVoid && (
             <p className="text-[11px] text-muted-foreground tabular-nums leading-none mt-0.5">
-              Payout {formatVox(settled.payout)}
+              Payout <VoxText text={formatVox(settled.payout)} />
             </p>
           )}
         </div>
@@ -510,9 +514,9 @@ function ResultBody({
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 text-right">
               <span className="block">
-                Stake {formatVox(stake)}
+                Stake <VoxText text={formatVox(stake)} />
                 {(isWon || isLost) && (
-                  <span className="ml-1 opacity-70">→ {formatVox(payout)}</span>
+                  <span className="ml-1 opacity-70">→ <VoxText text={formatVox(payout)} /></span>
                 )}
               </span>
               {(isWon || isLost) && (
@@ -608,7 +612,7 @@ function JackpotBody({ position }: { position: MyPositionResponse }) {
               )}
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-              {formatVox(bet.stakeAmount)} · {formatTimeAgo(bet.placedAt)}
+              <VoxText text={formatVox(bet.stakeAmount)} /> · {formatTimeAgo(bet.placedAt)}
             </span>
           </div>
         );
@@ -639,10 +643,10 @@ function EstimatedPayoutColumn({ atEntryPayout }: { atEntryPayout: number }) {
         className="font-mono font-semibold text-sm tabular-nums text-violet-600 dark:text-violet-400 leading-tight mt-0.5"
         data-testid="text-my-position-amm-payout"
       >
-        {formatVox(atEntryPayout)}
+        <VoxText text={formatVox(atEntryPayout)} />
       </p>
       <p className="text-[10px] text-muted-foreground/70 leading-none mt-1">
-        {CURRENCY.symbol}1 per share
+        <VoxMark />1 per share
       </p>
     </div>
   );
@@ -779,9 +783,9 @@ function GenericBody({ position }: { position: MyPositionResponse }) {
               <span className="text-sm font-medium truncate">{bet.entryLabel ?? "—"}</span>
             </div>
             <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-              {formatVox(bet.stakeAmount)}
+              <VoxText text={formatVox(bet.stakeAmount)} />
               {bet.potentialPayout != null && (
-                <span className="opacity-70"> → {formatVox(bet.potentialPayout)}</span>
+                <span className="opacity-70"> → <VoxText text={formatVox(bet.potentialPayout)} /></span>
               )}
             </span>
           </div>

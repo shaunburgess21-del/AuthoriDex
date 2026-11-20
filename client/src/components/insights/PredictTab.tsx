@@ -1,3 +1,4 @@
+import { VoxText } from "@/components/VoxText";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/useInsightsMarketLists";
 import { cn } from "@/lib/utils";
 import type {
+
   ContestedMarket,
   InsightsMarketsAnalytics,
   MarketMover,
@@ -257,7 +259,7 @@ function HottestMarketsTile() {
               </p>
             </div>
             <span className="text-xs font-mono text-muted-foreground tabular-nums shrink-0">
-              {formatVoxCompact(m.volume) ?? "—"}
+              <VoxText text={formatVoxCompact(m.volume) ?? "—"} />
             </span>
           </Link>
         </li>
@@ -473,7 +475,7 @@ function OpenInterestTile() {
   return (
     <div className="space-y-3">
       <p className="text-[11px] text-muted-foreground">
-        {formatVoxCompact(openInterest?.total ?? 0) ?? formatVox(0)} across open markets.
+        <VoxText text={formatVoxCompact(openInterest?.total ?? 0) ?? formatVox(0)} /> across open markets.
       </p>
       <ul className="space-y-2.5">
         {rows.map((r) => (
@@ -481,7 +483,7 @@ function OpenInterestTile() {
             <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:items-center text-xs mb-1">
               <span className="font-medium">{marketTypeLabel(r.key)}</span>
               <span className="text-muted-foreground tabular-nums shrink-0">
-                {formatVoxCompact(r.total) ?? formatVox(0)} · {r.marketCount}{" "}
+                <VoxText text={formatVoxCompact(r.total) ?? formatVox(0)} /> · {r.marketCount}{" "}
                 {r.marketCount === 1 ? "market" : "markets"}
               </span>
             </div>
@@ -629,7 +631,7 @@ function TopPredictorsTile() {
                 )}
               >
                 {pnlPositive ? "+" : ""}
-                {formatVox(Math.round(u.totalPnl))}
+                <VoxText text={formatVox(Math.round(u.totalPnl))} />
               </p>
               {winRate != null && (
                 <p className="text-[10px] text-muted-foreground tabular-nums">
@@ -796,7 +798,7 @@ function PredictorDemographicsTile({ timeWindow }: { timeWindow: DemographicWind
           </span>
           <span>
             <span className="font-semibold text-foreground tabular-nums">
-              {formatVoxCompact(chart.totalTertiary) ?? formatVox(chart.totalTertiary)}
+              <VoxText text={formatVoxCompact(chart.totalTertiary) ?? formatVox(chart.totalTertiary)} />
             </span>{" "}
             wagered
           </span>

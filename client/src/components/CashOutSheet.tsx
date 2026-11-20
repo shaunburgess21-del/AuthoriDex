@@ -20,6 +20,10 @@ import {
   snapshotFromApi,
 } from "@/lib/ammClient";
 import { CURRENCY, formatVox, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+import { VoxMark } from "@/components/VoxMark";
+
+
 
 /** Mirror of StakeModal's fixed quote-to-execution guard. */
 const SLIPPAGE_TOLERANCE = 0.05;
@@ -242,7 +246,7 @@ export function CashOutSheet({
               <div>
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cost</p>
                 <p className="font-mono font-semibold">
-                  {formatVoxPrice(selection.netCreditsIn, 0)}
+                  <VoxText text={formatVoxPrice(selection.netCreditsIn, 0)} />
                 </p>
               </div>
               <div>
@@ -250,7 +254,7 @@ export function CashOutSheet({
                   Value now
                 </p>
                 <p className="font-mono font-semibold">
-                  {currentValue != null ? `~${formatVoxPrice(currentValue)}` : "—"}
+                  {currentValue != null ? <VoxText text={`~${formatVoxPrice(currentValue)}`} /> : "—"}
                 </p>
               </div>
               <div>
@@ -271,7 +275,7 @@ export function CashOutSheet({
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Amount to cash out</label>
               <span className="text-[11px] text-muted-foreground font-mono">
-                avg entry {formatVoxPrice(selection.avgEntryPrice, 3)}/share
+                avg entry <VoxText text={formatVoxPrice(selection.avgEntryPrice, 3)} />/share
               </span>
             </div>
             <Input
@@ -340,16 +344,16 @@ export function CashOutSheet({
             </div>
             {quote ? (
               <p className="text-2xl font-bold leading-tight font-mono text-green-700 dark:text-green-500">
-                ~{formatVox(quote.proceeds)}
+                ~<VoxText text={formatVox(quote.proceeds)} />
                 {sellPnl != null && (
                   <span className={`ml-2 text-sm font-semibold ${pnlClass(sellPnl)}`}>
-                    ({formatVoxDelta(sellPnl)} vs cost)
+                    (<VoxText text={formatVoxDelta(sellPnl)} /> vs cost)
                   </span>
                 )}
               </p>
             ) : (
               <p className="text-2xl font-bold leading-tight font-mono text-muted-foreground/50">
-                {CURRENCY.symbol}—
+                <VoxMark />—
               </p>
             )}
             {quote ? (
@@ -357,7 +361,7 @@ export function CashOutSheet({
                 Selling {sharesToSell.toFixed(2)} shares
                 <span className="text-muted-foreground/70">
                   {" · Avg price "}
-                  {formatVoxPrice(quote.pricePerShareAvg, 3)}/share
+                  <VoxText text={formatVoxPrice(quote.pricePerShareAvg, 3)} />/share
                 </span>
               </p>
             ) : (

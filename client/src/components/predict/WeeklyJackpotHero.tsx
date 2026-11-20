@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
 import type { MarketStatus } from "@/hooks/useMarketCycle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { VoxMark } from "@/components/VoxMark";
 import { TrendingPerson } from "@shared/schema";
 import {
   Crown,
@@ -269,7 +270,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
         data-testid={isProfile ? "button-profile-predict-score" : "button-enter-jackpot"}
       >
         <Crown className="h-5 w-5 mr-2" />
-        Enter Jackpot — Ꝟ100
+        Enter Jackpot — <VoxMark />100
       </Button>
     );
   };
@@ -375,7 +376,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
             )}
             <div className="flex w-full flex-col items-start gap-1 lg:items-end">
               <p className="text-sm font-semibold text-amber-500 lg:text-right">
-                Pool: Ꝟ{poolSize > 0 ? poolSize.toLocaleString() : "0"}
+                Pool: <VoxMark />{poolSize > 0 ? poolSize.toLocaleString() : "0"}
               </p>
               {entryCount > 0 && (
                 <p className="text-xs text-muted-foreground lg:text-right">
@@ -401,7 +402,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
                   <span className="font-bold">{Number(lastWinnerData.actualScore).toLocaleString()}</span>
                   {lastWinnerData.margin === 0 ? " — EXACT match!" : `, off by ${Number(lastWinnerData.margin).toLocaleString()}`}
                   {") and won "}
-                  <span className="font-bold text-amber-600 dark:text-amber-400">Ꝟ{Number(lastWinnerData.payout).toLocaleString()}</span>
+                  <span className="font-bold text-amber-600 dark:text-amber-400"><VoxMark />{Number(lastWinnerData.payout).toLocaleString()}</span>
                 </>
               ) : (
                 <>

@@ -3,6 +3,8 @@ import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
 import { PositionSummaryRow } from "@/components/predict/PositionSummaryRow";
 import { cn } from "@/lib/utils";
 import { formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 export function weeklyUpDownPickFromEntryLabel(entryLabel: string | undefined): "up" | "down" | null {
   const l = (entryLabel || "").toLowerCase();
@@ -180,7 +182,7 @@ export function WeeklyUpDownYourPositionPanel({
         </div>
         <div className="text-right shrink-0">
           <p className="text-xs text-muted-foreground">Stake</p>
-          <p className="font-semibold text-sm tabular-nums">{formatVox(stakeAmount)}</p>
+          <p className="font-semibold text-sm tabular-nums"><VoxText text={formatVox(stakeAmount)} /></p>
         </div>
       </div>
     </div>

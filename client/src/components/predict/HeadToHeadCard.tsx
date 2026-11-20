@@ -16,6 +16,8 @@ import { formatVoxCompact, formatVoxPrice } from "@/lib/currency";
 import { h2hShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
 import { PositionSummaryRow } from "@/components/predict/PositionSummaryRow";
+import { VoxText } from "@/components/VoxText";
+
 
 type CategoryFilter = FilterCategory;
 
@@ -319,8 +321,8 @@ export function HeadToHeadCard({
 
         {ammP1Price != null && ammP2Price != null && (
           <div className="flex items-center justify-between px-2 text-[10px] mb-2 text-muted-foreground">
-            <span>{formatVoxPrice(ammP1Price, 3)}/share</span>
-            <span>{formatVoxPrice(ammP2Price, 3)}/share</span>
+            <span><VoxText text={formatVoxPrice(ammP1Price, 3)} />/share</span>
+            <span><VoxText text={formatVoxPrice(ammP2Price, 3)} />/share</span>
           </div>
         )}
 
@@ -333,7 +335,7 @@ export function HeadToHeadCard({
           {volumeLabel && (
             <span className="text-xs text-muted-foreground">
               <span className="text-muted-foreground/40">·</span>{" "}
-              <span className="font-mono">{volumeLabel}</span> vol
+              <span className="font-mono"><VoxText text={volumeLabel} /></span> vol
             </span>
           )}
         </div>

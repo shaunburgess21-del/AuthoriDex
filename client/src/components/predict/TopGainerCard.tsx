@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
 import { formatVoxCompact } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import {
@@ -170,7 +171,7 @@ export function TopGainerCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`gainer-card-volume-${market.id}`}
             >
-              {volumeLabel} vol
+              <VoxText text={volumeLabel} /> vol
             </Badge>
           )}
           <InteractiveCategoryPill

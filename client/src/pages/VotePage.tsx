@@ -120,6 +120,7 @@ import { VOTE_RULES_STEPS } from "@/components/rulesStepData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollHideTransform } from "@/hooks/useScrollHideOffset";
 import { UnifiedSectionHeader } from "@/components/UnifiedSectionHeader";
+import { InfoHint } from "@/components/InfoHint";
 import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { SectionSearchRow } from "@/components/SectionSearchRow";
@@ -3275,6 +3276,7 @@ export default function VotePage() {
         <section id="vote-induction" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="The Induction Queue"
+            titleAddon={<InfoHint term="inductionQueue" side="bottom" align="start" />}
             subtitle="Who joins the leaderboard next"
             icon={<Vote className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
@@ -3382,6 +3384,7 @@ export default function VotePage() {
         <section id="vote-curate" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="Curate the Profile"
+            titleAddon={<InfoHint term="curateProfile" side="bottom" align="start" />}
             subtitle="Help select their profile photo"
             icon={<Camera className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"

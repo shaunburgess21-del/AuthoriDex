@@ -26,6 +26,8 @@ import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { cn } from "@/lib/utils";
 import { formatVox } from "@/lib/currency";
 import { formatCountdown } from "@/lib/marketCountdown";
+import { VoxText } from "@/components/VoxText";
+
 
 export interface MyPredictionCardData {
   betId: string;
@@ -338,7 +340,7 @@ export function MyPredictionCard({
             <>
               <span className="text-muted-foreground">
                 Received:{" "}
-                <span className="text-foreground font-medium">{formatVox(prediction.payout)}</span>
+                <span className="text-foreground font-medium"><VoxText text={formatVox(prediction.payout)} /></span>
               </span>
               {pnl !== 0 && (
                 <span
@@ -350,7 +352,7 @@ export function MyPredictionCard({
                   )}
                 >
                   {pnl > 0 ? "+" : "−"}
-                  {formatVox(Math.abs(pnl))} P&L
+                  <VoxText text={formatVox(Math.abs(pnl))} /> P&L
                 </span>
               )}
             </>
@@ -358,7 +360,7 @@ export function MyPredictionCard({
             <>
               <span className="text-muted-foreground">
                 Stake:{" "}
-                <span className="text-foreground font-medium">{formatVox(prediction.stakeAmount)}</span>
+                <span className="text-foreground font-medium"><VoxText text={formatVox(prediction.stakeAmount)} /></span>
               </span>
               {payoutDisplay > 0 && (
                 <span
@@ -370,7 +372,7 @@ export function MyPredictionCard({
                 >
                   {isResolved ? "" : "Est. "}
                   {prediction.result === "lost" ? "−" : "+"}
-                  {formatVox(payoutDisplay)}
+                  <VoxText text={formatVox(payoutDisplay)} />
                 </span>
               )}
             </>
@@ -408,7 +410,7 @@ export function MyPredictionCard({
             <Badge
               variant="outline"
               className="text-[10px] px-1.5 py-0 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              title="Live-priced market — each winning share pays Ꝟ1 at settlement"
+              title="Live-priced market — each winning share pays 1 Vox at settlement"
             >
               Live price
             </Badge>

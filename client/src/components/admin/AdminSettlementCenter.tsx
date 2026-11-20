@@ -25,6 +25,8 @@ import { getSupabase } from "@/lib/supabase";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { AmmResolutionDialog, type ScoutAssessmentView } from "./AmmResolutionDialog";
 import { CURRENCY } from "@/lib/currency";
+import { VoxMark } from "@/components/VoxMark";
+
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const supabase = await getSupabase();
@@ -390,7 +392,7 @@ export function AdminSettlementCenter() {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {market.category && <span>{market.category}</span>}
-                      <span>{CURRENCY.symbol}{market.pool}</span>
+                      <span><VoxMark />{market.pool}</span>
                       <span>{market.betCount} bets</span>
                       <span>{market.uniqueBettors} bettors</span>
                       <span className="flex items-center gap-1">
@@ -456,7 +458,7 @@ export function AdminSettlementCenter() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                        <span>{CURRENCY.symbol}{market.pool}</span>
+                        <span><VoxMark />{market.pool}</span>
                         {market.status === "RESOLVED" && (
                           <>
                             <span className="text-green-600 dark:text-green-400">{market.winnersCount} winners</span>

@@ -1,4 +1,5 @@
 import { TrendingUp, Target, Trophy, Swords, BarChart3, Globe, HelpCircle, Crown, Hash, Clock } from "lucide-react";
+import { VoxText } from "@/components/VoxText";
 
 export interface RulesStep {
   icon: React.ReactNode;
@@ -78,9 +79,9 @@ export function RulesExplainer({ title, description, steps }: RulesEntry) {
     <div>
       <div className="flex items-center gap-2 mb-1">
         <HelpCircle className="h-5 w-5 text-violet-500 shrink-0" />
-        <h3 className="font-semibold text-sm">{title}</h3>
+        <h3 className="font-semibold text-sm"><VoxText text={title} /></h3>
       </div>
-      <p className="text-xs text-muted-foreground mb-3">{description}</p>
+      <p className="text-xs text-muted-foreground mb-3"><VoxText text={description} /></p>
 
       <div className="space-y-3">
         {steps.map((step, i) => (
@@ -89,8 +90,8 @@ export function RulesExplainer({ title, description, steps }: RulesEntry) {
               {step.icon}
             </div>
             <div>
-              <h4 className="font-semibold text-sm">{step.title}</h4>
-              <p className="text-xs text-muted-foreground">{step.description}</p>
+              <h4 className="font-semibold text-sm"><VoxText text={step.title} /></h4>
+              <p className="text-xs text-muted-foreground"><VoxText text={step.description} /></p>
             </div>
           </div>
         ))}

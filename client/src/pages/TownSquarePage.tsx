@@ -10,6 +10,8 @@ import { ArrowLeft, Users } from "lucide-react";
 import { formatActivityAge } from "@/lib/formatDate";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { voxWord, formatVoxPrice, formatVox } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
+
 
 interface ActivityItem {
   id: string;
@@ -256,7 +258,7 @@ export default function TownSquarePage() {
                             Received <span className="font-medium">{voxWord(proceeds)}</span>
                             {item.realisedPnl != null && (
                               <span className={item.realisedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
-                                {" · "}{item.realisedPnl >= 0 ? "+" : "−"}{formatVox(Math.abs(item.realisedPnl))} P&L
+                                {" · "}{item.realisedPnl >= 0 ? "+" : "−"}<VoxText text={formatVox(Math.abs(item.realisedPnl))} /> P&L
                               </span>
                             )}
                           </>

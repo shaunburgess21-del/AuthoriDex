@@ -18,6 +18,7 @@ import {
   trackMatchupNeutralVote,
 } from "@/lib/matchup-neutral-nudge";
 import { matchupShare } from "@/lib/share";
+import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
@@ -391,8 +392,12 @@ export function VersusCard({
                   )}
                 </div>
                 {hasVoted && (matchup.neutralVotes ?? 0) > 0 && (
-                  <span className={`text-xs font-semibold ${votedNeutral ? "text-slate-600 dark:text-slate-300" : "text-muted-foreground dark:text-slate-500"}`}>
-                    {matchup.neutralPercent ?? 0}%
+                  <span
+                    className={`text-xs font-semibold ${votedNeutral ? "text-slate-600 dark:text-slate-300" : "text-muted-foreground dark:text-slate-500"}`}
+                    data-testid={`text-neutral-share-${matchup.id}`}
+                    title="Neutral is the share of votes that picked neither side."
+                  >
+                    {neutralShareLabel(matchup.neutralPercent ?? 0)}
                   </span>
                 )}
                 <div className="flex items-center gap-1.5">

@@ -1,3 +1,4 @@
+import { VoxText } from "@/components/VoxText";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ import { formatVox } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { getRankByName } from "@shared/rank-config";
 import {
+
   getProfileTheme,
   PROFILE_BANNER_MIN_TIER,
   PROFILE_THEME_MIN_TIER,
@@ -133,7 +135,7 @@ export default function MePage() {
                 >
                   <div className="flex items-center justify-center gap-1">
                     <Wallet className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                    <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono">{formatVox(profile?.predictCredits || 0)}</p>
+                    <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 font-mono"><VoxText text={formatVox(profile?.predictCredits || 0)} /></p>
                   </div>
                   <p className="text-xs text-muted-foreground">Vox</p>
                 </button>
@@ -269,7 +271,7 @@ export default function MePage() {
                     className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-violet-600 dark:text-violet-400"
                     title={formatVox(profile?.predictCredits || 0)}
                   >
-                    {formatVox(profile?.predictCredits || 0)}
+                    <VoxText text={formatVox(profile?.predictCredits || 0)} />
                   </span>
                 </button>
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">

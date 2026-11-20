@@ -13,6 +13,7 @@ import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { worldMarketShare } from "@/lib/share";
 import { formatVox, formatVoxCompact, voxWord } from "@/lib/currency";
+import { VoxText } from "@/components/VoxText";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
 import { formatMarketCountdown } from "@/lib/marketCountdown";
@@ -406,7 +407,7 @@ function BinaryMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              {volumeLabel} vol
+              <VoxText text={volumeLabel} /> vol
             </Badge>
           )}
         </div>
@@ -660,7 +661,7 @@ function MultiMarketEntryRow({
         {showEntryPool && (
           <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
             {voxWord(entryPool)} in pool
-            {hasPendingBet && userStake > 0 ? ` · Your stake ${formatVox(userStake)}` : ""}
+            {hasPendingBet && userStake > 0 ? <VoxText text={` · Your stake ${formatVox(userStake)}`} /> : ""}
           </div>
         )}
       </div>
@@ -807,7 +808,7 @@ function MultiMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              {volumeLabel} vol
+              <VoxText text={volumeLabel} /> vol
             </Badge>
           )}
         </div>
@@ -1094,7 +1095,7 @@ function UpDownMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              {volumeLabel} vol
+              <VoxText text={volumeLabel} /> vol
             </Badge>
           )}
         </div>
