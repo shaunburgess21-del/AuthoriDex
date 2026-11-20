@@ -14,7 +14,9 @@ import {
   trendSnapshots,
   userFavourites,
 } from "@shared/schema";
+import { isCardVisibleToUser } from "@shared/geoVisibility";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
+import { resolveUserGeoContext, VOTE_CARD_GEO } from "../lib/geoVisibility";
 import { getTrendContextBatch } from "../services/trend-context";
 
 /**
@@ -120,6 +122,7 @@ export function registerFavoritesRoutes(app: Express): void {
         trendingPollRows,
         snapshot24hRows,
         openBetRows,
+        geo,
       ] = await Promise.all([
         db
           .select()
@@ -186,6 +189,7 @@ export function registerFavoritesRoutes(app: Express): void {
             pollImageUrl: opinionPolls.imageUrl,
             pollCreatedAt: opinionPolls.createdAt,
             pollVisibility: opinionPolls.visibility,
+            pollVisibleCountries: opinionPolls.visibleCountries,
             optionPersonId: opinionPollOptions.personId,
           })
           .from(opinionPollOptions)
@@ -271,6 +275,7 @@ export function registerFavoritesRoutes(app: Express): void {
             ),
           )
           .limit(50),
+        resolveUserGeoContext(req, VOTE_CARD_GEO),
       ]);
 
       const personMap = new Map(personRows.map((p) => [p.id, p]));
@@ -416,8 +421,12 @@ export function registerFavoritesRoutes(app: Express): void {
           createdAt: string;
         }
       >();
+      const visibleToViewer = (countries: string[] | null | undefined) =>
+        geo.bypass || isCardVisibleToUser(countries, geo.residence);
+
       for (const row of pollOptionRows) {
         if (!row.pollId || !row.optionPersonId) continue;
+        if (!visibleToViewer(row.pollVisibleCountries)) continue;
         const existing = pollsById.get(row.pollId);
         if (existing) {
           if (!existing.matchedPersonIds.includes(row.optionPersonId)) {
@@ -445,6 +454,7 @@ export function registerFavoritesRoutes(app: Express): void {
         }
       }
       for (const m of matchupRows) {
+        if (!visibleToViewer(m.visibleCountries)) continue;
         const matched: string[] = [];
         const matchedNames: string[] = [];
         if (m.personAId && favPersonIds.includes(m.personAId)) {
@@ -472,6 +482,7 @@ export function registerFavoritesRoutes(app: Express): void {
       }
       for (const tp of trendingPollRows) {
         if (!tp.personId) continue;
+        if (!visibleToViewer(tp.visibleCountries)) continue;
         pollsById.set(`trending:${tp.id}`, {
           id: tp.id,
           kind: "trending_poll",

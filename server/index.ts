@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { resolveAuthContextFromHeader, type AuthRequest } from "./auth-middleware";
 import { anonIdentityMiddleware } from "./middleware/anonIdentityMiddleware";
 import { isPersonalizedVoteGet } from "./lib/personalVoteCache";
+import { isCountryScopedVoteFeed, COUNTRY_SCOPED_FEED_VARY } from "./lib/voteFeedCache";
 import { applyNativeCorsHeaders, isNativeAppOrigin } from "./lib/anonIdentity";
 
 import { log, logger, requestIdMiddleware } from "./log";
@@ -594,10 +595,17 @@ app.use("/api/", anonIdentityMiddleware);
 // Ballot reads include the caller's own vote. Keep them out of any
 // shared or heuristic cache so a new account cannot replay a previous
 // visitor's "already voted" payload.
+// Country-scoped feeds also vary by viewer country (residence or the
+// IP-country header). `private, no-store` keeps one country's list off
+// a shared CDN entry; Vary is there if a cache stores the response anyway.
 app.use("/api/", (req, res, next) => {
   const path = (req.originalUrl || req.url || "").split("?")[0];
-  if (isPersonalizedVoteGet(req.method, path)) {
+  const countryScoped = isCountryScopedVoteFeed(req.method, path);
+  if (isPersonalizedVoteGet(req.method, path) || countryScoped) {
     res.setHeader("Cache-Control", "private, no-store");
+  }
+  if (countryScoped) {
+    res.setHeader("Vary", COUNTRY_SCOPED_FEED_VARY);
   }
   next();
 });

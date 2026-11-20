@@ -4,7 +4,7 @@ import { db } from "../db";
 import { matchups, trendingPolls, opinionPolls, trackedPeople, trendingPeople } from "@shared/schema";
 import { isCardVisibleToUser } from "@shared/geoVisibility";
 import { optionalAuth, type AuthRequest } from "../auth-middleware";
-import { resolveUserGeoContext } from "../lib/geoVisibility";
+import { resolveUserGeoContext, VOTE_CARD_GEO } from "../lib/geoVisibility";
 
 /**
  * Starter mix — heuristic, cross-type card sequence for the Quick Vote
@@ -87,7 +87,7 @@ export function registerStarterMixRoutes(app: Express): void {
           .orderBy(asc(trendingPeople.rank)),
       ]);
 
-      const geo = await resolveUserGeoContext(req);
+      const geo = await resolveUserGeoContext(req, VOTE_CARD_GEO);
       const geoFilter = <T extends { visibleCountries: string[] }>(rows: T[]) =>
         geo.bypass
           ? rows

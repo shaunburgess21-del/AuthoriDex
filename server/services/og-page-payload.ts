@@ -635,9 +635,7 @@ export async function resolveSentimentPollOg(slug: string): Promise<OgPreviewRes
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Sentiment poll not found — using generic preview.", "sentiment_poll");
   }
-  if (!isGloballyVisible(ctx.visibleCountries)) {
-    return geoRestrictedOgFallback(canonicalUrl);
-  }
+  // Shared links unfurl the card. Country targeting filters feeds, not the preview.
   return withPreviewMeta(
     {
       title: `${ctx.headline} • VoxDex`,
@@ -657,9 +655,7 @@ export async function resolveOpinionPollOg(slug: string): Promise<OgPreviewResul
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Opinion poll not found — using generic preview.", "opinion_poll");
   }
-  if (!isGloballyVisible(ctx.visibleCountries)) {
-    return geoRestrictedOgFallback(canonicalUrl);
-  }
+  // Shared links unfurl the card. Country targeting filters feeds, not the preview.
   return withPreviewMeta(
     {
       title: `${ctx.title} • VoxDex`,
@@ -679,9 +675,7 @@ export async function resolveMatchupOg(slug: string): Promise<OgPreviewResult> {
   if (!ctx) {
     return fallbackPayload(canonicalUrl, "Matchup not found — using generic preview.", "matchup");
   }
-  if (!isGloballyVisible(ctx.visibleCountries)) {
-    return geoRestrictedOgFallback(canonicalUrl);
-  }
+  // Shared links unfurl the card. Country targeting filters feeds, not the preview.
   return withPreviewMeta(
     {
       title: matchupOgPromptTitle(ctx),

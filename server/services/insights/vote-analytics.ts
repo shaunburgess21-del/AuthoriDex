@@ -1,10 +1,14 @@
 /**
  * Top-voted opinion polls and matchups for the Insights Vote tab.
  */
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../db";
 import type { TopVotedResponse, TopVoteMatchup, TopVotePoll } from "@shared/insights/types";
 import { withDiscoverCache } from "./discover-cache";
+import {
+  voteDiscoveryCacheKey,
+  type VoteDiscoveryViewer,
+} from "../../lib/voteFeedCache";
 import {
   resolveOpinionOptionDisplayImageUrl,
   resolveOpinionPollImageUrl,
@@ -14,7 +18,20 @@ import { resolveMatchupOptionDisplay } from "../matchup-option-images";
 const extract = (result: unknown) =>
   (Array.isArray(result) ? result : (result as { rows: Record<string, unknown>[] }).rows) ?? [];
 
-async function loadTopOpinionPolls(limit: number): Promise<TopVotePoll[]> {
+function countryAllowSql(
+  column: "op.visible_countries" | "fo.visible_countries",
+  viewer: VoteDiscoveryViewer,
+): SQL {
+  const col = sql.raw(column);
+  if (viewer.bypass) return sql`TRUE`;
+  if (!viewer.country) return sql`cardinality(${col}) = 0`;
+  return sql`(cardinality(${col}) = 0 OR ${col} @> ARRAY[${viewer.country}]::text[])`;
+}
+
+async function loadTopOpinionPolls(
+  limit: number,
+  viewer: VoteDiscoveryViewer,
+): Promise<TopVotePoll[]> {
   const result = await db.execute(sql`
     WITH option_weights AS (
       SELECT
@@ -35,6 +52,7 @@ async function loadTopOpinionPolls(limit: number): Promise<TopVotePoll[]> {
         GROUP BY option_id
       ) vc ON vc.option_id = o.id
       WHERE op.visibility = 'live'
+        AND ${countryAllowSql("op.visible_countries", viewer)}
     ),
     poll_totals AS (
       SELECT poll_id, SUM(weight)::int AS total_votes
@@ -127,7 +145,10 @@ async function loadTopOpinionPolls(limit: number): Promise<TopVotePoll[]> {
   return Array.from(byId.values());
 }
 
-async function loadTopMatchups(limit: number): Promise<TopVoteMatchup[]> {
+async function loadTopMatchups(
+  limit: number,
+  viewer: VoteDiscoveryViewer,
+): Promise<TopVoteMatchup[]> {
   const result = await db.execute(sql`
     WITH choice_totals AS (
       SELECT
@@ -146,6 +167,7 @@ async function loadTopMatchups(limit: number): Promise<TopVoteMatchup[]> {
       FROM face_offs fo
       LEFT JOIN votes v ON v.target_id = fo.id AND v.vote_type = 'face_off'
       WHERE fo.visibility = 'live'
+        AND ${countryAllowSql("fo.visible_countries", viewer)}
       GROUP BY
         fo.id, fo.title, fo.slug,
         fo.option_a_text, fo.option_b_text,
@@ -244,11 +266,14 @@ async function loadTopMatchups(limit: number): Promise<TopVoteMatchup[]> {
   });
 }
 
-export async function loadTopVoted(limit = 5): Promise<TopVotedResponse> {
-  return withDiscoverCache("vote:top", async () => {
+export async function loadTopVoted(
+  limit = 5,
+  viewer: VoteDiscoveryViewer = { country: null, bypass: false },
+): Promise<TopVotedResponse> {
+  return withDiscoverCache(voteDiscoveryCacheKey(viewer), async () => {
     const [polls, matchups] = await Promise.all([
-      loadTopOpinionPolls(limit),
-      loadTopMatchups(limit),
+      loadTopOpinionPolls(limit, viewer),
+      loadTopMatchups(limit, viewer),
     ]);
     return { polls, matchups };
   });
