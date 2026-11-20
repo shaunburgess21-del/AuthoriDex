@@ -121,7 +121,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
 
   if (!isAuthenticated) {
     return (
-      <div className="px-1.5 py-4 text-center sm:px-4">
+      <div id="voices-composer" data-testid="voices-composer" className="scroll-mt-32 px-1.5 py-4 text-center sm:px-4">
         <p className="text-sm text-muted-foreground">
           <button
             className="text-amber-600 underline hover:text-amber-500 dark:text-amber-400"
@@ -137,7 +137,7 @@ export function VoicesComposer({ onPosted }: VoicesComposerProps) {
   }
 
   return (
-    <div className="px-1.5 py-3 sm:px-4" data-testid="voices-composer">
+    <div id="voices-composer" className="scroll-mt-32 px-1.5 py-3 sm:px-4" data-testid="voices-composer">
       <CommentComposer
         value={body}
         onChange={setBody}

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest } from "@/lib/queryClient";
+import { useCategoryRegistry } from "@/hooks/useCategoryRegistry";
+import { useFavorites } from "@/hooks/useFavorites";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 import { useScrollHideOffset } from "@/hooks/useScrollHideOffset";
 import { cn } from "@/lib/utils";
@@ -16,6 +18,7 @@ import { VoicesFilterBar } from "@/components/voices/VoicesFilterBar";
 import { VoicesComposer } from "@/components/voices/VoicesComposer";
 import { VoiceDetailOverlay } from "@/components/voices/VoiceDetailOverlay";
 import { useVoicesFeed, voicesFeedQueryKey } from "@/components/voices/useVoicesFeed";
+import { useVoicesPersonNames } from "@/components/voices/useVoicesPersonNames";
 import {
   EMPTY_VOICES_FILTERS,
   type VoicesFeedItem,
@@ -24,6 +27,18 @@ import {
   type VoicesFilters,
 } from "@/components/voices/types";
 import {
+  applyFavourites,
+  categoryFilterLabel,
+  clearFavourites,
+  describeVoicesEmptyState,
+  favouritePersonIds,
+  favouritesSelectionActive,
+  parseVoicesQuery,
+  shouldShowFavouritesChip,
+  writeVoicesQuery,
+  type VoicesEmptyCopy,
+} from "@/components/voices/voicesFilters";
+import {
   VOICES_FEED_LANE_CLASS,
   VOICES_PAGE_CANVAS_CLASS,
   VOICES_PAGE_HEADER_CLASS,
@@ -31,13 +46,29 @@ import {
   VOICES_ROW_INNER_CLASS,
 } from "@/components/voices/voicesSurface";
 
+function readVoicesLocation(): { mode: VoicesFeedMode; filters: VoicesFilters } {
+  if (typeof window === "undefined") {
+    return { mode: "for-you", filters: EMPTY_VOICES_FILTERS };
+  }
+  return parseVoicesQuery(window.location.search);
+}
+
+function jumpToVoicesComposer() {
+  document.getElementById("voices-composer")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => {
+    document.querySelector<HTMLTextAreaElement>('[data-testid="voices-composer-input"]')?.focus();
+  }, 250);
+}
+
 export default function VoicesPage() {
   const { user, isLoggedIn } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<VoicesFeedMode>("for-you");
-  const [filters, setFilters] = useState<VoicesFilters>(EMPTY_VOICES_FILTERS);
+  const [mode, setMode] = useState<VoicesFeedMode>(() => readVoicesLocation().mode);
+  const [filters, setFilters] = useState<VoicesFilters>(() => readVoicesLocation().filters);
   const [selected, setSelected] = useState<VoicesFeedItem | null>(null);
+  const { favorites, isAuthenticated: hasSession, isLoading: favoritesLoading } = useFavorites();
+  const categoryRegistry = useCategoryRegistry();
 
   // Scroll-linked hide/reveal of the filter sub-header (tracks scroll 1:1).
   const headerRef = useRef<HTMLDivElement>(null);
@@ -45,12 +76,76 @@ export default function VoicesPage() {
 
   const isAuthenticated = isLoggedIn || !!user;
 
+  const favouriteIds = useMemo(
+    () => favouritePersonIds(favorites.map((favorite) => favorite.celebrityId)),
+    [favorites],
+  );
+  const favouriteSeed = useMemo(() => {
+    const seed: Record<string, string> = {};
+    for (const favorite of favorites) {
+      if (favorite.celebrityId && favorite.name) seed[favorite.celebrityId] = favorite.name;
+    }
+    return seed;
+  }, [favorites]);
+  const { names: personNames, remember: rememberPerson } = useVoicesPersonNames(
+    filters.personIds,
+    favouriteSeed,
+  );
+  const showFavourites = shouldShowFavouritesChip(hasSession, favouriteIds.length);
+  const favouritesActive = favouritesSelectionActive(filters.personIds, favouriteIds);
+
+  const registryLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of categoryRegistry.categories) {
+      if (row.id && row.label) map.set(row.id, row.label);
+    }
+    return map;
+  }, [categoryRegistry.categories]);
+
+  const emptyCopy = useMemo(
+    () =>
+      describeVoicesEmptyState({
+        filters,
+        categoryLabel: (id) => categoryFilterLabel(id, registryLabels),
+        personLabel: (id) => personNames[id] ?? "Celebrity",
+        favouritesActive,
+        favouriteIds,
+      }),
+    [filters, personNames, favouritesActive, favouriteIds, registryLabels],
+  );
+
   useEffect(() => {
     document.title = "Voices | VoxDex";
     return () => {
       document.title = "VoxDex";
     };
   }, []);
+
+  useEffect(() => {
+    const next = writeVoicesQuery(window.location.search, { mode, filters });
+    if (next === window.location.search) return;
+    const url = `${window.location.pathname}${next}${window.location.hash}`;
+    window.history.replaceState(window.history.state, "", url);
+  }, [mode, filters]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const next = readVoicesLocation();
+      setMode(next.mode);
+      setFilters(next.filters);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const toggleFavourites = useCallback(() => {
+    setFilters((prev) => ({
+      ...prev,
+      personIds: favouritesSelectionActive(prev.personIds, favouriteIds)
+        ? clearFavourites(prev.personIds, favouriteIds)
+        : applyFavourites(favouriteIds),
+    }));
+  }, [favouriteIds]);
 
   const {
     data,
@@ -175,6 +270,12 @@ export default function VoicesPage() {
             onChange={setFilters}
             mode={mode}
             onModeChange={setMode}
+            personNames={personNames}
+            onPersonResolved={(person) => rememberPerson(person.id, person.name)}
+            showFavourites={showFavourites}
+            favouriteIds={favouriteIds}
+            favouritesResolving={hasSession && favoritesLoading}
+            onToggleFavourites={toggleFavourites}
           />
         </div>
       </div>
@@ -196,9 +297,11 @@ export default function VoicesPage() {
               </Button>
             </div>
           ) : items.length === 0 ? (
-            <EmptyState hasFilters={
-              filters.surfaces.length + filters.personIds.length + filters.categories.length > 0
-            } />
+            <EmptyState
+              copy={emptyCopy}
+              onClear={() => setFilters(EMPTY_VOICES_FILTERS)}
+              onCompose={jumpToVoicesComposer}
+            />
           ) : (
             <>
               {items.map((item, index) => (
@@ -247,16 +350,40 @@ function FeedSkeleton() {
   );
 }
 
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
+function EmptyState({
+  copy,
+  onClear,
+  onCompose,
+}: {
+  copy: VoicesEmptyCopy;
+  onClear: () => void;
+  onCompose: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center gap-2 py-16 text-center">
+    <div className="flex flex-col items-center gap-3 px-4 py-16 text-center" data-testid="voices-empty">
       <MessagesSquare className="h-10 w-10 text-muted-foreground/40" />
-      <p className="text-sm font-medium">No voices yet</p>
-      <p className="max-w-xs text-sm text-muted-foreground">
-        {hasFilters
-          ? "No posts match these filters. Try clearing a few."
-          : "Be the first to share a take with the Town Square."}
-      </p>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{copy.title}</p>
+        {copy.body ? (
+          <p className="max-w-xs text-sm text-muted-foreground">{copy.body}</p>
+        ) : null}
+      </div>
+      {copy.filtered ? (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onClear}
+            data-testid="voices-empty-clear"
+          >
+            Clear filters
+          </Button>
+          <Button type="button" size="sm" onClick={onCompose} data-testid="voices-empty-compose">
+            Post the first take
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
