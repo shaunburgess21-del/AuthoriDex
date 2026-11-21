@@ -15,13 +15,18 @@ import { DeleteContentDialog } from "@/components/comments/DeleteContentDialog";
 import type { CommentAdapter, CommentItem } from "@/components/comments/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { formatTimeAgo } from "@/lib/formatDate";
 import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import { VOICES_TIMELINE_ID } from "@shared/constants";
 import { toast } from "sonner";
 import type { VoicesFeedItem, VoicesReply } from "./types";
+import {
+  removeDeletedVoicesPost,
+  voicesPostDeleteErrorCopy,
+  voicesPostDeleteRequest,
+} from "./deleteVoicesPost";
 import {
   VOICES_COMPOSER_INPUT_CLASS,
   VOICES_PANEL_HEADER_CLASS,
@@ -153,16 +158,21 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
 
   const deletePost = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/comments/${item.id}`);
+      const request = voicesPostDeleteRequest(item.id);
+      const res = await apiRequest(request.method, request.path);
       return res.json();
     },
     onSuccess: () => {
       setPostDeleted(true);
       setRootDeleteOpen(false);
-      toast("Post deleted");
-      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/me/comments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/profile/me"] });
+      removeDeletedVoicesPost(queryClient, item.id);
+      toast.success("Post deleted");
+      onClose();
+    },
+    onError: (err) => {
+      const parsed = parseApiError(err, "Couldn't delete post");
+      const copy = voicesPostDeleteErrorCopy(parsed);
+      toast.error(copy.title, { description: copy.description });
     },
   });
 
@@ -398,9 +408,12 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       <DeleteContentDialog
         open={rootDeleteOpen}
         onOpenChange={setRootDeleteOpen}
-        description="Delete this post? This cannot be undone."
+        title="Delete this post?"
+        description="This cannot be undone."
         isPending={deletePost.isPending}
-        onConfirm={() => deletePost.mutate()}
+        onConfirm={() => {
+          if (!deletePost.isPending) deletePost.mutate();
+        }}
       />
     </div>
   );

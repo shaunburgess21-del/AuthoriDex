@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { PostOverlayModal } from "@/components/PostOverlayModal";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { toast } from "sonner";
+import {
+  removeDeletedVoicesPost,
+  voicesPostDeleteErrorCopy,
+  voicesPostDeleteRequest,
+} from "./deleteVoicesPost";
 import { VoicesPostOverlay } from "./VoicesPostOverlay";
 import { CARD_ENTITY_TYPE, type VoicesFeedItem } from "./types";
 
@@ -105,14 +110,20 @@ function InsightOverlay({ item, onClose }: { item: VoicesFeedItem; onClose: () =
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/comments/${item.id}`);
+      const request = voicesPostDeleteRequest(item.id);
+      const res = await apiRequest(request.method, request.path);
       return res.json();
     },
     onSuccess: () => {
       setDeleted(true);
-      toast("Post deleted");
-      queryClient.invalidateQueries({ queryKey: ["/api/voices/feed"] });
+      removeDeletedVoicesPost(queryClient, item.id);
+      toast.success("Post deleted");
       onClose();
+    },
+    onError: (err) => {
+      const parsed = parseApiError(err, "Couldn't delete post");
+      const copy = voicesPostDeleteErrorCopy(parsed);
+      toast.error(copy.title, { description: copy.description });
     },
   });
 

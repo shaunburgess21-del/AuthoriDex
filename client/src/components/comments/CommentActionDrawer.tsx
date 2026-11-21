@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Ban, Flag, Share2, Trash2, X } from "lucide-react";
 import { sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
+import { containPortaledSheetEvent, runCommentDeleteAction } from "./commentActionDelete";
 
 interface CommentActionDrawerProps {
   open: boolean;
@@ -72,14 +73,18 @@ export function CommentActionDrawer({
     });
   }, [onReport]);
 
-  const handleDelete = useCallback(() => {
-    onDelete?.();
+  const handleDelete = useCallback((event: { stopPropagation: () => void }) => {
+    runCommentDeleteAction(event, onDelete);
   }, [onDelete]);
 
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[70]" data-interactive="true">
+    <div
+      className="fixed inset-0 z-[70]"
+      data-interactive="true"
+      onClick={containPortaledSheetEvent}
+    >
       <div
         className="absolute inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
@@ -144,7 +149,9 @@ export function CommentActionDrawer({
             )}
             {onDelete && (
               <button
+                type="button"
                 onClick={handleDelete}
+                data-testid="comment-action-delete"
                 className="flex items-center gap-3 w-full px-4 py-3.5 rounded-xl hover:bg-destructive/10 transition-colors text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <Trash2 className="h-5 w-5" />
