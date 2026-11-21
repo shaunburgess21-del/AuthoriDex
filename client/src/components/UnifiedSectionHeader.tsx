@@ -1,5 +1,5 @@
 interface UnifiedSectionHeaderProps {
-  title: string;
+  title: React.ReactNode;
   titleAddon?: React.ReactNode;
   subtitle?: string;
   subtitleMeta?: React.ReactNode;
@@ -49,23 +49,23 @@ export function UnifiedSectionHeader({
         className={`mb-3 rounded-xl pulse-card-flush pulse-card-noglow ${a.cardClass}`}
         data-testid={testId}
       >
-        <div className="flex items-center justify-between px-3 py-3 md:px-5">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 px-3 py-3 md:px-5">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             {icon && (
               <div className={`h-10 w-10 rounded-lg ${a.iconBg} hidden sm:flex items-center justify-center shrink-0`}>
                 {icon}
               </div>
             )}
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-xl font-serif font-bold">{title}</h2>
-                {titleAddon}
-              </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="flex w-full min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xl font-serif font-bold">
+                {title}
+                {titleAddon ? <span className="inline-flex shrink-0">{titleAddon}</span> : null}
+              </h2>
               {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
               {subtitleMeta && <div>{subtitleMeta}</div>}
             </div>
           </div>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
 
         {meta && <div className="px-3 pb-2 md:px-5">{meta}</div>}
