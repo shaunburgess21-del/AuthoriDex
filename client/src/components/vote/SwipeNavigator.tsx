@@ -1,5 +1,6 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { motion, useDragControls, type PanInfo } from "framer-motion";
+import { pointerTargetYieldsSwipeNav } from "@/components/vote/swipeGesture";
 
 interface SwipeNavigatorProps {
   /** Called when user swipes right (drag x > 0). Wire to "previous card". */
@@ -45,6 +46,17 @@ const COMMIT_VELOCITY_PX_PER_S = 500;
  * Why rubber-band even when disabled: showing the rebound on an edge
  * (first or last card in the list) gives the user explicit "you're at
  * the edge" feedback rather than a dead-zone gesture.
+ *
+ * Why nested horizontal scrollers are excluded: pointerdown starts a
+ * framer-motion drag on the whole detail surface, and a long enough
+ * horizontal drag calls onSwipeLeft/Right. The surface's touch-action
+ * is pan-y, so the browser leaves that horizontal gesture to script
+ * and the carousel never pans — the pager changes cards instead.
+ * Gestures that start inside a region that can actually scroll
+ * sideways, or on anything marked `data-no-swipe-nav`, skip the drag
+ * so the row scrolls natively. Vertical swipes elsewhere still scroll
+ * the page because the surface keeps `touch-action: pan-y` and
+ * dragDirectionLock.
  */
 export function SwipeNavigator({
   onSwipeRight,
@@ -79,12 +91,12 @@ export function SwipeNavigator({
     return <div className={className}>{children}</div>;
   }
 
-  // Manual drag initiation so gestures that begin inside `ignoreSelector`
-  // (e.g. horizontally scrollable chip rows) never start the page drag at
-  // all — the child's native overflow scroll handles them instead.
+  // Manual drag initiation. Gestures that begin in a nested horizontal
+  // scroller, on `[data-no-swipe-nav]`, or inside `ignoreSelector` never
+  // start the page drag — the child's native overflow scroll handles them.
+  // Do not preventDefault here; that would cancel the pan we just yielded.
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const target = event.target;
-    if (ignoreSelector && target instanceof Element && target.closest(ignoreSelector)) {
+    if (pointerTargetYieldsSwipeNav(event.target, event.currentTarget, ignoreSelector)) {
       return;
     }
     dragControls.start(event);

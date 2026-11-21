@@ -43,6 +43,19 @@ export type RelatedCountNoun = "market" | "matchup" | "poll";
 /** Uniform card height across the carousel row. */
 const CARD_BODY_HEIGHT = "h-[9.5rem]";
 
+/**
+ * Native horizontal pan for the "More like this" row.
+ *
+ * `data-no-swipe-nav` tells SwipeNavigator (detail-page prev/next) to
+ * leave the gesture alone. `touch-action: pan-x pan-y` — not `pan-x`
+ * alone — lets the row scroll sideways while a vertical swipe that
+ * starts on a card still scrolls the page. `overscroll-x-contain` keeps
+ * a flick at either end from chaining into the browser back/forward
+ * gesture on iOS Safari and Android WebView.
+ */
+const CAROUSEL_SCROLLER_CLASS =
+  "flex gap-4 overflow-x-auto overscroll-x-contain -mx-4 px-4 pb-2 snap-x snap-mandatory scrollbar-thin [touch-action:pan-x_pan-y]";
+
 function subtitleShows(title: string, subtitle: string | null | undefined): boolean {
   if (!subtitle?.trim()) return false;
   const norm = (s: string) => s.trim().toLowerCase();
@@ -171,7 +184,10 @@ export function RelatedItemsCarousel({
             More like this
           </h3>
         </div>
-        <div className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory scrollbar-thin">
+        <div
+          className={CAROUSEL_SCROLLER_CLASS}
+          data-no-swipe-nav=""
+        >
           {[0, 1, 2].map((i) => (
             <Skeleton
               key={i}
@@ -198,7 +214,8 @@ export function RelatedItemsCarousel({
       </div>
 
       <div
-        className="flex gap-4 overflow-x-auto -mx-4 px-4 pb-2 snap-x snap-mandatory scrollbar-thin"
+        className={CAROUSEL_SCROLLER_CLASS}
+        data-no-swipe-nav=""
         data-testid={`${testIdPrefix}-scroller`}
       >
         {items.map((m) => {
