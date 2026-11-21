@@ -28,6 +28,7 @@ import {
   releaseSash,
   rememberSashFullHeight,
 } from "@/lib/snapSashGesture";
+import { isDiscussionShellOpen } from "@/lib/discussionShell";
 
 export type SnapSectionType =
   | "matchups" | "sentiment" | "opinion"
@@ -662,6 +663,9 @@ export function VoteSnapScrollView({
 
   const updateColumnVisibleIndex = useCallback(
     (cat: string, el: HTMLDivElement) => {
+      // Keyboard scroll-into-view must not advance the snap page. That
+      // unmounts the card and takes the discussion shell with it.
+      if (isDiscussionShellOpen()) return;
       const h = el.clientHeight;
       if (h === 0) return;
       const idx = Math.round(el.scrollTop / h);
