@@ -117,8 +117,13 @@ export function CreateMarketModal({
   const [entrySearchResults, setEntrySearchResults] = useState<Record<string, any[]>>({});
   const [showEntryDropdown, setShowEntryDropdown] = useState<Record<string, boolean>>({});
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [aiDraftError, setAiDraftError] = useState<string | null>(null);
   const handleGenerateSummary = async () => {
-    if (!editMarket?.id) return;
+    if (!editMarket?.id) {
+      setAiDraftError("Save the market once first, then Draft with AI can run.");
+      return;
+    }
+    setAiDraftError(null);
     setIsGeneratingSummary(true);
     try {
       const res = await fetchWithAuth(`/api/admin/open-markets/${editMarket.id}/generate-summary`, {
@@ -132,6 +137,7 @@ export function CreateMarketModal({
       setSummary(data.summary);
       toast("Summary drafted", { description: "Review and edit before saving." });
     } catch (err: any) {
+      setAiDraftError(err.message || "Generation failed");
       toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingSummary(false);
@@ -171,7 +177,11 @@ export function CreateMarketModal({
 
   const [isGeneratingTeaser, setIsGeneratingTeaser] = useState(false);
   const handleGenerateTeaser = async () => {
-    if (!editMarket?.id) return;
+    if (!editMarket?.id) {
+      setAiDraftError("Save the market once first, then Draft with AI can run.");
+      return;
+    }
+    setAiDraftError(null);
     setIsGeneratingTeaser(true);
     try {
       const res = await fetchWithAuth(`/api/admin/open-markets/${editMarket.id}/generate-teaser`, {
@@ -187,6 +197,7 @@ export function CreateMarketModal({
       setTeaser(data.teaser);
       toast("Teaser drafted", { description: "Review and edit before saving." });
     } catch (err: any) {
+      setAiDraftError(err.message || "Generation failed");
       toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingTeaser(false);
@@ -859,6 +870,11 @@ export function CreateMarketModal({
             <p className="text-xs text-muted-foreground">
               Shown to users as &quot;About&quot;. Keep resolution mechanics in Resolution Criteria below.
             </p>
+            {aiDraftError && editMarket && (
+              <p className="text-sm text-destructive" role="alert" data-testid="ai-draft-error">
+                {aiDraftError}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

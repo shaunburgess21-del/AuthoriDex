@@ -596,6 +596,8 @@ export default function AdminDashboard() {
   const [isGeneratingOpSubject, setIsGeneratingOpSubject] = useState(false);
   const [isGeneratingOpDescription, setIsGeneratingOpDescription] = useState(false);
   const [isGeneratingMatchupDescription, setIsGeneratingMatchupDescription] = useState(false);
+  /** Inline — toasts sit under admin dialogs (z-55 vs z-70), so failures looked like a no-op. */
+  const [aiDraftError, setAiDraftError] = useState<string | null>(null);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS (React rules of hooks)
   
@@ -2488,6 +2490,7 @@ export default function AdminDashboard() {
   };
 
   const openEditPoll = (poll: TrendingPoll) => {
+    setAiDraftError(null);
     setEditingPoll(poll);
     const vis = (poll.visibility || poll.status || "draft") as "draft" | "live" | "inactive" | "archived";
     setPollForm({
@@ -2556,9 +2559,13 @@ export default function AdminDashboard() {
   };
 
   const handleGeneratePollDraft = async (field: "subjectText" | "description") => {
-    if (!editingPoll?.id) return;
+    if (!editingPoll?.id) {
+      setAiDraftError("Save the poll once first, then Draft with AI can run.");
+      return;
+    }
     const setLoading = field === "subjectText" ? setIsGeneratingPollSubject : setIsGeneratingPollDescription;
     const currentContent = field === "subjectText" ? pollForm.subjectText : pollForm.description;
+    setAiDraftError(null);
     setLoading(true);
     try {
       const res = await fetchWithAuth(`/api/admin/trending-polls/${editingPoll.id}/generate-ai-draft`, {
@@ -2574,6 +2581,7 @@ export default function AdminDashboard() {
       setPollForm(prev => ({ ...prev, [field]: data.content }));
       toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
+      setAiDraftError(err.message || "Generation failed");
       toast.error("Generation failed", { description: err.message });
     } finally {
       setLoading(false);
@@ -2581,9 +2589,13 @@ export default function AdminDashboard() {
   };
 
   const handleGenerateOpinionPollDraft = async (field: "description" | "summary") => {
-    if (!editingOpinionPoll?.id) return;
+    if (!editingOpinionPoll?.id) {
+      setAiDraftError("Save the poll once first, then Draft with AI can run.");
+      return;
+    }
     const setLoading = field === "description" ? setIsGeneratingOpSubject : setIsGeneratingOpDescription;
     const currentContent = field === "description" ? opinionPollForm.description : opinionPollForm.summary;
+    setAiDraftError(null);
     setLoading(true);
     try {
       const res = await fetchWithAuth(`/api/admin/opinion-polls/${editingOpinionPoll.id}/generate-ai-draft`, {
@@ -2599,6 +2611,7 @@ export default function AdminDashboard() {
       setOpinionPollForm(prev => ({ ...prev, [field]: data.content }));
       toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
+      setAiDraftError(err.message || "Generation failed");
       toast.error("Generation failed", { description: err.message });
     } finally {
       setLoading(false);
@@ -2606,7 +2619,11 @@ export default function AdminDashboard() {
   };
 
   const handleGenerateMatchupDescriptionDraft = async () => {
-    if (!editingMatchup?.id) return;
+    if (!editingMatchup?.id) {
+      setAiDraftError("Save the matchup once first, then Draft with AI can run.");
+      return;
+    }
+    setAiDraftError(null);
     setIsGeneratingMatchupDescription(true);
     try {
       const res = await fetchWithAuth(`/api/admin/matchups/${editingMatchup.id}/generate-ai-draft`, {
@@ -2622,6 +2639,7 @@ export default function AdminDashboard() {
       setMatchupForm((prev) => ({ ...prev, description: data.content }));
       toast("Draft generated", { description: "Review and edit before saving." });
     } catch (err: any) {
+      setAiDraftError(err.message || "Generation failed");
       toast.error("Generation failed", { description: err.message });
     } finally {
       setIsGeneratingMatchupDescription(false);
@@ -8761,6 +8779,11 @@ export default function AdminDashboard() {
                 rows={3}
                 data-testid="input-matchup-description"
               />
+              {aiDraftError && editingMatchup && (
+                <p className="text-sm text-destructive" role="alert" data-testid="ai-draft-error">
+                  {aiDraftError}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="matchup-slug">URL Slug</Label>
@@ -8966,6 +8989,11 @@ export default function AdminDashboard() {
                 data-testid="input-opinion-poll-summary"
               />
             </div>
+            {aiDraftError && editingOpinionPoll && (
+              <p className="text-sm text-destructive" role="alert" data-testid="ai-draft-error">
+                {aiDraftError}
+              </p>
+            )}
             <div className="space-y-2 min-w-0">
               <Label>Image</Label>
               <UploadImageInput
@@ -9327,6 +9355,11 @@ export default function AdminDashboard() {
                 data-testid="input-poll-description"
               />
             </div>
+            {aiDraftError && editingPoll && (
+              <p className="text-sm text-destructive" role="alert" data-testid="ai-draft-error">
+                {aiDraftError}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 relative">
                 <Label htmlFor="poll-person">Linked Celebrity (optional)</Label>

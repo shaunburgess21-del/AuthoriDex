@@ -15974,13 +15974,15 @@ Target length: about 90-150 words.`;
       });
 
       const draftModel = getAiModel("aiDrafts");
+      // No temperature: gpt-5.4 / gpt-5.4-mini reject it on Responses unless
+      // reasoning.effort is "none". Token budget is high because reasoning +
+      // web_search share max_output_tokens and used to return empty drafts.
       const response = await openai.responses.create({
         model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
-        max_output_tokens: 450,
-        temperature: 0.7,
+        max_output_tokens: 1600,
       } as any);
       recordLlmUsage({
         feature: "ai_drafts",
@@ -16002,7 +16004,7 @@ Target length: about 90-150 words.`;
       res.json({ content });
     } catch (error: any) {
       console.error("[Matchups] AI draft error:", error?.message || error);
-      res.status(500).json({ error: "Failed to generate draft" });
+      res.status(500).json({ error: adminAiDraftErrorMessage(error) });
     }
   });
 
@@ -16712,6 +16714,21 @@ Target length: about 90-150 words.`;
       .trim();
   }
 
+  /** Admin-facing OpenAI failure copy (toasts sit under dialogs, so be specific). */
+  function adminAiDraftErrorMessage(error: unknown, fallback = "Failed to generate draft"): string {
+    const msg = error instanceof Error ? error.message : String(error ?? "");
+    if (/credit_balance_exhausted|insufficient_quota|no credits remaining/i.test(msg)) {
+      return "OpenAI has no credits left on this API key. Top up billing, then try again.";
+    }
+    if (/Unsupported parameter:\s*'temperature'|temperature.*not supported/i.test(msg)) {
+      return "This model rejects temperature — remove it from the draft request.";
+    }
+    if (!process.env.AI_INTEGRATIONS_OPENAI_API_KEY && !process.env.OPENAI_API_KEY) {
+      return "OpenAI API key is missing on the server.";
+    }
+    return fallback;
+  }
+
   app.post("/api/admin/trending-polls/:id/generate-ai-draft", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -16754,7 +16771,7 @@ Target length: about 90-150 words.`;
 Category: ${poll.category || "General"}${linkedPersonBlock}${existingBlock}
 
 Write a compelling 1-3 sentence question or statement for this sentiment poll card. It should clearly frame the debate and invite users to weigh in with Agree, Neutral, or Disagree. Be provocative but fair — present the tension without taking a side.`;
-        maxTokens = 250;
+        maxTokens = 1200;
       } else {
         userPrompt = `Poll headline: "${poll.headline}"
 Category: ${poll.category || "General"}
@@ -16770,7 +16787,7 @@ Requirements:
 - Avoid long tangents and avoid repeating the headline.
 
 Target length: about 90-150 words.`;
-        maxTokens = 450;
+        maxTokens = 1600;
       }
 
       const openai = new OpenAI({
@@ -16778,13 +16795,13 @@ Target length: about 90-150 words.`;
       });
 
       const draftModel = getAiModel("aiDrafts");
+      // No temperature — gpt-5.4 family rejects it on Responses by default.
       const response = await openai.responses.create({
         model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: maxTokens,
-        temperature: 0.7,
       } as any);
       recordLlmUsage({
         feature: "ai_drafts",
@@ -16806,7 +16823,7 @@ Target length: about 90-150 words.`;
       res.json({ content });
     } catch (error: any) {
       console.error("[Sentiment Polls] AI draft error:", error?.message || error);
-      res.status(500).json({ error: "Failed to generate draft" });
+      res.status(500).json({ error: adminAiDraftErrorMessage(error) });
     }
   });
 
@@ -18220,7 +18237,7 @@ Category: ${poll.category || "General"}
 Options: ${optionNames}${existingBlock}
 
 Write a compelling 1-3 sentence question or framing statement for this opinion poll card. It should clearly present the choice and invite engagement. Make it conversational and intriguing.`;
-        maxTokens = 250;
+        maxTokens = 1200;
       } else {
         userPrompt = `Poll title: "${poll.title}"
 Category: ${poll.category || "General"}
@@ -18237,7 +18254,7 @@ Requirements:
 - Keep it practical and avoid overexplaining.
 
 Target length: about 90-150 words.`;
-        maxTokens = 450;
+        maxTokens = 1600;
       }
 
       const openai = new OpenAI({
@@ -18245,13 +18262,13 @@ Target length: about 90-150 words.`;
       });
 
       const draftModel = getAiModel("aiDrafts");
+      // No temperature — gpt-5.4 family rejects it on Responses by default.
       const response = await openai.responses.create({
         model: draftModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
         max_output_tokens: maxTokens,
-        temperature: 0.7,
       } as any);
       recordLlmUsage({
         feature: "ai_drafts",
@@ -18273,7 +18290,7 @@ Target length: about 90-150 words.`;
       res.json({ content });
     } catch (error: any) {
       console.error("[Opinion Polls] AI draft error:", error?.message || error);
-      res.status(500).json({ error: "Failed to generate draft" });
+      res.status(500).json({ error: adminAiDraftErrorMessage(error) });
     }
   });
 
@@ -20716,13 +20733,13 @@ Write engaging background context so a casual reader instantly gets why this mar
       });
 
       const summaryModel = getAiModel("worldMarkets");
+      // No temperature — gpt-5.4 family rejects it on Responses by default.
       const response = await openai.responses.create({
         model: summaryModel,
         tools: [{ type: "web_search" as any }],
         instructions: systemPrompt,
         input: userPrompt,
-        max_output_tokens: 1000,
-        temperature: 0.7,
+        max_output_tokens: 1600,
       } as any);
       recordLlmUsage({
         feature: "world_markets_admin",
@@ -20744,7 +20761,7 @@ Write engaging background context so a casual reader instantly gets why this mar
       res.json({ summary });
     } catch (error: any) {
       console.error("[World Markets] AI summary generation error:", error?.message || error);
-      res.status(500).json({ error: "Failed to generate summary" });
+      res.status(500).json({ error: adminAiDraftErrorMessage(error, "Failed to generate summary") });
     }
   });
 
@@ -20808,13 +20825,13 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const useWebSearch = attempt <= 2;
         const teaserModel = getAiModel("worldMarkets");
+        // No temperature — gpt-5.4 family rejects it on Responses by default.
         const response = await openai.responses.create({
           model: teaserModel,
           ...(useWebSearch ? { tools: [{ type: "web_search" as any }] } : {}),
           instructions: systemPrompt,
           input: userPrompt,
-          max_output_tokens: 300,
-          temperature: 0.85,
+          max_output_tokens: 800,
         } as any);
         recordLlmUsage({
           feature: "world_markets_admin",
@@ -20841,7 +20858,7 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
       res.json({ teaser });
     } catch (error: any) {
       console.error("[World Markets] AI teaser generation error:", error?.message || error);
-      res.status(500).json({ error: "Failed to generate teaser" });
+      res.status(500).json({ error: adminAiDraftErrorMessage(error, "Failed to generate teaser") });
     }
   });
 
