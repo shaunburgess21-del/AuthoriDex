@@ -45,16 +45,27 @@ export const FILTER_ACTIVE_PILL_WORLD =
   "bg-violet-500/25 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/50 dark:border-violet-400/40 shadow-sm shadow-violet-500/30 dark:shadow-violet-500/20";
 
 /**
- * Categories menu, nothing selected. Quieter than the selected All chip
- * (cyan/25 fill, /50 border, glow): ~10–15% accent fill, ~40–50% accent
- * border, light text, no glow.
+ * Categories menu, nothing selected, on /vote. Quieter than the selected
+ * type chip (cyan/25 fill, /50 border, glow): ~10–15% accent fill, ~40–50%
+ * accent border, light text, no glow.
  */
 export const FILTER_CATEGORY_MENU_IDLE =
   "border border-cyan-500/40 bg-cyan-500/10 text-cyan-800 hover:border-cyan-500/60 hover:bg-cyan-500/[0.18] hover:text-cyan-950 active:border-cyan-600/70 active:bg-cyan-500/25 dark:border-cyan-300/50 dark:bg-cyan-400/15 dark:text-cyan-300 dark:hover:border-cyan-200/70 dark:hover:bg-cyan-400/25 dark:hover:text-cyan-200 dark:active:border-cyan-200/80 dark:active:bg-cyan-400/30";
 
+/**
+ * Same quiet idle treatment on /predict. Hue is the page's violet-500
+ * accent (FILTER_ACTIVE_CHIP_WORLD, predict header), not a new hex.
+ */
+export const FILTER_CATEGORY_MENU_IDLE_PREDICT =
+  "border border-violet-500/40 bg-violet-500/10 text-violet-800 hover:border-violet-500/60 hover:bg-violet-500/[0.18] hover:text-violet-950 active:border-violet-600/70 active:bg-violet-500/25 dark:border-violet-300/50 dark:bg-violet-400/15 dark:text-violet-300 dark:hover:border-violet-200/70 dark:hover:bg-violet-400/25 dark:hover:text-violet-200 dark:active:border-violet-200/80 dark:active:bg-violet-400/30";
+
 /** Favorites / Trending — accent family, a step stronger than the idle trigger. */
 export const FILTER_CATEGORY_MENU_PINNED =
   "border border-cyan-500/50 bg-cyan-500/20 text-cyan-800 hover:border-cyan-500/70 hover:bg-cyan-500/30 active:bg-cyan-500/35 dark:border-cyan-300/55 dark:bg-cyan-400/20 dark:text-cyan-200 dark:hover:bg-cyan-400/30 dark:active:bg-cyan-400/35";
+
+/** Favorites / Trending on /predict — same step up, on violet-500. */
+export const FILTER_CATEGORY_MENU_PINNED_PREDICT =
+  "border border-violet-500/50 bg-violet-500/20 text-violet-800 hover:border-violet-500/70 hover:bg-violet-500/30 active:bg-violet-500/35 dark:border-violet-300/55 dark:bg-violet-400/20 dark:text-violet-200 dark:hover:bg-violet-400/30 dark:active:bg-violet-400/35";
 
 /** Hover/press on top of a category-colour fill from getCategoryStyle. */
 export const FILTER_CATEGORY_MENU_CATEGORY =

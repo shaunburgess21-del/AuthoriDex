@@ -83,9 +83,32 @@ describe("category menu face", () => {
     assert.match(face, /bg-cyan-500\/20/);
     assert.equal(face.includes("#FB923C"), false);
   });
+
+  it("uses the predict violet accent when idle, and keeps a selected category colour", () => {
+    const idle = categoryMenuFaceClass("all", "predict");
+    assert.match(idle, /bg-violet-500\/10/);
+    assert.match(idle, /border-violet-500\/40/);
+    assert.match(idle, /text-violet-800/);
+    assert.match(idle, /dark:bg-violet-400\/15/);
+    assert.match(idle, /dark:border-violet-300\/50/);
+    assert.match(idle, /dark:text-violet-300/);
+    assert.equal(idle.includes("cyan-"), false);
+    assert.equal(idle.includes("shadow-sm"), false);
+
+    const pinned = categoryMenuFaceClass("trending", "predict");
+    assert.match(pinned, /bg-violet-500\/20/);
+    assert.equal(pinned.includes("cyan-"), false);
+    assert.equal(pinned.includes("#FB923C"), false);
+
+    const sports = categoryMenuFaceClass("sports", "predict");
+    const voteSports = categoryMenuFaceClass("sports", "vote");
+    assert.equal(sports, voteSports);
+    assert.match(sports, /\[#FB923C\]\/10/);
+    assert.equal(sports.includes("violet-500"), false);
+  });
 });
 
-function renderMenu(value: string) {
+function renderMenu(value: string, theme?: "vote" | "predict") {
   // tsx compiles this component's JSX against the classic React runtime.
   (globalThis as { React?: typeof React }).React = React;
   return renderToStaticMarkup(
@@ -93,6 +116,7 @@ function renderMenu(value: string) {
       options: OPTIONS,
       value,
       onChange: () => {},
+      theme,
     }),
   );
 }
@@ -106,10 +130,24 @@ describe("VoteCategoryMenu markup", () => {
     assert.match(html, /aria-label="Categories: Categories"/);
     assert.match(html, /Categories/);
     assert.match(html, /data-testid="category-filter-divider"/);
+    assert.match(html, /bg-foreground\/30/);
+    assert.match(html, /bg-cyan-500\/10/);
     assert.match(html, /tap-44/);
     assert.match(html, /max-w-\[12ch\]/);
     assert.equal(html.includes("Clear category filter"), false);
     assert.equal(html.includes("category-menu-chrome"), false);
+    assert.equal(html.includes("violet-500"), false);
+  });
+
+  it("paints the idle predict chip violet and leaves the divider neutral", () => {
+    const html = renderMenu("all", "predict");
+    assert.match(html, /bg-violet-500\/10/);
+    assert.match(html, /border-violet-500\/40/);
+    assert.match(html, /aria-label="Categories: Categories"/);
+    assert.match(html, /data-testid="category-filter-divider"/);
+    assert.match(html, /bg-foreground\/30/);
+    assert.equal(html.includes("cyan-"), false);
+    assert.equal(html.includes("Clear category filter"), false);
   });
 
   it("shows the registry label and a clear button that is not inside the menu trigger", () => {
@@ -149,7 +187,9 @@ describe("category menu wiring", () => {
     assert.match(menu, /onOpenAutoFocus/);
     assert.match(menu, /filter-vote-category-menu/);
     assert.match(vote, /VoteCategoryMenu/);
+    assert.match(vote, /theme="vote"/);
     assert.match(predict, /VoteCategoryMenu/);
+    assert.equal((predict.match(/theme="predict"/g) ?? []).length, 2);
     assert.match(vote, /data-sticky-chrome=""/);
     assert.equal(menu.includes("category-menu-chrome"), false);
   });

@@ -3337,6 +3337,7 @@ export default function VotePage() {
             <div className="flex items-center gap-2">
               <div className="shrink-0 self-start">
                 <VoteCategoryMenu
+                  theme="vote"
                   options={globalCategoryOptions}
                   value={globalCategoryFilter}
                   onChange={(next) => setGlobalCategoryFilter(next as FilterCategory)}
