@@ -95,6 +95,10 @@ import {
   getSentimentPollChoiceLabel,
   normalizeSentimentChoice,
 } from "@shared/lib/sentiment-poll-choice";
+import {
+  sentimentPollIdFallback,
+  slugOrGenerated,
+} from "@shared/lib/sentiment-poll-vote-target";
 import { dispatchApproval, markSuggestionApproved, markSuggestionRejected } from "./services/suggestionApproval";
 import { JACKPOT_TICKET_COST, JACKPOT_MAX_PREDICTED_SCORE } from "./config/constants";
 import { isAdminRole } from "./utils/authz";
@@ -16190,35 +16194,46 @@ Target length: about 90-150 words.`;
       const { slug } = req.params;
       const authReq = req as AuthRequest;
       const userId = authReq.userId || null;
+      const requestedKey = slug.trim();
 
-      const [poll] = await db
-        .select({
-          id: trendingPolls.id,
-          headline: trendingPolls.headline,
-          subjectText: trendingPolls.subjectText,
-          description: trendingPolls.description,
-          category: trendingPolls.category,
-          personId: trendingPolls.personId,
-          imageUrl: trendingPolls.imageUrl,
-          slug: trendingPolls.slug,
-          featured: trendingPolls.featured,
-          visibility: trendingPolls.visibility,
-          status: trendingPolls.status,
-          timeline: trendingPolls.timeline,
-          deadlineAt: trendingPolls.deadlineAt,
-          seedAgreeCount: trendingPolls.seedAgreeCount,
-          seedNeutralCount: trendingPolls.seedNeutralCount,
-          seedDisagreeCount: trendingPolls.seedDisagreeCount,
-          createdAt: trendingPolls.createdAt,
-          visibleCountries: trendingPolls.visibleCountries,
-          personName: trackedPeople.name,
-          personAvatar: trendingPeople.avatar,
-        })
-        .from(trendingPolls)
-        .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
-        .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
-        .where(eq(trendingPolls.slug, slug))
-        .limit(1);
+      // A live card can be saved with a null slug. Detail links then use the
+      // poll id. Match the stored slug first so a headline slug always wins.
+      const pollColumns = {
+        id: trendingPolls.id,
+        headline: trendingPolls.headline,
+        subjectText: trendingPolls.subjectText,
+        description: trendingPolls.description,
+        category: trendingPolls.category,
+        personId: trendingPolls.personId,
+        imageUrl: trendingPolls.imageUrl,
+        slug: trendingPolls.slug,
+        featured: trendingPolls.featured,
+        visibility: trendingPolls.visibility,
+        status: trendingPolls.status,
+        timeline: trendingPolls.timeline,
+        deadlineAt: trendingPolls.deadlineAt,
+        seedAgreeCount: trendingPolls.seedAgreeCount,
+        seedNeutralCount: trendingPolls.seedNeutralCount,
+        seedDisagreeCount: trendingPolls.seedDisagreeCount,
+        createdAt: trendingPolls.createdAt,
+        visibleCountries: trendingPolls.visibleCountries,
+        personName: trackedPeople.name,
+        personAvatar: trendingPeople.avatar,
+      };
+      const loadPoll = (where: SQL) =>
+        db
+          .select(pollColumns)
+          .from(trendingPolls)
+          .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+          .leftJoin(trendingPeople, eq(trendingPolls.personId, trendingPeople.id))
+          .where(where)
+          .limit(1);
+
+      let [poll] = await loadPoll(eq(trendingPolls.slug, requestedKey));
+      const idFallback = sentimentPollIdFallback(requestedKey);
+      if (!poll && idFallback) {
+        [poll] = await loadPoll(eq(trendingPolls.id, idFallback));
+      }
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
@@ -16302,11 +16317,27 @@ Target length: about 90-150 words.`;
         return res.status(400).json({ error: "Choice must be 'agree', 'neutral', or 'disagree'" });
       }
 
-      const [poll] = await db
-        .select({ id: trendingPolls.id, category: trendingPolls.category, visibleCountries: trendingPolls.visibleCountries })
+      // Slugless live cards vote with their id in this same path. Look up the
+      // slug first so a normal headline slug is never treated as an id.
+      const requestedKey = slug.trim();
+      const votePollColumns = {
+        id: trendingPolls.id,
+        category: trendingPolls.category,
+        visibleCountries: trendingPolls.visibleCountries,
+      };
+      let [poll] = await db
+        .select(votePollColumns)
         .from(trendingPolls)
-        .where(eq(trendingPolls.slug, slug))
+        .where(eq(trendingPolls.slug, requestedKey))
         .limit(1);
+      const idFallback = sentimentPollIdFallback(requestedKey);
+      if (!poll && idFallback) {
+        [poll] = await db
+          .select(votePollColumns)
+          .from(trendingPolls)
+          .where(eq(trendingPolls.id, idFallback))
+          .limit(1);
+      }
 
       if (!poll) {
         return res.status(404).json({ error: "Poll not found" });
@@ -16493,7 +16524,7 @@ Target length: about 90-150 words.`;
         seedAgreeCount: seedAgreeCount || 0,
         seedNeutralCount: seedNeutralCount || 0,
         seedDisagreeCount: seedDisagreeCount || 0,
-        slug: slug || null,
+        slug: slugOrGenerated(slug, headline),
         featured: featured ?? false,
         visibility: effectiveVisibility,
         displayOrder: nextDisplayOrder,
@@ -16564,7 +16595,12 @@ Target length: about 90-150 words.`;
       if (seedAgreeCount !== undefined) updates.seedAgreeCount = seedAgreeCount;
       if (seedNeutralCount !== undefined) updates.seedNeutralCount = seedNeutralCount;
       if (seedDisagreeCount !== undefined) updates.seedDisagreeCount = seedDisagreeCount;
-      if (slug !== undefined) updates.slug = slug || null;
+      if (slug !== undefined) {
+        updates.slug = slugOrGenerated(
+          slug,
+          typeof headline === "string" && headline.trim() ? headline : existing.headline,
+        );
+      }
       if (featured !== undefined) updates.featured = featured;
       if (displayOrder !== undefined) updates.displayOrder = displayOrder;
       if (visibleCountries !== undefined) {
@@ -17009,6 +17045,7 @@ Target length: about 90-150 words.`;
           status: 'live',
           category: topic.category,
           headline: topic.headline,
+          slug: slugOrGenerated(null, topic.headline),
           subjectText: topic.description,
           description: topic.description,
           personId,

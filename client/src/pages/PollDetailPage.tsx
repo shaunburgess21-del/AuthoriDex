@@ -262,7 +262,7 @@ export default function PollDetailPage() {
     description: poll
       ? poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex."
       : null,
-    image: poll?.slug ? sentimentPollOgImagePath(poll.slug) : null,
+    image: (poll?.slug || slug) ? sentimentPollOgImagePath(poll?.slug || slug) : null,
   });
 
   if (pollLoading) {

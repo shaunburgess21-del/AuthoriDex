@@ -1,5 +1,6 @@
 import { canonicalizePersonCategory } from "@shared/constants";
 import { sanitizeVisibleCountries } from "@shared/geoVisibility";
+import { slugOrGenerated } from "@shared/lib/sentiment-poll-vote-target";
 import { db } from "../db";
 import {
   suggestions,
@@ -37,13 +38,7 @@ export const APPROVED_AS_TYPE: Record<string, string> = {
 // Slug generation. Timestamp suffix avoids collisions without a DB round-trip.
 // ---------------------------------------------------------------------------
 export function generateSlug(title: string): string {
-  const base = (title || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80);
-  const suffix = Date.now().toString(36);
-  return base ? `${base}-${suffix}` : `item-${suffix}`;
+  return slugOrGenerated("", title);
 }
 
 // Image-slug for induction candidates (mirrors server/routes.ts:349).
