@@ -15,7 +15,7 @@
  */
 
 /** Primary tabs. Exact paths only — `/vote/matchups/...` is not a root. */
-export const ROOT_DESTINATIONS = ["/", "/vote", "/predict", "/voices", "/insights"] as const;
+export const ROOT_DESTINATIONS = ["/", "/vote", "/rankings", "/predict", "/voices", "/insights"] as const;
 
 export type RootDestination = (typeof ROOT_DESTINATIONS)[number];
 
@@ -43,9 +43,9 @@ export function isRootDestination(input: string): boolean {
 
 /**
  * Where a deep-linked screen with an empty WebView history should land.
- * Vote and Predict details return to their hubs. Everything else walks one
- * sensible step toward Home (`/login/verify` → `/login`, `/me/settings` →
- * `/me`) and Home is the fallback.
+ * Vote and Predict details return to their hubs. Celebrity profiles return
+ * to Rankings. Everything else walks one sensible step toward the vote feed
+ * at `/` (`/login/verify` → `/login`, `/me/settings` → `/me`).
  */
 export function parentRouteFor(input: string): string {
   const path = normalizeAppPath(input);
@@ -62,9 +62,13 @@ export function parentRouteFor(input: string): string {
   if (path.startsWith("/login/")) return "/login";
   if (path.startsWith("/me/")) return "/me";
   if (path.startsWith("/admin/")) return "/admin";
+  if (path.startsWith("/person/") || path.startsWith("/celebrity/")) {
+    return "/rankings";
+  }
+  if (path === "/leaderboard" || path.startsWith("/rankings/")) {
+    return "/rankings";
+  }
   if (
-    path.startsWith("/person/") ||
-    path.startsWith("/celebrity/") ||
     path.startsWith("/u/") ||
     path === "/profile" ||
     path.startsWith("/profile/")

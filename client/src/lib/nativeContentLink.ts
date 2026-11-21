@@ -1,3 +1,5 @@
+import { legacyLeaderboardShareTarget } from "@/lib/primaryNav";
+
 /**
  * Maps a production https://voxdex.com content URL to an in-app wouter path.
  *
@@ -11,12 +13,15 @@
 
 export const CONTENT_LINK_HOST = "voxdex.com";
 
-/** Detail paths share helpers and page share buttons actually emit. */
+/**
+ * Detail paths share helpers and page share buttons actually emit.
+ * `/vote/` covers the hub's sub-routes (matchups, opinion polls, induction,
+ * all-ratings) so those App Links open in the shell.
+ */
 const CONTENT_PREFIXES = [
   "/person/",
   "/polls/",
-  "/vote/matchups/",
-  "/vote/opinion-polls/",
+  "/vote/",
   "/predict/updown/",
   "/predict/h2h/",
   "/predict/race/",
@@ -26,11 +31,18 @@ const CONTENT_PREFIXES = [
 ] as const;
 
 /**
- * Exact paths. `/` is referral (`?ref=`) and the home leaderboard share.
- * `/vote` and `/predict` are deck / portfolio shares. Prefixes would also
- * claim `/vote/induction` and `/predict/activity`, which are not share URLs.
+ * Exact paths. `/` is the vote hub and referral (`?ref=`).
+ * `/rankings` is the celebrity board. `/leaderboard` is its alias.
+ * `/vote` and `/predict` stay so older share URLs still open in-app.
+ * `/predict/activity` is not a share URL and stays out of this list.
  */
-const CONTENT_EXACT_PATHS = new Set(["/", "/vote", "/predict"]);
+const CONTENT_EXACT_PATHS = new Set([
+  "/",
+  "/vote",
+  "/rankings",
+  "/leaderboard",
+  "/predict",
+]);
 
 export type ContentLinkPlan =
   | { status: "navigate"; path: string }
@@ -51,8 +63,9 @@ function isAllowedPath(pathname: string): boolean {
 
 /**
  * Returns the in-app path (pathname + query + hash) or ignore.
- * Query (`ref`, `sharer`, `utm_*`, leaderboard filters) and hash
- * (`#leaderboard`, `#comment-*`) are preserved.
+ * Query (`ref`, `sharer`, `utm_*`, rankings filters) and hash
+ * (`#leaderboard`, `#comment-*`) are preserved. An old home share
+ * (`/?…#leaderboard`) is rewritten to `/rankings` so it still opens the board.
  */
 export function contentPathFromUrl(url: string): ContentLinkPlan {
   let parsed: URL;
@@ -75,5 +88,7 @@ export function contentPathFromUrl(url: string): ContentLinkPlan {
     return { status: "ignore" };
   }
 
+  const legacy = legacyLeaderboardShareTarget(pathname, parsed.search, parsed.hash);
+  if (legacy) return { status: "navigate", path: legacy };
   return { status: "navigate", path: `${pathname}${parsed.search}${parsed.hash}` };
 }

@@ -121,10 +121,10 @@ export function normalizeHideHintPath(path: string): string {
   return bare;
 }
 
-/** Live chip menus on the vote and predict hubs. Detail routes are excluded. */
+/** Live chip menus on the vote hub (`/` and `/vote`) and the predict hub. Detail routes are excluded. */
 export function isHideHintFeedPath(path: string): boolean {
   const normalized = normalizeHideHintPath(path);
-  return normalized === "/vote" || normalized === "/predict";
+  return normalized === "/" || normalized === "/vote" || normalized === "/predict";
 }
 
 export function isHideHintForced(search: string, local: HideHintStorage): boolean {

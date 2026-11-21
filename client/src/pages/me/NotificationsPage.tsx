@@ -101,11 +101,11 @@ export default function NotificationsArchivePage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-1 mr-2">
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/#leaderboard")}>
-                Leaderboard
-              </Button>
-              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/vote")}>
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/")}>
                 Vote
+              </Button>
+              <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/rankings")}>
+                Rankings
               </Button>
               <Button variant="ghost" size="sm" className="md:text-sm" onClick={() => setLocation("/predict")}>
                 Predict

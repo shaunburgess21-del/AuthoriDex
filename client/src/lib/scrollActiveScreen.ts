@@ -2,9 +2,9 @@
  * Re-tap of the active bottom tab, iOS only.
  *
  * The tab screens themselves scroll the window:
- *   Home `/`, Vote `/vote`, Predict `/predict`, Voices `/voices`, Insights `/insights`.
+ *   Vote `/` (and `/vote`), Rankings `/rankings`, Predict `/predict`, Voices `/voices`, Insights `/insights`.
  * An open panel scrolls instead, because that is the container the user sees:
- *   Home Compare Momentum — `fixed inset-0 overflow-y-auto`
+ *   Rankings Compare Momentum — `fixed inset-0 overflow-y-auto`
  *   Predict view-all — `[data-testid="overlay-view-all"]`
  *   Person polls — `[data-testid="overlay-view-all-polls"]`
  *   Vote hub sheets — the `overflow-y-auto` pane inside the open overlay

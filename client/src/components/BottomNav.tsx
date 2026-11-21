@@ -1,12 +1,14 @@
 import { Capacitor } from "@capacitor/core";
-import { Home, TrendingUp, Vote, LineChart, MessagesSquare } from "lucide-react";
+import { Home, TrendingUp, Trophy, LineChart, MessagesSquare } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { prefetchRoute } from "@/lib/routePrefetch";
 import { hapticSelection } from "@/lib/haptic";
 import { scrollActiveScreenToTop, shouldScrollTabOnReselect } from "@/lib/scrollActiveScreen";
+import { isPrimaryNavActive, type PrimaryNavKey } from "@/lib/primaryNav";
 
 interface NavItem {
+  key: PrimaryNavKey;
   path: string;
   label: string;
   icon: typeof Home;
@@ -14,11 +16,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: "/", label: "Home", icon: Home, activeClass: "text-blue-400" },
-  { path: "/vote", label: "Vote", icon: Vote, activeClass: "text-cyan-400" },
-  { path: "/predict", label: "Predict", icon: TrendingUp, activeClass: "text-violet-500" },
-  { path: "/voices", label: "Voices", icon: MessagesSquare, activeClass: "text-amber-400" },
-  { path: "/insights", label: "Insights", icon: LineChart, activeClass: "text-blue-400" },
+  { key: "vote", path: "/", label: "Vote", icon: Home, activeClass: "text-cyan-400" },
+  { key: "rankings", path: "/rankings", label: "Rankings", icon: Trophy, activeClass: "text-blue-400" },
+  { key: "predict", path: "/predict", label: "Predict", icon: TrendingUp, activeClass: "text-violet-500" },
+  { key: "voices", path: "/voices", label: "Voices", icon: MessagesSquare, activeClass: "text-amber-400" },
+  { key: "insights", path: "/insights", label: "Insights", icon: LineChart, activeClass: "text-blue-400" },
 ];
 
 export function BottomNav() {
@@ -33,16 +35,16 @@ export function BottomNav() {
 
   // Auth flow pages own the full mobile viewport (centered card layout, no
   // app-shell padding) so the fixed nav covers their bottom content — most
-  // visibly the "Back to Home" button on /login. Industry convention is to
+  // visibly the "Back to Vote" button on /login. Industry convention is to
   // hide bottom nav on auth routes anyway (X, Reddit, Polymarket, banking
   // apps) since the destinations don't make full sense pre-auth and the
-  // user already has explicit "Back to Home" affordances inside the cards.
+  // user already has explicit "Back to Vote" affordances inside the cards.
   if (location === "/login" || location.startsWith("/login/")) {
     return null;
   }
 
   // Admin routes have their own section-switcher bar at the bottom on mobile.
-  // Showing the public Home/Vote/Predict nav here both blocks the admin nav
+  // Showing the public Vote/Rankings/Predict nav here both blocks the admin nav
   // (both fixed at z-50) and is meaningless inside the admin tooling.
   if (location === "/admin" || location.startsWith("/admin/")) {
     return null;
@@ -83,13 +85,11 @@ export function BottomNav() {
         }}
       >
         {navItems.map((item) => {
-          const isActive = location === item.path || 
-            (item.path === "/" && location === "/") ||
-            (item.path !== "/" && location.startsWith(item.path));
+          const isActive = isPrimaryNavActive(item.path, location);
           
           return (
             <Link
-              key={item.path}
+              key={item.key}
               href={item.path}
               aria-current={isActive ? "page" : undefined}
               onClick={(event) => {

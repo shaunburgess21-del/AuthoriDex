@@ -39,6 +39,11 @@ import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
 import { setHideHintRecommendations } from "@/lib/hideHintGate";
 import { shouldOpenInterestsPrompt } from "@/lib/interestsPrompt";
 import { StickyChromeFocusGuard } from "@/components/StickyChromeFocusGuard";
+import {
+  leaderboardAliasTarget,
+  legacyLeaderboardShareTarget,
+  primaryNavKeyForPath,
+} from "@/lib/primaryNav";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
@@ -111,12 +116,25 @@ const RankUpModal = lazyWithRetry(() =>
 
 function PageFallback() {
   const [location] = useLocation();
-  if (location === "/" || location === "") {
+  const navKey = primaryNavKeyForPath(location);
+  if (navKey === "rankings") {
     return (
       <div className="min-h-screen pb-20">
-        <SiteHeader active="home" backButton="none" />
+        <SiteHeader active="rankings" backButton="none" />
         <div className="container mx-auto max-w-7xl px-2 pt-4 sm:px-4">
           <LeaderboardRowSkeleton count={8} />
+        </div>
+      </div>
+    );
+  }
+  if (navKey === "vote") {
+    return (
+      <div className="min-h-screen pb-20">
+        <SiteHeader active="vote" logoVariant="vote" backButton="none" />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
+          <Skeleton className="h-8 w-48 rounded-lg" />
+          <Skeleton className="h-4 w-64 rounded" />
+          <Skeleton className="h-64 w-full max-w-md rounded-xl" />
         </div>
       </div>
     );
@@ -130,7 +148,7 @@ function PageFallback() {
   );
 }
 
-/** Warm Top Predictors after the home board has had a chance to paint. */
+/** Warm Top Predictors after the first screen has had a chance to paint. */
 function WarmTopPredictors() {
   useEffect(() => {
     const run = () => {
@@ -163,11 +181,67 @@ function WarmTopPredictors() {
   return null;
 }
 
+/** Vote hub at `/`. Old `/?…#leaderboard` shares land on Rankings. */
+function VoteHomeRoute() {
+  const target =
+    typeof window === "undefined"
+      ? null
+      : legacyLeaderboardShareTarget(
+          window.location.pathname,
+          window.location.search,
+          window.location.hash,
+        );
+  if (target) return <Redirect to={target} replace />;
+  return <VotePage />;
+}
+
+/** `/leaderboard` keeps working as an alias of `/rankings`. */
+function LeaderboardAliasRedirect() {
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const hash = typeof window !== "undefined" ? window.location.hash : "";
+  return <Redirect to={leaderboardAliasTarget(search, hash)} replace />;
+}
+
+/**
+ * Full loads read the hash inside VoteHomeRoute. Client navigations that
+ * only change the hash (pushState does not remount `/`) are caught here.
+ */
+function LegacyLeaderboardShareRedirect() {
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    const go = () => {
+      const target = legacyLeaderboardShareTarget(
+        window.location.pathname,
+        window.location.search,
+        window.location.hash,
+      );
+      if (!target) return;
+      setLocation(target, { replace: true });
+    };
+    go();
+    const frame = window.requestAnimationFrame(go);
+    window.addEventListener("hashchange", go);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", go);
+    };
+  }, [location, setLocation]);
+
+  return null;
+}
+
 function Router() {
   return (
-    <Suspense fallback={<PageFallback />}>
+    <>
+      <LegacyLeaderboardShareRedirect />
+      <Suspense fallback={<PageFallback />}>
       <Switch>
-        <Route path="/" component={HomePage} />
+        <Route path="/" component={VoteHomeRoute} />
+        <Route path="/rankings" component={HomePage} />
+        <Route path="/rankings/" component={HomePage} />
+        <Route path="/leaderboard" component={LeaderboardAliasRedirect} />
+        <Route path="/leaderboard/" component={LeaderboardAliasRedirect} />
         <Route path="/person/:id" component={PersonDetailPage} />
         <Route path="/celebrity/:id" component={PersonDetailPage} />
         <Route path="/login/verify" component={VerifyPage} />
@@ -234,7 +308,8 @@ function Router() {
         <Route path="/share/bet/:betId" component={ShareBetRedirect} />
         <Route component={NotFound} />
       </Switch>
-    </Suspense>
+      </Suspense>
+    </>
   );
 }
 

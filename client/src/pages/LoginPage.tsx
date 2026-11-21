@@ -559,7 +559,7 @@ export default function LoginPage() {
                 onClick={() => setLocation("/")}
                 data-testid="button-back-home"
               >
-                Back to Home
+                Back to Vote
               </Button>
             </div>
           </CardContent>

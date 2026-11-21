@@ -13,7 +13,7 @@ import { isHideHintFeedPath, normalizeHideHintPath } from "@/lib/hideHintGate";
 /**
  * Watches one live category chip. `track` should be true only when the chip
  * menu is enabled and Hide card is in it. The hook itself also requires a
- * signed-in user on /vote or /predict.
+ * signed-in user on /, /vote, or /predict.
  */
 export function useHideHint(options: { track: boolean; cardId: string | null }): {
   showHint: boolean;

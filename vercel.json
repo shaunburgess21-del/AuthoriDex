@@ -18,6 +18,16 @@
       "source": "/refund-policy",
       "destination": "/terms",
       "permanent": false
+    },
+    {
+      "source": "/leaderboard",
+      "destination": "/rankings",
+      "permanent": false
+    },
+    {
+      "source": "/leaderboard/",
+      "destination": "/rankings",
+      "permanent": false
     }
   ],
   "rewrites": [
