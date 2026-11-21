@@ -1,5 +1,9 @@
 import { MessageSquare, Swords, ThumbsUp, Vote, type LucideIcon } from "lucide-react";
-import { VOTE_FEED_CUE_LABELS, type VoteFeedKind } from "@/lib/voteMixedFeed";
+import {
+  voteSectionHeadingPrefix,
+  VOTE_FEED_CUE_LABELS,
+  type VoteFeedKind,
+} from "@/lib/voteMixedFeed";
 
 const ICONS: Record<VoteFeedKind, LucideIcon> = {
   matchup: Swords,
@@ -27,13 +31,29 @@ export function VoteTypeCueIcon({ kind, className }: { kind: VoteFeedKind; class
   return <Icon className={className} aria-hidden />;
 }
 
-const SECTION_KIND: Record<string, VoteFeedKind> = {
-  "Sentiment Polls": "sentiment",
-  Matchups: "matchup",
-  "Opinion Polls": "opinion",
-  "Overall Rating": "rating",
-};
-
 export function voteSectionCueKind(section: string): VoteFeedKind | null {
-  return SECTION_KIND[section] ?? null;
+  return voteSectionHeadingPrefix(section)?.kind ?? null;
+}
+
+/**
+ * Section title with the matching chip's icon and cue in front of the name.
+ * The cue group stays on one line so the separator wraps with the prefix,
+ * and the section name can break onto the next line.
+ */
+export function VoteSectionHeading({ title }: { title: string }) {
+  const cue = voteSectionHeadingPrefix(title);
+  if (!cue) return title;
+  return (
+    <>
+      <span
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap font-medium text-muted-foreground"
+        data-testid={`vote-section-cue-${cue.kind}`}
+      >
+        <VoteTypeCueIcon kind={cue.kind} className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <span>{cue.label}</span>
+        <span aria-hidden="true">·</span>
+      </span>
+      <span className="min-w-0" data-testid={`vote-section-name-${cue.kind}`}>{title}</span>
+    </>
+  );
 }

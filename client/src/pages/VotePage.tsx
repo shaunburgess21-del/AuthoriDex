@@ -137,7 +137,7 @@ import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
-import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
+import { voteSectionCueKind, VoteSectionHeading, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
 import {
   VOTE_ALL_SECTION_LAYOUT_QUERY,
   VOTE_SECTION_CUE_LABELS,
@@ -3178,7 +3178,7 @@ export default function VotePage() {
     activeSection === "Overall Rating" || showDesktopAllSections ? (
         <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
-            title="Overall Rating"
+            title={<VoteSectionHeading title="Overall Rating" />}
             titleAddon={<InfoHint term="approval" side="bottom" align="start" />}
             subtitle="Community approval rating"
             icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
@@ -3351,7 +3351,7 @@ export default function VotePage() {
         {(activeSection === "Sentiment Polls" || showDesktopAllSections) && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
-            title="Sentiment Polls"
+            title={<VoteSectionHeading title="Sentiment Polls" />}
             subtitle="Weigh in on current topics"
             icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
@@ -3458,7 +3458,7 @@ export default function VotePage() {
         {(activeSection === "Matchups" || showDesktopAllSections) && (
         <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
-            title="Matchups"
+            title={<VoteSectionHeading title="Matchups" />}
             subtitle="Vote on A vs B"
             icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
@@ -3565,7 +3565,7 @@ export default function VotePage() {
         {(activeSection === "Opinion Polls" || showDesktopAllSections) && (
         <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
-            title="Opinion Polls"
+            title={<VoteSectionHeading title="Opinion Polls" />}
             subtitle="Your preference. The world's verdict."
             icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
