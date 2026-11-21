@@ -20,7 +20,7 @@ import {
 import { matchupShare } from "@/lib/share";
 import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
-import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { matchupResultsVisible } from "@/lib/matchupResults";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
@@ -131,54 +131,62 @@ export function VersusCard({
     onVote(matchup.id, "neutral", e);
   };
 
+  const headerLeading = showDiscussion ? (
+    <DiscussionButton
+      count={matchup.commentCount}
+      onClick={() => setDiscussionOpen(true)}
+      testId={`button-discussion-matchup-${matchup.id}`}
+    />
+  ) : (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+      <span className={hasVoted ? "" : "text-slate-600"}>
+        {hasVoted ? `${matchup.totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+      </span>
+    </div>
+  );
+
+  const categoryPill = (
+    <InteractiveCategoryPill
+      category={matchup.category}
+      onFilter={() => onFilterCategory(matchup.category)}
+      raceMarketId={categoryRaceMap.get(normalizeMarketCategory(matchup.category)) ?? undefined}
+      leaderboardCategories={leaderboardCategories}
+      detailHref={matchup.slug ? `/vote/matchups/${matchup.slug}` : undefined}
+      detailOnNavigate={onNavigateToDetail}
+      detailLabel="View Matchup Details"
+      onBrowseFullScreen={onBrowseFullScreen}
+      share={
+        matchup.slug
+          ? matchupShare(matchup.slug, matchup.promptText?.trim() || matchup.title)
+          : undefined
+      }
+      reactionTarget={{ surfaceType: "matchup", targetId: String(matchup.id) }}
+      menuDisabled={categoryMenuDisabled}
+      size="pollCard"
+      data-testid={`badge-matchup-${matchup.id}`}
+    />
+  );
+
   return (
     <div ref={neutralNudge.cardRef} className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}>
       <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
         <div className={`relative pt-4 ${hasVoted ? "pb-4 max-md:pb-2.5 md:pb-[10px]" : showResults ? "pb-4" : "pb-3"} flex flex-col ${showResults || feedLayout ? "flex-1" : ""}`}>
-          <div className="absolute top-3 right-3 z-10">
-            <InteractiveCategoryPill
-              category={matchup.category}
-              onFilter={() => onFilterCategory(matchup.category)}
-              raceMarketId={categoryRaceMap.get(normalizeMarketCategory(matchup.category)) ?? undefined}
-              leaderboardCategories={leaderboardCategories}
-              detailHref={matchup.slug ? `/vote/matchups/${matchup.slug}` : undefined}
-              detailOnNavigate={onNavigateToDetail}
-              detailLabel="View Matchup Details"
-              onBrowseFullScreen={onBrowseFullScreen}
-              share={
-                matchup.slug
-                  ? matchupShare(matchup.slug, matchup.promptText?.trim() || matchup.title)
-                  : undefined
-              }
-              reactionTarget={{ surfaceType: "matchup", targetId: String(matchup.id) }}
-              menuDisabled={categoryMenuDisabled}
-              size="pollCard"
-              data-testid={`badge-matchup-${matchup.id}`}
+          {showTypeCue ? (
+            <VoteCardHeader
+              className="px-4"
+              kind="matchup"
+              leading={headerLeading}
+              trailing={categoryPill}
             />
-          </div>
-          <div className={`flex items-center mb-3 gap-2 px-4 ${showTypeCue ? "pr-28" : ""}`}>
-            {showDiscussion ? (
-              <DiscussionButton
-                count={matchup.commentCount}
-                onClick={() => setDiscussionOpen(true)}
-                testId={`button-discussion-matchup-${matchup.id}`}
-              />
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                <span className={hasVoted ? "" : "text-slate-600"}>
-                  {hasVoted ? `${matchup.totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-                </span>
-              </div>
-            )}
-            {showTypeCue ? (
-              <span className="ml-auto">
-                <VoteTypeCue kind="matchup" />
-              </span>
-            ) : null}
-          </div>
+          ) : (
+            <>
+              <div className="absolute top-3 right-3 z-10">{categoryPill}</div>
+              <div className="flex items-center mb-3 gap-2 px-4">{headerLeading}</div>
+            </>
+          )}
 
           <div className={`rounded-t-lg border border-border/40 dark:border-slate-700/30 border-b-0 ${footerBarClass} px-4 py-2 text-center mb-0 mt-[5px]`}>
             {matchup.slug && onNavigateToDetail ? (

@@ -27,7 +27,7 @@ import { CardVoteCount, DiscussionButton } from "@/components/comments/Discussio
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
-import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -292,41 +292,41 @@ export function OpinionPollCard({
         className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[420px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[420px] md:min-h-0"}`}
         data-testid={`opinion-poll-card-${poll.id}`}
       >
-        <div className="flex items-center justify-between gap-2 mb-3">
-          {showDiscussion ? (
-            <DiscussionButton
-              count={poll.commentCount}
-              onClick={() => setDiscussionOpen(true)}
-              testId={`button-discussion-opinion-${poll.id}`}
+        <VoteCardHeader
+          kind={showTypeCue ? "opinion" : null}
+          leading={
+            showDiscussion ? (
+              <DiscussionButton
+                count={poll.commentCount}
+                onClick={() => setDiscussionOpen(true)}
+                testId={`button-discussion-opinion-${poll.id}`}
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span className={hasVoted ? "" : "text-slate-600"}>
+                  {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+                </span>
+              </div>
+            )
+          }
+          trailing={
+            <InteractiveCategoryPill
+              category={categoryKey}
+              onFilter={() => onFilterCategory(categoryKey)}
+              leaderboardCategories={leaderboardCategories}
+              detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
+              detailOnNavigate={onNavigateToDetail}
+              detailLabel="View Poll Details"
+              onBrowseFullScreen={onBrowseFullScreen}
+              share={poll.slug ? opinionPollShare(poll.slug, poll.title) : undefined}
+              reactionTarget={{ surfaceType: "opinion_poll", targetId: String(poll.id) }}
+              menuDisabled={categoryMenuDisabled}
+              size="pollCard"
+              data-testid={`badge-opinion-category-${poll.id}`}
             />
-          ) : (
-            <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span className={hasVoted ? "" : "text-slate-600"}>
-                {hasVoted ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-              </span>
-            </div>
-          )}
-          {showTypeCue ? (
-            <div className="flex min-w-0 flex-1 justify-center px-1">
-              <VoteTypeCue kind="opinion" />
-            </div>
-          ) : null}
-          <InteractiveCategoryPill
-            category={categoryKey}
-            onFilter={() => onFilterCategory(categoryKey)}
-            leaderboardCategories={leaderboardCategories}
-            detailHref={poll.slug ? `/vote/opinion-polls/${poll.slug}` : undefined}
-            detailOnNavigate={onNavigateToDetail}
-            detailLabel="View Poll Details"
-            onBrowseFullScreen={onBrowseFullScreen}
-            share={poll.slug ? opinionPollShare(poll.slug, poll.title) : undefined}
-            reactionTarget={{ surfaceType: "opinion_poll", targetId: String(poll.id) }}
-            menuDisabled={categoryMenuDisabled}
-            size="pollCard"
-            data-testid={`badge-opinion-category-${poll.id}`}
-          />
-        </div>
+          }
+        />
 
         <AvatarHeightHeadline
           className="mb-2"
