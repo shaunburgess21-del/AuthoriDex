@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { Link } from "wouter";
 import {
   HIDE_CARD_TOAST_DURATION_MS,
   attachHoldPause,
@@ -6,6 +7,9 @@ import {
 } from "@/lib/hide-card-toast-pause";
 
 export const HIDE_CARD_TOAST_TEST_ID = "toast-card-hidden";
+
+/** Where a signed-in user brings a hidden card back. */
+export const HIDDEN_CARDS_HREF = "/me/hidden";
 
 /**
  * One stable id so a second hide replaces the Undo target instead of
@@ -17,11 +21,37 @@ type OpenToast = { cancel: () => void };
 let openToast: OpenToast | null = null;
 
 /**
+ * Sonner starts a swipe on pointerdown for anything except a button, and
+ * that gesture swallows the click. Stop it on the link so a tap navigates.
+ */
+function keepLinkPress(event: { stopPropagation: () => void }): void {
+  event.stopPropagation();
+}
+
+function HiddenCardsToastLink({ onOpen }: { onOpen: () => void }) {
+  return (
+    <span onClick={onOpen}>
+      <Link
+        href={HIDDEN_CARDS_HREF}
+        data-testid="link-toast-hidden-cards"
+        className="whitespace-nowrap underline underline-offset-2 hover:text-foreground"
+        onPointerDown={keepLinkPress}
+      >
+        Me → Hidden cards
+      </Link>
+    </span>
+  );
+}
+
+/**
  * "Card hidden" with Undo. Stays for about 6s. The countdown pauses while
  * the pointer hovers the toast or a finger is touching or pressing it, and
  * resumes on leave or release. Sonner's own duration is Infinity so the
  * global 3s default cannot close this card; "Card restored" does not use
  * this helper.
+ *
+ * The description links to Hidden cards. A click uses wouter, then dismisses
+ * this toast.
  */
 export function showCardHiddenToast(onUndo: () => void): void {
   openToast?.cancel();
@@ -54,7 +84,7 @@ export function showCardHiddenToast(onUndo: () => void): void {
     id: HIDE_CARD_TOAST_ID,
     duration: Number.POSITIVE_INFINITY,
     testId: HIDE_CARD_TOAST_TEST_ID,
-    description: "It's off your feeds. Everyone else still sees it.",
+    description: <>Unhide anytime in <HiddenCardsToastLink onOpen={() => end(true)} />.</>,
     classNames: {
       actionButton: "hide-card-undo",
     },
