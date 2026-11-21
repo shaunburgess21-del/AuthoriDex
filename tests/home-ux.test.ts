@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   buildLeaderboardCategoryFilters,
@@ -132,6 +133,18 @@ describe("public leaderboard cache", () => {
     writePublicCache("k", { ok: true }, 1000, 1_000);
     assert.deepEqual(readPublicCache("k", 1_500), { ok: true });
     assert.equal(readPublicCache("k", 2_001), undefined);
+  });
+});
+
+describe("fame leaderboard Rate cell", () => {
+  it("is desktop-only so names keep the full row on mobile", () => {
+    const row = readFileSync(new URL("../client/src/components/LeaderboardRow.tsx", import.meta.url), "utf8");
+    const fameStart = row.lastIndexOf('{activeTab === "fame" && (');
+    const approvalStart = row.indexOf('{activeTab === "approval" && (', fameStart);
+    assert.ok(fameStart > 0 && approvalStart > fameStart);
+    const fame = row.slice(fameStart, approvalStart);
+    assert.match(fame, /<div className="hidden md:flex">\s*<LeaderboardYourVoteCell/);
+    assert.equal(/<div className="flex">\s*<LeaderboardYourVoteCell/.test(fame), false);
   });
 });
 

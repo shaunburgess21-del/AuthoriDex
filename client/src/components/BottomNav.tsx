@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { Home, TrendingUp, Trophy, LineChart, MessagesSquare } from "lucide-react";
+import { Vote, TrendingUp, Trophy, LineChart, MessagesSquare } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useVisualViewportOffset } from "@/hooks/useVisualViewportOffset";
 import { prefetchRoute } from "@/lib/routePrefetch";
@@ -11,12 +11,12 @@ interface NavItem {
   key: PrimaryNavKey;
   path: string;
   label: string;
-  icon: typeof Home;
+  icon: typeof Vote;
   activeClass: string;
 }
 
 const navItems: NavItem[] = [
-  { key: "vote", path: "/", label: "Vote", icon: Home, activeClass: "text-cyan-400" },
+  { key: "vote", path: "/", label: "Vote", icon: Vote, activeClass: "text-cyan-400" },
   { key: "rankings", path: "/rankings", label: "Rankings", icon: Trophy, activeClass: "text-blue-400" },
   { key: "predict", path: "/predict", label: "Predict", icon: TrendingUp, activeClass: "text-violet-500" },
   { key: "voices", path: "/voices", label: "Voices", icon: MessagesSquare, activeClass: "text-amber-400" },

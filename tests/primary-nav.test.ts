@@ -108,7 +108,7 @@ test("nav chrome, routes, and the leaderboard alias stay in sync", () => {
   const vercel = read("../vercel.json");
   const express = read("../server/serve-static.ts");
 
-  assert.match(bottom, /label: "Vote", icon: Home/);
+  assert.match(bottom, /label: "Vote", icon: Vote/);
   assert.match(bottom, /label: "Rankings", icon: Trophy/);
   assert.equal(bottom.includes('label: "Home"'), false);
   assert.ok(bottom.indexOf('label: "Vote"') < bottom.indexOf('label: "Rankings"'));
