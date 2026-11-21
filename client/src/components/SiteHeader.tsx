@@ -104,11 +104,20 @@ export function SiteHeader({
           <button
             type="button"
             onClick={handleLogoClick}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex shrink-0 items-center gap-1.5 sm:gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label="VoxDex"
             data-testid="button-logo-home"
           >
-            <VoxDexLogo size={32} variant={logoVariant} />
-            <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
+            <VoxDexLogo size={32} variant={logoVariant} className="shrink-0" />
+            {/* Same serif wordmark as desktop. Below sm it scales with the
+                viewport (16px at 320, ~18px at 360, 20px from 400) so the
+                right-side controls stay on this row. sm+ keeps text-xl. */}
+            <span
+              className="shrink-0 whitespace-nowrap font-serif font-bold text-[clamp(16px,5vw,20px)] sm:text-xl"
+              data-testid="header-wordmark"
+            >
+              VoxDex
+            </span>
           </button>
         </div>
 

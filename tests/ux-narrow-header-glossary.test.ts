@@ -12,6 +12,24 @@ function buttonClassBefore(sourceText: string, testId: string): string {
   return sourceText.slice(Math.max(0, at - 220), at);
 }
 
+test("mobile header shows the VoxDex wordmark on one line", () => {
+  const header = source("client/src/components/SiteHeader.tsx");
+  const start = header.indexOf('data-testid="button-logo-home"');
+  assert.ok(start > 0);
+  const button = header.slice(header.lastIndexOf("<button", start), header.indexOf("</button>", start));
+  assert.match(button, /aria-label="VoxDex"/);
+  assert.match(button, /<VoxDexLogo size=\{32\} variant=\{logoVariant\}/);
+  assert.match(button, /data-testid="header-wordmark"/);
+  assert.match(button, /font-serif font-bold/);
+  assert.match(button, /whitespace-nowrap/);
+  assert.match(button, /shrink-0/);
+  assert.match(button, /text-\[clamp\(16px,5vw,20px\)\]/);
+  assert.match(button, /sm:text-xl/);
+  assert.match(button, />\s*VoxDex\s*</);
+  assert.equal(button.includes("hidden sm:block"), false);
+  assert.equal(/truncate|text-ellipsis|line-clamp/.test(button), false);
+});
+
 test("logged-out header keeps a compact Sign up down to 360px", () => {
   const header = source("client/src/components/HeaderUserActions.tsx");
   const signIn = buttonClassBefore(header, "button-header-sign-in");
