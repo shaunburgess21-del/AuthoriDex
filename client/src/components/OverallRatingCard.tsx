@@ -5,7 +5,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { Users, Loader2, BarChart2, ChevronRight } from "lucide-react";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
-import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import type { LeaderboardAvatarPriority } from "@/lib/leaderboardImageLoading";
 import { PersonCommentsFocusOverlay } from "@/components/CommunityInsights";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -301,40 +301,40 @@ export function OverallRatingCard({
       className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 ${showResults ? "pb-4 sm:pb-5 max-md:pb-2.5 md:pb-[14px]" : "pb-3 sm:pb-3"} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? `h-auto ${showResults ? "min-h-[390px]" : "min-h-0"} md:h-full md:min-h-0 md:overflow-hidden ${!showResults ? "md:justify-end" : ""}` : "h-full min-h-[390px] md:min-h-[340px]"}`}
       data-testid={`card-overall-rating-${person.id}`}
     >
-      <div className="flex items-center justify-between gap-2 mb-3">
-        {enableDiscussion ? (
-          <DiscussionButton
-            count={person.commentCount}
-            onClick={() => setDiscussionOpen(true)}
-            testId={`button-discussion-rating-${person.id}`}
-          />
-        ) : (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            <span className={showResults ? "" : "text-slate-600"}>
-              {showResults ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
-            </span>
-          </div>
-        )}
-        {showTypeCue ? (
-          <div className="flex min-w-0 flex-1 justify-center px-1">
-            <VoteTypeCue kind="rating" />
-          </div>
-        ) : null}
-        {person.category && (
-          <InteractiveCategoryPill
-            category={person.category}
-            onFilter={() => onFilterCategory?.(person.category!)}
-            leaderboardCategories={leaderboardCategories}
-            detailHref={`/vote/all-ratings?focus=${encodeURIComponent(person.id)}`}
-            detailLabel="See How They Compare"
-            onBrowseFullScreen={onBrowseFullScreen}
-            reactionTarget={{ surfaceType: "value_person", targetId: String(person.id) }}
-            menuDisabled={categoryMenuDisabled}
-            data-testid={`badge-category-${person.id}`}
-          />
-        )}
-      </div>
+      <VoteCardHeader
+        kind={showTypeCue ? "rating" : null}
+        leading={
+          enableDiscussion ? (
+            <DiscussionButton
+              count={person.commentCount}
+              onClick={() => setDiscussionOpen(true)}
+              testId={`button-discussion-rating-${person.id}`}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+              <span className={showResults ? "" : "text-slate-600"}>
+                {showResults ? `${totalVotes.toLocaleString("en-US")} votes` : "Votes"}
+              </span>
+            </div>
+          )
+        }
+        trailing={
+          person.category ? (
+            <InteractiveCategoryPill
+              category={person.category}
+              onFilter={() => onFilterCategory?.(person.category!)}
+              leaderboardCategories={leaderboardCategories}
+              detailHref={`/vote/all-ratings?focus=${encodeURIComponent(person.id)}`}
+              detailLabel="See How They Compare"
+              onBrowseFullScreen={onBrowseFullScreen}
+              reactionTarget={{ surfaceType: "value_person", targetId: String(person.id) }}
+              menuDisabled={categoryMenuDisabled}
+              data-testid={`badge-category-${person.id}`}
+            />
+          ) : null
+        }
+      />
 
       <div
         className="flex items-start gap-3 md:gap-3 mb-2 cursor-pointer group"

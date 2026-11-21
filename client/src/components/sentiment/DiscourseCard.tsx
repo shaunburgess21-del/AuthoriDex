@@ -13,7 +13,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare } from "lucide-react";
-import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { Link } from "wouter";
 import { sentimentPollShare } from "@/lib/share";
 import {
@@ -105,41 +105,41 @@ export function DiscourseCard({
       className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[300px]"}`}
       data-testid={`card-discourse-${topic.id}`}
     >
-      <div className="flex items-center justify-between gap-2 mb-3">
-        {showDiscussion ? (
-          <DiscussionButton
-            count={topic.commentCount}
-            onClick={() => setDiscussionOpen(true)}
-            testId={`button-discussion-${topic.id}`}
+      <VoteCardHeader
+        kind={showTypeCue ? "sentiment" : null}
+        leading={
+          showDiscussion ? (
+            <DiscussionButton
+              count={topic.commentCount}
+              onClick={() => setDiscussionOpen(true)}
+              testId={`button-discussion-${topic.id}`}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
+              <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+              <span className={voted ? "" : "text-slate-600"}>
+                {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
+              </span>
+            </div>
+          )
+        }
+        trailing={
+          <InteractiveCategoryPill
+            category={topic.category}
+            onFilter={() => onFilterCategory(topic.category)}
+            leaderboardCategories={leaderboardCategories}
+            detailHref={pollKey ? `/polls/${pollKey}` : undefined}
+            detailOnNavigate={onNavigateToPollDetail}
+            detailLabel="View Poll Details"
+            onBrowseFullScreen={onBrowseFullScreen}
+            share={pollKey ? sentimentPollShare(pollKey, topic.headline) : undefined}
+            reactionTarget={{ surfaceType: "sentiment_poll", targetId: String(topic.id) }}
+            menuDisabled={categoryMenuDisabled}
+            size="pollCard"
+            data-testid={`badge-category-${topic.id}`}
           />
-        ) : (
-          <div className="flex items-center gap-1.5 shrink-0 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-            <span className={voted ? "" : "text-slate-600"}>
-              {voted ? `${topic.totalVotes.toLocaleString('en-US')} votes` : "Votes"}
-            </span>
-          </div>
-        )}
-        {showTypeCue ? (
-          <div className="flex min-w-0 flex-1 justify-center px-1">
-            <VoteTypeCue kind="sentiment" />
-          </div>
-        ) : null}
-        <InteractiveCategoryPill
-          category={topic.category}
-          onFilter={() => onFilterCategory(topic.category)}
-          leaderboardCategories={leaderboardCategories}
-          detailHref={pollKey ? `/polls/${pollKey}` : undefined}
-          detailOnNavigate={onNavigateToPollDetail}
-          detailLabel="View Poll Details"
-          onBrowseFullScreen={onBrowseFullScreen}
-          share={pollKey ? sentimentPollShare(pollKey, topic.headline) : undefined}
-          reactionTarget={{ surfaceType: "sentiment_poll", targetId: String(topic.id) }}
-          menuDisabled={categoryMenuDisabled}
-          size="pollCard"
-          data-testid={`badge-category-${topic.id}`}
-        />
-      </div>
+        }
+      />
       <AvatarHeightHeadline
         className="mb-3"
         text={topic.headline}
