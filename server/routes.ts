@@ -88,7 +88,8 @@ import {
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
-import { executeCommentDelete } from "./services/comment-delete";
+import { commentDeleteDropsVoicesFeedCache, executeCommentDelete } from "./services/comment-delete";
+import { invalidateVoicesFeedCache } from "./services/voices/feed-cache";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
 import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
@@ -6069,6 +6070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return updated;
         },
       );
+      if (commentDeleteDropsVoicesFeedCache(result.status)) invalidateVoicesFeedCache();
       res.status(result.status).json(result.body);
     } catch (error: any) {
       console.error("Error deleting comment:", error);

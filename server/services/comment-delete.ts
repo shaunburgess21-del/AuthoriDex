@@ -49,6 +49,14 @@ export function commentDeleteWriteResult(
   return { status: 200, body: { success: true, deletedAt: updated.deletedAt } };
 }
 
+/**
+ * The Voices feed keeps a 60s in-memory copy. A successful delete has to
+ * drop it, or the client's refetch paints the post again.
+ */
+export function commentDeleteDropsVoicesFeedCache(status: number): boolean {
+  return status === 200;
+}
+
 export async function executeCommentDelete(
   comment: CommentDeleteRow | null | undefined,
   actor: CommentDeleteActor,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { executeCommentDelete } from "../server/services/comment-delete";
+import { commentDeleteDropsVoicesFeedCache, executeCommentDelete } from "../server/services/comment-delete";
 
 const author = { userId: "author-1", role: "user" };
 
@@ -88,5 +88,15 @@ describe("delete route wiring", () => {
     assert.match(block, /eq\(unifiedComments\.userId, userId\)/);
     assert.match(block, /returning\(\{ deletedAt: unifiedComments\.deletedAt \}\)/);
     assert.equal(block.includes("updated?.deletedAt ??"), false);
+    assert.match(block, /commentDeleteDropsVoicesFeedCache\(result\.status\)/);
+    assert.match(block, /invalidateVoicesFeedCache\(\)/);
+  });
+});
+
+describe("commentDeleteDropsVoicesFeedCache", () => {
+  it("drops the ranked feed only after a real delete response", () => {
+    assert.equal(commentDeleteDropsVoicesFeedCache(200), true);
+    assert.equal(commentDeleteDropsVoicesFeedCache(403), false);
+    assert.equal(commentDeleteDropsVoicesFeedCache(404), false);
   });
 });

@@ -27,6 +27,10 @@ const AlertDialogOverlay = React.forwardRef<
       event.stopPropagation();
       onClick?.(event);
     }}
+    onPointerDown={(event) => {
+      event.stopPropagation();
+      props.onPointerDown?.(event);
+    }}
   />
 ))
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
