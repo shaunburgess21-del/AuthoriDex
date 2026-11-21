@@ -1589,6 +1589,16 @@
   }
 }
 
+/* line-height: 1 (Tailwind leading-none) sizes the line box to the em square.
+   Tailwind's truncate sets overflow: hidden, so the part of g, j, p, q, and y
+   that hangs past that box is sliced off flat. Padding moves the clip edge
+   below the glyph. The matching negative margin keeps the margin box — and
+   any header row sized to a sibling icon — the same height. */
+.keep-descenders {
+  padding-bottom: 0.25em;
+  margin-bottom: -0.25em;
+}
+
 /* Vote type-chip cue. Absolutely positioned, so the fade never reflows.
    Holds through ~1.5s, then fades out by 2s. The heading pulse is a
    background only — no padding, so the title box stays the same size. */
