@@ -137,7 +137,7 @@ export default function FavoritesPage() {
               winning.
             </p>
             <Button
-              onClick={() => setLocation("/")}
+              onClick={() => setLocation("/rankings")}
               data-testid="button-browse-leaderboard"
             >
               Browse Leaderboard

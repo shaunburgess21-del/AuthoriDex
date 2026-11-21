@@ -1394,8 +1394,8 @@ export default function PersonDetailPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-xl text-muted-foreground">Person not found</p>
-          <Button className="mt-4" onClick={() => setLocation("/")}>
-            Back to Leaderboard
+          <Button className="mt-4" onClick={() => setLocation("/rankings")}>
+            Back to Rankings
           </Button>
         </div>
       </div>

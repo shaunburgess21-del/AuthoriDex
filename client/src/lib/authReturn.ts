@@ -1,4 +1,5 @@
 import type { SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
+import { pathnameOnly } from "@/lib/primaryNav";
 
 /** Serializable Vote hub UI to restore after sign-in (see VotePage). */
 export interface VoteResumePayload {
@@ -99,6 +100,24 @@ interface StoredSnapshot {
 
 export type AuthSetLocation = (to: string, opts?: { replace?: boolean }) => void;
 
+/** Vote-hub UI restore. `/` is the vote feed; Rankings must not consume it. */
+export function shouldApplyVoteUi(target: string): boolean {
+  const path = pathnameOnly(target);
+  return path === "/" || path === "/vote" || path.startsWith("/vote/");
+}
+
+/** Quick Vote hosts live on the vote feed and on Rankings. */
+export function shouldApplyQuickVote(target: string): boolean {
+  const path = pathnameOnly(target);
+  return (
+    path === "/" ||
+    path === "/vote" ||
+    path.startsWith("/vote/") ||
+    path === "/rankings" ||
+    path.startsWith("/rankings/")
+  );
+}
+
 /**
  * Same-origin in-app path only. Rejects protocol-relative, control chars, and any path
  * whose URL resolution escapes the current origin (belt-and-suspenders vs. smuggling).
@@ -193,7 +212,7 @@ export function redirectAfterLogin(setLocation: AuthSetLocation): void {
     }
   }
 
-  if (snap.voteUi && target.startsWith("/vote")) {
+  if (snap.voteUi && shouldApplyVoteUi(target)) {
     try {
       sessionStorage.setItem(
         AUTH_APPLY_VOTE_UI_ONCE_KEY,
@@ -204,13 +223,11 @@ export function redirectAfterLogin(setLocation: AuthSetLocation): void {
     }
   }
 
-  // Quick Vote overlay restore — hosts live on Home ("/") and Vote ("/vote").
-  // Sibling to the /vote branch above: a quickVote payload carries all VotePage
-  // overlay flags as false, so both consumers can run without conflict.
-  if (
-    snap.voteUi?.quickVoteOpen &&
-    (target === "/" || target.startsWith("/vote"))
-  ) {
+  // Quick Vote overlay restore — hosts live on the vote feed ("/", "/vote")
+  // and on Rankings. Sibling to the vote-hub branch above: a quickVote payload
+  // carries all VotePage overlay flags as false, so both consumers can run
+  // without conflict.
+  if (snap.voteUi?.quickVoteOpen && shouldApplyQuickVote(target)) {
     try {
       sessionStorage.setItem(
         AUTH_APPLY_QUICK_VOTE_ONCE_KEY,

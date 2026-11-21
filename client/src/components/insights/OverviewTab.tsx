@@ -415,7 +415,7 @@ function FavouritesPanel({
           <Button size="sm" onClick={() => navigateToLogin(setLocation)}>
             Sign in
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setLocation("/")}>
+          <Button size="sm" variant="outline" onClick={() => setLocation("/rankings")}>
             Browse leaderboard
           </Button>
         </div>
@@ -431,7 +431,7 @@ function FavouritesPanel({
         <p className="text-xs text-muted-foreground mt-1 mb-4 leading-relaxed">
           Tap the heart on anyone in the leaderboard to track them here.
         </p>
-        <Button size="sm" variant="outline" onClick={() => setLocation("/")}>
+        <Button size="sm" variant="outline" onClick={() => setLocation("/rankings")}>
           Browse leaderboard
         </Button>
       </div>

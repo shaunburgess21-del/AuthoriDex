@@ -21,6 +21,7 @@ test("root tabs with in-app history go back instead of exiting", () => {
   }
   assert.deepEqual(decideNativeBack("/vote?section=matchups", true), { type: "back" });
   assert.deepEqual(decideNativeBack("/insights?tab=crowd", false), { type: "exit" });
+  assert.deepEqual(decideNativeBack("/rankings?category=sports#leaderboard", false), { type: "exit" });
 });
 
 test("nested screens with history always pop, including deep links that were then navigated", () => {
@@ -54,8 +55,10 @@ test("deep-linked nested routes with empty history replace to a parent and do no
     ["/markets/some-market", "/predict"],
     ["/predictions/leaderboard", "/predict"],
     ["/share/bet/abc", "/predict"],
-    ["/person/taylor-swift", "/"],
-    ["/celebrity/taylor-swift", "/"],
+    ["/person/taylor-swift", "/rankings"],
+    ["/celebrity/taylor-swift", "/rankings"],
+    ["/leaderboard", "/rankings"],
+    ["/leaderboard?category=sports#leaderboard", "/rankings"],
     ["/u/shaun", "/"],
     ["/profile", "/"],
     ["/login/verify", "/login"],

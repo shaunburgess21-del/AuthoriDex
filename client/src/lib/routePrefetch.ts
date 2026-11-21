@@ -7,8 +7,9 @@
  * them to the same chunk (the prefetch and the real navigation reuse one file).
  */
 const loaders: Record<string, () => Promise<unknown>> = {
-  "/": () => import("@/pages/HomePage"),
+  "/": () => import("@/pages/VotePage"),
   "/vote": () => import("@/pages/VotePage"),
+  "/rankings": () => import("@/pages/HomePage"),
   "/predict": () => import("@/pages/PredictPage"),
   "/voices": () => import("@/pages/VoicesPage"),
   "/insights": () => import("@/pages/InsightsPage"),

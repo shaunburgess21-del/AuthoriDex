@@ -71,13 +71,16 @@ function returningStores(userId = "user-1") {
 
 describe("hide hint feed routes", () => {
   it("only arms on the vote and predict hubs", () => {
+    assert.equal(isHideHintFeedPath("/"), true);
+    assert.equal(isHideHintFeedPath("/?hint=hide"), true);
     assert.equal(isHideHintFeedPath("/vote"), true);
     assert.equal(isHideHintFeedPath("/predict"), true);
     assert.equal(isHideHintFeedPath("/vote/"), true);
     assert.equal(isHideHintFeedPath("/predict?hint=hide"), true);
     assert.equal(isHideHintFeedPath("/vote/matchups/some-slug"), false);
     assert.equal(isHideHintFeedPath("/predict/updown/1"), false);
-    assert.equal(isHideHintFeedPath("/"), false);
+    assert.equal(isHideHintFeedPath("/rankings"), false);
+    assert.equal(isHideHintFeedPath("/leaderboard"), false);
     assert.equal(isHideHintFeedPath("/me/hidden"), false);
   });
 });

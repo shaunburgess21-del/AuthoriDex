@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { cn } from "@/lib/utils";
+import { primaryNavKeyForPath, type PrimaryNavKey } from "@/lib/primaryNav";
 
-type ActiveNav = "home" | "vote" | "predict" | "voices" | "insights";
+type ActiveNav = PrimaryNavKey;
 type LogoVariant = "default" | "vote" | "predict";
 
 interface SiteHeaderProps {
@@ -15,8 +16,8 @@ interface SiteHeaderProps {
   /** Logo color variant (vote = cyan, predict = violet). */
   logoVariant?: LogoVariant;
   /**
-   * Optional override for the Home logo button. HomePage uses this to also
-   * reset its in-page view + scroll to top instead of just navigating.
+   * Optional override for the logo button. Default sends the user to the
+   * vote feed at `/` and scrolls to the top.
    */
   onHomeClick?: () => void;
   /**
@@ -28,7 +29,7 @@ interface SiteHeaderProps {
    * Back-arrow visibility. `"mobile"` (default) shows the arrow only on
    * mobile (`md:hidden`); `"always"` keeps it on every breakpoint (used
    * by detail/profile sub-pages whose only back affordance lives in the
-   * header); `"none"` omits the button entirely (used by the Home page).
+   * header); `"none"` omits the button entirely (used by Vote and Rankings).
    */
   backButton?: "mobile" | "always" | "none";
   /** Overrides the back button test id. Defaults to `button-back`. */
@@ -36,16 +37,16 @@ interface SiteHeaderProps {
 }
 
 const ACTIVE_CLASS: Record<ActiveNav, string> = {
-  home: "text-blue-700 dark:text-blue-400",
   vote: "text-cyan-700 dark:text-cyan-400",
+  rankings: "text-blue-700 dark:text-blue-400",
   predict: "text-violet-700 dark:text-violet-500",
   voices: "text-amber-600 dark:text-amber-400",
   insights: "text-blue-600 dark:text-blue-400",
 };
 
 const NAV_ITEMS: Array<{ key: ActiveNav; label: string; href: string; testId: string }> = [
-  { key: "home", label: "Home", href: "/", testId: "nav-home-desktop" },
-  { key: "vote", label: "Vote", href: "/vote", testId: "nav-vote-desktop" },
+  { key: "vote", label: "Vote", href: "/", testId: "nav-vote-desktop" },
+  { key: "rankings", label: "Rankings", href: "/rankings", testId: "nav-rankings-desktop" },
   { key: "predict", label: "Predict", href: "/predict", testId: "nav-predict-desktop" },
   { key: "voices", label: "Voices", href: "/voices", testId: "nav-voices-desktop" },
   { key: "insights", label: "Insights", href: "/insights", testId: "nav-insights-desktop" },
@@ -64,7 +65,8 @@ export function SiteHeader({
   backButton = "mobile",
   backTestId = "button-back",
 }: SiteHeaderProps) {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const highlighted = active ?? primaryNavKeyForPath(location) ?? undefined;
 
   const handleLogoClick = () => {
     if (onHomeClick) {
@@ -115,7 +117,7 @@ export function SiteHeader({
           data-testid="site-header-nav"
         >
           {NAV_ITEMS.map((item) => {
-            const isActive = active === item.key;
+            const isActive = highlighted === item.key;
             return (
               <Link key={item.key} href={item.href}>
                 <Button

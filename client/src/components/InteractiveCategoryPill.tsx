@@ -218,7 +218,7 @@ function MenuItems({
       ) : showLeaderboard ? (
         <CloseWrapper asChild>
           <Link
-            href={`/?category=${encodeURIComponent(label)}#leaderboard`}
+            href={`/rankings?category=${encodeURIComponent(label)}#leaderboard`}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm rounded-md hover:bg-muted/80 transition-colors no-underline text-foreground"
           >
             <Users className="h-4 w-4 opacity-60 shrink-0" />

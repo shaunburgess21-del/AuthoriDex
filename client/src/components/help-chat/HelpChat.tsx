@@ -40,7 +40,7 @@ const DEFAULT_SUGGESTIONS = [
 
 /** Chips that match where the member opened the panel. */
 function suggestionsForPath(pathname: string): string[] {
-  if (pathname === "/vote" || pathname.startsWith("/vote/")) {
+  if (pathname === "/" || pathname === "/vote" || pathname.startsWith("/vote/")) {
     return [
       "What can I vote on here?",
       "Does voting cost Vox?",
@@ -63,7 +63,7 @@ function suggestionsForPath(pathname: string): string[] {
   }
   if (pathname === "/insights" || pathname.startsWith("/insights/")) {
     return [
-      "What is Insights vs the Home leaderboard?",
+      "What is Insights vs Rankings?",
       "What is Trend Score?",
       "How does approval rating work?",
     ];
@@ -82,7 +82,12 @@ function suggestionsForPath(pathname: string): string[] {
       "What is the difference between XP and Vox?",
     ];
   }
-  if (pathname === "/" || pathname.startsWith("/person/")) {
+  if (
+    pathname === "/rankings" ||
+    pathname === "/leaderboard" ||
+    pathname.startsWith("/person/") ||
+    pathname.startsWith("/celebrity/")
+  ) {
     return [
       "How does the ranking work?",
       "What are Daily Movers?",

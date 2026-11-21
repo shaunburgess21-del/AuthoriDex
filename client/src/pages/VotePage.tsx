@@ -38,6 +38,8 @@ import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
 import { SiteHeader } from "@/components/SiteHeader";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { VOTE_HOME_DESCRIPTION, VOTE_HOME_TITLE } from "@/lib/primaryNav";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1040,6 +1042,10 @@ function voteHubMaxScroll(): number {
 }
 
 export default function VotePage() {
+  useDocumentMeta({
+    title: VOTE_HOME_TITLE,
+    description: VOTE_HOME_DESCRIPTION,
+  });
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);

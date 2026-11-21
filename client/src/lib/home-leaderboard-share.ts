@@ -1,4 +1,5 @@
 import { currentShareContext, isShareCancelled, shareWithSystemSheet, toPublicShareUrl } from "@/lib/nativeShare";
+import { buildRankingsSharePath } from "@/lib/primaryNav";
 
 export type HomeLeaderboardSortDirection = "asc" | "desc";
 
@@ -12,23 +13,7 @@ export interface HomeLeaderboardShareState {
 export function buildHomeLeaderboardShareUrl(
   state: HomeLeaderboardShareState,
 ): string {
-  const url = new URL(window.location.origin + "/");
-
-  if (state.category && state.category !== "all") {
-    url.searchParams.set("category", state.category);
-  }
-
-  const trimmedSearch = state.searchQuery.trim();
-  if (trimmedSearch) {
-    url.searchParams.set("search", trimmedSearch);
-  }
-
-  if (state.sortDirection !== "desc") {
-    url.searchParams.set("sortDir", state.sortDirection);
-  }
-
-  url.hash = "leaderboard";
-  return url.toString();
+  return new URL(buildRankingsSharePath(state), window.location.origin).toString();
 }
 
 export function buildHomeLeaderboardShareTitle(

@@ -70,7 +70,7 @@ test("https content URLs keep query and hash", () => {
     ),
     {
       status: "navigate",
-      path: "/?category=sports&search=ada&sortDir=asc#leaderboard",
+      path: "/rankings?category=sports&search=ada&sortDir=asc#leaderboard",
     },
   );
   assert.deepEqual(
@@ -94,6 +94,15 @@ test("share and referral paths map onto in-app routes", () => {
     ["https://voxdex.com/u/ada", "/u/ada"],
     ["https://voxdex.com/vote", "/vote"],
     ["https://voxdex.com/vote?section=matchups", "/vote?section=matchups"],
+    ["https://voxdex.com/vote/induction", "/vote/induction"],
+    ["https://voxdex.com/vote/all-ratings?hint=hide", "/vote/all-ratings?hint=hide"],
+    ["https://voxdex.com/rankings", "/rankings"],
+    [
+      "https://voxdex.com/rankings?category=sports&search=ada&sortDir=asc#leaderboard",
+      "/rankings?category=sports&search=ada&sortDir=asc#leaderboard",
+    ],
+    ["https://voxdex.com/leaderboard?category=sports", "/leaderboard?category=sports"],
+    ["https://voxdex.com/#leaderboard", "/rankings#leaderboard"],
     ["https://voxdex.com/predict", "/predict"],
     ["https://voxdex.com/predict?tab=world", "/predict?tab=world"],
     ["https://voxdex.com/person/abc/", "/person/abc"],
@@ -119,8 +128,6 @@ test("disallowed hosts and paths are ignored", () => {
     "https://voxdex.com/me/predictions",
     "https://voxdex.com/me/settings",
     "https://voxdex.com/api/og/person/abc",
-    "https://voxdex.com/vote/induction",
-    "https://voxdex.com/vote/all-ratings",
     "https://voxdex.com/predict/activity",
     "https://voxdex.com/insights",
     "https://voxdex.com/how-it-works",

@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { useHotMoverIds } from "@/hooks/useHotMoverIds";
 import { useDeferredReady } from "@/hooks/useDeferredReady";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
+import { RANKINGS_DESCRIPTION, RANKINGS_TITLE } from "@/lib/primaryNav";
 import { shareHomeLeaderboardView } from "@/lib/home-leaderboard-share";
 import {
   X,
@@ -281,7 +282,7 @@ interface TrendingResponse {
 
 type SortDirection = "desc" | "asc";
 
-/** Home leaderboard share URLs (`/?category=&search=&sortDir=#leaderboard`). */
+/** Rankings share URLs (`/rankings?category=&search=&sortDir=#leaderboard`). */
 function readHomeLeaderboardShareState(search: string): {
   searchQuery: string;
   category: string;
@@ -305,9 +306,8 @@ function readHomeLeaderboardShareState(search: string): {
 
 export default function HomePage() {
   useDocumentMeta({
-    title: "VoxDex | Vox Populi - Indexed",
-    description:
-      "VoxDex turns the voice of the people into a living, real-time index. Vote, predict, and weigh in on the figures and topics shaping global conversation. — make your voice heard, one vote at a time.",
+    title: RANKINGS_TITLE,
+    description: RANKINGS_DESCRIPTION,
   });
 
   const urlSearch = useSearch();
@@ -329,8 +329,8 @@ export default function HomePage() {
   );
 
   // Share links land as client navigations in the native shell. Re-read the
-  // query when it changes so a warm open of `/?category=&search=#leaderboard`
-  // updates a Home page that is already mounted.
+  // query when it changes so a warm open of `/rankings?category=&search=#leaderboard`
+  // updates a Rankings page that is already mounted.
   useEffect(() => {
     const next = readHomeLeaderboardShareState(urlSearch);
     setSearchQuery(next.searchQuery);
@@ -607,14 +607,7 @@ export default function HomePage() {
           </div>
         </div>
       )}
-      <SiteHeader
-        active="home"
-        backButton="none"
-        onHomeClick={() => {
-          setActiveView("leaderboard");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }}
-      />
+      <SiteHeader active="rankings" backButton="none" />
       <WelcomeModal ref={welcomeOnboardingRef} />
       <QuickVoteHost surface="home" />
       {/* PRESERVED: Sticky toggle bar (Leaderboard/Vote/Predict) - commented out for future re-enable
