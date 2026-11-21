@@ -88,6 +88,7 @@ import {
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
+import { executeCommentDelete } from "./services/comment-delete";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
 import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
@@ -124,6 +125,7 @@ import {
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { toTrendingPerson } from "./jobs/celebrity-profile-cron";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
+import { emptyWhyTrendingPayload } from "./services/why-trending-payload";
 import { MOVERS_PULSE_TOP_N, selectDailyMovers } from "./services/trending/daily-movers";
 import { HOT_MOVERS_CAP, selectHotMovers } from "./services/trending/hot-movers";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
@@ -6035,6 +6037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Soft-delete a comment owned by the authenticated user.
+  // Author only. Admins use DELETE /api/admin/moderation/comments/:id.
   app.delete("/api/comments/:id", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -6049,21 +6052,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(unifiedComments)
         .where(eq(unifiedComments.id, id))
         .limit(1);
-      if (!comment) return res.status(404).json({ error: "Comment not found" });
-      if (comment.userId !== userId) return res.status(403).json({ error: "Forbidden" });
-      if (comment.deletedAt) return res.json({ success: true, deletedAt: comment.deletedAt });
 
-      const deletedAt = new Date();
-      const [updated] = await db
-        .update(unifiedComments)
-        .set({ deletedAt })
-        .where(and(
-          eq(unifiedComments.id, id),
-          eq(unifiedComments.userId, userId),
-        ))
-        .returning({ deletedAt: unifiedComments.deletedAt });
-
-      res.json({ success: true, deletedAt: updated?.deletedAt ?? deletedAt });
+      const result = await executeCommentDelete(
+        comment ?? null,
+        { userId, role: req.userRole },
+        async () => {
+          const deletedAt = new Date();
+          const [updated] = await db
+            .update(unifiedComments)
+            .set({ deletedAt })
+            .where(and(
+              eq(unifiedComments.id, id),
+              eq(unifiedComments.userId, userId),
+            ))
+            .returning({ deletedAt: unifiedComments.deletedAt });
+          return updated;
+        },
+      );
+      res.status(result.status).json(result.body);
     } catch (error: any) {
       console.error("Error deleting comment:", error);
       res.status(500).json({ error: "Failed to delete comment" });
@@ -6471,13 +6477,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // See server/services/why-trending.ts
 
   app.get("/api/why-trending/:personId", async (req, res) => {
+    const { personId } = req.params;
+    let person: Awaited<ReturnType<typeof storage.getTrendingPerson>>;
     try {
-      const { personId } = req.params;
-      const person = await storage.getTrendingPerson(personId);
-      if (!person) {
-        return res.status(404).json({ error: "Person not found" });
-      }
+      person = await storage.getTrendingPerson(personId);
+    } catch (error: any) {
+      console.error("Error fetching why trending:", error);
+      return res.status(500).json({ error: "Failed to fetch trending context" });
+    }
+    if (!person) {
+      return res.status(404).json({ error: "Person not found" });
+    }
 
+    try {
       const hotMover = req.query.hotMover === "true";
       const result = await fetchWhyTrendingForPerson(person, hotMover);
       if (result.cacheStatus) {
@@ -6485,13 +6497,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(result);
     } catch (error: any) {
+      // Missing headlines or an unusable model payload used to throw out of
+      // fetchWhyTrendingForPerson (JSON.parse on truncated output, a headline
+      // with no title). The profile card already renders the empty shape;
+      // answering 500 took the section down for people like Robert Pattinson.
       console.error("Error fetching why trending:", error);
       try {
-        await db.delete(apiCache).where(eq(apiCache.cacheKey, `why_trending_lock:${req.params.personId}`));
+        await db.delete(apiCache).where(eq(apiCache.cacheKey, `why_trending_lock:${personId}`));
       } catch {
         /* best-effort lock cleanup */
       }
-      res.status(500).json({ error: "Failed to fetch trending context" });
+      res.json(emptyWhyTrendingPayload(person.id, person.name));
     }
   });
 

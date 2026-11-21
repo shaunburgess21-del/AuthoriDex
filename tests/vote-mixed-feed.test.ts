@@ -24,6 +24,7 @@ import {
   matchesVoteFeedFilters,
   planFeedRestore,
   scrollYForFeedCard,
+  voteFeedStickyOffset,
   separateShortRatingTail,
   snapFeedWindow,
   voteAllUsesMixedFeed,
@@ -427,6 +428,12 @@ describe("mixed feed back to place", () => {
   it("scrolls the card to just under the sticky band", () => {
     assert.equal(scrollYForFeedCard(480, 1200, 128), 1544);
     assert.equal(scrollYForFeedCard(10, 0, 128), 0);
+  });
+
+  it("offsets a restore by the header plus the chip bar, ignoring a hidden bar", () => {
+    assert.equal(voteFeedStickyOffset(64, 72), 136);
+    assert.equal(voteFeedStickyOffset(0, 80), 80);
+    assert.equal(voteFeedStickyOffset(Number.NaN, -4), 0);
   });
 
   it("moves a two-rating ending into an earlier gap", () => {

@@ -1,8 +1,14 @@
 import OpenAI from "openai";
-import { createHash } from "crypto";
 import { eq, inArray } from "drizzle-orm";
 import { apiCache, type TrendingPerson } from "@shared/schema";
 import { db } from "../db";
+import {
+  computeHeadlineHash,
+  emptyWhyTrendingPayload,
+  parseWhyTrendingModelContent,
+} from "./why-trending-payload";
+
+export { computeHeadlineHash } from "./why-trending-payload";
 import {
   fetchTrendingNewsContext,
   getSerperDegradedState,
@@ -84,32 +90,6 @@ export interface WhyTrendingGenerationOptions {
   hotMover?: boolean;
   /** Skip SWR and always run the full generation path (admin/cron blocking). */
   force?: boolean;
-}
-
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url.slice(0, 30);
-  }
-}
-
-function normalizeTitle(title: string): string {
-  let t = title;
-  t = t.replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "");
-  t = t.replace(/\s*[-–—|]\s*(CNN|Reuters|AP|BBC|NBC|CBS|ABC|Fox News|CNBC|Bloomberg|Forbes|WSJ|The Guardian|The New York Times|Associated Press|NPR|USA Today|The Washington Post|Sky News|Al Jazeera|MSNBC|The Hill|Politico|TechCrunch|The Verge|Variety|TMZ|E! News|People|Entertainment Weekly|ESPN|Daily Mail|NY Post|New York Post|Axios|Business Insider|The Independent)\.?$/i, "");
-  t = t.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-  return t;
-}
-
-/** Hash top-3 headlines only — more stable than the full Serper list. */
-export function computeHeadlineHash(sources: Array<{ title: string; link?: string }>): string {
-  const top = sources.slice(0, 3);
-  const stableIds = top.map((s) => {
-    const domain = s.link ? extractDomain(s.link) : "unknown";
-    return `${domain}|${normalizeTitle(s.title)}`;
-  });
-  return createHash("sha256").update(stableIds.sort().join("||")).digest("hex").slice(0, 16);
 }
 
 function cacheKeys(personId: string) {
@@ -349,7 +329,7 @@ export async function generateWhyTrendingSummary(
   try {
     const newsContext = await fetchTrendingNewsContext(person.name);
 
-    if (!newsContext || newsContext.sources.length === 0) {
+    if (!newsContext?.sources?.length) {
       const degraded = getSerperDegradedState();
       if (cached && isWithinWhyTrendingStaleGrace(cached.fetchedAt)) {
         const stale = parseCachedPayload(cached);
@@ -469,26 +449,34 @@ Return a JSON object with:
 Only return the JSON object.`;
 
     const whyTrendingModel = getAiModel("whyTrending");
-    const response = await openai.chat.completions.create({
-      model: whyTrendingModel,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      response_format: { type: "json_object" },
-      ...getChatCompletionTokenLimit(whyTrendingModel, 200),
-    });
-    recordLlmUsage({
-      feature: "why_trending",
-      model: whyTrendingModel,
-      usage: response.usage,
-      detail: `person=${person.name}`,
-    });
-
-    const content = response.choices[0]?.message?.content;
-    const parsed = content
-      ? JSON.parse(content)
-      : { summary: newsContext.headline, category: newsContext.category };
+    const fallback = {
+      summary: newsContext.headline,
+      category: newsContext.category,
+    };
+    let parsed: { summary: string; category: string };
+    try {
+      const response = await openai.chat.completions.create({
+        model: whyTrendingModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        ...getChatCompletionTokenLimit(whyTrendingModel, 200),
+      });
+      recordLlmUsage({
+        feature: "why_trending",
+        model: whyTrendingModel,
+        usage: response.usage,
+        detail: `person=${person.name}`,
+      });
+      // Truncated or non-JSON model output used to throw here and the route
+      // answered 500. Fall back to the headline instead.
+      parsed = parseWhyTrendingModelContent(response.choices[0]?.message?.content, fallback);
+    } catch (error) {
+      console.error(`[WhyTrending] Summary unavailable for ${person.name}:`, error);
+      return emptyWhyTrendingPayload(personId, person.name);
+    }
 
     const generatedAt = new Date().toISOString();
     const result: WhyTrendingPayload = {

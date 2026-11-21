@@ -11,6 +11,7 @@ import {
   type InsightCommentResponse,
 } from "@/lib/communityInsightsQuery";
 import { navigateToLogin } from "@/lib/authReturn";
+import { discussionPlaceholderName } from "@/lib/discussionShell";
 import { toast } from "sonner";
 import { useXpBurst } from "./XpBurstProvider";
 import { CommentActionDrawer } from "./comments/CommentActionDrawer";
@@ -66,7 +67,8 @@ export function CommunityInsights({
   const { trigger: triggerXpBurst } = useXpBurst();
   const snapDismiss = useContext(SnapDismissContext);
 
-  const composerPlaceholder = placeholder ?? `Share your thoughts on ${personName}...`;
+  const composerPlaceholder =
+    placeholder ?? `Share your thoughts on ${discussionPlaceholderName(personName)}...`;
   const postedHighlightRef = useRef<(id: string) => void>(() => {});
 
   const [drawerComment, setDrawerComment] = useState<CommentItem | null>(null);
@@ -289,7 +291,7 @@ export function CommunityInsights({
           open={focusDiscussionOpen}
           onClose={() => {
             setFocusDiscussionOpen(false);
-            window.setTimeout(() => discussionExpandRef.current?.focus(), 0);
+            window.setTimeout(() => discussionExpandRef.current?.focus({ preventScroll: true }), 0);
           }}
           contextTitle={focusContextTitle ?? personName}
         >

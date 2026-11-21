@@ -398,6 +398,21 @@ export function planFeedRestore(args: {
   return { action: "reveal", start, end };
 }
 
+/**
+ * Sticky chrome the restored card must clear: site header plus the chip bar.
+ * Callers pass layout heights (`offsetHeight`), not a transformed rect.
+ * The chip bar slides off with `translateY` while you scroll; measuring the
+ * visual bottom then lands the card one bar too low once the bar comes back.
+ */
+export function voteFeedStickyOffset(headerHeight: number, bandHeight: number): number {
+  const header = Number.isFinite(headerHeight) && headerHeight > 0 ? headerHeight : 0;
+  const band = Number.isFinite(bandHeight) && bandHeight > 0 ? bandHeight : 0;
+  return Math.round(header + band);
+}
+
+/** Ask the chip bar to show again and forget the hide offset from a restore scroll. */
+export const VOTE_STICKY_BAND_REVEAL = "vote-sticky-band-reveal";
+
 /** Document scrollY that puts the card just under the sticky chip band. */
 export function scrollYForFeedCard(
   cardTop: number,

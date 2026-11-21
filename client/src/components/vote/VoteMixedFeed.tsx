@@ -17,6 +17,8 @@ import {
   layoutFeedRows,
   planFeedRestore,
   scrollYForFeedCard,
+  voteFeedStickyOffset,
+  VOTE_STICKY_BAND_REVEAL,
   snapFeedWindow,
   VOTE_ALL_SECTION_LAYOUT_QUERY,
   voteFeedSpan,
@@ -24,6 +26,7 @@ import {
   type VoteFeedKind,
   type VoteFeedSpan,
 } from "@/lib/voteMixedFeed";
+import { isDiscussionShellOpen } from "@/lib/discussionShell";
 
 const MOBILE_ESTIMATE_PX = 640;
 const DESKTOP_BREAKPOINT = VOTE_ALL_SECTION_LAYOUT_QUERY;
@@ -67,9 +70,17 @@ function useFeedColumns(): 1 | 2 {
 }
 
 function stickyBottom(): number {
+  const header = document.querySelector("header.sticky");
   const band = document.querySelector("[data-testid='vote-sticky-band']");
-  const bottom = band?.getBoundingClientRect().bottom ?? 0;
-  return bottom > 0 ? bottom : 128;
+  const offset = voteFeedStickyOffset(
+    header instanceof HTMLElement ? header.offsetHeight : 0,
+    band instanceof HTMLElement ? band.offsetHeight : 0,
+  );
+  return offset > 0 ? offset : 128;
+}
+
+function revealStickyBand(): void {
+  window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
 }
 
 /**
@@ -193,6 +204,7 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
       }
       didScrollRestore.current = true;
       scrollLock.current = false;
+      revealStickyBand();
     };
 
     const frame = window.requestAnimationFrame(tick);
@@ -255,6 +267,10 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         if (scrollLock.current || items.length === 0) return;
+        // The discussion shell pins scroll, but iOS still fires a jump to 0
+        // when the keyboard opens. Following it would unmount the card that
+        // owns the shell and close the screen.
+        if (isDiscussionShellOpen()) return;
         const previousY = scrollYRef.current;
         scrollYRef.current = window.scrollY;
         // Leaving the page scrolls to the top in one jump. That must not

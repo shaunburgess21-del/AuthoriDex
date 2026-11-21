@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { VOTE_STICKY_BAND_REVEAL } from "@/lib/voteMixedFeed";
 
 /**
  * Returns how many px to translate a top bar up, tied 1:1 to scroll delta and
@@ -71,9 +72,21 @@ export function useScrollHideTransform(ref: RefObject<HTMLElement>, resetKey?: u
         apply(target, next);
       });
     };
+    const onReveal = () => {
+      const target = ref.current;
+      offsetRef.current = 0;
+      lastY.current = window.scrollY;
+      if (!target) return;
+      target.style.transition = "";
+      target.style.transform = "";
+      target.style.opacity = "";
+      target.style.pointerEvents = "";
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener(VOTE_STICKY_BAND_REVEAL, onReveal);
     return () => {
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener(VOTE_STICKY_BAND_REVEAL, onReveal);
       clearTimeout(clearTransitionTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

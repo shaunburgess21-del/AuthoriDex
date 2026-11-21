@@ -13,7 +13,7 @@ const COMPOSER_MAX_HEIGHT_PX = 160;
 const DEFAULT_COMMENT_MAX_LENGTH = 5000;
 
 const TEXTAREA_BASE_CLASS =
-  "text-foreground caret-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30";
+  "text-foreground caret-foreground placeholder:truncate placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 focus:border-border/30";
 
 type ComposerMode = "auto" | "manual" | "fullscreen";
 
@@ -168,6 +168,14 @@ export function CommentComposer({
   );
 
   const resizeAutoComposer = useCallback((textarea: HTMLTextAreaElement) => {
+    // An empty field stays one row. A wrapping placeholder ("Share your
+    // thoughts on Sabrina Carpenter...") otherwise grows scrollHeight and
+    // the box onto a second line before the member has typed anything.
+    if (!textarea.value) {
+      textarea.style.height = "";
+      textarea.style.overflowY = "hidden";
+      return;
+    }
     textarea.style.height = "auto";
     const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX);
     textarea.style.height = `${nextHeight}px`;
@@ -418,11 +426,17 @@ export function CommentComposer({
           }}
           onFocus={() => setIsFocused(true)}
           onBlur={handleTextareaBlur}
+          onPointerDown={(event) => {
+            if (!event.currentTarget.closest("[data-discussion-shell]")) return;
+            if (document.activeElement === event.currentTarget) return;
+            event.currentTarget.focus({ preventScroll: true });
+          }}
           onClick={syncCursorFromTextarea}
           onKeyUp={syncCursorFromTextarea}
           onSelect={syncCursorFromTextarea}
           onKeyDown={handleKeyDown}
           className={`h-full w-full resize-none rounded-2xl border border-border/30 bg-muted/30 px-4 py-4 text-base ${TEXTAREA_BASE_CLASS}`}
+          data-comment-input=""
           data-testid={testIds?.inputFullscreen ?? "input-comment-fullscreen"}
         />
       </div>
@@ -489,6 +503,14 @@ export function CommentComposer({
                 }}
                 onFocus={() => setIsFocused(true)}
                 onBlur={handleTextareaBlur}
+                onPointerDown={(event) => {
+                  // Inside the discussion shell, the browser's default focus
+                  // scrolls the page so the field clears the keyboard. That
+                  // scroll is what closes the shell on the vote feed.
+                  if (!event.currentTarget.closest("[data-discussion-shell]")) return;
+                  if (document.activeElement === event.currentTarget) return;
+                  event.currentTarget.focus({ preventScroll: true });
+                }}
                 onClick={syncCursorFromTextarea}
                 onKeyUp={syncCursorFromTextarea}
                 onSelect={syncCursorFromTextarea}
@@ -501,6 +523,7 @@ export function CommentComposer({
                   inputClassName,
                 )}
                 rows={1}
+                data-comment-input=""
                 data-testid={testIds?.input ?? "input-comment"}
               />
               {mentionMenuOpen && activeMention && !isFullscreenComposer && (

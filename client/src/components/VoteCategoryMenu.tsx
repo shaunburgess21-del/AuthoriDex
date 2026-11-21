@@ -110,6 +110,11 @@ export function VoteCategoryMenu({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       )}
       data-testid="filter-vote-category-menu"
+      onClick={(event) => {
+        // Drop focus before the sheet aria-hides the sticky bar that contains
+        // this button. Otherwise Chrome warns that aria-hidden hid a focused control.
+        event.currentTarget.blur();
+      }}
     >
       <span className="max-w-[9rem] truncate">{pillLabel}</span>
       <ChevronDown
@@ -126,7 +131,24 @@ export function VoteCategoryMenu({
     return (
       <Drawer open={open} onOpenChange={setOpen}>
         <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
-        <DrawerContent>
+        <DrawerContent
+          onOpenAutoFocus={(event) => {
+            // The sheet marks the sticky chip bar aria-hidden while the
+            // Categories button inside it still holds focus. Blur first, then
+            // move focus into the sheet.
+            event.preventDefault();
+            const active = document.activeElement;
+            if (active instanceof HTMLElement) active.blur();
+            const root = event.currentTarget;
+            if (root instanceof HTMLElement) {
+              root.querySelector<HTMLElement>("[role='menuitemradio']")?.focus();
+            }
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            document.querySelector<HTMLElement>("[data-testid='filter-vote-category-menu']")?.focus();
+          }}
+        >
           <div className="px-2 pb-4">
             <DrawerTitle className="px-3 pt-1 pb-2 text-sm font-semibold text-foreground text-left">
               Categories
