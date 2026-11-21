@@ -83,6 +83,7 @@ export function CommentActionDrawer({
     <div
       className="fixed inset-0 z-[70]"
       data-interactive="true"
+      data-above-discussion=""
       onClick={containPortaledSheetEvent}
     >
       <div

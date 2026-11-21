@@ -2086,6 +2086,15 @@ html.ios-shell select {
   font-size: 16px;
 }
 
+/* Empty comment fields stay one line. WebKit wraps a textarea placeholder,
+   and that wrapped line was making "Share your thoughts on {name}..."
+   spill onto a second row on a phone. */
+textarea[data-comment-input]::placeholder {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 600px) {
   html [data-sonner-toaster][data-y-position="top"] {
     top: calc(var(--mobile-offset-top, 0.5rem) + var(--safe-area-inset-top, 0px)) !important;

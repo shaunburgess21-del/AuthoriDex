@@ -25,6 +25,7 @@ import {
   type VoteFeedKind,
   type VoteFeedSpan,
 } from "@/lib/voteMixedFeed";
+import { isDiscussionShellOpen } from "@/lib/discussionShell";
 
 const MOBILE_ESTIMATE_PX = 640;
 const DESKTOP_BREAKPOINT = "(min-width: 768px)";
@@ -264,6 +265,10 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         if (scrollLock.current || items.length === 0) return;
+        // The discussion shell pins scroll, but iOS still fires a jump to 0
+        // when the keyboard opens. Following it would unmount the card that
+        // owns the shell and close the screen.
+        if (isDiscussionShellOpen()) return;
         const previousY = scrollYRef.current;
         scrollYRef.current = window.scrollY;
         // Leaving the page scrolls to the top in one jump. That must not

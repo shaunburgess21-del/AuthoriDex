@@ -587,7 +587,7 @@ export function CardComments({
 
   const handleCloseFocus = useCallback(() => {
     setFocusOpen(false);
-    window.setTimeout(() => expandTriggerRef.current?.focus(), 0);
+    window.setTimeout(() => expandTriggerRef.current?.focus({ preventScroll: true }), 0);
   }, []);
 
   return (
