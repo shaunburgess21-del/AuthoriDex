@@ -42,32 +42,13 @@ export const VOTE_FEED_CUE_LABELS = {
   rating: "Rate",
 } as const;
 
-/**
- * Section toggles that have a type chip. Induction Queue and Curate Profile
- * are not in this map. Chip labels and section-heading prefixes both read it.
- */
-export const VOTE_SECTION_CUE_KINDS = {
-  "Sentiment Polls": "sentiment",
-  Matchups: "matchup",
-  "Opinion Polls": "opinion",
-  "Overall Rating": "rating",
-} as const satisfies Record<string, VoteFeedKind>;
-
 /** Chip keys stay the section toggles. Only the visible label changes. */
-export const VOTE_SECTION_CUE_LABELS: Record<string, string> = Object.fromEntries(
-  (Object.keys(VOTE_SECTION_CUE_KINDS) as (keyof typeof VOTE_SECTION_CUE_KINDS)[]).map(
-    (section) => [section, VOTE_FEED_CUE_LABELS[VOTE_SECTION_CUE_KINDS[section]]],
-  ),
-);
-
-/** Cue shown in front of a section heading, or null when that section has no type chip. */
-export function voteSectionHeadingPrefix(
-  section: string,
-): { kind: VoteFeedKind; label: string } | null {
-  if (!Object.prototype.hasOwnProperty.call(VOTE_SECTION_CUE_KINDS, section)) return null;
-  const kind = VOTE_SECTION_CUE_KINDS[section as keyof typeof VOTE_SECTION_CUE_KINDS];
-  return { kind, label: VOTE_FEED_CUE_LABELS[kind] };
-}
+export const VOTE_SECTION_CUE_LABELS: Record<string, string> = {
+  "Sentiment Polls": VOTE_FEED_CUE_LABELS.sentiment,
+  Matchups: VOTE_FEED_CUE_LABELS.matchup,
+  "Opinion Polls": VOTE_FEED_CUE_LABELS.opinion,
+  "Overall Rating": VOTE_FEED_CUE_LABELS.rating,
+};
 
 export type VoteFeedSpan = 1 | 2;
 

@@ -137,8 +137,15 @@ import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
-import { voteSectionCueKind, VoteSectionHeading, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
+import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
+import { VoteChipLinkCuePill } from "@/components/vote/VoteChipLinkCue";
 import {
+  claimVoteChipLinkCue,
+  shouldOfferVoteChipLinkCue,
+  type VoteChipLinkCue,
+} from "@/lib/voteChipLinkCue";
+import {
+  VOTE_ALL_SECTION_LAYOUT_MIN_PX,
   VOTE_ALL_SECTION_LAYOUT_QUERY,
   VOTE_SECTION_CUE_LABELS,
   applyVoteFeedFilters,
@@ -1375,6 +1382,47 @@ export default function VotePage() {
   const desktopSectionLayoutRef = useRef(desktopSectionLayout);
   desktopSectionLayoutRef.current = desktopSectionLayout;
   const showDesktopAllSections = activeSection === "All" && desktopSectionLayout;
+  const [chipLinkCue, setChipLinkCue] = useState<{ nonce: number; cue: VoteChipLinkCue } | null>(null);
+  const chipLinkCueNonce = useRef(0);
+
+  const selectVoteSection = (section: SectionToggle) => {
+    setActiveSection(section);
+    const viewportWidth = desktopSectionLayoutRef.current
+      ? VOTE_ALL_SECTION_LAYOUT_MIN_PX
+      : VOTE_ALL_SECTION_LAYOUT_MIN_PX - 1;
+    if (!shouldOfferVoteChipLinkCue({ section, viewportWidth, fromChipTap: true })) {
+      setChipLinkCue(null);
+      return;
+    }
+    let cue: VoteChipLinkCue | null = null;
+    try {
+      cue = claimVoteChipLinkCue(section, window.sessionStorage);
+    } catch {
+      cue = null;
+    }
+    if (!cue) {
+      setChipLinkCue(null);
+      return;
+    }
+    chipLinkCueNonce.current += 1;
+    const nonce = chipLinkCueNonce.current;
+    setChipLinkCue({ nonce, cue });
+  };
+
+  const chipCueHeaderProps = (section: string): { titleClassName?: string; overlay?: React.ReactNode } => {
+    if (!chipLinkCue || chipLinkCue.cue.section !== section) return {};
+    const nonce = chipLinkCue.nonce;
+    return {
+      titleClassName: "vote-section-heading-pulse",
+      overlay: (
+        <VoteChipLinkCuePill
+          key={nonce}
+          cue={chipLinkCue.cue}
+          onDone={() => setChipLinkCue((current) => (current?.nonce === nonce ? null : current))}
+        />
+      ),
+    };
+  };
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
@@ -3178,7 +3226,8 @@ export default function VotePage() {
     activeSection === "Overall Rating" || showDesktopAllSections ? (
         <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
-            title={<VoteSectionHeading title="Overall Rating" />}
+            title="Overall Rating"
+            {...chipCueHeaderProps("Overall Rating")}
             titleAddon={<InfoHint term="approval" side="bottom" align="start" />}
             subtitle="Community approval rating"
             icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
@@ -3306,7 +3355,7 @@ export default function VotePage() {
                     />
                   )}
                   <button
-                    onClick={() => setActiveSection(section)}
+                    onClick={() => selectVoteSection(section)}
                     className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all min-w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                       activeSection === section
                         ? "bg-cyan-500/25 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/50 dark:border-cyan-400/40 shadow-sm shadow-cyan-500/30 dark:shadow-cyan-500/20"
@@ -3351,7 +3400,8 @@ export default function VotePage() {
         {(activeSection === "Sentiment Polls" || showDesktopAllSections) && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
-            title={<VoteSectionHeading title="Sentiment Polls" />}
+            title="Sentiment Polls"
+            {...chipCueHeaderProps("Sentiment Polls")}
             subtitle="Weigh in on current topics"
             icon={<MessageSquare className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
@@ -3458,7 +3508,8 @@ export default function VotePage() {
         {(activeSection === "Matchups" || showDesktopAllSections) && (
         <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
-            title={<VoteSectionHeading title="Matchups" />}
+            title="Matchups"
+            {...chipCueHeaderProps("Matchups")}
             subtitle="Vote on A vs B"
             icon={<Swords className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
@@ -3565,7 +3616,8 @@ export default function VotePage() {
         {(activeSection === "Opinion Polls" || showDesktopAllSections) && (
         <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
-            title={<VoteSectionHeading title="Opinion Polls" />}
+            title="Opinion Polls"
+            {...chipCueHeaderProps("Opinion Polls")}
             subtitle="Your preference. The world's verdict."
             icon={<ListChecks className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
             accent="cyan"
