@@ -62,8 +62,8 @@ type FeedCursor = Record<VoteFeedKind, number>;
 /**
  * Remaining ratings after the other types run out.
  * Multiple categories are dealt round-robin so the tail alternates.
- * A single category is woven from the front and back so neighbors are not
- * adjacent ranks in the source list.
+ * A single category is dealt as every other rank, then the ranks between
+ * them, so the tail does not finish on two neighboring source ranks.
  */
 export function distributeRatingTail<T>(
   items: readonly T[],
@@ -85,18 +85,14 @@ export function distributeRatingTail<T>(
   }
 
   if (groups.size <= 1) {
-    const woven: T[] = [];
-    let lo = 0;
-    let hi = items.length - 1;
-    while (lo <= hi) {
-      woven.push(items[lo]);
-      lo += 1;
-      if (lo <= hi) {
-        woven.push(items[hi]);
-        hi -= 1;
-      }
+    // Step through every other rank, then the ones left between them.
+    // Outside-in weaving left the two middle ranks sitting together at the end.
+    const evens: T[] = [];
+    const odds: T[] = [];
+    for (let i = 0; i < items.length; i += 1) {
+      (i % 2 === 0 ? evens : odds).push(items[i]);
     }
-    return woven;
+    return [...evens, ...odds];
   }
 
   const out: T[] = [];
@@ -176,6 +172,31 @@ export function interleaveVoteFeed<
   for (const item of distributeRatingTail(rest, categoryOf)) {
     out.push({ kind: "rating", id: item.id, item });
   }
+  return separateShortRatingTail(out);
+}
+
+/**
+ * A single leftover rating sits against the rating that closed the last round,
+ * so the feed ends on two rating cards. Tuck that extra into the first gap
+ * between other card types. Longer rating tails stay woven as a block.
+ */
+export function separateShortRatingTail<T extends { kind: string }>(feed: readonly T[]): T[] {
+  const out = feed.slice();
+  if (out.length < 3) return out;
+  let run = 0;
+  for (let i = out.length - 1; i >= 0 && out[i].kind === "rating"; i -= 1) run += 1;
+  if (run !== 2) return out;
+  let gap = -1;
+  for (let i = 0; i < out.length - 1; i += 1) {
+    if (out[i].kind !== "rating" && out[i + 1].kind !== "rating") {
+      gap = i + 1;
+      break;
+    }
+  }
+  if (gap < 0) return out;
+  const rating = out.pop();
+  if (!rating) return out;
+  out.splice(gap, 0, rating);
   return out;
 }
 
@@ -324,6 +345,55 @@ export function feedSpacerRows(
   const top = rowOfIndex[start] ?? 0;
   const lastRow = rowOfIndex[Math.min(end, spans.length) - 1] ?? 0;
   return { top, bottom: Math.max(0, rowCount - lastRow - 1) };
+}
+
+export interface FeedRestorePlan {
+  /** Wait for the lists, give up, or mount a window that contains the card. */
+  action: "wait" | "abandon" | "reveal";
+  start: number;
+  end: number;
+}
+
+/**
+ * Which window to mount before scrolling back to a card.
+ * An empty list still waits: the first paint can be empty while queries
+ * hydrate, and abandoning then would pin the feed at the top.
+ */
+export function planFeedRestore(args: {
+  keys: readonly string[];
+  cardKey: string | null | undefined;
+  loading: boolean;
+  spans: readonly VoteFeedSpan[];
+  columns: 1 | 2;
+  pageSize?: number;
+}): FeedRestorePlan {
+  if (!args.cardKey) return { action: "abandon", start: 0, end: 0 };
+  const index = args.keys.indexOf(args.cardKey);
+  if (index < 0) {
+    if (args.loading || args.keys.length === 0) return { action: "wait", start: 0, end: 0 };
+    return { action: "abandon", start: 0, end: 0 };
+  }
+  const window = snapFeedWindow(
+    args.spans,
+    index,
+    args.columns,
+    args.pageSize ?? VOTE_FEED_PAGE_SIZE,
+  );
+  let start = window.start;
+  let end = window.end;
+  if (index < start) start = index;
+  if (end <= index) end = index + 1;
+  return { action: "reveal", start, end };
+}
+
+/** Document scrollY that puts the card just under the sticky chip band. */
+export function scrollYForFeedCard(
+  cardTop: number,
+  scrollY: number,
+  stickyBottomPx: number,
+  gap = 8,
+): number {
+  return Math.max(0, Math.round(scrollY + cardTop - stickyBottomPx - gap));
 }
 
 const FEED_PLACE_KEY = "voteMixedFeedPlace";

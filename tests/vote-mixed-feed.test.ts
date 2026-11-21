@@ -12,6 +12,9 @@ import {
   interleaveVoteFeed,
   layoutFeedRows,
   matchesVoteFeedFilters,
+  planFeedRestore,
+  scrollYForFeedCard,
+  separateShortRatingTail,
   snapFeedWindow,
   type VoteFeedFilterable,
 } from "../client/src/lib/voteMixedFeed";
@@ -105,8 +108,14 @@ describe("interleaveVoteFeed", () => {
     const tail = distributeRatingTail(ratings, (item) => item.category);
     assert.deepEqual(
       tail.map((item) => item.id),
-      ["a", "f", "b", "e", "c", "d"],
+      ["a", "c", "e", "b", "d", "f"],
     );
+    const order = ratings.map((item) => item.id);
+    for (let i = 1; i < tail.length; i += 1) {
+      const prev = order.indexOf(tail[i - 1].id);
+      const next = order.indexOf(tail[i].id);
+      assert.notEqual(Math.abs(prev - next), 1);
+    }
 
     const feed = interleaveVoteFeed({
       matchup: [],
@@ -116,7 +125,7 @@ describe("interleaveVoteFeed", () => {
     });
     assert.deepEqual(
       feed.map((entry) => entry.id),
-      ["a", "f", "b", "e", "c", "d"],
+      ["a", "c", "e", "b", "d", "f"],
     );
   });
 
@@ -134,6 +143,35 @@ describe("interleaveVoteFeed", () => {
       tail.map((item) => item.id),
       ["a1", "b1", "c1", "a2", "b2", "a3"],
     );
+  });
+
+  it("does not leave a single leftover rating against the previous rating", () => {
+    const feed = interleaveVoteFeed({
+      matchup: [card("m1"), card("m2")],
+      sentiment: [card("s1")],
+      opinion: [card("o1")],
+      rating: [card("r1"), card("r2"), card("r3")],
+    });
+    const kindsInOrder = kinds(feed);
+    assert.ok(!(kindsInOrder.at(-1) === "rating" && kindsInOrder.at(-2) === "rating"));
+    for (let i = 1; i < feed.length; i += 1) {
+      assert.ok(!(feed[i].kind === "rating" && feed[i - 1].kind === "rating"));
+    }
+    assert.equal(feed.filter((entry) => entry.kind === "rating").length, 3);
+  });
+
+  it("keeps a long rating tail woven instead of pulling it apart", () => {
+    const feed = interleaveVoteFeed({
+      matchup: [card("m1")],
+      sentiment: [],
+      opinion: [],
+      rating: [card("r1"), card("r2"), card("r3"), card("r4"), card("r5")],
+    });
+    const trailing = [];
+    for (let i = feed.length - 1; i >= 0 && feed[i].kind === "rating"; i -= 1) {
+      trailing.push(feed[i].id);
+    }
+    assert.ok(trailing.length > 2);
   });
 
   it("keeps source order for a short leftover tail", () => {
@@ -307,6 +345,89 @@ describe("vote feed layout", () => {
   it("pages about 12 cards from the start", () => {
     const spans = Array.from({ length: 20 }, () => 1 as const);
     assert.deepEqual(snapFeedWindow(spans, 0, 1, 12), { start: 0, end: 12 });
+  });
+});
+
+describe("mixed feed back to place", () => {
+  const spans = Array.from({ length: 60 }, () => 1 as const);
+  const keys = spans.map((_, index) => `matchup:card-${index}`);
+
+  it("reveals a window that contains a card far past the first page", () => {
+    const plan = planFeedRestore({
+      keys,
+      cardKey: "matchup:card-40",
+      loading: false,
+      spans,
+      columns: 1,
+    });
+    assert.equal(plan.action, "reveal");
+    assert.ok(plan.start <= 40);
+    assert.ok(plan.end > 40);
+    assert.ok(plan.end - plan.start <= 16);
+  });
+
+  it("waits while the lists are empty or still loading", () => {
+    assert.equal(
+      planFeedRestore({
+        keys: [],
+        cardKey: "matchup:card-40",
+        loading: false,
+        spans: [],
+        columns: 1,
+      }).action,
+      "wait",
+    );
+    assert.equal(
+      planFeedRestore({
+        keys: keys.slice(0, 4),
+        cardKey: "matchup:card-40",
+        loading: true,
+        spans: spans.slice(0, 4),
+        columns: 2,
+      }).action,
+      "wait",
+    );
+  });
+
+  it("gives up once the loaded list does not contain the card", () => {
+    assert.equal(
+      planFeedRestore({
+        keys: keys.slice(0, 8),
+        cardKey: "matchup:missing",
+        loading: false,
+        spans: spans.slice(0, 8),
+        columns: 1,
+      }).action,
+      "abandon",
+    );
+    assert.equal(
+      planFeedRestore({
+        keys,
+        cardKey: null,
+        loading: false,
+        spans,
+        columns: 1,
+      }).action,
+      "abandon",
+    );
+  });
+
+  it("scrolls the card to just under the sticky band", () => {
+    assert.equal(scrollYForFeedCard(480, 1200, 128), 1544);
+    assert.equal(scrollYForFeedCard(10, 0, 128), 0);
+  });
+
+  it("moves a two-rating ending into an earlier gap", () => {
+    const spread = separateShortRatingTail([
+      { kind: "matchup" },
+      { kind: "sentiment" },
+      { kind: "rating" },
+      { kind: "rating" },
+    ]);
+    assert.deepEqual(
+      spread.map((entry) => entry.kind),
+      ["matchup", "rating", "sentiment", "rating"],
+    );
   });
 });
 

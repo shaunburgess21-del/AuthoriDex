@@ -45,7 +45,10 @@ test("tab screens use the window, and the open panels are the real scrollers", (
 
   assert.match(home, /home-shell min-h-screen/);
   assert.match(homeTrends, /fixed inset-0 z-50 bg-background\/95 backdrop-blur-xl overflow-y-auto/);
-  assert.match(vote, /min-h-screen pb-20 md:pb-0 overflow-x-clip/);
+  assert.match(
+    vote,
+    /min-h-screen overflow-x-clip pb-\[calc\(13\.5rem\+env\(safe-area-inset-bottom,0px\)\)\] md:pb-0/,
+  );
   assert.match(vote, /flex-1 overflow-y-auto/);
   assert.match(predict, /min-h-screen pb-20 md:pb-0 overflow-x-clip/);
   assert.match(predict, /data-testid="overlay-view-all"/);
