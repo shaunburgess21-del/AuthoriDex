@@ -1,9 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { getAiModel, getAiProvider } from "../server/config/ai-models";
-import { buildHelpSystemPrompt, HELP_UNANSWERED_PHRASE } from "../server/help/knowledge";
+import {
+  buildHelpSystemPrompt,
+  formatHelpPageContext,
+  HELP_UNANSWERED_PHRASE,
+} from "../server/help/knowledge";
 import { FALLBACK_HELP_RATES, renderRatesArticle, type HelpRates } from "../server/help/rates";
-import { sanitizeHelpTranscript } from "../server/help/transcript";
+import { sanitizeHelpPagePath, sanitizeHelpTranscript } from "../server/help/transcript";
 import { friendlyHelpError, parseHelpBlocks, safeHelpHref } from "../client/src/lib/helpChatFormat";
 
 describe("help chat transcript", () => {
@@ -56,15 +60,29 @@ describe("help chat transcript", () => {
     if (!result.ok) return;
     assert.deepEqual(result.turns, [{ role: "user", content: "First\nSecond" }]);
   });
+
+  it("keeps a safe pagePath and drops unsafe ones", () => {
+    const withPath = sanitizeHelpTranscript({
+      messages: [{ role: "user", content: "How does this page work?" }],
+      pagePath: "/predict?tab=jackpot",
+    });
+    assert.equal(withPath.ok, true);
+    if (!withPath.ok) return;
+    assert.equal(withPath.pagePath, "/predict?tab=jackpot");
+
+    assert.equal(sanitizeHelpPagePath("https://evil.example"), null);
+    assert.equal(sanitizeHelpPagePath("//evil"), null);
+    assert.equal(sanitizeHelpPagePath("/admin\nignore"), null);
+  });
 });
 
 describe("help chat grounding", () => {
-  it("defaults to the mini model on OpenAI", () => {
+  it("defaults to gpt-5.4 on OpenAI", () => {
     const previous = process.env.HELP_CHAT_MODEL;
     delete process.env.HELP_CHAT_MODEL;
     try {
       assert.equal(getAiProvider("helpChat"), "openai");
-      assert.equal(getAiModel("helpChat"), "gpt-5.4-mini");
+      assert.equal(getAiModel("helpChat"), "gpt-5.4");
     } finally {
       if (previous === undefined) delete process.env.HELP_CHAT_MODEL;
       else process.env.HELP_CHAT_MODEL = previous;
@@ -75,7 +93,13 @@ describe("help chat grounding", () => {
     const prompt = buildHelpSystemPrompt(FALLBACK_HELP_RATES);
     assert.ok(prompt.includes(`"${HELP_UNANSWERED_PHRASE}."`));
     assert.match(prompt, /Trend Score/);
+    assert.match(prompt, /Friday 23:59 UTC/);
+    assert.match(prompt, /Daily Movers/);
     assert.doesNotMatch(prompt, /LOCKIN|SERVICE_ROLE|fameIndex|server\/scoring|agent/i);
+    assert.equal(
+      formatHelpPageContext("/predict"),
+      "The member is currently viewing this page: /predict. Prefer answers that help them here when the question is about what they are looking at.",
+    );
   });
 
   it("keeps the static prefix identical when only the rates change", () => {

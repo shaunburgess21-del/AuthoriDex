@@ -36,7 +36,9 @@ const SCOPE_DEFAULT_MODEL: Partial<Record<AiModelScope, string>> = {
   agentRationale: "gpt-5.4-mini",
   agentComments: "gpt-5.4-mini",
   marketResolver: "gpt-5.4-mini",
-  helpChat: "gpt-5.4-mini",
+  // Flagship quality for the public Ask VoxDex guide; override with
+  // HELP_CHAT_MODEL=gpt-5.4-mini if spend needs to drop.
+  helpChat: "gpt-5.4",
 };
 
 /** Defaults when a scope is routed to xAI/Grok. */

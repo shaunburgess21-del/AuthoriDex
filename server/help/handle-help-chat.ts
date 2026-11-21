@@ -1,5 +1,5 @@
 /**
- * Help-chat turn. Grounds gpt-5.4-mini on the public articles in
+ * Help-chat turn. Grounds gpt-5.4 on the public articles in
  * ./knowledge plus live rates, and records the call on llm_daily_spend
  * under "help_chat".
  */
@@ -9,15 +9,19 @@ import type { AuthRequest } from "../auth-middleware";
 import { getAiModel, getChatCompletionTokenLimit } from "../config/ai-models";
 import { recordLlmUsage } from "../config/ai-cost";
 import { loadPersistedSpend } from "../agents/llmSpendStore";
-import { buildHelpSystemPrompt, HELP_UNANSWERED_PHRASE } from "./knowledge";
+import {
+  buildHelpSystemPrompt,
+  formatHelpPageContext,
+  HELP_UNANSWERED_PHRASE,
+} from "./knowledge";
 import { getHelpRates } from "./live-rates";
 import type { HelpRates } from "./rates";
 import { cleanHelpText, sanitizeHelpTranscript, HELP_REPLY_CHAR_CAP } from "./transcript";
 
 const FEATURE = "help_chat";
 const DEFAULT_DAILY_BUDGET_USD = 3;
-/** Covers reasoning tokens as well as the reply on gpt-5 models. */
-const COMPLETION_TOKEN_LIMIT = 900;
+/** Covers reasoning tokens as well as a fuller reply on gpt-5.4. */
+const COMPLETION_TOKEN_LIMIT = 1200;
 
 let promptCache: { rates: HelpRates; prompt: string } | null = null;
 
@@ -92,10 +96,12 @@ export async function handleHelpChat(req: AuthRequest, res: Response): Promise<v
   const model = getAiModel("helpChat");
   try {
     const rates = await getHelpRates();
+    const pageContext = formatHelpPageContext(transcript.pagePath);
     const response = await openaiFor(apiKey).chat.completions.create({
       model,
       messages: [
         { role: "system", content: systemPromptFor(rates) },
+        ...(pageContext ? [{ role: "system" as const, content: pageContext }] : []),
         ...transcript.turns,
       ],
       ...getChatCompletionTokenLimit(model, COMPLETION_TOKEN_LIMIT),
@@ -105,7 +111,9 @@ export async function handleHelpChat(req: AuthRequest, res: Response): Promise<v
       feature: FEATURE,
       model,
       usage: response.usage,
-      detail: req.userId ? "auth" : "anon",
+      detail: req.userId
+        ? `auth${transcript.pagePath ? `:${transcript.pagePath}` : ""}`
+        : `anon${transcript.pagePath ? `:${transcript.pagePath}` : ""}`,
     });
 
     const choice = response.choices[0];

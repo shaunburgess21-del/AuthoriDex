@@ -32,11 +32,65 @@ interface ChatTurn {
   content: string;
 }
 
-const SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS = [
   "How does the ranking work?",
   "How do I earn Vox?",
   "What happens when I predict?",
 ];
+
+/** Chips that match where the member opened the panel. */
+function suggestionsForPath(pathname: string): string[] {
+  if (pathname === "/vote" || pathname.startsWith("/vote/")) {
+    return [
+      "What can I vote on here?",
+      "Does voting cost Vox?",
+      "What is Quick Vote?",
+    ];
+  }
+  if (pathname === "/predict" || pathname.startsWith("/predict/")) {
+    return [
+      "How do prediction markets work?",
+      "When does the Weekly Jackpot close?",
+      "Can I sell a position early?",
+    ];
+  }
+  if (pathname === "/voices" || pathname.startsWith("/voices/")) {
+    return [
+      "What is Voices?",
+      "How do I earn XP for posting?",
+      "How do I earn Vox?",
+    ];
+  }
+  if (pathname === "/insights" || pathname.startsWith("/insights/")) {
+    return [
+      "What is Insights vs the Home leaderboard?",
+      "What is Trend Score?",
+      "How does approval rating work?",
+    ];
+  }
+  if (pathname === "/me" || pathname.startsWith("/me/")) {
+    return [
+      "Where do I see my Vox balance?",
+      "How do ranks work?",
+      "How do I earn more Vox?",
+    ];
+  }
+  if (pathname === "/how-it-works" || pathname.startsWith("/how-it-works")) {
+    return [
+      "Summarize how predicting works",
+      "How do I earn XP?",
+      "What is the difference between XP and Vox?",
+    ];
+  }
+  if (pathname === "/" || pathname.startsWith("/person/")) {
+    return [
+      "How does the ranking work?",
+      "What are Daily Movers?",
+      "How do Favorites work?",
+    ];
+  }
+  return DEFAULT_SUGGESTIONS;
+}
 
 /** Matches the server: the last 8 turns, questions up to 500 characters. */
 const MAX_SENT_TURNS = 8;
@@ -121,9 +175,13 @@ export function HelpChat() {
   const labelVisible = useCornerPillIntro("help-chat", !hidden);
   const keyboardBox = useKeyboardPanelBox(open && isMobile);
 
+  const suggestions = suggestionsForPath(location);
   const ask = useMutation({
     mutationFn: async (messages: ChatTurn[]) => {
-      const res = await apiRequest("POST", "/api/help/chat", { messages });
+      const res = await apiRequest("POST", "/api/help/chat", {
+        messages,
+        pagePath: location,
+      });
       const body = (await res.json()) as { data?: { reply?: string } };
       const reply = body.data?.reply?.trim();
       if (!reply) throw new Error("The help chat sent an empty answer.");
@@ -293,7 +351,7 @@ export function HelpChat() {
                   Ask how ranking, voting, Vox, or predictions work. Answers come from the site guide.
                 </p>
                 <div className="flex flex-col items-start gap-2">
-                  {SUGGESTIONS.map((suggestion) => (
+                  {suggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
