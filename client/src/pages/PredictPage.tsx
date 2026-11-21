@@ -3191,6 +3191,7 @@ export default function PredictPage() {
               {selectedType !== "jackpot" && (
                 <div className="shrink-0 self-start">
                   <VoteCategoryMenu
+                    theme="predict"
                     options={weeklyCategoryOptions}
                     value={weeklyCategory}
                     onChange={(next) => setWeeklyCategory(next as CategoryFilter)}
@@ -3222,6 +3223,7 @@ export default function PredictPage() {
             <div className="flex flex-1 min-w-0 items-center gap-2" data-testid="world-mode-filter-bar">
               <div className="shrink-0">
                 <VoteCategoryMenu
+                  theme="predict"
                   options={communityCategoryFilters.map((cat) => ({ value: cat.id, label: cat.label }))}
                   value={communityCategory}
                   onChange={(next) => setCommunityCategory(next as CategoryFilter)}

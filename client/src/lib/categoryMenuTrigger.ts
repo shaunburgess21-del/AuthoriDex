@@ -4,9 +4,14 @@ import {
   FILTER_CATEGORY_MENU_CATEGORY,
   FILTER_CATEGORY_MENU_FOCUS,
   FILTER_CATEGORY_MENU_IDLE,
+  FILTER_CATEGORY_MENU_IDLE_PREDICT,
   FILTER_CATEGORY_MENU_PINNED,
+  FILTER_CATEGORY_MENU_PINNED_PREDICT,
 } from "@/lib/filterControlStyles";
 import { isPinnedCategory } from "@/lib/sectionCategoryFilters";
+
+/** Vote stays on cyan. Predict uses the page violet-500 accent. */
+export type CategoryMenuTheme = "vote" | "predict";
 
 /** Selected labels truncate around this many characters. */
 export const CATEGORY_MENU_LABEL_MAX_CH = 12;
@@ -55,11 +60,27 @@ export function categoryMenuIsFiltered(value: string | null | undefined): boolea
   return key.length > 0 && key !== "all";
 }
 
-/** Face classes. Real categories use the category chip colour map. */
-export function categoryMenuFaceClass(value: string | null | undefined): string {
+const IDLE_FACE: Record<CategoryMenuTheme, string> = {
+  vote: FILTER_CATEGORY_MENU_IDLE,
+  predict: FILTER_CATEGORY_MENU_IDLE_PREDICT,
+};
+
+const PINNED_FACE: Record<CategoryMenuTheme, string> = {
+  vote: FILTER_CATEGORY_MENU_PINNED,
+  predict: FILTER_CATEGORY_MENU_PINNED_PREDICT,
+};
+
+/**
+ * Face classes. Idle and Favorites/Trending follow the page accent.
+ * A real category uses the registry chip colour on either theme.
+ */
+export function categoryMenuFaceClass(
+  value: string | null | undefined,
+  theme: CategoryMenuTheme = "vote",
+): string {
   const key = normalizedKey(value);
-  if (!key || key === "all") return `${FILTER_CATEGORY_MENU_IDLE} ${FILTER_CATEGORY_MENU_FOCUS}`;
-  if (isPinnedCategory(key)) return `${FILTER_CATEGORY_MENU_PINNED} ${FILTER_CATEGORY_MENU_FOCUS}`;
+  if (!key || key === "all") return `${IDLE_FACE[theme]} ${FILTER_CATEGORY_MENU_FOCUS}`;
+  if (isPinnedCategory(key)) return `${PINNED_FACE[theme]} ${FILTER_CATEGORY_MENU_FOCUS}`;
   const style = getCategoryStyle(key, key);
   return `${style.bg} ${style.border} ${style.text} ${FILTER_CATEGORY_MENU_CATEGORY} ${FILTER_CATEGORY_MENU_FOCUS}`;
 }

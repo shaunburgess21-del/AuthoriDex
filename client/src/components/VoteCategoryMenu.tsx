@@ -12,6 +12,7 @@ import {
   categoryMenuFaceClass,
   categoryMenuIsFiltered,
   categoryMenuTriggerLabel,
+  type CategoryMenuTheme,
 } from "@/lib/categoryMenuTrigger";
 import type { SectionCategoryOption } from "@/lib/sectionCategoryFilters";
 import {
@@ -32,6 +33,8 @@ interface VoteCategoryMenuProps {
   options: SectionCategoryOption[];
   value: string;
   onChange: (value: string) => void;
+  /** Idle and Favorites/Trending accent. Defaults to the Vote cyan. */
+  theme?: CategoryMenuTheme;
   user?: unknown;
   onAuthRequired?: () => void;
 }
@@ -163,6 +166,7 @@ export function VoteCategoryMenu({
   options,
   value,
   onChange,
+  theme = "vote",
   user,
   onAuthRequired,
 }: VoteCategoryMenuProps) {
@@ -170,7 +174,7 @@ export function VoteCategoryMenu({
   const selected = options.find((option) => option.value === value);
   const pillLabel = categoryMenuTriggerLabel(value, selected?.label);
   const filtered = categoryMenuIsFiltered(value);
-  const faceClass = categoryMenuFaceClass(value);
+  const faceClass = categoryMenuFaceClass(value, theme);
 
   const isMobile = useIsMobile();
 
