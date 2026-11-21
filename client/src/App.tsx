@@ -36,6 +36,7 @@ import {
 } from "@/lib/referral-capture";
 import { registerNativeContentNavigator } from "@/lib/nativeDeepLinks";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
+import { setHideHintRecommendations } from "@/lib/hideHintGate";
 import { StickyChromeFocusGuard } from "@/components/StickyChromeFocusGuard";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
@@ -432,6 +433,17 @@ function InterestsGate() {
   // Once-per-session re-prompt latch: prevents the modal from popping back up
   // immediately after the user closes it via Save / Skip in the same tab.
   const repromptShownThisSession = useRef(false);
+  const recommendationsMode = !!profile?.interestsPromptDismissedAt;
+
+  // Hide-card hint stays down while this drawer is open, and for the rest
+  // of the session after "Want better recommendations?" (reprompt) shows.
+  useEffect(() => {
+    const showing = open && hasOpened;
+    setHideHintRecommendations({
+      open: showing,
+      shownThisSession: recommendationsMode && (showing || repromptShownThisSession.current),
+    });
+  }, [open, hasOpened, recommendationsMode]);
 
   useEffect(() => {
     if (loading || profileLoading) return;

@@ -17,6 +17,7 @@ import { useLocation } from "wouter";
 import { Check, ChevronRight, Camera, Eye, RefreshCw, User } from "lucide-react";
 import { selectCurateDisplayImages } from "./selectCurateDisplayImages";
 import { rememberCuratePersonVoted } from "@/lib/curateVotedPeople";
+import { noteHideHintVote } from "@/lib/hideHintSignals";
 
 interface CelebrityImage {
   id: string;
@@ -182,6 +183,7 @@ export function CurateProfileCard({
       setShowResults(true);
       setIsVotePending(false);
       rememberCuratePersonVoted(person.id);
+      noteHideHintVote();
       onVote();
       onComplete();
       void queryClient.invalidateQueries({ queryKey: imageQueryKey });

@@ -5,6 +5,8 @@ import type { CardReactionSurface } from "@shared/constants";
 import { showCardHiddenToast } from "@/lib/hide-card-toast";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
+import { markHideHintHasHidden } from "@/lib/hideHintGate";
+import { noteHideHintCardHidden } from "@/lib/hideHintController";
 import {
   HIDDEN_CARDS_QUERY_KEY,
   feedPrefixesFor,
@@ -83,6 +85,7 @@ export function useHiddenCardKeySet(): ReadonlySet<string> {
 /** Hide one card, drop it from the cached feeds, and offer Undo. */
 export function useHideCard() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation<unknown, Error, HideCardTarget, { snapshots: FeedCacheSnapshot[] }>({
     mutationFn: async (variables) => {
@@ -105,6 +108,8 @@ export function useHideCard() {
       return { snapshots };
     },
     onSuccess: (_data, variables) => {
+      if (user?.id) markHideHintHasHidden(user.id);
+      noteHideHintCardHidden();
       showCardHiddenToast(() => {
         void unhideHiddenCard(queryClient, variables);
       });
