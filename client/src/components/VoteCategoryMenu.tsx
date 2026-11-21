@@ -1,12 +1,18 @@
 /**
  * Category picker for Vote and Predict. Drawer on mobile, popover on desktop.
- * The pill is "Categories", or the selected category name when one is active.
+ * The trigger is a quiet filter chip ("Categories") until a category is on,
+ * then it takes that category's registry label and chip colour.
  */
-import { useState, type ComponentType, type ReactNode } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useState, type ComponentType, type MouseEvent, type ReactNode } from "react";
+import { Check, ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { getFilterCategoryIcon } from "@/components/interests/categoryIcons";
+import {
+  categoryMenuFaceClass,
+  categoryMenuIsFiltered,
+  categoryMenuTriggerLabel,
+} from "@/lib/categoryMenuTrigger";
 import type { SectionCategoryOption } from "@/lib/sectionCategoryFilters";
 import {
   Popover,
@@ -76,6 +82,83 @@ function OptionList({
   );
 }
 
+type AsChildTrigger = ComponentType<{ asChild?: boolean; children?: ReactNode }>;
+
+function CategoryMenuFace({
+  open,
+  pillLabel,
+  filtered,
+  faceClass,
+  onClear,
+  Trigger,
+}: {
+  open: boolean;
+  pillLabel: string;
+  filtered: boolean;
+  faceClass: string;
+  onClear: (event: MouseEvent<HTMLButtonElement>) => void;
+  Trigger: AsChildTrigger;
+}) {
+  return (
+    <div className="inline-flex max-w-full shrink-0 items-center gap-2" data-testid="vote-category-filter">
+      <div
+        className={cn(
+          "inline-flex max-w-full items-center rounded-lg text-sm font-medium whitespace-nowrap",
+          faceClass,
+        )}
+      >
+        <Trigger asChild>
+          <button
+            type="button"
+            aria-label={`Categories: ${pillLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            className="category-menu-trigger tap-44 inline-flex min-w-0 items-center gap-1.5 self-stretch rounded-lg py-2 pl-2.5 pr-2 focus-visible:outline-none sm:pl-3 sm:pr-2.5"
+            data-testid="filter-vote-category-menu"
+            onClick={(event) => {
+              // Drop focus before the sheet aria-hides the sticky bar that contains
+              // this button. Otherwise Chrome warns that aria-hidden hid a focused control.
+              event.currentTarget.blur();
+            }}
+          >
+            <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="max-w-[12ch] truncate" title={pillLabel}>
+              {pillLabel}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 transition-transform",
+                open && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </button>
+        </Trigger>
+        {filtered ? (
+          <button
+            type="button"
+            aria-label="Clear category filter"
+            data-testid="filter-vote-category-clear"
+            className="mr-1 inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center self-stretch rounded-md px-1 text-current/80 hover:bg-current/10 hover:text-current active:bg-current/20 focus-visible:outline-none"
+            onPointerDown={(event) => {
+              // Sibling of the menu trigger — this press must not open it.
+              event.stopPropagation();
+            }}
+            onClick={onClear}
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+      <span
+        aria-hidden
+        className="h-5 w-px shrink-0 self-center bg-foreground/30"
+        data-testid="category-filter-divider"
+      />
+    </div>
+  );
+}
+
 export function VoteCategoryMenu({
   options,
   value,
@@ -85,7 +168,9 @@ export function VoteCategoryMenu({
 }: VoteCategoryMenuProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
-  const pillLabel = !value || value === "all" ? "Categories" : (selected?.label ?? "Categories");
+  const pillLabel = categoryMenuTriggerLabel(value, selected?.label);
+  const filtered = categoryMenuIsFiltered(value);
+  const faceClass = categoryMenuFaceClass(value);
 
   const isMobile = useIsMobile();
 
@@ -99,38 +184,27 @@ export function VoteCategoryMenu({
     setOpen(false);
   };
 
-  const pillButton = (
-    <button
-      type="button"
-      aria-label={`Categories: ${pillLabel}`}
-      aria-haspopup="menu"
-      aria-expanded={open}
-      className={cn(
-        "category-menu-chrome flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground whitespace-nowrap min-w-fit shrink-0",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      )}
-      data-testid="filter-vote-category-menu"
-      onClick={(event) => {
-        // Drop focus before the sheet aria-hides the sticky bar that contains
-        // this button. Otherwise Chrome warns that aria-hidden hid a focused control.
-        event.currentTarget.blur();
-      }}
-    >
-      <span className="max-w-[9rem] truncate">{pillLabel}</span>
-      <ChevronDown
-        className={cn(
-          "h-4 w-4 shrink-0 transition-transform",
-          open && "rotate-180",
-        )}
-        aria-hidden
-      />
-    </button>
+  const clearFilter = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onChange("all");
+  };
+
+  const face = (
+    <CategoryMenuFace
+      open={open}
+      pillLabel={pillLabel}
+      filtered={filtered}
+      faceClass={faceClass}
+      onClear={clearFilter}
+      Trigger={isMobile ? DrawerTrigger : PopoverTrigger}
+    />
   );
 
   if (isMobile) {
     return (
       <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerTrigger asChild>{pillButton}</DrawerTrigger>
+        {face}
         <DrawerContent
           onOpenAutoFocus={(event) => {
             // The sheet marks the sticky chip bar aria-hidden while the
@@ -167,7 +241,7 @@ export function VoteCategoryMenu({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{pillButton}</PopoverTrigger>
+      {face}
       <PopoverContent align="start" className="w-72 bg-background p-1">
         <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground">
           Categories
