@@ -42,6 +42,7 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Drawer } from "vaul";
+import { releaseStickyChromeOnOpen } from "@/lib/stickyChromeFocus";
 import { MarketCycleHero } from "@/components/MarketCycleHero";
 import { useMarketCycle, type MarketStatus } from "@/hooks/useMarketCycle";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
@@ -699,7 +700,7 @@ function CreatePredictionModal({
     <Drawer.Root open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <Drawer.Portal>
         <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-        <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+        <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
           <div className={SUGGEST_DRAWER_HANDLE} />
           <div className={SUGGEST_DRAWER_HEADER}>
             <div>

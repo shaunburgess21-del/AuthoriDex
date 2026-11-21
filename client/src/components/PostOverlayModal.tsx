@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,13 @@ import {
   type InsightCommentResponse,
 } from "@/lib/communityInsightsMappers";
 import { toast } from "sonner";
+import {
+  acquireDismissLock,
+  claimDeleteAttempt,
+  overlayBackdropShouldClose,
+  releaseDeleteAttempt,
+  releaseDismissLock,
+} from "@/components/voices/deleteVoicesPost";
 
 interface CommunityInsight {
   id: string;
@@ -177,6 +184,14 @@ function PostOverlayModalContent({
   const blockUser = useBlockUser();
   const [rootActionsOpen, setRootActionsOpen] = useState(false);
   const [rootDeleteOpen, setRootDeleteOpen] = useState(false);
+  const dismissLock = useRef(0);
+  const deleteAttempt = useRef(false);
+  useEffect(() => {
+    dismissLock.current = (rootDeleteOpen ? 1 : 0) + (deleteTarget ? 1 : 0);
+  }, [rootDeleteOpen, deleteTarget]);
+  useEffect(() => {
+    if (!isDeletingInsight) releaseDeleteAttempt(deleteAttempt);
+  }, [isDeletingInsight]);
 
   const triggerXp = useCallback((data: unknown) => {
     const xp = (data as { xp?: { xpAwarded?: number; reason?: string } | null } | null)?.xp;
@@ -203,7 +218,10 @@ function PostOverlayModalContent({
   return (
     <div 
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto"
-      onClick={onClose}
+      onClick={() => {
+        if (!overlayBackdropShouldClose(dismissLock, isDeletingInsight || thread.isDeletePending)) return;
+        onClose();
+      }}
       data-testid="post-overlay-modal"
     >
       <div
@@ -215,7 +233,10 @@ function PostOverlayModalContent({
           <Button
             variant="ghost"
             size="icon"
-            onClick={onClose}
+            onClick={() => {
+              if (!overlayBackdropShouldClose(dismissLock, isDeletingInsight)) return;
+              onClose();
+            }}
             className="h-8 w-8"
             aria-label="Close"
             data-testid="button-close-overlay"
@@ -377,6 +398,7 @@ function PostOverlayModalContent({
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
+              acquireDismissLock(dismissLock);
               setDeleteTarget(drawerComment);
               setDrawerComment(null);
             }
@@ -401,6 +423,7 @@ function PostOverlayModalContent({
         onDelete={
           !isInsightDeleted && insight.userId === user?.id
             ? () => {
+              acquireDismissLock(dismissLock);
               setRootDeleteOpen(true);
               setRootActionsOpen(false);
             }
@@ -412,7 +435,10 @@ function PostOverlayModalContent({
       <DeleteContentDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open) {
+            releaseDismissLock(dismissLock);
+            setDeleteTarget(null);
+          }
         }}
         description="Delete this comment? This cannot be undone."
         isPending={thread.isDeletePending}
@@ -424,12 +450,16 @@ function PostOverlayModalContent({
       />
       <DeleteContentDialog
         open={rootDeleteOpen}
-        onOpenChange={setRootDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open) releaseDismissLock(dismissLock);
+          setRootDeleteOpen(open);
+        }}
         title="Delete this post?"
         description="This cannot be undone."
         isPending={isDeletingInsight}
         onConfirm={() => {
-          if (!isDeletingInsight) onDeleteInsight(insight.id);
+          if (!claimDeleteAttempt(deleteAttempt) || isDeletingInsight) return;
+          onDeleteInsight(insight.id);
         }}
       />
     </div>

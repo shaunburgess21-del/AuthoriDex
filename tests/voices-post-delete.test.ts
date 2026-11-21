@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  acquireDismissLock,
+  claimDeleteAttempt,
+  overlayBackdropShouldClose,
+  releaseDeleteAttempt,
+  releaseDismissLock,
   removeDeletedVoicesPost,
+  resetVoicesPostTombstonesForTests,
   stripDeletedPost,
   voicesPostDeleteErrorCopy,
   voicesPostDeleteRequest,
@@ -53,6 +59,34 @@ describe("stripDeletedPost", () => {
   });
 });
 
+describe("stripDeletedPost page", () => {
+  it("drops a post from one feed page, not only infinite-query caches", () => {
+    const page = stripDeletedPost(
+      { items: [{ id: "gone" }, { id: "keep" }], nextCursor: null, total: 2 },
+      "gone",
+    );
+    assert.deepEqual(page.items.map((item) => item.id), ["keep"]);
+    assert.equal(page.total, 1);
+    assert.equal(page.nextCursor, null);
+  });
+});
+
+describe("voices delete confirm", () => {
+  it("does not let the confirm click close the overlay, and ignores a second confirm", () => {
+    const lock = { current: 0 };
+    const attempt = { current: false };
+    assert.equal(overlayBackdropShouldClose(lock, false), true);
+    acquireDismissLock(lock);
+    assert.equal(overlayBackdropShouldClose(lock, false), false);
+    assert.equal(claimDeleteAttempt(attempt), true);
+    assert.equal(claimDeleteAttempt(attempt), false);
+    releaseDismissLock(lock);
+    releaseDeleteAttempt(attempt);
+    assert.equal(overlayBackdropShouldClose(lock, false), true);
+    assert.equal(overlayBackdropShouldClose(lock, true), false);
+  });
+});
+
 describe("removeDeletedVoicesPost", () => {
   it("clears every voices feed, comment history, and profile thread, then invalidates them", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -99,5 +133,25 @@ describe("removeDeletedVoicesPost", () => {
       client.getQueryState(["/api/comments", "community_insight", "person-1", "thread"])?.isInvalidated,
       true,
     );
+  });
+
+  it("does not let a stale refetch put a confirmed delete back", () => {
+    resetVoicesPostTombstonesForTests();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ["/api/voices/feed", "latest", "k"] as const;
+    client.setQueryData(key, {
+      pages: [{ items: [{ id: "post-1" }, { id: "post-2" }], nextCursor: null, total: 2 }],
+      pageParams: [null],
+    });
+
+    removeDeletedVoicesPost(client, "post-1");
+    client.setQueryData(key, {
+      pages: [{ items: [{ id: "post-1" }, { id: "post-2" }], nextCursor: null, total: 2 }],
+      pageParams: [null],
+    });
+
+    const latest = client.getQueryData<{ pages: Array<{ items: Array<{ id: string }> }> }>(key);
+    assert.deepEqual(latest?.pages[0].items.map((item) => item.id), ["post-2"]);
+    resetVoicesPostTombstonesForTests();
   });
 });

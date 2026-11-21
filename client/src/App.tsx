@@ -36,6 +36,7 @@ import {
 } from "@/lib/referral-capture";
 import { registerNativeContentNavigator } from "@/lib/nativeDeepLinks";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
+import { StickyChromeFocusGuard } from "@/components/StickyChromeFocusGuard";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
   window.history.scrollRestoration = "manual";
@@ -501,6 +502,7 @@ function App() {
                 <InterestsGate />
                 <ReferralPromptGate />
                 <NotificationsRealtimeWatcher />
+                <StickyChromeFocusGuard />
                 <RankUpModalGate />
                 <AnalyticsWatcher />
                 <ShareAttributionWatcher />

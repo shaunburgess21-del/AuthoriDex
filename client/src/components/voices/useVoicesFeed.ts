@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/queryClient";
 import type { VoicesFeedMode, VoicesFeedResponse, VoicesFilters } from "./types";
+import { stripTombstonedPosts } from "./deleteVoicesPost";
 import { voicesFeedSearchParams } from "./voicesFilters";
 
 export interface UseVoicesFeedArgs {
@@ -36,7 +37,7 @@ export function useVoicesFeed({ mode, filters }: UseVoicesFeedArgs) {
         headers: authHeaders,
       });
       if (!res.ok) throw new Error(`${res.status}: Failed to load Voices feed`);
-      return res.json();
+      return stripTombstonedPosts(await res.json());
     },
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor ?? undefined,

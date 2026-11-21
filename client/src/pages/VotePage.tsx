@@ -95,6 +95,7 @@ import { showVoteToast } from "@/lib/vote-toast";
 import { CountdownDescription } from "@/components/CountdownDescription";
 import { useLocation, Link } from "wouter";
 import { Drawer } from "vaul";
+import { releaseStickyChromeOnOpen } from "@/lib/stickyChromeFocus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -3066,6 +3067,7 @@ export default function VotePage() {
       <div
         ref={chipBarRef}
         className="sticky top-16 z-40 bg-background will-change-transform"
+        data-sticky-chrome=""
         data-testid="vote-sticky-band"
       >
         <div
@@ -3929,7 +3931,7 @@ export default function VotePage() {
       <Drawer.Root open={startPollModalOpen} onOpenChange={setStartPollModalOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
             <div className={SUGGEST_DRAWER_HANDLE} />
             <div className={SUGGEST_DRAWER_HEADER}>
               <div>
@@ -4075,7 +4077,7 @@ export default function VotePage() {
       <Drawer.Root open={matchupSuggestOpen} onOpenChange={setMatchupSuggestOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
             <div className={SUGGEST_DRAWER_HANDLE} />
             <div className={SUGGEST_DRAWER_HEADER}>
               <div>
@@ -4156,7 +4158,7 @@ export default function VotePage() {
       <Drawer.Root open={curateSuggestOpen} onOpenChange={setCurateSuggestOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
             <div className={SUGGEST_DRAWER_HANDLE} />
             <div className={SUGGEST_DRAWER_HEADER}>
               <div>
@@ -4252,7 +4254,7 @@ export default function VotePage() {
       <Drawer.Root open={opinionSuggestOpen} onOpenChange={setOpinionSuggestOpen}>
         <Drawer.Portal>
           <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-          <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+          <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
             <div className={SUGGEST_DRAWER_HANDLE} />
             <div className={SUGGEST_DRAWER_HEADER}>
               <div>

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { containPortaledSheetEvent } from "./commentActionDelete";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -34,7 +35,11 @@ export function DeleteContentDialog({
         onOpenChange(next);
       }}
     >
-      <AlertDialogContent onClick={(e) => e.stopPropagation()} aria-busy={isPending}>
+      <AlertDialogContent
+        onClick={containPortaledSheetEvent}
+        onPointerDown={containPortaledSheetEvent}
+        aria-busy={isPending}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
