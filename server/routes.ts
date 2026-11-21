@@ -88,6 +88,7 @@ import {
 import { generateUniqueReferralCode } from "./utils/referral-code";
 import { createNotification, createNotificationsBulk } from "./services/notifications";
 import { sanitizeMentions, notifyMentionedUsers } from "./services/mentions";
+import { executeCommentDelete } from "./services/comment-delete";
 import { mentionsToPlainText } from "@shared/lib/mentions";
 import { sanitizeResolutionSources } from "@shared/lib/resolution-sources";
 import { isSettlementEligibleVisibility } from "@shared/lib/market-visibility";
@@ -6036,6 +6037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Soft-delete a comment owned by the authenticated user.
+  // Author only. Admins use DELETE /api/admin/moderation/comments/:id.
   app.delete("/api/comments/:id", requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -6050,21 +6052,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(unifiedComments)
         .where(eq(unifiedComments.id, id))
         .limit(1);
-      if (!comment) return res.status(404).json({ error: "Comment not found" });
-      if (comment.userId !== userId) return res.status(403).json({ error: "Forbidden" });
-      if (comment.deletedAt) return res.json({ success: true, deletedAt: comment.deletedAt });
 
-      const deletedAt = new Date();
-      const [updated] = await db
-        .update(unifiedComments)
-        .set({ deletedAt })
-        .where(and(
-          eq(unifiedComments.id, id),
-          eq(unifiedComments.userId, userId),
-        ))
-        .returning({ deletedAt: unifiedComments.deletedAt });
-
-      res.json({ success: true, deletedAt: updated?.deletedAt ?? deletedAt });
+      const result = await executeCommentDelete(
+        comment ?? null,
+        { userId, role: req.userRole },
+        async () => {
+          const deletedAt = new Date();
+          const [updated] = await db
+            .update(unifiedComments)
+            .set({ deletedAt })
+            .where(and(
+              eq(unifiedComments.id, id),
+              eq(unifiedComments.userId, userId),
+            ))
+            .returning({ deletedAt: unifiedComments.deletedAt });
+          return updated;
+        },
+      );
+      res.status(result.status).json(result.body);
     } catch (error: any) {
       console.error("Error deleting comment:", error);
       res.status(500).json({ error: "Failed to delete comment" });

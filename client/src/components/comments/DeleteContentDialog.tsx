@@ -11,6 +11,7 @@ import {
 
 interface DeleteContentDialogProps {
   open: boolean;
+  title?: string;
   description: string;
   isPending?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -19,20 +20,27 @@ interface DeleteContentDialogProps {
 
 export function DeleteContentDialog({
   open,
+  title = "Delete",
   description,
   isPending = false,
   onOpenChange,
   onConfirm,
 }: DeleteContentDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && isPending) return;
+        onOpenChange(next);
+      }}
+    >
+      <AlertDialogContent onClick={(e) => e.stopPropagation()} aria-busy={isPending}>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete</AlertDialogTitle>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel type="button" disabled={isPending}>
+          <AlertDialogCancel type="button" disabled={isPending} data-testid="delete-content-cancel">
             Cancel
           </AlertDialogCancel>
           <Button
@@ -40,8 +48,9 @@ export function DeleteContentDialog({
             variant="destructive"
             onClick={onConfirm}
             disabled={isPending}
+            data-testid="delete-content-confirm"
           >
-            Delete
+            {isPending ? "Deleting…" : "Delete"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -425,11 +425,11 @@ function PostOverlayModalContent({
       <DeleteContentDialog
         open={rootDeleteOpen}
         onOpenChange={setRootDeleteOpen}
-        description="Delete this insight? This cannot be undone."
+        title="Delete this post?"
+        description="This cannot be undone."
         isPending={isDeletingInsight}
         onConfirm={() => {
-          onDeleteInsight(insight.id);
-          setRootDeleteOpen(false);
+          if (!isDeletingInsight) onDeleteInsight(insight.id);
         }}
       />
     </div>
