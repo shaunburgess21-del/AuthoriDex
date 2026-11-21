@@ -130,7 +130,7 @@ export function CommentComposer({
       const active = document.activeElement;
       if (
         active?.closest(
-          "[data-radix-popper-content-wrapper], [data-radix-popover-content]",
+          "[data-radix-popper-content-wrapper], [data-radix-popover-content], [data-keep-composer-focus]",
         )
       ) {
         return;

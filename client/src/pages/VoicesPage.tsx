@@ -31,11 +31,12 @@ import {
   categoryFilterLabel,
   clearFavourites,
   describeVoicesEmptyState,
+  emptyStateClearGesture,
   favouritePersonIds,
   favouritesSelectionActive,
+  nextVoicesHistoryAction,
   parseVoicesQuery,
   shouldShowFavouritesChip,
-  writeVoicesQuery,
   type VoicesEmptyCopy,
 } from "@/components/voices/voicesFilters";
 import {
@@ -66,7 +67,10 @@ export default function VoicesPage() {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<VoicesFeedMode>(() => readVoicesLocation().mode);
   const [filters, setFilters] = useState<VoicesFilters>(() => readVoicesLocation().filters);
+  const [historyDeferred, setHistoryDeferred] = useState(false);
   const [selected, setSelected] = useState<VoicesFeedItem | null>(null);
+  const canonicalizeHistoryRef = useRef(true);
+  const historyFromPopRef = useRef(false);
   const { favorites, isAuthenticated: hasSession, isLoading: favoritesLoading } = useFavorites();
   const categoryRegistry = useCategoryRegistry();
 
@@ -121,16 +125,50 @@ export default function VoicesPage() {
     };
   }, []);
 
+  const onHistoryDeferChange = useCallback((defer: boolean) => {
+    setHistoryDeferred((prev) => (prev === defer ? prev : defer));
+  }, []);
+
   useEffect(() => {
-    const next = writeVoicesQuery(window.location.search, { mode, filters });
-    if (next === window.location.search) return;
-    const url = `${window.location.pathname}${next}${window.location.hash}`;
-    window.history.replaceState(window.history.state, "", url);
-  }, [mode, filters]);
+    if (historyFromPopRef.current) {
+      historyFromPopRef.current = false;
+      canonicalizeHistoryRef.current = false;
+      const next = nextVoicesHistoryAction({
+        currentSearch: window.location.search,
+        mode,
+        filters,
+        canonicalize: true,
+        defer: false,
+      });
+      if (next.action === "replace") {
+        const url = `${window.location.pathname}${next.search}${window.location.hash}`;
+        window.history.replaceState(window.history.state, "", url);
+      }
+      return;
+    }
+
+    const decision = nextVoicesHistoryAction({
+      currentSearch: window.location.search,
+      mode,
+      filters,
+      canonicalize: canonicalizeHistoryRef.current,
+      defer: historyDeferred,
+    });
+    if (!historyDeferred) canonicalizeHistoryRef.current = false;
+    if (decision.action === "none") return;
+    const url = `${window.location.pathname}${decision.search}${window.location.hash}`;
+    if (decision.action === "replace") {
+      window.history.replaceState(window.history.state, "", url);
+    } else {
+      window.history.pushState(window.history.state, "", url);
+    }
+  }, [mode, filters, historyDeferred]);
 
   useEffect(() => {
     const onPop = () => {
+      historyFromPopRef.current = true;
       const next = readVoicesLocation();
+      setHistoryDeferred(false);
       setMode(next.mode);
       setFilters(next.filters);
     };
@@ -153,6 +191,7 @@ export default function VoicesPage() {
     isError,
     refetch,
     isRefetching,
+    isPlaceholderData,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -276,6 +315,7 @@ export default function VoicesPage() {
             favouriteIds={favouriteIds}
             favouritesResolving={hasSession && favoritesLoading}
             onToggleFavourites={toggleFavourites}
+            onHistoryDeferChange={onHistoryDeferChange}
           />
         </div>
       </div>
@@ -297,30 +337,47 @@ export default function VoicesPage() {
               </Button>
             </div>
           ) : items.length === 0 ? (
-            <EmptyState
-              copy={emptyCopy}
-              onClear={() => setFilters(EMPTY_VOICES_FILTERS)}
-              onCompose={jumpToVoicesComposer}
-            />
-          ) : (
-            <>
-              {items.map((item, index) => (
-                <VoiceCard
-                  key={`${item.source}:${item.id}`}
-                  item={item}
-                  onOpen={setSelected}
-                  onVote={handleVote}
-                  imagePriority={index < 3}
-                />
-              ))}
-              <div ref={sentinelRef} className="flex min-h-10 justify-center py-4">
-                {isFetchingNextPage ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                ) : !hasNextPage ? (
-                  <span className="text-xs text-muted-foreground">You&apos;re all caught up</span>
-                ) : null}
+            isPlaceholderData ? (
+              <div data-testid="voices-feed-refresh" aria-busy="true">
+                <FeedSkeleton />
               </div>
-            </>
+            ) : (
+              <EmptyState
+                copy={emptyCopy}
+                onClear={() => setFilters(EMPTY_VOICES_FILTERS)}
+                onCompose={jumpToVoicesComposer}
+              />
+            )
+          ) : (
+            <div className="relative" aria-busy={isPlaceholderData}>
+              {isPlaceholderData ? (
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center"
+                  data-testid="voices-feed-refresh"
+                >
+                  <span className="sr-only">Updating voices</span>
+                  <Loader2 className="h-5 w-5 animate-spin rounded-full bg-background/80 text-muted-foreground" />
+                </div>
+              ) : null}
+              <div className={cn(isPlaceholderData && "opacity-60 transition-opacity")}>
+                {items.map((item, index) => (
+                  <VoiceCard
+                    key={`${item.source}:${item.id}`}
+                    item={item}
+                    onOpen={setSelected}
+                    onVote={handleVote}
+                    imagePriority={index < 3}
+                  />
+                ))}
+                <div ref={sentinelRef} className="flex min-h-10 justify-center py-4">
+                  {isFetchingNextPage ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : !hasNextPage ? (
+                    <span className="text-xs text-muted-foreground">You&apos;re all caught up</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </main>
@@ -374,8 +431,21 @@ function EmptyState({
             type="button"
             variant="secondary"
             size="sm"
-            onClick={onClear}
+            data-keep-composer-focus=""
             data-testid="voices-empty-clear"
+            onPointerDown={(event) => {
+              const decision = emptyStateClearGesture({
+                type: "pointerdown",
+                button: event.button,
+              });
+              if (!decision.clear) return;
+              if (decision.preventFocusChange) event.preventDefault();
+              onClear();
+            }}
+            onClick={() => {
+              const decision = emptyStateClearGesture({ type: "click" });
+              if (decision.clear) onClear();
+            }}
           >
             Clear filters
           </Button>
