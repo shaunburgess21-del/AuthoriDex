@@ -21,6 +21,7 @@ import { matchupShare } from "@/lib/share";
 import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 import { VoteTypeCue } from "@/components/vote/VoteTypeCue";
+import { matchupResultsVisible } from "@/lib/matchupResults";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -97,6 +98,11 @@ export function VersusCard({
   feedLayout?: boolean;
 }) {
   const hasVoted = userVote !== null;
+  const showResults = matchupResultsVisible({
+    userVote,
+    isActive: matchup.isActive,
+    visibility: matchup.visibility,
+  });
   const votedA = userVote === "option_a";
   const votedB = userVote === "option_b";
   const votedNeutral = userVote === "neutral";
@@ -126,11 +132,11 @@ export function VersusCard({
   };
 
   return (
-    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
-      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-0"}`}>
+    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}>
+      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
-        <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>
+        <div className={`relative pt-4 ${hasVoted ? "pb-4 max-md:pb-2.5 md:pb-[10px]" : showResults ? "pb-4" : "pb-3"} flex flex-col ${showResults || feedLayout ? "flex-1" : ""}`}>
           <div className="absolute top-3 right-3 z-10">
             <InteractiveCategoryPill
               category={matchup.category}
@@ -388,14 +394,15 @@ export function VersusCard({
             </div>
           </div>
 
+          {showResults ? (
           <div className="mt-auto shrink-0 pt-3 px-4">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`text-lg font-bold ${hasVoted ? (votedA ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground dark:text-slate-400") : "text-muted-foreground/50 dark:text-slate-600"}`}
+                    className={`text-lg font-bold ${votedA ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground dark:text-slate-400"}`}
                   >
-                    {hasVoted ? `${matchup.optionAPercent}%` : "%"}
+                    {matchup.optionAPercent}%
                   </span>
                   {hasVoted && votedA && (
                     <Badge variant="outline" className="text-[10px] border-blue-500/50 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 px-1.5 py-0">
@@ -419,24 +426,18 @@ export function VersusCard({
                     </Badge>
                   )}
                   <span
-                    className={`text-lg font-bold ${hasVoted ? (votedB ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground dark:text-slate-400") : "text-muted-foreground/50 dark:text-slate-600"}`}
+                    className={`text-lg font-bold ${votedB ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground dark:text-slate-400"}`}
                   >
-                    {hasVoted ? `${matchup.optionBPercent}%` : "%"}
+                    {matchup.optionBPercent}%
                   </span>
                 </div>
               </div>
-              <div className={`h-2.5 rounded-full overflow-hidden flex ${hasVoted ? "bg-muted dark:bg-slate-700/50" : "bg-muted/60 dark:bg-slate-700/30"}`}>
-                {hasVoted ? (
-                  <>
-                    <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400" style={{ width: `${matchup.optionAPercent}%` }} />
-                    {(matchup.neutralVotes ?? 0) > 0 && (
-                      <div className="h-full bg-slate-400 dark:bg-slate-500" style={{ width: `${matchup.neutralPercent ?? 0}%` }} />
-                    )}
-                    <div className="h-full bg-gradient-to-r from-amber-500 to-amber-600" style={{ width: `${matchup.optionBPercent}%` }} />
-                  </>
-                ) : (
-                  <div className="h-full w-full bg-muted dark:bg-slate-700/40" />
+              <div className="h-2.5 rounded-full overflow-hidden flex bg-muted dark:bg-slate-700/50">
+                <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400" style={{ width: `${matchup.optionAPercent}%` }} />
+                {(matchup.neutralVotes ?? 0) > 0 && (
+                  <div className="h-full bg-slate-400 dark:bg-slate-500" style={{ width: `${matchup.neutralPercent ?? 0}%` }} />
                 )}
+                <div className="h-full bg-gradient-to-r from-amber-500 to-amber-600" style={{ width: `${matchup.optionBPercent}%` }} />
               </div>
               <div className="flex items-center justify-between mt-1.5">
                 <span className={`text-[11px] font-medium ${votedA ? "text-blue-600 dark:text-blue-400" : hasVoted ? "text-slate-500" : "text-slate-600"}`}>
@@ -448,9 +449,10 @@ export function VersusCard({
               </div>
             </div>
           </div>
+          ) : null}
 
+          {hasVoted ? (
           <div className="px-4 mt-2 min-h-7 flex items-center">
-            {hasVoted ? (
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0 flex items-center">
                   {showDiscussion ? (
@@ -497,8 +499,8 @@ export function VersusCard({
                   />
                 </div>
               </div>
-            ) : null}
           </div>
+          ) : null}
         </div>
       </Card>
       {showDiscussion && matchup.slug ? (
