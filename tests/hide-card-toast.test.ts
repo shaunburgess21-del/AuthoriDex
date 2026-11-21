@@ -54,7 +54,7 @@ test("card hidden toast waits 6s and does not change the global toast duration",
   assert.equal(TOAST_DURATION_MS, 3_000);
 
   const hook = read("client/src/hooks/useHideCard.ts");
-  const toastSource = read("client/src/lib/hide-card-toast.ts");
+  const toastSource = read("client/src/lib/hide-card-toast.tsx");
   assert.match(hook, /showCardHiddenToast\(/);
   assert.equal(hook.includes('toast("Card hidden"'), false);
   assert.match(toastSource, /duration:\s*Number\.POSITIVE_INFINITY/);
@@ -67,6 +67,18 @@ test("card hidden toast waits 6s and does not change the global toast duration",
   assert.equal(/toast\("Card restored"[\s\S]{0,80}duration/.test(hook), false);
 });
 
+test("card hidden description points at Hidden cards", () => {
+  const toastSource = read("client/src/lib/hide-card-toast.tsx");
+  assert.match(toastSource, /Unhide anytime in/);
+  assert.match(toastSource, /Me → Hidden cards/);
+  assert.match(toastSource, /HIDDEN_CARDS_HREF = "\/me\/hidden"/);
+  assert.match(toastSource, /from "wouter"/);
+  assert.match(toastSource, /href=\{HIDDEN_CARDS_HREF\}/);
+  assert.match(toastSource, /onOpen=\{\(\) => end\(true\)\}/);
+  assert.equal(toastSource.includes("It's off your feeds"), false);
+  assert.equal(toastSource.includes("Everyone else still sees it"), false);
+});
+
 test("undo is at least 44px tall on mobile and only on the card-hidden toast", () => {
   const css = read("client/src/index.css");
   const at = css.indexOf('data-testid="toast-card-hidden"');
@@ -76,7 +88,7 @@ test("undo is at least 44px tall on mobile and only on the card-hidden toast", (
   assert.match(rule, /height:\s*44px/);
   assert.match(rule, /min-height:\s*44px/);
   assert.match(rule, /hide-card-undo/);
-  assert.match(read("client/src/lib/hide-card-toast.ts"), /actionButton:\s*"hide-card-undo"/);
+  assert.match(read("client/src/lib/hide-card-toast.tsx"), /actionButton:\s*"hide-card-undo"/);
 });
 
 test("a mouse hover pauses and leaving resumes", () => {
