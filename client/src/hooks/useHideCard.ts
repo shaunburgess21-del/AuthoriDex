@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { CardReactionSurface } from "@shared/constants";
+import { showCardHiddenToast } from "@/lib/hide-card-toast";
 import { ApiError, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -104,14 +105,8 @@ export function useHideCard() {
       return { snapshots };
     },
     onSuccess: (_data, variables) => {
-      toast("Card hidden", {
-        description: "It's off your feeds. Everyone else still sees it.",
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void unhideHiddenCard(queryClient, variables);
-          },
-        },
+      showCardHiddenToast(() => {
+        void unhideHiddenCard(queryClient, variables);
       });
     },
     onError: (error, _variables, context) => {

@@ -1767,6 +1767,18 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
   color: hsl(var(--muted-foreground));
 }
 
+/* Hide-card Undo only. Sonner's action button is 24px tall, which is too
+ * small to tap before the toast goes away. The painted control is 44px on
+ * phones; other toasts keep the compact button. */
+@media (max-width: 767px) {
+  html [data-sonner-toaster] [data-sonner-toast][data-testid="toast-card-hidden"] [data-button].hide-card-undo {
+    height: 44px;
+    min-height: 44px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
 /* Vote-type icon chip (see client/src/lib/vote-toast.tsx) — let the chip
  * define the icon slot size instead of Sonner's fixed 16px box. */
 [data-sonner-toast].vd-toast {
