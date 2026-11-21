@@ -100,7 +100,7 @@ export function VoteActivityFilterFab({
         initial={false}
         animate={{ opacity: labelVisible ? 1 : 0.5 }}
         transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
-        className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+        className="pointer-events-auto relative flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
         aria-label={hubActivityFilterFabAriaLabel(scope, value, count, ownedCount)}
         data-testid={testId}
       >
@@ -123,11 +123,11 @@ export function VoteActivityFilterFab({
           initial={false}
           animate={
             labelVisible
-              ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
-              : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
+              ? { opacity: 1, y: 0 }
+              : { opacity: 0, y: 6 }
           }
           transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
-          className="overflow-hidden whitespace-nowrap"
+          className="pointer-events-none absolute bottom-[calc(100%+8px)] right-0 whitespace-nowrap rounded-full border border-white/15 bg-black/70 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-lg"
           aria-hidden
         >
           {label}

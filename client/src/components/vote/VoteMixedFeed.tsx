@@ -17,6 +17,8 @@ import {
   layoutFeedRows,
   planFeedRestore,
   scrollYForFeedCard,
+  voteFeedStickyOffset,
+  VOTE_STICKY_BAND_REVEAL,
   snapFeedWindow,
   voteFeedSpan,
   writeVoteMixedFeedPlace,
@@ -66,9 +68,17 @@ function useFeedColumns(): 1 | 2 {
 }
 
 function stickyBottom(): number {
+  const header = document.querySelector("header.sticky");
   const band = document.querySelector("[data-testid='vote-sticky-band']");
-  const bottom = band?.getBoundingClientRect().bottom ?? 0;
-  return bottom > 0 ? bottom : 128;
+  const offset = voteFeedStickyOffset(
+    header instanceof HTMLElement ? header.offsetHeight : 0,
+    band instanceof HTMLElement ? band.offsetHeight : 0,
+  );
+  return offset > 0 ? offset : 128;
+}
+
+function revealStickyBand(): void {
+  window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
 }
 
 /**
@@ -191,6 +201,7 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
       }
       didScrollRestore.current = true;
       scrollLock.current = false;
+      revealStickyBand();
     };
 
     const frame = window.requestAnimationFrame(tick);

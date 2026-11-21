@@ -74,11 +74,28 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        navigateFallback: "/index.html",
-        // Do not serve the SPA for /api/* navigations (e.g. opening OG JPG URLs in a tab).
-        navigateFallbackDenylist: [/^\/api\//, /^\/attached_assets\//],
+        // Hashed assets only. index.html must not be precached: a cache-first
+        // shell keeps returning users on the previous deploy until they clear
+        // site data, and its old chunk URLs 404.
+        globPatterns: ["**/*.{js,css,svg,png,woff2}"],
+        globIgnores: ["**/index.html"],
+        navigateFallback: null,
+        // Activate the new worker as soon as it installs. registerType stays
+        // "prompt", so the page is not force-reloaded mid-scroll; a failed
+        // lazy chunk reloads once (see client/src/lib/chunkReload.ts).
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
+          {
+            urlPattern: ({ request }: { request: Request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "html-navigations",
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 16, maxAgeSeconds: 24 * 60 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",

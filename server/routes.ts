@@ -124,6 +124,7 @@ import {
 import { generateProfilePreview, getOrGenerateCelebrityProfile } from "./services/profile-generator";
 import { toTrendingPerson } from "./jobs/celebrity-profile-cron";
 import { fetchWhyTrendingForPerson } from "./services/why-trending";
+import { emptyWhyTrendingPayload } from "./services/why-trending-payload";
 import { MOVERS_PULSE_TOP_N, selectDailyMovers } from "./services/trending/daily-movers";
 import { HOT_MOVERS_CAP, selectHotMovers } from "./services/trending/hot-movers";
 import { getSourceStats, refreshSourceStats } from "./scoring/sourceStats";
@@ -6471,13 +6472,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // See server/services/why-trending.ts
 
   app.get("/api/why-trending/:personId", async (req, res) => {
+    const { personId } = req.params;
+    let person: Awaited<ReturnType<typeof storage.getTrendingPerson>>;
     try {
-      const { personId } = req.params;
-      const person = await storage.getTrendingPerson(personId);
-      if (!person) {
-        return res.status(404).json({ error: "Person not found" });
-      }
+      person = await storage.getTrendingPerson(personId);
+    } catch (error: any) {
+      console.error("Error fetching why trending:", error);
+      return res.status(500).json({ error: "Failed to fetch trending context" });
+    }
+    if (!person) {
+      return res.status(404).json({ error: "Person not found" });
+    }
 
+    try {
       const hotMover = req.query.hotMover === "true";
       const result = await fetchWhyTrendingForPerson(person, hotMover);
       if (result.cacheStatus) {
@@ -6485,13 +6492,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(result);
     } catch (error: any) {
+      // Missing headlines or an unusable model payload used to throw out of
+      // fetchWhyTrendingForPerson (JSON.parse on truncated output, a headline
+      // with no title). The profile card already renders the empty shape;
+      // answering 500 took the section down for people like Robert Pattinson.
       console.error("Error fetching why trending:", error);
       try {
-        await db.delete(apiCache).where(eq(apiCache.cacheKey, `why_trending_lock:${req.params.personId}`));
+        await db.delete(apiCache).where(eq(apiCache.cacheKey, `why_trending_lock:${personId}`));
       } catch {
         /* best-effort lock cleanup */
       }
-      res.status(500).json({ error: "Failed to fetch trending context" });
+      res.json(emptyWhyTrendingPayload(person.id, person.name));
     }
   });
 

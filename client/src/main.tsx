@@ -10,6 +10,7 @@ import {
   installNativeContentLinkListener,
 } from "./lib/nativeDeepLinks";
 import { installNativeExternalLinkPolicy } from "./lib/nativeExternalLinkListener";
+import { installChunkReloadRecovery } from "./lib/chunkReload";
 import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
 import { installIosKeyboard } from "./lib/nativeIosKeyboardListener";
 import { primeAndroidNetworkStatus } from "./lib/nativeNetworkListener";
@@ -22,6 +23,7 @@ try {
   syncNativeSystemBars("dark");
 }
 
+installChunkReloadRecovery();
 installNativeOriginPatch();
 installNativeOAuthListener();
 installNativeBackListener();
