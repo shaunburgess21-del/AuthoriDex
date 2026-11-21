@@ -1,17 +1,29 @@
 /**
- * Client-side mix for the Vote hub All view.
+ * Client-side mix for the Vote hub All view below the md breakpoint.
  *
- * The four source lists stay in their existing order. This module only
- * interleaves them, spaces the large rating list, and applies the same
- * category / search / my-votes predicates the section views already use.
- * It does not fetch, vote, or touch cache.
+ * Phones and the Capacitor apps keep this one feed. From `md` (768px) up,
+ * All is stacked sections again — see `voteAllUsesMixedFeed`. This module
+ * still interleaves the four lists for the narrow feed. It does not fetch,
+ * vote, or touch cache.
  */
 
 export const VOTE_FEED_PAGE_SIZE = 12;
 
-/** Desktop row size. Must match the mixed-feed card class `md:h-[32rem]`. */
+/**
+ * All uses stacked sections from this width up (Tailwind `md`).
+ * Narrower viewports keep the mixed feed, including the Capacitor apps.
+ */
+export const VOTE_ALL_SECTION_LAYOUT_MIN_PX = 768;
+export const VOTE_ALL_SECTION_LAYOUT_QUERY = `(min-width: ${VOTE_ALL_SECTION_LAYOUT_MIN_PX}px)`;
+
+/** True when All should be the single mixed feed (below md). */
+export function voteAllUsesMixedFeed(viewportWidth: number): boolean {
+  return viewportWidth < VOTE_ALL_SECTION_LAYOUT_MIN_PX;
+}
+
+/** Row size for the mixer's unused 2-column math. The All page does not mount that grid. */
 export const VOTE_FEED_ROW_HEIGHT = "32rem";
-/** Desktop grid gap. Must match `md:gap-5` on the mixed feed. */
+/** Grid gap paired with `VOTE_FEED_ROW_HEIGHT` in the 2-column packer. */
 export const VOTE_FEED_ROW_GAP = "1.25rem";
 
 export type VoteFeedKind = "matchup" | "sentiment" | "opinion" | "rating";

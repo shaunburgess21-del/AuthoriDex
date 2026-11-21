@@ -132,11 +132,11 @@ export function VersusCard({
   };
 
   return (
-    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
-      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-0"}`}>
+    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}>
+      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
-        <div className={`relative pt-4 pb-4 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} flex flex-col flex-1`}>
+        <div className={`relative pt-4 ${hasVoted ? "pb-4 max-md:pb-2.5 md:pb-[10px]" : showResults ? "pb-4" : "pb-3"} flex flex-col ${showResults || feedLayout ? "flex-1" : ""}`}>
           <div className="absolute top-3 right-3 z-10">
             <InteractiveCategoryPill
               category={matchup.category}
@@ -451,8 +451,8 @@ export function VersusCard({
           </div>
           ) : null}
 
+          {hasVoted ? (
           <div className="px-4 mt-2 min-h-7 flex items-center">
-            {hasVoted ? (
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0 flex items-center">
                   {showDiscussion ? (
@@ -499,8 +499,8 @@ export function VersusCard({
                   />
                 </div>
               </div>
-            ) : null}
           </div>
+          ) : null}
         </div>
       </Card>
       {showDiscussion && matchup.slug ? (

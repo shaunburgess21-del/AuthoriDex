@@ -1,8 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { filterCardsByVoteActivity } from "../client/src/lib/hub-activity-filter";
 import { voteHubSectionFromHash } from "../client/src/lib/voteHubDeepLinks";
 import {
+  restoresMixedFeedCard,
+  voteDetailFeedCardKey,
+  voteDetailListSearch,
+  voteHubRestoreScrollPending,
+  voteHubRestoreScrollTop,
+  votePersonListSearch,
+} from "../client/src/lib/voteListNavigation";
+import {
+  VOTE_ALL_SECTION_LAYOUT_MIN_PX,
   VOTE_FEED_CUE_LABELS,
   VOTE_SECTION_CUE_LABELS,
   applyVoteFeedFilters,
@@ -17,6 +27,7 @@ import {
   voteFeedStickyOffset,
   separateShortRatingTail,
   snapFeedWindow,
+  voteAllUsesMixedFeed,
   type VoteFeedFilterable,
 } from "../client/src/lib/voteMixedFeed";
 
@@ -320,13 +331,14 @@ describe("vote feed layout", () => {
     assert.equal(layout.rowCount, 4);
   });
 
-  it("lets matchups span a full desktop row and pairs the other cards", () => {
+  it("still packs a 2-column window when asked, which All no longer mounts", () => {
     const layout = layoutFeedRows([2, 1, 1, 2, 1], 2);
     assert.deepEqual(layout.rowOfIndex, [0, 1, 1, 2, 3]);
     assert.equal(layout.rowCount, 4);
+    assert.equal(voteAllUsesMixedFeed(VOTE_ALL_SECTION_LAYOUT_MIN_PX), false);
   });
 
-  it("snaps a window to whole desktop rows", () => {
+  it("snaps a 2-column window without splitting a row", () => {
     const spans = [2, 1, 1, 2, 1, 1] as const;
     const window = snapFeedWindow(spans, 3, 2, 2);
     assert.deepEqual(window, { start: 3, end: 6 });
@@ -334,7 +346,7 @@ describe("vote feed layout", () => {
     assert.deepEqual(spacers, { top: 2, bottom: 0 });
   });
 
-  it("lets a lone card fill the desktop row before the next matchup", () => {
+  it("lets a lone card fill a 2-column row before the next matchup", () => {
     const spans = [2, 1, 1, 1, 2] as const;
     assert.equal(feedItemFillsRow(spans, 0, 2), true);
     assert.equal(feedItemFillsRow(spans, 1, 2), false);
@@ -457,5 +469,128 @@ describe("vote hub chip keys", () => {
     assert.equal(VOTE_FEED_CUE_LABELS.matchup, VOTE_SECTION_CUE_LABELS.Matchups);
     assert.equal(VOTE_SECTION_CUE_LABELS.All, undefined);
     assert.equal(VOTE_SECTION_CUE_LABELS["Induction Queue"], undefined);
+  });
+});
+
+describe("desktop All uses stacked sections", () => {
+  it("keeps the mixed feed below md and sections from 768px", () => {
+    assert.equal(VOTE_ALL_SECTION_LAYOUT_MIN_PX, 768);
+    assert.equal(voteAllUsesMixedFeed(390), true);
+    assert.equal(voteAllUsesMixedFeed(767), true);
+    assert.equal(voteAllUsesMixedFeed(768), false);
+    assert.equal(voteAllUsesMixedFeed(1280), false);
+    assert.equal(voteAllUsesMixedFeed(1440), false);
+  });
+
+  it("restores scroll position on desktop sections and a card key on the mix", () => {
+    assert.equal(
+      restoresMixedFeedCard({
+        sectionLayout: true,
+        activeSection: "All",
+        feedCardKey: "matchup:1",
+        storedCardKey: "matchup:1",
+      }),
+      false,
+    );
+    assert.equal(
+      restoresMixedFeedCard({
+        sectionLayout: false,
+        activeSection: "All",
+        feedCardKey: "matchup:1",
+      }),
+      true,
+    );
+    assert.equal(
+      restoresMixedFeedCard({
+        sectionLayout: false,
+        activeSection: "Matchups",
+        feedCardKey: "matchup:1",
+      }),
+      false,
+    );
+    assert.equal(
+      voteDetailFeedCardKey({
+        activeSection: "All",
+        sectionLayout: true,
+        cardKey: "matchup:1",
+      }),
+      undefined,
+    );
+    assert.equal(
+      voteDetailFeedCardKey({
+        activeSection: "All",
+        sectionLayout: false,
+        cardKey: "matchup:1",
+      }),
+      "matchup:1",
+    );
+    assert.equal(
+      voteDetailListSearch({
+        activeSection: "All",
+        sectionLayout: true,
+        mixedSearch: "mix",
+        sectionSearch: "matchups",
+      }),
+      "matchups",
+    );
+    assert.equal(
+      voteDetailListSearch({
+        activeSection: "All",
+        sectionLayout: false,
+        mixedSearch: "mix",
+        sectionSearch: "matchups",
+      }),
+      "mix",
+    );
+    assert.equal(
+      votePersonListSearch({
+        activeSection: "All",
+        sectionLayout: true,
+        mixedSearch: "mix",
+        anchorHashId: "vote-rating",
+        ratingSearch: "rated",
+        inductionSearch: "",
+        curateSearch: "",
+      }),
+      "rated",
+    );
+    assert.equal(voteHubRestoreScrollTop(2400, 400), 400);
+    assert.equal(voteHubRestoreScrollTop(180, 2000), 180);
+    assert.equal(voteHubRestoreScrollPending(2400, 400), true);
+    assert.equal(voteHubRestoreScrollPending(180, 2000), false);
+  });
+
+  it("renders All as per-type sections on desktop and the mix only below md", () => {
+    const vote = readFileSync(new URL("../client/src/pages/VotePage.tsx", import.meta.url), "utf8");
+    const cards = readFileSync(new URL("../client/src/components/CardSection.tsx", import.meta.url), "utf8");
+    assert.match(vote, /activeSection === "All" && !desktopSectionLayout && \([\s\S]*?<VoteMixedFeed/);
+    assert.match(vote, /activeSection === "Sentiment Polls" \|\| showDesktopAllSections/);
+    assert.match(vote, /activeSection === "Matchups" \|\| showDesktopAllSections/);
+    assert.match(vote, /activeSection === "Opinion Polls" \|\| showDesktopAllSections/);
+    assert.match(vote, /showDesktopAllSections && overallRatingSection/);
+    const desktopRating = vote.indexOf("showDesktopAllSections && overallRatingSection");
+    const shape = vote.indexOf('data-testid="shape-voxdex-sticky-scope"');
+    const chipRating = vote.indexOf('activeSection === "Overall Rating" && overallRatingSection');
+    assert.ok(desktopRating > 0 && desktopRating < shape, "Rate sits above Shape the VoxDex on desktop All");
+    assert.ok(shape < chipRating, "the Rate chip still keeps its section under the Shape header");
+
+    const matchupsAt = vote.indexOf('testId="section-header-matchups"');
+    const matchupsEnd = vote.indexOf('data-testid="button-view-all-matchups"');
+    const matchupsBlock = vote.slice(matchupsAt, matchupsEnd);
+    assert.equal(matchupsBlock.includes("feedLayout"), false);
+    assert.equal(matchupsBlock.includes("md:h-[32rem]"), false);
+    assert.equal(matchupsBlock.includes("columns={"), false);
+    assert.match(matchupsBlock, /desktopLimit=\{9\}/);
+    assert.match(cards, /lg:grid-cols-3/);
+
+    const sentimentAt = vote.indexOf('testId="section-header-sentiment"');
+    const sentimentEnd = vote.indexOf('data-testid="button-view-all-topics"');
+    assert.equal(vote.slice(sentimentAt, sentimentEnd).includes("feedLayout"), false);
+    const opinionAt = vote.indexOf('testId="section-header-opinion"');
+    const opinionEnd = vote.indexOf('data-testid="button-view-all-opinion-polls"');
+    assert.equal(vote.slice(opinionAt, opinionEnd).includes("feedLayout"), false);
+    const ratingAt = vote.indexOf('testId="section-header-rating"');
+    const ratingEnd = vote.indexOf('data-testid="button-view-all-rating"');
+    assert.equal(vote.slice(ratingAt, ratingEnd).includes("feedLayout"), false);
   });
 });
