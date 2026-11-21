@@ -208,6 +208,76 @@ export function readVoteHubReturnState(): VoteHubReturnState | null {
 
 const SCROLL_ANCHOR_MAX_ATTEMPTS = 24;
 
+/**
+ * The narrow All mix restores a card key because only a window of cards is
+ * mounted. Stacked sections (desktop All) restore `scrollY` instead.
+ */
+export function restoresMixedFeedCard(args: {
+  sectionLayout: boolean;
+  activeSection: string;
+  feedCardKey?: string | null;
+  storedCardKey?: string | null;
+}): boolean {
+  if (args.sectionLayout || args.activeSection !== "All") return false;
+  return Boolean(args.feedCardKey || args.storedCardKey);
+}
+
+/** Search text to stash when opening a detail from All or a single-type section. */
+export function voteDetailListSearch(args: {
+  activeSection: string;
+  sectionLayout: boolean;
+  mixedSearch: string;
+  sectionSearch: string;
+}): string {
+  if (args.activeSection === "All" && !args.sectionLayout) return args.mixedSearch;
+  return args.sectionSearch;
+}
+
+/** Card key for the narrow mix. Desktop sections leave this empty and use scrollY. */
+export function voteDetailFeedCardKey(args: {
+  activeSection: string;
+  sectionLayout: boolean;
+  cardKey?: string | null;
+}): string | undefined {
+  if (args.activeSection !== "All" || args.sectionLayout) return undefined;
+  const key = args.cardKey?.trim();
+  return key || undefined;
+}
+
+/** Person-profile exits: the mix has one search; sections keep their own. */
+export function votePersonListSearch(args: {
+  activeSection: string;
+  sectionLayout: boolean;
+  mixedSearch: string;
+  anchorHashId: string;
+  ratingSearch: string;
+  inductionSearch: string;
+  curateSearch: string;
+}): string {
+  if (args.activeSection === "All" && !args.sectionLayout) return args.mixedSearch;
+  if (args.anchorHashId === "vote-rating") return args.ratingSearch;
+  if (args.anchorHashId === "vote-induction") return args.inductionSearch;
+  if (args.anchorHashId === "vote-curate") return args.curateSearch;
+  return "";
+}
+
+/** Clamp a saved Vote hub offset to the document's current scroll range. */
+export function voteHubRestoreScrollTop(desired: number, maxScroll: number): number {
+  if (!Number.isFinite(desired) || desired <= 0) return 0;
+  const max = Number.isFinite(maxScroll) && maxScroll > 0 ? maxScroll : 0;
+  return Math.min(desired, max);
+}
+
+/**
+ * True while the saved offset is still below the fold because section cards
+ * have not finished loading. Callers retry until this is false or they time out.
+ */
+export function voteHubRestoreScrollPending(desired: number, maxScroll: number): boolean {
+  if (!Number.isFinite(desired) || desired <= 0) return false;
+  const max = Number.isFinite(maxScroll) && maxScroll > 0 ? maxScroll : 0;
+  return max + 8 < desired;
+}
+
 /** Scroll to a Vote hub section anchor without changing the URL hash (avoids filter sync). */
 export function scrollToVoteHubAnchor(anchorHashId: string, attempt = 0): void {
   const el = document.getElementById(anchorHashId);

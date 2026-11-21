@@ -138,6 +138,7 @@ import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHead
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
 import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
 import {
+  VOTE_ALL_SECTION_LAYOUT_QUERY,
   VOTE_SECTION_CUE_LABELS,
   applyVoteFeedFilters,
   interleaveVoteFeed,
@@ -163,9 +164,15 @@ import {
   navigateToPersonFromVoteHub,
   navigateWithVoteList,
   readVoteHubReturnState,
+  restoresMixedFeedCard,
   scrollToVoteHubAnchor,
-  writeVoteHubReturnState,
+  voteDetailFeedCardKey,
+  voteDetailListSearch,
+  voteHubRestoreScrollPending,
+  voteHubRestoreScrollTop,
   voteHubSearchSection,
+  votePersonListSearch,
+  writeVoteHubReturnState,
   type VoteHubReturnState,
   type VoteHubSearchSection,
 } from "@/lib/voteListNavigation";
@@ -1002,6 +1009,27 @@ function restoredSectionSearch(
   return voteHubSearchSection(state) === section ? state.listSearchQuery : "";
 }
 
+/** md and up. Initializes from matchMedia so the first paint is the right All layout. */
+function useVoteDesktopSectionLayout(): boolean {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia(VOTE_ALL_SECTION_LAYOUT_QUERY).matches;
+  });
+  useEffect(() => {
+    const media = window.matchMedia(VOTE_ALL_SECTION_LAYOUT_QUERY);
+    const apply = () => setMatches(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+  return matches;
+}
+
+function voteHubMaxScroll(): number {
+  if (typeof document === "undefined") return 0;
+  return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+}
+
 export default function VotePage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -1232,9 +1260,18 @@ export default function VotePage() {
     const section = voteHubReturn?.activeSection;
     return (section as SectionToggle) || "All";
   });
-  const [mixedFeedSearch, setMixedFeedSearch] = useState(() =>
-    voteHubReturn?.activeSection === "All" ? voteHubReturn.listSearchQuery ?? "" : "",
-  );
+  const [mixedFeedSearch, setMixedFeedSearch] = useState(() => {
+    if (voteHubReturn?.activeSection !== "All") return "";
+    // Desktop All restores each section's own search box, not the mix field.
+    if (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(VOTE_ALL_SECTION_LAYOUT_QUERY).matches
+    ) {
+      return "";
+    }
+    return voteHubReturn.listSearchQuery ?? "";
+  });
   const mixedFeedAnchorRef = useRef<string | null>(voteHubReturn?.feedCardKey ?? null);
   const [mixedFeedRestoreKey] = useState<string | null>(() => {
     if (voteHubReturn && voteHubReturn.activeSection !== "All") return null;
@@ -1333,6 +1370,10 @@ export default function VotePage() {
   const ratingScrollRef = useRef<HTMLDivElement>(null);
 
   const isMobile = useIsMobile();
+  const desktopSectionLayout = useVoteDesktopSectionLayout();
+  const desktopSectionLayoutRef = useRef(desktopSectionLayout);
+  desktopSectionLayoutRef.current = desktopSectionLayout;
+  const showDesktopAllSections = activeSection === "All" && desktopSectionLayout;
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
@@ -1355,7 +1396,7 @@ export default function VotePage() {
     setActiveSection(voteHubReturn.activeSection as SectionToggle);
     const searchSection = voteHubSearchSection(voteHubReturn);
     const query = voteHubReturn.listSearchQuery;
-    if (voteHubReturn.activeSection === "All" && query) {
+    if (voteHubReturn.activeSection === "All" && query && !desktopSectionLayoutRef.current) {
       setMixedFeedSearch(query);
     }
     if (searchSection && query) {
@@ -1366,22 +1407,52 @@ export default function VotePage() {
       else if (searchSection === "induction") setInductionSearchQuery(query);
       else setCurateSearchQuery(query);
     }
+    const restoreMixedFeed = restoresMixedFeedCard({
+      sectionLayout: desktopSectionLayoutRef.current,
+      activeSection: voteHubReturn.activeSection,
+      feedCardKey: voteHubReturn.feedCardKey,
+      storedCardKey: readVoteMixedFeedPlace()?.cardKey,
+    });
+    // The mixed feed mounts the saved card and scrolls it into view.
+    // A raw scrollY would clamp while only the first page of cards exists.
+    if (restoreMixedFeed) return;
+
+    const desired = voteHubReturn.scrollY ?? 0;
+    const settleSections =
+      desktopSectionLayoutRef.current && voteHubReturn.activeSection === "All" && desired > 0;
+    let cancelled = false;
+    const started = performance.now();
+    let lastApplied = -1;
+
     const runScroll = () => {
-      // The mixed feed mounts the saved card and scrolls it into view.
-      // A raw scrollY would clamp while only the first page of cards exists.
-      const restoreMixedFeed =
-        voteHubReturn.activeSection === "All" &&
-        !!(voteHubReturn.feedCardKey || readVoteMixedFeedPlace()?.cardKey);
-      if (restoreMixedFeed) return;
+      if (cancelled) return;
       // Prefer exact scrollY when available (person-profile Back, filtered sections).
       // Fall back to section anchor when scrollY is missing (legacy poll returns on "All").
-      if (voteHubReturn.scrollY != null && voteHubReturn.scrollY > 0) {
-        window.scrollTo(0, voteHubReturn.scrollY);
-      } else {
-        scrollToVoteHubAnchor(voteHubReturn.anchorHashId);
+      if (desired > 0) {
+        const top = voteHubRestoreScrollTop(desired, voteHubMaxScroll());
+        const userMoved = lastApplied >= 0 && Math.abs(window.scrollY - lastApplied) > 48;
+        if (userMoved) return;
+        if (Math.abs(window.scrollY - top) > 2) {
+          window.scrollTo(0, top);
+          lastApplied = top;
+        }
+        // Desktop All stacks every section, so the saved offset sits past the
+        // first paint until those cards finish loading.
+        if (
+          settleSections &&
+          voteHubRestoreScrollPending(desired, voteHubMaxScroll()) &&
+          performance.now() - started < 2500
+        ) {
+          requestAnimationFrame(runScroll);
+        }
+        return;
       }
+      scrollToVoteHubAnchor(voteHubReturn.anchorHashId);
     };
     requestAnimationFrame(() => requestAnimationFrame(runScroll));
+    return () => {
+      cancelled = true;
+    };
   }, [voteHubReturn]);
 
   useScrollToHash([activeSection]);
@@ -1906,8 +1977,18 @@ export default function VotePage() {
 
   const inductionVotesPending = !!user && myVotesFilter !== "all" && !inductionVotesFetched;
 
-  const stashMixedFeedReturn = useCallback(() => {
+  const stashMixedFeedReturn = useCallback((section?: { anchorHashId: string; listSearchQuery?: string }) => {
     if (activeSection !== "All") return;
+    if (desktopSectionLayout) {
+      const query = section?.listSearchQuery?.trim();
+      writeVoteHubReturnState({
+        activeSection: "All",
+        anchorHashId: section?.anchorHashId ?? "vote-sentiment",
+        scrollY: window.scrollY,
+        ...(query ? { listSearchQuery: section?.listSearchQuery } : {}),
+      });
+      return;
+    }
     const feedCardKey = mixedFeedAnchorRef.current ?? undefined;
     const query = mixedFeedSearch.trim();
     writeVoteHubReturnState({
@@ -1917,7 +1998,7 @@ export default function VotePage() {
       ...(query ? { listSearchQuery: mixedFeedSearch } : {}),
       ...(feedCardKey ? { feedCardKey } : {}),
     });
-  }, [activeSection, mixedFeedSearch]);
+  }, [activeSection, desktopSectionLayout, mixedFeedSearch]);
 
   const sentimentSlugList = useMemo(
     () => displayTopics.map((t: any) => sentimentPollVoteKey(t)).filter(Boolean) as string[],
@@ -1934,7 +2015,13 @@ export default function VotePage() {
 
   const goSentimentDetail = useCallback(
     (slug: string) => {
-      stashMixedFeedReturn();
+      const listSearchQuery = voteDetailListSearch({
+        activeSection,
+        sectionLayout: desktopSectionLayout,
+        mixedSearch: mixedFeedSearch,
+        sectionSearch: topicsSearchQuery,
+      });
+      stashMixedFeedReturn({ anchorHashId: "vote-sentiment", listSearchQuery });
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1942,17 +2029,27 @@ export default function VotePage() {
           slugs: sentimentSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: activeSection === "All" ? mixedFeedSearch : topicsSearchQuery,
-          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
+          listSearchQuery,
+          feedCardKey: voteDetailFeedCardKey({
+            activeSection,
+            sectionLayout: desktopSectionLayout,
+            cardKey: mixedFeedAnchorRef.current,
+          }),
         }),
         `/polls/${encodeURIComponent(slug)}`,
       );
     },
-    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
+    [sentimentSlugList, setLocation, activeSection, topicsSearchQuery, mixedFeedSearch, desktopSectionLayout, stashMixedFeedReturn],
   );
   const goMatchupDetail = useCallback(
     (slug: string) => {
-      stashMixedFeedReturn();
+      const listSearchQuery = voteDetailListSearch({
+        activeSection,
+        sectionLayout: desktopSectionLayout,
+        mixedSearch: mixedFeedSearch,
+        sectionSearch: matchupsSearchQuery,
+      });
+      stashMixedFeedReturn({ anchorHashId: "vote-matchups", listSearchQuery });
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1960,17 +2057,27 @@ export default function VotePage() {
           slugs: matchupSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: activeSection === "All" ? mixedFeedSearch : matchupsSearchQuery,
-          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
+          listSearchQuery,
+          feedCardKey: voteDetailFeedCardKey({
+            activeSection,
+            sectionLayout: desktopSectionLayout,
+            cardKey: mixedFeedAnchorRef.current,
+          }),
         }),
         `/vote/matchups/${encodeURIComponent(slug)}`,
       );
     },
-    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
+    [matchupSlugList, setLocation, activeSection, matchupsSearchQuery, mixedFeedSearch, desktopSectionLayout, stashMixedFeedReturn],
   );
   const goOpinionDetail = useCallback(
     (slug: string) => {
-      stashMixedFeedReturn();
+      const listSearchQuery = voteDetailListSearch({
+        activeSection,
+        sectionLayout: desktopSectionLayout,
+        mixedSearch: mixedFeedSearch,
+        sectionSearch: opinionPollsSearchQuery,
+      });
+      stashMixedFeedReturn({ anchorHashId: "vote-opinion", listSearchQuery });
       navigateWithVoteList(
         setLocation,
         buildVoteListState({
@@ -1978,13 +2085,17 @@ export default function VotePage() {
           slugs: opinionSlugList,
           currentSlug: slug,
           activeSection,
-          listSearchQuery: activeSection === "All" ? mixedFeedSearch : opinionPollsSearchQuery,
-          feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
+          listSearchQuery,
+          feedCardKey: voteDetailFeedCardKey({
+            activeSection,
+            sectionLayout: desktopSectionLayout,
+            cardKey: mixedFeedAnchorRef.current,
+          }),
         }),
         `/vote/opinion-polls/${encodeURIComponent(slug)}`,
       );
     },
-    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery, mixedFeedSearch, stashMixedFeedReturn],
+    [opinionSlugList, setLocation, activeSection, opinionPollsSearchQuery, mixedFeedSearch, desktopSectionLayout, stashMixedFeedReturn],
   );
 
   // Snap view always shows the full category chip row, so each snap source
@@ -2478,17 +2589,20 @@ export default function VotePage() {
         anchorHashId,
         activeSection,
         scrollY,
-        listSearchQuery:
-          activeSection === "All"
-            ? mixedFeedSearch
-            : anchorHashId === "vote-rating"
-              ? ratingSearchQuery
-              : anchorHashId === "vote-induction"
-                ? inductionSearchQuery
-                : anchorHashId === "vote-curate"
-                  ? curateSearchQuery
-                  : "",
-        feedCardKey: activeSection === "All" ? mixedFeedAnchorRef.current ?? undefined : undefined,
+        listSearchQuery: votePersonListSearch({
+          activeSection,
+          sectionLayout: desktopSectionLayout,
+          mixedSearch: mixedFeedSearch,
+          anchorHashId,
+          ratingSearch: ratingSearchQuery,
+          inductionSearch: inductionSearchQuery,
+          curateSearch: curateSearchQuery,
+        }),
+        feedCardKey: voteDetailFeedCardKey({
+          activeSection,
+          sectionLayout: desktopSectionLayout,
+          cardKey: mixedFeedAnchorRef.current,
+        }),
       });
     },
     [
@@ -2496,6 +2610,7 @@ export default function VotePage() {
       inductionOverlayOpen,
       ratingOverlayOpen,
       activeSection,
+      desktopSectionLayout,
       applyOverlayState,
       setLocation,
       ratingSearchQuery,
@@ -3058,6 +3173,98 @@ export default function VotePage() {
     }
   };
 
+  const overallRatingSection =
+    activeSection === "Overall Rating" || showDesktopAllSections ? (
+        <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
+          <UnifiedSectionHeader
+            title="Overall Rating"
+            titleAddon={<InfoHint term="approval" side="bottom" align="start" />}
+            subtitle="Community approval rating"
+            icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
+            accent="cyan"
+            testId="section-header-rating"
+            actions={
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRulesModalOpen("rating")}
+                      className="text-cyan-600 dark:text-cyan-400"
+                      data-testid="button-rules-rating"
+                    >
+                      <HelpCircle className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
+                    How it works
+                  </TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => openSnapScroll("rating", displayRatingCelebrities[0]?.id, "header-icon")}
+                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
+                  aria-label="Open immersive browse"
+                  data-testid="button-snap-rating"
+                >
+                  <Maximize2 className="h-5 w-5" aria-hidden />
+                </button>
+              </>
+            }
+          >
+            <SectionSearchRow
+              value={ratingSearchQuery}
+              onChange={setRatingSearchQuery}
+              placeholder="Search celebrities..."
+              testId="filter-rating-search"
+            />
+          </UnifiedSectionHeader>
+          
+          {ratingLoading ? (
+            <CardGridSkeleton count={3} />
+          ) : displayRatingCelebrities.length > 0 ? (
+            <CardSection ref={ratingSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
+              {displayRatingCelebrities.map((person) => (
+                <HideExitCard
+                  key={person.id}
+                  isMobile={isMobile}
+                  exiting={isHideExiting(`rating:${person.id}`)}
+                >
+                  <OverallRatingCard 
+                    person={person}
+                    onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
+                    onRated={() => beginShapeHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    enableDiscussion
+                  />
+                </HideExitCard>
+              ))}
+            </CardSection>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No celebrities match your filter criteria.
+            </div>
+          )}
+
+          <div className="text-center mt-2 md:mt-6">
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/vote/all-ratings")}
+              className="text-cyan-600 dark:text-cyan-400"
+              data-testid="button-view-all-rating"
+            >
+              View all ratings
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </section>
+    ) : null;
+
   return (
     <div className="min-h-screen overflow-x-clip pb-[calc(13.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
       <SiteHeader active="vote" logoVariant="vote" backButton="none" />
@@ -3132,9 +3339,14 @@ export default function VotePage() {
           </div>
         </div>
       </div>
-      <div className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]">
+      <div
+        className="container mx-auto px-2 sm:px-4 py-8 max-w-7xl pt-[5px] pb-[5px]"
+        data-vote-all-layout={
+          activeSection !== "All" ? undefined : desktopSectionLayout ? "sections" : "mixed"
+        }
+      >
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
-        {activeSection === "Sentiment Polls" && (
+        {(activeSection === "Sentiment Polls" || showDesktopAllSections) && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
           <UnifiedSectionHeader
             title="Sentiment Polls"
@@ -3241,7 +3453,7 @@ export default function VotePage() {
         )}
 
         {/* ZONE 1: Public Opinion - Matchups Section (Second) */}
-        {activeSection === "Matchups" && (
+        {(activeSection === "Matchups" || showDesktopAllSections) && (
         <section id="vote-matchups" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="Matchups"
@@ -3348,7 +3560,7 @@ export default function VotePage() {
         )}
 
         {/* ZONE 1.5: Opinion Polls - Multi-option community polls */}
-        {activeSection === "Opinion Polls" && (
+        {(activeSection === "Opinion Polls" || showDesktopAllSections) && (
         <section id="vote-opinion" data-hash-anchor className="mb-10 scroll-mt-32">
           <UnifiedSectionHeader
             title="Opinion Polls"
@@ -3452,7 +3664,7 @@ export default function VotePage() {
         </section>
         )}
 
-        {activeSection === "All" && (
+        {activeSection === "All" && !desktopSectionLayout && (
           <VoteMixedFeed
             items={mixedFeedEntries}
             loading={mixedFeedLoading}
@@ -3623,6 +3835,8 @@ export default function VotePage() {
           />
         )}
 
+        {showDesktopAllSections && overallRatingSection}
+
         {/* Shape the VoxDex: sticky splitter + Induction and Curate on All.
             Single-type chips keep the header with their own section. */}
         {(activeSection === "All" || isShapeVoxDexSection(activeSection)) && (
@@ -3636,96 +3850,7 @@ export default function VotePage() {
             }
           />
 
-        {activeSection === "Overall Rating" && (
-        <section id="vote-rating" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
-          <UnifiedSectionHeader
-            title="Overall Rating"
-            titleAddon={<InfoHint term="approval" side="bottom" align="start" />}
-            subtitle="Community approval rating"
-            icon={<ThumbsUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />}
-            accent="cyan"
-            testId="section-header-rating"
-            actions={
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setRulesModalOpen("rating")}
-                      className="text-cyan-600 dark:text-cyan-400"
-                      data-testid="button-rules-rating"
-                    >
-                      <HelpCircle className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-popover dark:bg-slate-900/95 border-border dark:border-slate-700 text-popover-foreground dark:text-slate-200 text-xs">
-                    How it works
-                  </TooltipContent>
-                </Tooltip>
-                <button
-                  type="button"
-                  onClick={() => openSnapScroll("rating", displayRatingCelebrities[0]?.id, "header-icon")}
-                  className="md:hidden inline-flex shrink-0 items-center justify-center rounded-md p-1 text-cyan-600 dark:text-cyan-400 transition-colors hover:text-cyan-500 dark:hover:text-cyan-300 hover:bg-muted/40 active:opacity-80"
-                  aria-label="Open immersive browse"
-                  data-testid="button-snap-rating"
-                >
-                  <Maximize2 className="h-5 w-5" aria-hidden />
-                </button>
-              </>
-            }
-          >
-            <SectionSearchRow
-              value={ratingSearchQuery}
-              onChange={setRatingSearchQuery}
-              placeholder="Search celebrities..."
-              testId="filter-rating-search"
-            />
-          </UnifiedSectionHeader>
-          
-          {ratingLoading ? (
-            <CardGridSkeleton count={3} />
-          ) : displayRatingCelebrities.length > 0 ? (
-            <CardSection ref={ratingSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
-              {displayRatingCelebrities.map((person) => (
-                <HideExitCard
-                  key={person.id}
-                  isMobile={isMobile}
-                  exiting={isHideExiting(`rating:${person.id}`)}
-                >
-                  <OverallRatingCard 
-                    person={person}
-                    onVisitProfile={() => goPersonFromVote(person.id, "vote-rating")}
-                    onFilterCategory={handleCategoryPillFilter}
-                    categoryRaceMap={raceMap}
-                    leaderboardCategories={leaderboardCats}
-                    onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
-                    onRated={() => beginShapeHideExit(`rating:${person.id}`)}
-                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
-                    enableDiscussion
-                  />
-                </HideExitCard>
-              ))}
-            </CardSection>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No celebrities match your filter criteria.
-            </div>
-          )}
-
-          <div className="text-center mt-2 md:mt-6">
-            <Button
-              variant="ghost"
-              onClick={() => setLocation("/vote/all-ratings")}
-              className="text-cyan-600 dark:text-cyan-400"
-              data-testid="button-view-all-rating"
-            >
-              View all ratings
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </section>
-        )}
+        {activeSection === "Overall Rating" && overallRatingSection}
 
         {/* Induction Queue */}
         {(activeSection === "All" || activeSection === "Induction Queue") && (

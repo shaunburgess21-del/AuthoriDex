@@ -18,6 +18,7 @@ import {
   planFeedRestore,
   scrollYForFeedCard,
   snapFeedWindow,
+  VOTE_ALL_SECTION_LAYOUT_QUERY,
   voteFeedSpan,
   writeVoteMixedFeedPlace,
   type VoteFeedKind,
@@ -25,7 +26,7 @@ import {
 } from "@/lib/voteMixedFeed";
 
 const MOBILE_ESTIMATE_PX = 640;
-const DESKTOP_BREAKPOINT = "(min-width: 768px)";
+const DESKTOP_BREAKPOINT = VOTE_ALL_SECTION_LAYOUT_QUERY;
 
 export interface VoteMixedFeedItem {
   key: string;
@@ -72,7 +73,8 @@ function stickyBottom(): number {
 }
 
 /**
- * One document-scrolled list for the All view.
+ * One document-scrolled list for the All view below md.
+ * Desktop All uses stacked sections and does not mount this list.
  * About 12 cards stay mounted. The page itself scrolls (no nested scroller),
  * which is what iOS Safari and WKWebView need for momentum scroll and lazy images.
  */
