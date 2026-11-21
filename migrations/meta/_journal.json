@@ -694,6 +694,13 @@
       "when": 1790985800000,
       "tag": "0104_private_profile_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1795300000000,
+      "tag": "0105_user_hidden_cards",
+      "breakpoints": true
     }
   ]
 }

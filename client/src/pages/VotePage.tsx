@@ -11,6 +11,7 @@ import {
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "@/lib/quickVoteHideVoted";
+import { useHiddenCardKeySet } from "@/hooks/useHideCard";
 import {
   INDUCTION_VOTES_QUERY_KEY,
   mergeInductionVotedIds,
@@ -2290,15 +2291,17 @@ export default function VotePage() {
 
   // Same membership rules as CurateSection (category helper, not the registry
   // matcher) so the activity-filter badge counts the cards that carousel shows.
+  const hiddenCardKeys = useHiddenCardKeySet();
   const filteredCurateCelebrities = useMemo(() => {
     const search = curateSearchQuery.trim().toLowerCase();
     return curateTrendingCelebrities.filter((p: any) => {
+      if (hiddenCardKeys.has(`curate_person:${p.id}`)) return false;
       const matchesSearch = !search || String(p.name ?? "").toLowerCase().includes(search);
       if (!matchesSearch) return false;
       if (globalCategoryFilter === "favorites") return favoriteIds.has(p.id);
       return matchesCategoryFilter(p.category, p.secondaryCategories, globalCategoryFilter);
     });
-  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearchQuery, favoriteIds]);
+  }, [curateTrendingCelebrities, globalCategoryFilter, curateSearchQuery, favoriteIds, hiddenCardKeys]);
 
   const myVotesCount = useMemo(() => {
     const matchupVoted = filteredMatchups.filter((m) => !!matchupUserVotes[m.id]).length;

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown, Share2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Filter, Trophy, Users, ExternalLink, Maximize2, ChevronDown, Share2, ThumbsUp, ThumbsDown, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { getMarketCategoryLabel, normalizeMarketCategory, type CardReactionType } from "@shared/constants";
 import { getCategoryStyle, CategoryPill } from "@/components/CategoryPill";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
 import { signInToVoteToastOptions } from "@/lib/signInToVoteToast";
+import { useHideCard } from "@/hooks/useHideCard";
 import {
   cardReactionKey,
   useCardReactionMutation,
@@ -99,6 +100,7 @@ function MenuItems({
   sharerUserId,
   reaction,
   onReact,
+  onHide,
   CloseWrapper,
 }: {
   label: string;
@@ -120,6 +122,8 @@ function MenuItems({
   reaction?: CardReactionType | null;
   /** When set, renders the "More/Less like this" row. */
   onReact?: (reaction: CardReactionType) => void;
+  /** When set, renders "Hide card" at the bottom of the menu. */
+  onHide?: () => void;
   CloseWrapper: React.ComponentType<{ children: React.ReactNode; asChild?: boolean }>;
 }) {
   const showLeaderboard = !leaderboardCategories || leaderboardCategories.has(normalizeMarketCategory(category));
@@ -261,6 +265,20 @@ function MenuItems({
           </CloseWrapper>
         </div>
       )}
+
+      {onHide && (
+        <CloseWrapper asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
+            onClick={onHide}
+            data-testid="menu-hide-card"
+          >
+            <EyeOff className="h-4 w-4 opacity-60 shrink-0" />
+            Hide card
+          </button>
+        </CloseWrapper>
+      )}
     </div>
   );
 }
@@ -306,6 +324,7 @@ export function InteractiveCategoryPill({
   const [, setLocation] = useLocation();
   const reactionsMap = useCardReactionsMap();
   const reactionMutation = useCardReactionMutation();
+  const hideCard = useHideCard();
   const style = getCategoryStyle(category, canonicalId);
   const sizeClass = SIZE_CLASSES[size];
   const label = displayLabel ?? getMarketCategoryLabel(category);
@@ -328,6 +347,22 @@ export function InteractiveCategoryPill({
           // Tapping the active reaction toggles it off.
           reaction: currentReaction === next ? null : next,
           category,
+        });
+      }
+    : undefined;
+
+  const handleHide = reactionTarget
+    ? () => {
+        if (!user) {
+          toast(
+            "Sign in to hide cards",
+            signInToVoteToastOptions(() => setLocation("/login")),
+          );
+          return;
+        }
+        hideCard.mutate({
+          cardType: reactionTarget.surfaceType,
+          cardId: reactionTarget.targetId,
         });
       }
     : undefined;
@@ -509,6 +544,7 @@ export function InteractiveCategoryPill({
               sharerUserId={user?.id}
               reaction={currentReaction}
               onReact={handleReact}
+              onHide={handleHide}
               onDetailNavigate={detailNavHandler}
               onBrowseIntentStart={(event) => {
                 if ("touches" in event) onBrowseTouchStart?.(event);
@@ -540,6 +576,7 @@ export function InteractiveCategoryPill({
           sharerUserId={user?.id}
           reaction={currentReaction}
           onReact={handleReact}
+          onHide={handleHide}
           onDetailNavigate={detailNavHandler}
           onBrowseIntentStart={(event) => {
             if ("touches" in event) onBrowseTouchStart?.(event);

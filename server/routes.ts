@@ -28,7 +28,7 @@ import {
 } from "./services/moderation";
 import { validateSuggestionPayload, SUGGESTION_TYPES } from "@shared/suggestionSchemas";
 import { normaliseSocialHandles, SOCIAL_HANDLE_KEYS } from "@shared/handleNormalise";
-import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
+import { eq, desc, and, gt, sql, count, gte, lte, ilike, SQL, or, inArray, notInArray, asc, lt, ne, isNotNull, isNull } from "drizzle-orm";
 import { seedSupabasePersons } from "./supabase-seed";
 import { supabaseServer } from "./supabase";
 import { requireAuth, requireAdmin, optionalAuth, type AuthRequest } from "./auth-middleware";
@@ -260,7 +260,14 @@ import { authCookieFlags, FDX_SID_COOKIE, readFdxSid } from "./lib/anonIdentity"
 import { consumeBudgetUnit, getBudgetStatus } from "./lib/anonBudget";
 import { anonVoteIpRateLimit } from "./middleware/anonRateLimit";
 import { isLikelyMatchupUuid, resolvePublicMatchupBySlugOrId } from "./utils/matchup-resolve";
-import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerUserBlockRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes, registerHelpChatRoutes } from "./route-modules";
+import { registerCronRoutes, registerPublicRoutes, registerGamificationRoutes, registerFavoritesRoutes, registerNotificationsRoutes, registerAdminNotificationsRoutes, registerAdminBrandingRoutes, registerOgRoutes, registerShareRoutes, registerBadgesRoutes, registerInsightsRoutes, registerVoicesRoutes, registerMeCommentsRoutes, registerUserBlockRoutes, registerFunnelRoutes, registerStarterMixRoutes, registerCardReactionsRoutes, registerHelpChatRoutes, registerHiddenCardRoutes } from "./route-modules";
+import {
+  filterFeedByHidden,
+  filterNativeMarkets,
+  filterWrappedFeed,
+  nativeHideCardType,
+} from "./services/hidden-cards";
+import { loadViewerHiddenCards } from "./services/hidden-cards-db";
 import { blockedAuthorSqlExclusion, omitBlockedAuthors } from "./services/user-blocks";
 import { blockedUserIdSet } from "./services/user-blocks-store";
 import { handleAuthHook } from "./emails/routes/auth-hook";
@@ -1368,6 +1375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerFunnelRoutes(app);
   registerStarterMixRoutes(app);
   registerCardReactionsRoutes(app);
+  registerHiddenCardRoutes(app);
   registerHelpChatRoutes(app);
 
   // ---- Supabase Send Email Auth Hook -------------------------------------
@@ -4624,7 +4632,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }),
       ];
 
-      res.json({ data, totalCount: data.length });
+      const hidden = await loadViewerHiddenCards(userId);
+      res.json(filterWrappedFeed({ data, totalCount: data.length }, hidden, "value_person"));
     } catch (error: any) {
       console.error("[overall-ratings GET] Error:", error);
       res.status(500).json({ error: "Failed to get overall ratings" });
@@ -6674,13 +6683,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Signed-in default: interests first, most-voted first inside each
       // bucket. No-op for cold-start users, who keep the manual order.
       const preferredCategories = await resolvePreferredCategoriesForUser(req);
-      res.json(sortByInterestThenVotes(
+      const rankedMatchups = sortByInterestThenVotes(
         matchupsWithVotes,
         preferredCategories,
         (m) => m.category,
         (m) => m.totalVotes,
         (m) => m.secondaryCategories,
-      ));
+      );
+      const hidden = await loadViewerHiddenCards(req.userId);
+      res.json(filterFeedByHidden(rankedMatchups, hidden, "matchup"));
     } catch (error: any) {
       console.error("Error fetching matchups:", error.message);
       res.status(500).json({ error: "Failed to fetch matchups" });
@@ -16192,13 +16203,15 @@ Target length: about 90-150 words.`;
       // Signed-in default: interests first, most-voted first inside each
       // bucket. No-op for cold-start users, who keep the manual order.
       const preferredCategories = await resolvePreferredCategoriesForUser(req as AuthRequest);
-      res.json(sortByInterestThenVotes(
+      const rankedPolls = sortByInterestThenVotes(
         result,
         preferredCategories,
         (p) => p.category,
         (p) => p.totalVotes,
         (p) => p.secondaryCategories,
-      ));
+      );
+      const hidden = await loadViewerHiddenCards((req as AuthRequest).userId);
+      res.json(filterFeedByHidden(rankedPolls, hidden, "sentiment_poll"));
     } catch (error: any) {
       console.error("Error fetching public trending polls:", error.message);
       res.status(500).json({ error: "Failed to fetch trending polls" });
@@ -17414,13 +17427,15 @@ Target length: about 90-150 words.`;
       // Signed-in default: interests first, most-voted first inside each
       // bucket. No-op for cold-start users, who keep the manual order.
       const preferredCategories = await resolvePreferredCategoriesForUser(req as AuthRequest);
-      res.json(sortByInterestThenVotes(
+      const rankedOpinionPolls = sortByInterestThenVotes(
         result,
         preferredCategories,
         (p) => p.category,
         (p) => p.totalVotes,
         (p) => p.secondaryCategories,
-      ));
+      );
+      const hidden = await loadViewerHiddenCards((req as AuthRequest).userId);
+      res.json(filterFeedByHidden(rankedOpinionPolls, hidden, "opinion_poll"));
     } catch (error: any) {
       console.error("Error fetching opinion polls:", error.message);
       res.status(500).json({ error: "Failed to fetch opinion polls" });
@@ -18654,6 +18669,14 @@ Target length: about 90-150 words.`;
 
       if (featured === "true") {
         conditions.push(eq(predictionMarkets.featured, true));
+      }
+
+      // Drop this viewer's hidden world markets before LIMIT so the page
+      // still fills. Anonymous viewers and a missing hide table add nothing.
+      const hidden = await loadViewerHiddenCards(req.userId);
+      const hiddenWorldIds = hidden.idsFor("market_world");
+      if (hiddenWorldIds.length > 0) {
+        conditions.push(notInArray(predictionMarkets.id, [...hiddenWorldIds]));
       }
 
       // Admin-controlled front-end sort (Predict CMS → World Markets).
@@ -22085,7 +22108,15 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         orderingKey = "global";
       }
 
-      res.json(await loadNativeMarkets({ type, orderTerms, orderingKey }));
+      const markets = await loadNativeMarkets({ type, orderTerms, orderingKey });
+      // Filter after the shared memo. Jackpot is not a hide surface, so it
+      // returns the memoized payload unchanged and does not read the hide table.
+      if (!nativeHideCardType(type)) {
+        res.json(markets);
+        return;
+      }
+      const hidden = await loadViewerHiddenCards(req.userId);
+      res.json(filterNativeMarkets(type, markets as Array<{ id: string }>, hidden));
     } catch (error: any) {
       console.error("Error fetching native markets:", error.message);
       res.status(500).json({ error: "Failed to fetch native markets" });
@@ -25289,7 +25320,8 @@ Write a single short, punchy tagline (max 12 words). Think newspaper sub-headlin
         ...candidate,
         commentCount: candidate.personId ? commentCountById.get(candidate.personId) ?? 0 : 0,
       }));
-      res.json({ data, totalCount: data.length });
+      const hidden = await loadViewerHiddenCards(req.userId);
+      res.json(filterWrappedFeed({ data, totalCount: data.length }, hidden, "induction_candidate"));
     } catch (error: any) {
       console.error("Error fetching induction candidates:", error);
       res.status(500).json({ error: "Failed to fetch induction candidates" });

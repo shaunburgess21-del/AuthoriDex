@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SiteHeader } from "@/components/SiteHeader";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
-import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, Lock, Flame, Award, MessageSquare } from "lucide-react";
+import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, EyeOff, Lock, Flame, Award, MessageSquare } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { navigateToLogin } from "@/lib/authReturn";
@@ -233,6 +233,15 @@ export default function MePage() {
                 >
                   <Star className="h-4 w-4" />
                   My Favorites
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-3"
+                  onClick={() => setLocation("/me/hidden")}
+                  data-testid="button-hidden-cards"
+                >
+                  <EyeOff className="h-4 w-4" />
+                  Hidden cards
                 </Button>
                 <Button 
                   variant="outline" 

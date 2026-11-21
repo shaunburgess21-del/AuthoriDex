@@ -2055,6 +2055,32 @@ export type UserBlock = typeof userBlocks.$inferSelect;
 export type InsertUserBlock = typeof userBlocks.$inferInsert;
 
 // ============================================================================
+// HIDDEN CARDS
+// One row per (user, card). Hides that card from the owner's feeds only.
+// card_type is one of CARD_REACTION_SURFACES. card_id is the entity id for
+// that surface (poll, matchup, person, or market). No FK: the id is polymorphic.
+// ============================================================================
+
+export const userHiddenCards = pgTable("user_hidden_cards", {
+  userId: varchar("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  cardType: text("card_type").notNull(),
+  cardId: text("card_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.cardType, table.cardId] }),
+  typeChk: check(
+    "user_hidden_cards_type_chk",
+    sql`${table.cardType} IN (${sql.join(
+      CARD_REACTION_SURFACES.map((surface) => sql`${surface}`),
+      sql`, `,
+    )})`,
+  ),
+}));
+
+export type UserHiddenCard = typeof userHiddenCards.$inferSelect;
+export type InsertUserHiddenCard = typeof userHiddenCards.$inferInsert;
+
+// ============================================================================
 // CONTENT MODERATION QUEUE (P0)
 // ============================================================================
 
