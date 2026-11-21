@@ -7,6 +7,7 @@ import {
   HIDE_HINT_COPY,
   HIDE_HINT_ENTER_RATIO,
   HIDE_HINT_FORCE_STORAGE_KEY,
+  HIDE_HINT_RECOMMENDATIONS_QUIET_MS,
   classifyHideHintIntersection,
   evaluateHideHintGate,
   hideHintTargetCard,
@@ -50,7 +51,7 @@ function input(
     search: "",
     hasHiddenCards: false,
     recommendationsOpen: false,
-    recommendationsShownThisSession: false,
+    recommendationsClosedAt: null,
     stores,
     ...overrides,
   };
@@ -160,14 +161,32 @@ describe("hide hint gate", () => {
     assert.equal(fromFlag.reason, "has-hidden");
   });
 
-  it("stays quiet while recommendations are open and after they showed this session", () => {
+  it("stays quiet while the recommendations drawer is open", () => {
     const { local, session } = returningStores();
     const open = evaluateHideHintGate(input({ local, session }, { recommendationsOpen: true }));
+    assert.equal(open.eligible, false);
     assert.equal(open.reason, "recommendations");
-    const shown = evaluateHideHintGate(
-      input({ local, session }, { recommendationsShownThisSession: true }),
+  });
+
+  it("stays quiet for about a minute after the drawer closes, then allows the hint", () => {
+    const { local, session } = returningStores();
+    const closedAt = 50_000;
+    const during = evaluateHideHintGate(
+      input({ local, session }, {
+        now: closedAt + HIDE_HINT_RECOMMENDATIONS_QUIET_MS - 1,
+        recommendationsClosedAt: closedAt,
+      }),
     );
-    assert.equal(shown.reason, "recommendations");
+    assert.equal(during.reason, "recommendations");
+
+    const after = evaluateHideHintGate(
+      input({ local, session }, {
+        now: closedAt + HIDE_HINT_RECOMMENDATIONS_QUIET_MS,
+        recommendationsClosedAt: closedAt,
+      }),
+    );
+    assert.equal(after.eligible, true);
+    assert.equal(after.reason, "eligible");
   });
 
   it("lets the testing override skip frequency, first session, and has-hidden", () => {
@@ -187,20 +206,39 @@ describe("hide hint gate", () => {
     assert.equal(byQuery.reason, "forced");
   });
 
-  it("still defers to the recommendations drawer when forced", () => {
+  it("still defers to the recommendations drawer when forced, but skips the quiet window", () => {
     const stores = freshStores();
     const blocked = evaluateHideHintGate(
       input(stores, { search: "?hint=hide", recommendationsOpen: true }),
     );
     assert.equal(blocked.eligible, false);
     assert.equal(blocked.reason, "recommendations");
+
+    const closedAt = 50_000;
+    const duringQuiet = evaluateHideHintGate(
+      input(freshStores(), {
+        search: "?hint=hide",
+        now: closedAt + 1_000,
+        recommendationsClosedAt: closedAt,
+      }),
+    );
+    assert.equal(duringQuiet.eligible, true);
+    assert.equal(duringQuiet.reason, "forced");
   });
 
-  it("keeps the recommendations session latch once it has been shown", () => {
+  it("records when the drawer closes and does not latch that for the rest of the page", () => {
     resetHideHintRecommendationsForTests();
-    setHideHintRecommendations({ open: true, shownThisSession: true });
-    setHideHintRecommendations({ open: false, shownThisSession: false });
-    assert.deepEqual(getHideHintRecommendations(), { open: false, shownThisSession: true });
+    setHideHintRecommendations({ open: true }, 1_000);
+    setHideHintRecommendations({ open: false }, 2_000);
+    assert.deepEqual(getHideHintRecommendations(), { open: false, closedAt: 2_000 });
+    // A later update that is still closed must not refresh the timestamp
+    // or stick a session-long flag.
+    setHideHintRecommendations({ open: false }, 9_000);
+    assert.deepEqual(getHideHintRecommendations(), { open: false, closedAt: 2_000 });
+    setHideHintRecommendations({ open: true }, 10_000);
+    assert.deepEqual(getHideHintRecommendations(), { open: true, closedAt: 2_000 });
+    setHideHintRecommendations({ open: false }, 11_000);
+    assert.deepEqual(getHideHintRecommendations(), { open: false, closedAt: 11_000 });
     resetHideHintRecommendationsForTests();
   });
 });

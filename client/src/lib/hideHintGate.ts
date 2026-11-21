@@ -4,10 +4,9 @@
  * Testing override (signed-in only, still waits for a qualifying card):
  *   ?hint=hide
  *   localStorage voxdex_force_hide_hint = "1"
- * The override skips the 7-day cooldown, the first-session gate, and the
- * "already hid a card" gate. It still stays quiet while the interests
- * prompt is open, and for the rest of the session after
- * "Want better recommendations?" has been shown.
+ * The override skips the 7-day cooldown, the first-session gate, the
+ * "already hid a card" gate, and the short quiet period after the
+ * interests drawer closes. It still stays quiet while that drawer is open.
  */
 
 export const HIDE_HINT_COPY = "Not your thing? Tap here to hide cards like this.";
@@ -22,6 +21,12 @@ export const HIDE_HINT_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** How long the bubble stays up before it fades, if nothing dismisses it. */
 export const HIDE_HINT_VISIBLE_MS = 4_000;
+
+/**
+ * After the interests drawer closes, keep the hint down briefly so it does
+ * not appear in the same breath. Forced mode skips this window.
+ */
+export const HIDE_HINT_RECOMMENDATIONS_QUIET_MS = 60_000;
 
 /** A card counts as seen once this much of it is inside the viewport. */
 export const HIDE_HINT_ENTER_RATIO = 0.4;
@@ -55,8 +60,8 @@ export interface HideHintGateInput {
   hasHiddenCards: boolean;
   /** Interests picker is currently open (either copy). */
   recommendationsOpen: boolean;
-  /** "Want better recommendations?" was shown earlier in this tab session. */
-  recommendationsShownThisSession: boolean;
+  /** When the interests drawer last closed, or null if it has not closed. */
+  recommendationsClosedAt: number | null;
   stores: HideHintStores;
 }
 
@@ -67,14 +72,16 @@ export interface HideHintGateResult {
 
 export interface HideHintRecommendationsState {
   open: boolean;
-  shownThisSession: boolean;
+  /** ms timestamp of the last open → closed transition, or null. */
+  closedAt: number | null;
 }
 
 const recommendationListeners = new Set<() => void>();
 let recommendations: HideHintRecommendationsState = {
   open: false,
-  shownThisSession: false,
+  closedAt: null,
 };
+let quietTimer: number | null = null;
 
 function firstSeenKey(userId: string): string {
   return `voxdex_hide_hint_first_seen:${userId}`;
@@ -190,10 +197,15 @@ export function evaluateHideHintGate(input: HideHintGateInput): HideHintGateResu
   const hidden =
     input.hasHiddenCards || readHideHintHasHiddenFlag(input.userId, input.stores.local);
 
-  if (input.recommendationsOpen || input.recommendationsShownThisSession) {
+  if (input.recommendationsOpen) {
     return { eligible: false, reason: "recommendations" };
   }
+  // Forced mode skips the post-close quiet window along with the other
+  // frequency gates. It still waits while the drawer is actually open.
   if (forced) return { eligible: true, reason: "forced" };
+  if (recommendationsRecentlyClosed(input)) {
+    return { eligible: false, reason: "recommendations" };
+  }
   if (hidden) return { eligible: false, reason: "has-hidden" };
   if (intro === "first") return { eligible: false, reason: "first-visit" };
   if (withinCooldown(input.userId, input.now, input.stores.local)) {
@@ -202,15 +214,40 @@ export function evaluateHideHintGate(input: HideHintGateInput): HideHintGateResu
   return { eligible: true, reason: "eligible" };
 }
 
-export function setHideHintRecommendations(next: HideHintRecommendationsState): void {
-  // shownThisSession sticks for the life of the page. A later profile
-  // refresh must not clear it and let the hint appear after the drawer.
-  const shownThisSession = recommendations.shownThisSession || next.shownThisSession;
-  if (recommendations.open === next.open && recommendations.shownThisSession === shownThisSession) {
+function recommendationsRecentlyClosed(input: HideHintGateInput): boolean {
+  if (input.recommendationsClosedAt == null) return false;
+  return input.now - input.recommendationsClosedAt < HIDE_HINT_RECOMMENDATIONS_QUIET_MS;
+}
+
+function clearQuietTimer(): void {
+  if (quietTimer == null) return;
+  window.clearTimeout(quietTimer);
+  quietTimer = null;
+}
+
+/** Notify listeners when the post-close quiet window ends, so a streak that is already met can show. */
+function armQuietTimer(now: number): void {
+  clearQuietTimer();
+  if (recommendations.open || recommendations.closedAt == null) return;
+  const remaining = HIDE_HINT_RECOMMENDATIONS_QUIET_MS - (now - recommendations.closedAt);
+  if (remaining <= 0 || typeof window === "undefined") return;
+  quietTimer = window.setTimeout(() => {
+    quietTimer = null;
+    recommendationListeners.forEach((listener) => listener());
+  }, remaining);
+}
+
+export function setHideHintRecommendations(next: { open: boolean }, now = Date.now()): void {
+  let closedAt = recommendations.closedAt;
+  if (recommendations.open && !next.open) {
+    closedAt = now;
+  }
+  if (recommendations.open === next.open && recommendations.closedAt === closedAt) {
     return;
   }
-  recommendations = { open: next.open, shownThisSession };
+  recommendations = { open: next.open, closedAt };
   recommendationListeners.forEach((listener) => listener());
+  armQuietTimer(now);
 }
 
 export function getHideHintRecommendations(): HideHintRecommendationsState {
@@ -225,7 +262,8 @@ export function subscribeHideHintRecommendations(listener: () => void): () => vo
 }
 
 export function resetHideHintRecommendationsForTests(): void {
-  recommendations = { open: false, shownThisSession: false };
+  clearQuietTimer();
+  recommendations = { open: false, closedAt: null };
   recommendationListeners.clear();
 }
 
