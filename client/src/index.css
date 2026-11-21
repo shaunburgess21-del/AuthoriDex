@@ -1382,17 +1382,20 @@
     --lb-row-tint: rgba(255, 255, 255, 0.04);
   }
 
-  /* Vote/Predict hub cards — leaderboard lip + expand on hover only (no resting border). */
+  /* Vote/Predict hub cards — leaderboard lip on fine-pointer hover.
+     The resting float (lighter surface, soft border, ambient + contact
+     shadow, 1px top highlight) is the HUB CARD ELEVATION block below.
+     It uses a heavier selector so per-card Tailwind utilities cannot
+     flatten the surface. */
   .hub-card-hover {
     position: relative;
     overflow: hidden;
     border: 1px solid transparent;
-    border-color: transparent;
     -webkit-tap-highlight-color: transparent;
     transition:
-      transform 0.2s ease-out,
-      border-color 0.2s ease-out,
-      box-shadow 0.2s ease-out;
+      transform 160ms ease-out,
+      border-color 160ms ease-out,
+      box-shadow 160ms ease-out;
   }
   .hub-card-hover::before {
     content: '';
@@ -1423,40 +1426,30 @@
   .hub-card-hover > *:not(.hub-card-surface) {
     z-index: 1;
   }
-  @media (hover: hover) {
-    .hub-card-hover:hover {
-      transform: translateY(-2px) scale(1.015);
-      border-color: var(--lb-row-border-hover);
-      box-shadow:
-        0 8px 30px -4px var(--lb-row-glow),
-        0 0 50px -10px var(--lb-row-glow-soft);
-    }
+  /* Lip + wash only. The 2px lift and shadow live in the elevation
+     block, gated to a fine pointer, so touch scroll never sticks a transform. */
+  @media (hover: hover) and (pointer: fine) {
     .hub-card-hover:hover::before,
     .hub-card-hover:hover::after {
       opacity: 1;
     }
   }
-  .hub-card-hover.hub-card-selected {
-    border-color: var(--lb-row-border-hover);
-    box-shadow:
-      0 8px 30px -4px var(--lb-row-glow),
-      0 0 50px -10px var(--lb-row-glow-soft);
-  }
   .hub-card-hover.hub-card-selected::before {
     opacity: 1;
   }
   @media (prefers-reduced-motion: reduce) {
-    .hub-card-hover:hover {
-      transform: none;
+    .hub-card-hover {
+      transition: none;
     }
   }
 
-  /* Grid slot wrapper — elevate hovered card above neighbors (mirrors BattleCard). */
+  /* Grid slot wrapper — raise the hovered card above neighbors.
+     Same pointer gate as the lift so a tap does not stick a new stacking context. */
   .hub-card-slot {
     position: relative;
     z-index: 0;
   }
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     .hub-card-slot:hover {
       z-index: 10;
     }
@@ -1527,6 +1520,87 @@
     --lb-row-tint: rgba(234, 88, 12, 0.06);
   }
 
+}
+
+/* ===== HUB CARD ELEVATION =====
+   Shared float for every vote and predict card on .hub-card-hover
+   (matchup, sentiment, opinion, ratings, up/down, head-to-head, gainer,
+   world). Selector weight beats per-card Tailwind utilities
+   (bg-card/80, shadow-none, md:shadow-sm, dark:bg-[#11151D]), which are
+   emitted later in the stylesheet.
+
+   Dark surface hsl(220 22% 11.5%) ≈ #171b24 is one step above the page
+   hsl(220 31% 6%) ≈ #0b0e14 and a hair above --card (#11151d).
+   Blur stays ≤ 28px. backdrop-filter is cleared: the fill is opaque, and
+   a blur on every feed card is wasted paint on mobile.
+   Inner panels (matchup images, option rows) are not this element, so
+   they do not pick up the shadow. */
+:root {
+  --hub-card-surface: hsl(0 0% 100%);
+  --hub-card-border: rgba(15, 23, 42, 0.08);
+  --hub-card-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 10px 22px -12px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --hub-card-shadow-hover:
+    0 2px 4px rgba(15, 23, 42, 0.08),
+    0 16px 28px -10px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --hub-card-shadow-selected:
+    0 2px 4px rgba(15, 23, 42, 0.08),
+    0 14px 26px -10px rgba(15, 23, 42, 0.18),
+    0 8px 24px -8px var(--lb-row-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.dark {
+  --hub-card-surface: hsl(220 22% 11.5%);
+  --hub-card-border: rgba(255, 255, 255, 0.06);
+  --hub-card-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 12px 24px -12px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --hub-card-shadow-hover:
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 16px 28px -10px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --hub-card-shadow-selected:
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 14px 26px -10px rgba(0, 0, 0, 0.6),
+    0 8px 24px -8px var(--lb-row-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* html + both classes beats later Tailwind utilities such as
+   .dark .dark\:shadow-none, .dark .dark\:bg-[#11151D], and .md\:shadow-sm.
+   Responsive utilities are emitted after this file, so a single class loses. */
+html .hub-card-hover.lb-row-neutral {
+  background-color: var(--hub-card-surface);
+  border-color: var(--hub-card-border);
+  box-shadow: var(--hub-card-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html .hub-card-hover.lb-row-neutral.hub-card-selected {
+  border-color: var(--lb-row-border-hover);
+  box-shadow: var(--hub-card-shadow-selected);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html .hub-card-hover.lb-row-neutral:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--hub-card-shadow-hover);
+  }
+  html .hub-card-hover.lb-row-neutral.hub-card-selected:hover {
+    box-shadow: var(--hub-card-shadow-selected);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html .hub-card-hover.lb-row-neutral:hover {
+    transform: none;
+  }
 }
 
 /* ===== JACKPOT HERO BACKGROUND ===== */
