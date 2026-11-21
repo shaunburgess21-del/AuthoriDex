@@ -147,7 +147,7 @@ function gateAllows(): boolean {
     search: typeof window !== "undefined" ? window.location.search : "",
     hasHiddenCards: viewerHasHidden(),
     recommendationsOpen: recommendations.open,
-    recommendationsShownThisSession: recommendations.shownThisSession,
+    recommendationsClosedAt: recommendations.closedAt,
     stores: { local: safeLocal, session: safeSession },
   });
   return result.eligible;

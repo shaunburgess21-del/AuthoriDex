@@ -37,6 +37,7 @@ import {
 import { registerNativeContentNavigator } from "@/lib/nativeDeepLinks";
 import { shouldShowCelebrationToasts } from "@/lib/onboarding-toasts";
 import { setHideHintRecommendations } from "@/lib/hideHintGate";
+import { shouldOpenInterestsPrompt } from "@/lib/interestsPrompt";
 import { StickyChromeFocusGuard } from "@/components/StickyChromeFocusGuard";
 
 if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
@@ -392,32 +393,21 @@ function NewUserGate() {
 }
 
 /**
- * Interest Picker — Phase 1 prompt + soft re-prompt gate.
+ * Interest Picker — first prompt and the "Want better recommendations?"
+ * re-prompt.
  *
- * Shows the InterestsPicker modal exactly when the user is on a
- * personalised-feed surface (/, /vote, /predict) AND we have a clear reason
- * to ask:
+ * Opens on a personalised-feed surface (/, /vote, /predict) when terms are
+ * accepted and `shouldOpenInterestsPrompt` says so:
  *
- *   * First-time prompt:
- *       tosAcceptedAt set, statedInterests empty, never dismissed.
+ *   * First-time: statedInterests empty, never dismissed. Opens immediately.
+ *   * Re-prompt: still empty, and the last dismiss is at least REPROMPT_DAYS
+ *     (2) old. Lifetime vote and prediction totals do not shorten that snooze.
+ *     Saving interests stops the prompt for good.
  *
- *   * Soft re-prompt (skippers only — once per browser tab):
- *       tosAcceptedAt set, statedInterests still empty, dismissed AT LEAST
- *       once, AND any of:
- *         - >= 2 days have passed since dismissal, OR
- *         - totalVotes >= 20, OR
- *         - totalPredictions >= 20.
- *
- * The "once per session" check uses an in-memory ref so we don't nag a user
- * who chose "Not now" again in the same tab; refreshing the tab is fine —
- * if the dismissed clock has rolled over again or they crossed an
- * engagement threshold, we earn another nudge.
+ * `repromptShownThisSession` stops a second open in the same document before
+ * the refreshed profile lands. A full load asks again only after the snooze.
  */
 const INTERESTS_GATE_ROUTES = new Set(["/", "/vote", "/predict"]);
-const REPROMPT_DAYS = 2;
-const REPROMPT_VOTE_THRESHOLD = 20;
-const REPROMPT_PREDICT_THRESHOLD = 20;
-const MS_PER_DAY = 86_400_000;
 
 function InterestsGate() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -433,48 +423,38 @@ function InterestsGate() {
   // Once-per-session re-prompt latch: prevents the modal from popping back up
   // immediately after the user closes it via Save / Skip in the same tab.
   const repromptShownThisSession = useRef(false);
-  const recommendationsMode = !!profile?.interestsPromptDismissedAt;
 
-  // Hide-card hint stays down while this drawer is open, and for the rest
-  // of the session after "Want better recommendations?" (reprompt) shows.
+  // Hide-card hint stays down while this drawer is open, and for about a
+  // minute after it closes. "Want better recommendations?" does not block
+  // the hint for the rest of the page.
   useEffect(() => {
-    const showing = open && hasOpened;
-    setHideHintRecommendations({
-      open: showing,
-      shownThisSession: recommendationsMode && (showing || repromptShownThisSession.current),
-    });
-  }, [open, hasOpened, recommendationsMode]);
+    setHideHintRecommendations({ open: open && hasOpened });
+  }, [open, hasOpened]);
 
   useEffect(() => {
     if (loading || profileLoading) return;
     if (!user || !profile) return;
     if (!profile.tosAcceptedAt) return;
     if (!INTERESTS_GATE_ROUTES.has(location)) return;
-    const interests = profile.statedInterests ?? [];
-    if (interests.length > 0) return;
 
-    const dismissedAt = profile.interestsPromptDismissedAt
+    const dismissedAtMs = profile.interestsPromptDismissedAt
       ? new Date(profile.interestsPromptDismissedAt).getTime()
       : null;
-
-    // First-time path: never dismissed, never picked. Open immediately.
-    if (dismissedAt === null) {
-      setOpen(true);
-      return;
-    }
-
-    if (repromptShownThisSession.current) return;
-
-    const daysSince = (Date.now() - dismissedAt) / MS_PER_DAY;
-    const meetsTime = daysSince >= REPROMPT_DAYS;
-    const meetsVotes = (profile.totalVotes ?? 0) >= REPROMPT_VOTE_THRESHOLD;
-    const meetsPredictions =
-      (profile.totalPredictions ?? 0) >= REPROMPT_PREDICT_THRESHOLD;
-
-    if (meetsTime || meetsVotes || meetsPredictions) {
+    const openPrompt = shouldOpenInterestsPrompt({
+      statedInterests: profile.statedInterests ?? [],
+      dismissedAtMs,
+      now: Date.now(),
+      shownThisSession: repromptShownThisSession.current,
+      totalVotes: profile.totalVotes ?? 0,
+      totalPredictions: profile.totalPredictions ?? 0,
+    });
+    if (!openPrompt) return;
+    // Re-prompt only. The first-time prompt has no dismiss timestamp, so a
+    // failed skip can still ask again on the next feed route.
+    if (dismissedAtMs !== null) {
       repromptShownThisSession.current = true;
-      setOpen(true);
     }
+    setOpen(true);
   }, [loading, profileLoading, user, profile, location]);
 
   if (!user || !profile || !profile.tosAcceptedAt) return null;

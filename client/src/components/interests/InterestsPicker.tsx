@@ -18,13 +18,14 @@
 //
 // Persistence:
 //   * Save  -> PATCH /api/profile/me/interests { interests: [...] }
-//   * Skip  -> PATCH /api/profile/me/interests { interests: [], dismissed: true }
+//   * Skip, drag/swipe down, or overlay tap
+//           -> PATCH /api/profile/me/interests { interests: [], dismissed: true }
 //
 // Saving an empty selection without `dismissed` is a "clear all" — used by
 // the Settings card. The server treats that as "no interests, not dismissed"
 // so cold-start ordering kicks back in.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
@@ -111,11 +112,14 @@ function PickerBody({
   defaultValue,
   onSaved,
   onClose,
+  onDismiss,
 }: {
   mode: InterestsPickerMode;
   defaultValue: string[];
   onSaved?: () => void;
   onClose?: () => void;
+  /** Skip / "Not now". Resolves after the dismissed PATCH, including on failure. */
+  onDismiss?: () => Promise<void>;
 }) {
   const { refreshProfile } = useAuth();
   const copy = MODE_COPY[mode];
@@ -204,26 +208,15 @@ function PickerBody({
   }, [selected, refreshProfile, mode, onSaved, onClose]);
 
   const handleSkip = useCallback(async () => {
+    if (!onDismiss) return;
     setSaving(true);
     try {
-      await apiRequest("PATCH", "/api/profile/me/interests", {
-        interests: [],
-        dismissed: true,
-      });
-      await refreshProfile();
-      onSaved?.();
-      onClose?.();
-    } catch (err) {
-      console.error("[InterestsPicker] skip failed:", err);
-      // Skip should never block the user — close anyway, but warn quietly.
-      toast.error("Couldn't dismiss the prompt", {
-        description: "We'll try again next time.",
-      });
+      await onDismiss();
       onClose?.();
     } finally {
       setSaving(false);
     }
-  }, [refreshProfile, onSaved, onClose]);
+  }, [onDismiss, onClose]);
 
   const showSkip = copy.skipLabel !== null;
 
@@ -366,6 +359,65 @@ export function InterestsPicker({
   onSaved,
 }: InterestsPickerProps) {
   const isMobile = useIsMobile();
+  const { refreshProfile } = useAuth();
+  // Set when Save closes the modal, so the drawer's close event does not
+  // follow a successful save with a dismiss PATCH (that would wipe the
+  // interests just stored). Cleared the next time the modal opens.
+  const suppressGestureDismiss = useRef(false);
+  const dismissInflight = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    if (open) suppressGestureDismiss.current = false;
+  }, [open]);
+
+  const persistDismiss = useCallback(() => {
+    if (dismissInflight.current) return dismissInflight.current;
+    const run = (async () => {
+      try {
+        await apiRequest("PATCH", "/api/profile/me/interests", {
+          interests: [],
+          dismissed: true,
+        });
+        await refreshProfile();
+        onSaved?.();
+      } catch (err) {
+        console.error("[InterestsPicker] skip failed:", err);
+        // Skip should never block the user — the caller still closes.
+        toast.error("Couldn't dismiss the prompt", {
+          description: "We'll try again next time.",
+        });
+      } finally {
+        dismissInflight.current = null;
+      }
+    })();
+    dismissInflight.current = run;
+    return run;
+  }, [refreshProfile, onSaved]);
+
+  const closeQuietly = useCallback(() => {
+    suppressGestureDismiss.current = true;
+    onOpenChange?.(false);
+  }, [onOpenChange]);
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) {
+        suppressGestureDismiss.current = false;
+        onOpenChange?.(true);
+        return;
+      }
+      if (suppressGestureDismiss.current) {
+        suppressGestureDismiss.current = false;
+        return;
+      }
+      // Drag, swipe, overlay, or Escape. Close immediately so the
+      // controlled drawer does not snap back, and persist the same
+      // dismissed:true PATCH as "Not now" / "Skip".
+      onOpenChange?.(false);
+      void persistDismiss();
+    },
+    [onOpenChange, persistDismiss],
+  );
 
   if (mode === "settings" || mode === "inline") {
     return (
@@ -377,11 +429,9 @@ export function InterestsPicker({
     );
   }
 
-  const handleClose = () => onOpenChange?.(false);
-
   if (isMobile) {
     return (
-      <Drawer open={!!open} onOpenChange={onOpenChange}>
+      <Drawer open={!!open} onOpenChange={handleOpenChange}>
         <DrawerContent className="max-h-[85vh] focus:outline-none">
           <DrawerTitle className="sr-only">{MODE_COPY[mode].title}</DrawerTitle>
           <DrawerDescription className="sr-only">
@@ -391,7 +441,8 @@ export function InterestsPicker({
             mode={mode}
             defaultValue={defaultValue}
             onSaved={onSaved}
-            onClose={handleClose}
+            onDismiss={persistDismiss}
+            onClose={closeQuietly}
           />
         </DrawerContent>
       </Drawer>
@@ -399,12 +450,12 @@ export function InterestsPicker({
   }
 
   return (
-    <Dialog open={!!open} onOpenChange={onOpenChange}>
+    <Dialog open={!!open} onOpenChange={handleOpenChange}>
       <DialogContent
         // [&>button]:hidden hides the default Radix close X (rendered as a
-        // direct-child <button> by shadcn's DialogContent). We render our
-        // own "Skip" button inside PickerBody so the action is explicit
-        // and routes through the dismissed PATCH instead of just closing.
+        // direct-child <button> by shadcn's DialogContent). Skip lives
+        // inside PickerBody, and overlay / Escape go through
+        // handleOpenChange, which persists the same dismissed PATCH.
         // Skip is nested inside PickerBody's <div>, so it isn't matched
         // by the direct-child selector.
         className="max-w-md gap-0 p-0 sm:max-w-lg [&>button]:hidden"
@@ -417,7 +468,8 @@ export function InterestsPicker({
           mode={mode}
           defaultValue={defaultValue}
           onSaved={onSaved}
-          onClose={handleClose}
+          onDismiss={persistDismiss}
+          onClose={closeQuietly}
         />
       </DialogContent>
     </Dialog>
