@@ -10,6 +10,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
 import { signInToVoteToastOptions } from "@/lib/signInToVoteToast";
 import { useHideCard } from "@/hooks/useHideCard";
+import { useHideHint } from "@/hooks/useHideHint";
+import { HideHintBubble, HideHintChipGlow } from "@/components/hide-hint/HideHintBubble";
 import {
   cardReactionKey,
   useCardReactionMutation,
@@ -322,6 +324,10 @@ export function InteractiveCategoryPill({
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const hideHint = useHideHint({
+    track: !menuDisabled && !!reactionTarget,
+    cardId: reactionTarget ? `${reactionTarget.surfaceType}:${reactionTarget.targetId}` : null,
+  });
   const reactionsMap = useCardReactionsMap();
   const reactionMutation = useCardReactionMutation();
   const hideCard = useHideCard();
@@ -382,11 +388,12 @@ export function InteractiveCategoryPill({
 
   const pillButton = (
     <button
+      ref={hideHint.setChipElement}
       type="button"
       aria-label={`${label}, more options`}
       aria-haspopup="menu"
       aria-expanded={open}
-      className={`group inline-flex items-center gap-0.5 ${CATEGORY_CHIP_RADIUS} border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer bg-transparent ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
+      className={`group relative inline-flex items-center gap-0.5 ${CATEGORY_CHIP_RADIUS} border w-fit whitespace-nowrap transition-all duration-200 hover:opacity-80 cursor-pointer bg-transparent ${sizeClass} ${style.bg} ${style.border} ${style.text} ${className}`}
       data-testid={testId}
     >
       <span className="truncate">{label}</span>
@@ -398,6 +405,10 @@ export function InteractiveCategoryPill({
           open && "rotate-180 opacity-75",
         )}
       />
+      {hideHint.showHint && <HideHintChipGlow />}
+      {hideHint.showHint && hideHint.chipElement && (
+        <HideHintBubble anchor={hideHint.chipElement} onDone={hideHint.dismissHint} />
+      )}
     </button>
   );
 

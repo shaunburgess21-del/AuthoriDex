@@ -1,4 +1,5 @@
 import { toast, type ExternalToast } from "sonner";
+import { noteHideHintVote } from "@/lib/hideHintSignals";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
@@ -102,6 +103,7 @@ export function showVoteToast(
   title: string,
   options?: ExternalToast,
 ): string | number {
+  noteHideHintVote();
   return toast(title, {
     ...options,
     icon: <VoteToastChip kind={kind} />,
