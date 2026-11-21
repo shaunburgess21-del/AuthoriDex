@@ -51,6 +51,7 @@ import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
 import { navigateToLogin, type VoteResumePayload } from "@/lib/authReturn";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
+import { sentimentPollVoteKey } from "@shared/lib/sentiment-poll-vote-target";
 import { apiRequest } from "@/lib/queryClient";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { useAuth } from "@/contexts/AuthContext";
@@ -744,12 +745,16 @@ export function QuickVoteOverlay({ open, onClose, initialCardId, source }: Quick
         });
         throw new VoteGateRedirectError();
       }
+      const voteKey = sentimentPollVoteKey(topic);
+      if (!voteKey) {
+        throw new Error("This poll is no longer available.");
+      }
       const optimisticBurst = !!user && !topic.userVote;
       if (optimisticBurst) {
         triggerXpBurst(OPTIMISTIC_VOTE_XP, undefined, "Vote");
       }
       await sentimentVoteMutation.mutateAsync({
-        slug: topic.slug,
+        slug: voteKey,
         choice,
         topicId: topic.id,
         hadPreviousVote: !!topic.userVote,

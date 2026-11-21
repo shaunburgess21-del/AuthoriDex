@@ -167,6 +167,7 @@ import {
   type VoteHubSearchSection,
 } from "@/lib/voteListNavigation";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
+import { sentimentPollVoteKey } from "@shared/lib/sentiment-poll-vote-target";
 import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
@@ -1897,7 +1898,7 @@ export default function VotePage() {
   const inductionVotesPending = !!user && myVotesFilter !== "all" && !inductionVotesFetched;
 
   const sentimentSlugList = useMemo(
-    () => displayTopics.map((t: any) => t.slug).filter(Boolean) as string[],
+    () => displayTopics.map((t: any) => sentimentPollVoteKey(t)).filter(Boolean) as string[],
     [displayTopics],
   );
   const matchupSlugList = useMemo(
@@ -2673,8 +2674,9 @@ export default function VotePage() {
       throw new VoteGateRedirectError();
     }
     const topic = dbPolls.find((t: any) => t.id === topicId);
-    if (!topic?.slug) {
-      throw new Error("Topic not found");
+    const voteKey = topic ? sentimentPollVoteKey(topic) : "";
+    if (!topic || !voteKey) {
+      throw new Error("This poll is no longer available.");
     }
     const wasFirstVote = !topic.userVote;
     const optimisticFeedbackShown = showOptimisticVoteFeedback(
@@ -2686,7 +2688,7 @@ export default function VotePage() {
         : "Your Sentiment Poll vote has been updated.",
       "Sentiment Vote",
     ) && wasFirstVote;
-    await discourseVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId, optimisticFeedbackShown });
+    await discourseVoteMutation.mutateAsync({ slug: voteKey, choice, topicId, optimisticFeedbackShown });
     if (myVotesFilter === "hide-mine") {
       beginHideExit(`sentiment:${topicId}`);
     }
@@ -3136,7 +3138,11 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
+                    onNavigateToPollDetail={
+                      sentimentPollVoteKey(topic)
+                        ? () => goSentimentDetail(sentimentPollVoteKey(topic))
+                        : undefined
+                    }
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
                     enableDiscussion
                   />
@@ -3473,10 +3479,10 @@ export default function VotePage() {
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
                       onNavigateToPollDetail={
-                        topic.slug
+                        sentimentPollVoteKey(topic)
                           ? () => {
                               pinMixedFeedCard(entry.key);
-                              goSentimentDetail(topic.slug);
+                              goSentimentDetail(sentimentPollVoteKey(topic));
                             }
                           : undefined
                       }
@@ -4421,7 +4427,11 @@ export default function VotePage() {
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
-                    onNavigateToPollDetail={topic.slug ? () => goSentimentDetail(topic.slug) : undefined}
+                    onNavigateToPollDetail={
+                      sentimentPollVoteKey(topic)
+                        ? () => goSentimentDetail(sentimentPollVoteKey(topic))
+                        : undefined
+                    }
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("sentiment", topic.id, "browse-button") : undefined}
                     enableDiscussion
                   />
@@ -4680,7 +4690,11 @@ export default function VotePage() {
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
-                  onNavigateToPollDetail={t.slug ? () => goSentimentDetail(t.slug) : undefined}
+                  onNavigateToPollDetail={
+                    sentimentPollVoteKey(t)
+                      ? () => goSentimentDetail(sentimentPollVoteKey(t))
+                      : undefined
+                  }
                   categoryMenuDisabled
                 />
               );

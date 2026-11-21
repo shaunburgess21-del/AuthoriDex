@@ -21,6 +21,8 @@ import {
   getSentimentPollChoiceLabel,
   getSentimentPollVotedPillStyle,
 } from "@/lib/sentimentPollVoteDisplay";
+import { sentimentPollVoteKey } from "@shared/lib/sentiment-poll-vote-target";
+import { toastUnhandledSentimentVoteError } from "@/lib/sentimentVoteFailure";
 
 export function DiscourseCard({
   topic,
@@ -56,7 +58,9 @@ export function DiscourseCard({
   const [voted, setVoted] = useState<'agree' | 'neutral' | 'disagree' | null>(topic.userVote || null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [discussionOpen, setDiscussionOpen] = useState(false);
-  const showDiscussion = enableDiscussion && !!topic.slug;
+  // Blank slugs still have an id. Comments and the detail page resolve either key.
+  const pollKey = sentimentPollVoteKey(topic);
+  const showDiscussion = enableDiscussion && !!pollKey;
 
   useEffect(() => {
     setVoted(topic.userVote ?? null);
@@ -85,8 +89,9 @@ export function DiscourseCard({
     setVoted(choice);
     try {
       await onVote(choice);
-    } catch {
+    } catch (err) {
       setVoted(prev);
+      toastUnhandledSentimentVoteError(err);
     }
   };
 
@@ -124,11 +129,11 @@ export function DiscourseCard({
           category={topic.category}
           onFilter={() => onFilterCategory(topic.category)}
           leaderboardCategories={leaderboardCategories}
-          detailHref={topic.slug ? `/polls/${topic.slug}` : undefined}
+          detailHref={pollKey ? `/polls/${pollKey}` : undefined}
           detailOnNavigate={onNavigateToPollDetail}
           detailLabel="View Poll Details"
           onBrowseFullScreen={onBrowseFullScreen}
-          share={topic.slug ? sentimentPollShare(topic.slug, topic.headline) : undefined}
+          share={pollKey ? sentimentPollShare(pollKey, topic.headline) : undefined}
           reactionTarget={{ surfaceType: "sentiment_poll", targetId: String(topic.id) }}
           menuDisabled={categoryMenuDisabled}
           size="pollCard"
@@ -139,9 +144,9 @@ export function DiscourseCard({
         className="mb-3"
         text={topic.headline}
         serif={false}
-        href={onNavigateToPollDetail ? undefined : topic.slug ? `/polls/${topic.slug}` : undefined}
+        href={onNavigateToPollDetail ? undefined : pollKey ? `/polls/${pollKey}` : undefined}
         onTitleNavigate={onNavigateToPollDetail}
-        linkTestId={topic.slug ? `link-poll-detail-${topic.id}` : undefined}
+        linkTestId={pollKey ? `link-poll-detail-${topic.id}` : undefined}
         avatar={
           currentImgSrc ? (
             <div
@@ -168,12 +173,12 @@ export function DiscourseCard({
         }
       />
       {topic.subjectText && (
-        topic.slug && onNavigateToPollDetail ? (
+        pollKey && onNavigateToPollDetail ? (
           <button type="button" onClick={onNavigateToPollDetail} className="block mb-4 w-full text-left">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
           </button>
-        ) : topic.slug ? (
-          <Link href={`/polls/${topic.slug}`} className="block mb-4">
+        ) : pollKey ? (
+          <Link href={`/polls/${pollKey}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.subjectText}</p>
           </Link>
         ) : (
@@ -181,12 +186,12 @@ export function DiscourseCard({
         )
       )}
       {!topic.subjectText && topic.description && (
-        topic.slug && onNavigateToPollDetail ? (
+        pollKey && onNavigateToPollDetail ? (
           <button type="button" onClick={onNavigateToPollDetail} className="block mb-4 w-full text-left">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.description}</p>
           </button>
-        ) : topic.slug ? (
-          <Link href={`/polls/${topic.slug}`} className="block mb-4">
+        ) : pollKey ? (
+          <Link href={`/polls/${pollKey}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">{topic.description}</p>
           </Link>
         ) : (
@@ -283,7 +288,7 @@ export function DiscourseCard({
               ) : null}
             </div>
             <div className="flex-1 min-w-0 flex items-center justify-center">
-              {topic.slug &&
+              {pollKey &&
                 (onNavigateToPollDetail ? (
                   <button
                     type="button"
@@ -295,7 +300,7 @@ export function DiscourseCard({
                   </button>
                 ) : (
                   <Link
-                    href={`/polls/${topic.slug}`}
+                    href={`/polls/${pollKey}`}
                     className="text-xs text-cyan-600 dark:text-cyan-400 transition-colors underline-offset-4 hover:underline inline-block"
                     data-testid={`link-poll-view-more-${topic.id}`}
                   >
@@ -322,12 +327,12 @@ export function DiscourseCard({
       alt={topic.personName || topic.headline}
       onClose={() => setExpandedImage(null)}
     />
-    {showDiscussion && topic.slug ? (
+    {showDiscussion && pollKey ? (
       <CardCommentsFocusOverlay
         open={discussionOpen}
         onClose={() => setDiscussionOpen(false)}
         entityType="poll"
-        slug={topic.slug}
+        slug={pollKey}
         contextTitle={topic.headline}
       />
     ) : null}

@@ -73,6 +73,8 @@ import { navigateToLogin } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError, parseVoteError } from "@/lib/voteErrors";
+import { sentimentPollVoteKey } from "@shared/lib/sentiment-poll-vote-target";
+import { toastUnhandledSentimentVoteError } from "@/lib/sentimentVoteFailure";
 import {
   getSentimentPollChoiceColor,
   getSentimentPollChoiceLabel,
@@ -398,7 +400,8 @@ function FeaturedPollCard({
   const [voted, setVoted] = useState<"agree" | "neutral" | "disagree" | null>(poll.userVote ?? null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [discussionOpen, setDiscussionOpen] = useState(false);
-  const showDiscussion = enableDiscussion && !!poll.slug;
+  const pollKey = sentimentPollVoteKey(poll);
+  const showDiscussion = enableDiscussion && !!pollKey;
   const imgSources = [poll.personAvatar, poll.imageUrl].filter(Boolean) as string[];
   const [imgIdx, setImgIdx] = useState(0);
 
@@ -426,8 +429,9 @@ function FeaturedPollCard({
     setVoted(choice);
     try {
       await onVote(choice);
-    } catch {
+    } catch (err) {
       setVoted(prev);
+      toastUnhandledSentimentVoteError(err);
     }
   };
 
@@ -435,14 +439,14 @@ function FeaturedPollCard({
     setVoted(null);
   };
 
-  const pollDetailHref = poll.slug ? `/polls/${poll.slug}` : undefined;
+  const pollDetailHref = pollKey ? `/polls/${pollKey}` : undefined;
   const raceMarketId = categoryRaceMap.get(normalizeMarketCategory(poll.category)) ?? undefined;
 
   const bodyCopy = (
     <>
       {poll.subjectText && (
-        poll.slug ? (
-          <Link href={`/polls/${poll.slug}`} className="block mb-4">
+        pollKey ? (
+          <Link href={`/polls/${pollKey}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
               {poll.subjectText}
             </p>
@@ -452,8 +456,8 @@ function FeaturedPollCard({
         )
       )}
       {!poll.subjectText && poll.description && (
-        poll.slug ? (
-          <Link href={`/polls/${poll.slug}`} className="block mb-4">
+        pollKey ? (
+          <Link href={`/polls/${pollKey}`} className="block mb-4">
             <p className="text-[17px] md:text-[16px] leading-[1.5] md:leading-[1.4] text-muted-foreground line-clamp-2 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
               {poll.description}
             </p>
@@ -492,7 +496,7 @@ function FeaturedPollCard({
           text={poll.headline}
           serif={false}
           href={pollDetailHref}
-          linkTestId={poll.slug ? `link-poll-detail-${poll.id}` : undefined}
+          linkTestId={pollKey ? `link-poll-detail-${poll.id}` : undefined}
           avatar={
             currentImgSrc ? (
               <div
@@ -642,12 +646,12 @@ function FeaturedPollCard({
         onClose={() => setExpandedImage(null)}
         zIndexClass="z-50"
       />
-      {showDiscussion && poll.slug ? (
+      {showDiscussion && pollKey ? (
         <CardCommentsFocusOverlay
           open={discussionOpen}
           onClose={() => setDiscussionOpen(false)}
           entityType="poll"
-          slug={poll.slug}
+          slug={pollKey}
           contextTitle={poll.headline}
         />
       ) : null}
@@ -1221,11 +1225,12 @@ export default function PersonDetailPage() {
       throw new VoteGateRedirectError();
     }
     const topic = trendingPolls.find((t) => t.id === topicId);
-    if (!topic?.slug) {
-      throw new Error("Topic not found");
+    const voteKey = topic ? sentimentPollVoteKey(topic) : "";
+    if (!topic || !voteKey) {
+      throw new Error("This poll is no longer available.");
     }
     showVoteToast("sentiment", "Vote recorded!", { description: "Your Sentiment Poll vote has been counted." });
-    await sentimentVoteMutation.mutateAsync({ slug: topic.slug, choice, topicId });
+    await sentimentVoteMutation.mutateAsync({ slug: voteKey, choice, topicId });
   };
 
   const { data: trendingPolls = [], isLoading: sentimentPollsLoading } = useQuery<TrendingPoll[]>({

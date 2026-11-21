@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { sentimentPollIdFallback } from "@shared/lib/sentiment-poll-vote-target";
 import { db } from "../db";
 import { trackedPeople, trendingPolls } from "@shared/schema";
 import {
@@ -24,32 +25,46 @@ export async function loadSentimentPollOgContext(
   const slug = decodeURIComponent(rawSlug).trim();
   if (!slug) return null;
 
-  const [row] = await db
-    .select({
-      headline: trendingPolls.headline,
-      subjectText: trendingPolls.subjectText,
-      description: trendingPolls.description,
-      imageUrl: trendingPolls.imageUrl,
-      category: trendingPolls.category,
-      pollSlug: trendingPolls.slug,
-      visibleCountries: trendingPolls.visibleCountries,
-      personAvatar: trackedPeople.avatar,
-    })
+  const columns = {
+    headline: trendingPolls.headline,
+    subjectText: trendingPolls.subjectText,
+    description: trendingPolls.description,
+    imageUrl: trendingPolls.imageUrl,
+    category: trendingPolls.category,
+    pollSlug: trendingPolls.slug,
+    visibleCountries: trendingPolls.visibleCountries,
+    personAvatar: trackedPeople.avatar,
+  };
+  let [row] = await db
+    .select(columns)
     .from(trendingPolls)
     .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
     .where(eq(trendingPolls.slug, slug))
     .limit(1);
+  const idFallback = sentimentPollIdFallback(slug);
+  if (!row && idFallback) {
+    [row] = await db
+      .select(columns)
+      .from(trendingPolls)
+      .leftJoin(trackedPeople, eq(trendingPolls.personId, trackedPeople.id))
+      .where(eq(trendingPolls.id, idFallback))
+      .limit(1);
+  }
 
   if (!row) return null;
 
-  const effectiveSlug = row.pollSlug || slugifySentimentPollHeadline(row.headline);
+  const storedSlug = row.pollSlug?.trim() || "";
+  // Image files follow the headline slug. The public URL must stay on a key
+  // that actually resolves (the stored slug, or the id when slug is blank).
+  const effectiveSlug = storedSlug || slugifySentimentPollHeadline(row.headline);
+  const publicSlug = storedSlug || slug;
   let imageUrl = resolveSentimentPollImageUrl(row.imageUrl, effectiveSlug);
   if (!imageUrl && row.personAvatar) {
     imageUrl = row.personAvatar;
   }
 
   return {
-    slug: effectiveSlug,
+    slug: publicSlug,
     headline: row.headline,
     subjectText: row.subjectText,
     description: row.description,
