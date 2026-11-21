@@ -560,7 +560,7 @@ export const LeaderboardRow = memo(function LeaderboardRow({
                 </span>
               </TouchTooltip>
             </div>
-            <div className="flex">
+            <div className="hidden md:flex">
               <LeaderboardYourVoteCell
                 person={person}
                 sentimentScore={sentimentScore}
