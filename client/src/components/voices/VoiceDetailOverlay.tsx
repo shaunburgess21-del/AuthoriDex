@@ -115,9 +115,9 @@ function InsightOverlay({ item, onClose }: { item: VoicesFeedItem; onClose: () =
       return res.json();
     },
     onSuccess: () => {
+      toast.success("Post deleted");
       setDeleted(true);
       removeDeletedVoicesPost(queryClient, item.id);
-      toast.success("Post deleted");
       onClose();
     },
     onError: (err) => {

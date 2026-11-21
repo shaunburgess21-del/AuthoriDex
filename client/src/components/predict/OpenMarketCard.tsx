@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Drawer } from "vaul";
+import { releaseStickyChromeOnOpen } from "@/lib/stickyChromeFocus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -978,6 +979,7 @@ function MultiMarketCard({
             className="fixed inset-x-0 bottom-0 z-[70] flex flex-col rounded-t-2xl border-t border-border/50 bg-background max-h-[85dvh]"
             data-interactive="true"
             data-testid={`multi-market-options-drawer-${market.slug}`}
+            onOpenAutoFocus={releaseStickyChromeOnOpen}
           >
             <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
             <div className="flex items-center justify-between px-4 pb-2">

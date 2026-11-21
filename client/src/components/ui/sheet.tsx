@@ -6,6 +6,10 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+  releaseStickyChromeOnClose,
+  releaseStickyChromeOnOpen,
+} from "@/lib/stickyChromeFocus"
 
 const Sheet = SheetPrimitive.Root
 
@@ -56,11 +60,19 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
+      onOpenAutoFocus={(event) => {
+        onOpenAutoFocus?.(event);
+        releaseStickyChromeOnOpen(event);
+      }}
+      onCloseAutoFocus={(event) => {
+        releaseStickyChromeOnClose();
+        onCloseAutoFocus?.(event);
+      }}
       className={cn(
         sheetVariants({ side }),
         className,

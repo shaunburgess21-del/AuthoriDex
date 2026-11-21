@@ -4,6 +4,10 @@ import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
+import {
+  releaseStickyChromeOnClose,
+  releaseStickyChromeOnOpen,
+} from "@/lib/stickyChromeFocus"
 
 const Drawer = ({
   shouldScaleBackground = true,
@@ -41,11 +45,19 @@ type DrawerContentProps = React.ComponentPropsWithoutRef<typeof DrawerPrimitive.
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
   DrawerContentProps
->(({ className, children, overlayProps, ...props }, ref) => (
+>(({ className, children, overlayProps, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => (
   <DrawerPortal>
     <DrawerOverlay {...overlayProps} />
     <DrawerPrimitive.Content
       ref={ref}
+      onOpenAutoFocus={(event) => {
+        onOpenAutoFocus?.(event);
+        releaseStickyChromeOnOpen(event);
+      }}
+      onCloseAutoFocus={(event) => {
+        releaseStickyChromeOnClose();
+        onCloseAutoFocus?.(event);
+      }}
       className={cn(
         "fixed inset-x-0 bottom-0 z-[70] mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
         // Zero-height flex spacer when the inset variable is unset.

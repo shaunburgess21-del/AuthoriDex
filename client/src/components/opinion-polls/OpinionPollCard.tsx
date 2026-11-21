@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { ChevronDown, Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
 import { Drawer } from "vaul";
+import { releaseStickyChromeOnOpen } from "@/lib/stickyChromeFocus";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
@@ -547,6 +548,7 @@ export function OpinionPollCard({
             }`}
             data-interactive="true"
             data-testid={`opinion-poll-options-drawer-${poll.id}`}
+            onOpenAutoFocus={releaseStickyChromeOnOpen}
           >
             <div className="mx-auto mt-3 mb-2 h-1.5 w-16 rounded-full bg-muted-foreground/60" />
             <div className="px-4 pb-2">

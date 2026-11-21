@@ -5,7 +5,7 @@
  * each tap, then collapses to a dim eye — the same recede as the Quick Vote pill.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, useAnimationControls } from "framer-motion";
+import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCornerPillIntro } from "@/lib/cornerPillIntro";
@@ -93,7 +93,26 @@ export function VoteActivityFilterFab({
   const testId = scope === "predict" ? "predict-activity-filter-fab" : "vote-activity-filter-fab";
 
   return (
-    <motion.div animate={pulse} className="relative">
+    <motion.div animate={pulse} className="relative flex flex-col items-end">
+      {/* Sibling of the eye, not a child. backdrop-blur on the button clips
+          anything positioned outside its rounded box, which hid this pill. */}
+      <AnimatePresence initial={false}>
+        {labelVisible && (
+          <motion.span
+            key="activity-filter-label"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="pointer-events-none mb-2 whitespace-nowrap rounded-full border border-white/15 bg-black/70 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-lg"
+            aria-hidden
+            data-testid={`${testId}-label`}
+          >
+            {label}
+          </motion.span>
+        )}
+      </AnimatePresence>
+      <div className="relative">
       <motion.button
         type="button"
         onClick={onCycle}
@@ -119,19 +138,6 @@ export function VoteActivityFilterFab({
             aria-hidden
           />
         )}
-        <motion.span
-          initial={false}
-          animate={
-            labelVisible
-              ? { opacity: 1, y: 0 }
-              : { opacity: 0, y: 6 }
-          }
-          transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
-          className="pointer-events-none absolute bottom-[calc(100%+8px)] right-0 whitespace-nowrap rounded-full border border-white/15 bg-black/70 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-lg"
-          aria-hidden
-        >
-          {label}
-        </motion.span>
       </motion.button>
 
       {showBadge && (
@@ -149,6 +155,7 @@ export function VoteActivityFilterFab({
           {count > 99 ? "99+" : count}
         </span>
       )}
+      </div>
     </motion.div>
   );
 }

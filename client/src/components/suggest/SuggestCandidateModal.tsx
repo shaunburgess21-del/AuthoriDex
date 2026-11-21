@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Drawer } from "vaul";
+import { releaseStickyChromeOnOpen } from "@/lib/stickyChromeFocus";
 import { UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { SuggestionSentDialog, awardedSuggestionXp } from "@/components/suggest/SuggestionSentDialog";
@@ -91,7 +92,7 @@ export function SuggestCandidateModal({ open, onOpenChange, initialDisplayName, 
     <Drawer.Root open={open} onOpenChange={onOpenChange}>
       <Drawer.Portal>
         <Drawer.Overlay className={SUGGEST_DRAWER_OVERLAY} />
-        <Drawer.Content className={SUGGEST_DRAWER_CONTENT}>
+        <Drawer.Content className={SUGGEST_DRAWER_CONTENT} onOpenAutoFocus={releaseStickyChromeOnOpen}>
           <div className={SUGGEST_DRAWER_HANDLE} />
           <div className={SUGGEST_DRAWER_HEADER}>
             <div>

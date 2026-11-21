@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Heart, Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
@@ -23,6 +23,11 @@ import { VOICES_TIMELINE_ID } from "@shared/constants";
 import { toast } from "sonner";
 import type { VoicesFeedItem, VoicesReply } from "./types";
 import {
+  acquireDismissLock,
+  claimDeleteAttempt,
+  overlayBackdropShouldClose,
+  releaseDeleteAttempt,
+  releaseDismissLock,
   removeDeletedVoicesPost,
   voicesPostDeleteErrorCopy,
   voicesPostDeleteRequest,
@@ -88,6 +93,11 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
   const [rootActionsOpen, setRootActionsOpen] = useState(false);
   const [rootDeleteOpen, setRootDeleteOpen] = useState(false);
   const [postDeleted, setPostDeleted] = useState(false);
+  const dismissLock = useRef(0);
+  const deleteAttempt = useRef(false);
+  useEffect(() => {
+    dismissLock.current = (rootDeleteOpen ? 1 : 0) + (deleteTarget ? 1 : 0);
+  }, [rootDeleteOpen, deleteTarget]);
 
   const isAuthenticated = isLoggedIn || !!user;
 
@@ -163,13 +173,14 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       return res.json();
     },
     onSuccess: () => {
+      toast.success("Post deleted");
       setPostDeleted(true);
       setRootDeleteOpen(false);
       removeDeletedVoicesPost(queryClient, item.id);
-      toast.success("Post deleted");
       onClose();
     },
     onError: (err) => {
+      releaseDeleteAttempt(deleteAttempt);
       const parsed = parseApiError(err, "Couldn't delete post");
       const copy = voicesPostDeleteErrorCopy(parsed);
       toast.error(copy.title, { description: copy.description });
@@ -189,7 +200,10 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={() => {
+        if (!overlayBackdropShouldClose(dismissLock, deletePost.isPending || thread.isDeletePending)) return;
+        onClose();
+      }}
       data-testid="voices-post-overlay"
     >
       <div
@@ -206,7 +220,16 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
           )}
         >
           <h2 className="text-lg font-semibold">Post</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8" aria-label="Close">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              if (!overlayBackdropShouldClose(dismissLock, deletePost.isPending || thread.isDeletePending)) return;
+              onClose();
+            }}
+            className="h-8 w-8"
+            aria-label="Close"
+          >
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -362,6 +385,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
         onDelete={
           drawerComment && !drawerComment.deletedAt && drawerComment.userId === user?.id
             ? () => {
+                acquireDismissLock(dismissLock);
                 setDeleteTarget(drawerComment);
                 setDrawerComment(null);
               }
@@ -386,6 +410,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
         onDelete={
           isOwner && !postDeleted
             ? () => {
+                acquireDismissLock(dismissLock);
                 setRootDeleteOpen(true);
                 setRootActionsOpen(false);
               }
@@ -397,7 +422,10 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       <DeleteContentDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open) {
+            releaseDismissLock(dismissLock);
+            setDeleteTarget(null);
+          }
         }}
         description="Delete this reply? This cannot be undone."
         isPending={thread.isDeletePending}
@@ -407,12 +435,16 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
       />
       <DeleteContentDialog
         open={rootDeleteOpen}
-        onOpenChange={setRootDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open) releaseDismissLock(dismissLock);
+          setRootDeleteOpen(open);
+        }}
         title="Delete this post?"
         description="This cannot be undone."
         isPending={deletePost.isPending}
         onConfirm={() => {
-          if (!deletePost.isPending) deletePost.mutate();
+          if (!claimDeleteAttempt(deleteAttempt) || deletePost.isPending) return;
+          deletePost.mutate();
         }}
       />
     </div>
