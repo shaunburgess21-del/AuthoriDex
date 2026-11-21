@@ -1589,6 +1589,41 @@
   }
 }
 
+/* Vote type-chip cue. Absolutely positioned, so the fade never reflows.
+   Holds through ~1.5s, then fades out by 2s. The heading pulse is a
+   background only — no padding, so the title box stays the same size. */
+@keyframes vote-chip-link-cue {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.vote-chip-link-cue {
+  animation: vote-chip-link-cue 2s ease-out both;
+}
+@keyframes vote-section-heading-pulse {
+  0%, 100% { background-color: transparent; box-shadow: none; }
+  40% {
+    background-color: rgb(6 182 212 / 0.16);
+    box-shadow: 0 0 0 4px rgb(6 182 212 / 0.14);
+  }
+}
+@media (max-width: 767px) {
+  .vote-section-heading-pulse {
+    border-radius: 0.25rem;
+    animation: vote-section-heading-pulse 1.6s ease-out 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vote-chip-link-cue {
+    animation-duration: 0.7s !important;
+    animation-iteration-count: 1 !important;
+  }
+  .vote-section-heading-pulse {
+    animation: none !important;
+  }
+}
+
 /* ===== GLOBAL SCROLLBAR ===== */
 * {
   scrollbar-width: thin;
