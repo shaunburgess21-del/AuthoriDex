@@ -17,7 +17,7 @@ export function VoteTypeCue({ kind }: { kind: VoteFeedKind }) {
       data-testid={`vote-type-cue-${kind}`}
     >
       <Icon className="h-3 w-3 shrink-0" aria-hidden />
-      <span className="truncate">{VOTE_FEED_CUE_LABELS[kind]}</span>
+      <span className="truncate keep-descenders">{VOTE_FEED_CUE_LABELS[kind]}</span>
     </span>
   );
 }

@@ -31,6 +31,19 @@ function memoryStore(): VoteChipCueStore & { snapshot(): string | null } {
   };
 }
 
+describe("vote type cue descenders", () => {
+  it("keeps one-line ellipsis without clipping the line box", () => {
+    assert.match(heading, /truncate keep-descenders/);
+    assert.match(heading, /leading-none/);
+    assert.match(css, /\.keep-descenders \{\s*padding-bottom: 0\.25em;\s*margin-bottom: -0\.25em;\s*\}/);
+    const preview = readFileSync(
+      new URL("../client/src/components/voices/VoiceOpinionPollPreview.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(preview, /truncate keep-descenders text-xs leading-none/);
+  });
+});
+
 describe("vote section headings", () => {
   it("uses the plain section name on the four typed headers", () => {
     for (const title of SECTION_TITLES) {

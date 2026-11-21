@@ -56,7 +56,7 @@ export function VoiceOpinionPollPreview({ preview }: VoiceOpinionPollPreviewProp
                 <OptionThumb name={option.name} imageUrl={option.imageUrl ?? null} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate text-xs leading-none text-foreground">
+                    <span className="min-w-0 flex-1 truncate keep-descenders text-xs leading-none text-foreground">
                       {option.name}
                     </span>
                     <span
