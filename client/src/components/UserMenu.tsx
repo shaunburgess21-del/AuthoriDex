@@ -46,6 +46,7 @@ import { useReferralModal } from "@/components/referral/ReferralModalProvider";
 import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { VoxMark } from "@/components/VoxMark";
 import { InfoHint } from "@/components/InfoHint";
+import { useAccountWinRate } from "@/hooks/useAccountWinRate";
 
 
 // Referral reward derives from credit-config so the menu label tracks the
@@ -97,6 +98,7 @@ function UserMenuContent({
   onClose,
 }: UserMenuContentProps) {
   const { open: openReferralModal } = useReferralModal();
+  const winRate = useAccountWinRate();
 
   const handleNavClick = (path: string) => {
     onNavigate(path);
@@ -282,10 +284,19 @@ function UserMenuContent({
         <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/40 dark:border-amber-500/30">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            <span className="text-sm text-muted-foreground">Win Rate</span>
+            <span className="text-sm text-muted-foreground">
+              Win Rate{winRate.pending ? " · Pending" : ""}
+            </span>
           </div>
-          <span className="font-mono font-bold text-sm text-amber-600 dark:text-amber-400">
-            {profile?.winRate != null ? `${Math.round(profile.winRate)}%` : "--"}
+          <span
+            className={`font-mono font-bold text-sm ${
+              winRate.pending
+                ? "text-muted-foreground"
+                : "text-amber-600 dark:text-amber-400"
+            }`}
+            data-testid="text-menu-win-rate"
+          >
+            {winRate.text}
           </span>
         </div>
         {showStreakBadge && (

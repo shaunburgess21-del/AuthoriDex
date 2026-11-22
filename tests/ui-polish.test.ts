@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { measureScrollEdge, scrollEdgeMaskClass } from "../client/src/lib/scrollEdgeFade";
 import {
@@ -14,6 +15,10 @@ import { inlineCommentCount } from "../client/src/lib/commentCountLabel";
 import { shouldHideFooter } from "../client/src/lib/siteFooter";
 
 const NOW = new Date("2026-11-22T12:00:00.000Z");
+
+function source(path: string): string {
+  return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+}
 
 test("scroll edge fade follows which side still has content", () => {
   assert.equal(
@@ -106,6 +111,38 @@ test("discussion counts pluralise", () => {
   assert.equal(inlineCommentCount(0, "Discussion"), "0 discussions");
   assert.equal(inlineCommentCount(1, "Discussion"), "1 discussion");
   assert.equal(inlineCommentCount(3, "Discussion"), "3 discussions");
+});
+
+test("rankings quick view keeps both signal cards and the trend summary at a fixed height", () => {
+  const modal = source("client/src/components/PersonInsightModal.tsx");
+  assert.match(modal, /No growth signals/);
+  assert.match(modal, /No cooling signals/);
+  assert.match(modal, /No trend summary yet/);
+  assert.equal(modal.includes("growthSignals.length > 0"), false);
+  assert.equal(modal.includes("coolingSignals.length > 0"), false);
+  assert.equal(modal.includes("return null"), false);
+  assert.match(modal, /flex h-14 min-w-0 flex-wrap content-start gap-2 overflow-x-hidden overflow-y-auto scrollbar-hide/);
+  assert.match(modal, /h-\[3\.09375rem\]/);
+});
+
+test("win rate surfaces share the pending helper", () => {
+  for (const path of [
+    "client/src/components/UserMenu.tsx",
+    "client/src/pages/MePage.tsx",
+    "client/src/pages/PublicProfilePage.tsx",
+    "client/src/pages/UserLeaderboardPage.tsx",
+    "client/src/pages/me/PredictionsPage.tsx",
+    "client/src/components/insights/PredictTab.tsx",
+    "client/src/components/share/ShareCard.tsx",
+  ]) {
+    const text = source(path);
+    assert.match(text, /useAccountWinRate|accountWinRateDisplay/, path);
+  }
+  const menu = source("client/src/components/UserMenu.tsx");
+  assert.match(menu, /Win Rate\{winRate\.pending \? " · Pending" : ""\}/);
+  assert.match(menu, /data-testid="text-menu-win-rate"/);
+  assert.equal(menu.includes("Math.round(profile.winRate)"), false);
+  assert.equal(menu.includes("Math.round(profile?.winRate)"), false);
 });
 
 test("profile, world markets, and unknown routes keep the shared footer", () => {

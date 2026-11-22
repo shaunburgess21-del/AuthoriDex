@@ -46,6 +46,7 @@ import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { appendShareAttribution } from "@/lib/share";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { VoxText } from "@/components/VoxText";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 
 
 type UserPrediction = MyPredictionCardData;
@@ -418,7 +419,13 @@ export default function PredictionsPage() {
   };
 
   const handleSharePortfolio = (stats: PredictionStats) => {
-    const fallbackText = `My VoxDex predictions: ${stats.winRate}% win rate | ${
+    const winRate = accountWinRateDisplay({
+      resolved: stats.won + stats.lost,
+      winRate: stats.winRate,
+    });
+    const fallbackText = `My VoxDex predictions: ${
+      winRate.pending ? "win rate pending" : `${winRate.text} win rate`
+    } | ${
       stats.netCredits >= 0 ? "+" : "\u2212"
     }${formatVox(Math.abs(stats.netCredits))} net | ${stats.total} predictions\n${
       window.location.origin
@@ -429,6 +436,7 @@ export default function PredictionsPage() {
         username: profile?.username || "voxdex",
         rankName: profile?.rank || null,
         winRate: stats.winRate,
+        resolvedCount: stats.won + stats.lost,
         netCredits: stats.netCredits,
         totalPredictions: stats.total,
         currentStreak: stats.currentStreak,
@@ -569,6 +577,7 @@ function PredictionHeadlineHero({
   // to have a meaningful win rate, put it front and centre. Otherwise highlight
   // Net Vox, which is a more personal "you've put skin in the game" metric.
   const resolved = stats.won + stats.lost;
+  const winRate = accountWinRateDisplay({ resolved, winRate: stats.winRate });
   const leadWithWinRate = resolved >= 3;
   const formatNetVox = (n: number) =>
     n > 0
@@ -577,7 +586,7 @@ function PredictionHeadlineHero({
         ? `\u2212${CURRENCY.symbol}${Math.abs(n).toLocaleString()}`
         : `${CURRENCY.symbol}0`;
   const leadValue = leadWithWinRate
-    ? `${stats.winRate}%`
+    ? winRate.text
     : formatNetVox(stats.netCredits);
   const leadLabel = leadWithWinRate ? "Win Rate" : "Net Vox";
   const secondaryLabel = leadWithWinRate ? "Net Vox" : "Open positions";
@@ -759,6 +768,11 @@ function OverviewTab({
     return <OverviewEmpty onStart={() => window.location.assign("/predict")} />;
   }
 
+  const winRate = accountWinRateDisplay({
+    resolved: stats.won + stats.lost,
+    winRate: stats.winRate,
+  });
+
   return (
     <div className="space-y-6">
       <PredictionHeadlineHero stats={stats} onShare={onSharePortfolio} />
@@ -806,9 +820,11 @@ function OverviewTab({
         </Card>
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">
           <BarChart3 className="h-4 w-4 mx-auto text-violet-600 dark:text-violet-400" />
-          <p className="text-2xl font-mono font-bold tabular-nums">{stats.winRate}%</p>
+          <p className={`text-2xl font-mono font-bold tabular-nums ${winRate.pending ? "text-muted-foreground" : ""}`}>
+            {winRate.text}
+          </p>
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
-            Win Rate
+            {winRate.pending ? "Win rate · Pending" : "Win Rate"}
           </p>
         </Card>
         <Card className="p-3 text-center space-y-1 border-white/5 bg-card/60 backdrop-blur-sm">

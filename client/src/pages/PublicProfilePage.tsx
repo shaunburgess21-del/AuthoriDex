@@ -35,6 +35,7 @@ import { getEthnicityLabel } from "@shared/ethnicity";
 import { CURRENCY, formatVox } from "@/lib/currency";
 import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 
 
 
@@ -1017,7 +1018,6 @@ function ProfileIdentityCard({
   profile,
   displayName,
   memberSince,
-  accuracyPct,
   pnl,
   predictions,
   shareUrl,
@@ -1026,7 +1026,6 @@ function ProfileIdentityCard({
   profile: PublicProfile;
   displayName: string;
   memberSince: string;
-  accuracyPct: number | null;
   pnl: number;
   predictions: number;
   shareUrl?: string;
@@ -1037,6 +1036,12 @@ function ProfileIdentityCard({
   // qualifies), so we render whatever the server sends.
   const theme = getProfileTheme(profile.profileTheme);
   const banner = profile.profileBannerUrl;
+  // totalBets counts won/lost/settled rows. Open predictions stay at 0,
+  // so a stored win rate of 0 stays Pending until something resolves.
+  const winRate = accountWinRateDisplay({
+    resolved: profile.totalBets ?? null,
+    winRate: profile.winRate,
+  });
 
   return (
     <Card
@@ -1107,8 +1112,15 @@ function ProfileIdentityCard({
         </div>
         <div className="p-3 rounded-lg bg-muted/50 text-center">
           <Trophy className="h-4 w-4 mx-auto mb-1.5 text-emerald-600 dark:text-emerald-400" />
-          <p className="text-xl font-bold">{accuracyPct ?? profile.winRate ?? 0}%</p>
-          <p className="text-[10px] text-muted-foreground">Win Rate</p>
+          <p
+            className={`text-xl font-bold ${winRate.pending ? "text-muted-foreground" : ""}`}
+            data-testid="text-public-win-rate"
+          >
+            {winRate.text}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            Win Rate{winRate.pending ? " · Pending" : ""}
+          </p>
         </div>
         <div className="p-3 rounded-lg bg-muted/50 text-center col-span-2 sm:col-span-1">
           <Vote className="h-4 w-4 mx-auto mb-1.5 text-cyan-600 dark:text-cyan-400" />
@@ -1514,10 +1526,6 @@ export default function PublicProfilePage() {
   const memberSince = profile.createdAt
     ? new Date(profile.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long" })
     : "Unknown";
-  const accuracyPct =
-    profile.winRate != null && profile.winRate > 0
-      ? Math.round(profile.winRate)
-      : null;
   const pnl = profile.profitLoss ?? 0;
   const predictions = profile.totalPredictions ?? 0;
   const positionsPublic = profile.positionsPublic ?? true;
@@ -1543,7 +1551,6 @@ export default function PublicProfilePage() {
               profile={profile}
               displayName={displayName}
               memberSince={memberSince}
-              accuracyPct={accuracyPct}
               pnl={pnl}
               predictions={predictions}
               shareUrl={
