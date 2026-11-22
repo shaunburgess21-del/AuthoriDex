@@ -63,11 +63,26 @@ export default async function middleware(request: Request) {
   try {
     const meta = await loadDocumentMeta(url.pathname);
     if (!meta?.title || !meta.canonicalUrl) return next();
+    const shellHeaders = new Headers();
+    shellHeaders.set("accept", "text/html");
+    shellHeaders.set("x-og-shell", "1");
+    // Protected previews reject a bare fetch of /index.html and return the
+    // Vercel login document. Forward the caller's bypass cookie so the shell
+    // is the real app, then refuse to rewrite anything that is not that shell.
+    const cookie = request.headers.get("cookie");
+    const bypass = request.headers.get("x-vercel-protection-bypass");
+    if (cookie) shellHeaders.set("cookie", cookie);
+    if (bypass) shellHeaders.set("x-vercel-protection-bypass", bypass);
     const indexRes = await fetch(new URL("/index.html", url.origin), {
-      headers: { accept: "text/html", "x-og-shell": "1" },
+      headers: shellHeaders,
     });
     if (!indexRes.ok) return next();
-    const html = injectOgDocument(await indexRes.text(), meta);
+    const shell = await indexRes.text();
+    if (!shell.includes('id="root"')) {
+      console.error("[og-document] shell fetch was not the app document");
+      return next();
+    }
+    const html = injectOgDocument(shell, meta);
     return new Response(html, {
       status: 200,
       headers: {
