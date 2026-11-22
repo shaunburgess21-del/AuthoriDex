@@ -1380,10 +1380,13 @@ export default function PersonDetailPage() {
 
   if (isLoading && !person) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-          <p className="mt-4 text-muted-foreground">Loading person data...</p>
+      <div className="pb-20 md:pb-0">
+        <SiteHeader backButton="always" />
+        <div className="flex items-center justify-center px-4 py-24">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+            <p className="mt-4 text-muted-foreground">Loading person data...</p>
+          </div>
         </div>
       </div>
     );
@@ -1391,12 +1394,15 @@ export default function PersonDetailPage() {
 
   if (error || !person) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-xl text-muted-foreground">Person not found</p>
-          <Button className="mt-4" onClick={() => setLocation("/rankings")}>
-            Back to Rankings
-          </Button>
+      <div className="pb-20 md:pb-0">
+        <SiteHeader backButton="always" />
+        <div className="flex items-center justify-center px-4 py-24">
+          <div className="text-center">
+            <p className="text-xl text-muted-foreground">Person not found</p>
+            <Button className="mt-4" onClick={() => setLocation("/rankings")}>
+              Back to Rankings
+            </Button>
+          </div>
         </div>
       </div>
     );

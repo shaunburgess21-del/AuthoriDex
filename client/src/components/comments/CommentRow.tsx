@@ -3,7 +3,7 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
 import { VoteLabel } from "@/components/VoteLabel";
 import { Badge } from "@/components/ui/badge";
-import { formatTimeAgo } from "@/lib/formatDate";
+import { CommentTimestamp } from "@/components/comments/CommentTimestamp";
 import { MentionText } from "@/components/comments/MentionText";
 import { getRankByName } from "@shared/rank-config";
 import type { CommentItem, VoteType } from "./types";
@@ -97,12 +97,7 @@ export function CommentRow({
                 className="shrink-0"
               />
             )}
-            <span
-              className="text-xs text-muted-foreground shrink-0"
-              title={new Date(comment.createdAt).toLocaleString()}
-            >
-              {formatTimeAgo(comment.createdAt)}
-            </span>
+            <CommentTimestamp at={comment.createdAt} className="shrink-0" />
             {!isDeleted && <VoteLabel label={comment.parentVoteLabel ?? null} />}
             {isTopComment && (
               <Badge variant="outline" className="text-[10px] border-cyan-500/40 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 py-0">

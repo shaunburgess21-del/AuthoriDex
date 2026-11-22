@@ -150,7 +150,7 @@ export const VOTE_RULES_STEPS: Record<string, RulesStepConfig> = {
       {
         icon: <ArrowLeftRight />,
         headline: "Tap to Choose",
-        body: "Tap the photo you want featured. The community favourite becomes the profile image.",
+        body: "Tap the photo you want featured. The community favorite becomes the profile image.",
       },
       {
         icon: <Sparkles />,

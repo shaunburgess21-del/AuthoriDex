@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
-import { useRanks } from "@/hooks/useGamification";
 import { UserRankBadge } from "@/components/UserRankBadge";
+import { XPProgressBar } from "@/components/XPProgressBar";
 import { navigateToLogin } from "@/lib/authReturn";
 import {
   DropdownMenu,
@@ -73,54 +73,6 @@ function useMediaQuery(query: string) {
 // implementation. Local map removed as part of the ranks overhaul
 // to fix VoxMax Legend silently falling through to Citizen.
 
-function XPProgressBar({ xp }: { xp: number }) {
-  const { data: ranks } = useRanks();
-
-  if (!ranks || ranks.length === 0) {
-    return (
-      <div className="flex items-center justify-end text-xs">
-        <span className="inline-flex items-center gap-1 font-mono text-amber-600 dark:text-amber-400">
-          {xp.toLocaleString('en-US')} XP
-          <InfoHint term="xp" side="left" className="h-3 w-3" />
-        </span>
-      </div>
-    );
-  }
-
-  const sortedRanks = [...ranks].sort((a, b) => a.tier - b.tier);
-  const currentRank =
-    sortedRanks.find(r => xp >= r.minXp && (r.maxXp === null || xp <= r.maxXp)) ??
-    sortedRanks[0];
-  const currentIdx = sortedRanks.indexOf(currentRank);
-  const nextRank = currentIdx < sortedRanks.length - 1 ? sortedRanks[currentIdx + 1] : null;
-
-  const rankProgress = nextRank
-    ? ((xp - currentRank.minXp) / (nextRank.minXp - currentRank.minXp)) * 100
-    : 100;
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-end text-xs">
-        <span className="inline-flex items-center gap-1 font-mono text-amber-600 dark:text-amber-400">
-          {xp.toLocaleString('en-US')} XP
-          <InfoHint term="xp" side="left" className="h-3 w-3" />
-        </span>
-      </div>
-      <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(rankProgress, 100)}%` }}
-        />
-      </div>
-      <p className="text-[10px] text-muted-foreground text-right">
-        {nextRank
-          ? `${(nextRank.minXp - xp).toLocaleString()} XP to ${nextRank.name}`
-          : "Max rank reached"}
-      </p>
-    </div>
-  );
-}
-
 interface UserMenuContentProps {
   profile: UserProfile | null;
   isLoggedIn: boolean;
@@ -169,18 +121,15 @@ function UserMenuContent({
           </p>
         </div>
         
-        {/* Create Account is the primary CTA — most prediction-market
-            and social products lead with sign-up because the LTV of a
-            new account dwarfs the cost of nudging an existing user
-            past one extra click. Sign In stays available right below
-            in the secondary outline treatment. */}
+        {/* Join free is the primary CTA in this welcome panel.
+            Sign In stays available right below in the outline treatment. */}
         <div className="space-y-2">
           <Button
             className="w-full bg-gradient-to-r from-blue-600 to-blue-500"
             onClick={onCreateAccount}
             data-testid="button-create-account"
           >
-            Create Account
+            Join free
           </Button>
           <Button
             variant="outline"

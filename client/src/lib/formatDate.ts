@@ -18,11 +18,71 @@ export function formatActivityAge(timestamp: string | Date): string {
   return `${Math.floor(diffDays / 7)}w ago`;
 }
 
-/** Relative time with full date for older items (>30d): "Just now", "5m ago", "2h ago", "3d ago", or "Jan 15" */
-export function formatTimeAgo(dateStr: string | Date | null): string {
+/**
+ * Calendar date in UTC. The product shows times in UTC on purpose.
+ * The year is included only when it is not the current UTC year,
+ * so a recent May 1 stays "May 1" and last August becomes "Aug 31, 2025".
+ */
+export function formatUtcCalendarDate(date: Date, now: Date = new Date()): string {
+  const includeYear = date.getUTCFullYear() !== now.getUTCFullYear();
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+    ...(includeYear ? { year: "numeric" } : {}),
+  });
+}
+
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Comment and reply age. Relative at every age:
+ * "just now", "5m ago", "2h ago", "3d ago", "2w ago", "3 mo ago", "1 yr ago".
+ */
+export function formatCommentAge(dateStr: string | Date | null, now: Date = new Date()): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  const diff = now.getTime() - date.getTime();
+  if (diff < MINUTE_MS) return "just now";
+  const minutes = Math.floor(diff / MINUTE_MS);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(diff / HOUR_MS);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(diff / DAY_MS);
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mo ago`;
+  return `${Math.max(1, Math.floor(days / 365))} yr ago`;
+}
+
+/** Exact UTC instant for a comment timestamp tooltip. */
+export function formatUtcTimestampTitle(dateStr: string | Date | null): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  const formatted = date.toLocaleString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${formatted} UTC`;
+}
+
+/** Relative time with a UTC date for older items (>30d): "Just now", "5m ago", "2h ago", "3d ago", or "Jan 15" / "Jan 15, 2025" */
+export function formatTimeAgo(dateStr: string | Date | null, now: Date = new Date()): string {
   if (!dateStr) return "Unknown";
   try {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "";
+    const diff = now.getTime() - date.getTime();
     const minutes = Math.max(0, Math.floor(diff / 60000));
     if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes}m ago`;
@@ -30,7 +90,7 @@ export function formatTimeAgo(dateStr: string | Date | null): string {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return formatUtcCalendarDate(date, now);
   } catch {
     return "";
   }

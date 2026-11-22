@@ -2,13 +2,13 @@ import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useLocation, Link } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { dismissVoteToast, marketToastKind, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
 import { sharePage } from "@/lib/share";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
+import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
@@ -24,7 +24,6 @@ import { apiRequest, getAuthHeaders, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { navigateToLogin } from "@/lib/authReturn";
 import { formatTimeAgo, formatDate } from "@/lib/formatDate";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { CommentsBottomSheet } from "@/components/snap-scroll/CommentsBottomSheet";
 import {
@@ -48,7 +47,6 @@ import { JACKPOT_MAX_PREDICTED_SCORE } from "@shared/fame-scale";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildTradeShareData, buildPositionShareData } from "@/lib/share-data";
-import { goBack } from "@/lib/goBack";
 import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
@@ -56,7 +54,6 @@ import { marketOgImagePath } from "@shared/market-og";
 import { useAmmPriceStream } from "@/hooks/useAmmPriceStream";
 import {
 
-  ArrowLeft,
   Star,
   Clock,
   Users,
@@ -1350,28 +1347,18 @@ export default function MarketDetailPage() {
   });
 
   if ((authLoading || isLoading) && !market) {
-    return <MarketDetailSkeleton />;
+    return (
+      <div className="min-h-screen pb-20 md:pb-0">
+        <SiteHeader active="predict" logoVariant="predict" backButton="always" />
+        <MarketDetailSkeleton />
+      </div>
+    );
   }
 
   if (error || !market) {
     return (
-      <div className="min-h-screen">
-        <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/markets")} aria-label="Go back" data-testid="button-back">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <Link href="/">
-                <button className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-testid="button-logo-home">
-                  <VoxDexLogo size={32} />
-                  <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
-                </button>
-              </Link>
-            </div>
-            <HeaderUserActions />
-          </div>
-        </header>
+      <div className="min-h-screen pb-20 md:pb-0">
+        <SiteHeader active="predict" logoVariant="predict" backButton="always" />
         <div className="container mx-auto px-4 pt-20 pb-24 md:pb-6 text-center" data-testid="market-not-found">
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h1 className="text-2xl font-serif font-bold mb-2">Market Not Found</h1>
@@ -1408,26 +1395,8 @@ export default function MarketDetailPage() {
     });
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => goBack(setLocation, "/markets")} aria-label="Go back" data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <Link href="/">
-              <button
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                data-testid="button-logo-home"
-              >
-                <VoxDexLogo size={32} />
-                <span className="font-serif font-bold text-xl hidden sm:block">VoxDex</span>
-              </button>
-            </Link>
-          </div>
-          <HeaderUserActions />
-        </div>
-      </header>
+    <div className="min-h-screen pb-20 md:pb-0">
+      <SiteHeader active="predict" logoVariant="predict" backButton="always" />
 
       <div className="container mx-auto px-4 pt-6 pb-24 md:pb-6 max-w-3xl">
         <div className="mb-6">
@@ -1798,7 +1767,7 @@ export default function MarketDetailPage() {
                         className="flex items-center gap-3 text-sm rounded-lg border border-border/40 bg-background/40 p-2"
                         data-testid={`amm-live-row-${entry.id}`}
                       >
-                        <span className={`w-[28%] sm:w-[26%] truncate font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
+                        <span className={`w-[28%] sm:w-[26%] line-clamp-2 leading-tight font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
                           {entry.label}
                         </span>
                         <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">

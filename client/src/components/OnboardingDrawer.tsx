@@ -199,8 +199,10 @@ export const OnboardingDrawer = forwardRef<OnboardingDrawerHandle, Props>(
     }));
 
     useEffect(() => {
-      if (!shouldShowToast(storageKey, reShowAfterDays)) return;
-      if (disableAutoToast) return;
+      if (disableAutoToast || !shouldShowToast(storageKey, reShowAfterDays)) {
+        setShowToast(false);
+        return;
+      }
       const timer = setTimeout(() => setShowToast(true), delayMs);
       return () => clearTimeout(timer);
     }, [storageKey, delayMs, reShowAfterDays, disableAutoToast]);

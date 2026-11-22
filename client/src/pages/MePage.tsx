@@ -7,6 +7,7 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, EyeOff, Lock, Flame, Award, MessageSquare } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
@@ -16,6 +17,8 @@ import { REFERRAL_PANEL_GLOW_CLASS } from "@/components/referral/ReferralFriendP
 import { formatVox } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { getRankByName } from "@shared/rank-config";
+import { XPProgressBar } from "@/components/XPProgressBar";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 import {
 
   getProfileTheme,
@@ -32,6 +35,20 @@ export default function MePage() {
   }, [user, refreshProfile]);
 
   const displayName = profile?.username || user?.email?.split("@")[0] || "User";
+
+  const { data: predictionStats } = useQuery<{
+    stats?: { won?: number; lost?: number; winRate?: number };
+  }>({
+    queryKey: ["/api/me/predictions"],
+    enabled: !!user,
+  });
+  const resolvedPredictions = predictionStats?.stats
+    ? (predictionStats.stats.won ?? 0) + (predictionStats.stats.lost ?? 0)
+    : null;
+  const winRate = accountWinRateDisplay({
+    resolved: resolvedPredictions,
+    winRate: predictionStats?.stats?.winRate ?? profile?.winRate,
+  });
 
   // Per-tier profile visual unlocks (Phase 5). /api/profile/me returns the
   // raw stored values (not tier-gated like the public endpoint), so gate on
@@ -124,8 +141,15 @@ export default function MePage() {
                   onClick={() => setLocation("/me/predictions")}
                   data-testid="link-me-win-rate-stat"
                 >
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{profile?.winRate || 0}%</p>
-                  <p className="text-xs text-muted-foreground">Win Rate</p>
+                  <p
+                    className={`text-2xl font-bold ${winRate.pending ? "text-muted-foreground" : "text-green-600 dark:text-green-400"}`}
+                    data-testid="text-me-win-rate"
+                  >
+                    {winRate.text}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Win Rate{winRate.pending ? " · Pending" : ""}
+                  </p>
                 </button>
                 <button
                   type="button"
@@ -256,50 +280,11 @@ export default function MePage() {
             </Card>
 
             <Card className={cn(REFERRAL_PANEL_GLOW_CLASS, "p-6")}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Predictor Stats</h3>
-                <Badge variant="outline" className="px-3 border-violet-500/40 dark:border-violet-500/30 text-violet-600 dark:text-violet-400">VIRTUAL</Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {/* Label is `flex-1` so it absorbs free space and
-                    ellipsifies first; value is `min-w-0 truncate` so a
-                    long number (e.g. "1,234,567") falls back to an
-                    ellipsis with a hover tooltip instead of being
-                    silently clipped at the pill edge. */}
-                <button
-                  type="button"
-                  className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-violet-500/40 dark:border-violet-500/30 overflow-hidden w-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  onClick={() => setLocation("/me/credits")}
-                  data-testid="link-me-credits-balance"
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Wallet className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-                    <span className="text-sm text-muted-foreground truncate">Balance</span>
-                  </div>
-                  <span
-                    className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-violet-600 dark:text-violet-400"
-                    title={formatVox(profile?.predictCredits || 0)}
-                  >
-                    <VoxText text={formatVox(profile?.predictCredits || 0)} />
-                  </span>
-                </button>
-                <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-orange-500/40 dark:border-orange-500/30 overflow-hidden">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Flame className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
-                    <span className="text-sm text-muted-foreground truncate">Streak</span>
-                  </div>
-                  <span
-                    className="font-mono font-bold text-lg tabular-nums min-w-0 truncate text-orange-600 dark:text-orange-400"
-                    title={String(profile?.currentStreak || 0)}
-                  >
-                    {profile?.currentStreak || 0}
-                  </span>
-                </div>
-              </div>
-              {/* Earn CTA lives on the Predictor Stats card (rather than
-                  inside the dense 5-stat grid above) so there's room for a
-                  proper button that doesn't squeeze the Vox number on
-                  mobile. /how-it-works is public, so logged-out viewers of this
+              <h3 className="font-semibold mb-4">Predictor Stats</h3>
+              <XPProgressBar xp={profile?.xpPoints || 0} />
+              {/* Earn CTA sits under the rank progress so the button
+                  doesn't squeeze the Vox number in the stat grid.
+                  /how-it-works is public, so logged-out viewers of this
                   card never reach this surface anyway. */}
               <Button
                 className="w-full mt-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"

@@ -413,7 +413,7 @@ export function VoicesFilterBar({
             )}
           >
             <Star className={cn("h-3.5 w-3.5", favouritesActive && "fill-current")} />
-            Favourites
+            Favorites
           </button>
         )}
         <CelebritySearch excludeIds={filters.personIds} onSelect={addPerson} />
@@ -575,7 +575,7 @@ export function VoicesFilterBar({
               className={modeTabClass(favouritesActive)}
             >
               <Star className={cn("h-3 w-3 shrink-0", favouritesActive && "fill-current")} />
-              Favourites
+              Favorites
             </button>
           )}
         </div>

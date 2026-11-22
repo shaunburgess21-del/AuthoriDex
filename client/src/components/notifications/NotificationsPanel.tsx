@@ -16,6 +16,7 @@ import {
 } from "@/hooks/useNotifications";
 import { NotificationItem } from "./NotificationItem";
 import { NotificationsEmptyState } from "./NotificationsEmptyState";
+import { HorizontalScrollFade } from "@/components/HorizontalScrollFade";
 
 export interface NotificationsPanelProps {
   /** Called when the user clicks a row, "View all", or settings — lets
@@ -125,7 +126,10 @@ export function NotificationsPanel({ onClose, variant = "popover" }: Notificatio
 
         {/* Category chips. Always rendered; the active state acts as
             the filter toggle. Clicking the same chip twice clears it. */}
-        <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+        <HorizontalScrollFade
+          className="mt-2 -mx-1"
+          scrollerClassName="items-center gap-1.5 px-1 pb-1"
+        >
           <CategoryChip
             active={category === null}
             onClick={() => setCategory(null)}
@@ -141,7 +145,7 @@ export function NotificationsPanel({ onClose, variant = "popover" }: Notificatio
               {CATEGORY_SHORT_LABELS[cat]}
             </CategoryChip>
           ))}
-        </div>
+        </HorizontalScrollFade>
       </div>
 
       {/* List */}

@@ -1022,7 +1022,7 @@ function EarnVoxReferralSlot() {
         onClick={() => navigateToLogin(navigate, { mode: "signup" })}
         data-testid="button-referral-teaser-signup"
       >
-        Create account
+        Join free
       </Button>
     </Card>
   );
@@ -1897,7 +1897,7 @@ function PredictSection({
             <VoxMark />0.30 share means a ~30% chance.
           </ConceptTile>
           <ConceptTile icon={Trophy} label="Cheaper pays bigger" accent={accent}>
-            A contrarian pick at <VoxMark />0.20 pays 5×; the <VoxMark />0.80 favourite pays 1.25×.
+            A contrarian pick at <VoxMark />0.20 pays 5×; the <VoxMark />0.80 favorite pays 1.25×.
             Sell anytime before close.
           </ConceptTile>
           <ConceptTile icon={Sparkles} label="Weekly Jackpot" accent={accent}>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { HorizontalScrollFade } from "@/components/HorizontalScrollFade";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
@@ -281,14 +282,27 @@ function SettingsTabsBar({
   activeTab: SettingsTabId;
   onTabChange: (id: SettingsTabId) => void;
 }) {
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  // Same horizontal-only centering as the Insights tab bar, so a deep
+  // link to Privacy or Notifications brings that tab on screen.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({
+      inline: "center",
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [activeTab]);
+
   return (
-    <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
+    <HorizontalScrollFade scrollerClassName="items-center gap-0 rounded-lg bg-muted/50 p-0.5 snap-x snap-mandatory">
       {tabs.map((t) => {
         const Icon = t.icon;
         const active = t.id === activeTab;
         return (
           <button
             key={t.id}
+            ref={active ? activeRef : undefined}
             type="button"
             onClick={() => {
               hapticSelection();
@@ -320,7 +334,7 @@ function SettingsTabsBar({
           </button>
         );
       })}
-    </div>
+    </HorizontalScrollFade>
   );
 }
 

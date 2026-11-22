@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useScrollHint } from "@/hooks/use-scroll-hint";
+import { useScrollEdgeFade } from "@/hooks/useScrollEdgeFade";
 import { cn } from "@/lib/utils";
-
-type ScrollState = "start" | "middle" | "end" | "none";
 
 export function ScrollMaskedChipRow({
   children,
@@ -24,7 +23,8 @@ export function ScrollMaskedChipRow({
 }) {
   const dragScrollRef = useDragScroll<HTMLDivElement>();
   useScrollHint(dragScrollRef);
-  const [scrollState, setScrollState] = useState<ScrollState>("start");
+  const { edge } = useScrollEdgeFade(dragScrollRef);
+  const scrollState = edge === "both" ? "middle" : edge;
 
   useEffect(() => {
     if (!activeChipKey) return;
@@ -42,32 +42,6 @@ export function ScrollMaskedChipRow({
     });
     return () => cancelAnimationFrame(frameId);
   }, [activeChipKey]);
-
-  useEffect(() => {
-    const el = dragScrollRef.current;
-    if (!el) return;
-
-    const update = () => {
-      const { scrollLeft, scrollWidth, clientWidth } = el;
-      const maxScroll = scrollWidth - clientWidth;
-      if (maxScroll <= 2) {
-        setScrollState("none");
-        return;
-      }
-      if (scrollLeft <= 2) setScrollState("start");
-      else if (scrollLeft >= maxScroll - 2) setScrollState("end");
-      else setScrollState("middle");
-    };
-
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    el.addEventListener("scroll", update, { passive: true });
-    update();
-    return () => {
-      ro.disconnect();
-      el.removeEventListener("scroll", update);
-    };
-  }, [children]);
 
   const scrollByPage = useCallback((direction: -1 | 1) => {
     const el = dragScrollRef.current;
@@ -89,7 +63,7 @@ export function ScrollMaskedChipRow({
   const showRight = scrollState === "start" || scrollState === "middle";
 
   return (
-    <div className={cn("relative min-w-0", className)}>
+    <div className={cn("relative min-w-0 max-w-full overflow-hidden", className)}>
       {showLeft && (
         <button
           type="button"

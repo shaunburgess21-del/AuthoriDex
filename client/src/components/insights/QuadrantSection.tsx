@@ -19,7 +19,7 @@ import { InsightsSection } from "./insights-ui";
 const QUADRANT_LABELS: Record<InsightsQuadrantPoint["quadrant"], string> = {
   beloved_giants: "Beloved Giants",
   hated_giants: "Polarising Giants",
-  cult_favourites: "Cult Favourites",
+  cult_favourites: "Cult Favorites",
   unknown_critics: "Unknown Critics",
 };
 

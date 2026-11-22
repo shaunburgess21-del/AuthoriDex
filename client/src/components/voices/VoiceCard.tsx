@@ -2,7 +2,7 @@ import { Clock, Crown, Flame, Heart, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { UserRankBadge } from "@/components/UserRankBadge";
-import { formatTimeAgo } from "@/lib/formatDate";
+import { CommentTimestamp } from "@/components/comments/CommentTimestamp";
 import { MentionText } from "@/components/comments/MentionText";
 import { VoteLabel } from "@/components/VoteLabel";
 import { cn } from "@/lib/utils";
@@ -52,9 +52,7 @@ export function VoiceCard({ item, onOpen, onVote, imagePriority = false }: Voice
               {item.author.username || "Anonymous"}
             </span>
             {item.author.rank && <UserRankBadge rank={item.author.rank} size="xs" />}
-            <span className="text-xs text-muted-foreground">
-              {formatTimeAgo(item.createdAt)}
-            </span>
+            <CommentTimestamp at={item.createdAt} />
             {!isDeleted && <VoteLabel label={item.parentVoteLabel ?? null} />}
             {item.pendingReview && (
               <Badge

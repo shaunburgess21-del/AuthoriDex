@@ -1,20 +1,17 @@
 import type { Ref } from "react";
 import { MessageSquare, ArrowUpDown, Clock, ExternalLink, Share2, Maximize2 } from "lucide-react";
 import { hapticSelection } from "@/lib/haptic";
+import { Skeleton } from "@/components/ui/skeleton";
+import { inlineCommentCount, type CommentCountLabel } from "@/lib/commentCountLabel";
 
-export type CommentCountLabel = "Discussion" | "Comments" | "Insights" | "Replies";
+export type { CommentCountLabel };
 export type CommentSort = "top" | "newest";
-
-const COUNT_WORDS: Record<CommentCountLabel, [singular: string, plural: string]> = {
-  Discussion: ["discussion", "discussion"],
-  Comments: ["comment", "comments"],
-  Insights: ["insight", "insights"],
-  Replies: ["reply", "replies"],
-};
 
 export interface CommentSortHeaderProps {
   count: number;
   countLabel: CommentCountLabel;
+  /** Hide the number until the thread has loaded, so it does not flash "0 discussion". */
+  countPending?: boolean;
   variant?: "card" | "inline";
   /** Snap scroll toolbar: number-only count + centered sort toggles. */
   snapHeader?: boolean;
@@ -30,6 +27,7 @@ export interface CommentSortHeaderProps {
 export function CommentSortHeader({
   count,
   countLabel,
+  countPending = false,
   variant = "card",
   snapHeader = false,
   sort,
@@ -39,13 +37,16 @@ export function CommentSortHeader({
   onOpenFocusMode,
   expandTriggerRef,
 }: CommentSortHeaderProps) {
-  const [singularCountWord, pluralCountWord] = COUNT_WORDS[countLabel];
-  const inlineCountWord = count === 1 ? singularCountWord : pluralCountWord;
   const countText = snapHeader
     ? String(count)
     : variant === "card"
       ? `${countLabel} (${count})`
-      : `${count} ${inlineCountWord}`;
+      : inlineCommentCount(count, countLabel);
+  const countNode = countPending ? (
+    <Skeleton className="h-4 w-16" role="status" data-testid="discussion-count-loading" aria-label="Loading discussion count" />
+  ) : (
+    <span className={`text-sm font-semibold ${onOpenFocusMode ? "text-foreground" : ""}`}>{countText}</span>
+  );
   const focusButtonClass =
     "inline-flex items-center gap-2 rounded-lg text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -61,12 +62,12 @@ export function CommentSortHeader({
           data-testid="button-discussion-label-expand"
         >
           <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
-          <span className="text-sm font-semibold text-foreground">{countText}</span>
+          {countNode}
         </button>
       ) : (
         <>
           <MessageSquare className="h-4 w-4 text-cyan-700 dark:text-cyan-500" />
-          <span className="text-sm font-semibold">{countText}</span>
+          {countNode}
         </>
       )}
       {onOpenFocusMode && (

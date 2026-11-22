@@ -10,7 +10,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { formatTimeAgo } from "@/lib/formatDate";
+import { CommentTimestamp } from "@/components/comments/CommentTimestamp";
 import { cn } from "@/lib/utils";
 import type { MeCommentItem } from "@shared/me-comments";
 
@@ -68,7 +68,7 @@ export function MyCommentCard({ item, onOpen }: MyCommentCardProps) {
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="truncate">{contextLabel(item)}</span>
             <span aria-hidden>·</span>
-            <span className="shrink-0">{formatTimeAgo(item.createdAt)}</span>
+            <CommentTimestamp at={item.createdAt} className="shrink-0" />
           </div>
           <p className="mt-1 whitespace-pre-wrap break-words text-sm line-clamp-3">{item.body}</p>
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">

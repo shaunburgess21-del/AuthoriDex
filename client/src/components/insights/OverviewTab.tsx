@@ -229,7 +229,7 @@ function MoverList({
           >
             <span className="text-[10px] font-mono text-muted-foreground w-6">#{m.rank}</span>
             <PersonAvatar name={m.name} avatar={m.avatar} size="xs" />
-            <span className="truncate flex-1 font-medium">{m.name}</span>
+            <span className="line-clamp-2 min-w-0 flex-1 font-medium leading-snug">{m.name}</span>
             <span
               className={`tabular-nums text-xs font-semibold ${positive ? "text-green-600 dark:text-green-400" : "text-red-500"}`}
             >
@@ -268,7 +268,7 @@ function FavouriteHighlightRow({ item }: { item: InsightsFavouriteHighlight }) {
     >
       <PersonAvatar name={item.name} avatar={item.avatar} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-sm truncate">{item.name}</p>
+        <p className="font-medium text-sm line-clamp-2">{item.name}</p>
         <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
           {item.category && <CategoryPill category={item.category} size="sm" />}
           <span className="text-[10px] text-muted-foreground tabular-nums">#{item.rank}</span>
@@ -324,7 +324,7 @@ function FavouriteHeroCard({ item }: { item: InsightsFavouriteHighlight }) {
           <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
             Biggest mover · 24h
           </p>
-          <p className="text-base md:text-lg font-semibold truncate mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+          <p className="text-base md:text-lg font-semibold line-clamp-2 mt-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400">
             {item.name}
           </p>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -407,9 +407,9 @@ function FavouritesPanel({
     return (
       <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-5 text-center">
         <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground/70" />
-        <p className="text-sm font-medium">Sign in to track favourites</p>
+        <p className="text-sm font-medium">Sign in to track favorites</p>
         <p className="text-xs text-muted-foreground mt-1 mb-4 leading-relaxed">
-          Favourite people on the leaderboard and see how they&apos;re moving here.
+          Favorite people on the leaderboard and see how they&apos;re moving here.
         </p>
         <div className="flex flex-col sm:flex-row gap-2 justify-center">
           <Button size="sm" onClick={() => navigateToLogin(setLocation)}>
@@ -427,7 +427,7 @@ function FavouritesPanel({
     return (
       <div className="rounded-lg border border-dashed border-border/50 bg-muted/20 p-5 text-center">
         <Star className="h-8 w-8 mx-auto mb-2 text-muted-foreground/70" />
-        <p className="text-sm font-medium">No favourites yet</p>
+        <p className="text-sm font-medium">No favorites yet</p>
         <p className="text-xs text-muted-foreground mt-1 mb-4 leading-relaxed">
           Tap the heart on anyone in the leaderboard to track them here.
         </p>
@@ -447,7 +447,7 @@ function FavouritesPanel({
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground leading-relaxed">
           Your {favouritesSignals.favouriteCount}{" "}
-          {favouritesSignals.favouriteCount === 1 ? "favourite is" : "favourites are"} steady today
+          {favouritesSignals.favouriteCount === 1 ? "favorite is" : "favorites are"} steady today
           — no big 24h moves yet.
         </p>
         <FavouriteActivityStrip
@@ -661,7 +661,7 @@ function OverviewTabContent({
 
         <InsightsSection
           tab="today"
-          title="Your favourites"
+          title="Your favorites"
           description={
             isLoggedIn
               ? "How the people you follow are moving today."

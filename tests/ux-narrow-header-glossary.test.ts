@@ -69,6 +69,6 @@ test("glossary hints sit on labels for shares, P&L, and Curate Profile", () => {
   assert.match(source("client/src/components/LeaderboardRow.tsx"), /term="approval"/);
   assert.match(source("client/src/components/PersonInsightModal.tsx"), /term="wikiSignal"/);
   assert.match(source("client/src/components/PersonInsightModal.tsx"), /term="newsSignal"/);
-  assert.match(source("client/src/components/UserMenu.tsx"), /term="xp"/);
+  assert.match(source("client/src/components/XPProgressBar.tsx"), /term="xp"/);
   assert.match(source("client/src/components/UserMenu.tsx"), /term="vox"/);
 });

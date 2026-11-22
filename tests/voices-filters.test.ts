@@ -422,7 +422,7 @@ test("Favourites sits on the mode row and stays a personIds toggle", () => {
   const filterStart = bar.indexOf('data-testid="voices-filter-button"');
   const chipStart = bar.indexOf('data-testid="voices-favourites-chip"');
   assert.ok(rowStart >= 0 && chipStart > rowStart && chipStart < filterStart);
-  assert.match(bar.slice(rowStart, filterStart), /Favourites/);
+  assert.match(bar.slice(rowStart, filterStart), /Favorites/);
   assert.doesNotMatch(bar, /My favourites/);
   assert.match(bar, /modeTabClass\(mode === item\.id\)/);
   assert.match(bar, /modeTabClass\(favouritesActive\)/);
