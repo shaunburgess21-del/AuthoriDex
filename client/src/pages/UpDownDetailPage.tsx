@@ -581,16 +581,19 @@ export default function UpDownDetailPage() {
    * crawlers (Google, Bing) a real preview, while non-JS crawlers
    * (Slack, iMessage) hit the server-side OG endpoint via the Vercel
    * UA-matched rewrite. */
+  const upDownCardTitle = hydrated ? `${hydrated.personName}: Up or Down?` : "Up or Down?";
+  const upDownPrices =
+    hydrated && Number.isFinite(hydrated.upPercent)
+      ? `&prices=${encodeURIComponent(`Up:${Math.round(hydrated.upPercent)}:up,Down:${Math.round(100 - hydrated.upPercent)}:down`)}`
+      : "";
   useDocumentMeta({
-    title: hydrated
-      ? `${hydrated.personName}: Up or Down? • VoxDex`
-      : "Up / Down • VoxDex",
+    title: `${upDownCardTitle} | VoxDex`,
     description: hydrated
       ? `Will ${hydrated.personName}'s Trend Score close above or below baseline this week? Predict on VoxDex.`
       : "Predict whether a person's weekly Trend Score closes above or below baseline.",
-    image: `/api/og/image/market.png?title=${encodeURIComponent(
-      hydrated ? `${hydrated.personName}: Up or Down?` : "Up / Down",
-    )}&subtitle=${encodeURIComponent("Up or down this week?")}&badge=${encodeURIComponent("Up / Down")}`,
+    image: `/api/og/image/market.png?title=${encodeURIComponent(upDownCardTitle)}&subtitle=${encodeURIComponent(
+      hydrated ? `UP ${Math.round(hydrated.upPercent)}% · DOWN ${Math.round(100 - hydrated.upPercent)}%` : "Up or down this week?",
+    )}&badge=${encodeURIComponent("Up / Down")}${upDownPrices}`,
   });
 
   if (isLoading && !market) {

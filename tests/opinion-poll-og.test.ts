@@ -23,11 +23,11 @@ import {
 } from "../server/services/opinion-poll-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("opinionPollOgImagePath uses shared cache version v2", () => {
-  assert.equal(OPINION_POLL_OG_IMAGE_VERSION, "2");
+test("opinionPollOgImagePath uses shared cache version v3 png", () => {
+  assert.equal(OPINION_POLL_OG_IMAGE_VERSION, "3");
   assert.equal(
     opinionPollOgImagePath("best-pizza-topping"),
-    "/api/og/vote/opinion-polls/best-pizza-topping.jpg?v=2",
+    "/api/og/vote/opinion-polls/best-pizza-topping.png?v=3",
   );
 });
 

@@ -13,17 +13,18 @@ import {
 import {
   buildSentimentPollOverlaySvg,
   getSentimentPollOverlayLabels,
+  getSentimentPollPillLabels,
   getSentimentPollVotePillLayout,
   renderSentimentPollOgImage,
   renderSentimentPollOgImageJpeg,
 } from "../server/services/sentiment-poll-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("sentimentPollOgImagePath uses shared cache version v4", () => {
-  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "4");
+test("sentimentPollOgImagePath uses shared cache version v5 png", () => {
+  assert.equal(SENTIMENT_POLL_OG_IMAGE_VERSION, "5");
   assert.equal(
     sentimentPollOgImagePath("elon-musk-ai"),
-    "/api/og/vote/polls/elon-musk-ai.jpg?v=4",
+    "/api/og/vote/polls/elon-musk-ai.png?v=5",
   );
 });
 
@@ -71,6 +72,21 @@ const PLACEHOLDER_CTX = {
 
 test("opentype path fonts load for sentiment poll OG", () => {
   assert.ok(assertOgPathFontsLoaded());
+});
+
+test("sentiment poll pills show the live split when votes exist", () => {
+  assert.deepEqual(getSentimentPollPillLabels(PLACEHOLDER_CTX), [
+    "Agree",
+    "Neutral",
+    "Disagree",
+  ]);
+  assert.deepEqual(
+    getSentimentPollPillLabels({
+      ...PLACEHOLDER_CTX,
+      results: { agreePercent: 61, neutralPercent: 9, disagreePercent: 30 },
+    }),
+    ["Agree 61%", "Neutral 9%", "Disagree 30%"],
+  );
 });
 
 test("buildSentimentPollOverlaySvg uses path outlines only", () => {

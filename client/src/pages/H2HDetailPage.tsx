@@ -579,12 +579,21 @@ export default function H2HDetailPage() {
   const h2hShareTitle = hydrated
     ? `${hydrated.person1.name} vs ${hydrated.person2.name}`
     : "Head-to-Head";
+  const h2hPrices = hydrated
+    ? `&prices=${encodeURIComponent(
+        `${hydrated.person1.name.replace(/[,:]/g, " ")}:${Math.round(hydrated.person1Percent)}:other,${hydrated.person2.name.replace(/[,:]/g, " ")}:${Math.round(100 - hydrated.person1Percent)}:other`,
+      )}`
+    : "";
   useDocumentMeta({
-    title: `${h2hShareTitle} • VoxDex`,
+    title: `${h2hShareTitle} | VoxDex`,
     description: hydrated
       ? `Who'll gain more Trend Score points this week — ${hydrated.person1.name} or ${hydrated.person2.name}? Predict on VoxDex.`
       : "Head-to-head Trend Score battle. Predict on VoxDex.",
-    image: `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent("Who'll gain more this week?")}&badge=${encodeURIComponent("Head to head")}`,
+    image: `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent(
+      hydrated
+        ? `${hydrated.person1.name} ${Math.round(hydrated.person1Percent)}% · ${hydrated.person2.name} ${Math.round(100 - hydrated.person1Percent)}%`
+        : "Who'll gain more this week?",
+    )}&badge=${encodeURIComponent("Head to head")}${h2hPrices}`,
   });
 
   if (isLoading && !market) {

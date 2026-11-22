@@ -1,5 +1,6 @@
+import { and, count, eq } from "drizzle-orm";
 import { db } from "../db";
-import { trackedPeople } from "@shared/schema";
+import { trackedPeople, votes } from "@shared/schema";
 import { resolvePublicMatchupBySlugOrId } from "../utils/matchup-resolve";
 import {
   pickMatchupImageUrl,
@@ -21,6 +22,11 @@ export interface MatchupOgContext {
   optionAImageUrl: string | null;
   optionBImageUrl: string | null;
   visibleCountries: string[];
+  /** Null or omitted when nobody has voted yet — the card omits a fake 50/50. */
+  optionAPercent?: number | null;
+  optionBPercent?: number | null;
+  neutralPercent?: number | null;
+  totalVotes?: number;
 }
 
 /**
@@ -70,6 +76,12 @@ export async function loadMatchupOgContext(
     matchup.slug,
   );
 
+  const tally = await loadMatchupVoteTally(matchup.id, {
+    seedA: matchup.seedVotesA || 0,
+    seedB: matchup.seedVotesB || 0,
+    seedNeutral: matchup.seedVotesNeutral || 0,
+  });
+
   return {
     slug: matchup.slug,
     title: matchup.title,
@@ -80,5 +92,60 @@ export async function loadMatchupOgContext(
     optionAImageUrl: pickMatchupImageUrl(optA),
     optionBImageUrl: pickMatchupImageUrl(optB),
     visibleCountries: matchup.visibleCountries ?? [],
+    optionAPercent: tally.optionAPercent,
+    optionBPercent: tally.optionBPercent,
+    neutralPercent: tally.neutralPercent,
+    totalVotes: tally.totalVotes,
+  };
+}
+
+/**
+ * Same display totals as GET /api/matchups: real face_off votes plus seeds.
+ * Percents stay null at zero votes so the share image does not invent a tie.
+ */
+async function loadMatchupVoteTally(
+  matchupId: string,
+  seed: { seedA: number; seedB: number; seedNeutral: number },
+): Promise<{
+  optionAPercent: number | null;
+  optionBPercent: number | null;
+  neutralPercent: number | null;
+  totalVotes: number;
+}> {
+  const rows = await db
+    .select({ value: votes.value, cnt: count() })
+    .from(votes)
+    .where(and(eq(votes.voteType, "face_off"), eq(votes.targetId, matchupId)))
+    .groupBy(votes.value);
+
+  let realA = 0;
+  let realB = 0;
+  let realNeutral = 0;
+  for (const row of rows) {
+    const n = Number(row.cnt) || 0;
+    if (row.value === "option_a") realA = n;
+    else if (row.value === "option_b") realB = n;
+    else if (row.value === "neutral") realNeutral = n;
+  }
+
+  const displayA = realA + seed.seedA;
+  const displayB = realB + seed.seedB;
+  const displayNeutral = realNeutral + seed.seedNeutral;
+  const totalVotes = displayA + displayB + displayNeutral;
+  if (totalVotes <= 0) {
+    return {
+      optionAPercent: null,
+      optionBPercent: null,
+      neutralPercent: null,
+      totalVotes: 0,
+    };
+  }
+  const optionAPercent = Math.round((displayA / totalVotes) * 100);
+  const optionBPercent = Math.round((displayB / totalVotes) * 100);
+  return {
+    optionAPercent,
+    optionBPercent,
+    neutralPercent: 100 - optionAPercent - optionBPercent,
+    totalVotes,
   };
 }

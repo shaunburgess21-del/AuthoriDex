@@ -9,13 +9,11 @@
     <meta name="theme-color" content="#0f172a" />
 
     <!--
-      Open Graph + Twitter card fallback. These are the meta tags that
-      Slack, iMessage, Facebook, and X read for link previews. We keep
-      them in index.html so even crawlers that don't hit our UA-matched
-      Vercel rewrite (see vercel.json → /api/og/...) still get a
-      reasonable preview. Per-page detail pages override these via the
-      client `useDocumentMeta` hook — the matching server-side OG endpoint
-      remains the source of truth for non-JS crawlers.
+      Open Graph + Twitter card fallback for the homepage and list pages.
+      Vote, matchup, and predict detail URLs get their own title, description,
+      canonical, and image injected into this shell by middleware.ts before
+      the response leaves Vercel, so the first HTML byte (no JS required)
+      is unique per page. useDocumentMeta keeps the tab in sync after hydration.
     -->
     <link rel="canonical" href="https://voxdex.com/" />
     <meta property="og:type" content="website" />

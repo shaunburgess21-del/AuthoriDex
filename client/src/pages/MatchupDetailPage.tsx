@@ -5,7 +5,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -35,7 +35,7 @@ import { CompactResultRows, type CompactResultRowData } from "@/components/vote/
 import { CrowdLine } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { matchupOgImagePath } from "@shared/matchup-og";
+import { matchupDocumentDescription, matchupDocumentTitle, matchupOgImagePath } from "@shared/matchup-og";
 import {
   ArrowLeft,
   Clock,
@@ -290,8 +290,22 @@ export default function MatchupDetailPage() {
       ? `${window.location.origin}/vote/matchups/${encodeURIComponent(matchup.slug)}`
       : undefined;
 
+  const shareTitle = matchup
+    ? matchupDocumentTitle(matchup)
+    : "Matchup | VoxDex";
+
   const handleShare = () => {
-    sharePage(matchupPrompt ? `${matchupPrompt} on VoxDex` : "VoxDex", {
+    if (matchup?.slug) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: matchupOgImagePath(matchup.slug),
+        sharerUserId: user?.id,
+        surface: "matchup",
+        url: canonicalShareUrl,
+      });
+      return;
+    }
+    void sharePage(shareTitle, {
       sharerUserId: user?.id,
       surface: "matchup",
       url: canonicalShareUrl,
@@ -300,8 +314,14 @@ export default function MatchupDetailPage() {
 
   // Dynamic <title> + OG/Twitter meta (mirrors server /api/og/matchups/:slug).
   useDocumentMeta({
-    title: matchupPrompt ?? "Matchup",
-    description: matchupVsDescription,
+    title: matchup ? shareTitle : "Matchup | VoxDex",
+    description: matchup
+      ? matchupDocumentDescription(matchup, {
+          optionAPercent: matchup.optionAPercent,
+          optionBPercent: matchup.optionBPercent,
+          totalVotes: matchup.totalVotes,
+        })
+      : matchupVsDescription,
     image: matchup?.slug ? matchupOgImagePath(matchup.slug) : null,
     url: canonicalShareUrl ?? null,
   });

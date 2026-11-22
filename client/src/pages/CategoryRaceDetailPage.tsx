@@ -542,7 +542,7 @@ export default function CategoryRaceDetailPage() {
 
   const raceTitle = categoryLabel ? `${categoryLabel} Race` : "Category Race";
   useDocumentMeta({
-    title: `${raceTitle} • VoxDex`,
+    title: `${raceTitle} | VoxDex`,
     description: categoryLabel
       ? `Pick the biggest mover in ${categoryLabel} this week. Predict on VoxDex.`
       : "Pick the biggest mover in the category this week. Predict on VoxDex.",

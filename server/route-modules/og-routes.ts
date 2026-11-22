@@ -15,11 +15,7 @@ import {
   profiles,
   ammPriceSnapshots,
 } from "@shared/schema";
-import {
-  loadMatchupOgContext,
-  matchupOgDescription,
-  matchupOgPromptTitle,
-} from "../services/matchup-og-context";
+import { loadMatchupOgContext } from "../services/matchup-og-context";
 import {
   renderMatchupOgImage,
   renderMatchupOgImageJpeg,
@@ -62,8 +58,10 @@ import {
 } from "../services/market-og-image";
 import { getMarketCategoryLabel } from "@shared/constants";
 import {
+  parseOgPreviewPath,
   renderOgHtml,
   resolveBetShareOg,
+  resolveOgPagePayload,
   resolveCommunityMarketOg,
   resolveMatchupOg,
   resolveNativePredictOg,
@@ -87,6 +85,7 @@ import { loadDivergence, loadSingleSourceSurge } from "../services/insights/disc
 import { parseFilters } from "@shared/insights/filters";
 import type { InsightsDivergenceType } from "@shared/insights/types";
 import type { AmmPriceChip } from "../services/og-page-payload";
+import { buildOgJsonLd, isOgDetailPath } from "@shared/og-document";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Open Graph + Twitter card endpoints + sitemap.xml
@@ -1023,7 +1022,7 @@ async function serveOpinionPollOgImage(
         : await renderOpinionPollOgImage(ctx);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=600");
     res.send(image);
   } catch (err: any) {
     console.error(`[OG] Opinion poll ${format.toUpperCase()} render failed:`, err?.message);
@@ -1064,7 +1063,7 @@ async function serveSentimentPollOgImage(
         : await renderSentimentPollOgImage(ctx);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=600");
     res.send(image);
   } catch (err: any) {
     console.error(`[OG] Sentiment poll ${format.toUpperCase()} render failed:`, err?.message);
@@ -1105,7 +1104,7 @@ async function serveMatchupOgImage(
         : await renderMatchupOgImage(ctx);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cache-Control", "public, max-age=600");
     res.send(image);
   } catch (err: any) {
     console.error(`[OG] Matchup ${format.toUpperCase()} render failed:`, err?.message);
@@ -1441,6 +1440,43 @@ export function registerOgRoutes(app: Express): void {
   /* Generic OG HTML for the homepage / Predict page / static surfaces.
    * Crawlers that follow share-this-page links (e.g. /predict#updown)
    * land here when we strip the hash for routing. */
+  /* JSON document meta for the Vercel edge injector. Detail paths only —
+   * list pages and the homepage keep the shell's generic tags. Country
+   * targeting matches the HTML resolvers: world markets that are not
+   * globally visible return the generic title (no card copy); vote cards
+   * unfurl on a direct link, the same way the page itself does. */
+  app.get("/api/og/document-meta", async (req: Request, res: Response) => {
+    const pathname = parseOgPreviewPath(String(req.query.path ?? ""));
+    if (!isOgDetailPath(pathname)) {
+      res.status(404).json({ error: "no document meta for path" });
+      return;
+    }
+    try {
+      const result = await resolveOgPagePayload({ pathname });
+      const meta = {
+        title: result.title,
+        description: result.description,
+        canonicalUrl: result.canonicalUrl,
+        imageUrl: result.imageUrl,
+        imageType: result.imageType,
+        jsonLd: buildOgJsonLd({
+          title: result.title,
+          description: result.description,
+          canonicalUrl: result.canonicalUrl,
+          imageUrl: result.imageUrl,
+        }),
+      };
+      res.setHeader(
+        "Cache-Control",
+        result.warnings.length > 0 ? "public, max-age=60" : "public, max-age=120",
+      );
+      res.json(meta);
+    } catch (err: any) {
+      console.error("[OG] document-meta failed:", err?.message);
+      res.status(500).json({ error: "og meta failed" });
+    }
+  });
+
   app.get("/api/og/site", async (_req: Request, res: Response) => {
     const result = await resolveSiteOg();
     res.setHeader("Content-Type", "text/html; charset=utf-8");

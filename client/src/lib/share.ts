@@ -8,6 +8,7 @@ import {
   cachePngForNativeShare,
   toPublicShareText,
   toPublicShareUrl,
+  PUBLIC_SHARE_ORIGIN,
 } from "@/lib/nativeShare";
 
 /**
@@ -159,6 +160,48 @@ export function appendShareAttribution(
     // Fallback for non-absolute URLs that fail the URL constructor.
     return baseUrl;
   }
+}
+
+/**
+ * Share the page's generated 1200×630 result card (the same PNG linked
+ * from og:image). Falls back to a plain link if the image cannot be fetched.
+ * Capacitor shells load the image from the public site, not the WebView origin.
+ */
+export async function shareResultImage(options: SharePageOptions & {
+  title: string;
+  imagePath: string;
+}): Promise<void> {
+  const pageUrl = appendShareAttribution(options.url ?? window.location.href, {
+    sharerUserId: options.sharerUserId ?? null,
+    surface: options.surface,
+  });
+  try {
+    const imageUrl = resolveShareImageUrl(options.imagePath);
+    const res = await fetch(imageUrl);
+    if (!res.ok) throw new Error(`share image ${res.status}`);
+    const blob = await res.blob();
+    if (!blob.type.startsWith("image/")) throw new Error("share image was not an image");
+    await shareImage(blob, {
+      title: options.title,
+      text: options.title,
+      url: pageUrl,
+      filename: "voxdex-vote.png",
+    });
+  } catch {
+    await sharePage(options.title, {
+      url: options.url,
+      sharerUserId: options.sharerUserId,
+      surface: options.surface,
+    });
+  }
+}
+
+function resolveShareImageUrl(imagePath: string): string {
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  const ctx = currentShareContext();
+  const origin =
+    ctx.nativeAndroid || ctx.nativeIos ? PUBLIC_SHARE_ORIGIN : window.location.origin;
+  return new URL(imagePath, origin).toString();
 }
 
 /**

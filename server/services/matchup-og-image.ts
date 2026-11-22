@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { MatchupOgContext } from "./matchup-og-context";
 import { matchupOgPromptTitle } from "./matchup-og-meta";
+import { encodeOgPng } from "./og-png";
 import {
   baselineForStackAbove,
   measureOutlinedTextWidth,
@@ -23,15 +24,24 @@ function truncate(value: string, max: number): string {
 }
 
 /** Exported for tests — labels rendered on the matchup overlay. */
+function flankLabel(name: string, percent: number | null | undefined, totalVotes: number | undefined): string {
+  const safe = truncate(name, totalVotes && percent != null ? 22 : 32);
+  if (!totalVotes || percent == null) return safe;
+  return `${safe} · ${percent}%`;
+}
+
 export function getMatchupOverlayLabels(ctx: MatchupOgContext) {
+  const total = ctx.totalVotes ?? 0;
   return {
     brand: "VoxDex",
     category: truncate(ctx.category || "Matchup", 24).toUpperCase(),
     vs: "VS",
     optionA: truncate(ctx.optionAText, 32),
     optionB: truncate(ctx.optionBText, 32),
+    flankA: flankLabel(ctx.optionAText, ctx.optionAPercent, total),
+    flankB: flankLabel(ctx.optionBText, ctx.optionBPercent, total),
     prompt: truncate(matchupOgPromptTitle(ctx), 72),
-    cta: "Vote on VoxDex",
+    cta: total > 0 ? `${total.toLocaleString("en-US")} votes` : "Vote on VoxDex",
   };
 }
 
@@ -236,8 +246,8 @@ export function buildMatchupOverlaySvg(ctx: MatchupOgContext): string {
     weight: 700,
     fill: "#ffffff",
   })}
-  ${flankVsNamePill(labels.optionA, "left")}
-  ${flankVsNamePill(labels.optionB, "right")}
+  ${flankVsNamePill(labels.flankA, "left")}
+  ${flankVsNamePill(labels.flankB, "right")}
 
   <circle cx="${HALF_WIDTH}" cy="${VS_CY}" r="${VS_RADIUS}" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="4"/>
   ${textPath({
@@ -323,7 +333,7 @@ export async function renderMatchupOgImage(
   ctx: MatchupOgContext,
 ): Promise<Buffer> {
   const composite = await compositeMatchupBase(ctx, "png");
-  return composite.png().toBuffer();
+  return encodeOgPng(composite);
 }
 
 /**

@@ -43,7 +43,36 @@ test("matchupOgDescription formats option names", () => {
       optionAText: "Cristiano Ronaldo",
       optionBText: "Lionel Messi",
     }),
-    "Cristiano Ronaldo vs Lionel Messi",
+    "Cristiano Ronaldo vs Lionel Messi. Cast your vote on VoxDex.",
+  );
+});
+
+test("matchupDocumentTitle leads with both sides", async () => {
+  const { matchupDocumentTitle, matchupDocumentDescription } = await import("@shared/matchup-og");
+  assert.equal(
+    matchupDocumentTitle({
+      promptText: null,
+      title: "Seal Team 6 vs Delta Force",
+      optionAText: "Seal Team 6",
+      optionBText: "Delta Force",
+    }),
+    "Seal Team 6 vs Delta Force: who wins? | VoxDex",
+  );
+  assert.equal(
+    matchupDocumentTitle({
+      promptText: "Top tier one team?",
+      title: "Seal Team 6 vs Delta Force",
+      optionAText: "Seal Team 6",
+      optionBText: "Delta Force",
+    }),
+    "Seal Team 6 vs Delta Force: Top tier one team? | VoxDex",
+  );
+  assert.equal(
+    matchupDocumentDescription(
+      { optionAText: "Seal Team 6", optionBText: "Delta Force" },
+      { optionAPercent: 29, optionBPercent: 57, totalVotes: 7 },
+    ),
+    "Delta Force leads with 57% of 7 votes. Seal Team 6 vs Delta Force.",
   );
 });
 
@@ -96,11 +125,11 @@ test("matchupBucketUrl falls back to option-derived folder when slug missing", (
   );
 });
 
-test("matchupOgImagePath uses shared cache version v11", () => {
-  assert.equal(MATCHUP_OG_IMAGE_VERSION, "11");
+test("matchupOgImagePath uses shared cache version v12 png", () => {
+  assert.equal(MATCHUP_OG_IMAGE_VERSION, "12");
   assert.equal(
     matchupOgImagePath("football-goat"),
-    "/api/og/vote/matchups/football-goat.jpg?v=11",
+    "/api/og/vote/matchups/football-goat.png?v=12",
   );
 });
 
@@ -136,7 +165,18 @@ test("buildMatchupOverlaySvg uses path outlines only (no librsvg text)", () => {
   assert.equal(labels.optionA, "Cristiano Ronaldo");
   assert.equal(labels.optionB, "Lionel Messi");
   assert.equal(labels.cta, "Vote on VoxDex");
+  assert.equal(labels.flankA, "Cristiano Ronaldo");
   assert.equal(labels.brand, "VoxDex");
+
+  const withResult = getMatchupOverlayLabels({
+    ...PLACEHOLDER_CTX,
+    optionAPercent: 62,
+    optionBPercent: 38,
+    totalVotes: 1200,
+  });
+  assert.equal(withResult.flankA, "Cristiano Ronaldo · 62%");
+  assert.equal(withResult.flankB, "Lionel Messi · 38%");
+  assert.equal(withResult.cta, "1,200 votes");
   assert.ok(svg.includes('fill-opacity="0.75"'));
 });
 

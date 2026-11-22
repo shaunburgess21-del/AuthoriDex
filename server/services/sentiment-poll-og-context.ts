@@ -6,6 +6,7 @@ import {
   resolveSentimentPollImageUrl,
   slugifySentimentPollHeadline,
 } from "./sentiment-poll-images";
+import { loadSentimentPollResults, type VoicesSentimentResults } from "./sentiment-poll-results";
 
 export { sentimentPollOgDescription } from "./sentiment-poll-og-meta";
 
@@ -17,6 +18,8 @@ export interface SentimentPollOgContext {
   category: string;
   imageUrl: string | null;
   visibleCountries: string[];
+  /** Present only once at least one vote (including seeds) exists. */
+  results?: VoicesSentimentResults | null;
 }
 
 export async function loadSentimentPollOgContext(
@@ -26,6 +29,7 @@ export async function loadSentimentPollOgContext(
   if (!slug) return null;
 
   const columns = {
+    id: trendingPolls.id,
     headline: trendingPolls.headline,
     subjectText: trendingPolls.subjectText,
     description: trendingPolls.description,
@@ -53,6 +57,12 @@ export async function loadSentimentPollOgContext(
 
   if (!row) return null;
 
+  const resultsMap = await loadSentimentPollResults([row.id]);
+  const loaded = resultsMap.get(row.id);
+  const hasResults =
+    !!loaded &&
+    loaded.agreePercent + loaded.neutralPercent + loaded.disagreePercent > 0;
+
   const storedSlug = row.pollSlug?.trim() || "";
   // Image files follow the headline slug. The public URL must stay on a key
   // that actually resolves (the stored slug, or the id when slug is blank).
@@ -71,5 +81,6 @@ export async function loadSentimentPollOgContext(
     category: row.category,
     imageUrl,
     visibleCountries: row.visibleCountries ?? [],
+    results: hasResults ? loaded : null,
   };
 }

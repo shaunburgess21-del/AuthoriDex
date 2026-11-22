@@ -4,7 +4,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -292,15 +292,26 @@ export default function OpinionPollDetailPage() {
     setChangeDialogOpen(true);
   }, []);
 
+  const shareTitle = poll ? `${poll.title} | VoxDex` : "Opinion poll | VoxDex";
+
   const handleShare = () => {
-    sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
+    if (poll?.slug) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: opinionPollOgImagePath(poll.slug),
+        sharerUserId: user?.id,
+        surface: "poll",
+      });
+      return;
+    }
+    void sharePage(shareTitle, { sharerUserId: user?.id, surface: "poll" });
   };
 
   // Dynamic <title> + OG/Twitter meta. Crawlers without JS hit
   // /api/og/opinion-polls/:slug via the vercel.json bot rewrite; this
   // hook keeps the live document head accurate for everyone else.
   useDocumentMeta({
-    title: poll ? `${poll.title} • VoxDex` : "Opinion poll • VoxDex",
+    title: shareTitle,
     description: poll
       ? poll.summary ?? poll.description ?? "Cast your vote on VoxDex."
       : null,

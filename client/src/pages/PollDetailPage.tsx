@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess } from "@/lib/haptic";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -250,8 +250,20 @@ export default function PollDetailPage() {
     voteMutation.mutate({ slug, choice, pollId: poll.id });
   };
 
+  const shareTitle = poll ? `${poll.headline} | VoxDex` : "Sentiment poll | VoxDex";
+  const shareImagePath = (poll?.slug || slug) ? sentimentPollOgImagePath(poll?.slug || slug) : null;
+
   const handleShare = () => {
-    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
+    if (shareImagePath) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: shareImagePath,
+        sharerUserId: user?.id,
+        surface: "poll",
+      });
+      return;
+    }
+    void sharePage(shareTitle, { sharerUserId: user?.id, surface: "poll" });
   };
 
   // Dynamic <title> + OG/Twitter meta. Slack/iMessage previews come
@@ -260,11 +272,11 @@ export default function PollDetailPage() {
   // bookmark, JS-aware crawlers) all read the live document head, so
   // we keep this in sync with the server payload.
   useDocumentMeta({
-    title: poll ? `${poll.headline} • VoxDex` : "Sentiment poll • VoxDex",
+    title: shareTitle,
     description: poll
       ? poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex."
       : null,
-    image: (poll?.slug || slug) ? sentimentPollOgImagePath(poll?.slug || slug) : null,
+    image: shareImagePath,
   });
 
   if (pollLoading) {
