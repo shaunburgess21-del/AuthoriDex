@@ -140,6 +140,7 @@ import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
+import { ReturningUserStrip } from "@/components/vote/ReturningUserStrip";
 import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
 import { VoteChipLinkCuePill } from "@/components/vote/VoteChipLinkCue";
 import {
@@ -3406,6 +3407,7 @@ export default function VotePage() {
           activeSection !== "All" ? undefined : desktopSectionLayout ? "sections" : "mixed"
         }
       >
+        <ReturningUserStrip />
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
         {(activeSection === "Sentiment Polls" || showDesktopAllSections) && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
