@@ -10,7 +10,6 @@ import { matchesCategoryFilter, type FilterCategory } from "@shared/constants";
 import { useFavorites } from "@/hooks/useFavorites";
 import { CardSection, type CardSectionHandle } from "@/components/CardSection";
 import { HideExitCard } from "@/components/HideExitCard";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   filterCardsByVoteActivity,
   type HubActivityFilter,
@@ -47,6 +46,8 @@ interface CurateSectionProps {
   /** A curate vote just saved. Parent starts the hide-exit when filtering to not-voted. */
   onPersonVoted?: (personId: string) => void;
   sectionRef?: Ref<CardSectionHandle>;
+  /** Include this person in the desktop grid even past the nine-card slice. */
+  revealKey?: string | null;
 }
 
 export function CurateSection({ 
@@ -66,10 +67,10 @@ export function CurateSection({
   isPersonExiting,
   onPersonVoted,
   sectionRef,
+  revealKey,
 }: CurateSectionProps) {
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [viewResultsPerson, setViewResultsPerson] = useState<CuratePerson | null>(null);
-  const isMobile = useIsMobile();
 
   const { favoriteIds } = useFavorites();
   const { data: allCelebritiesResponse, isLoading } = useQuery<{ data: TrendingPerson[] } | TrendingPerson[]>({
@@ -161,11 +162,12 @@ export function CurateSection({
             desktopLimit={9}
             gap="gap-5"
             testIdPrefix="section-curate"
+            revealKey={revealKey}
           >
             {visiblePersons.map((person) => (
               <HideExitCard
                 key={person.id}
-                isMobile={isMobile}
+                cardKey={`curate:${person.id}`}
                 exiting={isPersonExiting?.(person.id) ?? false}
               >
                 <CurateProfileCard

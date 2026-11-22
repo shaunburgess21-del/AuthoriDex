@@ -50,4 +50,20 @@ describe("vote card type header", () => {
     assert.match(cueBranch, /VoteCardHeader/);
     assert.equal(cueBranch.includes("absolute"), false);
   });
+
+  it("does not draw a divider between the Agree? crowd line and the footer", () => {
+    const openingDivAfter = (source: string, marker: string) => {
+      const at = source.indexOf(marker);
+      const start = source.indexOf("<div", at);
+      return source.slice(start, source.indexOf(">", start) + 1);
+    };
+    const sentimentFooter = openingDivAfter(discourse, "crowd-line-poll-");
+    const versusFooter = openingDivAfter(versus, "crowd-line-matchup-");
+    const opinionFooter = openingDivAfter(opinion, "crowd-line-opinion-");
+    assert.equal(sentimentFooter.includes("border-t"), false);
+    assert.match(sentimentFooter, /mt-auto flex min-h-7 items-center gap-2 pt-2 md:mt-2 md:pt-0/);
+    assert.equal(versusFooter.includes("border-t"), false);
+    assert.equal(opinionFooter.includes("border-t"), false);
+    assert.match(versusFooter, /mt-2 min-h-7/);
+  });
 });

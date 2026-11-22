@@ -1,52 +1,142 @@
-import type { ReactNode } from "react";
-import { motion } from "framer-motion";
-
-// Vote-hub "Not voted" mode card transition. A voted card dwells on its
-// results, then shrinks + drifts toward the filter toggle while fading out;
-// the grid reflows the next card into the vacated slot.
-const HIDE_EXIT_REST = { opacity: 1, scale: 1, x: 0, y: 0 } as const;
-const HIDE_EXIT_FLY = { opacity: 0, scale: 0.12, x: -160, y: -200 } as const;
-const HIDE_EXIT_FLY_TRANSITION = { duration: 0.45, ease: "easeIn" } as const;
-const HIDE_EXIT_SETTLE_TRANSITION = { duration: 0.2, ease: "easeOut" } as const;
-const HIDE_EXIT_LAYOUT_TRANSITION = { duration: 0.3, ease: "easeOut" } as const;
+import { useEffect, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { nextIntersectionWatch, scrollDeltaForRemovedSize } from "@/lib/voted-card-retain";
+import { useVotedCardRetain, type VotedCardAccent } from "@/components/VotedCardRetainContext";
 
 /**
- * Card wrapper for the Vote-hub Hidden-mode transition. The outer layer owns
- * the grid `layout` reflow (so neighbours slide into the vacated slot on
- * desktop); the inner layer plays the shrink + drift-toward-the-toggle fly.
- * On mobile the fly + layout are disabled — the carousel advance (slideNext)
- * provides the exit motion instead.
+ * Wraps a hub card that can be voted while "Not voted" is on.
+ * The card stays put and shows its post-vote state. Once it has been on
+ * screen and then leaves the viewport, it collapses. A card fully above
+ * the viewport compensates document scroll so the content in view does
+ * not jump. Horizontal carousel slides are removed on that frame; the
+ * carousel corrects its index.
  */
 export function HideExitCard({
-  isMobile,
-  exiting,
-  animateOnMobile = false,
+  cardKey,
+  exiting = false,
   children,
 }: {
-  isMobile: boolean;
-  exiting: boolean;
-  /**
-   * Vertical lists have no carousel to slide. Play the same fly on mobile
-   * so a voted card still leaves the feed.
-   */
-  animateOnMobile?: boolean;
+  cardKey?: string;
+  /** Collapse now. Context can supply this as well. */
+  exiting?: boolean;
   children: ReactNode;
 }) {
-  const flying = exiting && (!isMobile || animateOnMobile);
+  const retain = useVotedCardRetain();
+  const ref = useRef<HTMLDivElement>(null);
+  const wasVisibleRef = useRef(false);
+  const onLeaveRef = useRef(retain?.onLeave);
+  onLeaveRef.current = retain?.onLeave;
+  const collapsing = exiting || (cardKey ? retain?.collapsing(cardKey) ?? false : false);
+  const watch = !!cardKey && !!retain && !collapsing && retain.watching(cardKey);
+  const highlighted = !!cardKey && retain?.highlightKey === cardKey;
+  const accent: VotedCardAccent = retain?.accent ?? "cyan";
+
+  useEffect(() => {
+    if (!watch || !cardKey) return;
+    const element = ref.current;
+    if (!element) return;
+    wasVisibleRef.current = false;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (!entry) return;
+      const decision = nextIntersectionWatch({
+        phase: "retained",
+        wasVisible: wasVisibleRef.current,
+        isIntersecting: entry.isIntersecting,
+      });
+      wasVisibleRef.current = decision.wasVisible;
+      if (!decision.release) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const inCarousel = !!element.closest(".swiper");
+      const immediate = reduce || inCarousel;
+      if (immediate) {
+        const rect = element.getBoundingClientRect();
+        const removed = rect.height;
+        element.style.overflow = "hidden";
+        element.style.height = "0px";
+        element.style.marginTop = "0px";
+        element.style.marginBottom = "0px";
+        const delta = scrollDeltaForRemovedSize({
+          cardStart: rect.top,
+          cardEnd: rect.bottom,
+          viewportStart: 0,
+          viewportEnd: window.innerHeight,
+          removed,
+        });
+        if (delta) window.scrollBy(0, delta);
+      }
+      onLeaveRef.current?.(cardKey, { immediate });
+    }, { threshold: 0 });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [watch, cardKey]);
+
+  useEffect(() => {
+    if (!collapsing) return;
+    const element = ref.current;
+    if (!element) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const rect = element.getBoundingClientRect();
+    const start = rect.height;
+    if (reduce || start <= 0) {
+      const delta = scrollDeltaForRemovedSize({
+        cardStart: rect.top,
+        cardEnd: rect.bottom,
+        viewportStart: 0,
+        viewportEnd: window.innerHeight,
+        removed: start,
+      });
+      element.style.overflow = "hidden";
+      element.style.height = "0px";
+      element.style.marginTop = "0px";
+      element.style.marginBottom = "0px";
+      if (delta) window.scrollBy(0, delta);
+      return;
+    }
+
+    element.style.overflow = "hidden";
+    element.style.height = `${start}px`;
+    element.style.transition = "height 280ms ease-out, margin 280ms ease-out, opacity 280ms ease-out";
+    let previous = start;
+    const observer = new ResizeObserver(() => {
+      const next = element.getBoundingClientRect().height;
+      const removed = previous - next;
+      previous = next;
+      if (removed <= 0) return;
+      const box = element.getBoundingClientRect();
+      const delta = scrollDeltaForRemovedSize({
+        cardStart: box.top,
+        cardEnd: box.bottom + removed,
+        viewportStart: 0,
+        viewportEnd: window.innerHeight,
+        removed,
+      });
+      if (delta) window.scrollBy(0, delta);
+    });
+    observer.observe(element);
+    const frame = window.requestAnimationFrame(() => {
+      element.style.height = "0px";
+      element.style.opacity = "0";
+      element.style.marginTop = "0px";
+      element.style.marginBottom = "0px";
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [collapsing]);
+
   return (
-    <motion.div
-      layout={isMobile ? false : "position"}
-      transition={HIDE_EXIT_LAYOUT_TRANSITION}
-      className="h-full"
+    <div
+      ref={ref}
+      data-voted-card={cardKey || undefined}
+      data-testid={cardKey ? `voted-card-${cardKey}` : undefined}
+      className={cn(
+        "h-full min-w-0",
+        highlighted && (accent === "blue" ? "voted-return-ring-blue" : "voted-return-ring"),
+      )}
     >
-      <motion.div
-        className="h-full"
-        style={{ transformOrigin: "top left" }}
-        animate={flying ? HIDE_EXIT_FLY : HIDE_EXIT_REST}
-        transition={flying ? HIDE_EXIT_FLY_TRANSITION : HIDE_EXIT_SETTLE_TRANSITION}
-      >
-        {children}
-      </motion.div>
-    </motion.div>
+      {children}
+    </div>
   );
 }

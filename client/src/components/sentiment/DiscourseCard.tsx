@@ -304,7 +304,7 @@ export function DiscourseCard({
           />
         </div>
 
-        <div className="mt-auto md:mt-2 flex items-center gap-2 pt-3 md:pt-[22px] border-t border-white/10">
+        <div className="mt-auto flex min-h-7 items-center gap-2 pt-2 md:mt-2 md:pt-0">
             <div className="flex-1 min-w-0 flex items-center">
               {showDiscussion ? (
                 <CardVoteCount count={topic.totalVotes} testId={`text-votes-${topic.id}`} />
