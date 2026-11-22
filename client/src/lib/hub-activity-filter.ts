@@ -206,8 +206,9 @@ export interface VoteActivityLifecycle<T> {
 /**
  * Vote-hub activity filter for one card.
  * All = every card. Votes only = acted cards. Not voted = cards the user has
- * not acted on, keeping a just-voted card through its hide-exit animation.
- * Snap lists omit `lifecycle` so a voted card leaves immediately.
+ * not acted on, keeping a just-voted card until they move on (it leaves the
+ * viewport, or the filter or category changes). Snap lists omit `lifecycle`
+ * so a voted card leaves immediately.
  */
 export function filterCardsByVoteActivity<T>(
   cards: readonly T[],

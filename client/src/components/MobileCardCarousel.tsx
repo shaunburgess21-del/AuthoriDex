@@ -16,6 +16,7 @@ import "swiper/css";
 import "swiper/css/virtual";
 import { WindowedDotIndicator, type WindowedDotAccent } from "@/components/WindowedDotIndicator";
 import { HIDE_EXIT_DWELL_MS } from "@/hooks/useHideExitQueue";
+import { carouselIndexAfterRemoval } from "@/lib/voted-card-retain";
 
 export interface CardSectionHandle {
   slideToKey: (key: string) => boolean;
@@ -83,6 +84,9 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
     // corrects the active index (instead of resetting to 0) once the voted
     // slide is spliced out of `items`.
     const pendingHideRef = useRef<{ idx: number; advanced: boolean } | null>(null);
+    const prevKeysRef = useRef<string[] | null>(null);
+    const activeIndexRef = useRef(activeIndex);
+    activeIndexRef.current = activeIndex;
 
     const modules = useMemo(() => (autoHeight ? [A11y] : [A11y, Virtual]), [autoHeight]);
 
@@ -205,25 +209,61 @@ export const MobileCardCarousel = forwardRef<CardSectionHandle, MobileCardCarous
       }
     });
 
+    const itemKeys = items.map((item, index) => normalizeSlideKey(mobileSlideKey(item, index)));
+    const itemKeySig = itemKeys.join("\n");
+
     useEffect(() => {
-      // A voted card was just spliced out (Hidden mode): correct the active
-      // index so we stay on the adjacent card rather than resetting to 0.
+      const previous = prevKeysRef.current;
+      prevKeysRef.current = itemKeys;
+      const swiper = swiperRef.current;
+      // One voted card left the carousel. Stay on the slide the user is
+      // looking at instead of letting the index point at the next card.
+      if (previous && previous.length === itemKeys.length + 1) {
+        let removed = -1;
+        let matched = 0;
+        for (let index = 0; index < previous.length; index += 1) {
+          if (matched < itemKeys.length && previous[index] === itemKeys[matched]) {
+            matched += 1;
+          } else if (removed === -1) {
+            removed = index;
+          } else {
+            removed = -2;
+            break;
+          }
+        }
+        if (removed >= 0 && matched === itemKeys.length) {
+          pendingHideRef.current = null;
+          const target = carouselIndexAfterRemoval({
+            removedIndex: removed,
+            activeIndex: activeIndexRef.current,
+            nextLength: itemKeys.length,
+          });
+          setActiveIndex(target);
+          if (swiper && !swiper.destroyed) swiper.slideTo(target, 0);
+          return;
+        }
+      }
+      // A voted card was just spliced out (legacy hide-exit advance): correct
+      // the active index so we stay on the adjacent card rather than resetting to 0.
       const pending = pendingHideRef.current;
       if (pending) {
         pendingHideRef.current = null;
-        const swiper = swiperRef.current;
+        const current = activeIndexRef.current;
         // After slideNext we sit at idx+1; removing idx shifts us back by one.
         // For the last card (no advance) drop to the new last slide.
-        const shift = pending.advanced || pending.idx <= activeIndex ? 1 : 0;
-        const target = Math.max(0, Math.min(activeIndex - shift, items.length - 1));
+        const shift = pending.advanced || pending.idx <= current ? 1 : 0;
+        const target = Math.max(0, Math.min(current - shift, itemKeys.length - 1));
         setActiveIndex(target);
         if (swiper && !swiper.destroyed) swiper.slideTo(target, 0);
         return;
       }
-      if (userOrParentControlledRef.current) return;
+      if (!previous || userOrParentControlledRef.current) return;
       setActiveIndex(0);
       swiperRef.current?.slideTo(0, 0);
-    }, [items.length]);
+      // itemKeys is derived from itemKeySig. activeIndex is read from a ref so
+      // correcting it does not run this effect a second time.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [itemKeySig]);
 
     useEffect(() => {
       if (!autoHeight) return;

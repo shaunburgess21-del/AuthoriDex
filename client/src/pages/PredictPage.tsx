@@ -25,6 +25,11 @@ import { positionsSectionEmptyMessage } from "@/lib/positions-filter-notice";
 import { PositionsFilterNotice } from "@/components/predict/PositionsFilterNotice";
 import { consumePredictReturnAnchor, scrollToPredictAnchor } from "@/lib/predictReturnAnchor";
 import type { CardSectionHandle } from "@/components/CardSection";
+import { HideExitCard } from "@/components/HideExitCard";
+import { VotedCardRetainProvider } from "@/components/VotedCardRetainContext";
+import { useHideExitQueue } from "@/hooks/useHideExitQueue";
+import { useVotedCardSession } from "@/hooks/useVotedCardSession";
+import { retainIdFromKey } from "@/lib/voted-card-retain";
 import { Button } from "@/components/ui/button";
 import { OfflineInlineNotice } from "@/components/OfflineUnavailable";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
@@ -1178,6 +1183,32 @@ export default function PredictPage() {
   const [gainerSearch, setGainerSearch] = useState("");
   const [communityCategory, setCommunityCategory] = useState<CategoryFilter>("all");
   const [communitySearch, setCommunitySearch] = useState("");
+  const predictHideExit = useHideExitQueue();
+  const predictCardInListRef = useRef<(key: string) => boolean>(() => false);
+  const predictRevealRef = useRef<(id: string | null) => void>(() => {});
+  const predictSession = useVotedCardSession({
+    filter: myPositionsFilter,
+    categoryKey: `${weeklyCategory}|${communityCategory}`,
+    hideExit: predictHideExit,
+    cardInList: (key) => predictCardInListRef.current(key),
+    prepare: (key) => {
+      const id = retainIdFromKey(key);
+      updownSectionRef.current?.slideToKey(id);
+      h2hSectionRef.current?.slideToKey(id);
+      gainerSectionRef.current?.slideToKey(id);
+      communitySectionRef.current?.slideToKey(id);
+      predictRevealRef.current(id);
+    },
+    sticky: () => {
+      const header = document.querySelector("header.sticky");
+      const band = document.querySelector("[data-testid='predict-section-filter-bar']");
+      return {
+        stickyTop: header instanceof HTMLElement ? header.offsetHeight : 64,
+        bandHeight: band instanceof HTMLElement ? band.offsetHeight : 0,
+      };
+    },
+  });
+  predictRevealRef.current = predictSession.setRevealId;
   const [viewAllCategory, setViewAllCategory] = useState<PredictOverlayKey | null>(() => {
     const overlay = window.history.state?.overlay;
     return overlay === "weekly" || overlay === "h2h" || overlay === "gainers"
@@ -1980,6 +2011,10 @@ export default function PredictPage() {
       setStakeModalOpen(false);
       setPendingSelection(null);
 
+      if (!hadPositionBefore && myPositionsFilter === "hide-mine") {
+        predictHideExit.beginExit(`market:${marketId}`);
+        predictSession.note(`market:${marketId}`);
+      }
       appendOptimisticPrediction(queryClient, {
         marketId,
         entryId: variables.entryId,
@@ -2110,6 +2145,10 @@ export default function PredictPage() {
       setStakeModalOpen(false);
       setPendingSelection(null);
 
+      if (!hadPositionBefore && myPositionsFilter === "hide-mine") {
+        predictHideExit.beginExit(`market:${marketId}`);
+        predictSession.note(`market:${marketId}`);
+      }
       appendOptimisticPrediction(queryClient, {
         marketId,
         entryId: variables.entryId,
@@ -2223,8 +2262,13 @@ export default function PredictPage() {
       setPendingSelection(null);
 
       if (market?.id) {
+        const marketId = String(market.id);
+        if (!userBetsByMarket.has(marketId) && myPositionsFilter === "hide-mine") {
+          predictHideExit.beginExit(`market:${marketId}`);
+          predictSession.note(`market:${marketId}`);
+        }
         appendOptimisticPrediction(queryClient, {
-          marketId: String(market.id),
+          marketId,
           entryId: variables.entryId,
           entryLabel: String(entryLabel),
           stakeAmount: variables.stakeAmount,
@@ -2600,10 +2644,17 @@ export default function PredictPage() {
     return matchesCategoryFilter(marketCategory, secondaryCategories, cat);
   };
 
-  const passesMyPositionsFilter = (marketId: string) =>
-    myPositionsFilter === "all" ||
-    (myPositionsFilter === "show-mine" && userBetsByMarket.has(String(marketId))) ||
-    (myPositionsFilter === "hide-mine" && !userBetsByMarket.has(String(marketId)));
+  const passesMyPositionsFilter = (marketId: string) => {
+    const id = String(marketId);
+    const acted = userBetsByMarket.has(id);
+    const key = `market:${id}`;
+    if (myPositionsFilter === "all") return true;
+    if (myPositionsFilter === "show-mine") return acted;
+    if (predictHideExit.isRetained(key)) return true;
+    if (acted) return false;
+    if (predictHideExit.isHidden(key)) return false;
+    return true;
+  };
 
   const passesPredictSectionFilter = (marketId: string, search: string) =>
     passesSectionActivityFilter(marketId, search, passesMyPositionsFilter);
@@ -2665,6 +2716,7 @@ export default function PredictPage() {
       myPositionsFilter,
       userBetsByMarket,
       favoriteIds,
+      predictHideExit.snapshot,
     ],
   );
 
@@ -2698,6 +2750,7 @@ export default function PredictPage() {
       myPositionsFilter,
       userBetsByMarket,
       favoriteIds,
+      predictHideExit.snapshot,
     ],
   );
 
@@ -2738,6 +2791,7 @@ export default function PredictPage() {
       myPositionsFilter,
       userBetsByMarket,
       favoriteIds,
+      predictHideExit.snapshot,
     ],
   );
 
@@ -2791,6 +2845,7 @@ export default function PredictPage() {
       myPositionsFilter,
       userBetsByMarket,
       favoriteIds,
+      predictHideExit.snapshot,
     ],
   );
 
@@ -3021,8 +3076,9 @@ export default function PredictPage() {
             key={market.id}
             className="max-md:h-auto max-md:self-start w-full"
             data-testid={`card-community-${market.id}`}
-            data-predict-market-card=""
-          >
+          data-predict-market-card=""
+        >
+          <HideExitCard cardKey={`market:${market.id}`}>
           <OpenMarketCard
             market={market}
             onNavigate={(slug, pick, direction) =>
@@ -3044,6 +3100,7 @@ export default function PredictPage() {
             netCreditsIn={totals?.netCreditsIn ?? top?.netCreditsIn ?? null}
             positionCount={totals?.count ?? (top ? 1 : 0)}
           />
+          </HideExitCard>
         </div>
       );
     },
@@ -3074,7 +3131,7 @@ export default function PredictPage() {
           passesPredictSectionFilter(m.id, updownSearch),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- passesMyPositionsFilter closes over myPositionsFilter/userBetsByMarket which are listed
-    [hydratedMarkets, updownSearch, myPositionsFilter, userBetsByMarket],
+    [hydratedMarkets, updownSearch, myPositionsFilter, userBetsByMarket, predictHideExit.snapshot],
   );
 
   const updownSnapItems: SnapItem[] = useMemo(
@@ -3124,7 +3181,33 @@ export default function PredictPage() {
     return null;
   }, [pendingSelection, nativeUpdownData, nativeH2hData, nativeGainerData, openMarkets]);
 
+  predictCardInListRef.current = (key) => {
+    const id = retainIdFromKey(key);
+    const lists = [hydratedMarkets, hydratedH2H, hydratedGainers, openMarkets];
+    return lists.some((list) => list.some((market: { id?: string }) => String(market?.id) === id));
+  };
+
+  const predictRetainValue = useMemo(
+    () => ({
+      watching: (key: string) =>
+        myPositionsFilter === "hide-mine" && predictHideExit.isRetained(key) && !predictHideExit.isExiting(key),
+      collapsing: (key: string) => predictHideExit.isExiting(key),
+      onLeave: (key: string, options?: { immediate?: boolean }) => predictHideExit.release(key, options),
+      highlightKey: predictSession.highlightKey,
+      accent: "blue" as const,
+    }),
+    [
+      myPositionsFilter,
+      predictHideExit.isRetained,
+      predictHideExit.isExiting,
+      predictHideExit.release,
+      predictHideExit.snapshot,
+      predictSession.highlightKey,
+    ],
+  );
+
   return (
+    <VotedCardRetainProvider value={predictRetainValue}>
     <div className="min-h-screen pb-20 md:pb-0 overflow-x-clip">
       <SiteHeader
         active="predict"
@@ -3431,9 +3514,10 @@ export default function PredictPage() {
             ) : updownLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredUpDown.length > 0 ? (
-              <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-blue-500">
+              <CardSection ref={updownSectionRef} desktopLimit={sectionDesktopLimit(updownSearch)} gap="gap-4" testIdPrefix="section-updown" dotActiveColor="bg-blue-500" revealKey={predictSession.revealId}>
                 {filteredUpDown.map((market) => (
                   <div key={market.id} data-predict-market-card="">
+                    <HideExitCard cardKey={`market:${market.id}`}>
                     <WeeklyUpDownCard 
                       market={market} 
                       isMarketClosed={isMarketClosed}
@@ -3450,6 +3534,7 @@ export default function PredictPage() {
                       onBrowseFullScreen={isMobile ? () => openSnapScroll("updown", String(market.id), "browse-button") : undefined}
                       unrealisedPnl={ammPositionByMarket.get(String(market.id))?.unrealisedPnl ?? null}
                     />
+                    </HideExitCard>
                   </div>
                 ))}
               </CardSection>
@@ -3535,7 +3620,7 @@ export default function PredictPage() {
             ) : h2hLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredH2H.length > 0 ? (
-              <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-blue-500" mobileSlideMinHeight="min-h-[420px]">
+              <CardSection ref={h2hSectionRef} desktopLimit={sectionDesktopLimit(h2hSearch)} gap="gap-4" testIdPrefix="section-h2h" dotActiveColor="bg-blue-500" mobileSlideMinHeight="min-h-[420px]" revealKey={predictSession.revealId}>
                 {filteredH2H.map((market) => {
                   const bet = userBetsByMarket.get(String(market.id));
                   const ammPos = ammPositionByMarket.get(String(market.id));
@@ -3549,6 +3634,7 @@ export default function PredictPage() {
                       : bet?.stakeAmount;
                   return (
                     <div key={market.id} data-predict-market-card="">
+                    <HideExitCard cardKey={`market:${market.id}`}>
                     <HeadToHeadCard
                       market={market} 
                       isMarketClosed={isMarketClosed}
@@ -3561,6 +3647,7 @@ export default function PredictPage() {
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
                     />
+                    </HideExitCard>
                     </div>
                   );
                 })}
@@ -3646,7 +3733,7 @@ export default function PredictPage() {
             ) : gainerLoading ? (
               <CardGridSkeleton count={3} />
             ) : filteredGainers.length > 0 ? (
-              <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-blue-500" autoHeight>
+              <CardSection ref={gainerSectionRef} desktopLimit={sectionDesktopLimit(gainerSearch)} gap="gap-4" testIdPrefix="section-gainer" dotActiveColor="bg-blue-500" autoHeight revealKey={predictSession.revealId}>
                 {filteredGainers.map((market) => {
                   const marketId = String(market.id);
                   const totals = ammPositionTotalsByMarket.get(marketId);
@@ -3658,6 +3745,7 @@ export default function PredictPage() {
                   const isMultiPick = summary?.pickLabel === "Multiple picks";
                   return (
                   <div key={market.id} data-predict-market-card="">
+                  <HideExitCard cardKey={`market:${market.id}`}>
                   <TopGainerCard
                     market={market} 
                     isMarketClosed={isMarketClosed}
@@ -3677,6 +3765,7 @@ export default function PredictPage() {
                         : (top?.unrealisedPnl ?? null)
                     }
                   />
+                  </HideExitCard>
                   </div>
                   );
                 })}
@@ -4422,5 +4511,6 @@ export default function PredictPage() {
         </CornerFabSlot>
       )}
     </div>
+    </VotedCardRetainProvider>
   );
 }

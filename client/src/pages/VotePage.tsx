@@ -114,7 +114,10 @@ import { CurateProfileCard as CurateProfileCardComponent, type CuratePerson } fr
 import { OverallRatingCard } from "@/components/OverallRatingCard";
 import { CardSection, type CardSectionHandle } from "@/components/CardSection";
 import { HideExitCard } from "@/components/HideExitCard";
+import { VotedCardRetainProvider } from "@/components/VotedCardRetainContext";
 import { useHideExitQueue } from "@/hooks/useHideExitQueue";
+import { useVotedCardSession } from "@/hooks/useVotedCardSession";
+import { mixedFeedKeyForRetainKey, retainIdFromKey } from "@/lib/voted-card-retain";
 import { VersusCard, type VersusCardMatchup } from "@/components/matchups/VersusCard";
 import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 import { FilterDropdown } from "@/components/FilterDropdown";
@@ -1150,6 +1153,7 @@ export default function VotePage() {
   // Induction's onError runs before the hide-exit queue exists. The ref is
   // assigned once that queue is created, and the callback only fires later.
   const cancelHideExitRef = useRef<(key: string) => void>(() => {});
+  const clearVotedAnchorRef = useRef<(key: string) => void>(() => {});
 
   const inductionAuthUserId = user?.id ?? null;
   useEffect(() => {
@@ -1192,6 +1196,7 @@ export default function VotePage() {
     onError: (err, candidateId, context) => {
       hapticError();
       cancelHideExitRef.current(`induction:${candidateId}`);
+      clearVotedAnchorRef.current(`induction:${candidateId}`);
       setPendingInductionIds((prev) => {
         const next = new Set(prev);
         next.delete(candidateId);
@@ -1703,30 +1708,50 @@ export default function VotePage() {
     },
     [isMobile, myVotesFilter, playInactiveVoteAdvance, triggerXpBurst, user],
   );
-  const hideExit = useHideExitQueue({
-    onExiting: (key) => {
-      if (!isMobile) return;
-      const sep = key.indexOf(":");
-      if (sep < 0) return;
-      const section = key.slice(0, sep);
-      const id = key.slice(sep + 1);
+  const hideExit = useHideExitQueue();
+  const cardInListRef = useRef<(key: string) => boolean>(() => false);
+  const revealSetterRef = useRef<(id: string | null) => void>(() => {});
+  const focusSetterRef = useRef<(key: string | null) => void>(() => {});
+  const votedSession = useVotedCardSession({
+    filter: myVotesFilter,
+    categoryKey: globalCategoryFilter,
+    hideExit,
+    cardInList: (key) => cardInListRef.current(key),
+    prepare: (key) => {
+      const id = retainIdFromKey(key);
+      const kind = key.slice(0, key.indexOf(":"));
       const ref =
-        section === "sentiment"
+        kind === "sentiment"
           ? sentimentSectionRef
-          : section === "matchups"
+          : kind === "matchups"
             ? matchupsSectionRef
-            : section === "opinion"
+            : kind === "opinion"
               ? opinionSectionRef
-              : section === "rating"
+              : kind === "rating"
                 ? ratingSectionRef
-                : section === "induction"
+                : kind === "induction"
                   ? inductionSectionRef
-                  : section === "curate"
+                  : kind === "curate"
                     ? curateSectionRef
                     : null;
-      ref?.current?.playHideExit(id);
+      ref?.current?.slideToKey(id);
+      revealSetterRef.current(id);
+      const feedKey = mixedFeedKeyForRetainKey(key);
+      focusSetterRef.current(
+        feedKey && activeSection === "All" && !desktopSectionLayoutRef.current ? feedKey : null,
+      );
+    },
+    sticky: () => {
+      const header = document.querySelector("header.sticky");
+      const band = document.querySelector("[data-testid='vote-sticky-band']");
+      return {
+        stickyTop: header instanceof HTMLElement ? header.offsetHeight : 64,
+        bandHeight: band instanceof HTMLElement ? band.offsetHeight : 0,
+      };
     },
   });
+  revealSetterRef.current = votedSession.setRevealId;
+  focusSetterRef.current = votedSession.setFeedFocusKey;
   const {
     beginExit: beginHideExit,
     cancelExit: cancelHideExit,
@@ -1736,12 +1761,15 @@ export default function VotePage() {
     pulseTick: hidePulseTick,
   } = hideExit;
   cancelHideExitRef.current = cancelHideExit;
+  clearVotedAnchorRef.current = votedSession.clear;
 
   const beginShapeHideExit = useCallback(
     (key: string) => {
-      if (myVotesFilter === "hide-mine") beginHideExit(key);
+      if (myVotesFilter !== "hide-mine") return;
+      beginHideExit(key);
+      votedSession.note(key);
     },
-    [myVotesFilter, beginHideExit],
+    [myVotesFilter, beginHideExit, votedSession.note],
   );
 
   // Matchup voting via the shared query-cache-first hook (also used by the
@@ -1758,6 +1786,7 @@ export default function VotePage() {
       // Abort any pending hide animation so the card returns to the grid.
       if (!hadPreviousVote) {
         cancelHideExit(`matchups:${matchupId}`);
+        votedSession.clear(`matchups:${matchupId}`);
       }
     },
     onVoteSuccess: (_data, variables) => {
@@ -1776,6 +1805,7 @@ export default function VotePage() {
         // cards animate out — a re-votable card is always visible, never hidden.
         if (myVotesFilter === "hide-mine" && !previousVote) {
           beginHideExit(`matchups:${matchupId}`);
+          votedSession.note(`matchups:${matchupId}`);
         }
         if (previousVote) {
           // Re-vote: instant toast with change copy; XP/advance stay onSuccess-gated.
@@ -2372,6 +2402,18 @@ export default function VotePage() {
     ratingVoteEpoch,
   ]);
 
+  cardInListRef.current = (key) => {
+    const id = retainIdFromKey(key);
+    const kind = key.slice(0, key.indexOf(":"));
+    if (kind === "matchups") return filteredMatchups.some((matchup) => matchup.id === id);
+    if (kind === "sentiment") return filteredTopics.some((topic: { id?: string }) => topic.id === id);
+    if (kind === "opinion") return filteredOpinionPolls.some((poll: { id?: string }) => poll.id === id);
+    if (kind === "rating") return filteredRatingCelebrities.some((person) => person.id === id);
+    if (kind === "induction") return filteredCandidates.some((candidate) => candidate.id === id);
+    if (kind === "curate") return filteredCurateCelebrities.some((person: { id: string }) => person.id === id);
+    return false;
+  };
+
   const shapeVotesPending = !!user && (!inductionVotesFetched || !curateVotesFetched);
 
   const cycleMyVotesFilter = useCallback(() => {
@@ -2919,6 +2961,11 @@ export default function VotePage() {
       throw new Error("This poll is no longer available.");
     }
     const wasFirstVote = !topic.userVote;
+    const retainKey = `sentiment:${topicId}`;
+    if (myVotesFilter === "hide-mine" && wasFirstVote) {
+      beginHideExit(retainKey);
+      votedSession.note(retainKey);
+    }
     const optimisticFeedbackShown = showOptimisticVoteFeedback(
       "sentiment",
       topicId,
@@ -2928,9 +2975,14 @@ export default function VotePage() {
         : "Your Sentiment Poll vote has been updated.",
       "Sentiment Vote",
     ) && wasFirstVote;
-    await discourseVoteMutation.mutateAsync({ slug: voteKey, choice, topicId, optimisticFeedbackShown });
-    if (myVotesFilter === "hide-mine") {
-      beginHideExit(`sentiment:${topicId}`);
+    try {
+      await discourseVoteMutation.mutateAsync({ slug: voteKey, choice, topicId, optimisticFeedbackShown });
+    } catch (err) {
+      if (myVotesFilter === "hide-mine" && wasFirstVote) {
+        cancelHideExit(retainKey);
+        votedSession.clear(retainKey);
+      }
+      throw err;
     }
   };
 
@@ -2944,9 +2996,10 @@ export default function VotePage() {
       const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
       const wasFirstVote = !poll?.userVote;
       if (myVotesFilter === "hide-mine") {
-        if (poll) {
+        if (poll && wasFirstVote) {
           exitKey = `opinion:${poll.id}`;
           beginHideExit(exitKey);
+          votedSession.note(exitKey);
         }
       }
       const optimisticFeedbackShown = !!(poll?.id && showOptimisticVoteFeedback(
@@ -2961,11 +3014,14 @@ export default function VotePage() {
       try {
         await voteOnOpinionPoll(slug, optionId, { suppressXpBurst: optimisticFeedbackShown });
       } catch (err) {
-        if (exitKey) cancelHideExit(exitKey);
+        if (exitKey) {
+          cancelHideExit(exitKey);
+          votedSession.clear(exitKey);
+        }
         throw err;
       }
     },
-    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit, showOptimisticVoteFeedback],
+    [voteOnOpinionPoll, myVotesFilter, opinionPolls, beginHideExit, cancelHideExit, showOptimisticVoteFeedback, votedSession.note, votedSession.clear],
   );
 
   const openSuggestModal = (open: () => void) => {
@@ -3284,11 +3340,11 @@ export default function VotePage() {
           {ratingLoading ? (
             <CardGridSkeleton count={3} />
           ) : displayRatingCelebrities.length > 0 ? (
-            <CardSection ref={ratingSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-rating">
+            <CardSection ref={ratingSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-rating" revealKey={votedSession.revealId}>
               {displayRatingCelebrities.map((person) => (
                 <HideExitCard
                   key={person.id}
-                  isMobile={isMobile}
+                  cardKey={`rating:${person.id}`}
                   exiting={isHideExiting(`rating:${person.id}`)}
                 >
                   <OverallRatingCard 
@@ -3299,7 +3355,10 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                     onRated={() => beginShapeHideExit(`rating:${person.id}`)}
-                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => {
+                      cancelHideExit(`rating:${person.id}`);
+                      votedSession.clear(`rating:${person.id}`);
+                    }}
                     enableDiscussion
                   />
                 </HideExitCard>
@@ -3325,7 +3384,19 @@ export default function VotePage() {
         </section>
     ) : null;
 
+  const votedRetainValue = useMemo(
+    () => ({
+      watching: (key: string) => myVotesFilter === "hide-mine" && isHideRetained(key) && !isHideExiting(key),
+      collapsing: (key: string) => isHideExiting(key),
+      onLeave: (key: string, options?: { immediate?: boolean }) => hideExit.release(key, options),
+      highlightKey: votedSession.highlightKey,
+      accent: "cyan" as const,
+    }),
+    [myVotesFilter, isHideRetained, isHideExiting, hideExit.release, votedSession.highlightKey],
+  );
+
   return (
+    <VotedCardRetainProvider value={votedRetainValue}>
     <div className="min-h-screen overflow-x-clip pb-[calc(13.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
       <SiteHeader active="vote" logoVariant="vote" backButton="none" />
       {/* Section chips stick as one band. The band slides up on scroll down
@@ -3467,11 +3538,11 @@ export default function VotePage() {
           {pollsLoading ? (
             <CardGridSkeleton count={3} />
           ) : displayTopics.length > 0 ? (
-            <CardSection ref={sentimentSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-topics">
+            <CardSection ref={sentimentSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-topics" revealKey={votedSession.revealId}>
               {displayTopics.map((topic) => (
                 <HideExitCard
                   key={topic.id}
-                  isMobile={isMobile}
+                  cardKey={`sentiment:${topic.id}`}
                   exiting={isHideExiting(`sentiment:${topic.id}`)}
                 >
                   <DiscourseCard
@@ -3579,11 +3650,11 @@ export default function VotePage() {
               ))}
             </div>
           ) : (
-            <CardSection ref={matchupsSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups">
+            <CardSection ref={matchupsSectionRef} desktopLimit={9} gap="gap-5" testIdPrefix="section-matchups" revealKey={votedSession.revealId}>
               {displayMatchups.map((matchup, index) => (
                 <HideExitCard
                   key={matchup.id}
-                  isMobile={isMobile}
+                  cardKey={`matchups:${matchup.id}`}
                   exiting={isHideExiting(`matchups:${matchup.id}`)}
                 >
                   <VersusCard
@@ -3683,11 +3754,11 @@ export default function VotePage() {
           {opinionPollsLoading ? (
             <CardGridSkeleton count={3} />
           ) : displayOpinionPolls.length > 0 ? (
-            <CardSection ref={opinionSectionRef} desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls">
+            <CardSection ref={opinionSectionRef} desktopLimit={6} gap="gap-5" testIdPrefix="section-opinion-polls" revealKey={votedSession.revealId}>
               {displayOpinionPolls.map((poll: any) => (
                 <HideExitCard
                   key={poll.id}
-                  isMobile={isMobile}
+                  cardKey={`opinion:${poll.id}`}
                   exiting={isHideExiting(`opinion:${poll.id}`)}
                 >
                   <OpinionPollCard
@@ -3736,6 +3807,7 @@ export default function VotePage() {
             loading={mixedFeedLoading}
             filterKey={`${globalCategoryFilter}|${mixedFeedSearch}|${myVotesFilter}`}
             restoreCardKey={mixedFeedRestoreKey}
+            focusCardKey={votedSession.feedFocusKey}
             onAnchorChange={pinMixedFeedCard}
             toolbar={
               <div className="mb-4">
@@ -3776,8 +3848,7 @@ export default function VotePage() {
                 const matchup = entry.item as VersusCardMatchup;
                 return (
                   <HideExitCard
-                    isMobile={isMobile}
-                    animateOnMobile
+                    cardKey={`matchups:${matchup.id}`}
                     exiting={isHideExiting(`matchups:${matchup.id}`)}
                   >
                     <VersusCard
@@ -3812,8 +3883,7 @@ export default function VotePage() {
                 const topic = entry.item as any;
                 return (
                   <HideExitCard
-                    isMobile={isMobile}
-                    animateOnMobile
+                    cardKey={`sentiment:${topic.id}`}
                     exiting={isHideExiting(`sentiment:${topic.id}`)}
                   >
                     <DiscourseCard
@@ -3843,8 +3913,7 @@ export default function VotePage() {
                 const poll = entry.item as any;
                 return (
                   <HideExitCard
-                    isMobile={isMobile}
-                    animateOnMobile
+                    cardKey={`opinion:${poll.id}`}
                     exiting={isHideExiting(`opinion:${poll.id}`)}
                   >
                     <OpinionPollCard
@@ -3874,8 +3943,7 @@ export default function VotePage() {
               const person = entry.item as (typeof ratingCelebrities)[number];
               return (
                 <HideExitCard
-                  isMobile={isMobile}
-                  animateOnMobile
+                  cardKey={`rating:${person.id}`}
                   exiting={isHideExiting(`rating:${person.id}`)}
                 >
                   <OverallRatingCard
@@ -3889,7 +3957,10 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                     onRated={() => beginShapeHideExit(`rating:${person.id}`)}
-                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => {
+                      cancelHideExit(`rating:${person.id}`);
+                      votedSession.clear(`rating:${person.id}`);
+                    }}
                     enableDiscussion
                     showTypeCue
                     feedLayout
@@ -3977,11 +4048,11 @@ export default function VotePage() {
           {inductionLoading || inductionVotesPending ? (
             <CardGridSkeleton count={3} />
           ) : displayCandidates.length > 0 ? (
-            <CardSection ref={inductionSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-induction">
+            <CardSection ref={inductionSectionRef} desktopLimit={9} gap="gap-4" testIdPrefix="section-induction" revealKey={votedSession.revealId}>
               {displayCandidates.map((candidate, index) => (
                 <HideExitCard
                   key={candidate.id}
-                  isMobile={isMobile}
+                  cardKey={`induction:${candidate.id}`}
                   exiting={isHideExiting(`induction:${candidate.id}`)}
                 >
                   <InductionCandidateCard
@@ -4098,6 +4169,7 @@ export default function VotePage() {
             isPersonExiting={(id) => isHideExiting(`curate:${id}`)}
             onPersonVoted={(id) => beginShapeHideExit(`curate:${id}`)}
             sectionRef={curateSectionRef}
+            revealKey={votedSession.revealId}
           />
         </section>
         )}
@@ -4880,7 +4952,10 @@ export default function VotePage() {
                     leaderboardCategories={leaderboardCats}
                     onBrowseFullScreen={isMobile ? () => openSnapScroll("rating", person.id, "browse-button") : undefined}
                     onRated={() => beginShapeHideExit(`rating:${person.id}`)}
-                    onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                    onRateRolledBack={() => {
+                      cancelHideExit(`rating:${person.id}`);
+                      votedSession.clear(`rating:${person.id}`);
+                    }}
                     enableDiscussion
                   />
                 ))}
@@ -5008,7 +5083,10 @@ export default function VotePage() {
                   leaderboardCategories={leaderboardCats}
                   categoryMenuDisabled
                   onRated={() => beginShapeHideExit(`rating:${person.id}`)}
-                  onRateRolledBack={() => cancelHideExit(`rating:${person.id}`)}
+                  onRateRolledBack={() => {
+                    cancelHideExit(`rating:${person.id}`);
+                    votedSession.clear(`rating:${person.id}`);
+                  }}
                 />
               );
             }}
@@ -5107,5 +5185,6 @@ export default function VotePage() {
         }
       />
     </div>
+    </VotedCardRetainProvider>
   );
 }

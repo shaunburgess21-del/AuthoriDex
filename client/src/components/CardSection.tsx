@@ -24,11 +24,19 @@ interface CardSectionProps {
   mobileSlideMinHeight?: string;
   /** Collapse Swiper height to the active slide (content-sized cards). Disables Virtual slides. */
   autoHeight?: boolean;
+  /**
+   * Keep this child in the desktop grid even when it sits past `desktopLimit`,
+   * so a just-voted card can be scrolled back into view.
+   */
+  revealKey?: string | null;
 }
 
-function desktopChildKey(child: unknown, index: number): string | number {
+function desktopChildKey(child: unknown, index: number): string {
   if (isValidElement(child) && child.key != null && child.key !== ".") {
-    return child.key as string | number;
+    const key = String(child.key);
+    if (key.startsWith(".$")) return key.slice(2);
+    if (key.startsWith(".")) return key.slice(1);
+    return key;
   }
   return `desktop-${index}`;
 }
@@ -44,11 +52,17 @@ export const CardSection = forwardRef<CardSectionHandle, CardSectionProps>(funct
     centerShortRows = false,
     mobileSlideMinHeight,
     autoHeight,
+    revealKey,
   },
   ref,
 ) {
   const items = useMemo(() => Children.toArray(children).filter(Boolean), [children]);
-  const desktopItems = items.slice(0, desktopLimit);
+  const desktopCount = useMemo(() => {
+    if (!revealKey) return desktopLimit;
+    const index = items.findIndex((item, itemIndex) => desktopChildKey(item, itemIndex) === revealKey);
+    return index >= desktopLimit ? index + 1 : desktopLimit;
+  }, [desktopLimit, items, revealKey]);
+  const desktopItems = items.slice(0, desktopCount);
 
   if (items.length === 0) return null;
 

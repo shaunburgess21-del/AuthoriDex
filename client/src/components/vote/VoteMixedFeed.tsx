@@ -43,6 +43,12 @@ interface VoteMixedFeedProps<T extends VoteMixedFeedItem> {
   /** Changes when category, search, or my-votes changes. Resets the window. */
   filterKey: string;
   restoreCardKey?: string | null;
+  /**
+   * Mount this card in the window so a filter change can scroll it back
+   * into view. Unlike `restoreCardKey`, this does not scroll on its own
+   * and does not survive a remount.
+   */
+  focusCardKey?: string | null;
   onAnchorChange?: (key: string) => void;
   empty: ReactNode;
   toolbar?: ReactNode;
@@ -94,6 +100,7 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
   loading,
   filterKey,
   restoreCardKey,
+  focusCardKey,
   onAnchorChange,
   empty,
   toolbar,
@@ -214,9 +221,25 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
     };
   }, [columns, items, loading, restoreCardKey, spans]);
 
+  useLayoutEffect(() => {
+    if (!focusCardKey) return;
+    const plan = planFeedRestore({
+      keys: items.map((item) => item.key),
+      cardKey: focusCardKey,
+      loading,
+      spans,
+      columns,
+    });
+    if (plan.action !== "reveal") return;
+    setRange((prev) =>
+      prev.start === plan.start && prev.end === plan.end ? prev : { start: plan.start, end: plan.end },
+    );
+  }, [columns, focusCardKey, items, loading, spans]);
+
   useEffect(() => {
     if (filterInit.current === filterKey) return;
     filterInit.current = filterKey;
+    if (focusCardKey) return;
     if (restoreCardKey && !didScrollRestore.current) return;
     didScrollRestore.current = true;
     scrollLock.current = false;
@@ -227,7 +250,7 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
     if (top < stickyBottom()) {
       window.scrollTo({ top: Math.max(0, window.scrollY + top - stickyBottom()), behavior: "auto" });
     }
-  }, [filterKey, items.length]);
+  }, [filterKey, focusCardKey, items.length]);
 
   const indexAtScroll = useCallback((): number => {
     const list = listRef.current;

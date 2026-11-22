@@ -1,112 +1,189 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  EMPTY_VOTED_RETAIN,
+  VOTED_CARD_COLLAPSE_MS,
+  cancelVotedCard,
+  collapseVotedCard,
+  dropRetainedCards,
+  hideVotedCard,
+  isVotedCardCollapsing,
+  isVotedCardHidden,
+  isVotedCardRetained,
+  retainVotedCard,
+  type VotedRetainPhase,
+  type VotedRetainState,
+} from "@/lib/voted-card-retain";
 
 /**
- * Lifecycle phases for a card that has been voted on while the Vote hub's
- * "My Votes" filter is in Hidden (`hide-mine`) mode.
+ * Cards voted while the hub filter is "not yet acted".
  *
- *  - `dwelling`  card stays mounted showing its results state (~DWELL_MS)
- *  - `exiting`   card plays its shrink/drift-into-the-toggle animation (~ANIM_MS)
- *  - `hidden`    card is removed from the display list permanently (for the session)
+ * The card stays mounted (`retained`, exposed as dwelling) so the post-vote
+ * state can sit where the user left it. It collapses and then leaves only
+ * when `release` runs (scrolled out of view) or the page drops the set
+ * (filter, category, or navigation).
  *
- * The queue defers the (otherwise instant) removal of a voted card so the
- * results can breathe for a beat and then animate away toward the Hidden
- * toggle, instead of vanishing on the next render.
+ * `isRetained` / `isHidden` plug into `filterCardsByVoteActivity`.
  */
 export type HideExitPhase = "dwelling" | "exiting" | "hidden";
 
 export const HIDE_EXIT_DWELL_MS = 900;
-export const HIDE_EXIT_ANIM_MS = 450;
+export const HIDE_EXIT_ANIM_MS = VOTED_CARD_COLLAPSE_MS;
+
+function toLegacyPhase(phase: VotedRetainPhase | undefined): HideExitPhase | null {
+  if (phase === "retained") return "dwelling";
+  if (phase === "collapsing") return "exiting";
+  if (phase === "hidden") return "hidden";
+  return null;
+}
 
 export interface HideExitQueue {
-  /** Start the dwell -> exit -> hidden lifecycle for a card key. Idempotent. */
+  /** Keep this card in the not-yet list. Idempotent. */
   beginExit: (key: string) => void;
-  /**
-   * Abort an in-flight lifecycle (e.g. the vote failed and was rolled back),
-   * so the card is neither retained nor permanently hidden.
-   */
+  /** Vote rolled back. */
   cancelExit: (key: string) => void;
+  /**
+   * The card left the viewport. Collapse, then drop.
+   * `immediate` skips the collapse (horizontal carousel, reduced motion).
+   */
+  release: (key: string, options?: { immediate?: boolean }) => void;
+  /** Filter changed or the page is leaving. Drop held cards without a collapse. */
+  dropAll: () => void;
+  /** Category changed. Collapse cards that are still retained, then drop them. */
+  collapseAll: () => void;
   phaseOf: (key: string) => HideExitPhase | null;
-  /** dwelling || exiting — card should stay rendered in the list. */
   isRetained: (key: string) => boolean;
-  /** Card is mid fly-away animation. */
   isExiting: (key: string) => boolean;
-  /** Lifecycle complete — card should be dropped from the list. */
   isHidden: (key: string) => boolean;
-  /** Increments each time a card completes its fly-away (drives the toggle pulse). */
+  /** New object whenever the set changes. List memos depend on it. */
+  snapshot: VotedRetainState;
+  /** Increments when a card finishes leaving, so the eye pill can pulse. */
   pulseTick: number;
 }
 
-export interface UseHideExitQueueOptions {
-  dwellMs?: number;
-  animMs?: number;
-  /** Fired when a key transitions dwelling -> exiting (used to drive the mobile carousel advance). */
-  onExiting?: (key: string) => void;
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function useHideExitQueue(options?: UseHideExitQueueOptions): HideExitQueue {
-  const dwellMs = options?.dwellMs ?? HIDE_EXIT_DWELL_MS;
-  const animMs = options?.animMs ?? HIDE_EXIT_ANIM_MS;
-
-  const onExitingRef = useRef(options?.onExiting);
-  onExitingRef.current = options?.onExiting;
-
-  const [phases, setPhases] = useState<Record<string, HideExitPhase>>({});
+export function useHideExitQueue(): HideExitQueue {
+  const [snapshot, setSnapshot] = useState<VotedRetainState>(EMPTY_VOTED_RETAIN);
   const [pulseTick, setPulseTick] = useState(0);
-  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>[]>>({});
+  const snapshotRef = useRef(snapshot);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     const timers = timersRef.current;
     return () => {
-      Object.values(timers).forEach((list) => list.forEach(clearTimeout));
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 
-  const beginExit = useCallback(
-    (key: string) => {
-      // Already in the lifecycle — never restart it.
-      if (timersRef.current[key]) return;
-
-      setPhases((prev) => ({ ...prev, [key]: "dwelling" }));
-
-      const timers: ReturnType<typeof setTimeout>[] = [];
-      timers.push(
-        setTimeout(() => {
-          setPhases((prev) => (prev[key] ? { ...prev, [key]: "exiting" } : prev));
-          onExitingRef.current?.(key);
-        }, dwellMs),
-      );
-      timers.push(
-        setTimeout(() => {
-          setPhases((prev) => (prev[key] ? { ...prev, [key]: "hidden" } : prev));
-          setPulseTick((t) => t + 1);
-        }, dwellMs + animMs),
-      );
-      timersRef.current[key] = timers;
-    },
-    [dwellMs, animMs],
-  );
-
-  const cancelExit = useCallback((key: string) => {
-    const timers = timersRef.current[key];
-    if (timers) {
-      timers.forEach(clearTimeout);
-      delete timersRef.current[key];
-    }
-    setPhases((prev) => {
-      if (!(key in prev)) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+  const commit = useCallback((next: VotedRetainState) => {
+    snapshotRef.current = next;
+    setSnapshot(next);
   }, []);
 
-  const phaseOf = useCallback((key: string) => phases[key] ?? null, [phases]);
-  const isRetained = useCallback(
-    (key: string) => phases[key] === "dwelling" || phases[key] === "exiting",
-    [phases],
-  );
-  const isExiting = useCallback((key: string) => phases[key] === "exiting", [phases]);
-  const isHidden = useCallback((key: string) => phases[key] === "hidden", [phases]);
+  const clearTimer = useCallback((key: string) => {
+    const timer = timersRef.current[key];
+    if (timer) {
+      clearTimeout(timer);
+      delete timersRef.current[key];
+    }
+  }, []);
 
-  return { beginExit, cancelExit, phaseOf, isRetained, isExiting, isHidden, pulseTick };
+  const scheduleHide = useCallback((key: string) => {
+    clearTimer(key);
+    timersRef.current[key] = setTimeout(() => {
+      delete timersRef.current[key];
+      const next = hideVotedCard(snapshotRef.current, key);
+      if (next !== snapshotRef.current) {
+        snapshotRef.current = next;
+        setSnapshot(next);
+        setPulseTick((tick) => tick + 1);
+      }
+    }, VOTED_CARD_COLLAPSE_MS);
+  }, [clearTimer]);
+
+  const beginExit = useCallback((key: string) => {
+    const next = retainVotedCard(snapshotRef.current, key);
+    if (next !== snapshotRef.current) commit(next);
+  }, [commit]);
+
+  const cancelExit = useCallback((key: string) => {
+    clearTimer(key);
+    const next = cancelVotedCard(snapshotRef.current, key);
+    if (next !== snapshotRef.current) commit(next);
+  }, [clearTimer, commit]);
+
+  const release = useCallback((key: string, options?: { immediate?: boolean }) => {
+    if (snapshotRef.current.phases[key] !== "retained") return;
+    const immediate = options?.immediate || prefersReducedMotion();
+    if (immediate) {
+      clearTimer(key);
+      commit(hideVotedCard(snapshotRef.current, key));
+      setPulseTick((tick) => tick + 1);
+      return;
+    }
+    commit(collapseVotedCard(snapshotRef.current, key));
+    scheduleHide(key);
+  }, [clearTimer, commit, scheduleHide]);
+
+  const dropAll = useCallback(() => {
+    Object.keys(timersRef.current).forEach(clearTimer);
+    const next = dropRetainedCards(snapshotRef.current, "hide");
+    if (next !== snapshotRef.current) commit(next);
+  }, [clearTimer, commit]);
+
+  const collapseAll = useCallback(() => {
+    if (prefersReducedMotion()) {
+      Object.keys(timersRef.current).forEach(clearTimer);
+      const next = dropRetainedCards(snapshotRef.current, "hide");
+      if (next !== snapshotRef.current) {
+        commit(next);
+        setPulseTick((tick) => tick + 1);
+      }
+      return;
+    }
+    const prev = snapshotRef.current;
+    const next = dropRetainedCards(prev, "collapse");
+    if (next === prev) return;
+    commit(next);
+    for (const key of Object.keys(next.phases)) {
+      if (next.phases[key] === "collapsing" && prev.phases[key] === "retained") {
+        scheduleHide(key);
+      }
+    }
+  }, [clearTimer, commit, scheduleHide]);
+
+  const phaseOf = useCallback(
+    (key: string) => toLegacyPhase(snapshotRef.current.phases[key]),
+    [snapshot],
+  );
+  const isRetained = useCallback(
+    (key: string) => isVotedCardRetained(snapshotRef.current.phases[key]),
+    [snapshot],
+  );
+  const isExiting = useCallback(
+    (key: string) => isVotedCardCollapsing(snapshotRef.current.phases[key]),
+    [snapshot],
+  );
+  const isHidden = useCallback(
+    (key: string) => isVotedCardHidden(snapshotRef.current.phases[key]),
+    [snapshot],
+  );
+
+  return {
+    beginExit,
+    cancelExit,
+    release,
+    dropAll,
+    collapseAll,
+    phaseOf,
+    isRetained,
+    isExiting,
+    isHidden,
+    snapshot,
+    pulseTick,
+  };
 }

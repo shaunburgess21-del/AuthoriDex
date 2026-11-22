@@ -2370,3 +2370,42 @@ button.sash-handle:active {
     padding: 0 1.5rem 0.625rem;
   }
 }
+
+/* Brief ring when a just-voted card is scrolled back into view.
+   Cyan is the Vote accent; blue is the Predict accent. The ring is a
+   shadow, so it does not shift layout. */
+@keyframes voted-return-ring {
+  0% { box-shadow: 0 0 0 2px rgb(34 211 238 / 0.9); }
+  100% { box-shadow: 0 0 0 2px rgb(34 211 238 / 0); }
+}
+
+@keyframes voted-return-ring-blue {
+  0% { box-shadow: 0 0 0 2px rgb(96 165 250 / 0.9); }
+  100% { box-shadow: 0 0 0 2px rgb(96 165 250 / 0); }
+}
+
+.voted-return-ring,
+.voted-return-ring-blue {
+  border-radius: 1rem;
+}
+
+.voted-return-ring {
+  animation: voted-return-ring 1.5s ease-out forwards;
+}
+
+.voted-return-ring-blue {
+  animation: voted-return-ring-blue 1.5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voted-return-ring,
+  .voted-return-ring-blue {
+    animation: none;
+  }
+  .voted-return-ring {
+    box-shadow: 0 0 0 2px rgb(34 211 238 / 0.55);
+  }
+  .voted-return-ring-blue {
+    box-shadow: 0 0 0 2px rgb(96 165 250 / 0.55);
+  }
+}
