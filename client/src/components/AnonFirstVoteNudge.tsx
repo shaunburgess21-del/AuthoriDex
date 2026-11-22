@@ -55,7 +55,7 @@ function AnonFirstVoteNudgeBody() {
           data-testid="button-anon-nudge-sign-up"
           onClick={() => navigateToLogin(setLocation, { mode: "signup" })}
         >
-          Sign up
+          Join free
         </Button>
         <button
           type="button"

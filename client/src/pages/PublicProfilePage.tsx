@@ -9,12 +9,13 @@ import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { toast } from "sonner";
 import { useRanks } from "@/hooks/useGamification";
 import {
-  ArrowLeft, User, Trophy, Vote, TrendingUp, Calendar, Lock,
+  User, Trophy, Vote, TrendingUp, Calendar, Lock,
   BarChart3, Coins, Target, ChevronRight, Loader2, Share2, Check,
   ArrowUpDown, EyeOff, Eye, Settings, Globe, Swords, Star,
   MessageCircle, ImageIcon, UserPlus, ThumbsUp, RefreshCw, Info,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { SiteHeader } from "@/components/SiteHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyPredictionCard";
@@ -1019,6 +1020,8 @@ function ProfileIdentityCard({
   accuracyPct,
   pnl,
   predictions,
+  shareUrl,
+  sharerUserId,
 }: {
   profile: PublicProfile;
   displayName: string;
@@ -1026,6 +1029,8 @@ function ProfileIdentityCard({
   accuracyPct: number | null;
   pnl: number;
   predictions: number;
+  shareUrl?: string;
+  sharerUserId?: string | null;
 }) {
   // Per-tier visual unlocks (Phase 5). Both are already tier-gated by
   // the API (it nulls them out when the owner's current rank no longer
@@ -1059,7 +1064,12 @@ function ProfileIdentityCard({
           fallbackClassName="text-2xl"
         />
         <div className="flex-1 min-w-0">
-          <h1 className={`text-2xl font-bold truncate ${banner ? "mt-14 sm:mt-16" : ""}`}>{displayName}</h1>
+          <div className={`flex items-start justify-between gap-2 ${banner ? "mt-14 sm:mt-16" : ""}`}>
+            <h1 className="min-w-0 text-2xl font-bold truncate">{displayName}</h1>
+            {shareUrl ? (
+              <ShareLinkButton url={shareUrl} label="Profile link copied!" sharerUserId={sharerUserId} />
+            ) : null}
+          </div>
           <p className="text-muted-foreground">@{profile.username}</p>
           <div className="flex items-center gap-2 mt-3 flex-wrap">
             <UserRankBadge rank={profile.rank || "Citizen"} />
@@ -1443,15 +1453,8 @@ export default function PublicProfilePage() {
 
   if (isLoading && !profile) {
     return (
-      <div className="min-h-screen pb-20 md:pb-0">
-        <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")} data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <Skeleton className="h-6 w-32" />
-          </div>
-        </header>
+      <div className="pb-20 md:pb-0">
+        <SiteHeader backButton="always" />
         <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
           <div className="flex items-center gap-4 mb-6">
             <Skeleton className="h-20 w-20 rounded-full" />
@@ -1472,15 +1475,8 @@ export default function PublicProfilePage() {
 
   if (error || !profile) {
     return (
-      <div className="min-h-screen pb-20 md:pb-0">
-        <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")} data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="font-semibold">Profile</span>
-          </div>
-        </header>
+      <div className="pb-20 md:pb-0">
+        <SiteHeader backButton="always" />
         <div className="container mx-auto px-2 sm:px-4 py-16 max-w-md">
           <Card className="p-8 text-center">
             <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
@@ -1500,15 +1496,8 @@ export default function PublicProfilePage() {
   // appear once they flip the toggle.
   if (!profile.isPublic && !isOwner) {
     return (
-      <div className="min-h-screen pb-20 md:pb-0">
-        <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-          <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")} data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <span className="font-semibold">Profile</span>
-          </div>
-        </header>
+      <div className="pb-20 md:pb-0">
+        <SiteHeader backButton="always" />
         <div className="container mx-auto px-2 sm:px-4 py-16 max-w-md">
           <Card className="p-8 text-center">
             <Lock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
@@ -1534,16 +1523,8 @@ export default function PublicProfilePage() {
   const positionsPublic = profile.positionsPublic ?? true;
 
   return (
-    <div className="min-h-screen pb-20 md:pb-0">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="container mx-auto px-4 h-14 flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")} data-testid="button-back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <span className="font-semibold flex-1">@{profile.username}</span>
-          <ShareLinkButton url={`${window.location.origin}/u/${profile.username}`} label="Profile link copied!" sharerUserId={viewerUser?.id ?? null} />
-        </div>
-      </header>
+    <div className="pb-20 md:pb-0">
+      <SiteHeader backButton="always" />
 
       <div className="container mx-auto px-2 sm:px-4 py-6 max-w-3xl space-y-4">
         {isOwner && <OwnerBanner isPublic={profile.isPublic} />}
@@ -1565,6 +1546,12 @@ export default function PublicProfilePage() {
               accuracyPct={accuracyPct}
               pnl={pnl}
               predictions={predictions}
+              shareUrl={
+                profile.username
+                  ? `${window.location.origin}/u/${profile.username}`
+                  : undefined
+              }
+              sharerUserId={viewerUser?.id ?? null}
             />
 
             {profile.userId && <PublicBadgesSection userId={profile.userId} />}

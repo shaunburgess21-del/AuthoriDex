@@ -1016,7 +1016,7 @@ function PredictionContrarianTile({
         ? "Long-Shot Believer"
         : pct! >= 20
           ? "Balanced Predictor"
-          : "Favourites Backer"
+          : "Favorites Backer"
     : null;
 
   return (

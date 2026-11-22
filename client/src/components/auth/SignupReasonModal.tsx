@@ -63,7 +63,7 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
   vote_limit_reached: {
     heading: "You've made your voice heard.",
     body: "Create a free account to keep voting and count toward the live rankings.",
-    primaryCta: "Create account",
+    primaryCta: "Join free",
     secondaryCta: "Already have an account? Sign in.",
     primaryCtaSubtext: "Free to sign up. No credit card.",
     primaryAccentClass:
@@ -72,7 +72,7 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
   predict_signup: {
     heading: "You've got the instinct.",
     body: "Create a free account to place predictions and build your track record.",
-    primaryCta: "Create account",
+    primaryCta: "Join free",
     secondaryCta: "Already have an account? Sign in.",
     primaryCtaSubtext: "Free to sign up. No credit card.",
     primaryAccentClass:

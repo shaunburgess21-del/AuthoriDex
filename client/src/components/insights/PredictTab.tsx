@@ -253,7 +253,7 @@ function HottestMarketsTile() {
           >
             <MarketThumbSlot marketType={m.marketType} market={m.market} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{m.title}</p>
+              <p className="text-sm font-medium line-clamp-2">{m.title}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
                 {marketTypeLabel(m.marketType)}
               </p>

@@ -18,11 +18,28 @@ export function formatActivityAge(timestamp: string | Date): string {
   return `${Math.floor(diffDays / 7)}w ago`;
 }
 
-/** Relative time with full date for older items (>30d): "Just now", "5m ago", "2h ago", "3d ago", or "Jan 15" */
-export function formatTimeAgo(dateStr: string | Date | null): string {
+/**
+ * Calendar date in UTC. The product shows times in UTC on purpose.
+ * The year is included only when it is not the current UTC year,
+ * so a recent May 1 stays "May 1" and last August becomes "Aug 31, 2025".
+ */
+export function formatUtcCalendarDate(date: Date, now: Date = new Date()): string {
+  const includeYear = date.getUTCFullYear() !== now.getUTCFullYear();
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+    ...(includeYear ? { year: "numeric" } : {}),
+  });
+}
+
+/** Relative time with a UTC date for older items (>30d): "Just now", "5m ago", "2h ago", "3d ago", or "Jan 15" / "Jan 15, 2025" */
+export function formatTimeAgo(dateStr: string | Date | null, now: Date = new Date()): string {
   if (!dateStr) return "Unknown";
   try {
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return "";
+    const diff = now.getTime() - date.getTime();
     const minutes = Math.max(0, Math.floor(diff / 60000));
     if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes}m ago`;
@@ -30,7 +47,7 @@ export function formatTimeAgo(dateStr: string | Date | null): string {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return formatUtcCalendarDate(date, now);
   } catch {
     return "";
   }

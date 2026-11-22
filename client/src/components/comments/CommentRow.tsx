@@ -99,7 +99,7 @@ export function CommentRow({
             )}
             <span
               className="text-xs text-muted-foreground shrink-0"
-              title={new Date(comment.createdAt).toLocaleString()}
+              title={`${new Date(comment.createdAt).toLocaleString("en-US", { timeZone: "UTC" })} UTC`}
             >
               {formatTimeAgo(comment.createdAt)}
             </span>

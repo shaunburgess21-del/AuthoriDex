@@ -10,6 +10,7 @@ import { type InsightsTab, writeInsightsQuery } from "@shared/insights/filters";
 import { getInsightsTabAccentHex } from "@shared/insights/constants";
 import { cn } from "@/lib/utils";
 import { hapticSelection } from "@/lib/haptic";
+import { HorizontalScrollFade } from "@/components/HorizontalScrollFade";
 
 const INSIGHTS_TABS: Array<{
   id: InsightsTab;
@@ -54,7 +55,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
          * every tab), matching the How It Works knowledge tab bar.
          */}
         <div data-testid="insights-segmented-tabs">
-          <div className="flex items-center gap-0 rounded-lg bg-muted/50 p-0.5 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
+          <HorizontalScrollFade scrollerClassName="items-center gap-0 rounded-lg bg-muted/50 p-0.5 snap-x snap-mandatory">
             {INSIGHTS_TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
@@ -94,7 +95,7 @@ export function InsightsHeader({ activeTab }: InsightsHeaderProps) {
                 </button>
               );
             })}
-          </div>
+          </HorizontalScrollFade>
         </div>
       </div>
     </div>

@@ -251,6 +251,7 @@ function CardCommentsEmbedded({
         <CommentSortHeader
           count={fetchEnabled ? thread.visibleCount : 0}
           countLabel="Discussion"
+          countPending={thread.isLoading || !fetchEnabled}
           variant={variant}
           snapHeader={snapHeader}
           sort={thread.sort}
@@ -454,6 +455,7 @@ function CardCommentsFocusInner({
         <CommentSortHeader
           count={thread.visibleCount}
           countLabel="Discussion"
+          countPending={thread.isLoading}
           variant="inline"
           sort={thread.sort}
           onSortChange={thread.setSort}

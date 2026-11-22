@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Fragment } from "react";
 import { ABOVE_TAB_BAR_PADDING } from "@/lib/safeAreaChrome";
+import { shouldHideFooter } from "@/lib/siteFooter";
 
 interface FooterLink {
   label: string;
@@ -47,16 +48,9 @@ const FOOTER_LINKS: FooterLink[] = [
  * (legal links would render behind the bar, illegible). Hiding
  * the footer there keeps the CTA the visual full-stop on those
  * screens; legal links remain reachable from the BottomNav
- * "Profile" tab and from `/me/settings`. */
-function shouldHideFooter(pathname: string): boolean {
-  if (pathname === "/login" || pathname.startsWith("/login/")) return true;
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) return true;
-  if (pathname.startsWith("/predict/updown/")) return true;
-  if (pathname.startsWith("/predict/h2h/")) return true;
-  if (pathname.startsWith("/predict/race/")) return true;
-  return false;
-}
-
+ * "Profile" tab and from `/me/settings`.
+ * Profile, world-market detail, and unknown routes keep the footer.
+ */
 export function Footer() {
   const [location] = useLocation();
   if (shouldHideFooter(location)) return null;

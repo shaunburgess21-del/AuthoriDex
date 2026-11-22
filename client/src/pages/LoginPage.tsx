@@ -508,7 +508,7 @@ export default function LoginPage() {
                 data-testid="button-email-submit"
               >
                 <Mail className="h-4 w-4" />
-                {loading ? "Please wait..." : isLogin ? "Sign in" : "Create account"}
+                {loading ? "Please wait..." : isLogin ? "Sign in" : "Sign up"}
               </Button>
 
               {!isLogin ? (

@@ -1,6 +1,13 @@
-import { forwardRef } from "react";
+import { forwardRef, useEffect } from "react";
 
 import { BookOpen, Trophy, Coins, Sparkles } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  HOW_IT_WORKS_TOUR_STORAGE_KEY,
+  persistHowItWorksTourSeen,
+  readHasEverVoted,
+  shouldOfferHowItWorksTour,
+} from "@/lib/howItWorksTour";
 
 import {
   OnboardingDrawer,
@@ -51,15 +58,37 @@ const STEPS: readonly OnboardingStep[] = [
 
 export const HowItWorksWelcomeModal = forwardRef<OnboardingDrawerHandle>(
   function HowItWorksWelcomeModal(_props, ref) {
+    const { profile } = useAuth();
+    const totalVotes = profile?.totalVotes ?? 0;
+    const hasEverVoted = readHasEverVoted();
+    let seenRaw: string | null = null;
+    try {
+      seenRaw = window.localStorage.getItem(HOW_IT_WORKS_TOUR_STORAGE_KEY);
+    } catch {
+      seenRaw = null;
+    }
+    const offerTour = shouldOfferHowItWorksTour({
+      now: Date.now(),
+      seenRaw,
+      reShowAfterDays: Number.POSITIVE_INFINITY,
+      totalVotes,
+      hasEverVoted,
+    });
+
+    useEffect(() => {
+      if (totalVotes > 0 || hasEverVoted) persistHowItWorksTourSeen();
+    }, [totalVotes, hasEverVoted]);
+
     return (
       <OnboardingDrawer
         ref={ref}
-        storageKey="voxdex_seen_how_it_works"
+        storageKey={HOW_IT_WORKS_TOUR_STORAGE_KEY}
         steps={STEPS}
         toastLabel="First time here?"
         toastCtaLabel="Take the tour"
         lastStepCta="Got it"
         reShowAfterDays={Infinity}
+        disableAutoToast={!offerTour}
       />
     );
   },

@@ -226,7 +226,7 @@ export default function UserProfilePage() {
                     </div>
                     <div className="text-center p-3 rounded-lg bg-muted/30">
                       <div className="text-2xl font-bold">{favourites.length}</div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Favourites</div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Favorites</div>
                     </div>
                     <div className="text-center p-3 rounded-lg bg-muted/30">
                       <div className="text-2xl font-bold">
@@ -292,7 +292,7 @@ export default function UserProfilePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Star className="h-5 w-5" />
-                    Favourites
+                    Favorites
                   </CardTitle>
                   <CardDescription>
                     Your starred celebrities ({favourites.length})
@@ -304,7 +304,7 @@ export default function UserProfilePage() {
                   ) : favourites.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Star className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                      <p>No favourites yet</p>
+                      <p>No favorites yet</p>
                       <p className="text-sm mt-1">Star your favorite celebrities to see them here</p>
                     </div>
                   ) : (

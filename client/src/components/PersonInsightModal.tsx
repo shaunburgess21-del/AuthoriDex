@@ -415,8 +415,25 @@ function InsightPanelContent({
       />
 
       {loading ? (
-        <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
-          <p className="text-sm text-muted-foreground">Loading signal insights...</p>
+        <div
+          className="space-y-3 min-h-[7.5rem]"
+          aria-busy="true"
+          data-testid="signal-insights-loading"
+        >
+          <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+            <Skeleton className="mb-2 h-3 w-28" />
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-6 w-24 rounded-md" />
+              <Skeleton className="h-6 w-28 rounded-md" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+            <Skeleton className="mb-2 h-3 w-32" />
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-6 w-24 rounded-md" />
+              <Skeleton className="h-6 w-20 rounded-md" />
+            </div>
+          </div>
         </div>
       ) : error ? (
         <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">

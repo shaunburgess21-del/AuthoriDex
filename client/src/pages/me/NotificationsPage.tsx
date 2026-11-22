@@ -27,6 +27,7 @@ import { NotificationItem } from "@/components/notifications/NotificationItem";
 import { NotificationsEmptyState } from "@/components/notifications/NotificationsEmptyState";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { HorizontalScrollFade } from "@/components/HorizontalScrollFade";
 
 /**
  * Full notifications archive at `/me/notifications`.
@@ -166,7 +167,10 @@ export default function NotificationsArchivePage() {
               Unread
             </FilterPill>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-1 scrollbar-hide">
+          <HorizontalScrollFade
+            className="-mx-1"
+            scrollerClassName="items-center gap-1.5 px-1 pb-1"
+          >
             <ChipPill active={category === null} onClick={() => setCategory(null)}>
               Everything
             </ChipPill>
@@ -179,7 +183,7 @@ export default function NotificationsArchivePage() {
                 {CATEGORY_SHORT_LABELS[cat]}
               </ChipPill>
             ))}
-          </div>
+          </HorizontalScrollFade>
         </div>
 
         {/* List */}
