@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { formatVox } from "@/lib/currency";
 import { formatCountdown } from "@/lib/marketCountdown";
 import { VoxText } from "@/components/VoxText";
+import { resolvedBetSentence } from "@/lib/resolvedBetCopy";
 
 
 export interface MyPredictionCardData {
@@ -206,6 +207,13 @@ export function MyPredictionCard({
   const projectedPnl = prediction.result === "pending"
     ? (prediction.potentialPayout || 0) - prediction.stakeAmount
     : pnl;
+  const resultSentence = isAmmSell
+    ? null
+    : resolvedBetSentence({
+        result: prediction.result,
+        stakeAmount: prediction.stakeAmount,
+        payout: prediction.payout,
+      });
 
   const effectivelyPublic = !profileIsPrivate && !hidden;
 
@@ -358,11 +366,19 @@ export function MyPredictionCard({
             </>
           ) : (
             <>
+              {resultSentence && (
+                <span
+                  className="font-medium text-foreground"
+                  data-testid={`prediction-result-line-${prediction.betId}`}
+                >
+                  <VoxText text={resultSentence} />
+                </span>
+              )}
               <span className="text-muted-foreground">
                 Stake:{" "}
                 <span className="text-foreground font-medium"><VoxText text={formatVox(prediction.stakeAmount)} /></span>
               </span>
-              {payoutDisplay > 0 && (
+              {!resultSentence && payoutDisplay > 0 && (
                 <span
                   className={
                     prediction.result === "lost"

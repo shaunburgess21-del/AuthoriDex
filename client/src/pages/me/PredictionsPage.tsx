@@ -42,8 +42,8 @@ import { useItemVisibility } from "@/hooks/useItemVisibility";
 import { cn } from "@/lib/utils";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { buildPositionShareData, inferDirection } from "@/lib/share-data";
-import { inferPredictionDirection } from "@/pages/me/predictions-utils";
 import { appendShareAttribution } from "@/lib/share";
+import { winShareArgs } from "@/lib/shareWin";
 import { getRecentActivityMarketPath } from "@/lib/predict-display";
 import { VoxText } from "@/components/VoxText";
 import { accountWinRateDisplay } from "@/lib/winRateDisplay";
@@ -344,34 +344,7 @@ export default function PredictionsPage() {
   };
 
   const handleShareWin = (p: UserPrediction) => {
-    const pnl = p.payout - p.stakeAmount;
-    const direction = inferPredictionDirection(p.entryLabel);
-    const mappedDirection: "up" | "down" | "other" =
-      direction === "up" ? "up" : direction === "down" ? "down" : "other";
-    const fallbackText = `I won +${formatVox(pnl)} on "${p.marketTitle}" on VoxDex!\n${window.location.origin}/markets/${p.marketSlug}`;
-    openShareCard({
-      data: {
-        variant: "win",
-        personName: p.personName,
-        personAvatar: p.personAvatar,
-        marketTitle: p.marketTitle,
-        direction: mappedDirection,
-        entryLabel: p.entryLabel,
-        stakeAmount: p.stakeAmount,
-        payout: p.payout,
-        baselineScore: p.baselineScore,
-        currentScore: p.currentScore,
-        category: p.marketCategory,
-      },
-      fallbackText,
-      shareUrl: appendShareAttribution(
-        p.marketSlug
-          ? `${window.location.origin}/markets/${p.marketSlug}`
-          : window.location.origin,
-        { sharerUserId: user?.id ?? null, surface: "prediction_win" },
-      ),
-      filenameBase: `voxdex-win-${p.betId.slice(0, 8)}`,
-    });
+    openShareCard(winShareArgs(p, user?.id ?? null));
   };
 
   const handleSharePosition = (p: AmmOpenPosition) => {

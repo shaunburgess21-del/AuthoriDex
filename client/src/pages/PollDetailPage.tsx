@@ -41,6 +41,8 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { normalizeSentimentChoice } from "@shared/lib/sentiment-poll-choice";
 import { CompactResultRows } from "@/components/vote/CompactResultRows";
+import { CrowdLine } from "@/components/vote/CrowdLine";
+import { choiceCrowdLine } from "@/lib/crowdLine";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -527,6 +529,21 @@ export default function PollDetailPage() {
               },
             ]}
           />
+          {displayUserVote ? (
+            <CrowdLine
+              text={
+                choiceCrowdLine(
+                  [
+                    { key: "agree", percent: poll.agreePercent },
+                    { key: "neutral", percent: poll.neutralPercent },
+                    { key: "disagree", percent: poll.disagreePercent },
+                  ],
+                  normalizeSentimentChoice(displayUserVote),
+                )?.text ?? null
+              }
+              testId="crowd-line-poll-detail"
+            />
+          ) : null}
         </Card>
 
         {/* Stats Row */}

@@ -98,6 +98,13 @@ import {
   normalizeSentimentChoice,
 } from "@shared/lib/sentiment-poll-choice";
 import {
+  crowdSharesFromCounts,
+  crowdSharesFromPercents,
+  ratingBucketShare,
+  type CrowdOptionCount,
+  type CrowdShare,
+} from "./services/my-votes-crowd";
+import {
   sentimentPollIdFallback,
   slugOrGenerated,
 } from "@shared/lib/sentiment-poll-vote-target";
@@ -9483,7 +9490,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
          * directly comparable (e.g. opinion_poll, image_curate, induction).
          */
         alignedWithMajority: boolean | null;
+        /** Card id. Additive — older clients ignore it. */
+        targetId: string | null;
+        /** Slug when the card route uses one. Null for person-tied votes. */
+        slug: string | null;
+        /** Share of the crowd that picked the user's option, 0–100. */
+        crowdPercent: number | null;
+        /** Noun for "61% chose Cats". Null when there is no label. */
+        choiceLabel: string | null;
+        /** Per-option shares when the tally was already in hand. */
+        optionPercents: { key: string; label: string; percent: number }[] | null;
       };
+
+      const noCrowd = (
+        targetId: string | null,
+        slug: string | null,
+        choiceLabel: string | null,
+      ): Pick<UnifiedVote, "targetId" | "slug" | "crowdPercent" | "choiceLabel" | "optionPercents"> => ({
+        targetId,
+        slug,
+        crowdPercent: null,
+        choiceLabel,
+        optionPercents: null,
+      });
+
+      const withCrowd = (
+        share: CrowdShare,
+        targetId: string | null,
+        slug: string | null,
+        choiceLabel: string | null,
+      ): Pick<UnifiedVote, "targetId" | "slug" | "crowdPercent" | "choiceLabel" | "optionPercents"> => ({
+        targetId,
+        slug,
+        crowdPercent: share.crowdPercent,
+        choiceLabel,
+        optionPercents: share.optionPercents,
+      });
 
       // voteType -> privacy itemType mapping. "face_off" maps to "matchup".
       const privacyTypeFor = (voteType: string): PrivacyItemType | null => {
@@ -9513,6 +9555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             matchupTitle: matchups.title,
             optionA: matchups.optionAText,
             optionB: matchups.optionBText,
+            slug: matchups.slug,
           })
           .from(votes)
           .leftJoin(matchups, eq(matchups.id, votes.targetId))
@@ -9567,6 +9610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             choice: trendingPollVotes.choice,
             createdAt: trendingPollVotes.createdAt,
             headline: trendingPolls.headline,
+            slug: trendingPolls.slug,
             seedAgree: trendingPolls.seedAgreeCount,
             seedDisagree: trendingPolls.seedDisagreeCount,
             seedNeutral: trendingPolls.seedNeutralCount,
@@ -9581,7 +9625,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .select({
             id: opinionPollVotes.id,
             createdAt: opinionPollVotes.createdAt,
+            pollId: opinionPollVotes.pollId,
+            optionId: opinionPollVotes.optionId,
             pollTitle: opinionPolls.title,
+            slug: opinionPolls.slug,
             optionName: opinionPollOptions.name,
           })
           .from(opinionPollVotes)
@@ -9594,6 +9641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         want("image_curate") ? db
           .select({
             id: imageVotes.id,
+            imageId: imageVotes.imageId,
             votedAt: imageVotes.votedAt,
             personId: trackedPeople.id,
             personName: trackedPeople.name,
@@ -9610,6 +9658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         want("induction") ? db
           .select({
             id: inductionVotes.id,
+            candidateId: inductionVotes.candidateId,
             votedAt: inductionVotes.votedAt,
             candidateName: inductionCandidates.displayName,
             imageSlug: inductionCandidates.imageSlug,
@@ -9679,6 +9728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Set(faceOffVotes.map((v) => v.targetId).filter(Boolean) as string[]),
       );
       const faceOffMajority = new Map<string, string>();
+      const faceOffTallies = new Map<string, Map<string, number>>();
       if (faceOffMatchupIds.length > 0) {
         const tallies = await db
           .select({
@@ -9692,14 +9742,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             inArray(votes.targetId, faceOffMatchupIds),
           ))
           .groupBy(votes.targetId, votes.value);
-        const byMatchup = new Map<string, Map<string, number>>();
         for (const row of tallies) {
           if (!row.matchupId || !row.option) continue;
-          const m = byMatchup.get(row.matchupId) ?? new Map<string, number>();
+          const m = faceOffTallies.get(row.matchupId) ?? new Map<string, number>();
           m.set(row.option, (m.get(row.option) ?? 0) + Number(row.c ?? 0));
-          byMatchup.set(row.matchupId, m);
+          faceOffTallies.set(row.matchupId, m);
         }
-        for (const [matchupId, opts] of byMatchup.entries()) {
+        for (const [matchupId, opts] of faceOffTallies.entries()) {
           let top: string | null = null;
           let topN = -1;
           let tie = false;
@@ -9715,6 +9764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         new Set(pollVotes.map((v) => v.pollId).filter(Boolean) as string[]),
       );
       const pollMajority = new Map<string, string>();
+      const pollTallies = new Map<string, Map<string, number>>();
       if (pollIds.length > 0) {
         const tallies = await db
           .select({
@@ -9726,23 +9776,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(inArray(trendingPollVotes.pollId, pollIds))
           .groupBy(trendingPollVotes.pollId, trendingPollVotes.choice);
         // Seed with the curator-provided seed counts so early-stage polls have a majority.
-        const byPoll = new Map<string, Map<string, number>>();
         for (const v of pollVotes) {
           if (!v.pollId) continue;
-          const m = byPoll.get(v.pollId) ?? new Map<string, number>();
+          const m = pollTallies.get(v.pollId) ?? new Map<string, number>();
           m.set("agree", (m.get("agree") ?? 0) + (v.seedAgree ?? 0));
           m.set("disagree", (m.get("disagree") ?? 0) + (v.seedDisagree ?? 0));
           m.set("neutral", (m.get("neutral") ?? 0) + (v.seedNeutral ?? 0));
-          byPoll.set(v.pollId, m);
+          pollTallies.set(v.pollId, m);
         }
         for (const row of tallies) {
           if (!row.pollId || !row.choice) continue;
           const choice = normalizeSentimentChoice(row.choice) ?? row.choice;
-          const m = byPoll.get(row.pollId) ?? new Map<string, number>();
+          const m = pollTallies.get(row.pollId) ?? new Map<string, number>();
           m.set(choice, (m.get(choice) ?? 0) + Number(row.c ?? 0));
-          byPoll.set(row.pollId, m);
+          pollTallies.set(row.pollId, m);
         }
-        for (const [pollId, opts] of byPoll.entries()) {
+        for (const [pollId, opts] of pollTallies.entries()) {
           let top: string | null = null;
           let topN = -1;
           let tie = false;
@@ -9754,12 +9803,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Opinion, rating buckets, and photo share. One grouped read each
+      // for the ids already on this page — not a query per vote.
+      const opinionPollIds = Array.from(
+        new Set(opVotes.map((v) => v.pollId).filter(Boolean) as string[]),
+      );
+      const opinionOptionsByPoll = new Map<string, CrowdOptionCount[]>();
+      const ratingCountsByPerson = new Map<string, number[]>();
+      const photoPercentByImage = new Map<string, number>();
+
+      const ratingPersonIds = Array.from(
+        new Set(ovRatings.map((v) => v.personId).filter(Boolean) as string[]),
+      );
+      const curatePersonIds = Array.from(
+        new Set(imgVotes.map((v) => v.personId).filter(Boolean) as string[]),
+      );
+
+      if (opinionPollIds.length > 0 || ratingPersonIds.length > 0 || curatePersonIds.length > 0) {
+        const [opinionOptions, opinionVoteRows, ratingRows, photoRows] = await Promise.all([
+          opinionPollIds.length > 0
+            ? db
+                .select({
+                  id: opinionPollOptions.id,
+                  pollId: opinionPollOptions.pollId,
+                  name: opinionPollOptions.name,
+                  seedCount: opinionPollOptions.seedCount,
+                })
+                .from(opinionPollOptions)
+                .where(inArray(opinionPollOptions.pollId, opinionPollIds))
+            : Promise.resolve([]),
+          opinionPollIds.length > 0
+            ? db
+                .select({
+                  optionId: opinionPollVotes.optionId,
+                  c: sql<number>`count(*)::int`,
+                })
+                .from(opinionPollVotes)
+                .where(inArray(opinionPollVotes.pollId, opinionPollIds))
+                .groupBy(opinionPollVotes.optionId)
+            : Promise.resolve([]),
+          ratingPersonIds.length > 0
+            ? db
+                .select({
+                  personId: userVotes.personId,
+                  rating: userVotes.rating,
+                  cnt: sql<number>`count(*)::int`,
+                })
+                .from(userVotes)
+                .where(and(
+                  inArray(userVotes.personId, ratingPersonIds),
+                  gte(userVotes.rating, 1),
+                  lte(userVotes.rating, 5),
+                ))
+                .groupBy(userVotes.personId, userVotes.rating)
+            : Promise.resolve([]),
+          curatePersonIds.length > 0
+            ? db
+                .select({
+                  id: celebrityImages.id,
+                  personId: celebrityImages.personId,
+                  votesUp: celebrityImages.votesUp,
+                })
+                .from(celebrityImages)
+                .where(inArray(celebrityImages.personId, curatePersonIds))
+            : Promise.resolve([]),
+        ]);
+
+        const opinionRealVotes = new Map(opinionVoteRows.map((row) => [row.optionId, Number(row.c ?? 0)]));
+        for (const option of opinionOptions) {
+          const list = opinionOptionsByPoll.get(option.pollId) ?? [];
+          list.push({
+            key: option.id,
+            label: option.name,
+            count: (opinionRealVotes.get(option.id) ?? 0) + (option.seedCount ?? 0),
+          });
+          opinionOptionsByPoll.set(option.pollId, list);
+        }
+
+        for (const row of ratingRows) {
+          const rating = Number(row.rating);
+          if (rating < 1 || rating > 5) continue;
+          const counts = ratingCountsByPerson.get(row.personId) ?? [0, 0, 0, 0, 0];
+          counts[rating - 1] = Number(row.cnt ?? 0);
+          ratingCountsByPerson.set(row.personId, counts);
+        }
+
+        const photosByPerson = new Map<string, Array<{ id: string; votesUp: number }>>();
+        for (const row of photoRows) {
+          const list = photosByPerson.get(row.personId) ?? [];
+          list.push({ id: row.id, votesUp: Number(row.votesUp ?? 0) });
+          photosByPerson.set(row.personId, list);
+        }
+        for (const photos of photosByPerson.values()) {
+          const total = photos.reduce((sum, photo) => sum + Math.max(0, photo.votesUp), 0);
+          if (total <= 0) continue;
+          for (const photo of photos) {
+            photoPercentByImage.set(photo.id, Math.round((Math.max(0, photo.votesUp) / total) * 100));
+          }
+        }
+      }
+
       const results: UnifiedVote[] = [];
 
       for (const v of faceOffVotes) {
         const name = v.matchupTitle || (v.optionA && v.optionB ? `${v.optionA} vs ${v.optionB}` : "Matchup");
         const side = v.value === "option_a" ? v.optionA : v.value === "option_b" ? v.optionB : null;
         const majority = v.targetId ? faceOffMajority.get(v.targetId) ?? null : null;
+        const tally = v.targetId ? faceOffTallies.get(v.targetId) : undefined;
+        const userKey = typeof v.value === "string" ? v.value : null;
+        const share = crowdSharesFromCounts(
+          [
+            { key: "option_a", label: v.optionA ?? "Option A", count: tally?.get("option_a") ?? 0 },
+            { key: "option_b", label: v.optionB ?? "Option B", count: tally?.get("option_b") ?? 0 },
+            { key: "neutral", label: "Neutral", count: tally?.get("neutral") ?? 0 },
+          ],
+          userKey,
+        );
+        const choiceLabel = userKey === "option_a" ? v.optionA : userKey === "option_b" ? v.optionB : userKey === "neutral" ? "Neutral" : side;
         results.push({
           id: v.id,
           voteType: "face_off",
@@ -9773,6 +9933,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectImageSlug: null,
           alignedWithMajority:
             majority && typeof v.value === "string" ? v.value === majority : null,
+          ...withCrowd(share, v.targetId ?? null, v.slug ?? null, choiceLabel ?? null),
         });
       }
 
@@ -9796,6 +9957,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: v.avatar ?? null,
           subjectImageSlug: v.imageSlug ?? null,
           alignedWithMajority: aligned,
+          ...withCrowd(
+            crowdSharesFromPercents(
+              [
+                { key: "underrated", label: "Underrated", percent: under },
+                { key: "overrated", label: "Overrated", percent: over },
+              ],
+              v.voteType,
+            ),
+            v.personId ?? null,
+            null,
+            v.voteType === "overrated" ? "Overrated" : "Underrated",
+          ),
         });
       }
 
@@ -9828,6 +10001,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: v.avatar ?? null,
           subjectImageSlug: v.imageSlug ?? null,
           alignedWithMajority: aligned,
+          ...withCrowd(
+            crowdSharesFromPercents(
+              [
+                { key: "underrated", label: "Underrated", percent: under },
+                { key: "overrated", label: "Overrated", percent: over },
+                { key: "fairly_rated", label: "Fairly Rated", percent: fair },
+              ],
+              v.vote,
+            ),
+            v.personId ?? null,
+            null,
+            label,
+          ),
         });
       }
 
@@ -9847,10 +10033,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: null,
           subjectImageSlug: null,
           alignedWithMajority: majority ? normalized === majority : null,
+          ...withCrowd(
+            crowdSharesFromCounts(
+              [
+                { key: "agree", label: "Agree", count: (v.pollId ? pollTallies.get(v.pollId)?.get("agree") : 0) ?? 0 },
+                { key: "neutral", label: "Neutral", count: (v.pollId ? pollTallies.get(v.pollId)?.get("neutral") : 0) ?? 0 },
+                { key: "disagree", label: "Disagree", count: (v.pollId ? pollTallies.get(v.pollId)?.get("disagree") : 0) ?? 0 },
+              ],
+              normalized,
+            ),
+            v.pollId ?? null,
+            v.slug ?? null,
+            choiceLabel,
+          ),
         });
       }
 
       for (const v of opVotes) {
+        const options = v.pollId ? opinionOptionsByPoll.get(v.pollId) ?? [] : [];
         results.push({
           id: v.id,
           voteType: "opinion_poll",
@@ -9863,10 +10063,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: null,
           subjectImageSlug: null,
           alignedWithMajority: null,
+          ...withCrowd(
+            crowdSharesFromCounts(options, v.optionId ?? null),
+            v.pollId ?? null,
+            v.slug ?? null,
+            v.optionName ?? null,
+          ),
         });
       }
 
       for (const v of imgVotes) {
+        const photoPercent = v.imageId ? photoPercentByImage.get(v.imageId) ?? null : null;
         results.push({
           id: v.id,
           voteType: "image_curate",
@@ -9879,6 +10086,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: v.avatar ?? null,
           subjectImageSlug: v.imageSlug ?? null,
           alignedWithMajority: null,
+          ...withCrowd(
+            {
+              crowdPercent: photoPercent,
+              optionPercents: photoPercent == null
+                ? null
+                : [{ key: v.imageId, label: "This photo", percent: photoPercent }],
+            },
+            v.personId ?? null,
+            null,
+            "this photo",
+          ),
         });
       }
 
@@ -9895,6 +10113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: v.subjectAvatar,
           subjectImageSlug: v.subjectImageSlug,
           alignedWithMajority: null,
+          ...noCrowd(v.candidateId ?? null, null, null),
         });
       }
 
@@ -9919,6 +10138,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subjectAvatar: v.avatar ?? null,
           subjectImageSlug: v.imageSlug ?? null,
           alignedWithMajority: aligned,
+          ...withCrowd(
+            ratingBucketShare(v.personId ? ratingCountsByPerson.get(v.personId) : null, v.rating),
+            v.personId ?? null,
+            null,
+            zoneLabel,
+          ),
         });
       }
 

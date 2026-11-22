@@ -279,18 +279,31 @@ function getEntryResolutionTone(status: string | null | undefined) {
   }
 }
 
+function YourPickMark({ testId }: { testId: string }) {
+  return (
+    <span
+      className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-violet-500/40 bg-background/90 px-1 py-px text-[9px] font-semibold leading-none text-violet-600 dark:text-violet-300"
+      data-testid={testId}
+    >
+      Your pick
+    </span>
+  );
+}
+
 function BinaryOutcomes({
   entries,
   selectedEntry,
   onSelect,
   disabled,
   isResolved,
+  heldEntryIds,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
   isResolved?: boolean;
+  heldEntryIds?: ReadonlySet<string>;
 }) {
   // Once a market is resolved, binary outcomes always render in
   // displayOrder so Yes is on the left and No on the right. We rely
@@ -317,6 +330,9 @@ function BinaryOutcomes({
           } ${yesTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${yesEntry.id}`}
         >
+          {heldEntryIds?.has(yesEntry.id) && (
+            <YourPickMark testId={`your-pick-${yesEntry.id}`} />
+          )}
           {yesTone && (
             <div className="absolute right-3 top-3">
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${yesTone.labelClass}`}>
@@ -349,6 +365,9 @@ function BinaryOutcomes({
           } ${noTone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
           data-testid={`button-outcome-${noEntry.id}`}
         >
+          {heldEntryIds?.has(noEntry.id) && (
+            <YourPickMark testId={`your-pick-${noEntry.id}`} />
+          )}
           {noTone && (
             <div className="absolute right-3 top-3">
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${noTone.labelClass}`}>
@@ -380,12 +399,14 @@ function MultiOutcomes({
   onSelect,
   disabled,
   isResolved,
+  heldEntryIds,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
   onSelect: (id: string) => void;
   disabled: boolean;
   isResolved?: boolean;
+  heldEntryIds?: ReadonlySet<string>;
 }) {
   // While the market is open we sort by popularity (largest pool share
   // first) so the favourite leads. Once it's resolved we instead pin
@@ -417,7 +438,7 @@ function MultiOutcomes({
             key={entry.id}
             disabled={disabled}
             onClick={() => !disabled && onSelect(entry.id)}
-            className={`flex items-center gap-3 w-full text-left rounded-lg py-0.5 -mx-1 px-1 transition-colors ${
+            className={`relative flex items-center gap-3 w-full text-left rounded-lg py-0.5 -mx-1 px-1 transition-colors ${
               isUserPick ? "bg-violet-500/8 dark:bg-violet-500/5 ring-1 ring-violet-500/20" : ""
             } ${tone?.rowClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer hover:bg-muted/20"}`}
             data-testid={`button-outcome-${entry.id}`}
@@ -425,7 +446,7 @@ function MultiOutcomes({
             {/* No avatar placeholder — see pick-row comment. Names alone
                 read better than "S." on mobile when the column shrinks. */}
             <span
-              className={`w-[40%] sm:w-[30%] text-sm truncate shrink-0 ${
+              className={`flex w-[40%] sm:w-[30%] min-w-0 items-center gap-1 text-sm shrink-0 ${
                 isOtherStyleOutcomeLabel(entry.label)
                   ? "italic text-muted-foreground"
                   : isUserPick
@@ -435,7 +456,15 @@ function MultiOutcomes({
                       : "text-muted-foreground"
               }`}
             >
-              {entry.label}
+              <span className="truncate">{entry.label}</span>
+              {heldEntryIds?.has(entry.id) && (
+                <span
+                  className="shrink-0 rounded border border-violet-500/40 bg-background/80 px-1 py-px text-[9px] font-semibold not-italic leading-none text-violet-600 dark:text-violet-300"
+                  data-testid={`your-pick-${entry.id}`}
+                >
+                  Your pick
+                </span>
+              )}
             </span>
             {/* Track: home-style dark blue glass (pulse-card-blue adjacent) */}
             <div className="flex-1 h-6 rounded-md overflow-hidden border border-blue-500/25 bg-gradient-to-b from-slate-900/90 to-slate-950/95 backdrop-blur-sm shadow-[inset_0_1px_2px_rgba(59,130,246,0.1)]">
@@ -486,6 +515,7 @@ function UpDownOutcomes({
   strike,
   unit,
   isResolved,
+  heldEntryIds,
 }: {
   entries: (MarketEntry & { percentage: number; displayStake: number })[];
   selectedEntry: string | null;
@@ -496,6 +526,7 @@ function UpDownOutcomes({
   strike: string;
   unit: string;
   isResolved?: boolean;
+  heldEntryIds?: ReadonlySet<string>;
 }) {
   const sorted = [...entries].sort((a, b) => a.displayOrder - b.displayOrder);
   // Strike defaults to "0" when the field was never populated. Hiding
@@ -540,6 +571,9 @@ function UpDownOutcomes({
               } ${tone?.cardClass ?? ""} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
               data-testid={`button-outcome-${entry.id}`}
             >
+              {heldEntryIds?.has(entry.id) && (
+                <YourPickMark testId={`your-pick-${entry.id}`} />
+              )}
               {tone && (
                 <div className="absolute right-3 top-3">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone.labelClass}`}>
@@ -695,7 +729,7 @@ export default function MarketDetailPage() {
   // staked" line for same-side top-ups). React Query dedupes the
   // request with MyPositionCard so this is effectively free.
   const { data: myPositionData } = useQuery<{
-    bets: Array<{ entryId: string; direction: string; stakeAmount: number; status: string }>;
+    bets: Array<{ entryId: string; direction: string; stakeAmount: number; status: string; actionType?: string | null }>;
   }>({
     queryKey: market?.id ? myPositionQueryKey(market.id) : ["/api/markets", "_none_", "my-position"],
     // Use apiRequest so React Query dedupes this with the identical
@@ -1376,6 +1410,28 @@ export default function MarketDetailPage() {
   const isInactive = (market as any).visibility === "inactive";
   const isClosedMarket = !isOpen;
   const isResolved = market.status === "RESOLVED";
+  // Same holdings the Your Position card already loaded: open share
+  // balances while the market trades, settled buys once it has closed.
+  const heldEntryIds = useMemo(() => {
+    const ids = new Set<string>();
+    const openShares = (ammPositionData?.positions ?? []).filter((position) => position.netShares > 1e-6);
+    if (isOpen) {
+      for (const position of openShares) ids.add(position.entryId);
+      if (ids.size === 0) {
+        for (const [entryId, stakes] of userBetsByEntry) {
+          if (stakes.yesStake + stakes.noStake > 0) ids.add(entryId);
+        }
+      }
+      return ids;
+    }
+    for (const bet of myPositionData?.bets ?? []) {
+      if (bet.actionType === "sell") continue;
+      if (bet.status === "won" || bet.status === "lost" || bet.status === "active") {
+        ids.add(bet.entryId);
+      }
+    }
+    return ids;
+  }, [ammPositionData, isOpen, myPositionData, userBetsByEntry]);
   const resultOpenScore = market.resolutionSummary?.openScore ?? market.baselineScore ?? null;
   const resultCloseScore = market.resolutionSummary?.closeScore ?? null;
   const resultActualScore = market.resolutionSummary?.actualScore ?? null;
@@ -1767,8 +1823,16 @@ export default function MarketDetailPage() {
                         className="flex items-center gap-3 text-sm rounded-lg border border-border/40 bg-background/40 p-2"
                         data-testid={`amm-live-row-${entry.id}`}
                       >
-                        <span className={`w-[28%] sm:w-[26%] line-clamp-2 leading-tight font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
-                          {entry.label}
+                        <span className={`flex w-[28%] sm:w-[26%] min-w-0 items-center gap-1 font-medium ${isOther ? "text-muted-foreground italic" : ""}`}>
+                          <span className="truncate">{entry.label}</span>
+                          {heldEntryIds.has(entry.id) && (
+                            <span
+                              className="shrink-0 rounded border border-violet-500/40 bg-background/80 px-1 py-px text-[9px] font-semibold not-italic leading-none text-violet-600 dark:text-violet-300"
+                              data-testid={`your-pick-${entry.id}`}
+                            >
+                              Your pick
+                            </span>
+                          )}
                         </span>
                         <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
                           <div
@@ -1814,9 +1878,17 @@ export default function MarketDetailPage() {
                     return (
                       <div
                         key={entry.id}
-                        className={`rounded-lg border p-3 text-center ${tileColor}`}
+                        className={`relative rounded-lg border p-3 text-center ${tileColor}`}
                         data-testid={`amm-live-tile-${entry.id}`}
                       >
+                        {heldEntryIds.has(entry.id) && (
+                          <span
+                            className="pointer-events-none absolute left-2 top-2 z-10 rounded border border-violet-500/40 bg-background/90 px-1 py-px text-[9px] font-semibold leading-none text-violet-600 dark:text-violet-300"
+                            data-testid={`your-pick-${entry.id}`}
+                          >
+                            Your pick
+                          </span>
+                        )}
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
                         <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
                         <p className="text-[10px] text-muted-foreground tabular-nums"><VoxText text={formatVoxPrice(livePrice)} /> / share</p>
@@ -2213,6 +2285,7 @@ export default function MarketDetailPage() {
               onSelect={setSelectedEntry}
               disabled={!isOpen}
               isResolved={isResolved}
+              heldEntryIds={heldEntryIds}
             />
           )}
           {effectiveOpenMarketType === "multi" && (
@@ -2222,6 +2295,7 @@ export default function MarketDetailPage() {
               onSelect={setSelectedEntry}
               disabled={!isOpen}
               isResolved={isResolved}
+              heldEntryIds={heldEntryIds}
             />
           )}
           {effectiveOpenMarketType === "updown" && (
@@ -2229,6 +2303,7 @@ export default function MarketDetailPage() {
               entries={entriesWithPercentages}
               selectedEntry={selectedEntry}
               onSelect={setSelectedEntry}
+              heldEntryIds={heldEntryIds}
               disabled={!isOpen}
               underlying={market.underlying || ""}
               metric={market.metric || ""}

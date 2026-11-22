@@ -32,6 +32,8 @@ import { CardComments, useCommentCount } from "@/components/comments/CardComment
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { CompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
+import { CrowdLine } from "@/components/vote/CrowdLine";
+import { choiceCrowdLine } from "@/lib/crowdLine";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { matchupOgImagePath } from "@shared/matchup-og";
 import {
@@ -629,6 +631,21 @@ export default function MatchupDetailPage() {
           </h2>
 
           <CompactResultRows rows={matchupResultRows} />
+          {hasVoted ? (
+            <CrowdLine
+              text={
+                choiceCrowdLine(
+                  [
+                    { key: "option_a", percent: matchup.optionAPercent },
+                    { key: "neutral", percent: matchup.neutralPercent ?? 0 },
+                    { key: "option_b", percent: matchup.optionBPercent },
+                  ],
+                  userVote,
+                )?.text ?? null
+              }
+              testId="crowd-line-matchup-detail"
+            />
+          ) : null}
         </Card>
 
         {/* Stats Row */}
