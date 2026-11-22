@@ -27,6 +27,8 @@ const OG_ORIGIN =
   "https://authoridex-production.up.railway.app";
 
 const META_TTL_SECONDS = 120;
+const JSON_TIMEOUT_MS = 900;
+const HTML_TIMEOUT_MS = 4000;
 
 export const config = {
   matcher: [
@@ -96,34 +98,53 @@ async function loadDocumentMeta(pathname: string): Promise<OgDocumentMeta | null
   const cached = await readMetaCache(pathname);
   if (cached) return cached;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1800);
-  try {
-    const jsonUrl = `${OG_ORIGIN}/api/og/document-meta?path=${encodeURIComponent(pathname)}`;
-    const jsonRes = await fetch(jsonUrl, {
-      signal: controller.signal,
-      headers: { accept: "application/json" },
-    });
-    if (jsonRes.ok) {
-      const body = (await jsonRes.json()) as OgDocumentMeta;
-      if (body?.title && body.canonicalUrl) {
-        await writeMetaCache(pathname, body);
-        return body;
-      }
-    }
+  const fromJson = await fetchJsonMeta(pathname);
+  if (fromJson) {
+    await writeMetaCache(pathname, fromJson);
+    return fromJson;
+  }
 
-    const htmlPath = ogHtmlPathForSpaPath(pathname);
-    if (!htmlPath) return null;
-    const htmlRes = await fetch(`${OG_ORIGIN}${htmlPath}`, { signal: controller.signal });
-    if (!htmlRes.ok) return null;
+  const htmlPath = ogHtmlPathForSpaPath(pathname);
+  if (!htmlPath) return null;
+  try {
+    const htmlRes = await fetch(`${OG_ORIGIN}${htmlPath}`, {
+      signal: AbortSignal.timeout(HTML_TIMEOUT_MS),
+      headers: { accept: "text/html" },
+    });
+    if (!htmlRes.ok) {
+      console.error(`[og-document] html ${htmlRes.status} ${htmlPath}`);
+      return null;
+    }
     const parsed = parseOgDocumentHtml(await htmlRes.text());
-    if (!parsed) return null;
+    if (!parsed) {
+      console.error(`[og-document] html parse failed ${htmlPath}`);
+      return null;
+    }
     await writeMetaCache(pathname, parsed);
     return parsed;
+  } catch (err) {
+    console.error(`[og-document] html fetch failed ${htmlPath}`, err);
+    return null;
+  }
+}
+
+/** New JSON route. A 404 is expected until Railway deploys it; don't let that eat the HTML fallback's time. */
+async function fetchJsonMeta(pathname: string): Promise<OgDocumentMeta | null> {
+  const jsonUrl = `${OG_ORIGIN}/api/og/document-meta?path=${encodeURIComponent(pathname)}`;
+  try {
+    const jsonRes = await fetch(jsonUrl, {
+      signal: AbortSignal.timeout(JSON_TIMEOUT_MS),
+      headers: { accept: "application/json" },
+    });
+    if (!jsonRes.ok) {
+      await jsonRes.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    const body = (await jsonRes.json()) as OgDocumentMeta;
+    if (!body?.title || !body.canonicalUrl) return null;
+    return body;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
