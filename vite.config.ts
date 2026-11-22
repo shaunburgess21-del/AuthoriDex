@@ -74,12 +74,16 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Hashed assets only. index.html must not be precached: a cache-first
-        // shell keeps returning users on the previous deploy until they clear
-        // site data, and its old chunk URLs 404.
-        globPatterns: ["**/*.{js,css,svg,png,woff2}"],
+        // Hashed assets only, plus the offline document. index.html must not
+        // be precached: a cache-first shell keeps returning users on the
+        // previous deploy until they clear site data, and its old chunk URLs
+        // 404. offline.html has no chunk URLs, so it can be precached safely.
+        globPatterns: ["**/*.{js,css,svg,png,woff2}", "offline.html"],
         globIgnores: ["**/index.html"],
         navigateFallback: null,
+        // Drop precache buckets left by older Workbox builds so they cannot
+        // keep serving a shell this worker no longer knows about.
+        cleanupOutdatedCaches: true,
         // Activate the new worker as soon as it installs. registerType stays
         // "prompt", so the page is not force-reloaded mid-scroll; a failed
         // lazy chunk reloads once (see client/src/lib/chunkReload.ts).
@@ -87,13 +91,29 @@ export default defineConfig({
         clientsClaim: true,
         runtimeCaching: [
           {
-            urlPattern: ({ request }: { request: Request }) => request.mode === "navigate",
+            // Document loads only. fetch() from the app is mode "cors", so
+            // /api requests are not stored here. /api and attached_assets
+            // opened as a tab are excluded too.
+            urlPattern: ({ request }: { request: Request }) => {
+              if (request.mode !== "navigate") return false;
+              const path = new URL(request.url).pathname;
+              return (
+                !path.startsWith("/api/") &&
+                !path.startsWith("/attached_assets/")
+              );
+            },
             handler: "NetworkFirst",
             options: {
               cacheName: "html-navigations",
               networkTimeoutSeconds: 3,
               expiration: { maxEntries: 16, maxAgeSeconds: 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
+              // NetworkFirst throws no-response when the fetch fails and this
+              // runtime cache misses, which rejects the FetchEvent (Chrome
+              // ERR_FAILED). The precached offline page is that failure's
+              // response only — a slow network with an empty cache still
+              // waits for the real document.
+              precacheFallback: { fallbackURL: "/offline.html" },
             },
           },
           {
