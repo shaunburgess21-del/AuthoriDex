@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { CURRENCY, formatVox } from "@/lib/currency";
 import { VoxText } from "@/components/VoxText";
 import { VoxMark } from "@/components/VoxMark";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 
 
 
@@ -49,6 +50,8 @@ export interface ShareCardPortfolioData {
   rankName?: string | null;
   rankColor?: string | null;
   winRate: number;
+  /** Wins + losses. Pending until this is at least 1. */
+  resolvedCount: number;
   netCredits: number;
   totalPredictions: number;
   currentStreak?: number;
@@ -440,13 +443,17 @@ function PortfolioLayout({
 }) {
   const netPositive = data.netCredits >= 0;
   const netColor = netPositive ? "#34D399" : "#F87171";
+  const winRate = accountWinRateDisplay({
+    resolved: data.resolvedCount,
+    winRate: data.winRate,
+  });
 
   // Three headline stats. We keep typography large and monospaced so they
   // read at thumbnail size on feeds.
   const stats: { label: string; value: string; accent?: string; icon?: typeof Trophy }[] = [
     {
-      label: "Win Rate",
-      value: `${data.winRate}%`,
+      label: winRate.pending ? "Win Rate · Pending" : "Win Rate",
+      value: winRate.text,
       accent: "#A78BFA",
       icon: Trophy,
     },

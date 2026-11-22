@@ -35,6 +35,7 @@ import {
   type InsightsOpenMarket,
 } from "@/lib/useInsightsMarketLists";
 import { cn } from "@/lib/utils";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 import type {
 
   ContestedMarket,
@@ -600,12 +601,15 @@ function TopPredictorsTile() {
     <div className="space-y-2">
       <ul className="space-y-1.5">
       {users.slice(0, 5).map((u, idx) => {
-        const winRate =
-          typeof u.winRate === "number"
-            ? u.winRate
-            : u.totalResolved > 0
-              ? Math.round((u.winCount / u.totalResolved) * 100)
-              : null;
+        const winRate = accountWinRateDisplay({
+          resolved: u.totalResolved,
+          winRate:
+            typeof u.winRate === "number"
+              ? u.winRate
+              : u.totalResolved > 0
+                ? Math.round((u.winCount / u.totalResolved) * 100)
+                : 0,
+        });
         const pnlPositive = u.totalPnl > 0;
         const pnlNegative = u.totalPnl < 0;
         const inner = (
@@ -633,11 +637,9 @@ function TopPredictorsTile() {
                 {pnlPositive ? "+" : ""}
                 <VoxText text={formatVox(Math.round(u.totalPnl))} />
               </p>
-              {winRate != null && (
-                <p className="text-[10px] text-muted-foreground tabular-nums">
-                  {winRate}% wins
-                </p>
-              )}
+              <p className="text-[10px] text-muted-foreground tabular-nums">
+                {winRate.pending ? "Pending" : `${winRate.text} wins`}
+              </p>
             </div>
           </>
         );

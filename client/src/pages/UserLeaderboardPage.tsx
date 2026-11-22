@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { CURRENCY } from "@/lib/currency";
+import { accountWinRateDisplay } from "@/lib/winRateDisplay";
 import { hapticSelection } from "@/lib/haptic";
 import { ABOVE_TAB_BAR_BOTTOM } from "@/lib/safeAreaChrome";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -261,6 +262,10 @@ function UserRow({
 }) {
   const canOpenProfile = Boolean(user.username && user.isPublic);
   const showStreak = (user.currentStreak || 0) > 1;
+  const winRate = accountWinRateDisplay({
+    resolved: user.totalResolved,
+    winRate: user.winRate,
+  });
 
   return (
     <button
@@ -336,9 +341,13 @@ function UserRow({
       <div className="shrink-0 min-w-[56px] text-right hidden md:block">
         <div className="flex items-center justify-end gap-1">
           <Zap className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-          <span className="font-mono text-sm tabular-nums">{Math.round(user.winRate)}%</span>
+          <span className="font-mono text-sm tabular-nums" data-testid={`text-leaderboard-win-rate-${user.userId}`}>
+            {winRate.text}
+          </span>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-0.5">win rate</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          {winRate.pending ? "pending" : "win rate"}
+        </p>
       </div>
 
       <div className="shrink-0 min-w-[40px] text-right hidden lg:block">

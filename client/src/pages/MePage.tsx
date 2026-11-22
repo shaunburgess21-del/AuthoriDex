@@ -7,7 +7,6 @@ import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { User, Star, TrendingUp, Settings, LogOut, Vote, Wallet, Shield, Trophy, Eye, EyeOff, Lock, Flame, Award, MessageSquare } from "lucide-react";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { navigateToLogin } from "@/lib/authReturn";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserRankBadge } from "@/components/UserRankBadge";
@@ -18,7 +17,7 @@ import { formatVox } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { getRankByName } from "@shared/rank-config";
 import { XPProgressBar } from "@/components/XPProgressBar";
-import { accountWinRateDisplay } from "@/lib/winRateDisplay";
+import { useAccountWinRate } from "@/hooks/useAccountWinRate";
 import {
 
   getProfileTheme,
@@ -35,20 +34,7 @@ export default function MePage() {
   }, [user, refreshProfile]);
 
   const displayName = profile?.username || user?.email?.split("@")[0] || "User";
-
-  const { data: predictionStats } = useQuery<{
-    stats?: { won?: number; lost?: number; winRate?: number };
-  }>({
-    queryKey: ["/api/me/predictions"],
-    enabled: !!user,
-  });
-  const resolvedPredictions = predictionStats?.stats
-    ? (predictionStats.stats.won ?? 0) + (predictionStats.stats.lost ?? 0)
-    : null;
-  const winRate = accountWinRateDisplay({
-    resolved: resolvedPredictions,
-    winRate: predictionStats?.stats?.winRate ?? profile?.winRate,
-  });
+  const winRate = useAccountWinRate();
 
   // Per-tier profile visual unlocks (Phase 5). /api/profile/me returns the
   // raw stored values (not tier-gated like the public endpoint), so gate on

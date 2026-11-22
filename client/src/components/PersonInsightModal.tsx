@@ -75,19 +75,79 @@ const INSIGHT_SIGNAL_DEAD_ZONE_PCT = 5;
 const SIGNAL_CARD_CLASS =
   "rounded-lg border border-border/60 bg-background/60 px-3 py-2 sm:p-3 min-w-0";
 
-function SignalCard({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * Two chip rows, always. An empty side keeps a placeholder on the first
+ * row, and a second row of chips (Jensen's cooling set) stays inside the
+ * box, so the centered dialog does not grow or shrink when data arrives.
+ */
+const SIGNAL_ROW_CLASS =
+  "flex h-14 min-w-0 flex-wrap content-start gap-2 overflow-x-hidden overflow-y-auto scrollbar-hide";
+
+function SignalCard({
+  title,
+  testId,
+  children,
+}: {
+  title: string;
+  testId: string;
+  children: ReactNode;
+}) {
   return (
-    <div className={SIGNAL_CARD_CLASS}>
+    <div className={SIGNAL_CARD_CLASS} data-testid={testId}>
       <p className="mb-2 text-[11px] uppercase leading-4 tracking-wider text-muted-foreground">
         {title}
       </p>
-      <div className="flex min-h-6 flex-wrap items-center gap-2">{children}</div>
+      <div className={SIGNAL_ROW_CLASS}>{children}</div>
     </div>
   );
 }
 
 function SignalChipSkeleton({ width }: { width: string }) {
-  return <Skeleton className={`h-6 rounded-md ${width}`} />;
+  return <Skeleton className={`h-6 shrink-0 rounded-md ${width}`} />;
+}
+
+function SignalPlaceholder({ children }: { children: string }) {
+  return (
+    <p className="flex h-6 shrink-0 items-center whitespace-nowrap text-xs text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
+function SignalChips({
+  tone,
+  signals,
+  formatPct,
+}: {
+  tone: "growth" | "cooling";
+  signals: InsightSignal[];
+  formatPct: (value: number) => string;
+}) {
+  if (signals.length === 0) {
+    return (
+      <SignalPlaceholder>
+        {tone === "growth" ? "No growth signals" : "No cooling signals"}
+      </SignalPlaceholder>
+    );
+  }
+  const toneClass =
+    tone === "growth"
+      ? "bg-green-500/15 text-green-600 dark:text-green-400"
+      : "bg-red-500/15 text-red-600 dark:text-red-400";
+  return (
+    <>
+      {signals.map((signal) => (
+        <span
+          key={signal.label}
+          className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs font-medium ${toneClass}`}
+        >
+          {signal.label} {formatPct(signal.deltaPct)}
+          {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
+          {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
+        </span>
+      ))}
+    </>
+  );
 }
 
 const VOTE_ACCENT = "#22D3EE";
@@ -157,35 +217,43 @@ function InsightWhyTrendingSnippet({
     staleTime: 60_000,
   });
 
-  if (isLoading) {
-    return (
-      <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 space-y-2">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">WHY THEY'RE TRENDING</p>
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-4/5" />
-      </div>
-    );
-  }
-
-  if (isError || !data?.hasContext || !data.summary) {
-    return null;
-  }
+  const summary =
+    !isLoading && !isError && data?.hasContext && data.summary ? data.summary : null;
 
   return (
-    <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">WHY THEY'RE TRENDING</p>
-      <p className="text-xs leading-snug text-muted-foreground line-clamp-3 break-words" data-testid="text-insight-why-trending">
-        {data.summary}
-      </p>
-      <div className="flex justify-end mt-1.5">
-        <button
-          type="button"
-          onClick={onReadMore}
-          className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-          data-testid="button-insight-why-trending-read-more"
-        >
-          Read more {"\u2192"}
-        </button>
+    <div className="min-w-0 rounded-lg border border-border/60 bg-background/60 px-3 py-2 sm:p-3">
+      <p className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">WHY THEY'RE TRENDING</p>
+      {/* Three text-xs/leading-snug lines (0.75rem * 1.375 * 3). Loading, a short
+          summary, and an empty summary all occupy this box so the dialog does
+          not re-center when the copy arrives. */}
+      <div className="h-[3.09375rem] overflow-hidden text-xs leading-snug">
+        {isLoading ? (
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-11/12" />
+            <Skeleton className="h-3 w-4/5" />
+          </div>
+        ) : summary ? (
+          <p className="line-clamp-3 break-words text-muted-foreground" data-testid="text-insight-why-trending">
+            {summary}
+          </p>
+        ) : (
+          <p className="text-muted-foreground" data-testid="text-insight-why-trending-empty">
+            No trend summary yet
+          </p>
+        )}
+      </div>
+      <div className="mt-1.5 flex h-4 items-center justify-end">
+        {summary ? (
+          <button
+            type="button"
+            onClick={onReadMore}
+            className="text-xs font-medium leading-4 text-primary transition-colors hover:text-primary/80"
+            data-testid="button-insight-why-trending-read-more"
+          >
+            Read more {"\u2192"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -432,53 +500,30 @@ function InsightPanelContent({
         }}
       />
 
-      {loading ? (
-        <>
-          <SignalCard title="Growth signals">
+      <SignalCard title="Growth signals" testId="insight-signals-growth">
+        {loading ? (
+          <>
             <SignalChipSkeleton width="w-24" />
             <SignalChipSkeleton width="w-28" />
-          </SignalCard>
-          <SignalCard title="Cooling signals">
+          </>
+        ) : error ? (
+          <SignalPlaceholder>Unable to load signal insights right now</SignalPlaceholder>
+        ) : (
+          <SignalChips tone="growth" signals={growthSignals} formatPct={formatPct} />
+        )}
+      </SignalCard>
+      <SignalCard title="Cooling signals" testId="insight-signals-cooling">
+        {loading ? (
+          <>
             <SignalChipSkeleton width="w-24" />
             <SignalChipSkeleton width="w-20" />
-          </SignalCard>
-        </>
-      ) : error ? (
-        <div className={SIGNAL_CARD_CLASS}>
-          <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
-        </div>
-      ) : (
-        <>
-          {growthSignals.length > 0 && (
-            <SignalCard title="Growth signals">
-              {growthSignals.map((signal) => (
-                <span
-                  key={signal.label}
-                  className="inline-flex h-6 items-center gap-1 rounded-md bg-green-500/15 px-2.5 text-xs font-medium text-green-600 dark:text-green-400"
-                >
-                  {signal.label} {formatPct(signal.deltaPct)}
-                  {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
-                  {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
-                </span>
-              ))}
-            </SignalCard>
-          )}
-          {coolingSignals.length > 0 && (
-            <SignalCard title="Cooling signals">
-              {coolingSignals.map((signal) => (
-                <span
-                  key={signal.label}
-                  className="inline-flex h-6 items-center gap-1 rounded-md bg-red-500/15 px-2.5 text-xs font-medium text-red-600 dark:text-red-400"
-                >
-                  {signal.label} {formatPct(signal.deltaPct)}
-                  {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
-                  {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
-                </span>
-              ))}
-            </SignalCard>
-          )}
-        </>
-      )}
+          </>
+        ) : error ? (
+          <SignalPlaceholder>Unable to load signal insights right now</SignalPlaceholder>
+        ) : (
+          <SignalChips tone="cooling" signals={coolingSignals} formatPct={formatPct} />
+        )}
+      </SignalCard>
 
       <div className="space-y-2 min-w-0 w-full">
         <div className="grid grid-cols-2 gap-2 min-w-0 w-full">
