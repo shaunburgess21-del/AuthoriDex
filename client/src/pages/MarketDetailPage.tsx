@@ -43,6 +43,7 @@ import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { selectHeldEntryIds } from "@/lib/heldEntryIds";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "@shared/fame-scale";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { useShareCard } from "@/contexts/ShareCardContext";
@@ -1380,6 +1381,20 @@ export default function MarketDetailPage() {
     image: market?.slug ? marketOgImagePath(market.slug) : null,
   });
 
+  // Must stay above the loading return. A hook after that return runs
+  // only once the market arrives, and React throws on the extra hook.
+  const holdingsMarketOpen = !!market && !isCommunityTradingClosed(market);
+  const heldEntryIds = useMemo(
+    () =>
+      selectHeldEntryIds({
+        open: holdingsMarketOpen,
+        positions: ammPositionData?.positions,
+        activeStakes: userBetsByEntry,
+        bets: myPositionData?.bets,
+      }),
+    [ammPositionData, holdingsMarketOpen, myPositionData, userBetsByEntry],
+  );
+
   if ((authLoading || isLoading) && !market) {
     return (
       <div className="min-h-screen pb-20 md:pb-0">
@@ -1410,28 +1425,6 @@ export default function MarketDetailPage() {
   const isInactive = (market as any).visibility === "inactive";
   const isClosedMarket = !isOpen;
   const isResolved = market.status === "RESOLVED";
-  // Same holdings the Your Position card already loaded: open share
-  // balances while the market trades, settled buys once it has closed.
-  const heldEntryIds = useMemo(() => {
-    const ids = new Set<string>();
-    const openShares = (ammPositionData?.positions ?? []).filter((position) => position.netShares > 1e-6);
-    if (isOpen) {
-      for (const position of openShares) ids.add(position.entryId);
-      if (ids.size === 0) {
-        for (const [entryId, stakes] of userBetsByEntry) {
-          if (stakes.yesStake + stakes.noStake > 0) ids.add(entryId);
-        }
-      }
-      return ids;
-    }
-    for (const bet of myPositionData?.bets ?? []) {
-      if (bet.actionType === "sell") continue;
-      if (bet.status === "won" || bet.status === "lost" || bet.status === "active") {
-        ids.add(bet.entryId);
-      }
-    }
-    return ids;
-  }, [ammPositionData, isOpen, myPositionData, userBetsByEntry]);
   const resultOpenScore = market.resolutionSummary?.openScore ?? market.baselineScore ?? null;
   const resultCloseScore = market.resolutionSummary?.closeScore ?? null;
   const resultActualScore = market.resolutionSummary?.actualScore ?? null;
