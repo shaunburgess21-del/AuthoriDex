@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { boundaryRecovery, isChunkLoadError } from "@/lib/chunkReload";
 
 interface Props {
   children: ReactNode;
@@ -23,6 +24,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("[ErrorBoundary] Uncaught error:", error, info.componentStack);
+    if (typeof window === "undefined") return;
+    const action = boundaryRecovery(error, window.sessionStorage, () => {
+      window.location.reload();
+    });
+    if (action === "reload") {
+      console.warn("[ErrorBoundary] Chunk load failed, reloading once:", error);
+    }
   }
 
   handleReset = () => {
@@ -32,6 +40,16 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
+
+      if (isChunkLoadError(this.state.error)) {
+        return (
+          <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8 text-center">
+            <h2 className="text-xl font-semibold text-foreground">This page didn't load</h2>
+            <p className="max-w-md text-muted-foreground">Refresh to try again.</p>
+            <Button onClick={() => window.location.reload()}>Refresh</Button>
+          </div>
+        );
+      }
 
       return (
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8 text-center">

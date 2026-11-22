@@ -8,13 +8,33 @@ const CHUNK_LOAD_ERROR_PATTERNS = [
   /ChunkLoadError/i,
   /Loading chunk [\d]+ failed/i,
   /Unable to preload CSS/i,
+  // Chrome, when a module URL comes back as HTML (stale shell or SPA fallback).
+  /Failed to load module script/i,
+  /Expected a JavaScript(?:-or-Wasm)? module script/i,
+  /MIME type of ["']text\/html["']/i,
 ];
 
 type ReloadStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
+export type BoundaryRecovery = "reload" | "retry" | "generic";
+
 export function isChunkLoadError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err ?? "");
+  const message =
+    err instanceof Error ? `${err.name}: ${err.message}` : String(err ?? "");
   return CHUNK_LOAD_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Chunk failures get one reload. A second failure in the same session is a
+ * retry screen, not the generic crash page. Anything else stays generic.
+ */
+export function boundaryRecovery(
+  error: unknown,
+  storage: ReloadStorage,
+  reload: () => void,
+): BoundaryRecovery {
+  if (!isChunkLoadError(error)) return "generic";
+  return reloadOnceAfterChunkError(storage, reload) ? "reload" : "retry";
 }
 
 export function chunkReloadAlreadyAttempted(storage: Pick<Storage, "getItem">): boolean {
