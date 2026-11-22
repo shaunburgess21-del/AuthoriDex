@@ -408,7 +408,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
       </CornerFabSlot>
 
       {activityFilter && (
-        <CornerFabSlot className="fixed right-4 bottom-6 z-[55] pointer-events-none hidden md:flex">
+        <CornerFabSlot className="pointer-events-auto fixed right-4 bottom-6 z-[55] hidden md:flex">
           <VoteActivityFilterFab
             value={activityFilter.value}
             count={activityFilter.count}

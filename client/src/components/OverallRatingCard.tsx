@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLockedVoteCardHeight } from "@/hooks/useLockedVoteCardHeight";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PersonAvatar } from "@/components/PersonAvatar";
@@ -293,14 +294,15 @@ export function OverallRatingCard({
   };
 
   const showResults = submittedRating != null && !isChanging;
+  const cardRef = useLockedVoteCardHeight(showResults && !feedLayout);
   const firstName = person.name.split(" ")[0];
   const submittedColor = submittedRating != null ? RATING_COLORS[submittedRating - 1] : undefined;
   const avgColor = avgRating != null ? RATING_COLORS[Math.round(avgRating) - 1] : undefined;
 
   return (
-    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
+    <div ref={cardRef} className={`hub-card-slot relative flex h-full min-h-0 flex-col ${feedLayout ? "md:min-h-0" : ""}`}>
     <Card
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 ${showResults ? "pb-4 sm:pb-5 max-md:pb-2.5 md:pb-[14px]" : "pb-3 sm:pb-3"} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? `h-auto ${showResults ? "min-h-[390px]" : "min-h-0"} md:h-full md:min-h-0 md:overflow-hidden ${!showResults ? "md:justify-end" : ""}` : "h-full min-h-[390px] md:min-h-[340px]"}`}
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 ${showResults ? "pb-4 sm:pb-5 max-md:pb-2.5" : "pb-3 sm:pb-3"} bg-card/80 backdrop-blur-sm flex min-h-0 flex-1 flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? `h-auto ${showResults ? "min-h-[390px]" : "min-h-0"} md:h-full md:min-h-0 md:overflow-hidden ${!showResults ? "md:justify-end" : ""}` : "h-full min-h-[390px] md:min-h-[340px]"}`}
       data-testid={`card-overall-rating-${person.id}`}
     >
       <VoteCardHeader
@@ -486,7 +488,7 @@ export function OverallRatingCard({
               <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
             </Link>
           </div>
-          <div className="mt-auto md:mt-0 flex flex-col gap-2 md:gap-1.5 -translate-y-[2px] md:translate-y-3">
+          <div className="mt-auto flex min-h-0 flex-1 flex-col gap-2 -translate-y-[2px] md:mt-0 md:translate-y-0 md:gap-1 md:overflow-hidden">
             {[...ZONE_LABELS].map((zone, index) => ({ zone, index })).reverse().map(({ zone, index }) => {
               const color = RATING_COLORS[index];
               const isUserZone = submittedRating === index + 1;

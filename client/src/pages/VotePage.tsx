@@ -134,6 +134,7 @@ import { WindowedDotIndicator } from "@/components/WindowedDotIndicator";
 import { ScrollMaskedChipRow } from "@/components/ScrollMaskedChipRow";
 import { SectionSearchRow } from "@/components/SectionSearchRow";
 import { VoteCategoryMenu } from "@/components/VoteCategoryMenu";
+import { HubActivityFilterToggle } from "@/components/HubActivityFilterToggle";
 import { FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import { sentimentPollShare } from "@/lib/share";
 import { VoteSnapScrollView, type SnapItem, type SnapSectionType } from "@/components/snap-scroll/VoteSnapScrollView";
@@ -3423,6 +3424,15 @@ export default function VotePage() {
                   onAuthRequired={handleAuthRequired}
                 />
               </div>
+              {user ? (
+                <HubActivityFilterToggle
+                  scope="vote"
+                  value={myVotesFilter}
+                  count={eyeBadge.count}
+                  ownedCount={eyeBadge.ownedCount}
+                  onCycle={cycleMyVotesFilter}
+                />
+              ) : null}
               <ScrollMaskedChipRow className="pb-1 relative flex-1 min-w-0" reserveStartPadding={false}>
                 {SECTION_TOGGLES.map((section) => {
                   const cueKind = voteSectionCueKind(section);

@@ -32,6 +32,15 @@ export function nextVoteActivityFilter(
   return "all";
 }
 
+/**
+ * Badge text for the eye. Exact through 999 so a vote can move the number;
+ * only four digits collapse to 999+.
+ */
+export function formatActivityFilterCount(count: number): string {
+  const safe = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  return safe > 999 ? "999+" : String(safe);
+}
+
 /** Collapsed-pill label for the floating Vote filter. */
 export function voteActivityFilterShortLabel(value: HubActivityFilter): string {
   if (value === "hide-mine") return "Not voted";

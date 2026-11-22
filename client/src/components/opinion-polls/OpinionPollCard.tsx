@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useRef, useCallback, type KeyboardEvent, type MouseEvent } from "react";
+import { useLockedVoteCardHeight } from "@/hooks/useLockedVoteCardHeight";
 import { Link, useLocation } from "wouter";
 import { ChevronDown, Images, List, Users, ListChecks, MessageSquare, X } from "lucide-react";
 import { getDisplayImageUrl } from "@/lib/imageTransform";
@@ -288,10 +289,12 @@ export function OpinionPollCard({
     0
   );
 
+  const cardRef = useLockedVoteCardHeight(hasVoted && !feedLayout);
+
   return (
-    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : "overflow-visible"}`}>
+    <div ref={cardRef} className={`hub-card-slot relative flex h-full min-h-0 flex-col ${feedLayout ? "md:min-h-0" : "overflow-visible"}`}>
       <Card
-        className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5 md:pb-[10px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[420px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[420px] md:min-h-0"}`}
+        className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${hasVoted ? "max-md:pb-2.5" : ""} bg-card/80 backdrop-blur-sm flex min-h-0 flex-1 flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[420px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[420px] md:min-h-0"}`}
         data-testid={`opinion-poll-card-${poll.id}`}
       >
         <VoteCardHeader
@@ -388,7 +391,7 @@ export function OpinionPollCard({
           )
         )}
 
-        <div className={feedLayout ? "mt-auto flex min-h-0 flex-1 flex-col justify-end" : undefined}>
+        <div className={feedLayout ? "mt-auto flex min-h-0 flex-1 flex-col justify-end" : hasVoted ? "md:flex md:min-h-0 md:flex-1 md:flex-col" : undefined}>
         {!hasVoted ? (
           <div className={cn("space-y-1.5", feedLayout && feedExpanded && "min-h-0 flex-1 overflow-y-auto md:max-h-full")}>
             {visibleOptions.map((option, idx) => {
@@ -425,6 +428,7 @@ export function OpinionPollCard({
                   mode={isSelected ? "result-selected" : "result-other"}
                   percent={percent}
                   isLeading={isLeading}
+                  compactDesktop
                   onChangeVote={(e) => openChangeDialog(option, e)}
                   onExpandImage={() => openCardOptionImageReview(option.id)}
                   imageInteraction="gallery"
@@ -472,6 +476,7 @@ export function OpinionPollCard({
 
         {hasVoted && (
           <CrowdLine
+            className="md:mt-1 md:shrink-0"
             text={
               choiceCrowdLine(
                 options.map((option) => ({
@@ -486,7 +491,7 @@ export function OpinionPollCard({
         )}
 
         {hasVoted && (
-          <div className="mt-auto pt-2.5 flex items-center gap-2">
+          <div className="mt-auto flex items-center gap-2 pt-2.5 md:mt-1 md:shrink-0 md:pt-1">
             <div className="flex-1 min-w-0 flex items-center">
               {showDiscussion ? (
                 <CardVoteCount count={totalVotes} testId={`text-votes-opinion-${poll.id}`} />

@@ -11,6 +11,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCornerPillIntro } from "@/lib/cornerPillIntro";
 import {
+  formatActivityFilterCount,
   hubActivityFilterFabAriaLabel,
   hubActivityFilterFabLabel,
   type HubActivityFilter,
@@ -18,6 +19,49 @@ import {
 } from "@/lib/hub-activity-filter";
 
 const LABEL_HOLD_MS = 1600;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/** Fixed-width count so 8 and 999 occupy the same box. Pulses when it falls. */
+export function ActivityFilterCountBadge({
+  count,
+  className,
+  testId,
+}: {
+  count: number;
+  className?: string;
+  testId?: string;
+}) {
+  const previous = useRef(count);
+  const [dropTick, setDropTick] = useState(0);
+
+  useEffect(() => {
+    if (count < previous.current && !prefersReducedMotion()) {
+      setDropTick((tick) => tick + 1);
+    }
+    previous.current = count;
+  }, [count]);
+
+  return (
+    <span
+      key={dropTick}
+      className={cn(
+        "inline-flex h-[18px] min-w-[2.5rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums leading-none",
+        dropTick > 0 && "activity-count-drop",
+        className,
+      )}
+      data-testid={testId}
+    >
+      {formatActivityFilterCount(count)}
+    </span>
+  );
+}
 
 export interface VoteActivityFilterFabProps {
   scope?: HubActivityFilterScope;
@@ -96,7 +140,7 @@ export function VoteActivityFilterFab({
   const testId = scope === "predict" ? "predict-activity-filter-fab" : "vote-activity-filter-fab";
 
   return (
-    <motion.div animate={pulse} className="relative flex flex-col items-end">
+    <motion.div animate={pulse} className="pointer-events-auto relative flex flex-col items-end">
       <span
         className="sr-only"
         role="status"
@@ -151,19 +195,18 @@ export function VoteActivityFilterFab({
         </motion.button>
 
         {showBadge && (
-          <span
+          <ActivityFilterCountBadge
+            count={count}
+            testId={scope === "predict" ? "predict-activity-filter-count" : "vote-activity-filter-count"}
             className={cn(
-              "pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none ring-2 ring-black/60",
+              "pointer-events-none absolute -right-1 -top-1 ring-2 ring-black/60",
               value === "hide-mine"
                 ? "bg-amber-500 text-black"
                 : scope === "predict"
                   ? "bg-violet-400 text-black"
                   : "bg-cyan-400 text-black",
             )}
-            data-testid={scope === "predict" ? "predict-activity-filter-count" : "vote-activity-filter-count"}
-          >
-            {count > 99 ? "99+" : count}
-          </span>
+          />
         )}
       </div>
     </motion.div>
