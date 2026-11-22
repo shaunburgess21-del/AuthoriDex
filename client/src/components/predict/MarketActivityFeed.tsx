@@ -10,6 +10,7 @@ import { formatActivityAge } from "@/lib/formatDate";
 import { apiRequest } from "@/lib/queryClient";
 import { voxWord } from "@/lib/currency";
 import { GlossaryLegend } from "@/components/GlossaryLegend";
+import { OPENING_ODDS_NOTE } from "@/lib/market-trust-copy";
 
 interface MarketTrade {
   id: string;
@@ -40,6 +41,12 @@ interface MarketActivityFeedProps {
   className?: string;
   /** Use predict-detail section header styling (matches Category Race page). */
   detailHeader?: boolean;
+  /**
+   * Distinct traders on this market. The empty tape explains opening
+   * prices only when this is zero. A positive count keeps the tape
+   * from calling the viewer the first predictor.
+   */
+  traderCount?: number;
 }
 
 /**
@@ -58,6 +65,7 @@ export function MarketActivityFeed({
   limit = 20,
   className,
   detailHeader = false,
+  traderCount,
 }: MarketActivityFeedProps) {
   const [, setLocation] = useLocation();
 
@@ -136,7 +144,9 @@ export function MarketActivityFeed({
         </p>
       ) : trades.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">
-          No trades yet. Be the first to make a prediction.
+          {traderCount === 0
+            ? `No trades yet. ${OPENING_ODDS_NOTE}`
+            : "No trades yet."}
         </p>
       ) : (
         <div className="space-y-2">

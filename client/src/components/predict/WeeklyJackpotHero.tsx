@@ -8,8 +8,9 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { getSupabase } from "@/lib/supabase";
-import type { MarketStatus } from "@/hooks/useMarketCycle";
+import { useMarketCycle } from "@/hooks/useMarketCycle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
+import { deriveJackpotPanelState, splitCountdown } from "@/lib/jackpot-panel-state";
 import { VoxMark } from "@/components/VoxMark";
 import { TrendingPerson } from "@shared/schema";
 import {
@@ -137,8 +138,6 @@ type ProfileProps = {
 
 export type WeeklyJackpotHeroProps = {
   onEnterJackpot: () => void;
-  marketStatus: MarketStatus;
-  timeRemaining: { days: number; hours: number; minutes: number; seconds: number };
   jackpotMarket: any | null;
   onRulesClick: () => void;
 } & (BrowseProps | ProfileProps);
@@ -180,11 +179,26 @@ const JackpotPersonPicker = memo(function JackpotPersonPicker({
 export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
   const {
     onEnterJackpot,
-    marketStatus,
-    timeRemaining,
     jackpotMarket,
     onRulesClick,
   } = props;
+
+  // Tick once a second so the jackpot clock stays current. The phase
+  // itself comes from deriveJackpotPanelState, not from the weekly bar.
+  useMarketCycle({
+    bettingCutoff: jackpotMarket?.bettingCutoff ?? null,
+    resolutionDeadline: jackpotMarket?.endAt ?? null,
+  });
+  const now = new Date();
+  const panel = deriveJackpotPanelState({
+    status: jackpotMarket?.status ?? null,
+    lifecycleStatus: jackpotMarket?.lifecycleStatus ?? null,
+    isCutoffPassed: jackpotMarket?.isCutoffPassed ?? null,
+    bettingCutoff: jackpotMarket?.bettingCutoff ?? null,
+    resolveAt: jackpotMarket?.endAt ?? null,
+    now,
+  });
+  const countdown = panel.countdownTo ? splitCountdown(panel.countdownTo, now) : null;
 
   const isProfile = props.variant === "profile";
   const profilePerson = isProfile ? props.profilePerson : null;
@@ -240,22 +254,30 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
 
   const entryCount = jackpotMarket?.totalBets || jackpotMarket?.activeParticipantCount || 0;
 
-  const timerLabel = marketStatus === "ENTRIES_CLOSED" ? "Results In" : "Time Remaining";
+  const timerLabel = panel.phase === "closed" ? "Results in" : "Time remaining";
 
   const canEnter = isProfile ? !!profilePerson : !!selectedPerson;
 
+  const statusBadgeClass =
+    panel.phase === "open"
+      ? "bg-green-500/25 dark:bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50 dark:border-green-500/40"
+      : panel.phase === "closed"
+        ? "bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/50 dark:border-amber-500/40"
+        : "bg-red-500/25 dark:bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50 dark:border-red-500/40";
+  const statusBadgeLabel = panel.phase === "open" ? "OPEN" : panel.phase === "closed" ? "CLOSED" : "SETTLED";
+
   const renderCTA = () => {
-    if (marketStatus === "RESOLVED") {
+    if (panel.phase === "settled") {
       return (
-        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
+        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled data-testid="button-jackpot-settled">
           <Lock className="h-5 w-5 mr-2" />
           Market Resolved
         </Button>
       );
     }
-    if (marketStatus === "ENTRIES_CLOSED") {
+    if (panel.phase === "closed") {
       return (
-        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled>
+        <Button size="lg" className="bg-muted text-muted-foreground cursor-not-allowed" disabled data-testid="button-jackpot-closed">
           <Clock className="h-5 w-5 mr-2" />
           Entries Closed — Results Sunday
         </Button>
@@ -313,6 +335,12 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
               <Badge className="bg-amber-500/25 dark:bg-amber-500/20 text-amber-700 dark:text-amber-500 border-amber-500/50 dark:border-amber-500/40">
                 WEEKLY JACKPOT
               </Badge>
+              <Badge
+                className={statusBadgeClass}
+                data-testid="jackpot-panel-status"
+              >
+                {statusBadgeLabel}
+              </Badge>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -338,6 +366,7 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
               resolveAt={jackpotMarket?.endAt ?? null}
               variant="compact"
               engine="parimutuel"
+              phaseStatus={panel.stripStatus}
               className="mb-4"
             />
 
@@ -349,22 +378,22 @@ export function WeeklyJackpotHero(props: WeeklyJackpotHeroProps) {
               >
                 <TicketCheck className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600/80 dark:text-amber-400/80" aria-hidden />
                 <span>
-                  You&apos;re in with {myJackpotEntryCount} prediction{myJackpotEntryCount !== 1 ? "s" : ""} this week — Enter
-                  again to add another.
+                  You&apos;re in with {myJackpotEntryCount} prediction{myJackpotEntryCount !== 1 ? "s" : ""} this week
+                  {panel.phase === "open" ? " — Enter again to add another." : "."}
                 </span>
               </p>
             )}
           </div>
 
           <div className="flex w-full flex-col items-start gap-3 lg:w-auto lg:items-end">
-            {marketStatus !== "RESOLVED" && (
+            {panel.phase !== "settled" && countdown && (
               <div className="flex w-full flex-col items-start gap-1 lg:items-end lg:gap-2">
                 <p className="shrink-0 text-xs text-muted-foreground lg:text-right">{timerLabel}</p>
                 <div className="flex gap-2 lg:justify-end">
                   {[
-                    { value: timeRemaining.days, label: "d" },
-                    { value: timeRemaining.hours, label: "h" },
-                    { value: timeRemaining.minutes, label: "m" },
+                    { value: countdown.days, label: "d" },
+                    { value: countdown.hours, label: "h" },
+                    { value: countdown.minutes, label: "m" },
                   ].map((item, i) => (
                     <div key={i} className="flex items-baseline gap-0.5">
                       <span className="font-mono text-2xl font-bold text-amber-500">{item.value}</span>

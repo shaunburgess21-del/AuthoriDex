@@ -30,6 +30,11 @@ export interface MarketCycleStripProps {
    * weekly cutoff policy; H2H/gainer keep the short pre-resolve window.
    */
   marketKind?: "updown" | "h2h" | "gainer" | "jackpot";
+  /**
+   * When set, badge/CTA callers and this strip share one phase.
+   * Omit it and the strip derives the phase from the cutoff dates.
+   */
+  phaseStatus?: "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
   className?: string;
 }
 
@@ -58,12 +63,14 @@ export function MarketCycleStrip({
   variant = "compact",
   engine = "amm",
   marketKind,
+  phaseStatus,
   className,
 }: MarketCycleStripProps) {
   const cycle = useMarketCycle({
     bettingCutoff: bettingCutoff ?? null,
     resolutionDeadline: resolveAt ?? null,
   });
+  const status = phaseStatus ?? cycle.status;
 
   const isAmm = engine === "amm";
   const fridayUpdown = marketKind === "updown";
@@ -99,7 +106,7 @@ export function MarketCycleStrip({
   if (variant === "compact") {
     return (
       <CompactStrip
-        status={cycle.status}
+        status={status}
         cutoffLabel={cutoffLabelShort}
         resolveLabel={resolveLabelShort}
         isAmm={isAmm}
@@ -111,7 +118,7 @@ export function MarketCycleStrip({
   if (variant === "modal") {
     return (
       <ModalStrip
-        status={cycle.status}
+        status={status}
         cutoffLabel={cutoffLabelFull}
         resolveLabel={resolveLabelFull}
         isAmm={isAmm}
@@ -122,7 +129,7 @@ export function MarketCycleStrip({
 
   return (
     <FullStrip
-      status={cycle.status}
+      status={status}
       countdown={countdown}
       urgencyClass={urgencyClass}
       cutoffLabel={cutoffLabelFull}

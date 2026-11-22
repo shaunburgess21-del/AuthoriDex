@@ -12,7 +12,8 @@ import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
-import { formatVoxCompact, formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { FIRST_TO_PREDICT, formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1651,7 +1652,7 @@ export default function MarketDetailPage() {
                      mirroring the Race candidate list. */}
         {isAmm && ammPriceMap && market.entries && market.entries.length > 0 && (() => {
           const liveVolume = Number(market.ammState?.totalUserCreditsIn ?? 0);
-          const liveVolumeLabel = liveVolume > 0 ? formatVoxCompact(liveVolume) : null;
+          const liveVolumeLabel = formatVolumeWithUnit(liveVolume);
           // Sprint 5 / Phase 4.3: trader count chip uses the same
           // `totalParticipants` memo as the existing hero stats below
           // so the two surfaces stay numerically aligned.
@@ -1673,16 +1674,24 @@ export default function MarketDetailPage() {
                       className="text-[10px] tabular-nums text-muted-foreground border-border/50"
                       data-testid="community-live-market-volume"
                     >
-                      <VoxText text={liveVolumeLabel} /> vol
+                      <VoxText text={liveVolumeLabel} />
                     </Badge>
                   )}
-                  {traderCount > 0 && (
+                  {traderCount > 0 ? (
                     <Badge
                       variant="outline"
                       className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
                     >
                       <Users className="h-2.5 w-2.5" />
                       {traderCount}
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] text-muted-foreground border-border/50"
+                      data-testid="be-first-to-predict"
+                    >
+                      {FIRST_TO_PREDICT}
                     </Badge>
                   )}
                   <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
@@ -1894,7 +1903,7 @@ export default function MarketDetailPage() {
             sync with the rest of the platform's social surfaces. */}
         {market.id && (
           <div className="mb-6">
-            <MarketActivityFeed marketId={market.id} />
+            <MarketActivityFeed marketId={market.id} traderCount={totalParticipants} />
           </div>
         )}
 
@@ -2272,8 +2281,14 @@ export default function MarketDetailPage() {
           )}
           <Card className="p-3 text-center">
             <Users className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />
-            <p className="text-lg font-bold font-mono" data-testid="text-total-participants">{formatNumber(totalParticipants)}</p>
-            <p className="text-xs text-muted-foreground">{isAmm ? "Traders" : "Participants"}</p>
+            {totalParticipants > 0 ? (
+              <>
+                <p className="text-lg font-bold font-mono" data-testid="text-total-participants">{formatNumber(totalParticipants)}</p>
+                <p className="text-xs text-muted-foreground">{isAmm ? "Traders" : "Participants"}</p>
+              </>
+            ) : (
+              <p className="text-xs font-medium leading-snug" data-testid="text-total-participants">{FIRST_TO_PREDICT}</p>
+            )}
           </Card>
           <Card className="p-3 text-center">
             <Gavel className="h-4 w-4 text-violet-700 dark:text-violet-500 mx-auto mb-1" />

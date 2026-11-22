@@ -40,6 +40,7 @@ import { getMarketBaselineScore } from "@/lib/predict-market-baseline";
 import { getUpDownWinningState, UP_DOWN_STATE_LABELS } from "@/lib/updownState";
 import { predictDetailSectionCardClass } from "@/lib/predict-detail-ui";
 import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { FIRST_TO_PREDICT } from "@/lib/market-trust-copy";
 import { goBack } from "@/lib/goBack";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
@@ -747,12 +748,18 @@ export default function UpDownDetailPage() {
                     </div>
                   )}
                   <div>
-                    <p className="text-sm md:text-base font-bold">
-                      {hydrated.totalParticipants}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Traders
-                    </p>
+                    {hydrated.totalParticipants > 0 ? (
+                      <>
+                        <p className="text-sm md:text-base font-bold">
+                          {hydrated.totalParticipants}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          Traders
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs font-medium leading-snug">{FIRST_TO_PREDICT}</p>
+                    )}
                   </div>
                 </div>
               );
@@ -972,7 +979,7 @@ export default function UpDownDetailPage() {
 
         {/* Live trade feed — Up/Down trades flow heavily right around
             resolution windows, so seeing the late book matters here. */}
-        <MarketActivityFeed marketId={marketId} />
+        <MarketActivityFeed marketId={marketId} traderCount={hydrated.totalParticipants} />
 
         {/* Trend Score Chart */}
         <Card className="border-border/50">

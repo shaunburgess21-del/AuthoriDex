@@ -35,7 +35,8 @@ import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { getClosedMarketMessage } from "@/lib/marketClosedMessaging";
 import { goBack } from "@/lib/goBack";
-import { formatVox, formatVoxCompact, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import { formatVox, formatVoxDelta, formatVoxPrice } from "@/lib/currency";
+import { FIRST_TO_PREDICT, formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useNativeMarketDetail } from "@/hooks/useNativeMarketDetail";
 import { pricesFor, priceToPercent, snapshotFromApi } from "@/lib/ammClient";
@@ -659,8 +660,14 @@ export default function CategoryRaceDetailPage() {
               </div>
               <div className="h-8 w-px bg-border/50" />
               <div className="text-center">
-                <p className="text-base font-bold tabular-nums">{totalParticipants}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Traders</p>
+                {totalParticipants > 0 ? (
+                  <>
+                    <p className="text-base font-bold tabular-nums">{totalParticipants}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Traders</p>
+                  </>
+                ) : (
+                  <p className="text-xs font-medium leading-snug max-w-[9rem]">{FIRST_TO_PREDICT}</p>
+                )}
               </div>
             </div>
           </div>
@@ -727,7 +734,7 @@ export default function CategoryRaceDetailPage() {
           const liveVolume = Number(
             ((market as any)?.ammState?.totalUserCreditsIn ?? (market as any)?.volume ?? 0),
           );
-          const liveVolumeLabel = liveVolume > 0 ? formatVoxCompact(liveVolume) : null;
+          const liveVolumeLabel = formatVolumeWithUnit(liveVolume);
           const openPositions = (ammPositionData?.positions ?? []).filter(
             (p) => p.netShares > 1e-6,
           );
@@ -747,16 +754,23 @@ export default function CategoryRaceDetailPage() {
                           className="text-[10px] tabular-nums text-muted-foreground border-border/50"
                           data-testid="race-live-market-volume"
                         >
-                          <VoxText text={liveVolumeLabel} /> vol
+                          <VoxText text={liveVolumeLabel} />
                         </Badge>
                       )}
-                      {totalParticipants > 0 && (
+                      {totalParticipants > 0 ? (
                         <Badge
                           variant="outline"
                           className="text-[10px] tabular-nums text-muted-foreground border-border/50 flex items-center gap-1"
                         >
                           <Users className="h-2.5 w-2.5" />
                           {totalParticipants}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-muted-foreground border-border/50"
+                        >
+                          {FIRST_TO_PREDICT}
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
@@ -981,6 +995,7 @@ export default function CategoryRaceDetailPage() {
           marketId={marketId}
           limit={5}
           detailHeader
+          traderCount={totalParticipants}
           className="border-border/50 shadow-none"
         />
 

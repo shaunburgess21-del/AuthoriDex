@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { getJackpotWeekDeadlines } from "@/lib/jackpot-panel-state";
 
 export type MarketStatus = "OPEN" | "ENTRIES_CLOSED" | "RESOLVED";
 
@@ -29,27 +30,8 @@ export interface MarketCycleOptions {
  * Used as a client-side fallback when API data hasn't loaded yet.
  * Mirrors the server's getWeeklyBettingCutoff + getWeekContext logic.
  */
-export function getClientWeekDeadlines(): { friday: Date; sunday: Date } {
-  const now = new Date();
-  const dayOfWeek = now.getUTCDay(); // 0=Sun .. 6=Sat
-
-  // Find this week's Sunday 23:59:59.999 UTC
-  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
-  const sunday = new Date(now);
-  sunday.setUTCDate(now.getUTCDate() + daysUntilSunday);
-  sunday.setUTCHours(23, 59, 59, 999);
-
-  // If we're past this Sunday, advance to next week
-  if (now > sunday) {
-    sunday.setUTCDate(sunday.getUTCDate() + 7);
-  }
-
-  // Friday = Sunday minus 2 days
-  const friday = new Date(sunday);
-  friday.setUTCDate(friday.getUTCDate() - 2);
-  friday.setUTCHours(23, 59, 59, 999);
-
-  return { friday, sunday };
+export function getClientWeekDeadlines(now: Date = new Date()): { friday: Date; sunday: Date } {
+  return getJackpotWeekDeadlines(now);
 }
 
 function calculateTimeRemaining(deadline: Date): MarketCycleState["timeRemaining"] {
