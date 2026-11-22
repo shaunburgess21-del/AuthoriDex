@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Flame } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +22,8 @@ import {
   xpRankProgressLabel,
   type StripStorage,
 } from "@/lib/returningUserStrip";
+import { newlyResolvedRevealRows, revealRowsFromPredictionsResponse } from "@/lib/resolvedReveal";
+import { ResolvedPredictionsSheet } from "@/components/vote/ResolvedPredictionsSheet";
 import { cn } from "@/lib/utils";
 
 /**
@@ -103,6 +104,15 @@ export function ReturningUserStrip() {
   }, [predictions.isSuccess, predictions.data]);
 
   const [chipCleared, setChipCleared] = useState(false);
+  const [revealOpen, setRevealOpen] = useState(false);
+
+  const revealRows = useMemo(() => {
+    if (!predictions.isSuccess) return [];
+    return newlyResolvedRevealRows(
+      revealRowsFromPredictionsResponse(predictions.data),
+      lastSeenRef.current ?? null,
+    );
+  }, [predictions.isSuccess, predictions.data]);
 
   useEffect(() => {
     if (!shown || !predictions.isSuccess) return;
@@ -133,6 +143,7 @@ export function ReturningUserStrip() {
   };
 
   return (
+    <>
     <Card
       className="relative mb-3 mt-1.5 h-11 overflow-hidden rounded-[12px] border-card-border bg-card/80 shadow-none md:rounded-xl"
       data-testid="vote-return-strip"
@@ -174,17 +185,21 @@ export function ReturningUserStrip() {
             <div data-testid="vote-return-strip-goal-slot" className="min-w-0 flex-1" aria-hidden />
             <div data-testid="vote-return-strip-resolved-slot" className="shrink-0">
               {showChip ? (
-                <Link
-                  href="/me/predictions"
-                  onClick={acknowledgeChip}
+                <button
+                  type="button"
+                  onClick={() => {
+                    acknowledgeChip();
+                    setRevealOpen(true);
+                  }}
                   data-testid="vote-return-strip-resolved"
                   aria-label={`${resolvedCount} resolved predictions`}
+                  aria-haspopup="dialog"
                   className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <Badge variant="outline" className={RESOLVED_CHIP_CLASS}>
                     <span className="whitespace-nowrap">{resolvedCount} resolved ›</span>
                   </Badge>
-                </Link>
+                </button>
               ) : null}
             </div>
           </>
@@ -202,5 +217,11 @@ export function ReturningUserStrip() {
         <Skeleton className="ml-auto h-5 w-[5.5rem] rounded-md" />
       </div>
     </Card>
+    <ResolvedPredictionsSheet
+      open={revealOpen}
+      onOpenChange={setRevealOpen}
+      rows={revealRows}
+    />
+    </>
   );
 }

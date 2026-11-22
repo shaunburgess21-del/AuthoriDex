@@ -116,6 +116,22 @@ export interface SettledPredictionRow {
 }
 
 /**
+ * A non-pending row whose settledAt is strictly after the stamp.
+ * A missing stamp uses cutoff 0, so every dated settlement counts.
+ * The caller must read this before writing a new stamp.
+ */
+export function settledAfterLastSeen(
+  row: SettledPredictionRow,
+  lastSeenAtMs: number | null,
+): boolean {
+  if (row.result === "pending") return false;
+  if (!row.settledAt) return false;
+  const settled = Date.parse(row.settledAt);
+  const cutoff = lastSeenAtMs ?? 0;
+  return Number.isFinite(settled) && settled > cutoff;
+}
+
+/**
  * Rows from GET /api/me/predictions that settled after `lastSeenAtMs`.
  * Pending rows never count. A missing stamp counts every settled row
  * (cutoff 0) — the caller must compute this before writing the stamp.
@@ -124,14 +140,9 @@ export function countNewlyResolvedPredictions(
   rows: readonly SettledPredictionRow[],
   lastSeenAtMs: number | null,
 ): number {
-  const cutoff = lastSeenAtMs ?? 0;
   let count = 0;
   for (const row of rows) {
-    if (row.result === "pending") continue;
-    if (!row.settledAt) continue;
-    const settled = Date.parse(row.settledAt);
-    if (!Number.isFinite(settled) || settled <= cutoff) continue;
-    count += 1;
+    if (settledAfterLastSeen(row, lastSeenAtMs)) count += 1;
   }
   return count;
 }

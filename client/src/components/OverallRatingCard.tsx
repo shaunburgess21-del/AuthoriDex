@@ -28,6 +28,8 @@ import {
   restoreOverallRatings,
   snapshotOverallRatings,
 } from "@/lib/overallRatingDistribution";
+import { CrowdLine } from "@/components/vote/CrowdLine";
+import { ratingCrowdLine } from "@/lib/crowdLine";
 
 const ZONE_LABELS = ["Hate", "Dislike", "Neutral", "Like", "Love"] as const;
 const RATING_COLORS = [1, 2, 3, 4, 5].map((r) => getRatingTileColor(r));
@@ -512,6 +514,10 @@ export function OverallRatingCard({
                 </div>
               );
             })}
+            <CrowdLine
+              text={ratingCrowdLine(pcts, submittedRating)?.text ?? null}
+              testId={`crowd-line-rating-${person.id}`}
+            />
             <div className="flex items-center justify-between pt-2 border-t border-white/10">
               <span className="text-sm text-muted-foreground">
                 You voted{" "}

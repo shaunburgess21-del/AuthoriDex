@@ -28,6 +28,8 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
+import { CrowdLine } from "@/components/vote/CrowdLine";
+import { choiceCrowdLine } from "@/lib/crowdLine";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
   const retryAfter = (err as any)?.retryAfter as number | undefined;
@@ -467,6 +469,21 @@ export function OpinionPollCard({
           </button>
         )}
         </div>
+
+        {hasVoted && (
+          <CrowdLine
+            text={
+              choiceCrowdLine(
+                options.map((option) => ({
+                  key: option.id,
+                  percent: totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0,
+                })),
+                voted,
+              )?.text ?? null
+            }
+            testId={`crowd-line-opinion-${poll.id}`}
+          />
+        )}
 
         {hasVoted && (
           <div className="mt-auto pt-2.5 flex items-center gap-2">

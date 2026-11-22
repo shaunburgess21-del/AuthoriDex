@@ -1,4 +1,5 @@
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import { Link } from "wouter";
 import {
   Swords,
   TrendingUp,
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { cn } from "@/lib/utils";
+import { myVoteCrowdCopy, myVoteHref } from "@/lib/myVoteCrowd";
 
 export interface MyVoteCardData {
   id: string;
@@ -36,6 +38,11 @@ export interface MyVoteCardData {
   subjectImageSlug?: string | null;
   /** Optional: whether the user's pick matched the community majority. */
   alignedWithMajority?: boolean | null;
+  /** Additive /api/me/votes fields. Absent on an older API. */
+  targetId?: string | null;
+  slug?: string | null;
+  crowdPercent?: number | null;
+  choiceLabel?: string | null;
 }
 
 interface MyVoteCardProps {
@@ -255,6 +262,33 @@ const PERSON_VOTE_TYPES = new Set([
   "overall_rating",
 ]);
 
+function VoteCardBody({
+  href,
+  label,
+  className,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  className: string;
+  children: ReactNode;
+}) {
+  if (!href) return <div className={className}>{children}</div>;
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      data-testid="my-vote-open"
+      className={cn(
+        className,
+        "rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function formatRelativeTime(iso: string): string {
   const now = Date.now();
   const then = new Date(iso).getTime();
@@ -280,6 +314,9 @@ export function MyVoteCard({
   const Icon = style.icon;
   const hidden = vote.hidden === true;
   const effectivelyPublic = !profileIsPrivate && !hidden;
+
+  const href = myVoteHref(vote);
+  const crowdCopy = myVoteCrowdCopy(vote);
 
   const toggleLabel = hidden
     ? "Hidden from your public profile. Click to make visible."
@@ -323,10 +360,13 @@ export function MyVoteCard({
         />
       )}
 
-      <div
+      <VoteCardBody
+        href={href}
+        label={`Open ${vote.targetName || "this vote"}`}
         className={cn(
           "relative flex gap-3 p-4 sm:p-5 transition-opacity",
           hidden && "opacity-60",
+          href && "cursor-pointer",
         )}
       >
         {/* Leading visual: real person photo for person-tied votes, icon chip otherwise. */}
@@ -416,8 +456,19 @@ export function MyVoteCard({
               </Badge>
             )}
           </div>
+          {crowdCopy && (
+            <div className="mt-2 flex min-h-4 items-center gap-2" data-testid={`vote-crowd-${vote.id}`}>
+              <div className="h-1 w-14 shrink-0 overflow-hidden rounded-full bg-muted" aria-hidden>
+                <div
+                  className="h-full rounded-full bg-sky-500/80"
+                  style={{ width: `${Math.max(0, Math.min(100, vote.crowdPercent ?? 0))}%` }}
+                />
+              </div>
+              <span className="min-w-0 truncate text-[11px] text-muted-foreground">{crowdCopy}</span>
+            </div>
+          )}
         </div>
-      </div>
+      </VoteCardBody>
 
       {/* Visibility toggle sits outside the body wrapper so it stays crisp when the card
          is hidden (body fades to opacity-60). Hit target padded to >=44px for touch. */}

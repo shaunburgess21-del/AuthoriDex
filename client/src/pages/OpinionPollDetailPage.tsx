@@ -34,6 +34,8 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { CollapsibleCompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
+import { CrowdLine } from "@/components/vote/CrowdLine";
+import { choiceCrowdLine } from "@/lib/crowdLine";
 import { sortOpinionPollOptionsByVotes } from "@/lib/opinionPollOptions";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
@@ -565,6 +567,19 @@ export default function OpinionPollDetailPage() {
                 );
               })}
 
+              <CrowdLine
+                text={
+                  choiceCrowdLine(
+                    voteSortedOptions.map((option: { id: string; percent?: number }) => ({
+                      key: option.id,
+                      percent: option.percent || 0,
+                    })),
+                    poll.userVote,
+                  )?.text ?? null
+                }
+                testId="crowd-line-opinion-detail"
+              />
+
               <div className="flex items-center justify-between mt-1 pt-3 border-t border-border/30">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
                   <span className="truncate">
@@ -654,6 +669,20 @@ export default function OpinionPollDetailPage() {
               };
             })}
           />
+          {hasVoted ? (
+            <CrowdLine
+              text={
+                choiceCrowdLine(
+                  voteSortedOptions.map((option: { id: string; percent?: number }) => ({
+                    key: option.id,
+                    percent: option.percent || 0,
+                  })),
+                  poll.userVote,
+                )?.text ?? null
+              }
+              testId="crowd-line-opinion-results"
+            />
+          ) : null}
         </Card>
         )}
 

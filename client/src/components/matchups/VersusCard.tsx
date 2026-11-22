@@ -21,7 +21,9 @@ import { matchupShare } from "@/lib/share";
 import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
+import { CrowdLine } from "@/components/vote/CrowdLine";
 import { matchupResultsVisible } from "@/lib/matchupResults";
+import { choiceCrowdLine } from "@/lib/crowdLine";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -455,6 +457,19 @@ export function VersusCard({
                   {matchup.optionBText}
                 </span>
               </div>
+              {hasVoted ? (
+                <CrowdLine
+                  text={choiceCrowdLine(
+                    [
+                      { key: "option_a", percent: matchup.optionAPercent },
+                      { key: "neutral", percent: matchup.neutralPercent ?? 0 },
+                      { key: "option_b", percent: matchup.optionBPercent },
+                    ],
+                    userVote,
+                  )?.text ?? null}
+                  testId={`crowd-line-matchup-${matchup.id}`}
+                />
+              ) : null}
             </div>
           </div>
           ) : null}
