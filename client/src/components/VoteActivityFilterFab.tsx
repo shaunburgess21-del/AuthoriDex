@@ -1,11 +1,12 @@
 /**
  * Mobile hub filter pill. On Vote it stacks above Quick Vote; on Predict it
  * floats alone in the same corner. Cycles all → not yet acted → mine only.
- * The label shows during the shared corner intro and again briefly after
- * each tap, then collapses to a dim eye — the same recede as the Quick Vote pill.
+ * The label expands inside the pill during the shared corner intro and again
+ * briefly after each tap, then collapses to a dim eye — the same slide-out
+ * and recede as the Quick Vote and Ask VoxDex pills.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+import { motion, useAnimationControls } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCornerPillIntro } from "@/lib/cornerPillIntro";
@@ -41,6 +42,7 @@ export function VoteActivityFilterFab({
   pulseTick = 0,
 }: VoteActivityFilterFabProps) {
   const [tapLabelVisible, setTapLabelVisible] = useState(false);
+  const [liveMessage, setLiveMessage] = useState("");
   const timerRef = useRef<number | null>(null);
   const pulse = useAnimationControls();
   // Vote and Predict count as separate pills, so the first visit to each
@@ -70,7 +72,8 @@ export function VoteActivityFilterFab({
     if (prevValueRef.current === value) return;
     prevValueRef.current = value;
     revealFor(LABEL_HOLD_MS);
-  }, [value, revealFor]);
+    setLiveMessage(hubActivityFilterFabAriaLabel(scope, value, count, ownedCount));
+  }, [value, revealFor, scope, count, ownedCount]);
 
   const seenTickRef = useRef(pulseTick);
   useEffect(() => {
@@ -94,67 +97,74 @@ export function VoteActivityFilterFab({
 
   return (
     <motion.div animate={pulse} className="relative flex flex-col items-end">
-      {/* Sibling of the eye, not a child. backdrop-blur on the button clips
-          anything positioned outside its rounded box, which hid this pill. */}
-      <AnimatePresence initial={false}>
-        {labelVisible && (
+      <span
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid={`${testId}-live`}
+      >
+        {liveMessage}
+      </span>
+      <div className="relative">
+        <motion.button
+          type="button"
+          onClick={onCycle}
+          initial={false}
+          animate={{ opacity: labelVisible ? 1 : 0.5 }}
+          transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
+          className="pointer-events-auto relative flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
+          aria-label={hubActivityFilterFabAriaLabel(scope, value, count, ownedCount)}
+          data-testid={testId}
+        >
+          {value === "hide-mine" ? (
+            <EyeOff className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+          ) : (
+            <Eye
+              className={cn(
+                "h-4 w-4 shrink-0",
+                value === "show-mine"
+                  ? scope === "predict"
+                    ? "text-violet-400"
+                    : "text-cyan-400"
+                  : "text-slate-100",
+              )}
+              aria-hidden
+            />
+          )}
+          {/* leading-4 matches the 16px icon so the open pill stays the same
+              height as the round button and the pills above and below do not jump. */}
           <motion.span
-            key="activity-filter-label"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="pointer-events-none mb-2 whitespace-nowrap rounded-full border border-white/15 bg-black/70 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-lg"
+            initial={false}
+            animate={
+              labelVisible
+                ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
+                : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
+            }
+            transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
+            className="overflow-hidden whitespace-nowrap leading-4"
             aria-hidden
             data-testid={`${testId}-label`}
           >
             {label}
           </motion.span>
-        )}
-      </AnimatePresence>
-      <div className="relative">
-      <motion.button
-        type="button"
-        onClick={onCycle}
-        initial={false}
-        animate={{ opacity: labelVisible ? 1 : 0.5 }}
-        transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
-        className="pointer-events-auto relative flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
-        aria-label={hubActivityFilterFabAriaLabel(scope, value, count, ownedCount)}
-        data-testid={testId}
-      >
-        {value === "hide-mine" ? (
-          <EyeOff className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
-        ) : (
-          <Eye
-            className={cn(
-              "h-4 w-4 shrink-0",
-              value === "show-mine"
-                ? scope === "predict"
-                  ? "text-violet-400"
-                  : "text-cyan-400"
-                : "text-slate-100",
-            )}
-            aria-hidden
-          />
-        )}
-      </motion.button>
+        </motion.button>
 
-      {showBadge && (
-        <span
-          className={cn(
-            "pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none ring-2 ring-black/60",
-            value === "hide-mine"
-              ? "bg-amber-500 text-black"
-              : scope === "predict"
-                ? "bg-violet-400 text-black"
-                : "bg-cyan-400 text-black",
-          )}
-          data-testid={scope === "predict" ? "predict-activity-filter-count" : "vote-activity-filter-count"}
-        >
-          {count > 99 ? "99+" : count}
-        </span>
-      )}
+        {showBadge && (
+          <span
+            className={cn(
+              "pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold leading-none ring-2 ring-black/60",
+              value === "hide-mine"
+                ? "bg-amber-500 text-black"
+                : scope === "predict"
+                  ? "bg-violet-400 text-black"
+                  : "bg-cyan-400 text-black",
+            )}
+            data-testid={scope === "predict" ? "predict-activity-filter-count" : "vote-activity-filter-count"}
+          >
+            {count > 99 ? "99+" : count}
+          </span>
+        )}
       </div>
     </motion.div>
   );
