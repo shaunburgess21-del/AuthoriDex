@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { measureScrollEdge, scrollEdgeMaskClass } from "../client/src/lib/scrollEdgeFade";
-import { formatTimeAgo, formatUtcCalendarDate } from "../client/src/lib/formatDate";
+import {
+  formatCommentAge,
+  formatTimeAgo,
+  formatUtcCalendarDate,
+  formatUtcTimestampTitle,
+} from "../client/src/lib/formatDate";
 import { accountWinRateDisplay } from "../client/src/lib/winRateDisplay";
 import { shouldOfferHowItWorksTour } from "../client/src/lib/howItWorksTour";
 import { inlineCommentCount } from "../client/src/lib/commentCountLabel";
@@ -41,15 +46,23 @@ test("scroll edge fade follows which side still has content", () => {
   );
 });
 
-test("comment dates stay relative, and older dates keep the year outside the current UTC year", () => {
-  assert.equal(formatTimeAgo("2026-11-22T10:00:00.000Z", NOW), "2h ago");
-  assert.equal(formatTimeAgo("2026-11-19T12:00:00.000Z", NOW), "3d ago");
+test("comment ages stay relative at every age, with the UTC instant for the tooltip", () => {
+  assert.equal(formatCommentAge("2026-11-22T11:59:30.000Z", NOW), "just now");
+  assert.equal(formatCommentAge("2026-11-22T11:55:00.000Z", NOW), "5m ago");
+  assert.equal(formatCommentAge("2026-11-22T10:00:00.000Z", NOW), "2h ago");
+  assert.equal(formatCommentAge("2026-11-19T12:00:00.000Z", NOW), "3d ago");
+  assert.equal(formatCommentAge("2026-11-08T12:00:00.000Z", NOW), "2w ago");
+  assert.equal(formatCommentAge("2026-09-27T12:00:00.000Z", NOW), "1 mo ago");
+  assert.equal(formatCommentAge("2026-05-09T12:00:00.000Z", NOW), "6 mo ago");
+  assert.equal(formatCommentAge("2026-05-22T12:00:00.000Z", NOW), "6 mo ago");
+  assert.equal(formatCommentAge("2025-11-22T12:00:00.000Z", NOW), "1 yr ago");
+  for (const sample of ["2026-05-09T12:00:00.000Z", "2026-09-27T12:00:00.000Z"]) {
+    assert.equal(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.test(formatCommentAge(sample, NOW)), false);
+  }
+  assert.match(formatUtcTimestampTitle("2026-05-09T15:04:00.000Z"), /May 9, 2026/);
+  assert.match(formatUtcTimestampTitle("2026-05-09T15:04:00.000Z"), /UTC$/);
   assert.equal(formatTimeAgo("2026-05-01T00:00:00.000Z", NOW), "May 1");
-  assert.equal(formatTimeAgo("2025-08-31T00:00:00.000Z", NOW), "Aug 31, 2025");
-  assert.equal(
-    formatUtcCalendarDate(new Date("2025-08-31T23:30:00.000Z"), NOW),
-    "Aug 31, 2025",
-  );
+  assert.equal(formatUtcCalendarDate(new Date("2025-08-31T23:30:00.000Z"), NOW), "Aug 31, 2025");
 });
 
 test("win rate stays pending until a prediction resolves", () => {

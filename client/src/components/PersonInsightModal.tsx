@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type ComponentType, type SVGProps } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import { useLocation } from "wouter";
 import { ArrowRight, ChevronRight, Star, Trophy, TrendingUp, Vote } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,24 @@ interface InsightSignal {
 
 // Hide chips for signals between ±5% so tiny noise doesn't pile up.
 const INSIGHT_SIGNAL_DEAD_ZONE_PCT = 5;
+
+const SIGNAL_CARD_CLASS =
+  "rounded-lg border border-border/60 bg-background/60 px-3 py-2 sm:p-3 min-w-0";
+
+function SignalCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className={SIGNAL_CARD_CLASS}>
+      <p className="mb-2 text-[11px] uppercase leading-4 tracking-wider text-muted-foreground">
+        {title}
+      </p>
+      <div className="flex min-h-6 flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+function SignalChipSkeleton({ width }: { width: string }) {
+  return <Skeleton className={`h-6 rounded-md ${width}`} />;
+}
 
 const VOTE_ACCENT = "#22D3EE";
 const PREDICT_ACCENT = "#8B5CF6";
@@ -415,69 +433,49 @@ function InsightPanelContent({
       />
 
       {loading ? (
-        <div
-          className="space-y-3 min-h-[7.5rem]"
-          aria-busy="true"
-          data-testid="signal-insights-loading"
-        >
-          <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
-            <Skeleton className="mb-2 h-3 w-28" />
-            <div className="flex flex-wrap gap-2">
-              <Skeleton className="h-6 w-24 rounded-md" />
-              <Skeleton className="h-6 w-28 rounded-md" />
-            </div>
-          </div>
-          <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
-            <Skeleton className="mb-2 h-3 w-32" />
-            <div className="flex flex-wrap gap-2">
-              <Skeleton className="h-6 w-24 rounded-md" />
-              <Skeleton className="h-6 w-20 rounded-md" />
-            </div>
-          </div>
-        </div>
+        <>
+          <SignalCard title="Growth signals">
+            <SignalChipSkeleton width="w-24" />
+            <SignalChipSkeleton width="w-28" />
+          </SignalCard>
+          <SignalCard title="Cooling signals">
+            <SignalChipSkeleton width="w-24" />
+            <SignalChipSkeleton width="w-20" />
+          </SignalCard>
+        </>
       ) : error ? (
-        <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60">
+        <div className={SIGNAL_CARD_CLASS}>
           <p className="text-sm text-muted-foreground">Unable to load signal insights right now</p>
         </div>
       ) : (
         <>
           {growthSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">GROWTH SIGNALS</p>
-              <div className="flex flex-wrap gap-2 min-w-0">
-                {growthSignals.map((signal) => (
-                  <span
-                    key={signal.label}
-                    className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/15 text-green-600 dark:text-green-400"
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {signal.label} {formatPct(signal.deltaPct)}
-                      {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
-                      {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
+            <SignalCard title="Growth signals">
+              {growthSignals.map((signal) => (
+                <span
+                  key={signal.label}
+                  className="inline-flex h-6 items-center gap-1 rounded-md bg-green-500/15 px-2.5 text-xs font-medium text-green-600 dark:text-green-400"
+                >
+                  {signal.label} {formatPct(signal.deltaPct)}
+                  {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
+                  {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
+                </span>
+              ))}
+            </SignalCard>
           )}
           {coolingSignals.length > 0 && (
-            <div className="rounded-lg border border-border/60 px-3 py-2 sm:p-3 bg-background/60 min-w-0">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">COOLING SIGNALS</p>
-              <div className="flex flex-wrap gap-2 min-w-0">
-                {coolingSignals.map((signal) => (
-                  <span
-                    key={signal.label}
-                    className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-500/15 text-red-600 dark:text-red-400"
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {signal.label} {formatPct(signal.deltaPct)}
-                      {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
-                      {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
+            <SignalCard title="Cooling signals">
+              {coolingSignals.map((signal) => (
+                <span
+                  key={signal.label}
+                  className="inline-flex h-6 items-center gap-1 rounded-md bg-red-500/15 px-2.5 text-xs font-medium text-red-600 dark:text-red-400"
+                >
+                  {signal.label} {formatPct(signal.deltaPct)}
+                  {signal.label === "Wiki" ? <InfoHint term="wikiSignal" side="bottom" className="h-3 w-3" /> : null}
+                  {signal.label === "News" ? <InfoHint term="newsSignal" side="bottom" className="h-3 w-3" /> : null}
+                </span>
+              ))}
+            </SignalCard>
           )}
         </>
       )}

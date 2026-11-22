@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Heart, Loader2, MessageCircle, MoreVertical, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { navigateToLogin } from "@/lib/authReturn";
-import { formatTimeAgo } from "@/lib/formatDate";
+import { CommentTimestamp } from "@/components/comments/CommentTimestamp";
 import { MentionText } from "@/components/comments/MentionText";
 import { useAuth } from "@/contexts/AuthContext";
 import { VoteLabel } from "./VoteLabel";
@@ -274,9 +274,7 @@ function PostOverlayModalContent({
                       Voted {insight.sentimentVote}/10
                     </span>
                   )}
-                  <span className="text-sm text-muted-foreground">
-                    {formatTimeAgo(insight.createdAt)}
-                  </span>
+                  <CommentTimestamp at={insight.createdAt} className="text-sm" />
                   {!isInsightDeleted && <VoteLabel label={insight.parentVoteLabel ?? null} />}
                 </div>
                 <button

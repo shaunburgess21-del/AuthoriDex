@@ -16,7 +16,7 @@ import type { CommentAdapter, CommentItem } from "@/components/comments/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { navigateToLogin } from "@/lib/authReturn";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
-import { formatTimeAgo } from "@/lib/formatDate";
+import { CommentTimestamp } from "@/components/comments/CommentTimestamp";
 import { MentionText } from "@/components/comments/MentionText";
 import { cn } from "@/lib/utils";
 import { VOICES_TIMELINE_ID } from "@shared/constants";
@@ -250,7 +250,7 @@ export function VoicesPostOverlay({ item, onClose }: VoicesPostOverlayProps) {
                   <span className={postDeleted ? "italic text-muted-foreground" : "font-semibold"}>
                     {postDeleted ? "[deleted user]" : item.author.username || "Anonymous"}
                   </span>
-                  <span className="text-sm text-muted-foreground">{formatTimeAgo(item.createdAt)}</span>
+                  <CommentTimestamp at={item.createdAt} className="text-sm" />
                   {item.pendingReview && (
                     <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
                       Pending review — only you can see this until it is approved
