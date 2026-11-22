@@ -3358,8 +3358,6 @@ export default function PredictPage() {
             ) : (
               <WeeklyJackpotHero 
                 onEnterJackpot={handleEnterJackpot}
-                marketStatus={marketCycle.status}
-                timeRemaining={marketCycle.timeRemaining}
                 trendingPeople={jackpotEligiblePeople}
                 selectedPerson={selectedJackpotPerson}
                 onSelectPerson={setSelectedJackpotPerson}

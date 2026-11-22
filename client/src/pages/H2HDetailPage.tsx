@@ -33,6 +33,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { h2hUserPickFromBet } from "@/components/predict/HeadToHeadCard";
 import { formatVox, formatVoxDelta, formatVoxPrice, voxWord } from "@/lib/currency";
+import { FIRST_TO_PREDICT } from "@/lib/market-trust-copy";
 import { normalizeMarketCategory } from "@shared/constants";
 import { apiRequest, parseApiError } from "@/lib/queryClient";
 import { useIdempotencyKey } from "@/lib/useIdempotencyKey";
@@ -770,12 +771,18 @@ export default function H2HDetailPage() {
 
             <div className="grid grid-cols-2 gap-3 text-center">
               <div>
-                <p className="text-lg md:text-xl font-bold">
-                  {hydrated.totalParticipants}
-                </p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Traders
-                </p>
+                {hydrated.totalParticipants > 0 ? (
+                  <>
+                    <p className="text-lg md:text-xl font-bold">
+                      {hydrated.totalParticipants}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      Traders
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs font-medium leading-snug">{FIRST_TO_PREDICT}</p>
+                )}
               </div>
               <div>
                 <p className="text-lg md:text-xl font-bold">
@@ -960,7 +967,7 @@ export default function H2HDetailPage() {
         })()}
 
         {/* Live trade feed for this H2H matchup. */}
-        <MarketActivityFeed marketId={marketId} />
+        <MarketActivityFeed marketId={marketId} traderCount={hydrated.totalParticipants} />
 
         {/* Score Comparison */}
         <Card className="border-border/50">

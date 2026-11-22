@@ -1,4 +1,5 @@
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
+import { FIRST_TO_PREDICT, OPENING_ODDS_NOTE, traderCountLabel } from "@/lib/market-trust-copy";
 
 export interface ParticipantPreview {
   userId: string;
@@ -21,8 +22,15 @@ export function ParticipantAvatarStack({
    */
   engine?: "amm" | "parimutuel";
 }) {
-  if (participants.length === 0 && totalCount <= 0) {
-    return null;
+  const count = Number.isFinite(totalCount) ? Math.max(0, Math.floor(totalCount)) : 0;
+
+  if (count <= 0) {
+    return (
+      <div className="text-xs text-muted-foreground" data-testid="market-zero-traders">
+        <p>{FIRST_TO_PREDICT}</p>
+        <p className="mt-0.5">{OPENING_ODDS_NOTE}</p>
+      </div>
+    );
   }
 
   const noun = engine === "amm" ? "trader" : "participant";
@@ -40,10 +48,7 @@ export function ParticipantAvatarStack({
           />
         ))}
       </div>
-      <span>
-        {totalCount} {noun}
-        {totalCount === 1 ? "" : "s"}
-      </span>
+      <span>{traderCountLabel(count, noun)}</span>
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { getMarketCategoryLabel, normalizeMarketCategory, type FilterCategory } 
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { categoryRaceShare } from "@/lib/share";
-import { formatVoxCompact } from "@/lib/currency";
+import { formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { VoxText } from "@/components/VoxText";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
@@ -118,7 +118,7 @@ export function TopGainerCard({
   leaderboardCategories?: Set<string>;
 }) {
   const candidates = market.allCandidates ?? market.leaders;
-  const volumeLabel = formatVoxCompact(market.volume ?? 0);
+  const volumeLabel = formatVolumeWithUnit(market.volume ?? 0);
   const raceDetailHref = `/predict/race/${market.id}`;
 
   const navigateToRaceDetail = () => {
@@ -171,7 +171,7 @@ export function TopGainerCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`gainer-card-volume-${market.id}`}
             >
-              <VoxText text={volumeLabel} /> vol
+              <VoxText text={volumeLabel} />
             </Badge>
           )}
           <InteractiveCategoryPill

@@ -12,7 +12,7 @@ import { Activity, Star, ListChecks } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClient";
-import { formatVoxCompact } from "@/lib/currency";
+import { formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { VoxText } from "@/components/VoxText";
 import { useStablePress } from "@/hooks/useStablePress";
 import { upDownShare } from "@/lib/share";
@@ -215,12 +215,12 @@ export function WeeklyUpDownCard({
           engine="amm"
         />
         {(() => {
-          const volText = formatVoxCompact(market.volume);
+          const volText = formatVolumeWithUnit(market.volume);
           if (!volText) return null;
           return (
             <span className="text-xs text-muted-foreground">
               <span className="text-muted-foreground/40">·</span>{" "}
-              <span className="font-mono"><VoxText text={volText} /></span> vol
+              <span className="font-mono"><VoxText text={volText} /></span>
             </span>
           );
         })()}

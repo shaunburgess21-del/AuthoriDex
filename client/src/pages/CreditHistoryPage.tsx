@@ -9,6 +9,7 @@ import { useCreditHistory } from "@/hooks/useGamification";
 import { bucketForTxnType, labelForTxnType } from "@shared/credit-config";
 import { CURRENCY, formatVox, voxWord } from "@/lib/currency";
 import { VoxText } from "@/components/VoxText";
+import { resolveLedgerOptionLabel } from "@/lib/ledger-option-label";
 
 
 /**
@@ -184,8 +185,8 @@ function CreditLedgerRowItem({ row }: { row: CreditLedgerRow }) {
         ? TrendingDown
         : Settings2;
 
-  const title = row.displayTitle ?? labelForTxnType(row.txnType);
-  const subtitle = row.displaySubtitle;
+  const title = resolveLedgerOptionLabel(row.displayTitle ?? labelForTxnType(row.txnType));
+  const subtitle = row.displaySubtitle ? resolveLedgerOptionLabel(row.displaySubtitle) : row.displaySubtitle;
 
   const inner = (
     <>

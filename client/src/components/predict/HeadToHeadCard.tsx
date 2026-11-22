@@ -12,7 +12,8 @@ import { type ApiAmmStateBlock, pricesFor, snapshotFromApi } from "@/lib/ammClie
 import { Activity, Check, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { formatVoxCompact, formatVoxPrice } from "@/lib/currency";
+import { formatVoxPrice } from "@/lib/currency";
+import { formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { h2hShare } from "@/lib/share";
 import type { FilterCategory } from "@shared/constants";
 import { PositionSummaryRow } from "@/components/predict/PositionSummaryRow";
@@ -128,7 +129,7 @@ export function HeadToHeadCard({
 }) {
   const hasPicked = userPick === 1 || userPick === 2;
   const pickedName = userPick === 1 ? market.person1.name : userPick === 2 ? market.person2.name : "";
-  const volumeLabel = formatVoxCompact(market.volume ?? 0);
+  const volumeLabel = formatVolumeWithUnit(market.volume ?? 0);
 
   const pickAccentShell =
     userPick === 1
@@ -335,7 +336,7 @@ export function HeadToHeadCard({
           {volumeLabel && (
             <span className="text-xs text-muted-foreground">
               <span className="text-muted-foreground/40">·</span>{" "}
-              <span className="font-mono"><VoxText text={volumeLabel} /></span> vol
+              <span className="font-mono"><VoxText text={volumeLabel} /></span>
             </span>
           )}
         </div>

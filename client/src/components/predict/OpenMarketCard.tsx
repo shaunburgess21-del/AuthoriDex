@@ -13,7 +13,8 @@ import { Check, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink, Plus }
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { pricesFor, snapshotFromApi, type ApiAmmStateBlock } from "@/lib/ammClient";
 import { worldMarketShare } from "@/lib/share";
-import { formatVox, formatVoxCompact, voxWord } from "@/lib/currency";
+import { formatVox, voxWord } from "@/lib/currency";
+import { formatOutcomeChance, formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { VoxText } from "@/components/VoxText";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
 import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
@@ -362,7 +363,7 @@ function BinaryMarketCard({
     onNavigate(slug, pick, direction);
   };
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
+  const volumeLabel = formatVolumeWithUnit(volumeRaw);
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
   const { leftEntry, rightEntry } = resolveBinaryEntries(entries);
@@ -408,7 +409,7 @@ function BinaryMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              <VoxText text={volumeLabel} /> vol
+              <VoxText text={volumeLabel} />
             </Badge>
           )}
         </div>
@@ -637,10 +638,8 @@ function MultiMarketEntryRow({
   // a single letter (e.g. "S." for Shai Gilgeous-Alexander), which read worse
   // than just the name. The card hero image already sets the visual context.
 
-  // Fixed-width Yes button keeps the right-hand column aligned across all
-  // rows. Single-line "Yes pct%" label and colour (#00C853 brand green)
-  // match the binary + Up/Down card Yes buttons so the three card
-  // variants are visually consistent.
+  // Fixed-width chance keeps the right-hand column aligned. Multi-option
+  // rows show the percentage alone. Yes/No stays on binary markets.
   const buttonClass =
     "shrink-0 text-center w-[92px] md:w-[104px] px-1 md:px-1.5 py-1.5 md:py-2 rounded-md transition-colors tabular-nums flex items-center justify-center";
 
@@ -702,7 +701,7 @@ function MultiMarketEntryRow({
             onClick={(e) => handlePick(e, "yes")}
             data-testid={`button-buy-${entry.id}`}
           >
-            <span className="text-[11px] md:text-xs font-semibold leading-none">Yes {entry.pct}%</span>
+            <span className="text-[11px] md:text-xs font-semibold leading-none">{formatOutcomeChance(entry.pct)}</span>
           </button>
         </div>
       ) : (
@@ -744,7 +743,7 @@ function MultiMarketCard({
   };
 
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
+  const volumeLabel = formatVolumeWithUnit(volumeRaw);
   const ammSnap = snapshotFromApi((market.ammState as ApiAmmStateBlock | null | undefined) ?? null);
   const ammPrices = ammSnap ? pricesFor(ammSnap) : null;
 
@@ -809,7 +808,7 @@ function MultiMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              <VoxText text={volumeLabel} /> vol
+              <VoxText text={volumeLabel} />
             </Badge>
           )}
         </div>
@@ -1072,7 +1071,7 @@ function UpDownMarketCard({
   const abovePercent = Math.max(0, Math.min(100, Math.round(abovePrice * 100)));
   const belowPercent = Math.max(0, Math.min(100, Math.round(belowPrice * 100)));
   const volumeRaw = Number((market as any)?.volume ?? 0);
-  const volumeLabel = volumeRaw > 0 ? formatVoxCompact(volumeRaw) : null;
+  const volumeLabel = formatVolumeWithUnit(volumeRaw);
   const displayStake = resolveDisplayStake(userBetResult?.stakeAmount, netCreditsIn);
 
   return (
@@ -1097,7 +1096,7 @@ function UpDownMarketCard({
               className="text-[10px] tabular-nums text-muted-foreground border-border/50"
               data-testid={`community-card-volume-${market.slug}`}
             >
-              <VoxText text={volumeLabel} /> vol
+              <VoxText text={volumeLabel} />
             </Badge>
           )}
         </div>

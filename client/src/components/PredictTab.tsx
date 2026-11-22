@@ -1206,8 +1206,6 @@ export function PredictTab({
               rank: personRank,
             }}
             onEnterJackpot={() => setJackpotModalOpen(true)}
-            marketStatus={marketCycle.status}
-            timeRemaining={marketCycle.timeRemaining}
             jackpotMarket={jackpotMarket}
             onRulesClick={() => setRulesModalOpen("jackpot")}
           />
