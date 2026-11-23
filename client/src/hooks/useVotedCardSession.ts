@@ -120,7 +120,7 @@ export function useVotedCardSession(options: VotedCardSessionOptions): VotedCard
     optionsRef.current.prepare(anchor.key);
     focusKeyRef.current = anchor.key;
     setFocusTick((tick) => tick + 1);
-    setHighlightKey(anchor.key);
+    setHighlightKey(null);
   }, [options.filter]);
 
   useEffect(() => {
@@ -128,6 +128,32 @@ export function useVotedCardSession(options: VotedCardSessionOptions): VotedCard
     if (!key || focusTick === 0) return;
     let cancelled = false;
     let frames = 0;
+    let settleFrame = 0;
+    let highlightTimer = 0;
+    const started = performance.now();
+
+    const armHighlight = () => {
+      if (cancelled) return;
+      setHighlightKey(key);
+      highlightTimer = window.setTimeout(() => {
+        setHighlightKey((current) => (current === key ? null : current));
+      }, 1500);
+    };
+
+    const waitUntilLanded = (target: number) => {
+      const step = () => {
+        if (cancelled) return;
+        const close = Math.abs(window.scrollY - target) < 2;
+        const gaveUp = performance.now() - started > 2000;
+        if (close || gaveUp) {
+          armHighlight();
+          return;
+        }
+        settleFrame = window.requestAnimationFrame(step);
+      };
+      settleFrame = window.requestAnimationFrame(step);
+    };
+
     const tick = () => {
       if (cancelled) return;
       const element = visibleVotedCard(key);
@@ -150,15 +176,15 @@ export function useVotedCardSession(options: VotedCardSessionOptions): VotedCard
       });
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       window.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+      if (reduce || Math.abs(window.scrollY - top) < 2) armHighlight();
+      else waitUntilLanded(top);
     };
     const frame = window.requestAnimationFrame(tick);
-    const timer = window.setTimeout(() => {
-      setHighlightKey((current) => (current === key ? null : current));
-    }, 1600);
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
+      window.cancelAnimationFrame(settleFrame);
+      window.clearTimeout(highlightTimer);
     };
   }, [focusTick]);
 

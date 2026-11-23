@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { filterCardsByVoteActivity, voteEyeBadgeCount } from "../client/src/lib/hub-activity-filter";
 import {
   EMPTY_VOTED_RETAIN,
@@ -15,6 +16,7 @@ import {
   retainVotedCard,
   scrollDeltaForRemovedSize,
   scrollTopToCenterCard,
+  VOTED_CARD_RETURN_GAP_PX,
   shouldReturnToVotedCard,
   type LastVotedAnchor,
 } from "../client/src/lib/voted-card-retain";
@@ -287,29 +289,44 @@ describe("last voted card anchor", () => {
     );
   });
 
-  it("centres the card under the sticky band and pins a tall card to that band", () => {
+  it("starts the return ring after the card has landed", () => {
+    const session = readFileSync(
+      new URL("../client/src/hooks/useVotedCardSession.ts", import.meta.url),
+      "utf8",
+    );
+    const css = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
+    assert.equal(session.includes("setHighlightKey(anchor.key)"), false);
+    assert.match(session, /armHighlight/);
+    assert.match(css, /0 0 0 2px hsl\(var\(--primary\)\)/);
+    assert.match(css, /voted-return-ring 1\.5s ease-out forwards/);
+  });
+
+  it("lands the card just under the sticky band with one shared gap", () => {
+    assert.equal(VOTED_CARD_RETURN_GAP_PX, 8);
+    const desktop = {
+      scrollY: 2400,
+      cardTop: 1800,
+      cardHeight: 220,
+      viewportHeight: 900,
+      stickyTopPx: 64,
+      bandHeightPx: 56,
+    };
+    const mobile = { ...desktop, stickyTopPx: 56, bandHeightPx: 48, viewportHeight: 700 };
     assert.equal(
-      scrollTopToCenterCard({
-        scrollY: 400,
-        cardTop: 300,
-        cardHeight: 200,
-        viewportHeight: 800,
-        stickyTopPx: 64,
-        bandHeightPx: 56,
-      }),
-      400 + 300 - (64 + 56 + (800 - 64 - 56 - 200) / 2),
+      scrollTopToCenterCard(desktop),
+      desktop.scrollY + desktop.cardTop - (desktop.stickyTopPx + desktop.bandHeightPx + VOTED_CARD_RETURN_GAP_PX),
     );
     assert.equal(
-      scrollTopToCenterCard({
-        scrollY: 100,
-        cardTop: 80,
-        cardHeight: 900,
-        viewportHeight: 800,
-        stickyTopPx: 64,
-        bandHeightPx: 48,
-      }),
-      100 + 80 - (64 + 48),
+      scrollTopToCenterCard(mobile),
+      mobile.scrollY + mobile.cardTop - (mobile.stickyTopPx + mobile.bandHeightPx + VOTED_CARD_RETURN_GAP_PX),
     );
+    const centered =
+      desktop.scrollY +
+      desktop.cardTop -
+      (desktop.stickyTopPx +
+        desktop.bandHeightPx +
+        (desktop.viewportHeight - desktop.stickyTopPx - desktop.bandHeightPx - desktop.cardHeight) / 2);
+    assert.notEqual(scrollTopToCenterCard(desktop), Math.round(centered));
     assert.equal(
       scrollTopToCenterCard({
         scrollY: 10,

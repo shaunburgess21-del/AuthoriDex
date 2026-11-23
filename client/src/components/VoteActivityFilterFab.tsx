@@ -52,7 +52,7 @@ export function ActivityFilterCountBadge({
     <span
       key={dropTick}
       className={cn(
-        "inline-flex h-[18px] min-w-[2.5rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums leading-none",
+        "inline-flex h-[18px] min-w-[2.75rem] items-center justify-center whitespace-nowrap rounded-full px-1 text-[10px] font-semibold tabular-nums leading-none",
         dropTick > 0 && "activity-count-drop",
         className,
       )}

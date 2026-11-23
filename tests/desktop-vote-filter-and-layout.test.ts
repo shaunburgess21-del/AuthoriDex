@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { lockedVoteCardBox } from "../client/src/hooks/useLockedVoteCardHeight";
+import {
+  hubActivityFilterFabLabel,
+  hubActivityFilterLongestLabel,
+} from "../client/src/lib/hub-activity-filter";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -20,6 +24,18 @@ describe("desktop activity filter", () => {
     const voteToggle = vote.indexOf("<HubActivityFilterToggle");
     const voteMenu = vote.indexOf("<VoteCategoryMenu");
     assert.ok(voteMenu > 0 && voteToggle > voteMenu);
+  });
+
+  it("holds a fixed width that fits the longest label and the 999+ badge", () => {
+    assert.equal(hubActivityFilterLongestLabel("vote"), "Votes only");
+    for (const value of ["all", "hide-mine", "show-mine"] as const) {
+      assert.ok(hubActivityFilterFabLabel("vote", value).length <= "Votes only".length);
+    }
+    assert.match(toggle, /hubActivityFilterLongestLabel/);
+    assert.match(toggle, /invisible flex items-center gap-2/);
+    assert.match(toggle, /999\+/);
+    assert.match(vote, /count=\{eyeBadge\.count\}/);
+    assert.match(vote, /count: eyeBadge\.count/);
   });
 
   it("lets the desktop eye receive the same cycle", () => {

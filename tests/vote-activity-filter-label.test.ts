@@ -34,12 +34,15 @@ describe("vote activity filter label", () => {
   it("keeps a fixed-width count through 999 and pulses only when it drops", () => {
     assert.equal(source.includes("99+"), false);
     assert.match(source, /formatActivityFilterCount/);
-    assert.match(source, /min-w-\[2\.5rem\]/);
+    assert.match(source, /min-w-\[2\.75rem\]/);
+    assert.match(source, /whitespace-nowrap/);
     assert.match(source, /tabular-nums/);
     assert.match(source, /count < previous\.current && !prefersReducedMotion\(\)/);
     assert.match(source, /activity-count-drop/);
     const css = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
     assert.match(css, /@keyframes activity-count-drop/);
+    assert.match(css, /activity-count-drop 300ms ease-out/);
+    assert.match(css, /background-color: hsl\(var\(--primary\)\)/);
     assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.activity-count-drop \{\s*animation: none;/);
   });
 

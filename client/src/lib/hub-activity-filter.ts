@@ -64,6 +64,11 @@ export function hubActivityFilterFabLabel(
     : voteActivityFilterShortLabel(value);
 }
 
+/** Widest desktop label for this scope. The button is fixed to this width. */
+export function hubActivityFilterLongestLabel(scope: HubActivityFilterScope): string {
+  return scope === "predict" ? "Positions only" : "Votes only";
+}
+
 /**
  * Number on the Vote eye.
  * Not voted counts cards still open, so a new vote lowers it by one.

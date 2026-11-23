@@ -13,6 +13,7 @@ import {
   returningStripVisibleAtPaint,
   rowsFromPredictionsResponse,
   shouldShowReturningUserStrip,
+  shouldStampResolvedLastSeen,
   stampResolvedLastSeenAt,
   streakStripLabel,
   xpRankProgress,
@@ -269,11 +270,64 @@ describe("resolved prediction count and last-seen stamp", () => {
   it("reads the predictions envelope and the legacy array", () => {
     const row = { result: "won", settledAt: won, marketTitle: "Ignored" };
     assert.deepEqual(rowsFromPredictionsResponse({ predictions: [row, { result: 1 }, null] }), [
-      { result: "won", settledAt: won },
-      { result: "", settledAt: null },
+      { result: "won", settledAt: won, marketType: null },
+      { result: "", settledAt: null, marketType: null },
     ]);
-    assert.deepEqual(rowsFromPredictionsResponse([row]), [{ result: "won", settledAt: won }]);
+    assert.deepEqual(rowsFromPredictionsResponse([row]), [
+      { result: "won", settledAt: won, marketType: null },
+    ]);
     assert.deepEqual(rowsFromPredictionsResponse(null), []);
+  });
+
+  it("counts a newly settled row for every market type", () => {
+    const settledAt = "2026-11-23T06:00:00.000Z";
+    const lastSeen = Date.parse("2026-11-22T12:00:00.000Z");
+    for (const marketType of ["updown", "h2h", "gainer", "jackpot", "community"] as const) {
+      const rows = rowsFromPredictionsResponse({
+        predictions: [
+          {
+            result: "won",
+            settledAt,
+            marketType,
+            betId: marketType,
+            marketTitle: "Sabrina Carpenter",
+          },
+        ],
+      });
+      assert.equal(rows[0]?.marketType, marketType);
+      assert.equal(countNewlyResolvedPredictions(rows, lastSeen), 1, marketType);
+      assert.equal(countNewlyResolvedPredictions(rows, Date.parse(settledAt)), 0, marketType);
+    }
+  });
+
+  it("still counts a settlement time that arrives as a Date or epoch millis", () => {
+    const at = Date.parse("2026-11-23T06:00:00.000Z");
+    const rows = rowsFromPredictionsResponse({
+      predictions: [
+        { result: "won", settledAt: new Date(at), marketType: "updown" },
+        { result: "lost", settledAt: at, marketType: "h2h" },
+      ],
+    });
+    assert.equal(countNewlyResolvedPredictions(rows, at - 1), 2);
+    assert.equal(rows[0]?.settledAt, new Date(at).toISOString());
+  });
+
+  it("stamps last-seen only when the results sheet opens", () => {
+    assert.equal(shouldStampResolvedLastSeen("results-sheet"), true);
+    for (const reason of ["mount", "fetch", "visibility-hidden", "unmount", "other-page"] as const) {
+      assert.equal(shouldStampResolvedLastSeen(reason), false, reason);
+    }
+    const store = memory();
+    const settledAt = "2026-11-23T06:00:00.000Z";
+    const rows = [{ result: "won", settledAt, marketType: "updown" }];
+    const seenAt = readResolvedLastSeenAt(store);
+    const count = countNewlyResolvedPredictions(rows, seenAt);
+    assert.equal(count, 1);
+    assert.equal(readResolvedLastSeenAt(store), null);
+    if (shouldStampResolvedLastSeen("results-sheet")) {
+      stampResolvedLastSeenAt(store, Date.parse("2026-11-23T08:00:00.000Z"));
+    }
+    assert.equal(countNewlyResolvedPredictions(rows, readResolvedLastSeenAt(store)), 0);
   });
 });
 
@@ -325,12 +379,13 @@ describe("vote page placement", () => {
     assert.equal(bandBlock.includes("ReturningUserStrip"), false);
   });
 
-  it("keeps a fixed-height slot, latches visibility, and stamps after the count", () => {
+  it("keeps a fixed-height slot, latches visibility, and stamps only from the sheet", () => {
     assert.match(strip, /h-11/);
     assert.equal(strip.includes("sticky"), false);
     assert.match(strip, /useState\(\(\) =>\s*returningStripVisibleAtPaint/);
-    assert.match(strip, /visibilitychange/);
-    assert.match(strip, /visibilityState === "hidden"/);
+    assert.equal(strip.includes("visibilitychange"), false);
+    assert.equal(strip.includes('visibilityState === "hidden"'), false);
+    assert.match(strip, /shouldStampResolvedLastSeen\("results-sheet"\)/);
     assert.match(strip, /stampResolvedLastSeenAt/);
     assert.match(strip, /vote-return-strip-goal-slot/);
     assert.match(strip, /whitespace-nowrap/);

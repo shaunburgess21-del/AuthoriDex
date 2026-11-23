@@ -11,6 +11,13 @@ import {
   writeHubActivityFilter,
 } from "@/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "@/lib/quickVoteHideVoted";
+import {
+  clearOptimisticVote,
+  noteOptimisticVote,
+  reconcileVoteOverlay,
+  votedWithOverlay,
+  type VoteOverlay,
+} from "@/lib/voteDeckOptimism";
 import { useHiddenCardKeySet } from "@/hooks/useHideCard";
 import {
   INDUCTION_VOTES_QUERY_KEY,
@@ -1338,8 +1345,20 @@ export default function VotePage() {
   // Overall Rating writes the voted key to localStorage before the list
   // refetch. Bump so the activity filter re-reads that signal.
   const [ratingVoteEpoch, setRatingVoteEpoch] = useState(0);
+  const [voteOverlay, setVoteOverlay] = useState<VoteOverlay>({});
   useEffect(() => {
-    const bump = () => setRatingVoteEpoch((n) => n + 1);
+    const bump = (event: Event) => {
+      setRatingVoteEpoch((n) => n + 1);
+      const detail = (event as CustomEvent<{ personId?: string; value?: number | null }>).detail;
+      const personId = detail?.personId;
+      if (!personId) return;
+      const value = detail.value;
+      setVoteOverlay((prev) =>
+        value != null && value >= 1 && value <= 5
+          ? noteOptimisticVote(prev, `rating:${personId}`, true)
+          : clearOptimisticVote(prev, `rating:${personId}`),
+      );
+    };
     window.addEventListener("sentiment-vote-updated", bump);
     return () => window.removeEventListener("sentiment-vote-updated", bump);
   }, []);
@@ -1588,6 +1607,15 @@ export default function VotePage() {
     return matchesCategory && matchesSearch;
   }).sort((a: any, b: any) => globalCategoryFilter === "trending" ? (b.totalVotes ?? 0) - (a.totalVotes ?? 0) : 0);
 
+  const removeOpinionVote = useCallback(
+    async (slug: string) => {
+      const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
+      if (poll) setVoteOverlay((prev) => clearOptimisticVote(prev, `opinion:${poll.id}`));
+      await removeOpinionPollVote(slug);
+    },
+    [opinionPolls, removeOpinionPollVote],
+  );
+
   const filteredOpinionPolls = opinionPolls.filter((p: any) => {
     const matchesCategory =
       globalCategoryFilter === "all" ||
@@ -1788,6 +1816,7 @@ export default function VotePage() {
       if (!hadPreviousVote) {
         cancelHideExit(`matchups:${matchupId}`);
         votedSession.clear(`matchups:${matchupId}`);
+        setVoteOverlay((prev) => clearOptimisticVote(prev, `matchups:${matchupId}`));
       }
     },
     onVoteSuccess: (_data, variables) => {
@@ -1804,6 +1833,9 @@ export default function VotePage() {
         // Begin the Hidden-mode dwell/fly now (the vote is optimistic, so the
         // card would otherwise be filtered out instantly). Only newly-voted
         // cards animate out — a re-votable card is always visible, never hidden.
+        if (!previousVote) {
+          setVoteOverlay((prev) => noteOptimisticVote(prev, `matchups:${matchupId}`, true));
+        }
         if (myVotesFilter === "hide-mine" && !previousVote) {
           beginHideExit(`matchups:${matchupId}`);
           votedSession.note(`matchups:${matchupId}`);
@@ -1828,6 +1860,7 @@ export default function VotePage() {
 
   const handleMatchupRemoveVote = (matchupId: string) => {
     if (!matchupUserVotes[matchupId]) return;
+    setVoteOverlay((prev) => clearOptimisticVote(prev, `matchups:${matchupId}`));
     showVoteToast("matchup", "Vote removed", { description: "Your Matchup vote has been removed." });
     removeMatchupVote(matchupId);
   };
@@ -2364,31 +2397,34 @@ export default function VotePage() {
 
   // Not voted shows how many cards are still open (a vote lowers it).
   // Votes only shows how many are already cast (a vote raises it).
+  // The same list feeds the desktop chip and the floating eye.
   // Rating rows can list the same person twice; one vote should move one card.
-  const eyeBadge = useMemo(() => {
+  // Optimistic keys cover the gap until this list includes the vote, including
+  // a refetch that is still one vote behind.
+  const deckCards = useMemo(() => {
     const seenRatings = new Set<string>();
-    const cards: { voted: boolean }[] = [];
+    const cards: { key: string; voted: boolean }[] = [];
     for (const matchup of filteredMatchups) {
-      cards.push({ voted: !!matchupUserVotes[matchup.id] });
+      cards.push({ key: `matchups:${matchup.id}`, voted: !!matchupUserVotes[matchup.id] });
     }
     for (const topic of filteredTopics) {
-      cards.push({ voted: !!topic.userVote });
+      cards.push({ key: `sentiment:${topic.id}`, voted: !!topic.userVote });
     }
     for (const poll of filteredOpinionPolls) {
-      cards.push({ voted: !!poll.userVote });
+      cards.push({ key: `opinion:${poll.id}`, voted: !!poll.userVote });
     }
     for (const person of filteredRatingCelebrities) {
       if (seenRatings.has(person.id)) continue;
       seenRatings.add(person.id);
-      cards.push({ voted: hasOverallRatingVote(person) });
+      cards.push({ key: `rating:${person.id}`, voted: hasOverallRatingVote(person) });
     }
     for (const candidate of filteredCandidates) {
-      cards.push({ voted: inductionVotedSet.has(candidate.id) });
+      cards.push({ key: `induction:${candidate.id}`, voted: inductionVotedSet.has(candidate.id) });
     }
     for (const person of filteredCurateCelebrities) {
-      cards.push({ voted: curateVotedIds.has(person.id) });
+      cards.push({ key: `curate:${person.id}`, voted: curateVotedIds.has(person.id) });
     }
-    return voteEyeBadgeCount(myVotesFilter, cards);
+    return cards;
   }, [
     filteredMatchups,
     filteredTopics,
@@ -2399,9 +2435,19 @@ export default function VotePage() {
     matchupUserVotes,
     inductionVotedSet,
     curateVotedIds,
-    myVotesFilter,
     ratingVoteEpoch,
   ]);
+
+  useEffect(() => {
+    setVoteOverlay((prev) => reconcileVoteOverlay(prev, deckCards));
+  }, [deckCards]);
+
+  const eyeBadge = useMemo(() => {
+    const cards = deckCards.map((card) => ({
+      voted: votedWithOverlay(card.key, card.voted, voteOverlay),
+    }));
+    return voteEyeBadgeCount(myVotesFilter, cards);
+  }, [deckCards, myVotesFilter, voteOverlay]);
 
   cardInListRef.current = (key) => {
     const id = retainIdFromKey(key);
@@ -2963,6 +3009,9 @@ export default function VotePage() {
     }
     const wasFirstVote = !topic.userVote;
     const retainKey = `sentiment:${topicId}`;
+    if (wasFirstVote) {
+      setVoteOverlay((prev) => noteOptimisticVote(prev, retainKey, true));
+    }
     if (myVotesFilter === "hide-mine" && wasFirstVote) {
       beginHideExit(retainKey);
       votedSession.note(retainKey);
@@ -2979,6 +3028,9 @@ export default function VotePage() {
     try {
       await discourseVoteMutation.mutateAsync({ slug: voteKey, choice, topicId, optimisticFeedbackShown });
     } catch (err) {
+      if (wasFirstVote) {
+        setVoteOverlay((prev) => clearOptimisticVote(prev, retainKey));
+      }
       if (myVotesFilter === "hide-mine" && wasFirstVote) {
         cancelHideExit(retainKey);
         votedSession.clear(retainKey);
@@ -2996,6 +3048,9 @@ export default function VotePage() {
       let exitKey: string | null = null;
       const poll = (opinionPolls as any[]).find((p) => p.slug === slug);
       const wasFirstVote = !poll?.userVote;
+      if (poll && wasFirstVote) {
+        setVoteOverlay((prev) => noteOptimisticVote(prev, `opinion:${poll.id}`, true));
+      }
       if (myVotesFilter === "hide-mine") {
         if (poll && wasFirstVote) {
           exitKey = `opinion:${poll.id}`;
@@ -3015,6 +3070,9 @@ export default function VotePage() {
       try {
         await voteOnOpinionPoll(slug, optionId, { suppressXpBurst: optimisticFeedbackShown });
       } catch (err) {
+        if (poll && wasFirstVote) {
+          setVoteOverlay((prev) => clearOptimisticVote(prev, `opinion:${poll.id}`));
+        }
         if (exitKey) {
           cancelHideExit(exitKey);
           votedSession.clear(exitKey);
@@ -3774,7 +3832,7 @@ export default function VotePage() {
                   <OpinionPollCard
                     poll={poll}
                     onVote={handleOpinionVote}
-                    onRemoveVote={removeOpinionPollVote}
+                    onRemoveVote={removeOpinionVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -3929,7 +3987,7 @@ export default function VotePage() {
                     <OpinionPollCard
                       poll={poll}
                       onVote={handleOpinionVote}
-                      onRemoveVote={removeOpinionPollVote}
+                      onRemoveVote={removeOpinionVote}
                       onFilterCategory={handleCategoryPillFilter}
                       categoryRaceMap={raceMap}
                       leaderboardCategories={leaderboardCats}
@@ -4177,7 +4235,10 @@ export default function VotePage() {
             isPersonRetained={(id) => isHideRetained(`curate:${id}`)}
             isPersonHidden={(id) => isHideHidden(`curate:${id}`)}
             isPersonExiting={(id) => isHideExiting(`curate:${id}`)}
-            onPersonVoted={(id) => beginShapeHideExit(`curate:${id}`)}
+            onPersonVoted={(id) => {
+              setVoteOverlay((prev) => noteOptimisticVote(prev, `curate:${id}`, true));
+              beginShapeHideExit(`curate:${id}`);
+            }}
             sectionRef={curateSectionRef}
             revealKey={votedSession.revealId}
           />
@@ -4895,7 +4956,7 @@ export default function VotePage() {
                     key={poll.id}
                     poll={poll}
                     onVote={handleOpinionVote}
-                    onRemoveVote={removeOpinionPollVote}
+                    onRemoveVote={removeOpinionVote}
                     onFilterCategory={handleCategoryPillFilter}
                     categoryRaceMap={raceMap}
                     leaderboardCategories={leaderboardCats}
@@ -5059,7 +5120,7 @@ export default function VotePage() {
                 <OpinionPollCard
                   poll={p}
                   onVote={handleOpinionVote}
-                  onRemoveVote={removeOpinionPollVote}
+                  onRemoveVote={removeOpinionVote}
                   onFilterCategory={handleCategoryPillFilter}
                   categoryRaceMap={raceMap}
                   leaderboardCategories={leaderboardCats}
@@ -5157,7 +5218,10 @@ export default function VotePage() {
               return (
                 <CurateProfileCardComponent
                   person={person}
-                  onVote={() => beginShapeHideExit(`curate:${item.id}`)}
+                  onVote={() => {
+                    setVoteOverlay((prev) => noteOptimisticVote(prev, `curate:${item.id}`, true));
+                    beginShapeHideExit(`curate:${item.id}`);
+                  }}
                   onComplete={() => {}}
                   onViewResults={() => {}}
                   onFilterCategory={handleCategoryPillFilter}

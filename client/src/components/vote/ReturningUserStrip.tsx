@@ -16,6 +16,7 @@ import {
   rememberReturningUser,
   returningStripVisibleAtPaint,
   rowsFromPredictionsResponse,
+  shouldStampResolvedLastSeen,
   stampResolvedLastSeenAt,
   streakStripLabel,
   xpRankProgress,
@@ -114,21 +115,6 @@ export function ReturningUserStrip() {
     );
   }, [predictions.isSuccess, predictions.data]);
 
-  useEffect(() => {
-    if (!shown || !predictions.isSuccess) return;
-    const store = browserLocalStorage();
-    if (!store) return;
-    const stamp = () => stampResolvedLastSeenAt(store, Date.now());
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") stamp();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      stamp();
-    };
-  }, [shown, predictions.isSuccess]);
-
   if (!shown) return null;
 
   const progress = xpRankProgress(profile?.xpPoints ?? 0);
@@ -137,8 +123,12 @@ export function ReturningUserStrip() {
   const showChip = ready && !chipCleared && resolvedCount > 0;
 
   const acknowledgeChip = () => {
-    const store: StripStorage | null = browserLocalStorage();
-    if (store) stampResolvedLastSeenAt(store, Date.now());
+    if (shouldStampResolvedLastSeen("results-sheet")) {
+      const store: StripStorage | null = browserLocalStorage();
+      const now = Date.now();
+      if (store) stampResolvedLastSeenAt(store, now);
+      lastSeenRef.current = now;
+    }
     setChipCleared(true);
   };
 

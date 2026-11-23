@@ -169,9 +169,16 @@ export function shouldReturnToVotedCard(input: {
 }
 
 /**
- * Document scrollY that centres the card in the space under the sticky
- * stack (site header `top-16` plus the chip band). A card taller than
- * that space aligns its top just under the band.
+ * Space between the sticky chip band and the top of a card scrolled back
+ * into view. One value for mobile and desktop — the sticky stack height
+ * is measured per viewport, and this gap is added the same way on both.
+ */
+export const VOTED_CARD_RETURN_GAP_PX = 8;
+
+/**
+ * Document scrollY that puts the card's top just under the sticky stack
+ * (site header plus the chip band) plus `VOTED_CARD_RETURN_GAP_PX`.
+ * Short cards use that same offset; they are not centred in the viewport.
  */
 export function scrollTopToCenterCard(input: {
   scrollY: number;
@@ -183,12 +190,7 @@ export function scrollTopToCenterCard(input: {
 }): number {
   const stickyTop = Number.isFinite(input.stickyTopPx) ? Math.max(0, input.stickyTopPx) : 0;
   const band = Number.isFinite(input.bandHeightPx) ? Math.max(0, input.bandHeightPx) : 0;
-  const viewport = Number.isFinite(input.viewportHeight) ? Math.max(0, input.viewportHeight) : 0;
-  const cardHeight = Number.isFinite(input.cardHeight) ? Math.max(0, input.cardHeight) : 0;
-  const visibleTop = stickyTop + band;
-  const visibleHeight = Math.max(0, viewport - visibleTop);
-  const centered = visibleTop + (visibleHeight - cardHeight) / 2;
-  const targetTop = Math.max(visibleTop, centered);
+  const targetTop = stickyTop + band + VOTED_CARD_RETURN_GAP_PX;
   const cardTop = Number.isFinite(input.cardTop) ? input.cardTop : 0;
   const scrollY = Number.isFinite(input.scrollY) ? input.scrollY : 0;
   return Math.max(0, Math.round(scrollY + cardTop - targetTop));
