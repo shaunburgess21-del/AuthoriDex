@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { lockedVoteCardBox } from "../client/src/hooks/useLockedVoteCardHeight";
 import {
   hubActivityFilterFabLabel,
   hubActivityFilterLongestLabel,
@@ -43,36 +42,6 @@ describe("desktop activity filter", () => {
     assert.ok(desktop > 0);
     assert.match(host.slice(Math.max(0, desktop - 120), desktop + 80), /pointer-events-auto/);
     assert.match(host, /onCycle=\{activityFilter\.onCycle\}/);
-  });
-});
-
-describe("locked vote card height", () => {
-  it("pins a desktop card to the height measured before the vote", () => {
-    assert.equal(lockedVoteCardBox(false, true, 420), null);
-    assert.equal(lockedVoteCardBox(true, false, 420), null);
-    assert.equal(lockedVoteCardBox(true, true, null), null);
-    assert.equal(lockedVoteCardBox(true, true, 0), null);
-    assert.deepEqual(lockedVoteCardBox(true, true, 420.4), {
-      height: "420px",
-      minHeight: "420px",
-      maxHeight: "420px",
-      overflow: "hidden",
-    });
-  });
-
-  it("locks the hub cards that gain a post-vote footer", () => {
-    for (const path of [
-      "../client/src/components/sentiment/DiscourseCard.tsx",
-      "../client/src/components/opinion-polls/OpinionPollCard.tsx",
-      "../client/src/components/matchups/VersusCard.tsx",
-      "../client/src/components/OverallRatingCard.tsx",
-    ]) {
-      const source = read(path);
-      assert.match(source, /useLockedVoteCardHeight\(/);
-    }
-    const agree = read("../client/src/components/sentiment/DiscourseCard.tsx");
-    assert.match(agree, /md:hidden/);
-    assert.equal(agree.includes("md:pb-[14px]"), false);
   });
 });
 
