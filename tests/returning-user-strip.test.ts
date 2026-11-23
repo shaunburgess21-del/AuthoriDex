@@ -368,11 +368,17 @@ describe("vote page placement", () => {
   it("renders the strip in the page container, under the chip band and above the feed", () => {
     const band = votePage.indexOf('data-testid="vote-sticky-band"');
     const container = votePage.indexOf("data-vote-all-layout");
-    const stripUse = votePage.indexOf("<ReturningUserStrip />");
+    const slotUse = votePage.indexOf("<VoteWelcomeSlot ");
+    const slot = readFileSync(
+      new URL("../client/src/components/vote/WelcomeChecklist.tsx", import.meta.url),
+      "utf8",
+    );
     const sentiment = votePage.indexOf('title="Sentiment Polls"');
     const search = votePage.indexOf('placeholder="Search votes"');
-    assert.ok(band > 0 && container > band && stripUse > container);
-    assert.ok(stripUse < sentiment && stripUse < search);
+    assert.ok(band > 0 && container > band && slotUse > container);
+    assert.ok(slotUse < sentiment && slotUse < search);
+    assert.match(slot, /<ReturningUserStrip \/>/);
+    assert.match(slot, /returningStripAllowed/);
     assert.match(votePage, /sticky top-16 z-40 bg-background will-change-transform/);
     assert.equal(votePage.includes("top-16"), true);
     const bandBlock = votePage.slice(band, container);

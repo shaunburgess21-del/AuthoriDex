@@ -14,11 +14,14 @@ import { useVotedCardRetain, type VotedCardAccent } from "@/components/VotedCard
 export function HideExitCard({
   cardKey,
   exiting = false,
+  unvoted,
   children,
 }: {
   cardKey?: string;
   /** Collapse now. Context can supply this as well. */
   exiting?: boolean;
+  /** When set, marks the card so the welcome checklist can scroll to the first open one. */
+  unvoted?: boolean;
   children: ReactNode;
 }) {
   const retain = useVotedCardRetain();
@@ -131,8 +134,10 @@ export function HideExitCard({
       ref={ref}
       data-voted-card={cardKey || undefined}
       data-testid={cardKey ? `voted-card-${cardKey}` : undefined}
+      data-welcome-unvoted={unvoted == null ? undefined : unvoted ? "true" : "false"}
       className={cn(
         "h-full min-w-0",
+        unvoted != null && "scroll-mt-32",
         highlighted && "relative z-10",
         highlighted && (accent === "blue" ? "voted-return-ring-blue" : "voted-return-ring"),
       )}
