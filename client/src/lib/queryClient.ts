@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { isDailyGoalVoteRequest, noteOptimisticDailyVote } from "@/lib/dailyVoteGoal";
 import { isTransportFailure, transportFailureDescription } from "./networkStatus";
 import { queryRetryDelay, shouldRetryQuery } from "./queryRetry";
 import { getSupabase } from "./supabase";
@@ -167,6 +168,12 @@ export async function apiRequest(
   }
 
   await throwIfResNotOk(res);
+  // The server already accepted the vote. Notify the strip so the goal
+  // moves before the caller finishes reading the body. Removals and
+  // anonymous calls are ignored inside the predicate / auth check.
+  if (authHeaders.Authorization && isDailyGoalVoteRequest(method, url, data)) {
+    noteOptimisticDailyVote();
+  }
   return res;
 }
 
