@@ -29,6 +29,8 @@ import {
   writeWelcomeDeviceDismissed,
   writeWelcomeOpen,
   writeWelcomeUserDismissed,
+  isQuickVoteEntryNudgeAllowed,
+  quickVoteEntryNudgeInput,
   type WelcomePhaseInput,
   type WelcomeStorage,
 } from "../client/src/lib/welcomeChecklist";
@@ -319,5 +321,84 @@ describe("welcome checklist on the vote page", () => {
     assert.equal(votePage.includes("lockedVoteCardBox"), false);
     assert.equal(checklist.includes("h-[339px]"), false);
     assert.equal(checklist.includes("max-h-["), false);
+  });
+});
+
+describe("quick vote entry pill on /vote", () => {
+  const host = readFileSync(
+    new URL("../client/src/components/quick-vote/QuickVoteHost.tsx", import.meta.url),
+    "utf8",
+  );
+
+  it("does not render while the welcome checklist is eligible", () => {
+    const store = memory();
+    const input = quickVoteEntryNudgeInput("vote", null, store);
+    assert.equal(input.checklistPhase, "checklist");
+    assert.equal(input.deviceDismissed, false);
+    assert.equal(input.userDismissed, false);
+    assert.equal(input.persistedComplete, false);
+    assert.equal(isQuickVoteEntryNudgeAllowed(input), false);
+  });
+
+  it("stays hidden after a signed-out dismiss, including once that visitor signs in", () => {
+    const store = memory();
+    writeWelcomeDeviceDismissed(store);
+    assert.equal(store.getItem("voxdex_welcome_checklist_dismissed"), "1");
+
+    const signedOut = quickVoteEntryNudgeInput("vote", null, store);
+    assert.equal(signedOut.checklistPhase, "hidden");
+    assert.equal(signedOut.deviceDismissed, true);
+    assert.equal(isQuickVoteEntryNudgeAllowed(signedOut), false);
+
+    const signedIn = quickVoteEntryNudgeInput("vote", "user-a", store);
+    assert.equal(signedIn.deviceDismissed, true);
+    assert.equal(signedIn.checklistPhase, "hidden");
+    assert.equal(isQuickVoteEntryNudgeAllowed(signedIn), false);
+  });
+
+  it("stays hidden after a signed-in dismiss or a completed checklist", () => {
+    const dismissed = memory();
+    writeWelcomeUserDismissed(dismissed, "user-a");
+    assert.equal(dismissed.getItem("voxdex_welcome_checklist_dismissed:user-a"), "1");
+    const dismissedInput = quickVoteEntryNudgeInput("vote", "user-a", dismissed);
+    assert.equal(dismissedInput.userDismissed, true);
+    assert.equal(dismissedInput.checklistPhase, "hidden");
+    assert.equal(isQuickVoteEntryNudgeAllowed(dismissedInput), false);
+
+    const done = memory();
+    writeWelcomeComplete(done, "user-a");
+    assert.equal(done.getItem("voxdex_welcome_checklist_complete:user-a"), "1");
+    const doneInput = quickVoteEntryNudgeInput("vote", "user-a", done);
+    assert.equal(doneInput.persistedComplete, true);
+    assert.equal(doneInput.checklistPhase, "hidden");
+    assert.equal(isQuickVoteEntryNudgeAllowed(doneInput), false);
+  });
+
+  it("keeps the pill off when the checklist is open for a returning signed-in visitor", () => {
+    const store = memory();
+    writeWelcomeOpen(store, "user-a");
+    const input = quickVoteEntryNudgeInput("vote", "user-a", store);
+    assert.equal(input.checklistPhase, "checklist");
+    assert.equal(isQuickVoteEntryNudgeAllowed(input), false);
+  });
+
+  it("leaves the rankings nudge in place", () => {
+    const eligible = quickVoteEntryNudgeInput("home", null, memory());
+    assert.equal(eligible.checklistPhase, "checklist");
+    assert.equal(isQuickVoteEntryNudgeAllowed(eligible), true);
+
+    const dismissed = memory();
+    writeWelcomeDeviceDismissed(dismissed);
+    assert.equal(isQuickVoteEntryNudgeAllowed(quickVoteEntryNudgeInput("home", null, dismissed)), true);
+  });
+
+  it("gates the vote host so the pill cannot mount on the vote surface", () => {
+    assert.match(votePage, /<QuickVoteHost[\s\S]*?surface="vote"/);
+    assert.match(host, /isQuickVoteEntryNudgeAllowed\(\s*quickVoteEntryNudgeInput\(surface, user\?\.id \?\? null\),?\s*\)/);
+    assert.match(host, /if \(!entryNudgeAllowed\) return;/);
+    assert.match(host, /\{entryNudgeAllowed && nudgeVisible && !overlayOpen && \(/);
+    assert.equal(host.includes('if (!isMobile && surface === "vote") return;'), false);
+    assert.match(host, /data-testid="quick-vote-reentry-pill"/);
+    assert.match(host, /data-testid="quick-vote-nudge-pill"/);
   });
 });

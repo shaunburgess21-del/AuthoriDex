@@ -1,7 +1,9 @@
 /**
- * Quick Vote host — mounted on Home and Vote. Owns:
- *  - the entry pill nudge (first-visit fast path; ~7s dwell OR first scroll,
- *    arbitrated via interruptArbiter so only one interrupt fires per session),
+ * Quick Vote host — mounted on Rankings (surface "home") and Vote. Owns:
+ *  - the entry pill nudge on Rankings (first-visit fast path; ~7s dwell OR
+ *    first scroll, arbitrated via interruptArbiter). Vote does not show it:
+ *    the welcome checklist is the only onboarding surface there, including
+ *    after it is dismissed or completed.
  *  - the QuickVoteOverlay open state + history pushState back-to-close,
  *  - the post-signup restore (AUTH_APPLY_QUICK_VOTE_ONCE_KEY),
  *  - the persistent bottom-right Quick Vote pill (mobile Home + Vote),
@@ -29,6 +31,10 @@ import {
   QUICK_VOTE_NUDGE_LIFETIME_CAP,
   isQuickVoteNudgeEligible,
 } from "@/lib/quickVoteNudge";
+import {
+  isQuickVoteEntryNudgeAllowed,
+  quickVoteEntryNudgeInput,
+} from "@/lib/welcomeChecklist";
 import {
   consumeInterrupt,
   dismissInterrupt,
@@ -167,12 +173,17 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isMobile]);
 
+  // The welcome checklist owns onboarding on Vote (`/` and `/vote`). This
+  // pill repeats its first step, and a dismiss must not reveal it later.
+  const entryNudgeAllowed = isQuickVoteEntryNudgeAllowed(
+    quickVoteEntryNudgeInput(surface, user?.id ?? null),
+  );
+
   // ── Entry pill nudge: ~7s dwell OR first meaningful scroll ──────────────
   useEffect(() => {
+    if (!entryNudgeAllowed) return;
     if (authLoading || user) return;
     if (overlayOpen || nudgeVisible) return;
-    // Desktop pill deep-links to /vote — pointless on /vote itself.
-    if (!isMobile && surface === "vote") return;
     if (!isQuickVoteNudgeEligible(!!user)) return;
 
     let fired = false;
@@ -199,7 +210,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
     };
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user, overlayOpen, surface, isMobile]);
+  }, [authLoading, user, overlayOpen, surface, entryNudgeAllowed]);
 
   const showFab = isMobile && !overlayOpen && !nudgeVisible;
 
@@ -312,7 +323,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
         }}
       >
         <AnimatePresence>
-          {nudgeVisible && !overlayOpen && (
+          {entryNudgeAllowed && nudgeVisible && !overlayOpen && (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
