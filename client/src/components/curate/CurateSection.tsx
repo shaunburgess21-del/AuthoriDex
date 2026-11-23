@@ -169,6 +169,7 @@ export function CurateSection({
                 key={person.id}
                 cardKey={`curate:${person.id}`}
                 exiting={isPersonExiting?.(person.id) ?? false}
+                unvoted={votedPersonIds ? !votedPersonIds.has(person.id) : undefined}
               >
                 <CurateProfileCard
                   person={person}

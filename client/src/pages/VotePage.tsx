@@ -151,7 +151,7 @@ import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
-import { ReturningUserStrip } from "@/components/vote/ReturningUserStrip";
+import { VoteWelcomeSlot } from "@/components/vote/WelcomeChecklist";
 import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
 import { VoteChipLinkCuePill } from "@/components/vote/VoteChipLinkCue";
 import {
@@ -177,8 +177,11 @@ import {
 } from "@/lib/authReturn";
 import { useAnonBudget, applyBudgetFromVoteResponse } from "@/hooks/useAnonBudget";
 import { checkVoteGate, VoteGateRedirectError } from "@/lib/voteGate";
-import { isQuickVoteNudgeEligible } from "@/lib/quickVoteNudge";
-import { isSessionInterruptUsed } from "@/lib/interruptArbiter";
+import {
+  firstUnvotedFeedKey,
+  firstVisibleUnvotedCard,
+  scrollTargetIntoView,
+} from "@/lib/welcomeChecklist";
 import { voteHubSectionFromHash } from "@/lib/voteHubDeepLinks";
 import { useScrollToHash } from "@/hooks/useScrollToHash";
 import {
@@ -1457,6 +1460,7 @@ export default function VotePage() {
     };
   };
   const [snapScrollOpen, setSnapScrollOpen] = useState(false);
+  const [welcomeFeedKey, setWelcomeFeedKey] = useState<string | null>(null);
   const [snapScrollSection, setSnapScrollSection] = useState<SnapSectionType>("matchups");
   const [snapScrollInitialId, setSnapScrollInitialId] = useState<string | undefined>();
   const [snapScrollStartOnAll, setSnapScrollStartOnAll] = useState(false);
@@ -2063,6 +2067,7 @@ export default function VotePage() {
       kind: entry.kind,
       id: entry.id,
       item: entry.item.item,
+      voted: entry.item.voted === true,
     }));
   }, [
     dbPolls,
@@ -2084,6 +2089,63 @@ export default function VotePage() {
     (pollsLoading && dbPolls.length === 0) ||
     (opinionPollsLoading && opinionPolls.length === 0) ||
     (ratingLoading && ratingCelebrities.length === 0);
+
+  const scrollToFirstUnvoted = useCallback(() => {
+    const reduce =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (activeSection === "All" && !desktopSectionLayout) {
+      const key = firstUnvotedFeedKey(mixedFeedEntries);
+      if (key) {
+        const escaped = typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(key) : key;
+        const mounted = document.querySelector<HTMLElement>(`[data-feed-key="${escaped}"]`);
+        const inner = mounted?.querySelector<HTMLElement>('[data-welcome-unvoted="true"]');
+        if (inner && inner.getClientRects().length > 0) {
+          scrollTargetIntoView(inner, reduce);
+          return;
+        }
+        setWelcomeFeedKey(key);
+        return;
+      }
+    }
+    const visible = firstVisibleUnvotedCard(document);
+    if (visible) {
+      scrollTargetIntoView(visible, reduce);
+      return;
+    }
+    const fallback =
+      document.getElementById("vote-sentiment") ??
+      document.querySelector<HTMLElement>("[data-testid='vote-mixed-feed']");
+    if (fallback) scrollTargetIntoView(fallback, reduce);
+  }, [activeSection, desktopSectionLayout, mixedFeedEntries]);
+
+  useEffect(() => {
+    if (!welcomeFeedKey) return;
+    const reduce =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let frames = 0;
+    let raf = 0;
+    const tick = () => {
+      frames += 1;
+      const escaped =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(welcomeFeedKey) : welcomeFeedKey;
+      const mounted = document.querySelector<HTMLElement>(`[data-feed-key="${escaped}"]`);
+      const target = mounted?.querySelector<HTMLElement>('[data-welcome-unvoted="true"]') ?? mounted;
+      if (target && target.getClientRects().length > 0) {
+        scrollTargetIntoView(target, reduce);
+        setWelcomeFeedKey(null);
+        return;
+      }
+      if (frames < 40) {
+        raf = window.requestAnimationFrame(tick);
+        return;
+      }
+      setWelcomeFeedKey(null);
+    };
+    raf = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(raf);
+  }, [welcomeFeedKey]);
 
   const displayCandidates = useMemo(
     () =>
@@ -3405,6 +3467,7 @@ export default function VotePage() {
                   key={person.id}
                   cardKey={`rating:${person.id}`}
                   exiting={isHideExiting(`rating:${person.id}`)}
+                  unvoted={!hasOverallRatingVote(person)}
                 >
                   <OverallRatingCard 
                     person={person}
@@ -3546,7 +3609,7 @@ export default function VotePage() {
           activeSection !== "All" ? undefined : desktopSectionLayout ? "sections" : "mixed"
         }
       >
-        <ReturningUserStrip />
+        <VoteWelcomeSlot onVote={scrollToFirstUnvoted} />
         {/* ZONE 1: Public Opinion - Sentiment Polls Section (First) */}
         {(activeSection === "Sentiment Polls" || showDesktopAllSections) && (
         <section id="vote-sentiment" data-hash-anchor className="mb-10 mt-[5px] scroll-mt-32">
@@ -3612,6 +3675,7 @@ export default function VotePage() {
                   key={topic.id}
                   cardKey={`sentiment:${topic.id}`}
                   exiting={isHideExiting(`sentiment:${topic.id}`)}
+                  unvoted={!topic.userVote}
                 >
                   <DiscourseCard
                     topic={topic}
@@ -3724,6 +3788,7 @@ export default function VotePage() {
                   key={matchup.id}
                   cardKey={`matchups:${matchup.id}`}
                   exiting={isHideExiting(`matchups:${matchup.id}`)}
+                  unvoted={!matchupUserVotes[matchup.id]}
                 >
                   <VersusCard
                     matchup={matchup}
@@ -3828,6 +3893,7 @@ export default function VotePage() {
                   key={poll.id}
                   cardKey={`opinion:${poll.id}`}
                   exiting={isHideExiting(`opinion:${poll.id}`)}
+                  unvoted={!poll.userVote}
                 >
                   <OpinionPollCard
                     poll={poll}
@@ -3875,7 +3941,7 @@ export default function VotePage() {
             loading={mixedFeedLoading}
             filterKey={`${globalCategoryFilter}|${mixedFeedSearch}|${myVotesFilter}`}
             restoreCardKey={mixedFeedRestoreKey}
-            focusCardKey={votedSession.feedFocusKey}
+            focusCardKey={welcomeFeedKey ?? votedSession.feedFocusKey}
             onAnchorChange={pinMixedFeedCard}
             toolbar={
               <div className="mb-4">
@@ -3918,6 +3984,7 @@ export default function VotePage() {
                   <HideExitCard
                     cardKey={`matchups:${matchup.id}`}
                     exiting={isHideExiting(`matchups:${matchup.id}`)}
+                    unvoted={!entry.voted}
                   >
                     <VersusCard
                       matchup={matchup}
@@ -3953,6 +4020,7 @@ export default function VotePage() {
                   <HideExitCard
                     cardKey={`sentiment:${topic.id}`}
                     exiting={isHideExiting(`sentiment:${topic.id}`)}
+                    unvoted={!entry.voted}
                   >
                     <DiscourseCard
                       topic={topic}
@@ -3983,6 +4051,7 @@ export default function VotePage() {
                   <HideExitCard
                     cardKey={`opinion:${poll.id}`}
                     exiting={isHideExiting(`opinion:${poll.id}`)}
+                    unvoted={!entry.voted}
                   >
                     <OpinionPollCard
                       poll={poll}
@@ -4013,6 +4082,7 @@ export default function VotePage() {
                 <HideExitCard
                   cardKey={`rating:${person.id}`}
                   exiting={isHideExiting(`rating:${person.id}`)}
+                  unvoted={!entry.voted}
                 >
                   <OverallRatingCard
                     person={person}
@@ -4122,6 +4192,7 @@ export default function VotePage() {
                   key={candidate.id}
                   cardKey={`induction:${candidate.id}`}
                   exiting={isHideExiting(`induction:${candidate.id}`)}
+                  unvoted={!inductionVotedSet.has(candidate.id)}
                 >
                   <InductionCandidateCard
                     candidate={candidate}
@@ -4708,11 +4779,9 @@ export default function VotePage() {
         steps={VOTE_ONBOARDING_STEPS}
         toastLabel="New to voting?"
         lastStepCta="Cast Your First Vote"
-        // Interrupt arbitration (same gate as WelcomeModal on Home): the Quick
-        // Vote "New here" pill outranks this toast. While the visitor is still
-        // a Quick Vote target — or once the pill has claimed the session's one
-        // interrupt slot — keep this toast suppressed so the two never stack.
-        disableAutoToast={!!user || isQuickVoteNudgeEligible(!!user) || isSessionInterruptUsed()}
+        // The inline welcome checklist replaced this floating pill. The footer
+        // link can still open the drawer.
+        disableAutoToast
       />
       <StepModal
         open={infoModalOpen === "governance"}
