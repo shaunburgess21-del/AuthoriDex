@@ -28,7 +28,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { useSupabaseUrl } from "@/lib/imageResolver";
 import { useOpinionPollHeaderImage } from "@/lib/opinionPollHeaderImage";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
-import { CrowdLine } from "@/components/vote/CrowdLine";
+import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 
 function parseOpinionPollCardError(err: unknown): { message: string; retryAfter?: number } {
@@ -279,6 +279,22 @@ export function OpinionPollCard({
   const votedPillLabel = votedOption?.name ?? "Voted";
   const showDiscussion = enableDiscussion && !!poll.slug;
   const totalVotes = poll.totalVotes || 0;
+  const crowd = choiceCrowdLine(
+    options.map((option) => ({
+      key: option.id,
+      percent: totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0,
+    })),
+    voted,
+  );
+  const crowdShare: CrowdLineShare | null =
+    crowd && poll.slug
+      ? {
+          headline: poll.title,
+          percent: crowd.userPercent,
+          path: `/vote/opinion-polls/${encodeURIComponent(poll.slug)}`,
+          surface: "poll",
+        }
+      : null;
   const maxPercent = Math.max(
     ...visibleOptions.map((o) => (totalVotes > 0 ? Math.round(((o.votes ?? 0) / totalVotes) * 100) : 0)),
     0
@@ -472,15 +488,8 @@ export function OpinionPollCard({
 
         {hasVoted && (
           <CrowdLine
-            text={
-              choiceCrowdLine(
-                options.map((option) => ({
-                  key: option.id,
-                  percent: totalVotes > 0 ? Math.round(((option.votes ?? 0) / totalVotes) * 100) : 0,
-                })),
-                voted,
-              )?.text ?? null
-            }
+            text={crowd?.text ?? null}
+            share={crowdShare}
             testId={`crowd-line-opinion-${poll.id}`}
           />
         )}

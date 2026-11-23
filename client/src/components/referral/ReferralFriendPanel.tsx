@@ -1,21 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Check, Share2, Users, ArrowRight } from "lucide-react";
-import { CREDIT_ACTIONS, SIGNUP_CREDIT_GRANT } from "@shared/credit-config";
-import { voxWord } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { glowClassFor } from "@/lib/gamification-content";
 import { useReferralLink } from "@/hooks/useReferralLink";
-
-// Reward numbers derive from credit-config so the /me card, modal, and
-// How It Works Vox tab stay in lockstep with actual server award amounts.
-const REFERRAL_SIGNUP_BONUS =
-  CREDIT_ACTIONS.find((a) => a.key === "referral_signup_bonus")
-    ?.proposedCredits ?? 0;
-const REFERRAL_REWARD =
-  CREDIT_ACTIONS.find((a) => a.key === "referral_completed")
-    ?.proposedCredits ?? 0;
-const REFERRED_USER_TOTAL = SIGNUP_CREDIT_GRANT + REFERRAL_SIGNUP_BONUS;
+import { referralRewardSentence } from "@/lib/referralRewardCopy";
 
 /** Chrome glow skin shared by the /me card and referral prompt modal. */
 export const REFERRAL_PANEL_GLOW_CLASS = cn(
@@ -66,12 +55,7 @@ export function ReferralFriendPanel({
         </Badge>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Your friend gets {voxWord(REFERRED_USER_TOTAL)} to start (
-        {voxWord(SIGNUP_CREDIT_GRANT)} signup grant + {voxWord(REFERRAL_SIGNUP_BONUS)}{" "}
-        bonus). You get {voxWord(REFERRAL_REWARD)} when they make their
-        first move.
-      </p>
+      <p className="text-sm text-muted-foreground">{referralRewardSentence()}</p>
 
       <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
         <code className="flex-1 truncate text-xs font-mono text-muted-foreground">

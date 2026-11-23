@@ -21,7 +21,7 @@ import { matchupShare } from "@/lib/share";
 import { neutralShareLabel } from "@/lib/profile-rank-label";
 import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
-import { CrowdLine } from "@/components/vote/CrowdLine";
+import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { matchupResultsVisible } from "@/lib/matchupResults";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 
@@ -100,6 +100,23 @@ export function VersusCard({
   feedLayout?: boolean;
 }) {
   const hasVoted = userVote !== null;
+  const crowd = choiceCrowdLine(
+    [
+      { key: "option_a", percent: matchup.optionAPercent },
+      { key: "neutral", percent: matchup.neutralPercent ?? 0 },
+      { key: "option_b", percent: matchup.optionBPercent },
+    ],
+    userVote,
+  );
+  const crowdShare: CrowdLineShare | null =
+    crowd && matchup.slug
+      ? {
+          headline: matchup.promptText?.trim() || matchup.title,
+          percent: crowd.userPercent,
+          path: `/vote/matchups/${encodeURIComponent(matchup.slug)}`,
+          surface: "matchup",
+        }
+      : null;
   const showResults = matchupResultsVisible({
     userVote,
     isActive: matchup.isActive,
@@ -459,14 +476,8 @@ export function VersusCard({
               </div>
               {hasVoted ? (
                 <CrowdLine
-                  text={choiceCrowdLine(
-                    [
-                      { key: "option_a", percent: matchup.optionAPercent },
-                      { key: "neutral", percent: matchup.neutralPercent ?? 0 },
-                      { key: "option_b", percent: matchup.optionBPercent },
-                    ],
-                    userVote,
-                  )?.text ?? null}
+                  text={crowd?.text ?? null}
+                  share={crowdShare}
                   testId={`crowd-line-matchup-${matchup.id}`}
                 />
               ) : null}
