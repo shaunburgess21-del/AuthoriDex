@@ -39,6 +39,7 @@ import { CardGridSkeleton } from "@/components/ui/card-skeletons";
 import { Badge } from "@/components/ui/badge";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { VoteActivityFilterFab } from "@/components/VoteActivityFilterFab";
+import { HubActivityFilterToggle } from "@/components/HubActivityFilterToggle";
 import { CornerFabSlot } from "@/components/help-chat/placement";
 import { useCategoryRaceMap } from "@/hooks/useCategoryRaceMap";
 import { useLeaderboardCategories } from "@/hooks/useLeaderboardCategories";
@@ -3269,6 +3270,15 @@ export default function PredictPage() {
           className="container mx-auto px-2 sm:px-4 py-3 max-w-7xl flex items-center gap-3"
           data-testid="predict-contextual-filter-row"
         >
+          {user && !userBetsError ? (
+            <HubActivityFilterToggle
+              scope="predict"
+              accent={predictView === "weekly" ? "weekly" : "world"}
+              value={myPositionsFilter}
+              count={activePredictions}
+              onCycle={cycleMyPositionsFilter}
+            />
+          ) : null}
           {predictView === "weekly" ? (
             <>
               {selectedType !== "jackpot" && (
@@ -4496,7 +4506,7 @@ export default function PredictPage() {
 
       {user && !userBetsError && (
         <CornerFabSlot
-          className="fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[55] pointer-events-none md:bottom-6"
+          className="pointer-events-none fixed right-4 bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] z-[55] md:bottom-6"
           style={{
             transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
             willChange: "transform",

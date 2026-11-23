@@ -5,6 +5,7 @@
  * optimistic voted/result presentation and re-syncs from `topic.userVote`.
  */
 import { useState, useEffect } from "react";
+import { useLockedVoteCardHeight } from "@/hooks/useLockedVoteCardHeight";
 import { Card } from "@/components/ui/card";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { InteractiveVotedPill } from "@/components/InteractiveVotedPill";
@@ -41,7 +42,7 @@ function ChoiceLabel({
         {getSentimentPollChoiceLabel(choice)}
       </span>
       <span
-        className="block h-3 text-[9px] font-semibold leading-3"
+        className="block h-3 text-[9px] font-semibold leading-3 md:hidden"
         data-testid={chosen ? `badge-your-pick-${topicId}` : undefined}
       >
         {chosen ? "Your pick" : "\u00a0"}
@@ -126,10 +127,15 @@ export function DiscourseCard({
     setVoted(null);
   };
 
+  // Desktop section grids stretch a row to its tallest card. Pin the box to
+  // the pre-vote height so results, the crowd line, and the footer cannot
+  // push the next row down. Mobile stays content-sized.
+  const cardRef = useLockedVoteCardHeight(!!voted && !feedLayout);
+
   return (
-    <div className={`hub-card-slot relative h-full ${feedLayout ? "md:min-h-0" : ""}`}>
-    <Card 
-      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5 md:pb-[14px]" : ""} bg-card/80 backdrop-blur-sm flex flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[300px]"}`}
+    <div ref={cardRef} className={`hub-card-slot relative flex h-full min-h-0 flex-col ${feedLayout ? "md:min-h-0" : ""}`}>
+    <Card
+      className={`hub-card-hover lb-row-neutral relative pt-5 px-4 sm:px-5 pb-4 sm:pb-5 ${voted ? "max-md:pb-2.5" : ""} bg-card/80 backdrop-blur-sm flex min-h-0 flex-1 flex-col shadow-none md:shadow-sm rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : "h-full min-h-[390px] md:min-h-[300px]"}`}
       data-testid={`card-discourse-${topic.id}`}
     >
       <VoteCardHeader
@@ -255,7 +261,7 @@ export function DiscourseCard({
         </div>
       ) : (
         <>
-        <div className="flex flex-col gap-5 md:gap-3 my-auto md:mt-auto">
+        <div className="my-auto flex flex-col gap-5 md:mt-auto md:min-h-0 md:flex-1 md:justify-end md:gap-2">
           <div className="flex items-center gap-3">
             <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("agree") }} />
             <ChoiceLabel choice="agree" voted={voted} topicId={topic.id} />

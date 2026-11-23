@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   filterCardsByVoteActivity,
+  formatActivityFilterCount,
   hubActivityFilterFabAriaLabel,
   voteEyeBadgeCount,
 } from "../client/src/lib/hub-activity-filter";
@@ -25,6 +26,17 @@ describe("vote eye badge count", () => {
     assert.equal(voteEyeBadgeCount("show-mine", open).count, 1);
     const after = [{ voted: true }, { voted: false }, { voted: true }];
     assert.equal(voteEyeBadgeCount("show-mine", after).count, 2);
+  });
+
+  it("shows the exact open count through 999 and only then caps", () => {
+    assert.equal(formatActivityFilterCount(0), "0");
+    assert.equal(formatActivityFilterCount(17), "17");
+    assert.equal(formatActivityFilterCount(99), "99");
+    assert.equal(formatActivityFilterCount(100), "100");
+    assert.equal(formatActivityFilterCount(999), "999");
+    assert.equal(formatActivityFilterCount(1000), "999+");
+    assert.equal(formatActivityFilterCount(2400), "999+");
+    assert.equal(formatActivityFilterCount(Number.NaN), "0");
   });
 
   it("describes the not-voted badge as cards still to vote", () => {

@@ -114,6 +114,7 @@ export function OpinionPollOptionRow({
   disabled = false,
   imageInteraction = "lightbox",
   imageLoading,
+  compactDesktop = false,
 }: {
   pollId: string;
   option: OpinionPollOptionRowOption;
@@ -129,6 +130,8 @@ export function OpinionPollOptionRow({
   imageInteraction?: OpinionPollOptionImageInteraction;
   /** Mixed feed sets this so option photos are not all fetched at once. */
   imageLoading?: "eager" | "lazy";
+  /** Desktop hub cards: drop the extra result lines so a vote cannot grow the row. */
+  compactDesktop?: boolean;
 }) {
   const { pointerProps, guardClick } = useTapClickGuard();
   const opensGallery = imageInteraction === "gallery";
@@ -197,7 +200,7 @@ export function OpinionPollOptionRow({
       : "border-border/30 bg-muted/20"
   }`;
   const contentColumn = (
-    <div className="flex-1 min-w-0 py-1.5 pl-2.5 pr-2">
+    <div className={cn("flex-1 min-w-0 py-1.5 pl-2.5 pr-2", compactDesktop && "md:py-1")}>
       <div className="flex items-center gap-1.5">
         <span className={`min-w-0 flex-1 truncate text-sm ${isSelected ? "font-semibold" : ""}`}>{option.name}</span>
         {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />}
@@ -209,13 +212,13 @@ export function OpinionPollOptionRow({
           {percent}%
         </span>
       </div>
-      <div className="mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
+      <div className={cn("mt-1 h-1.5 rounded-full bg-slate-700/50 overflow-hidden", compactDesktop && "md:mt-0.5 md:h-1")}>
         <div
           className="h-full rounded-full bg-cyan-500 transition-all duration-700 ease-out"
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className="text-[10px] text-muted-foreground mt-0.5">
+      <p className={cn("text-[10px] text-muted-foreground mt-0.5", compactDesktop && "md:hidden")}>
         {(option.votes || 0).toLocaleString("en-US")} {(option.votes || 0) === 1 ? "vote" : "votes"}
       </p>
     </div>

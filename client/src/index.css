@@ -2371,6 +2371,24 @@ button.sash-handle:active {
   }
 }
 
+/* Eye badge when the open-card count drops. Fixed width, so the pulse
+   does not move the pill. Reduced motion keeps the new number with no scale. */
+@keyframes activity-count-drop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+.activity-count-drop {
+  animation: activity-count-drop 420ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-count-drop {
+    animation: none;
+  }
+}
+
 /* Brief ring when a just-voted card is scrolled back into view.
    Cyan is the Vote accent; blue is the Predict accent. The ring is a
    shadow, so it does not shift layout. */

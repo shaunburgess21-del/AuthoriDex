@@ -28,7 +28,19 @@ describe("vote activity filter label", () => {
     assert.equal(source.includes(pillOpen), true);
     assert.equal(source.includes(pillClosed), true);
     assert.match(source, /duration: labelVisible \? 0\.2 : 0\.45, ease: "easeOut"/);
-    assert.match(source, /className="relative flex flex-col items-end"/);
+    assert.match(source, /className="pointer-events-auto relative flex flex-col items-end"/);
+  });
+
+  it("keeps a fixed-width count through 999 and pulses only when it drops", () => {
+    assert.equal(source.includes("99+"), false);
+    assert.match(source, /formatActivityFilterCount/);
+    assert.match(source, /min-w-\[2\.5rem\]/);
+    assert.match(source, /tabular-nums/);
+    assert.match(source, /count < previous\.current && !prefersReducedMotion\(\)/);
+    assert.match(source, /activity-count-drop/);
+    const css = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
+    assert.match(css, /@keyframes activity-count-drop/);
+    assert.match(css, /prefers-reduced-motion: reduce[\s\S]*\.activity-count-drop \{\s*animation: none;/);
   });
 
   it("keeps the state in the button name and a polite live announcement", () => {

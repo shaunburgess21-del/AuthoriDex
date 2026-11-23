@@ -75,6 +75,7 @@ export function ReferralPromptModal({ open, onOpenChange, source }: Props) {
             </div>
           ) : (
             <ReferralFriendPanel
+              className="pr-14"
               title={headlineFor(source)}
               showEarnMoreLink
               onEarnMoreClick={goToEarnMore}
