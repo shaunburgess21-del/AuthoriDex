@@ -108,7 +108,7 @@ export default function PollDetailPage() {
     }
   }, [slugParam]);
   const [, setLocation] = useLocation();
-  const { user, isLoggedIn } = useAuth();
+  const { isLoggedIn } = useAuth();
   const queryClient = useQueryClient();
   const { trigger: triggerXpBurst } = useXpBurst();
 
@@ -251,7 +251,7 @@ export default function PollDetailPage() {
   };
 
   const handleShare = () => {
-    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex", { sharerUserId: user?.id, surface: "poll" });
+    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex", { surface: "poll" });
   };
 
   // Dynamic <title> + OG/Twitter meta. Slack/iMessage previews come

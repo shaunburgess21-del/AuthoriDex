@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Share2 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useShareCard } from "@/contexts/ShareCardContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,7 +120,6 @@ export function ResolvedPredictionsSheet({
   rows: ResolvedRevealRow[];
 }) {
   const mobile = useCoarseSheet();
-  const { user } = useAuth();
   const { openShareCard } = useShareCard();
   const hasWin = rows.some((row) => row.result === "won");
 
@@ -146,7 +144,7 @@ export function ResolvedPredictionsSheet({
   }, [open, hasWin]);
 
   const onShareWin = (row: ResolvedRevealRow) => {
-    openShareCard(winShareArgs(row, user?.id ?? null));
+    openShareCard(winShareArgs(row));
   };
 
   const title = rows.length === 1 ? "1 prediction settled" : `${rows.length} predictions settled`;

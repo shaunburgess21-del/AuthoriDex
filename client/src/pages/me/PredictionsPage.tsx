@@ -344,7 +344,7 @@ export default function PredictionsPage() {
   };
 
   const handleShareWin = (p: UserPrediction) => {
-    openShareCard(winShareArgs(p, user?.id ?? null));
+    openShareCard(winShareArgs(p));
   };
 
   const handleSharePosition = (p: AmmOpenPosition) => {
@@ -364,7 +364,6 @@ export default function PredictionsPage() {
               ? `/markets/${p.marketSlug}`
               : "/predict";
     const shareUrl = appendShareAttribution(`${origin}${sharePath}`, {
-      sharerUserId: user?.id ?? null,
       surface: "portfolio",
     });
     const tradeData = buildPositionShareData({
@@ -417,7 +416,6 @@ export default function PredictionsPage() {
       },
       fallbackText,
       shareUrl: appendShareAttribution(`${window.location.origin}/predict`, {
-        sharerUserId: user?.id ?? null,
         surface: "portfolio",
       }),
       filenameBase: `voxdex-portfolio-${profile?.username || "me"}`,

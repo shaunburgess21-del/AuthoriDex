@@ -194,12 +194,12 @@ export interface FireAmmTradeToastArgs {
    */
   fallbackShareUrl: string;
   /**
-   * Sharer's profile id. Threaded into the /share/bet/:betId
-   * permalink as ?sharer= so the click-tracking endpoint can credit
-   * the sharer for confirmed external clicks. Anonymous flows pass
-   * undefined and the URL stays attribution-free.
+   * Sharer's referral code. Threaded into the permalink as ?ref= so
+   * click tracking can credit confirmed external clicks. Omitted
+   * values use the cached code for the signed-in user; signed-out
+   * shares stay free of a user identifier.
    */
-  sharerUserId?: string | null;
+  referralCode?: string | null;
   /** Reuse an existing toast id (from showPendingVoteToast) to update in place. */
   toastId?: string | number;
 }
@@ -247,7 +247,7 @@ export function fireAmmTradeToast(args: FireAmmTradeToastArgs): void {
   // coupling between share-data (used in many call sites) and the
   // attribution helper.
   const shareUrl = appendShareAttribution(rawShareUrl, {
-    sharerUserId: args.sharerUserId ?? null,
+    referralCode: args.referralCode,
     surface: args.actionType === "buy" ? "prediction_win" : "portfolio",
   });
 

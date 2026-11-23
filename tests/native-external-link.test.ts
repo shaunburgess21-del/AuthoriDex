@@ -120,12 +120,12 @@ test("signup Terms and Privacy open the public site in a Custom Tab", () => {
 test("public voxdex.com links stay in-app, including www and query/hash", () => {
   assert.deepEqual(
     classifyExternalLink(
-      "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1#comment-9",
+      "https://voxdex.com/person/abc?ref=VXABCDEF#comment-9",
       { currentOrigin: WEBVIEW },
     ),
     {
       kind: "in_app",
-      path: "/person/abc?ref=VXABCDEF&sharer=user-1#comment-9",
+      path: "/person/abc?ref=VXABCDEF#comment-9",
     },
   );
   assert.deepEqual(

@@ -6,7 +6,6 @@ import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
 import { getCategoryStyle } from "@/components/CategoryPill";
 import { getMarketCategoryLabel, normalizeMarketCategory } from "@shared/constants";
 import { sharePage } from "@/lib/share";
-import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { qvBump, qvDebugEnabled, qvLog, qvSetState } from "@/lib/quickVoteDebug";
 import {
@@ -1565,11 +1564,10 @@ export function VoteSnapScrollView({
     setLocation(`${detailPrefix}${encodeURIComponent(item.slug)}`);
   }, [activeCategory, categoryItems, getVisibleItem, listSearchQuery, onNavigateToPerson, sectionType, setLocation, voteHubActiveSection]);
 
-  const { user } = useAuth();
   const handleShare = useCallback(() => {
     const item = getVisibleItem();
-    if (item) sharePage(item.title, { sharerUserId: user?.id, surface: "vote_deck" });
-  }, [getVisibleItem, user?.id]);
+    if (item) sharePage(item.title, { surface: "vote_deck" });
+  }, [getVisibleItem]);
 
   const detachSashListeners = useCallback(() => {
     sashUnlistenRef.current?.();

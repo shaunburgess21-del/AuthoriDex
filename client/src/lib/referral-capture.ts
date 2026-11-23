@@ -1,21 +1,26 @@
 /**
  * Landing-time helpers for the shares + referral funnel.
  *
- * Two responsibilities:
+ * Two responsibilities, kept on separate paths so a share click
+ * never takes the place of sign-up attribution:
  *
  *   1. Capture `?ref=` from the inbound URL and stash it in
  *      localStorage with a 30-day expiry. AuthContext's syncProfile
  *      reads the stash on signup and forwards it to
  *      /api/profile/sync, which sets profiles.referred_by.
+ *      `captureReferralFromUrl` is the only writer of that stash.
  *
- *   2. Capture `?sharer=` from the inbound URL and POST to
- *      /api/share/track-click so the share-link credit can land.
- *      This fires once per page load, then the params are stripped
- *      from the URL via history.replaceState so a refresh doesn't
- *      re-fire the ping.
+ *   2. When the landing URL is a share (`ref` plus utm, or a legacy
+ *      `sharer` UUID), POST once to /api/share/track-click. New links
+ *      send `{ referralCode }`. Links already in the wild still send
+ *      `{ sharerUserId }`. UTM and `sharer` are stripped here; `ref`
+ *      is left for step 1 to stash and strip.
  *
  * Both are best-effort — failures are logged but never block render.
  */
+
+import { SUPABASE_AUTH_STORAGE_KEY, hasPersistedAuthSession } from "@/lib/authSession";
+import { cachedShareReferralCode } from "@/lib/share";
 
 const REFERRAL_LS_KEY = "voxdex_referral_code";
 const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -104,45 +109,139 @@ export function captureReferralFromUrl(): void {
   }
 }
 
+const SHARE_REFERRAL_CODE_PATTERN = /^VX[A-Z0-9]{6}$/;
+
+interface PendingShareClick {
+  mode: "referral" | "legacy";
+  referralCode: string | null;
+  sharerUserId: string | null;
+  surface: string;
+  shareUrl: string;
+  posted: boolean;
+}
+
+let pendingShareClick: PendingShareClick | null = null;
+
+function shareMarkersPresent(params: URLSearchParams): boolean {
+  return (
+    params.has("utm_source") ||
+    params.has("utm_medium") ||
+    params.has("utm_campaign") ||
+    params.has("sharer")
+  );
+}
+
+function normaliseShareReferralCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const normalised = code.trim().toUpperCase();
+  return SHARE_REFERRAL_CODE_PATTERN.test(normalised) ? normalised : null;
+}
+
 /**
- * Capture `?sharer=` from the current URL and ping the click-
- * tracking endpoint. Fires at most once per page load:
- *
- *   - Skips when the current viewer matches the sharer (a user
- *     can't credit themselves for their own share).
- *   - Strips the `sharer` / `utm_*` params from the URL after the
- *     ping so a hard refresh doesn't re-fire.
+ * Bearer token already in the persisted session, without booting
+ * the Supabase client. The server uses it for the self-credit guard.
+ * A missing or unreadable session sends the click anonymously.
  */
-export async function captureShareClickFromUrl(currentUserId: string | null | undefined): Promise<void> {
+function shareClickAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  if (!hasPersistedAuthSession()) return {};
+  try {
+    const raw = window.localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as { access_token?: unknown };
+    if (typeof parsed.access_token === "string" && parsed.access_token.length > 0) {
+      return { Authorization: `Bearer ${parsed.access_token}` };
+    }
+  } catch {
+    // Private mode or a torn session — the click still records.
+  }
+  return {};
+}
+
+/** Test isolation. Production call sites never need this. */
+export function resetShareClickCaptureForTests(): void {
+  pendingShareClick = null;
+}
+
+/**
+ * Read a share-click off the current URL and strip `sharer` / `utm_*`.
+ * Leaves `ref` in place so `captureReferralFromUrl` can stash it for
+ * sign-up exactly as before. Call this before that stash runs.
+ *
+ * A bare `?ref=` (copied referral link, no share markers) is not a
+ * click and is left entirely to the sign-up capture.
+ */
+export function armShareClickFromUrl(): void {
   if (typeof window === "undefined") return;
   try {
     const url = new URL(window.location.href);
-    const sharerUserId = url.searchParams.get("sharer");
-    if (!sharerUserId) return;
+    const sharerRaw = url.searchParams.get("sharer");
+    const sharerUserId = sharerRaw && sharerRaw.length > 0 ? sharerRaw : null;
+    const referralCode = normaliseShareReferralCode(url.searchParams.get("ref"));
+    const marked = shareMarkersPresent(url.searchParams);
+    const useReferral = Boolean(referralCode && marked);
+    const useLegacy = Boolean(sharerUserId) && !useReferral;
+    if (!useReferral && !useLegacy) return;
 
-    // Strip params eagerly — even if the ping fails we don't want
-    // a refresh to fire it again.
     const surface = url.searchParams.get("utm_campaign") ?? "unknown";
     const shareUrl = url.toString();
+    if (pendingShareClick && pendingShareClick.shareUrl === shareUrl) return;
+
     url.searchParams.delete("sharer");
     url.searchParams.delete("utm_source");
     url.searchParams.delete("utm_medium");
     url.searchParams.delete("utm_campaign");
     window.history.replaceState({}, "", url.toString());
 
-    // Self-share guard. We still strip params (above) so the URL
-    // shape is consistent regardless of viewer.
-    if (currentUserId && currentUserId === sharerUserId) return;
+    pendingShareClick = {
+      mode: useReferral ? "referral" : "legacy",
+      referralCode: useReferral ? referralCode : null,
+      sharerUserId: useLegacy ? sharerUserId : null,
+      surface,
+      shareUrl,
+      posted: false,
+    };
+  } catch (err) {
+    console.warn("[share-click] capture failed", err);
+  }
+}
 
+/**
+ * POST the armed share click. Fires at most once per armed URL.
+ *
+ * Self-click skip: a legacy `sharer` equal to the signed-in user id
+ * is not posted. A `ref` equal to the signed-in user's own referral
+ * code (when that code is already cached) is not posted. Otherwise
+ * the request includes the Bearer token so the server can refuse a
+ * self-credit when this client doesn't know the code yet.
+ *
+ * Does not write the sign-up referral stash and does not strip `ref`.
+ */
+export async function captureShareClickFromUrl(currentUserId: string | null | undefined): Promise<void> {
+  armShareClickFromUrl();
+  const pending = pendingShareClick;
+  if (!pending || pending.posted) return;
+  pending.posted = true;
+
+  try {
+    if (pending.mode === "legacy" && currentUserId && currentUserId === pending.sharerUserId) {
+      return;
+    }
+    const ownCode = cachedShareReferralCode();
+    if (pending.mode === "referral" && ownCode && ownCode === pending.referralCode) {
+      return;
+    }
+
+    const authHeaders = shareClickAuthHeaders();
     await fetch("/api/share/track-click", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       credentials: "include",
-      body: JSON.stringify({
-        sharerUserId,
-        surface,
-        shareUrl,
-      }),
+      body: JSON.stringify(
+        pending.mode === "referral"
+          ? { referralCode: pending.referralCode, surface: pending.surface, shareUrl: pending.shareUrl }
+          : { sharerUserId: pending.sharerUserId, surface: pending.surface, shareUrl: pending.shareUrl },
+      ),
     });
   } catch (err) {
     console.warn("[share-click] capture failed", err);

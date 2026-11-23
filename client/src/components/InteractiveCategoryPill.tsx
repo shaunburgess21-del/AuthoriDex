@@ -99,7 +99,6 @@ function MenuItems({
   onBrowseTouchEnd,
   onBrowsePointerCancel,
   share,
-  sharerUserId,
   reaction,
   onReact,
   onHide,
@@ -119,7 +118,6 @@ function MenuItems({
   onBrowseTouchEnd?: (event: React.TouchEvent<HTMLButtonElement>) => void;
   onBrowsePointerCancel?: () => void;
   share?: CardShareConfig;
-  sharerUserId?: string | null;
   /** Current Like/Dislike state for this card (null = none). */
   reaction?: CardReactionType | null;
   /** When set, renders the "More/Less like this" row. */
@@ -187,7 +185,6 @@ function MenuItems({
             className="flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left rounded-md hover:bg-muted/80 transition-colors text-foreground"
             onClick={() => {
               void sharePage(share.title, {
-                sharerUserId,
                 surface: share.surface,
                 url: resolveShareUrl(share.path),
               });
@@ -552,7 +549,6 @@ export function InteractiveCategoryPill({
             <MenuItems
               {...menuProps}
               share={share}
-              sharerUserId={user?.id}
               reaction={currentReaction}
               onReact={handleReact}
               onHide={handleHide}
@@ -584,7 +580,6 @@ export function InteractiveCategoryPill({
         <MenuItems
           {...menuProps}
           share={share}
-          sharerUserId={user?.id}
           reaction={currentReaction}
           onReact={handleReact}
           onHide={handleHide}

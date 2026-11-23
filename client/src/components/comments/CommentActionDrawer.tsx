@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Ban, Flag, Share2, Trash2, X } from "lucide-react";
 import { sharePage } from "@/lib/share";
-import { useAuth } from "@/contexts/AuthContext";
 import { containPortaledSheetEvent, runCommentDeleteAction } from "./commentActionDelete";
 
 interface CommentActionDrawerProps {
@@ -54,16 +53,14 @@ export function CommentActionDrawer({
     }
   }, [open]);
 
-  const { user } = useAuth();
   const handleShare = useCallback(async () => {
     const rawUrl = `${window.location.origin}${window.location.pathname}#comment-${commentId}`;
     await sharePage("Check out this comment", {
-      sharerUserId: user?.id ?? null,
       surface: "comment",
       url: rawUrl,
     });
     onClose();
-  }, [commentId, onClose, user?.id]);
+  }, [commentId, onClose]);
 
   const handleReport = useCallback((reason: string) => {
     setReportSubmitted((already) => {

@@ -93,7 +93,7 @@ export function outboundShareOrigin(currentOrigin: string): string {
 
 /**
  * Rewrite a WebView-origin share URL to `https://voxdex.com`, preserving
- * path, query (`ref`, `sharer`, `utm_*`), and hash. No-op on the website,
+ * path, query (`ref`, `utm_*`), and hash. No-op on the website,
  * and when the URL is already public or points at any other host.
  * Android and iOS both rewrite, then open the Capacitor share sheet.
  */

@@ -292,7 +292,6 @@ export default function MatchupDetailPage() {
 
   const handleShare = () => {
     sharePage(matchupPrompt ? `${matchupPrompt} on VoxDex` : "VoxDex", {
-      sharerUserId: user?.id,
       surface: "matchup",
       url: canonicalShareUrl,
     });

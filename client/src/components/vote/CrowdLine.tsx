@@ -1,5 +1,4 @@
 import { Share2 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useReferralLink } from "@/hooks/useReferralLink";
 import { shareVoteCard, voteCrowdShareText } from "@/lib/voteCardShare";
 import type { ShareSurface } from "@/lib/share";
@@ -40,7 +39,6 @@ export function CrowdLine({
 }
 
 function CrowdLineShareButton({ share, testId }: { share: CrowdLineShare; testId: string }) {
-  const { user } = useAuth();
   const { referralCode } = useReferralLink();
   const label = `Share. ${voteCrowdShareText(share.percent, share.headline)}`;
   return (
@@ -57,7 +55,6 @@ function CrowdLineShareButton({ share, testId }: { share: CrowdLineShare; testId
           percent: share.percent,
           path: share.path,
           surface: share.surface,
-          sharerUserId: user?.id,
           referralCode,
         });
       }}

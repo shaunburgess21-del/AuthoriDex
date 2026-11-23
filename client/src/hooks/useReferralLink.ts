@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { outboundShareOrigin } from "@/lib/nativeShare";
-import { sharePage } from "@/lib/share";
+import { registerShareReferralCodeReader, sharePage } from "@/lib/share";
 import { useAuth } from "@/contexts/AuthContext";
 
 export interface ReferralStats {
@@ -30,6 +30,11 @@ export interface UseReferralLink {
 
 const REFERRAL_STATS_KEY = ["/api/me/referral-stats"] as const;
 
+registerShareReferralCodeReader(() => {
+  const data = queryClient.getQueryData<ReferralStats>(REFERRAL_STATS_KEY);
+  return data?.referralCode ?? null;
+});
+
 /**
  * Single source of truth for the referral link + share/copy affordances.
  * Shared by ReferAFriendCard (/me), the ReferralPromptModal, and any
@@ -42,7 +47,7 @@ const REFERRAL_STATS_KEY = ["/api/me/referral-stats"] as const;
  * consistent with the existing card.
  */
 export function useReferralLink(): UseReferralLink {
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn } = useAuth();
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
 
@@ -77,11 +82,10 @@ export function useReferralLink(): UseReferralLink {
   const share = useCallback(() => {
     if (!referralUrl) return;
     void sharePage("Join me on VoxDex", {
-      sharerUserId: user?.id,
       surface: "referral",
       url: referralUrl,
     });
-  }, [referralUrl, user?.id]);
+  }, [referralUrl]);
 
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: REFERRAL_STATS_KEY });

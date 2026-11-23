@@ -269,14 +269,13 @@ function ScrollableFilterRow({ children, className }: { children: React.ReactNod
 
 // ---------- Share link helper (unchanged behaviour) ----------
 
-function ShareLinkButton({ url, label, sharerUserId }: { url: string; label: string; sharerUserId?: string | null }) {
+function ShareLinkButton({ url, label }: { url: string; label: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const attributedUrl = appendShareAttribution(url, {
-        sharerUserId: sharerUserId ?? null,
         surface: "public_profile",
       });
       await navigator.clipboard.writeText(attributedUrl);
@@ -1021,7 +1020,6 @@ function ProfileIdentityCard({
   pnl,
   predictions,
   shareUrl,
-  sharerUserId,
 }: {
   profile: PublicProfile;
   displayName: string;
@@ -1029,7 +1027,6 @@ function ProfileIdentityCard({
   pnl: number;
   predictions: number;
   shareUrl?: string;
-  sharerUserId?: string | null;
 }) {
   // Per-tier visual unlocks (Phase 5). Both are already tier-gated by
   // the API (it nulls them out when the owner's current rank no longer
@@ -1072,7 +1069,7 @@ function ProfileIdentityCard({
           <div className={`flex items-start justify-between gap-2 ${banner ? "mt-14 sm:mt-16" : ""}`}>
             <h1 className="min-w-0 text-2xl font-bold truncate">{displayName}</h1>
             {shareUrl ? (
-              <ShareLinkButton url={shareUrl} label="Profile link copied!" sharerUserId={sharerUserId} />
+              <ShareLinkButton url={shareUrl} label="Profile link copied!" />
             ) : null}
           </div>
           <p className="text-muted-foreground">@{profile.username}</p>
@@ -1558,7 +1555,6 @@ export default function PublicProfilePage() {
                   ? `${window.location.origin}/u/${profile.username}`
                   : undefined
               }
-              sharerUserId={viewerUser?.id ?? null}
             />
 
             {profile.userId && <PublicBadgesSection userId={profile.userId} />}

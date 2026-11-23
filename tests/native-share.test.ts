@@ -42,18 +42,18 @@ test("android rewrites webview share URLs to https://voxdex.com and keeps query 
   const cases: Array<[string, string, string]> = [
     [
       "https://localhost",
-      "https://localhost/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
-      "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
+      "https://localhost/person/abc?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
+      "https://voxdex.com/person/abc?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
     ],
     [
       "http://localhost",
-      "http://localhost/?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
-      "https://voxdex.com/?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
+      "http://localhost/?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
+      "https://voxdex.com/?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
     ],
     [
       "capacitor://localhost",
-      "capacitor://localhost/markets/world-event?sharer=user-1&utm_campaign=market#top",
-      "https://voxdex.com/markets/world-event?sharer=user-1&utm_campaign=market#top",
+      "capacitor://localhost/markets/world-event?utm_campaign=market#top",
+      "https://voxdex.com/markets/world-event?utm_campaign=market#top",
     ],
     [
       "https://localhost",
@@ -62,8 +62,8 @@ test("android rewrites webview share URLs to https://voxdex.com and keeps query 
     ],
     [
       "https://localhost",
-      "https://localhost/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win",
-      "https://voxdex.com/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win",
+      "https://localhost/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win",
+      "https://voxdex.com/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win",
     ],
   ];
 
@@ -78,29 +78,29 @@ test("android rewrites webview share URLs to https://voxdex.com and keeps query 
 
 test("the website and already-public URLs are not rewritten", () => {
   const publicUrl =
-    "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile";
+    "https://voxdex.com/person/abc?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile";
   assert.equal(toPublicShareUrl(publicUrl, webProduction), publicUrl);
   assert.equal(
-    toPublicShareUrl("http://localhost/person/abc?sharer=user-1", webLocalhost),
-    "http://localhost/person/abc?sharer=user-1",
+    toPublicShareUrl("http://localhost/person/abc", webLocalhost),
+    "http://localhost/person/abc",
   );
   assert.equal(
     toPublicShareUrl(publicUrl, androidLocalhost),
     publicUrl,
   );
   assert.equal(
-    toPublicShareUrl("https://localhost/person/abc?sharer=1", {
+    toPublicShareUrl("https://localhost/person/abc?ref=VXABCDEF", {
       nativeAndroid: true,
       nativeIos: false,
       currentOrigin: "https://voxdex.com",
     }),
-    "https://localhost/person/abc?sharer=1",
+    "https://localhost/person/abc?ref=VXABCDEF",
   );
 });
 
 test("android does not rewrite other hosts, ports, or userinfo", () => {
   const blocked = [
-    "https://localhost.evil.com/person/abc?sharer=1",
+    "https://localhost.evil.com/person/abc?ref=VXABCDEF",
     "https://voxdex.com.evil.com/person/abc",
     "https://localhost:8443/person/abc?ref=VXABCDEF",
     "https://user:pass@localhost/person/abc",
@@ -113,10 +113,10 @@ test("android does not rewrite other hosts, ports, or userinfo", () => {
 
 test("share text rewrites embedded webview links and leaves the sentence", () => {
   const input =
-    'I just backed Up on "Ada" on VoxDex!\nhttps://localhost/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win';
+    'I just backed Up on "Ada" on VoxDex!\nhttps://localhost/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win';
   assert.equal(
     toPublicShareText(input, androidLocalhost),
-    'I just backed Up on "Ada" on VoxDex!\nhttps://voxdex.com/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win',
+    'I just backed Up on "Ada" on VoxDex!\nhttps://voxdex.com/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win',
   );
   assert.equal(
     toPublicShareText("see https://localhost.evil.com/phish", androidLocalhost),
@@ -138,43 +138,43 @@ test("referral origin is public on a native webview and unchanged on the website
 test("iOS rewrites webview share URLs without using the Android sheet flag", () => {
   assert.equal(
     toPublicShareUrl(
-      "capacitor://localhost/markets/world-event?sharer=user-1&utm_campaign=market#top",
+      "capacitor://localhost/markets/world-event?utm_campaign=market#top",
       iosWebView,
     ),
-    "https://voxdex.com/markets/world-event?sharer=user-1&utm_campaign=market#top",
+    "https://voxdex.com/markets/world-event?utm_campaign=market#top",
   );
   assert.equal(
-    toPublicShareUrl("https://localhost/person/abc?ref=VXABCDEF&sharer=user-1", {
+    toPublicShareUrl("https://localhost/person/abc?ref=VXABCDEF", {
       nativeAndroid: false,
       nativeIos: true,
       currentOrigin: "https://localhost",
     }),
-    "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1",
+    "https://voxdex.com/person/abc?ref=VXABCDEF",
   );
   assert.equal(
-    toPublicShareUrl("https://voxdex.com/person/abc?sharer=user-1", iosWebView),
-    "https://voxdex.com/person/abc?sharer=user-1",
+    toPublicShareUrl("https://voxdex.com/person/abc", iosWebView),
+    "https://voxdex.com/person/abc",
   );
   assert.equal(
-    toPublicShareUrl("https://example.com/person/abc?sharer=1", iosWebView),
-    "https://example.com/person/abc?sharer=1",
+    toPublicShareUrl("https://example.com/person/abc?ref=VXABCDEF", iosWebView),
+    "https://example.com/person/abc?ref=VXABCDEF",
   );
   assert.equal(
     toPublicShareUrl("https://localhost:8443/person/abc", iosWebView),
     "https://localhost:8443/person/abc",
   );
   const sentence =
-    'I just backed Up on "Ada" on VoxDex!\ncapacitor://localhost/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win';
+    'I just backed Up on "Ada" on VoxDex!\ncapacitor://localhost/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win';
   assert.equal(
     toPublicShareText(sentence, iosWebView),
-    'I just backed Up on "Ada" on VoxDex!\nhttps://voxdex.com/share/bet/bet_123?sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win',
+    'I just backed Up on "Ada" on VoxDex!\nhttps://voxdex.com/share/bet/bet_123?utm_source=voxdex&utm_medium=share&utm_campaign=prediction_win',
   );
   assert.equal(toPublicShareText(sentence, webLocalhost), sentence);
   assert.equal(iosWebView.nativeAndroid, false);
 });
 
 test("android share fields omit url when the text already contains it", () => {
-  const url = "https://voxdex.com/markets/world-event?sharer=user-1&utm_campaign=market";
+  const url = "https://voxdex.com/markets/world-event?utm_campaign=market";
   assert.deepEqual(
     androidShareFields({
       title: "VoxDex",
