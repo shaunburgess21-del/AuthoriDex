@@ -133,6 +133,7 @@ export function HideExitCard({
       data-testid={cardKey ? `voted-card-${cardKey}` : undefined}
       className={cn(
         "h-full min-w-0",
+        highlighted && "relative z-10",
         highlighted && (accent === "blue" ? "voted-return-ring-blue" : "voted-return-ring"),
       )}
     >

@@ -3,7 +3,7 @@
  * /api/me/predictions payload the strip already caches.
  */
 
-import { settledAfterLastSeen, type SettledPredictionRow } from "@/lib/returningUserStrip";
+import { settledAfterLastSeen, settledAtFromPayload, type SettledPredictionRow } from "@/lib/returningUserStrip";
 import type { SettledBetAmounts } from "@/lib/resolvedBetCopy";
 
 export interface ResolvedRevealRow extends SettledBetAmounts, SettledPredictionRow {
@@ -49,7 +49,7 @@ export function revealRowsFromPredictionsResponse(data: unknown): ResolvedReveal
     rows.push({
       betId,
       result: str(row.result),
-      settledAt: typeof row.settledAt === "string" ? row.settledAt : null,
+      settledAt: settledAtFromPayload(row.settledAt),
       stakeAmount: num(row.stakeAmount),
       payout: num(row.payout),
       marketTitle: str(row.marketTitle) || "Prediction",

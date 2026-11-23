@@ -8,6 +8,7 @@ import { FILTER_INACTIVE_SECTION_TOGGLE } from "@/lib/filterControlStyles";
 import {
   hubActivityFilterFabAriaLabel,
   hubActivityFilterFabLabel,
+  hubActivityFilterLongestLabel,
   type HubActivityFilter,
   type HubActivityFilterScope,
 } from "@/lib/hub-activity-filter";
@@ -32,6 +33,7 @@ export function HubActivityFilterToggle({
   accent = scope === "predict" ? "world" : "vote",
 }: HubActivityFilterToggleProps) {
   const label = hubActivityFilterFabLabel(scope, value);
+  const longestLabel = hubActivityFilterLongestLabel(scope);
   const testId = scope === "predict" ? "predict-activity-filter-desktop" : "vote-activity-filter-desktop";
   const mineClass =
     accent === "weekly"
@@ -56,27 +58,38 @@ export function HubActivityFilterToggle({
       aria-label={hubActivityFilterFabAriaLabel(scope, value, count, ownedCount)}
       data-testid={testId}
     >
-      {value === "hide-mine" ? (
-        <EyeOff className="h-4 w-4 shrink-0" aria-hidden />
-      ) : (
-        <Eye className="h-4 w-4 shrink-0" aria-hidden />
-      )}
-      <span data-testid={`${testId}-label`}>{label}</span>
-      {value !== "all" && count > 0 ? (
-        <ActivityFilterCountBadge
-          count={count}
-          testId={`${testId}-count`}
-          className={cn(
-            value === "hide-mine"
-              ? "bg-amber-500 text-black"
-              : accent === "vote"
-                ? "bg-cyan-400 text-black"
-                : accent === "weekly"
-                  ? "bg-blue-500 text-white"
-                  : "bg-violet-400 text-black",
+      {/* Width follows the longest label plus the 999+ badge, so cycling
+          All votes / Not voted / Votes only does not shift the chips. */}
+      <span className="relative inline-flex items-center">
+        <span className="invisible flex items-center gap-2" aria-hidden>
+          <span className="h-4 w-4 shrink-0" />
+          <span>{longestLabel}</span>
+          <span className="inline-flex h-[18px] min-w-[2.75rem] px-1 text-[10px]">999+</span>
+        </span>
+        <span className="absolute inset-0 flex items-center gap-2">
+          {value === "hide-mine" ? (
+            <EyeOff className="h-4 w-4 shrink-0" aria-hidden />
+          ) : (
+            <Eye className="h-4 w-4 shrink-0" aria-hidden />
           )}
-        />
-      ) : null}
+          <span data-testid={`${testId}-label`}>{label}</span>
+          {value !== "all" && count > 0 ? (
+            <ActivityFilterCountBadge
+              count={count}
+              testId={`${testId}-count`}
+              className={cn(
+                value === "hide-mine"
+                  ? "bg-amber-500 text-black"
+                  : accent === "vote"
+                    ? "bg-cyan-400 text-black"
+                    : accent === "weekly"
+                      ? "bg-blue-500 text-white"
+                      : "bg-violet-400 text-black",
+              )}
+            />
+          ) : null}
+        </span>
+      </span>
     </button>
   );
 }

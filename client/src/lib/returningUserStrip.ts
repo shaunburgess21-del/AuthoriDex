@@ -113,6 +113,30 @@ export function stampResolvedLastSeenAt(storage: Pick<StripStorage, "setItem">, 
 export interface SettledPredictionRow {
   result: string;
   settledAt?: string | null;
+  /**
+   * Carried so callers can see the market, but the count does not branch
+   * on it. Up/Down, head-to-head, gainer, jackpot, and world markets all
+   * count once they have a non-pending result and a settlement time.
+   */
+  marketType?: string | null;
+}
+
+export type ResolvedLastSeenReason =
+  | "mount"
+  | "fetch"
+  | "visibility-hidden"
+  | "unmount"
+  | "other-page"
+  | "results-sheet";
+
+/**
+ * The chip stays until the visitor opens the results sheet.
+ * Mount, fetch, hiding the tab, leaving /vote, and other pages must not
+ * advance the stamp — those used to mark an overnight settlement as seen
+ * before the sheet was opened, and a reload then kept the chip hidden.
+ */
+export function shouldStampResolvedLastSeen(reason: ResolvedLastSeenReason): boolean {
+  return reason === "results-sheet";
 }
 
 /**
@@ -147,6 +171,13 @@ export function countNewlyResolvedPredictions(
   return count;
 }
 
+export function settledAtFromPayload(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  return null;
+}
+
 /** Accepts the `{ predictions }` payload and the legacy bare array. */
 export function rowsFromPredictionsResponse(data: unknown): SettledPredictionRow[] {
   const list = Array.isArray(data)
@@ -160,10 +191,11 @@ export function rowsFromPredictionsResponse(data: unknown): SettledPredictionRow
   const rows: SettledPredictionRow[] = [];
   for (const item of list) {
     if (!item || typeof item !== "object") continue;
-    const row = item as { result?: unknown; settledAt?: unknown };
+    const row = item as { result?: unknown; settledAt?: unknown; marketType?: unknown };
     rows.push({
       result: typeof row.result === "string" ? row.result : "",
-      settledAt: typeof row.settledAt === "string" ? row.settledAt : null,
+      settledAt: settledAtFromPayload(row.settledAt),
+      marketType: typeof row.marketType === "string" && row.marketType.length > 0 ? row.marketType : null,
     });
   }
   return rows;

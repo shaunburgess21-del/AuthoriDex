@@ -7,6 +7,12 @@ import {
   voteEyeBadgeCount,
 } from "../client/src/lib/hub-activity-filter";
 import { hasOverallRatingVote } from "../client/src/lib/quickVoteHideVoted";
+import {
+  clearOptimisticVote,
+  noteOptimisticVote,
+  reconcileVoteOverlay,
+  votedWithOverlay,
+} from "../client/src/lib/voteDeckOptimism";
 
 const cards = [
   { id: "voted", voted: true },
@@ -49,6 +55,43 @@ describe("vote eye badge count", () => {
       hubActivityFilterFabAriaLabel("predict", "hide-mine", 3),
       "Not predicted, 3 hidden. Show only positions you've taken.",
     );
+  });
+});
+
+describe("optimistic vote deck count", () => {
+  const server = [
+    { key: "sentiment:a", voted: false },
+    { key: "opinion:b", voted: false },
+    { key: "matchups:c", voted: true },
+  ];
+
+  it("drops the open count when the card shows its vote, before the server list does", () => {
+    const overlay = noteOptimisticVote({}, "sentiment:a", true);
+    const shown = server.map((card) => ({ voted: votedWithOverlay(card.key, card.voted, overlay) }));
+    assert.deepEqual(voteEyeBadgeCount("hide-mine", shown), { count: 1, ownedCount: 2 });
+    assert.equal(
+      filterCardsByVoteActivity(shown, "hide-mine", (card) => card.voted).length,
+      voteEyeBadgeCount("hide-mine", shown).count,
+    );
+  });
+
+  it("keeps the newer vote when a refetch is still one behind, then reconciles", () => {
+    let overlay = noteOptimisticVote({}, "sentiment:a", true);
+    overlay = noteOptimisticVote(overlay, "opinion:b", true);
+    const stale = [
+      { key: "sentiment:a", voted: true },
+      { key: "opinion:b", voted: false },
+      { key: "matchups:c", voted: true },
+    ];
+    const held = reconcileVoteOverlay(overlay, stale);
+    assert.deepEqual(held, { "opinion:b": true });
+    const shown = stale.map((card) => ({ voted: votedWithOverlay(card.key, card.voted, held) }));
+    assert.equal(voteEyeBadgeCount("hide-mine", shown).count, 0);
+    const caughtUp = stale.map((card) =>
+      card.key === "opinion:b" ? { ...card, voted: true } : card,
+    );
+    assert.deepEqual(reconcileVoteOverlay(held, caughtUp), {});
+    assert.deepEqual(clearOptimisticVote(held, "opinion:b"), {});
   });
 });
 

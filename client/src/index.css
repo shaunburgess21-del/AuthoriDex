@@ -2372,15 +2372,20 @@ button.sash-handle:active {
 }
 
 /* Eye badge when the open-card count drops. Fixed width, so the pulse
-   does not move the pill. Reduced motion keeps the new number with no scale. */
+   does not move the pill. Scale and a primary-colour flash, about 300ms.
+   Reduced motion keeps the new number with no motion. */
 @keyframes activity-count-drop {
   0% { transform: scale(1); }
-  35% { transform: scale(1.14); }
+  40% {
+    transform: scale(1.22);
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
   100% { transform: scale(1); }
 }
 
 .activity-count-drop {
-  animation: activity-count-drop 420ms ease-out;
+  animation: activity-count-drop 300ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2389,41 +2394,34 @@ button.sash-handle:active {
   }
 }
 
-/* Brief ring when a just-voted card is scrolled back into view.
-   Cyan is the Vote accent; blue is the Predict accent. The ring is a
-   shadow, so it does not shift layout. */
+/* Ring when a just-voted card has landed under the sticky band.
+   2px primary ring plus a soft glow, fading across about 1.5s.
+   The shadow does not shift layout. Predict uses the same primary. */
 @keyframes voted-return-ring {
-  0% { box-shadow: 0 0 0 2px rgb(34 211 238 / 0.9); }
-  100% { box-shadow: 0 0 0 2px rgb(34 211 238 / 0); }
-}
-
-@keyframes voted-return-ring-blue {
-  0% { box-shadow: 0 0 0 2px rgb(96 165 250 / 0.9); }
-  100% { box-shadow: 0 0 0 2px rgb(96 165 250 / 0); }
+  0% {
+    box-shadow:
+      0 0 0 2px hsl(var(--primary)),
+      0 0 16px 3px hsl(var(--primary) / 0.55);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px hsl(var(--primary) / 0),
+      0 0 16px 3px hsl(var(--primary) / 0);
+  }
 }
 
 .voted-return-ring,
 .voted-return-ring-blue {
   border-radius: 1rem;
-}
-
-.voted-return-ring {
   animation: voted-return-ring 1.5s ease-out forwards;
-}
-
-.voted-return-ring-blue {
-  animation: voted-return-ring-blue 1.5s ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .voted-return-ring,
   .voted-return-ring-blue {
     animation: none;
-  }
-  .voted-return-ring {
-    box-shadow: 0 0 0 2px rgb(34 211 238 / 0.55);
-  }
-  .voted-return-ring-blue {
-    box-shadow: 0 0 0 2px rgb(96 165 250 / 0.55);
+    box-shadow:
+      0 0 0 2px hsl(var(--primary)),
+      0 0 12px 2px hsl(var(--primary) / 0.4);
   }
 }
