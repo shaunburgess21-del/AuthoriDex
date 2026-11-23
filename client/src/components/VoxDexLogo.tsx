@@ -2,7 +2,7 @@ type LogoVariant = "default" | "vote" | "predict";
 
 const VARIANT_STYLES: Record<LogoVariant, string> = {
   default: "from-cyan-500 to-blue-600 shadow-cyan-500/25",
-  vote: "from-cyan-400 to-teal-600 shadow-cyan-400/25",
+  vote: "from-cyan-300 via-cyan-400 to-cyan-600 shadow-cyan-400/30",
   predict: "from-violet-500 to-purple-700 shadow-violet-500/25",
 };
 
