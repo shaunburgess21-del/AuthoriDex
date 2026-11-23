@@ -34,7 +34,7 @@ import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { CollapsibleCompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
-import { CrowdLine } from "@/components/vote/CrowdLine";
+import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { sortOpinionPollOptionsByVotes } from "@/lib/opinionPollOptions";
 import { ImageLightbox } from "@/components/ImageLightbox";
@@ -69,6 +69,30 @@ function parseOpinionPollVoteError(err: unknown): string {
     return err.message;
   }
   return "Something went wrong. Please try again.";
+}
+
+function opinionDetailCrowd(
+  options: { id: string; percent?: number }[],
+  userVote: string | null | undefined,
+  headline: string,
+  slug: string,
+): { text: string | null; share: CrowdLineShare | null } {
+  const line = choiceCrowdLine(
+    options.map((option) => ({ key: option.id, percent: option.percent || 0 })),
+    userVote,
+  );
+  if (!line) return { text: null, share: null };
+  return {
+    text: line.text,
+    share: slug
+      ? {
+          headline,
+          percent: line.userPercent,
+          path: `/vote/opinion-polls/${encodeURIComponent(slug)}`,
+          surface: "poll",
+        }
+      : null,
+  };
 }
 
 export default function OpinionPollDetailPage() {
@@ -569,14 +593,9 @@ export default function OpinionPollDetailPage() {
 
               <CrowdLine
                 text={
-                  choiceCrowdLine(
-                    voteSortedOptions.map((option: { id: string; percent?: number }) => ({
-                      key: option.id,
-                      percent: option.percent || 0,
-                    })),
-                    poll.userVote,
-                  )?.text ?? null
+                  opinionDetailCrowd(voteSortedOptions, poll.userVote, poll.title, slug).text
                 }
+                share={opinionDetailCrowd(voteSortedOptions, poll.userVote, poll.title, slug).share}
                 testId="crowd-line-opinion-detail"
               />
 
@@ -671,15 +690,8 @@ export default function OpinionPollDetailPage() {
           />
           {hasVoted ? (
             <CrowdLine
-              text={
-                choiceCrowdLine(
-                  voteSortedOptions.map((option: { id: string; percent?: number }) => ({
-                    key: option.id,
-                    percent: option.percent || 0,
-                  })),
-                  poll.userVote,
-                )?.text ?? null
-              }
+              text={opinionDetailCrowd(voteSortedOptions, poll.userVote, poll.title, slug).text}
+              share={opinionDetailCrowd(voteSortedOptions, poll.userVote, poll.title, slug).share}
               testId="crowd-line-opinion-results"
             />
           ) : null}

@@ -38,6 +38,15 @@ import { queryClient } from "@/lib/queryClient";
 import { newlyResolvedRevealRows, revealRowsFromPredictionsResponse } from "@/lib/resolvedReveal";
 import { ResolvedPredictionsSheet } from "@/components/vote/ResolvedPredictionsSheet";
 import { DailyGoalMark } from "@/components/vote/DailyGoalMark";
+import { GoalInviteCard, GoalInviteReveal } from "@/components/vote/GoalInviteCard";
+import {
+  GOAL_INVITE_INTERVAL_MS,
+  goalInviteOpen,
+  readGoalInviteDismissed,
+  readGoalInviteShownAt,
+  writeGoalInviteDismissed,
+  writeGoalInviteShownAt,
+} from "@/lib/goalInvite";
 import { cn } from "@/lib/utils";
 
 /**
@@ -121,11 +130,12 @@ function StripPieces({
         </p>
         <div
           className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-muted/50"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(xpProgressPct)}
-          aria-label={xpLabel}
+          role={interactive ? "progressbar" : undefined}
+          aria-valuemin={interactive ? 0 : undefined}
+          aria-valuemax={interactive ? 100 : undefined}
+          aria-valuenow={interactive ? Math.round(xpProgressPct) : undefined}
+          aria-label={interactive ? xpLabel : undefined}
+          aria-hidden={interactive ? undefined : true}
         >
           <div
             className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500"
@@ -138,7 +148,12 @@ function StripPieces({
         data-testid={interactive ? "vote-return-strip-goal-slot" : undefined}
         className={cn("flex items-center gap-1", interactive && !truncateXp ? "flex-1" : "shrink-0")}
       >
-        <DailyGoalMark count={goal?.done ? DAILY_VOTE_GOAL : goalCount} done={Boolean(goal?.done)} label={goalAria} />
+        <DailyGoalMark
+          count={goal?.done ? DAILY_VOTE_GOAL : goalCount}
+          done={Boolean(goal?.done)}
+          label={goalAria}
+          exposed={interactive}
+        />
         <span
           data-testid={interactive ? "vote-return-strip-goal" : undefined}
           data-goal-state={goal == null ? "unavailable" : goal.done ? "done" : "progress"}
@@ -147,25 +162,34 @@ function StripPieces({
         >
           {goalLabel}
         </span>
-        <span className="sr-only" aria-live={interactive ? "polite" : undefined}>
-          {goalAria}
-        </span>
+        {interactive ? (
+          <span className="sr-only" aria-live="polite">
+            {goalAria}
+          </span>
+        ) : null}
       </div>
       <div data-testid={interactive ? "vote-return-strip-resolved-slot" : undefined} className="shrink-0">
         {showChip ? (
-          <button
-            type="button"
-            tabIndex={interactive ? 0 : -1}
-            onClick={onResolvedClick}
-            data-testid={interactive ? "vote-return-strip-resolved" : undefined}
-            aria-label={`${resolvedCount} resolved predictions`}
-            aria-haspopup="dialog"
-            className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <Badge variant="outline" className={RESOLVED_CHIP_CLASS}>
-              <span className="whitespace-nowrap">{resolvedCount} resolved ›</span>
-            </Badge>
-          </button>
+          interactive ? (
+            <button
+              type="button"
+              onClick={onResolvedClick}
+              data-testid="vote-return-strip-resolved"
+              aria-label={`${resolvedCount} resolved predictions`}
+              aria-haspopup="dialog"
+              className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <Badge variant="outline" className={RESOLVED_CHIP_CLASS}>
+                <span className="whitespace-nowrap">{resolvedCount} resolved ›</span>
+              </Badge>
+            </button>
+          ) : (
+            <span className="inline-flex" aria-hidden>
+              <Badge variant="outline" className={RESOLVED_CHIP_CLASS}>
+                <span className="whitespace-nowrap">{resolvedCount} resolved ›</span>
+              </Badge>
+            </span>
+          )
         ) : null}
       </div>
     </>
@@ -238,7 +262,17 @@ export function ReturningUserStripLayout({
       >
         <StripPieces {...pieceProps} fit={fit} truncateXp={fit === "tight-xp"} interactive />
       </div>
-      <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
+      {/* Width probes only. inert plus aria-hidden keep the three copy
+          lengths out of the accessibility tree and out of test queries
+          that look for the visible row's roles and test ids. */}
+      <div
+        className="pointer-events-none h-0 overflow-hidden"
+        aria-hidden="true"
+        ref={(node) => {
+          if (node) node.inert = true;
+        }}
+        data-strip-measure=""
+      >
         <div ref={fullRef} className={cn("flex w-max items-center", ROW_GAP_CLASS)}>
           <StripPieces {...pieceProps} fit="full" truncateXp={false} interactive={false} />
         </div>
@@ -346,6 +380,63 @@ export function ReturningUserStrip() {
 
   const [chipCleared, setChipCleared] = useState(false);
   const [revealOpen, setRevealOpen] = useState(false);
+  const [dismissedInvite, setDismissedInvite] = useState(false);
+  const inviteUserId = user?.id ?? null;
+  const inviteUserRef = useRef<string | null>(inviteUserId);
+  const inviteHoldingRef = useRef(false);
+  const sawGoalOpenRef = useRef(false);
+  const [goalFlipped, setGoalFlipped] = useState(false);
+
+  // A different account must not inherit the previous user's flip or dismiss.
+  if (inviteUserRef.current !== inviteUserId) {
+    inviteUserRef.current = inviteUserId;
+    inviteHoldingRef.current = false;
+    sawGoalOpenRef.current = false;
+    setGoalFlipped(false);
+    setDismissedInvite(false);
+  }
+
+  const votesToday = votes.isSuccess ? countMeVotesOnStreakDay(votes.data, now) : null;
+
+  useEffect(() => {
+    if (votesToday == null) return;
+    const done = votesToday >= DAILY_VOTE_GOAL;
+    if (!done) {
+      sawGoalOpenRef.current = true;
+      return;
+    }
+    if (sawGoalOpenRef.current) setGoalFlipped(true);
+  }, [votesToday]);
+
+  const goal = votesToday == null ? null : dailyGoalCopy(votesToday);
+  const inviteStorage = browserLocalStorage();
+  const inviteDismissed =
+    dismissedInvite ||
+    (inviteUserId != null && inviteStorage != null && readGoalInviteDismissed(inviteStorage, inviteUserId));
+  const inviteShownAt =
+    inviteUserId != null && inviteStorage != null ? readGoalInviteShownAt(inviteStorage, inviteUserId) : null;
+  const inviteOpen = goalInviteOpen({
+    signedIn: Boolean(user),
+    userId: inviteUserId,
+    flippedThisSession: goalFlipped,
+    goalDone: goal?.done === true,
+    dismissed: inviteDismissed,
+    lastShownAt: inviteShownAt,
+    now: Date.now(),
+    alreadyOpen: inviteHoldingRef.current,
+  });
+  if (!inviteUserId || inviteDismissed || goal?.done !== true) inviteHoldingRef.current = false;
+  else if (inviteOpen) inviteHoldingRef.current = true;
+
+  useEffect(() => {
+    if (!inviteOpen || !inviteUserId) return;
+    const store = browserLocalStorage();
+    if (!store) return;
+    const existing = readGoalInviteShownAt(store, inviteUserId);
+    const stampedAt = Date.now();
+    if (existing != null && stampedAt - existing < GOAL_INVITE_INTERVAL_MS) return;
+    writeGoalInviteShownAt(store, inviteUserId, stampedAt);
+  }, [inviteOpen, inviteUserId]);
 
   const revealRows = useMemo(() => {
     if (!predictions.isSuccess) return [];
@@ -359,7 +450,6 @@ export function ReturningUserStrip() {
 
   const progress = xpRankProgress(profile?.xpPoints ?? 0);
   const xpLabel = xpRankProgressLabel(progress);
-  const votesToday = votes.isSuccess ? countMeVotesOnStreakDay(votes.data, now) : null;
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const reminder =
     votesToday != null &&
@@ -370,8 +460,14 @@ export function ReturningUserStrip() {
       votesToday,
     });
   const streakLabel = streakChipLabel(profile?.currentStreak ?? 0, reminder);
-  const goal = votesToday == null ? null : dailyGoalCopy(votesToday);
   const showChip = ready && !chipCleared && resolvedCount > 0;
+
+  const dismissInvite = () => {
+    setDismissedInvite(true);
+    inviteHoldingRef.current = false;
+    const store = browserLocalStorage();
+    if (inviteUserId && store) writeGoalInviteDismissed(store, inviteUserId);
+  };
 
   const acknowledgeChip = () => {
     if (shouldStampResolvedLastSeen("results-sheet")) {
@@ -420,6 +516,9 @@ export function ReturningUserStrip() {
           <Skeleton className="ml-auto h-5 w-[5.5rem] rounded-md" />
         </div>
       </Card>
+      <GoalInviteReveal open={inviteOpen}>
+        <GoalInviteCard onDismiss={dismissInvite} />
+      </GoalInviteReveal>
       <ResolvedPredictionsSheet open={revealOpen} onOpenChange={setRevealOpen} rows={revealRows} />
     </>
   );

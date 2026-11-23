@@ -16,23 +16,27 @@ export function DailyGoalMark({
   goal = DAILY_VOTE_GOAL,
   done,
   label,
+  exposed = true,
 }: {
   count: number;
   goal?: number;
   done: boolean;
   label: string;
+  /** Width probes pass false so only the visible ring is in the accessibility tree. */
+  exposed?: boolean;
 }) {
   const pct = goal > 0 ? Math.min(1, Math.max(0, count) / goal) : 0;
   const offset = CIRCUMFERENCE * (1 - pct);
   return (
-    <span className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+    <span className="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden={exposed ? undefined : true}>
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         className="h-3.5 w-3.5 -rotate-90"
-        role="img"
-        aria-label={label}
+        role={exposed ? "img" : "presentation"}
+        aria-label={exposed ? label : undefined}
+        aria-hidden={exposed ? undefined : true}
         focusable="false"
-        data-testid="vote-return-strip-goal-ring"
+        data-testid={exposed ? "vote-return-strip-goal-ring" : undefined}
       >
         <circle
           cx={SIZE / 2}

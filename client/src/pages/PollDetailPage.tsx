@@ -541,6 +541,23 @@ export default function PollDetailPage() {
                   normalizeSentimentChoice(displayUserVote),
                 )?.text ?? null
               }
+              share={(() => {
+                const line = choiceCrowdLine(
+                  [
+                    { key: "agree", percent: poll.agreePercent },
+                    { key: "neutral", percent: poll.neutralPercent },
+                    { key: "disagree", percent: poll.disagreePercent },
+                  ],
+                  normalizeSentimentChoice(displayUserVote),
+                );
+                if (!line || !slug) return null;
+                return {
+                  headline: poll.headline,
+                  percent: line.userPercent,
+                  path: `/polls/${encodeURIComponent(slug)}`,
+                  surface: "poll" as const,
+                };
+              })()}
               testId="crowd-line-poll-detail"
             />
           ) : null}

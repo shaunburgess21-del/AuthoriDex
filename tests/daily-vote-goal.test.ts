@@ -214,9 +214,12 @@ describe("strip wiring", () => {
     assert.match(strip, /shouldStampResolvedLastSeen\("results-sheet"\)/);
     assert.match(strip, /stampResolvedLastSeenAt/);
     assert.match(strip, /vote-return-strip-goal-slot/);
-    assert.match(strip, /aria-live=\{interactive \? "polite"/);
+    assert.match(strip, /aria-live="polite"/);
+    assert.match(strip, /data-strip-measure/);
+    assert.match(strip, /node\.inert = true/);
+    assert.match(strip, /exposed=\{interactive\}/);
     assert.match(goalMark, /motion-reduce:transition-none/);
-    assert.match(goalMark, /aria-label=\{label\}/);
+    assert.match(goalMark, /aria-label=\{exposed \? label : undefined\}/);
     assert.match(goalLib, /Streak ends tonight/);
     assert.match(strip, /ME_VOTES_QUERY_KEY/);
     assert.match(goalLib, /\/api\/me\/votes/);

@@ -13,7 +13,7 @@ import { ImageLightbox } from "@/components/ImageLightbox";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
 import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare } from "lucide-react";
-import { CrowdLine } from "@/components/vote/CrowdLine";
+import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { Link } from "wouter";
@@ -88,6 +88,23 @@ export function DiscourseCard({
   // Blank slugs still have an id. Comments and the detail page resolve either key.
   const pollKey = sentimentPollVoteKey(topic);
   const showDiscussion = enableDiscussion && !!pollKey;
+  const crowd = choiceCrowdLine(
+    [
+      { key: "agree", percent: topic.agreePercent },
+      { key: "neutral", percent: topic.neutralPercent },
+      { key: "disagree", percent: topic.disagreePercent },
+    ],
+    voted,
+  );
+  const crowdShare: CrowdLineShare | null =
+    crowd && pollKey
+      ? {
+          headline: topic.headline,
+          percent: crowd.userPercent,
+          path: `/polls/${encodeURIComponent(pollKey)}`,
+          surface: "poll",
+        }
+      : null;
 
   useEffect(() => {
     setVoted(topic.userVote ?? null);
@@ -292,14 +309,8 @@ export function DiscourseCard({
             <span className="text-sm text-muted-foreground w-10 text-right">{topic.disagreePercent}%</span>
           </div>
           <CrowdLine
-            text={choiceCrowdLine(
-              [
-                { key: "agree", percent: topic.agreePercent },
-                { key: "neutral", percent: topic.neutralPercent },
-                { key: "disagree", percent: topic.disagreePercent },
-              ],
-              voted,
-            )?.text ?? null}
+            text={crowd?.text ?? null}
+            share={crowdShare}
             testId={`crowd-line-poll-${topic.id}`}
           />
         </div>

@@ -643,6 +643,23 @@ export default function MatchupDetailPage() {
                   userVote,
                 )?.text ?? null
               }
+              share={(() => {
+                const line = choiceCrowdLine(
+                  [
+                    { key: "option_a", percent: matchup.optionAPercent },
+                    { key: "neutral", percent: matchup.neutralPercent ?? 0 },
+                    { key: "option_b", percent: matchup.optionBPercent },
+                  ],
+                  userVote,
+                );
+                if (!line || !slug) return null;
+                return {
+                  headline: matchup.promptText?.trim() || matchup.title,
+                  percent: line.userPercent,
+                  path: `/vote/matchups/${encodeURIComponent(slug)}`,
+                  surface: "matchup" as const,
+                };
+              })()}
               testId="crowd-line-matchup-detail"
             />
           ) : null}
