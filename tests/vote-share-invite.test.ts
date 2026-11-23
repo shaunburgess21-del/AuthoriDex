@@ -19,6 +19,7 @@ import {
   referralRewardAmounts,
   referralRewardSentence,
 } from "../client/src/lib/referralRewardCopy";
+import { appendShareAttribution } from "../client/src/lib/share";
 import {
   LINK_COPIED_TOAST,
   buildVoteCardShareUrl,
@@ -169,10 +170,11 @@ describe("referral code on the card link", () => {
     assert.equal(referralCodeForShare(" vxab12cd "), "VXAB12CD");
     assert.equal(referralCodeForShare("nope"), null);
     assert.equal(referralCodeForShare(null), null);
-    const base = "https://voxdex.com/vote/matchups/goat?sharer=user-1&utm_campaign=matchup";
+    const base = "https://voxdex.com/vote/matchups/goat?utm_campaign=matchup";
     const withCode = new URL(withReferralParam(base, "vxab12cd"));
     assert.equal(withCode.searchParams.get("ref"), "VXAB12CD");
-    assert.equal(withCode.searchParams.get("sharer"), "user-1");
+    assert.equal(withCode.searchParams.get("sharer"), null);
+    assert.equal(withCode.toString().includes("sharer"), false);
     assert.equal(withReferralParam(base, "not-a-code"), base);
     assert.equal(withReferralParam(`${base}&ref=VXZZZZZZ`, "VXAB12CD").includes("ref=VXZZZZZZ"), true);
     assert.equal(new URL(withReferralParam(`${base}&ref=VXZZZZZZ`, "VXAB12CD")).searchParams.getAll("ref").length, 1);
@@ -191,14 +193,14 @@ describe("referral code on the card link", () => {
           percent: 55,
           path: "/vote/matchups/goat",
           surface: "matchup",
-          sharerUserId: "user-1",
           referralCode: "VXAB12CD",
         }),
       );
       assert.equal(url.origin, "https://voxdex.com");
       assert.equal(url.pathname, "/vote/matchups/goat");
       assert.equal(url.searchParams.get("ref"), "VXAB12CD");
-      assert.equal(url.searchParams.get("sharer"), "user-1");
+      assert.equal(url.searchParams.get("sharer"), null);
+      assert.equal(url.toString().includes("sharer"), false);
       assert.equal(url.searchParams.get("utm_source"), "voxdex");
       assert.equal(url.searchParams.get("utm_medium"), "share");
       assert.equal(url.searchParams.get("utm_campaign"), "matchup");
@@ -213,6 +215,19 @@ describe("referral code on the card link", () => {
         }),
       );
       assert.equal(plain.searchParams.get("ref"), null);
+      assert.equal(plain.searchParams.get("sharer"), null);
+
+      const stripped = new URL(
+        appendShareAttribution(
+          "https://voxdex.com/person/ada?sharer=11111111-2222-3333-4444-555555555555&utm_source=voxdex",
+          { referralCode: "VXAB12CD", surface: "person_profile" },
+        ),
+      );
+      assert.equal(stripped.searchParams.get("sharer"), null);
+      assert.equal(stripped.toString().includes("sharer"), false);
+      assert.equal(stripped.searchParams.get("ref"), "VXAB12CD");
+      assert.equal(stripped.searchParams.get("utm_medium"), "share");
+      assert.equal(stripped.searchParams.get("utm_campaign"), "person_profile");
     } finally {
       Object.defineProperty(globalThis, "window", { configurable: true, value: previous });
     }

@@ -1,7 +1,6 @@
 import { Share2 } from "lucide-react";
 import { sharePage, type ShareSurface } from "@/lib/share";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
 
 interface ShareIconButtonProps {
   /**
@@ -39,7 +38,6 @@ interface ShareIconButtonProps {
  * consistent across the four detail variants.
  */
 export function ShareIconButton({ title, className, testId = "button-share", surface = "market" }: ShareIconButtonProps) {
-  const { user } = useAuth();
   return (
     <Button
       type="button"
@@ -47,7 +45,7 @@ export function ShareIconButton({ title, className, testId = "button-share", sur
       size="icon"
       className={`h-8 w-8 shrink-0 ${className ?? ""}`}
       onClick={() => {
-        void sharePage(title, { sharerUserId: user?.id, surface });
+        void sharePage(title, { surface });
       }}
       aria-label="Share this market"
       data-testid={testId}

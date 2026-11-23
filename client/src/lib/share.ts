@@ -10,6 +10,36 @@ import {
   toPublicShareUrl,
 } from "@/lib/nativeShare";
 
+const REFERRAL_CODE_PATTERN = /^VX[A-Z0-9]{6}$/;
+
+function normaliseReferralCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const normalised = code.trim().toUpperCase();
+  return REFERRAL_CODE_PATTERN.test(normalised) ? normalised : null;
+}
+
+/**
+ * Synchronous read of the signed-in user's referral code.
+ * `useReferralLink` registers the query-cache reader. Until that
+ * module loads, or while the cache is empty, shares stay free of a
+ * user identifier. Kept as a callback so this file does not import
+ * the query client (that import boots Supabase).
+ */
+let readCachedReferralCode: () => string | null = () => null;
+
+export function registerShareReferralCodeReader(reader: () => string | null): void {
+  readCachedReferralCode = reader;
+}
+
+/** Referral code already loaded for the signed-in user, if any. */
+export function cachedShareReferralCode(): string | null {
+  try {
+    return normaliseReferralCode(readCachedReferralCode());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Canonical share-attribution surfaces. Mirrors the `share_surface`
  * column on share_clicks; passed by every call site so the share-
@@ -33,8 +63,12 @@ export type ShareSurface =
   | "share_card";
 
 interface SharePageOptions {
-  /** Authenticated sharer's profile id. Anonymous shares pass null. */
-  sharerUserId?: string | null;
+  /**
+   * Signed-in sharer's referral code (`VX` + 6). Omitted values fall
+   * back to the cached code from `/api/me/referral-stats`. Signed-out
+   * shares pass nothing and stay free of a user identifier.
+   */
+  referralCode?: string | null;
   /** Surface label — drives utm_campaign and the share_clicks row. */
   surface?: ShareSurface;
   /** Override the URL we share. Defaults to window.location.href. */
@@ -119,17 +153,18 @@ export function worldMarketShare(slug: string, title: string): CardShareConfig {
 /**
  * Append attribution params to a share URL.
  *
- * - `?sharer={userId}` — used by the click-tracking ping to credit
- *   the referrer for confirmed external clicks. Omitted entirely
- *   for anonymous shares (no userId == no attribution).
+ * - `?ref={referralCode}` — click tracking resolves this to a profile
+ *   server-side. Omitted when there is no valid code (signed-out
+ *   shares, or a code that would not survive referral capture).
  * - `&utm_source=voxdex&utm_medium=share&utm_campaign={surface}` —
  *   standard UTM tags so external analytics (and our own admin
  *   share-funnel tab once it exists) can group the inbound traffic.
  *
- * Idempotent: if the URL already has any of these params we leave
- * them in place rather than appending duplicates. This matters for
- * the openShareCard path, where buildTradeShareData has already
- * baked the sharer param into shareUrl.
+ * Any existing `sharer` param is removed. Older call sites baked the
+ * profile UUID into the query string; it must not leave the device.
+ *
+ * Idempotent: if the URL already has `ref` or any UTM param we leave
+ * that value in place rather than appending a duplicate.
  *
  * On Capacitor Android the WebView origin is `https://localhost`.
  * On Capacitor iOS it is `capacitor://localhost`. After attribution,
@@ -138,12 +173,19 @@ export function worldMarketShare(slug: string, title: string): CardShareConfig {
  */
 export function appendShareAttribution(
   baseUrl: string,
-  options: { sharerUserId?: string | null; surface?: ShareSurface } = {},
+  options: { referralCode?: string | null; surface?: ShareSurface } = {},
 ): string {
   try {
     const url = new URL(baseUrl, window.location.origin);
-    if (options.sharerUserId && !url.searchParams.has("sharer")) {
-      url.searchParams.set("sharer", options.sharerUserId);
+    url.searchParams.delete("sharer");
+    // A provided string is used as-is (invalid codes add nothing).
+    // Null and undefined fall back to the signed-in user's cached code.
+    const referralCode =
+      options.referralCode != null && options.referralCode !== ""
+        ? normaliseReferralCode(options.referralCode)
+        : cachedShareReferralCode();
+    if (referralCode && !url.searchParams.has("ref")) {
+      url.searchParams.set("ref", referralCode);
     }
     if (!url.searchParams.has("utm_source")) {
       url.searchParams.set("utm_source", "voxdex");
@@ -163,12 +205,12 @@ export function appendShareAttribution(
 
 /**
  * Share a page link. Optional `options` lets call sites attach a
- * sharer id + surface so the resulting URL carries attribution
- * params that the click-tracking endpoint can credit.
+ * surface so the resulting URL carries UTM params. A referral code,
+ * when the viewer is signed in and one is cached, is added as `ref`
+ * so click tracking can credit the sharer without a profile UUID.
  *
- * Backward-compatible: existing call sites that pass only `title`
- * still work — they just produce un-attributed shares (which is
- * the right call for anonymous flows).
+ * Call sites that pass only `title` still work. Signed-out shares
+ * stay free of a user identifier.
  */
 export async function sharePage(
   title: string,
@@ -176,7 +218,7 @@ export async function sharePage(
 ): Promise<void> {
   const baseUrl = options.url ?? window.location.href;
   const url = appendShareAttribution(baseUrl, {
-    sharerUserId: options.sharerUserId ?? null,
+    referralCode: options.referralCode,
     surface: options.surface,
   });
 

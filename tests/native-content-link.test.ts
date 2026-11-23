@@ -48,20 +48,20 @@ test("https login callbacks are not content links", () => {
 test("https content URLs keep query and hash", () => {
   assert.deepEqual(
     contentPathFromUrl(
-      "https://voxdex.com/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
+      "https://voxdex.com/person/abc?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
     ),
     {
       status: "navigate",
-      path: "/person/abc?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
+      path: "/person/abc?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile#comment-9",
     },
   );
   assert.deepEqual(
     contentPathFromUrl(
-      "https://voxdex.com/?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
+      "https://voxdex.com/?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
     ),
     {
       status: "navigate",
-      path: "/?ref=VXABCDEF&sharer=user-1&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
+      path: "/?ref=VXABCDEF&utm_source=voxdex&utm_medium=share&utm_campaign=referral",
     },
   );
   assert.deepEqual(
@@ -74,10 +74,10 @@ test("https content URLs keep query and hash", () => {
     },
   );
   assert.deepEqual(
-    contentPathFromUrl("https://voxdex.com/share/bet/bet_123?sharer=user-1&utm_campaign=prediction_win"),
+    contentPathFromUrl("https://voxdex.com/share/bet/bet_123?utm_campaign=prediction_win"),
     {
       status: "navigate",
-      path: "/share/bet/bet_123?sharer=user-1&utm_campaign=prediction_win",
+      path: "/share/bet/bet_123?utm_campaign=prediction_win",
     },
   );
 });

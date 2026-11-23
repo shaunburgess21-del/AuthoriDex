@@ -150,7 +150,6 @@ export function QuickVoteActionBar({
   const handleShare = () => {
     const config = SHARE_CONFIG[type](slug, title);
     void sharePage(config.title, {
-      sharerUserId: user?.id ?? null,
       surface: config.surface,
       url: resolveShareUrl(config.path),
     }).finally(() => {

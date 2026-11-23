@@ -19,7 +19,6 @@ export interface VoteCardShareInput {
   percent: number;
   path: string;
   surface: ShareSurface;
-  sharerUserId?: string | null;
   referralCode?: string | null;
 }
 
@@ -74,7 +73,7 @@ export function buildVoteCardShareUrl(input: VoteCardShareInput): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://voxdex.com";
   const base = new URL(input.path, origin).toString();
   const attributed = appendShareAttribution(base, {
-    sharerUserId: input.sharerUserId ?? null,
+    referralCode: input.referralCode,
     surface: input.surface,
   });
   const withRef = withReferralParam(attributed, input.referralCode);

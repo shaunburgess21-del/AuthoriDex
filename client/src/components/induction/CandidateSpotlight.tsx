@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -67,7 +66,6 @@ export function CandidateSpotlight({
   onViewProfile,
 }: CandidateSpotlightProps) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
   const [direction, setDirection] = useState(1);
   const candidate = sequence[index];
   const hasPrev = index > 0;
@@ -99,7 +97,6 @@ export function CandidateSpotlight({
       url: candidate.personId
         ? `/person/${candidate.personId}`
         : `/vote/induction?search=${encodeURIComponent(candidate.displayName)}`,
-      sharerUserId: user?.id ?? null,
       surface: "person_profile",
     });
   };

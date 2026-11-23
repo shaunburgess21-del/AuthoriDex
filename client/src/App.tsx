@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemedToaster } from "@/components/ThemedToaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useReferralLink } from "@/hooks/useReferralLink";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BottomNav } from "@/components/BottomNav";
 import { HelpChat } from "@/components/help-chat/HelpChat";
@@ -31,6 +32,7 @@ import { NEW_USER_GATE_ALLOWLIST as NEW_USER_GATE_ALLOWLIST_PATHS } from "@share
 import { initGoogleAnalytics, trackGooglePageView } from "@/lib/analytics";
 import { trackPageLand } from "@/lib/funnelTelemetry";
 import {
+  armShareClickFromUrl,
   captureReferralFromUrl,
   captureShareClickFromUrl,
 } from "@/lib/referral-capture";
@@ -381,19 +383,26 @@ function AnalyticsWatcher() {
 }
 
 /**
- * Captures `?ref=` and `?sharer=` from the inbound URL on mount.
+ * Captures `?ref=` and share markers from the inbound URL on mount.
  *
+ * - The click is armed first (utm / legacy sharer stripped, `ref` kept)
+ *   so sign-up capture still sees `ref` and stashes it unchanged.
  * - Referral capture is fire-and-forget at the App level so a user
  *   landing on ANY route gets the code stashed before they sign up.
  * - Share-click capture waits for AuthContext to settle so the
  *   self-share guard can read the current user id; it re-runs when
  *   the user id changes (the rare anonymous → authenticated case
  *   inside the same session).
+ * - `useReferralLink` fills the referral-code cache share URLs read
+ *   synchronously, so a later share can attach `ref` without waiting
+ *   inside the click gesture.
  */
 function ShareAttributionWatcher() {
   const { user, loading } = useAuth();
+  useReferralLink();
 
   useEffect(() => {
+    armShareClickFromUrl();
     captureReferralFromUrl();
   }, []);
 
@@ -407,7 +416,7 @@ function ShareAttributionWatcher() {
 
 /**
  * Warm HTTPS App Links. Cold start is applied in main.tsx before this
- * tree renders, so referral capture on mount still sees `?ref=` / `?sharer=`.
+ * tree renders, so referral capture on mount still sees `?ref=`.
  * A link opened while the process is alive is pushed through wouter.
  */
 function NativeContentLinkBridge() {
@@ -419,6 +428,7 @@ function NativeContentLinkBridge() {
   useEffect(() => {
     return registerNativeContentNavigator((path, mode) => {
       setLocation(path, mode === "replace" ? { replace: true } : undefined);
+      armShareClickFromUrl();
       captureReferralFromUrl();
       if (!sessionRef.current.loading) {
         void captureShareClickFromUrl(sessionRef.current.id);

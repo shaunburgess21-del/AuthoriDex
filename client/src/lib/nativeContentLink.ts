@@ -63,7 +63,7 @@ function isAllowedPath(pathname: string): boolean {
 
 /**
  * Returns the in-app path (pathname + query + hash) or ignore.
- * Query (`ref`, `sharer`, `utm_*`, rankings filters) and hash
+ * Query (`ref`, `utm_*`, rankings filters) and hash
  * (`#leaderboard`, `#comment-*`) are preserved. An old home share
  * (`/?…#leaderboard`) is rewritten to `/rankings` so it still opens the board.
  */

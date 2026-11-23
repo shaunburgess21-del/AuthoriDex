@@ -1498,7 +1498,7 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   </Button>
-                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on VoxDex`, { sharerUserId: user?.id, surface: "person_profile" })} aria-label="Share" data-testid="button-share-mobile">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={() => sharePage(`${person.name} on VoxDex`, { surface: "person_profile" })} aria-label="Share" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
@@ -1511,7 +1511,7 @@ export default function PersonDetailPage() {
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                     {isFavorited ? "Favorited" : "Favorite"}
                   </Button>
-                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on VoxDex`, { sharerUserId: user?.id, surface: "person_profile" })} data-testid="button-share">
+                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={() => sharePage(`${person.name} on VoxDex`, { surface: "person_profile" })} data-testid="button-share">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>

@@ -22,10 +22,7 @@ export interface WinSharePrediction {
   personAvatar: string | null;
 }
 
-export function winShareArgs(
-  prediction: WinSharePrediction,
-  sharerUserId: string | null,
-): ShareCardOpenArgs {
+export function winShareArgs(prediction: WinSharePrediction): ShareCardOpenArgs {
   const pnl = prediction.payout - prediction.stakeAmount;
   const direction = inferPredictionDirection(prediction.entryLabel);
   const mappedDirection: "up" | "down" | "other" =
@@ -33,7 +30,6 @@ export function winShareArgs(
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const path = prediction.marketSlug ? `/markets/${prediction.marketSlug}` : "";
   const shareUrl = appendShareAttribution(`${origin}${path || ""}`, {
-    sharerUserId,
     surface: "prediction_win",
   });
   return {
