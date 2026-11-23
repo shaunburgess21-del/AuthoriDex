@@ -23,7 +23,6 @@ import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { CrowdLine } from "@/components/vote/CrowdLine";
 import { matchupResultsVisible } from "@/lib/matchupResults";
-import { useLockedVoteCardHeight } from "@/hooks/useLockedVoteCardHeight";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
@@ -101,7 +100,6 @@ export function VersusCard({
   feedLayout?: boolean;
 }) {
   const hasVoted = userVote !== null;
-  const cardRef = useLockedVoteCardHeight(hasVoted && !feedLayout);
   const showResults = matchupResultsVisible({
     userVote,
     isActive: matchup.isActive,
@@ -174,11 +172,10 @@ export function VersusCard({
 
   return (
     <div ref={neutralNudge.cardRef} className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}>
-      <div ref={cardRef} className={feedLayout ? "h-full" : showResults ? "flex h-full min-h-0 flex-col" : undefined}>
-      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex min-h-0 flex-1 flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
+      <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 
-        <div className={`relative pt-4 ${hasVoted ? "pb-4 max-md:pb-2.5" : showResults ? "pb-4" : "pb-3"} flex flex-col min-h-0 ${showResults || feedLayout ? "flex-1" : ""}`}>
+        <div className={`relative pt-4 ${hasVoted ? "pb-4 max-md:pb-2.5 md:pb-[10px]" : showResults ? "pb-4" : "pb-3"} flex flex-col ${showResults || feedLayout ? "flex-1" : ""}`}>
           {showTypeCue ? (
             <VoteCardHeader
               className="px-4"
@@ -218,8 +215,8 @@ export function VersusCard({
             )}
           </div>
 
-          <div className={`relative ${feedLayout || hasVoted ? "flex min-h-0 flex-1 flex-col" : ""}`}>
-            <div className={`flex items-stretch gap-0 ${feedLayout || hasVoted ? "min-h-0 flex-1" : ""}`}>
+          <div className={`relative ${feedLayout ? "flex min-h-0 flex-1 flex-col" : ""}`}>
+            <div className={`flex items-stretch gap-0 ${feedLayout ? "min-h-0 flex-1" : ""}`}>
             <button
               type="button"
               onClick={(e) => {
@@ -227,7 +224,7 @@ export function VersusCard({
                 trackMatchupNeutralVote(matchup.id, "option_a");
                 onVote(matchup.id, "option_a", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${hasVoted && !feedLayout ? "min-h-0" : ""} ${
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
                 hasVoted
                   ? votedA
                     ? "border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15"
@@ -236,7 +233,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-a-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : hasVoted ? "min-h-0 flex-1" : ""}`} style={feedLayout || hasVoted ? undefined : { minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -253,7 +250,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className={`px-2 py-2 shrink-0 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedA ? "opacity-70" : ""}`}>
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedA ? "opacity-70" : ""}`}>
                 <span className={`font-semibold text-sm truncate block ${votedA ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                   {matchup.optionAText}
                 </span>
@@ -267,7 +264,7 @@ export function VersusCard({
                 trackMatchupNeutralVote(matchup.id, "option_b");
                 onVote(matchup.id, "option_b", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${hasVoted && !feedLayout ? "min-h-0" : ""} ${
+              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
                 hasVoted
                   ? votedB
                     ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
@@ -276,7 +273,7 @@ export function VersusCard({
               }`}
               data-testid={`button-vote-b-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : hasVoted ? "min-h-0 flex-1" : ""}`} style={feedLayout || hasVoted ? undefined : { minHeight: "222px" }}>
+              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -293,7 +290,7 @@ export function VersusCard({
                   />
                 )}
               </div>
-              <div className={`px-2 py-2 shrink-0 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedB ? "opacity-70" : ""}`}>
+              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedB ? "opacity-70" : ""}`}>
                 <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
                   {matchup.optionBText}
                 </span>
@@ -408,7 +405,7 @@ export function VersusCard({
           </div>
 
           {showResults ? (
-          <div className="mt-auto shrink-0 px-4 pt-3 md:pt-2">
+          <div className="mt-auto shrink-0 pt-3 px-4">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5">
@@ -478,7 +475,7 @@ export function VersusCard({
           ) : null}
 
           {hasVoted ? (
-          <div className="mt-2 min-h-7 flex shrink-0 items-center px-4 md:mt-1">
+          <div className="px-4 mt-2 min-h-7 flex items-center">
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0 flex items-center">
                   {showDiscussion ? (
@@ -529,7 +526,6 @@ export function VersusCard({
           ) : null}
         </div>
       </Card>
-      </div>
       {showDiscussion && matchup.slug ? (
         <CardCommentsFocusOverlay
           open={discussionOpen}
