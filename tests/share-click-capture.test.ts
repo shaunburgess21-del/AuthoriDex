@@ -20,6 +20,7 @@ interface FetchCall {
 const calls: FetchCall[] = [];
 const previousWindow = globalThis.window;
 const previousFetch = globalThis.fetch;
+const previousDocument = globalThis.document;
 
 function installWindow(href: string) {
   const storage = new Map<string, string>();
@@ -65,6 +66,7 @@ afterEach(() => {
   calls.length = 0;
   globalThis.fetch = previousFetch;
   Object.defineProperty(globalThis, "window", { configurable: true, value: previousWindow });
+  Object.defineProperty(globalThis, "document", { configurable: true, value: previousDocument });
 });
 
 function installFetch() {
@@ -91,6 +93,7 @@ describe("share click capture", () => {
     assert.equal(calls[0]!.body?.referralCode, "VXAB12CD");
     assert.equal(calls[0]!.body?.surface, "person_profile");
     assert.equal("sharerUserId" in (calls[0]!.body ?? {}), false);
+    assert.equal(typeof calls[0]!.body?.referrer, "string");
     assert.equal(String(calls[0]!.body?.shareUrl).includes("ref=vxab12cd"), true);
     assert.equal(getStoredReferralCode(), "VXAB12CD");
     assert.equal(new URL(location.href).searchParams.has("ref"), false);
@@ -143,6 +146,31 @@ describe("share click capture", () => {
     await land("user-1");
     assert.equal(calls.length, 0);
     assert.equal(getStoredReferralCode(), "VXAB12CD");
+  });
+
+  it("posts the landing referrer captured before share params are stripped", async () => {
+    let current = "https://t.co/abc123";
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        get referrer() {
+          return current;
+        },
+      },
+    });
+    installWindow(
+      "https://voxdex.com/person/ada?ref=vxab12cd&utm_source=voxdex&utm_medium=share&utm_campaign=person_profile",
+    );
+    installFetch();
+
+    armShareClickFromUrl();
+    current = "https://voxdex.com/person/ada";
+    captureReferralFromUrl();
+    await captureShareClickFromUrl(null);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.body?.referrer, "https://t.co/abc123");
+    assert.equal(calls[0]!.body?.referralCode, "VXAB12CD");
   });
 
   it("wires the signed-in referral code into share URLs through the hook cache", () => {

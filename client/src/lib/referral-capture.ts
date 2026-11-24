@@ -13,8 +13,9 @@
  *   2. When the landing URL is a share (`ref` plus utm, or a legacy
  *      `sharer` UUID), POST once to /api/share/track-click. New links
  *      send `{ referralCode }`. Links already in the wild still send
- *      `{ sharerUserId }`. UTM and `sharer` are stripped here; `ref`
- *      is left for step 1 to stash and strip.
+ *      `{ sharerUserId }`. Both send `referrer` (document.referrer at
+ *      landing, before the query string is cleaned). UTM and `sharer`
+ *      are stripped here; `ref` is left for step 1 to stash and strip.
  *
  * Both are best-effort — failures are logged but never block render.
  */
@@ -117,7 +118,22 @@ interface PendingShareClick {
   sharerUserId: string | null;
   surface: string;
   shareUrl: string;
+  /**
+   * document.referrer at landing, before this module strips sharer/utm.
+   * The track-click POST is same-origin, so the Referer header is the
+   * VoxDex page and would look internal. This snapshot is the page that
+   * sent the visitor. The server treats it as advisory.
+   */
+  referrer: string;
   posted: boolean;
+}
+
+const MAX_LANDING_REFERRER_LEN = 2048;
+
+/** Snapshot the inbound referrer. Empty when the browser has none. */
+function readLandingReferrer(): string {
+  if (typeof document === "undefined" || typeof document.referrer !== "string") return "";
+  return document.referrer.slice(0, MAX_LANDING_REFERRER_LEN);
 }
 
 let pendingShareClick: PendingShareClick | null = null;
@@ -173,6 +189,10 @@ export function resetShareClickCaptureForTests(): void {
  */
 export function armShareClickFromUrl(): void {
   if (typeof window === "undefined") return;
+  // Capture before history.replaceState strips sharer / utm. The
+  // referrer is the previous page, not our query string, but this
+  // runs at landing so a later navigation cannot replace it.
+  const referrer = readLandingReferrer();
   try {
     const url = new URL(window.location.href);
     const sharerRaw = url.searchParams.get("sharer");
@@ -199,6 +219,7 @@ export function armShareClickFromUrl(): void {
       sharerUserId: useLegacy ? sharerUserId : null,
       surface,
       shareUrl,
+      referrer,
       posted: false,
     };
   } catch (err) {
@@ -237,11 +258,14 @@ export async function captureShareClickFromUrl(currentUserId: string | null | un
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders },
       credentials: "include",
-      body: JSON.stringify(
-        pending.mode === "referral"
-          ? { referralCode: pending.referralCode, surface: pending.surface, shareUrl: pending.shareUrl }
-          : { sharerUserId: pending.sharerUserId, surface: pending.surface, shareUrl: pending.shareUrl },
-      ),
+      body: JSON.stringify({
+        ...(pending.mode === "referral"
+          ? { referralCode: pending.referralCode }
+          : { sharerUserId: pending.sharerUserId }),
+        surface: pending.surface,
+        shareUrl: pending.shareUrl,
+        referrer: pending.referrer,
+      }),
     });
   } catch (err) {
     console.warn("[share-click] capture failed", err);

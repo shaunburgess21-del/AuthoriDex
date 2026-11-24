@@ -171,9 +171,10 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
   },
 
   // SOCIAL — share-link attribution + referral funnel. share_click
-  // is daily-capped (same anti-spam shape as engagement actions);
-  // the two referral keys are lifetime-once (idempotency keys
-  // include the referred userId, not the date).
+  // is daily-capped (same anti-spam shape as engagement actions).
+  // referral_signup_bonus is lifetime-once. referral_completed is
+  // once per friend (ledger key `referral_${refereeId}`) and also
+  // daily-capped per referrer; friends past the cap stay queued.
   {
     key: "share_click",
     label: "Confirmed share click",
@@ -188,9 +189,9 @@ export const CREDIT_ACTIONS: readonly CreditActionConfig[] = [
     key: "referral_completed",
     label: "Successful referral",
     proposedCredits: 5000,
-    dailyCap: null,
+    dailyCap: 3,
     category: "SOCIAL",
-    notes: "Awarded to referrer when referred user completes their first meaningful action",
+    notes: "Awarded to the referrer when the referred user completes their first meaningful action. Capped per referrer per UTC day; friends past the cap stay queued and pay on a later day, once each.",
     isActive: true,
     requiresApproval: false,
   },
