@@ -5,6 +5,7 @@ import { creditActions, profiles, xpActions } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth-middleware";
 import { gamificationService } from "../services/gamification";
 import { awardStreakMilestoneBadge } from "../services/badges";
+import { sweepReferrerReferralPayouts } from "../services/credits-earn";
 import {
   STREAK_MILESTONES,
   STREAK_MILESTONE_XP,
@@ -189,6 +190,9 @@ export function registerGamificationRoutes(app: Express): void {
       // repeat calls; the state is whatever the first call of the day
       // produced.
       if (profile.lastLoginDate === today) {
+        // A same-day open retries a queued payout the first check-in
+        // of the day didn't finish. Today's cap still applies.
+        await sweepReferrerReferralPayouts(userId);
         return res.json({
           streak: profile.currentStreak,
           longestStreak: profile.longestStreak,
@@ -322,6 +326,11 @@ export function registerGamificationRoutes(app: Express): void {
 
       const loginAwarded = loginXp.success ? loginXp.xpAwarded : 0;
       const xpAwarded = loginAwarded + bonusXpAwarded;
+
+      // Referral Vox is not part of creditsAwarded (that field is the
+      // streak milestone). The sweep pays queued referral_completed
+      // rows under today's cap and does not change this response.
+      await sweepReferrerReferralPayouts(userId);
 
       return res.json({
         streak: nextStreak,

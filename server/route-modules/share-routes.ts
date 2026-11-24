@@ -1,6 +1,6 @@
-import type { Express, Request } from "express";
+import type { Express } from "express";
 import { and, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 import { db } from "../db";
 import { profiles, shareClicks, creditLedger } from "@shared/schema";
 import { gamificationService } from "../services/gamification";
@@ -8,21 +8,7 @@ import { checkAndAwardShareMasterBadge } from "../services/badges";
 import { requireAuth, requireAdmin, type AuthRequest } from "../auth-middleware";
 import { generateUniqueReferralCode } from "../utils/referral-code";
 import { trackShareClick, type ShareClickInsert } from "../services/share-click-track";
-
-function clientIp(req: Request): string {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) {
-    return xff.split(",")[0]!.trim();
-  }
-  return req.ip ?? "unknown";
-}
-
-/** IPv6-safe client key shared by rate limiter and dedup ipHash. */
-function clientIdentityKey(req: Request): string {
-  const ip = clientIp(req);
-  if (ip === "unknown") return "unknown";
-  return ipKeyGenerator(ip);
-}
+import { shareClickClientKey } from "../services/share-click-client-key";
 
 // Per-IP rate limit on the public track-click endpoint. The
 // share_click credit row is daily-capped at 3/day per sharer, but
@@ -35,7 +21,9 @@ const trackClickLimiter = rateLimit({
   limit: 60,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  keyGenerator: clientIdentityKey,
+  // Passed by reference so express-rate-limit can see `ipKeyGenerator`
+  // inside shareClickClientKey. That function reads req.ip only.
+  keyGenerator: shareClickClientKey,
 });
 
 export function registerShareRoutes(app: Express): void {
@@ -46,20 +34,23 @@ export function registerShareRoutes(app: Express): void {
   // Identity is either `referralCode` (links shared after the UUID
   // was removed from the query string) or legacy `sharerUserId`
   // (links already in circulation). Resolution happens before the
-  // unchanged referer / dedup / credit path.
+  // referrer, dedup, and credit path.
   //
   // Validation order:
-  //   1. Per-IP rate limit (60/hr) via trackClickLimiter middleware
+  //   1. Per-IP rate limit (60/hr) via trackClickLimiter, keyed on
+  //      req.ip (trust proxy), not the caller-supplied XFF hop
   //   2. Body shape + length caps on surface / shareUrl
-  //   3. Resolve referralCode or sharerUserId to a profile (silently
-  //      200 with credited=false if not — the link could legitimately
-  //      outlive the account). An authenticated caller who is that
-  //      profile is not credited.
-  //   4. Referer is external (parseable, present, not one of our
-  //      hosts). Missing / malformed / internal still inserts the
-  //      analytics row but skips the credit award.
-  //   5. Dedup against (sharerUserId, ipHash, utcDate) — same
-  //      household refreshing doesn't farm credits
+  //   3. Resolve referralCode, or legacy sharerUserId until the
+  //      sunset instant, to a profile (silently 200 with
+  //      credited=false if not). An authenticated caller who is
+  //      that profile is not credited.
+  //   4. Dedup against (sharerUserId, ipHash, utcDate)
+  //   5. Per-sharer request budget (30/hr) before insert
+  //   6. Referrer is external. The body `referrer` (document.referrer
+  //      captured at landing) wins when present; otherwise the
+  //      Referer header. That value is advisory. Missing / malformed
+  //      / internal still inserts the analytics row but skips the
+  //      credit award. The daily cap and the dedup limit the money.
   //
   // The credit award itself respects the daily cap configured on
   // the credit_actions row (default 3/day), so even a successful
@@ -74,7 +65,7 @@ export function registerShareRoutes(app: Express): void {
         {
           body: req.body ?? {},
           referer: refererHeader,
-          ipKey: clientIdentityKey(req),
+          ipKey: shareClickClientKey(req),
           callerUserId: req.userId ?? null,
         },
         {
@@ -156,7 +147,7 @@ export function registerShareRoutes(app: Express): void {
                 },
               },
             );
-            return { awarded: awarded.awarded, amount: awarded.amount };
+            return { awarded: awarded.awarded, amount: awarded.amount, reason: awarded.reason };
           },
           awardShareMaster: (userId) => checkAndAwardShareMasterBadge(userId),
         },

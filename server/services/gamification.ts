@@ -163,6 +163,18 @@ class GamificationService {
   }
 
   /**
+   * Daily cap adjustCredits will enforce for this key. DB row wins,
+   * including an explicit null (admin cleared the cap). Seed config
+   * is the fallback when the row has not been seeded yet.
+   */
+  async resolvedCreditDailyCap(actionKey: string): Promise<number | null> {
+    await this.ensureCache();
+    const resolved = this.resolveCreditAction(actionKey);
+    if (!resolved) return null;
+    return resolved.row.dailyCap ?? null;
+  }
+
+  /**
    * Award the uncapped `prediction_win` bonus once per unique winner
    * per market. Prefer this over raw `awardXp('prediction_win', …)` so
    * AMM and jackpot resolvers cannot drift back to per-bet keys.

@@ -913,13 +913,15 @@ export const shareClicks = pgTable("share_clicks", {
   shareSurface: text("share_surface").notNull(),
   shareUrl: text("share_url").notNull(),
   clickedAt: timestamp("clicked_at", { withTimezone: true }).defaultNow(),
-  // HTTP Referer of the inbound click. Internal hosts (voxdex.com,
-  // localhost) are rejected before insert — anything that lands here
-  // is by definition external.
+  // Referrer we evaluated: the client body field when it sent one,
+  // otherwise the Referer header. Advisory only — internal and missing
+  // values are stored too, and `credited` is what marks a payout.
+  // The daily cap and the (sharer, ip hash, UTC day) dedup limit money.
   externalReferrer: text("external_referrer"),
-  // SHA-256 of the X-Forwarded-For first hop. We never store the raw
-  // IP. Used in the `(sharerUserId, ipHash, utc-date)` dedup so the
-  // same household refreshing the link doesn't farm clicks.
+  // SHA-256 of Express req.ip (trust proxy = 1). Never the raw IP and
+  // never the caller-supplied first X-Forwarded-For hop. Used in the
+  // (sharerUserId, ipHash, utc-date) dedup so the same household
+  // refreshing the link doesn't farm clicks.
   ipHash: text("ip_hash"),
   credited: boolean("credited").notNull().default(false),
   // The exact idempotencyKey we passed to adjustCredits(), so the
@@ -1003,8 +1005,9 @@ export const profiles = pgTable("profiles", {
   //   doesn't cascade away the referred user.
   // firstActionAt: stamped exactly once when the user completes a
   //   "meaningful action" (vote / prediction / comment / overall
-  //   rating). Gates the referral_completed credit fire so a brand-
-  //   new account can't trigger a payout by signing up alone.
+  //   rating). Records that the action happened so signup alone
+  //   cannot pay the referrer. The payout itself can still be waiting
+  //   on the referrer's daily cap; the ledger row is what marks it paid.
   // referralCreditFiredAt: stamped on the *referrer's* row (not the
   //   referee's) when their referral_completed credit lands.
   //   Defence-in-depth alongside the credit_ledger idempotency key.

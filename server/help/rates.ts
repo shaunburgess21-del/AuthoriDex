@@ -114,7 +114,7 @@ function xpFrequency(row: HelpXpRate): string {
 
 const VOX_NOTES: Record<string, string> = {
   vote_any: "for any vote, on any vote surface",
-  referral_completed: "paid to you when someone you referred completes their first meaningful action",
+  referral_completed: "paid to you when someone you referred completes their first meaningful action. Friends past that day's limit stay queued and pay on a later day",
   referral_signup_bonus: "for a new member who signed up through a referral link, on top of the signup grant",
   share_click: "when a share link you sent gets a confirmed click",
 };
