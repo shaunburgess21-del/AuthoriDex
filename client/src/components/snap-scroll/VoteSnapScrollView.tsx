@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, createContext, type MutableRefObject, type ReactNode, type UIEvent, type CSSProperties } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate } from "framer-motion";
 import { ArrowLeft, ArrowUp, Inbox, Plus, X } from "lucide-react";
@@ -28,6 +28,12 @@ import {
   rememberSashFullHeight,
 } from "@/lib/snapSashGesture";
 import { isDiscussionShellOpen } from "@/lib/discussionShell";
+import {
+  SNAP_SHELL_HEIGHT,
+  fullSnapPageBox,
+  snapShellFrame,
+  type SnapShellFrame,
+} from "@/lib/snapPageLayout";
 
 export type SnapSectionType =
   | "matchups" | "sentiment" | "opinion"
@@ -178,8 +184,14 @@ const VERTICAL_BUFFER_MINIMAL = 2;
  * arrival unmounts a previous page. Commits wait for rest instead. */
 const WINDOW_COMMIT_IDLE_MS = 150;
 
-const SNAP_PAGE_HEIGHT = "calc(100dvh - 52px)";
 const SNAP_PAGE_PADDING = "env(safe-area-inset-bottom, 16px)";
+/**
+ * Keeps the end section's snap-start a fraction inside max-scroll when
+ * `height: 100%` rounds a half pixel short of the scrollport. WebKit drops
+ * a snap point that sits past max-scroll, which is the bug that left the
+ * last card on screen. Not itself a snap target.
+ */
+const SNAP_END_TRAILING_PX = 1;
 /** Symmetric vertical inset for minimal pages so justify-center is true-center
  * (pt-only + bottom-only safe-area previously left topGap > bottomGap). */
 const SNAP_PAGE_INSET_MINIMAL = "max(0.75rem, env(safe-area-inset-bottom, 0px))";
@@ -217,11 +229,44 @@ function snapPageStyle(isMinimal = false, hasFooter = false): CSSProperties {
         : SNAP_PAGE_INSET_MINIMAL,
     };
   }
-  return {
-    height: SNAP_PAGE_HEIGHT,
-    scrollSnapAlign: "start",
-    paddingBottom: SNAP_PAGE_PADDING,
-  };
+  // Full variant: one scrollport per page, not `100dvh - 52px`. See snapPageLayout.
+  return fullSnapPageBox("card");
+}
+
+function useSnapShellFrame(enabled: boolean): SnapShellFrame | null {
+  const [frame, setFrame] = useState<SnapShellFrame | null>(null);
+
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setFrame(null);
+      return;
+    }
+    const read = () => {
+      const vv = window.visualViewport;
+      const next = snapShellFrame({
+        innerHeight: window.innerHeight,
+        visualHeight: vv?.height ?? window.innerHeight,
+        offsetTop: vv?.offsetTop ?? 0,
+      });
+      setFrame((prev) => {
+        if (prev == null && next == null) return prev;
+        if (prev && next && prev.top === next.top && prev.height === next.height) return prev;
+        return next;
+      });
+    };
+    read();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", read);
+    vv?.addEventListener("scroll", read);
+    window.addEventListener("resize", read);
+    return () => {
+      vv?.removeEventListener("resize", read);
+      vv?.removeEventListener("scroll", read);
+      window.removeEventListener("resize", read);
+    };
+  }, [enabled]);
+
+  return frame;
 }
 
 function scheduleIdleTask(task: () => void): void {
@@ -268,6 +313,36 @@ function getMaxScrollTop(el: HTMLElement): number {
   return Math.max(0, el.scrollHeight - el.clientHeight);
 }
 
+/**
+ * Scrolls only when the end-card copy is taller than the page. A permanently
+ * scrollable box steals the vertical pan from the snap column on iOS, so a
+ * fitting card (the common case) stays overflow:hidden and the swipe that
+ * leaves the end section reaches the column.
+ */
+function EndCardScroll({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      const overflows = el.scrollHeight > el.clientHeight + 1;
+      el.style.overflowY = overflows ? "auto" : "hidden";
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="min-h-0 w-full flex-1 overflow-y-hidden overscroll-y-auto">
+      {children}
+    </div>
+  );
+}
+
 function SnapEndCard({
   category,
   sectionType,
@@ -292,14 +367,18 @@ function SnapEndCard({
 
   return (
     <div
-      className="snap-start flex flex-col items-center justify-center px-6 text-center"
+      data-testid="snap-end-card"
+      className="snap-start flex w-full flex-col"
       style={{
-        height: SNAP_PAGE_HEIGHT,
-        scrollSnapAlign: "start",
-        paddingBottom: SNAP_PAGE_PADDING,
+        ...fullSnapPageBox("end"),
         background: "linear-gradient(to bottom, hsl(var(--background)), hsl(var(--card) / 0.6))",
       }}
     >
+      <EndCardScroll>
+      <div
+        className="flex min-h-full w-full flex-col items-center justify-center px-6 text-center"
+        style={{ paddingBottom: `max(1.5rem, ${SNAP_PAGE_PADDING})` }}
+      >
       <div className="flex flex-col items-center gap-6 max-w-sm w-full">
         {/* Icon */}
         <div className="rounded-full bg-muted/50 p-4">
@@ -372,6 +451,8 @@ function SnapEndCard({
           </button>
         </div>
       </div>
+      </div>
+      </EndCardScroll>
     </div>
   );
 }
@@ -406,6 +487,7 @@ export function VoteSnapScrollView({
   renderPageFooter,
 }: VoteSnapScrollViewProps) {
   const isMinimal = variant === "minimal";
+  const shellFrame = useSnapShellFrame(open && !isMinimal);
   const [, setLocation] = useLocation();
   const commentScrollRef = useRef<HTMLDivElement | null>(null);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -1866,7 +1948,11 @@ export function VoteSnapScrollView({
   if (isMinimal) qvBump("renders");
 
   // ── Render ────────────────────────────────────────────────────────────
-  return (
+  // Portaled so the vote page's overflow-x-clip cannot clip the shell, and
+  // so the shell stacks above the mobile tab bar (z-50) instead of scrolling
+  // under it. Minimal (Quick Vote) keeps inset-0; its pages are already 100%
+  // of that box. The full variant is the visual viewport — see snapShellFrame.
+  const shell = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -1874,9 +1960,19 @@ export function VoteSnapScrollView({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className={`fixed inset-0 z-[60] flex flex-col ${
-            isMinimal ? "bg-black/40 backdrop-blur-md" : "bg-background"
+          data-testid="snap-scroll-shell"
+          className={`fixed z-[60] flex flex-col ${
+            isMinimal ? "inset-0 bg-black/40 backdrop-blur-md" : "inset-x-0 bg-background"
           }`}
+          style={
+            isMinimal
+              ? undefined
+              : {
+                  top: shellFrame?.top ?? 0,
+                  height: shellFrame ? `${shellFrame.height}px` : SNAP_SHELL_HEIGHT,
+                  maxHeight: shellFrame ? `${shellFrame.height}px` : SNAP_SHELL_HEIGHT,
+                }
+          }
         >
           {/* Header */}
           {isMinimal ? (
@@ -2116,18 +2212,24 @@ export function VoteSnapScrollView({
                             });
                           })()}
                           {!isMinimal && (
-                            <SnapEndCard
-                              category={cat}
-                              sectionType={sectionType}
-                              categories={categories}
-                              onSelectCategory={handleCategorySelect}
-                              onSuggest={onSuggest}
-                              onBackToTop={() => {
-                                const el = columnScrollRefs.current[cat];
-                                if (el) el.scrollTo({ top: 0, behavior: "smooth" });
-                              }}
-                              onClose={onClose}
-                            />
+                            <>
+                              <SnapEndCard
+                                category={cat}
+                                sectionType={sectionType}
+                                categories={categories}
+                                onSelectCategory={handleCategorySelect}
+                                onSuggest={onSuggest}
+                                onBackToTop={() => {
+                                  const el = columnScrollRefs.current[cat];
+                                  if (el) el.scrollTo({ top: 0, behavior: "smooth" });
+                                }}
+                                onClose={onClose}
+                              />
+                              <div
+                                aria-hidden="true"
+                                style={{ height: SNAP_END_TRAILING_PX, scrollSnapAlign: "none" }}
+                              />
+                            </>
                           )}
                         </div>
                       )}
@@ -2141,4 +2243,7 @@ export function VoteSnapScrollView({
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === "undefined") return shell;
+  return createPortal(shell, document.body);
 }
