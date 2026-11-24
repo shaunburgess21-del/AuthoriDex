@@ -1,10 +1,20 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Flame } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserStats } from "@/hooks/useGamification";
 import { readStoredAuthUserId } from "@/lib/authSession";
 import { isFirstVisitSession } from "@/lib/firstVisit";
 import {
@@ -35,6 +45,15 @@ import {
   type DailyGoalCopy,
 } from "@/lib/dailyVoteGoal";
 import { queryClient } from "@/lib/queryClient";
+import {
+  goalExplainerCopy,
+  reduceStripExplainer,
+  streakExplainerCopy,
+  STRIP_XP_QUERY_KEY,
+  xpExplainerCopy,
+  type StripExplainerCopy,
+  type StripExplainerId,
+} from "@/lib/stripExplainers";
 import { newlyResolvedRevealRows, revealRowsFromPredictionsResponse } from "@/lib/resolvedReveal";
 import { ResolvedPredictionsSheet } from "@/components/vote/ResolvedPredictionsSheet";
 import { DailyGoalMark } from "@/components/vote/DailyGoalMark";
@@ -65,9 +84,28 @@ const STREAK_REMINDER_BADGE_CLASS =
 const RESOLVED_CHIP_CLASS =
   "shrink-0 cursor-pointer px-1.5 py-0 border-cyan-500/50 bg-cyan-500/25 text-[10px] text-cyan-600 hover:bg-cyan-500/30 dark:border-cyan-400/40 dark:bg-cyan-500/20 dark:text-cyan-400";
 
-const ROW_GAP_CLASS = "gap-0.5 sm:gap-2";
+/** 10px — inside the 8–12px gap the three segments need to read apart. */
+const ROW_GAP_CLASS = "gap-2.5";
 
-type GoalFit = "full" | "mid" | "tight" | "tight-xp";
+const PILL_CLASS =
+  "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2 font-inherit leading-none";
+
+const VALUE_PILL_CLASS =
+  "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-border/80 bg-muted/40 px-2.5 font-inherit leading-none text-foreground";
+
+const EXPLAINER_BUTTON_CLASS =
+  "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
+/**
+ * Under the quick-vote stack (z-55) and the bottom nav (z-50), above the
+ * page. collisionPadding keeps the popover out of the FAB zone so it
+ * neither covers those controls nor sits underneath them.
+ */
+const EXPLAINER_POPOVER_CLASS = "z-[45] w-[min(18rem,calc(100vw-2rem))] p-3 text-left";
+
+const EXPLAINER_COLLISION_PADDING = { top: 80, right: 16, bottom: 200, left: 16 };
+
+type GoalFit = "full" | "mid" | "tight";
 
 export interface ReturningUserStripLayoutProps {
   streakLabel: string;
@@ -80,12 +118,80 @@ export interface ReturningUserStripLayoutProps {
   resolvedCount: number;
   onResolvedClick?: () => void;
   revealed?: boolean;
+  streakCopy: StripExplainerCopy;
+  xpCopy: StripExplainerCopy;
+  goalCopy: StripExplainerCopy;
 }
 
 function goalVisibleLabel(goal: DailyGoalCopy, fit: GoalFit): string {
   if (fit === "full") return goal.full;
   if (fit === "mid") return goal.mid;
   return goal.tight;
+}
+
+function ExplainerControl({
+  id,
+  openId,
+  onOpenChange,
+  onDismiss,
+  copy,
+  className,
+  testId,
+  interactive,
+  children,
+  ...rest
+}: {
+  id: StripExplainerId;
+  openId: StripExplainerId | null;
+  onOpenChange: (id: StripExplainerId, next: boolean) => void;
+  onDismiss: () => void;
+  copy: StripExplainerCopy;
+  className: string;
+  testId?: string;
+  interactive: boolean;
+  children: ReactNode;
+} & HTMLAttributes<HTMLElement>) {
+  if (!interactive) {
+    return (
+      <span className={className} {...rest}>
+        {children}
+      </span>
+    );
+  }
+  const open = openId === id;
+  const contentId = `vote-return-strip-explainer-${id}`;
+  return (
+    <Popover open={open} onOpenChange={(next) => onOpenChange(id, next)}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          {...rest}
+          data-testid={testId}
+          aria-expanded={open}
+          aria-controls={contentId}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onDismiss();
+          }}
+          className={cn(className, EXPLAINER_BUTTON_CLASS)}
+        >
+          {children}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        id={contentId}
+        data-testid={contentId}
+        side="bottom"
+        align="start"
+        collisionPadding={EXPLAINER_COLLISION_PADDING}
+        onEscapeKeyDown={onDismiss}
+        className={EXPLAINER_POPOVER_CLASS}
+      >
+        <p className="text-sm font-semibold leading-snug text-foreground">{copy.title}</p>
+        <p className="mt-1 text-sm font-medium leading-snug text-foreground">{copy.value}</p>
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">{copy.body}</p>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function StripPieces({
@@ -97,37 +203,53 @@ function StripPieces({
   goalCount,
   resolvedCount,
   onResolvedClick,
-  truncateXp,
   fit,
   interactive,
-}: ReturningUserStripLayoutProps & { truncateXp: boolean; fit: GoalFit; interactive: boolean }) {
+  openId,
+  onOpenChange,
+  onDismiss,
+  streakCopy,
+  xpCopy,
+  goalCopy,
+}: ReturningUserStripLayoutProps & {
+  fit: GoalFit;
+  interactive: boolean;
+  openId: StripExplainerId | null;
+  onOpenChange: (id: StripExplainerId, next: boolean) => void;
+  onDismiss: () => void;
+}) {
   const showChip = resolvedCount > 0;
   const goalLabel = goal ? goalVisibleLabel(goal, fit) : "—";
   const goalAria = goal?.ariaLabel ?? DAILY_GOAL_UNAVAILABLE_LABEL;
+  const control = {
+    openId,
+    onOpenChange,
+    onDismiss,
+    interactive,
+  };
   return (
     <>
-      <Badge
-        variant="outline"
-        className={reminder ? STREAK_REMINDER_BADGE_CLASS : STREAK_BADGE_CLASS}
-        data-testid={interactive ? "vote-return-strip-streak" : undefined}
+      <ExplainerControl
+        {...control}
+        id="streak"
+        copy={streakCopy}
+        testId={interactive ? "vote-return-strip-streak" : undefined}
         data-streak-reminder={reminder ? "amber" : "off"}
+        className={cn(PILL_CLASS, reminder ? STREAK_REMINDER_BADGE_CLASS : STREAK_BADGE_CLASS, "px-2")}
       >
-        <Flame className="mr-1 h-3 w-3" aria-hidden />
+        <Flame className="h-3 w-3" aria-hidden />
         <span className="whitespace-nowrap">{streakLabel}</span>
-      </Badge>
-      <span aria-hidden className="h-4 w-px shrink-0 bg-border" />
-      <div
-        className={cn(truncateXp ? "min-w-0 flex-1" : "min-w-max shrink-0")}
-        data-testid={interactive ? "vote-return-strip-xp" : undefined}
+      </ExplainerControl>
+      <ExplainerControl
+        {...control}
+        id="xp"
+        copy={xpCopy}
+        testId={interactive ? "vote-return-strip-xp" : undefined}
+        className={cn(VALUE_PILL_CLASS, "flex-col items-stretch justify-center")}
       >
-        <p
-          className={cn(
-            "whitespace-nowrap text-[10px] font-medium leading-none tracking-tighter text-foreground sm:text-xs sm:tracking-normal",
-            truncateXp && "truncate",
-          )}
-        >
+        <span className="whitespace-nowrap text-[10px] font-medium leading-none tracking-tighter sm:text-xs sm:tracking-normal">
           {xpLabel}
-        </p>
+        </span>
         <div
           className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-muted/50"
           role={interactive ? "progressbar" : undefined}
@@ -142,11 +264,15 @@ function StripPieces({
             style={{ width: `${xpProgressPct}%` }}
           />
         </div>
-      </div>
+      </ExplainerControl>
       {/* Item 47: today's goal. The slot stays in this fixed row. */}
-      <div
-        data-testid={interactive ? "vote-return-strip-goal-slot" : undefined}
-        className={cn("flex items-center gap-1", interactive && !truncateXp ? "flex-1" : "shrink-0")}
+      <ExplainerControl
+        {...control}
+        id="goal"
+        copy={goalCopy}
+        testId={interactive ? "vote-return-strip-goal-slot" : undefined}
+        aria-label={goalAria}
+        className={VALUE_PILL_CLASS}
       >
         <DailyGoalMark
           count={goal?.done ? DAILY_VOTE_GOAL : goalCount}
@@ -158,7 +284,7 @@ function StripPieces({
           data-testid={interactive ? "vote-return-strip-goal" : undefined}
           data-goal-state={goal == null ? "unavailable" : goal.done ? "done" : "progress"}
           aria-hidden
-          className="whitespace-nowrap text-[10px] font-medium leading-none tracking-tight text-foreground sm:text-xs sm:tracking-normal"
+          className="whitespace-nowrap text-[10px] font-medium leading-none tracking-tight sm:text-xs sm:tracking-normal"
         >
           {goalLabel}
         </span>
@@ -167,8 +293,8 @@ function StripPieces({
             {goalAria}
           </span>
         ) : null}
-      </div>
-      <div data-testid={interactive ? "vote-return-strip-resolved-slot" : undefined} className="shrink-0">
+      </ExplainerControl>
+      <div data-testid={interactive ? "vote-return-strip-resolved-slot" : undefined} className="ml-auto shrink-0">
         {showChip ? (
           interactive ? (
             <button
@@ -197,10 +323,11 @@ function StripPieces({
 }
 
 /**
- * Fixed 44px row. The goal uses the longest copy that fits on one line
- * ("2 of 5 votes today", then "2 of 5", then "2/5"). The resolved chip
- * stays at the trailing edge. XP ellipsizes only when even "2/5" cannot
- * share the row with the streak chip and the resolved chip.
+ * Fixed 44px row. The three segments are equal-height pills with a 10px
+ * gap. The goal uses the longest copy that fits ("2 of 5 votes today",
+ * then "2 of 5", then "2/5"). Anything still wider than the card scrolls
+ * instead of truncating. The resolved chip stays at the trailing edge
+ * when there is room.
  */
 export function ReturningUserStripLayout({
   streakLabel,
@@ -212,12 +339,21 @@ export function ReturningUserStripLayout({
   resolvedCount,
   onResolvedClick,
   revealed = true,
+  streakCopy,
+  xpCopy,
+  goalCopy,
 }: ReturningUserStripLayoutProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const fullRef = useRef<HTMLDivElement>(null);
   const midRef = useRef<HTMLDivElement>(null);
-  const tightRef = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState<GoalFit>("full");
+  const [openId, setOpenId] = useState<StripExplainerId | null>(null);
+  const onOpenChange = (id: StripExplainerId, next: boolean) => {
+    setOpenId((current) => reduceStripExplainer(current, next ? { type: "open", id } : { type: "close", id }));
+  };
+  const onDismiss = () => {
+    setOpenId((current) => reduceStripExplainer(current, { type: "dismiss" }));
+  };
   const pieceProps = {
     streakLabel,
     reminder,
@@ -227,20 +363,25 @@ export function ReturningUserStripLayout({
     goalCount,
     resolvedCount,
     onResolvedClick,
+    streakCopy,
+    xpCopy,
+    goalCopy,
+    openId,
+    onOpenChange,
+    onDismiss,
   };
 
   useLayoutEffect(() => {
     const row = rowRef.current;
     const full = fullRef.current;
     const mid = midRef.current;
-    const tight = tightRef.current;
-    if (!row || !full || !mid || !tight) return;
+    if (!row || !full || !mid) return;
     const measure = () => {
       const style = window.getComputedStyle(row);
       const available =
         row.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
       const fits = (el: HTMLElement) => el.scrollWidth <= available + 1;
-      const next: GoalFit = fits(full) ? "full" : fits(mid) ? "mid" : fits(tight) ? "tight" : "tight-xp";
+      const next: GoalFit = fits(full) ? "full" : fits(mid) ? "mid" : "tight";
       setFit((current) => (current === next ? current : next));
     };
     measure();
@@ -249,18 +390,23 @@ export function ReturningUserStripLayout({
     return () => observer.disconnect();
   }, [streakLabel, reminder, xpLabel, goal, goalCount, resolvedCount]);
 
+  useEffect(() => {
+    const row = rowRef.current;
+    if (row) row.inert = !revealed;
+  }, [revealed]);
+
   return (
     <div className="relative h-11">
       <div
         ref={rowRef}
         className={cn(
-          "flex h-11 w-full min-w-0 items-center px-1 transition-opacity duration-300 sm:px-3",
+          "flex h-11 w-full min-w-0 flex-nowrap items-center overflow-x-auto overscroll-x-contain px-1 transition-opacity duration-300 [scrollbar-width:none] sm:px-3 [&::-webkit-scrollbar]:hidden",
           ROW_GAP_CLASS,
           revealed ? "opacity-100" : "opacity-0",
         )}
         aria-hidden={!revealed}
       >
-        <StripPieces {...pieceProps} fit={fit} truncateXp={fit === "tight-xp"} interactive />
+        <StripPieces {...pieceProps} fit={fit} interactive />
       </div>
       {/* Width probes only. inert plus aria-hidden keep the three copy
           lengths out of the accessibility tree and out of test queries
@@ -274,13 +420,10 @@ export function ReturningUserStripLayout({
         data-strip-measure=""
       >
         <div ref={fullRef} className={cn("flex w-max items-center", ROW_GAP_CLASS)}>
-          <StripPieces {...pieceProps} fit="full" truncateXp={false} interactive={false} />
+          <StripPieces {...pieceProps} fit="full" interactive={false} />
         </div>
         <div ref={midRef} className={cn("flex w-max items-center", ROW_GAP_CLASS)}>
-          <StripPieces {...pieceProps} fit="mid" truncateXp={false} interactive={false} />
-        </div>
-        <div ref={tightRef} className={cn("flex w-max items-center", ROW_GAP_CLASS)}>
-          <StripPieces {...pieceProps} fit="tight" truncateXp={false} interactive={false} />
+          <StripPieces {...pieceProps} fit="mid" interactive={false} />
         </div>
       </div>
     </div>
@@ -324,6 +467,8 @@ export function ReturningUserStrip() {
     else forgetReturningUser(store);
   }, [loading, user, profile]);
 
+  const stats = useUserStats(shown && Boolean(user));
+
   const predictions = useQuery({
     queryKey: ["/api/me/predictions"],
     enabled: shown && Boolean(user),
@@ -337,6 +482,10 @@ export function ReturningUserStrip() {
   useEffect(() => {
     if (!shown || !user) return;
     return subscribeDailyVoteGoal(() => {
+      // The goal count moves optimistically. XP is a server total, so the
+      // same successful vote refetches /api/gamification/stats instead of
+      // guessing the award.
+      void queryClient.invalidateQueries({ queryKey: STRIP_XP_QUERY_KEY });
       void queryClient.cancelQueries({ queryKey: ME_VOTES_QUERY_KEY, exact: true }).then(() => {
         queryClient.setQueryData(ME_VOTES_QUERY_KEY, (current) => {
           if (current == null) return current;
@@ -448,9 +597,13 @@ export function ReturningUserStrip() {
 
   if (!shown) return null;
 
-  const progress = xpRankProgress(profile?.xpPoints ?? 0);
+  const xpPoints = stats.data?.xpPoints ?? profile?.xpPoints ?? 0;
+  const progress = xpRankProgress(xpPoints);
   const xpLabel = xpRankProgressLabel(progress);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const streakCopy = streakExplainerCopy(profile?.currentStreak ?? 0, now, timeZone);
+  const xpCopy = xpExplainerCopy(xpPoints);
+  const goalCopy = goalExplainerCopy(votesToday);
   const reminder =
     votesToday != null &&
     streakReminderActive({
@@ -500,13 +653,16 @@ export function ReturningUserStrip() {
               setRevealOpen(true);
             }}
             revealed={revealed}
+            streakCopy={streakCopy}
+            xpCopy={xpCopy}
+            goalCopy={goalCopy}
           />
         ) : (
           <div className="h-11" />
         )}
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 flex items-center gap-0.5 px-1 transition-opacity duration-300 sm:gap-2 sm:px-3",
+            "pointer-events-none absolute inset-0 flex items-center gap-2.5 px-1 transition-opacity duration-300 sm:px-3",
             revealed ? "opacity-0" : "opacity-100",
           )}
           aria-hidden
