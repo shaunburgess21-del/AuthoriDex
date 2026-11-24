@@ -267,3 +267,86 @@ export function firstVisibleUnvotedCard(root: ParentNode): HTMLElement | null {
 export function scrollTargetIntoView(element: HTMLElement, reduceMotion: boolean): void {
   element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
+
+export interface QuickVoteEntryNudgeInput {
+  surface: "home" | "vote";
+  checklistPhase: WelcomePhase;
+  deviceDismissed: boolean;
+  userDismissed: boolean;
+  persistedComplete: boolean;
+}
+
+const EMPTY_WELCOME_STORAGE: Pick<WelcomeStorage, "getItem"> = {
+  getItem: () => null,
+};
+
+function readBrowserStorage(): Pick<WelcomeStorage, "getItem"> | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Checklist flags for the floating "New here?" pill. A missing store reads
+ * as not dismissed, which still leaves the pill off on the vote surface.
+ */
+export function quickVoteEntryNudgeInput(
+  surface: "home" | "vote",
+  userId: string | null,
+  storage?: Pick<WelcomeStorage, "getItem"> | null,
+): QuickVoteEntryNudgeInput {
+  const store =
+    storage === undefined ? (readBrowserStorage() ?? EMPTY_WELCOME_STORAGE) : (storage ?? EMPTY_WELCOME_STORAGE);
+  const deviceDismissed = readWelcomeDeviceDismissed(store);
+  const userDismissed = userId ? readWelcomeUserDismissed(store, userId) : false;
+  const persistedComplete = userId ? readWelcomeComplete(store, userId) : false;
+  const persistedOpen = userId ? readWelcomeOpen(store, userId) : false;
+  return {
+    surface,
+    deviceDismissed,
+    userDismissed,
+    persistedComplete,
+    checklistPhase: welcomeChecklistPhase({
+      audienceKnown: true,
+      signedIn: userId != null,
+      deviceDismissed,
+      userDismissed,
+      persistedComplete,
+      persistedOpen,
+      profileProvesPartial: false,
+      hasVote: null,
+      hasPrediction: null,
+      hasFavorite: null,
+      sawIncomplete: false,
+    }),
+  };
+}
+
+/**
+ * The floating "New here? Cast your first vote" pill.
+ *
+ * Rankings (surface "home") keeps it. The vote surface retires it: the
+ * checklist is the only onboarding surface there, and the pill repeats
+ * "vote on a card". Hiding it only while the card is open would show it
+ * again after a dismiss, so dismissed and completed visitors stay quiet
+ * too. Quick Vote itself stays on its own control.
+ */
+export function isQuickVoteEntryNudgeAllowed(input: QuickVoteEntryNudgeInput): boolean {
+  if (input.surface !== "vote") return true;
+
+  // Open card, the brief done line, a device or account dismiss, and a
+  // completed checklist all keep the pill hidden. Closing the card is not
+  // a cue to show it. No other vote-page state turns it back on.
+  const suppressed =
+    input.checklistPhase === "checklist" ||
+    input.checklistPhase === "all-set" ||
+    input.checklistPhase === "hidden" ||
+    input.deviceDismissed ||
+    input.userDismissed ||
+    input.persistedComplete;
+
+  return !suppressed;
+}

@@ -2,6 +2,9 @@
  * Quick Vote entry-nudge eligibility. Shared between the QuickVoteHost
  * (which triggers/consumes the nudge) and HomePage (which suppresses the
  * WelcomeModal auto-toast when this higher-priority interrupt is eligible).
+ *
+ * Whether the pill may appear on a given surface lives in welcomeChecklist.ts
+ * (`isQuickVoteEntryNudgeAllowed`). Vote retires it; Rankings keeps it.
  */
 import { canShowInterrupt } from "@/lib/interruptArbiter";
 import { getLifetimeVoteCount, getSessionVoteCount } from "@/lib/funnelTelemetry";
