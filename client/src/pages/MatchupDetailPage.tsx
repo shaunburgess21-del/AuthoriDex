@@ -5,7 +5,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -35,7 +35,7 @@ import { CompactResultRows, type CompactResultRowData } from "@/components/vote/
 import { CrowdLine } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { matchupOgImagePath } from "@shared/matchup-og";
+import { matchupDocumentDescription, matchupDocumentTitle, matchupOgImagePath } from "@shared/matchup-og";
 import {
   ArrowLeft,
   Clock,
@@ -279,9 +279,6 @@ export default function MatchupDetailPage() {
     removeVoteMutation.mutate(matchupId);
   };
 
-  const matchupPrompt = matchup
-    ? (matchup.promptText?.trim() || matchup.title)
-    : null;
   const matchupVsDescription = matchup
     ? `${matchup.optionAText} vs ${matchup.optionBText}`
     : null;
@@ -290,17 +287,35 @@ export default function MatchupDetailPage() {
       ? `${window.location.origin}/vote/matchups/${encodeURIComponent(matchup.slug)}`
       : undefined;
 
+  const shareTitle = matchup ? matchupDocumentTitle(matchup) : "Matchup | VoxDex";
+
   const handleShare = () => {
-    sharePage(matchupPrompt ? `${matchupPrompt} on VoxDex` : "VoxDex", {
+    if (matchup?.slug) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: matchupOgImagePath(matchup.slug),
+        surface: "matchup",
+        url: canonicalShareUrl,
+      });
+      return;
+    }
+    void sharePage(shareTitle, {
       surface: "matchup",
       url: canonicalShareUrl,
     });
   };
 
-  // Dynamic <title> + OG/Twitter meta (mirrors server /api/og/matchups/:slug).
+  // Dynamic <title> + OG/Twitter meta. The first HTML response is filled
+  // by middleware from /api/og/matchups/:slug; this keeps the tab in sync.
   useDocumentMeta({
-    title: matchupPrompt ?? "Matchup",
-    description: matchupVsDescription,
+    title: shareTitle,
+    description: matchup
+      ? matchupDocumentDescription(matchup, {
+          optionAPercent: matchup.optionAPercent,
+          optionBPercent: matchup.optionBPercent,
+          totalVotes: matchup.totalVotes,
+        })
+      : matchupVsDescription,
     image: matchup?.slug ? matchupOgImagePath(matchup.slug) : null,
     url: canonicalShareUrl ?? null,
   });

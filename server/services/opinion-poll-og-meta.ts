@@ -1,7 +1,14 @@
+import { opinionDocumentDescription } from "@shared/opinion-poll-og";
 import type { OpinionPollOgContext } from "./opinion-poll-og-context";
 
-/** og:description — summary/description stay out of the JPEG. */
+/** og:description — summary stays the lead; the leader percent follows when votes exist. */
 export function opinionPollOgDescription(ctx: OpinionPollOgContext): string {
-  const text = (ctx.summary || ctx.description || "").trim();
-  return text || "Cast your vote on VoxDex.";
+  const leader = ctx.totalVotes > 0 ? ctx.displayOptions[0] : undefined;
+  return opinionDocumentDescription({
+    summary: ctx.summary,
+    description: ctx.description,
+    leaderName: leader?.name,
+    leaderPercent: leader?.percent,
+    totalVotes: ctx.totalVotes,
+  });
 }

@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { encodeOgPng } from "./og-png";
 import type { PersonOgContext } from "./person-og-context";
 import { measureOutlinedTextWidth, textPath } from "./og-svg-text-paths";
 
@@ -498,7 +499,7 @@ async function encodeJpegUnderBudget(composite: sharp.Sharp): Promise<Buffer> {
 
 export async function renderPersonOgImage(ctx: PersonOgContext): Promise<Buffer> {
   const composite = await compositePersonBase(ctx);
-  return composite.png().toBuffer();
+  return encodeOgPng(composite);
 }
 
 export async function renderPersonOgImageJpeg(

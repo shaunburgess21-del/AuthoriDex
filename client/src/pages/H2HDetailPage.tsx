@@ -579,12 +579,24 @@ export default function H2HDetailPage() {
   const h2hShareTitle = hydrated
     ? `${hydrated.person1.name} vs ${hydrated.person2.name}`
     : "Head-to-Head";
+  const h2hLive = hydrated?.ammState != null;
+  const h2hPrices = h2hLive
+    ? `&prices=${encodeURIComponent(
+        `${hydrated.person1.name.replace(/[,:]/g, " ")}:${Math.round(hydrated.person1Percent)}:other,${hydrated.person2.name.replace(/[,:]/g, " ")}:${Math.round(100 - hydrated.person1Percent)}:other`,
+      )}`
+    : "";
+  const h2hSubtitle = h2hLive
+    ? `${hydrated.person1.name} ${Math.round(hydrated.person1Percent)}% · ${hydrated.person2.name} ${Math.round(100 - hydrated.person1Percent)}%`
+    : "Who'll gain more this week?";
+  const h2hImage = `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent(h2hSubtitle)}&badge=${encodeURIComponent("Head to head")}${h2hPrices}`;
   useDocumentMeta({
-    title: `${h2hShareTitle} • VoxDex`,
-    description: hydrated
-      ? `Who'll gain more Trend Score points this week — ${hydrated.person1.name} or ${hydrated.person2.name}? Predict on VoxDex.`
-      : "Head-to-head Trend Score battle. Predict on VoxDex.",
-    image: `/api/og/image/market.png?title=${encodeURIComponent(h2hShareTitle)}&subtitle=${encodeURIComponent("Who'll gain more this week?")}&badge=${encodeURIComponent("Head to head")}`,
+    title: `${h2hShareTitle} | VoxDex`,
+    description: h2hLive
+      ? `${hydrated.person1Percent >= 50 ? hydrated.person1.name : hydrated.person2.name} leading at ${Math.max(hydrated.person1Percent, 100 - hydrated.person1Percent)}% · Live head-to-head`
+      : hydrated
+        ? `Who'll gain more Trend Score points this week — ${hydrated.person1.name} or ${hydrated.person2.name}? Predict on VoxDex.`
+        : "Head-to-head Trend Score battle. Predict on VoxDex.",
+    image: h2hImage,
   });
 
   if (isLoading && !market) {
@@ -638,7 +650,7 @@ export default function H2HDetailPage() {
             {pad(timeRemaining.minutes)}m
           </Badge>
           <MuteMarketToggle marketId={marketId} />
-          <ShareIconButton title={`${hydrated.title} on VoxDex`} />
+          <ShareIconButton title={`${h2hShareTitle} | VoxDex`} imagePath={h2hImage} />
           <HeaderUserActions />
         </div>
       </header>

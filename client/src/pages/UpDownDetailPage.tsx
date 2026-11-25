@@ -577,20 +577,26 @@ export default function UpDownDetailPage() {
   const { timeRemaining } = marketState;
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  /* Dynamic meta — keeps the browser tab in sync and gives JS-running
-   * crawlers (Google, Bing) a real preview, while non-JS crawlers
-   * (Slack, iMessage) hit the server-side OG endpoint via the Vercel
-   * UA-matched rewrite. */
+  const upDownCardTitle = hydrated ? `${hydrated.personName}: Up or Down?` : "Up or Down?";
+  const upDownLive = hydrated?.ammState != null && Number.isFinite(hydrated.upPercent);
+  const upDownPrices = upDownLive
+    ? `&prices=${encodeURIComponent(`Up:${Math.round(hydrated.upPercent)}:up,Down:${Math.round(100 - hydrated.upPercent)}:down`)}`
+    : "";
+  const upDownImage = `/api/og/image/market.png?title=${encodeURIComponent(upDownCardTitle)}&subtitle=${encodeURIComponent(
+    upDownLive
+      ? `UP ${Math.round(hydrated.upPercent)}% · DOWN ${Math.round(100 - hydrated.upPercent)}%`
+      : "Up or down this week?",
+  )}&badge=${encodeURIComponent("Up / Down")}${upDownPrices}`;
+  /* Dynamic meta. Middleware writes the Railway payload into the first
+   * HTML response; this keeps the tab aligned after hydration. */
   useDocumentMeta({
-    title: hydrated
-      ? `${hydrated.personName}: Up or Down? • VoxDex`
-      : "Up / Down • VoxDex",
-    description: hydrated
-      ? `Will ${hydrated.personName}'s Trend Score close above or below baseline this week? Predict on VoxDex.`
-      : "Predict whether a person's weekly Trend Score closes above or below baseline.",
-    image: `/api/og/image/market.png?title=${encodeURIComponent(
-      hydrated ? `${hydrated.personName}: Up or Down?` : "Up / Down",
-    )}&subtitle=${encodeURIComponent("Up or down this week?")}&badge=${encodeURIComponent("Up / Down")}`,
+    title: `${upDownCardTitle} | VoxDex`,
+    description: upDownLive
+      ? `UP ${Math.round(hydrated.upPercent)}% · DOWN ${Math.round(100 - hydrated.upPercent)}% · Live market on ${hydrated.personName}`
+      : hydrated
+        ? `Will ${hydrated.personName}'s Trend Score close above or below baseline this week? Predict on VoxDex.`
+        : "Predict whether a person's weekly Trend Score closes above or below baseline.",
+    image: upDownImage,
   });
 
   if (isLoading && !market) {
@@ -659,7 +665,7 @@ export default function UpDownDetailPage() {
             {pad(timeRemaining.minutes)}m
           </Badge>
           <MuteMarketToggle marketId={marketId} />
-          <ShareIconButton title={`${hydrated.personName}: Up or Down? on VoxDex`} />
+          <ShareIconButton title={`${hydrated.personName}: Up or Down? | VoxDex`} imagePath={upDownImage} />
           <HeaderUserActions />
         </div>
       </header>

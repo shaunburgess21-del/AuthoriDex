@@ -16,16 +16,13 @@ import {
   profiles,
   ammPriceSnapshots,
 } from "@shared/schema";
-import { matchupOgImagePath } from "@shared/matchup-og";
+import { matchupDocumentDescription, matchupDocumentTitle, matchupOgImagePath } from "@shared/matchup-og";
+import { buildOgJsonLd, ogJsonLdScript } from "@shared/og-document";
 import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { personOgImagePath } from "@shared/person-og";
 import { marketOgImagePath } from "@shared/market-og";
-import {
-  loadMatchupOgContext,
-  matchupOgDescription,
-  matchupOgPromptTitle,
-} from "./matchup-og-context";
+import { loadMatchupOgContext } from "./matchup-og-context";
 import {
   loadSentimentPollOgContext,
   sentimentPollOgDescription,
@@ -142,6 +139,7 @@ export function renderOgHtml(p: OgPagePayload): string {
     <meta name="twitter:site" content="${site}" />
     <meta name="twitter:title" content="${t}" />
     <meta name="twitter:description" content="${d}" />
+    ${ogJsonLdScript({ ...p, jsonLd: buildOgJsonLd(p) })}
 
     <meta http-equiv="refresh" content="0; url=${url}" />
   </head>
@@ -518,7 +516,7 @@ export async function resolveCommunityMarketOg(slug: string): Promise<OgPreviewR
   const description = market.teaser ?? market.summary ?? DEFAULT_DESCRIPTION;
   return withPreviewMeta(
     {
-      title: `${market.title} • VoxDex`,
+      title: `${market.title} | VoxDex`,
       description,
       canonicalUrl,
       // Slug-based composite render: the market's actual card image with
@@ -529,7 +527,7 @@ export async function resolveCommunityMarketOg(slug: string): Promise<OgPreviewR
       // gradient with tofu boxes. New URL shape also busts chat apps'
       // cached copies of those blank previews.
       imageUrl: `${SITE_URL}${marketOgImagePath(slug)}`,
-      imageType: "image/jpeg",
+      imageType: "image/png",
     },
     "community_market",
     market.title,
@@ -606,10 +604,11 @@ export async function resolveNativePredictOg(
 
   return withPreviewMeta(
     {
-      title: `${cardTitle} • VoxDex`,
+      title: `${cardTitle} | VoxDex`,
       description: subtitle,
       canonicalUrl,
       imageUrl: marketImageUrl(cardTitle, subtitle, badge, chips),
+      imageType: "image/png",
     },
     "native_predict",
     cardTitle,
@@ -638,11 +637,11 @@ export async function resolveSentimentPollOg(slug: string): Promise<OgPreviewRes
   // Shared links unfurl the card. Country targeting filters feeds, not the preview.
   return withPreviewMeta(
     {
-      title: `${ctx.headline} • VoxDex`,
+      title: `${ctx.headline} | VoxDex`,
       description: sentimentPollOgDescription(ctx),
       canonicalUrl,
       imageUrl: `${SITE_URL}${sentimentPollOgImagePath(ctx.slug)}`,
-      imageType: "image/jpeg",
+      imageType: "image/png",
     },
     "sentiment_poll",
     ctx.headline,
@@ -658,11 +657,11 @@ export async function resolveOpinionPollOg(slug: string): Promise<OgPreviewResul
   // Shared links unfurl the card. Country targeting filters feeds, not the preview.
   return withPreviewMeta(
     {
-      title: `${ctx.title} • VoxDex`,
+      title: `${ctx.title} | VoxDex`,
       description: opinionPollOgDescription(ctx),
       canonicalUrl,
       imageUrl: `${SITE_URL}${opinionPollOgImagePath(ctx.slug)}`,
-      imageType: "image/jpeg",
+      imageType: "image/png",
     },
     "opinion_poll",
     ctx.title,
@@ -676,13 +675,21 @@ export async function resolveMatchupOg(slug: string): Promise<OgPreviewResult> {
     return fallbackPayload(canonicalUrl, "Matchup not found — using generic preview.", "matchup");
   }
   // Shared links unfurl the card. Country targeting filters feeds, not the preview.
+  const tally =
+    ctx.totalVotes && ctx.totalVotes > 0 && ctx.optionAPercent != null && ctx.optionBPercent != null
+      ? {
+          optionAPercent: ctx.optionAPercent,
+          optionBPercent: ctx.optionBPercent,
+          totalVotes: ctx.totalVotes,
+        }
+      : null;
   return withPreviewMeta(
     {
-      title: matchupOgPromptTitle(ctx),
-      description: matchupOgDescription(ctx),
+      title: matchupDocumentTitle(ctx),
+      description: matchupDocumentDescription(ctx, tally),
       canonicalUrl,
       imageUrl: `${SITE_URL}${matchupOgImagePath(ctx.slug)}`,
-      imageType: "image/jpeg",
+      imageType: "image/png",
     },
     "matchup",
     ctx.slug,
@@ -706,11 +713,11 @@ export async function resolvePersonOg(id: string): Promise<OgPreviewResult> {
   }
   return withPreviewMeta(
     {
-      title: `${ctx.name} • VoxDex`,
+      title: `${ctx.name} | VoxDex`,
       description: personOgDescription(ctx),
       canonicalUrl,
       imageUrl: `${SITE_URL}${personOgImagePath(ctx.id)}`,
-      imageType: "image/jpeg",
+      imageType: "image/png",
     },
     "person",
     ctx.name,

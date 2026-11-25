@@ -541,12 +541,35 @@ export default function CategoryRaceDetailPage() {
   const pad = (n: number) => String(n).padStart(2, "0");
 
   const raceTitle = categoryLabel ? `${categoryLabel} Race` : "Category Race";
+  const racePriced = candidates
+    .map((c) => {
+      const price = c.entryId ? Number(ammPriceMap?.[c.entryId]) : Number.NaN;
+      return { name: c.name, price };
+    })
+    .filter((c) => Number.isFinite(c.price))
+    .sort((a, b) => b.price - a.price)
+    .slice(0, 3);
+  const racePriceLeader = racePriced[0];
+  const racePrices =
+    racePriced.length > 0
+      ? `&prices=${encodeURIComponent(
+          racePriced
+            .map((c) => `${c.name.replace(/[,:]/g, " ").slice(0, 32)}:${Math.round(c.price * 100)}:other`)
+            .join(","),
+        )}`
+      : "";
+  const raceSubtitle = racePriceLeader
+    ? `Leader: ${racePriceLeader.name} ${Math.round(racePriceLeader.price * 100)}%`
+    : "Biggest mover this week";
+  const raceImage = `/api/og/image/market.png?title=${encodeURIComponent(raceTitle)}&subtitle=${encodeURIComponent(raceSubtitle)}&badge=${encodeURIComponent("Race")}${racePrices}`;
   useDocumentMeta({
-    title: `${raceTitle} • VoxDex`,
-    description: categoryLabel
-      ? `Pick the biggest mover in ${categoryLabel} this week. Predict on VoxDex.`
-      : "Pick the biggest mover in the category this week. Predict on VoxDex.",
-    image: `/api/og/image/market.png?title=${encodeURIComponent(raceTitle)}&subtitle=${encodeURIComponent("Biggest mover this week")}&badge=${encodeURIComponent("Race")}`,
+    title: `${raceTitle} | VoxDex`,
+    description: racePriceLeader
+      ? `Leader: ${racePriceLeader.name} ${Math.round(racePriceLeader.price * 100)}% · Pick the biggest mover${categoryLabel ? ` in ${categoryLabel}` : ""}`
+      : categoryLabel
+        ? `Pick the biggest mover in ${categoryLabel} this week. Predict on VoxDex.`
+        : "Pick the biggest mover in the category this week. Predict on VoxDex.",
+    image: raceImage,
   });
 
   if (isLoading && !market) {
@@ -586,7 +609,7 @@ export default function CategoryRaceDetailPage() {
             {pad(timeRemaining.days)}d {pad(timeRemaining.hours)}h {pad(timeRemaining.minutes)}m
           </Badge>
           <MuteMarketToggle marketId={marketId} />
-          <ShareIconButton title={`Category Race: ${categoryLabel} on VoxDex`} />
+          <ShareIconButton title={`${raceTitle} | VoxDex`} imagePath={raceImage} />
           <HeaderUserActions />
         </div>
       </header>

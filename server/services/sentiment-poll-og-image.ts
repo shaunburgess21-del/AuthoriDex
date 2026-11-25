@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { SentimentPollOgContext } from "./sentiment-poll-og-context";
-import { glyphExtentBelowBaseline, textPath } from "./og-svg-text-paths";
+import { encodeOgPng } from "./og-png";
+import { glyphExtentBelowBaseline, measureOutlinedTextWidth, textPath } from "./og-svg-text-paths";
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -70,6 +71,21 @@ export function getSentimentPollOverlayLabels(ctx: SentimentPollOgContext) {
     category: truncate(ctx.category || "Poll", 24).toUpperCase(),
     headline: truncate(ctx.headline, 72),
   };
+}
+
+/** Pill captions. Percentages appear once the poll has a live tally. */
+export function getSentimentPollPillLabels(ctx: SentimentPollOgContext): string[] {
+  const results = ctx.results;
+  return VOTE_CHOICES.map((choice) => {
+    if (!results) return choice.label;
+    const pct =
+      choice.label === "Agree"
+        ? results.agreePercent
+        : choice.label === "Neutral"
+          ? results.neutralPercent
+          : results.disagreePercent;
+    return `${choice.label} ${pct}%`;
+  });
 }
 
 async function fetchImageBuffer(url: string | null): Promise<Buffer | null> {
@@ -147,26 +163,32 @@ async function coverHeroJpeg(
     .toBuffer();
 }
 
-function horizontalVotePills(): string {
+function horizontalVotePills(ctx: SentimentPollOgContext): string {
   const rowWidth = OG_WIDTH - VOTE_PILL_MARGIN_X * 2;
   const pillW = (rowWidth - VOTE_PILL_GAP * 2) / 3;
   const pillY = Math.round(VOTE_PILL_Y);
   const pillH = Math.round(VOTE_PILL_H);
+  const labels = getSentimentPollPillLabels(ctx);
   const parts: string[] = [];
 
   for (let i = 0; i < VOTE_CHOICES.length; i++) {
     const choice = VOTE_CHOICES[i]!;
+    const label = labels[i] ?? choice.label;
     const pillX = VOTE_PILL_MARGIN_X + i * (pillW + VOTE_PILL_GAP);
     const centerX = pillX + pillW / 2;
-    const textY = pillY + pillH / 2 + 7;
+    let fontSize = VOTE_LABEL_FONT_SIZE;
+    if (measureOutlinedTextWidth(label, fontSize, VOTE_LABEL_WEIGHT) > pillW - 20) {
+      fontSize = 22;
+    }
+    const textY = pillY + pillH / 2 + fontSize * 0.35;
 
     parts.push(
       `<rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="10" fill="${choice.fill}" fill-opacity="${choice.fillOpacity}" stroke="${choice.fill}" stroke-opacity="${choice.strokeOpacity}" stroke-width="1.5"/>`,
       textPath({
-        text: choice.label,
+        text: label,
         x: centerX,
         y: textY,
-        fontSize: VOTE_LABEL_FONT_SIZE,
+        fontSize,
         weight: VOTE_LABEL_WEIGHT,
         fill: choice.textFill,
         anchor: "middle",
@@ -224,7 +246,7 @@ export function buildSentimentPollOverlaySvg(ctx: SentimentPollOgContext): strin
     weight: HEADLINE_WEIGHT,
     fill: "#ffffff",
   })}
-  ${horizontalVotePills()}
+  ${horizontalVotePills(ctx)}
 </svg>`;
 }
 
@@ -263,7 +285,7 @@ export async function renderSentimentPollOgImage(
     { input: overlayPng, left: 0, top: 0 },
   ]);
 
-  return composite.png().toBuffer();
+  return encodeOgPng(composite);
 }
 
 export async function renderSentimentPollOgImageJpeg(

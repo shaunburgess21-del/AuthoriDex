@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess } from "@/lib/haptic";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -38,7 +38,7 @@ import { goBack } from "@/lib/goBack";
 import { CardComments, useCommentCount } from "@/components/comments/CardComments";
 import { RelatedVoteItems } from "@/components/vote/RelatedVoteItems";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
+import { sentimentDocumentDescription, sentimentPollOgImagePath } from "@shared/sentiment-poll-og";
 import { normalizeSentimentChoice } from "@shared/lib/sentiment-poll-choice";
 import { CompactResultRows } from "@/components/vote/CompactResultRows";
 import { CrowdLine } from "@/components/vote/CrowdLine";
@@ -250,21 +250,36 @@ export default function PollDetailPage() {
     voteMutation.mutate({ slug, choice, pollId: poll.id });
   };
 
+  const shareTitle = poll ? `${poll.headline} | VoxDex` : "Sentiment poll | VoxDex";
+  const shareImagePath = (poll?.slug || slug) ? sentimentPollOgImagePath(poll?.slug || slug) : null;
+
   const handleShare = () => {
-    sharePage(poll ? `${poll.headline} on VoxDex` : "VoxDex", { surface: "poll" });
+    if (shareImagePath) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: shareImagePath,
+        surface: "poll",
+      });
+      return;
+    }
+    void sharePage(shareTitle, { surface: "poll" });
   };
 
-  // Dynamic <title> + OG/Twitter meta. Slack/iMessage previews come
-  // from the server-side /api/og/polls/:slug rewrite (see vercel.json),
-  // but human shares (browser tab → AirDrop, copy/paste, Save as
-  // bookmark, JS-aware crawlers) all read the live document head, so
-  // we keep this in sync with the server payload.
+  // Dynamic <title> + OG/Twitter meta. Middleware puts the same tags in
+  // the first HTML response; this keeps the live document head in sync.
   useDocumentMeta({
-    title: poll ? `${poll.headline} • VoxDex` : "Sentiment poll • VoxDex",
+    title: shareTitle,
     description: poll
-      ? poll.description ?? poll.subjectText ?? "Cast your vote on VoxDex."
+      ? sentimentDocumentDescription({
+          subjectText: poll.subjectText,
+          description: poll.description,
+          agreePercent: poll.agreePercent,
+          neutralPercent: poll.neutralPercent,
+          disagreePercent: poll.disagreePercent,
+          totalVotes: poll.totalVotes,
+        })
       : null,
-    image: (poll?.slug || slug) ? sentimentPollOgImagePath(poll?.slug || slug) : null,
+    image: shareImagePath,
   });
 
   if (pollLoading) {

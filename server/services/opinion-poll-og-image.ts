@@ -3,6 +3,7 @@ import type {
   OpinionPollOgContext,
   OpinionPollOgOption,
 } from "./opinion-poll-og-context";
+import { encodeOgPng } from "./og-png";
 import { textPath } from "./og-svg-text-paths";
 
 const OG_WIDTH = 1200;
@@ -466,7 +467,7 @@ export async function renderOpinionPollOgImage(
   ctx: OpinionPollOgContext,
 ): Promise<Buffer> {
   const composite = await compositeOpinionPollBase(ctx, "png");
-  return composite.png().toBuffer();
+  return encodeOgPng(composite);
 }
 
 export async function renderOpinionPollOgImageJpeg(

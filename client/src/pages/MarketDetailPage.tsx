@@ -6,7 +6,7 @@ import { useParams, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { dismissVoteToast, marketToastKind, showPendingVoteToast, showVoteToast } from "@/lib/vote-toast";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { hapticSuccess, hapticError } from "@/lib/haptic";
 import { SiteHeader } from "@/components/SiteHeader";
 import { useXpBurst } from "@/components/XpBurstProvider";
@@ -1373,8 +1373,9 @@ export default function MarketDetailPage() {
   /* Dynamic meta — keeps the browser tab title and JS-running crawlers
    * (Google, Bing) in sync with the market. Slack / iMessage / X go via
    * the bot-UA Vercel rewrite (see vercel.json) to /api/og/markets/:slug. */
+  const marketShareTitle = market ? `${market.title} | VoxDex` : "Market | VoxDex";
   useDocumentMeta({
-    title: market ? `${market.title} • VoxDex` : "Market • VoxDex",
+    title: marketShareTitle,
     description: market
       ? market.teaser ?? market.summary ?? `Predict on "${market.title}" — World market on VoxDex.`
       : null,
@@ -1533,7 +1534,17 @@ export default function MarketDetailPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => sharePage(`${market.title} on VoxDex`, { surface: "market" })}
+                onClick={() => {
+                  if (market.slug) {
+                    void shareResultImage({
+                      title: marketShareTitle,
+                      imagePath: marketOgImagePath(market.slug),
+                      surface: "market",
+                    });
+                    return;
+                  }
+                  void sharePage(marketShareTitle, { surface: "market" });
+                }}
                 data-testid="button-share"
               >
                 <Share2 className="h-4 w-4 mr-1" />

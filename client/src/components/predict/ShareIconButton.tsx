@@ -1,5 +1,5 @@
 import { Share2 } from "lucide-react";
-import { sharePage, type ShareSurface } from "@/lib/share";
+import { sharePage, shareResultImage, type ShareSurface } from "@/lib/share";
 import { Button } from "@/components/ui/button";
 
 interface ShareIconButtonProps {
@@ -25,6 +25,8 @@ interface ShareIconButtonProps {
    * can be wired without an API change.
    */
   surface?: ShareSurface;
+  /** OG image path. When set, share the result card and fall back to the link. */
+  imagePath?: string | null;
 }
 
 /**
@@ -37,7 +39,7 @@ interface ShareIconButtonProps {
  * surface it. Icon-only on every breakpoint keeps the header layout
  * consistent across the four detail variants.
  */
-export function ShareIconButton({ title, className, testId = "button-share", surface = "market" }: ShareIconButtonProps) {
+export function ShareIconButton({ title, className, testId = "button-share", surface = "market", imagePath }: ShareIconButtonProps) {
   return (
     <Button
       type="button"
@@ -45,6 +47,10 @@ export function ShareIconButton({ title, className, testId = "button-share", sur
       size="icon"
       className={`h-8 w-8 shrink-0 ${className ?? ""}`}
       onClick={() => {
+        if (imagePath) {
+          void shareResultImage({ title, imagePath, surface });
+          return;
+        }
         void sharePage(title, { surface });
       }}
       aria-label="Share this market"

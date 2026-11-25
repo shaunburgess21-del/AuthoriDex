@@ -6,6 +6,7 @@ import {
   isShareCancelled,
   shareWithSystemSheet,
   cachePngForNativeShare,
+  PUBLIC_SHARE_ORIGIN,
   toPublicShareText,
   toPublicShareUrl,
 } from "@/lib/nativeShare";
@@ -204,6 +205,79 @@ export function appendShareAttribution(
 }
 
 /**
+ * Share the page's 1200×630 result card (the same image linked from
+ * og:image). Sends the image when this device can share a file or copy
+ * an image, and falls back to the current link share otherwise.
+ * Capacitor shells load the image from the public site, not the WebView origin.
+ * Attribution stays `?ref=` plus UTM. No profile id is written onto the link.
+ */
+export async function shareResultImage(options: SharePageOptions & {
+  title: string;
+  imagePath: string;
+}): Promise<void> {
+  const linkShare = () =>
+    sharePage(options.title, {
+      url: options.url,
+      referralCode: options.referralCode,
+      surface: options.surface,
+    });
+
+  const canAttemptImage = canAttemptResultImage();
+  if (!canAttemptImage) {
+    await linkShare();
+    return;
+  }
+
+  let blob: Blob | null = null;
+  try {
+    const imageUrl = resolveShareImageUrl(options.imagePath);
+    const res = await fetch(imageUrl);
+    if (!res.ok) throw new Error(`share image ${res.status}`);
+    const fetched = await res.blob();
+    if (fetched.type && !fetched.type.startsWith("image/")) {
+      throw new Error("share image was not an image");
+    }
+    blob = fetched;
+  } catch {
+    blob = null;
+  }
+
+  if (!blob) {
+    await linkShare();
+    return;
+  }
+
+  const pageUrl = appendShareAttribution(options.url ?? window.location.href, {
+    referralCode: options.referralCode,
+    surface: options.surface,
+  });
+  const filename = /\.jpe?g(?:\?|$)/i.test(options.imagePath)
+    ? "voxdex-share.jpg"
+    : "voxdex-vote.png";
+  const result = await shareImage(blob, {
+    title: options.title,
+    text: options.title,
+    url: pageUrl,
+    filename,
+    downloadFallback: false,
+  });
+  const delivered =
+    result.status === "shared" || result.status === "copied" || result.status === "cancelled";
+  if (resultImageSharePlan({ canAttemptImage, imageReady: true, delivered }) === "image") {
+    return;
+  }
+  await linkShare();
+}
+
+function resolveShareImageUrl(imagePath: string): string {
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+  const ctx = currentShareContext();
+  const origin =
+    ctx.nativeAndroid || ctx.nativeIos ? PUBLIC_SHARE_ORIGIN : window.location.origin;
+  return new URL(imagePath, origin).toString();
+}
+
+/**
  * Share a page link. Optional `options` lets call sites attach a
  * surface so the resulting URL carries UTM params. A referral code,
  * when the viewer is signed in and one is cached, is added as `ref`
@@ -262,6 +336,36 @@ interface ShareImageOptions {
   url?: string;
   /** Filename for the download fallback. Defaults to `voxdex-share.png`. */
   filename?: string;
+  /**
+   * When false, a device that cannot share or copy the image returns
+   * `failed` instead of downloading. In-page result shares use that so
+   * they can fall back to the link share.
+   */
+  downloadFallback?: boolean;
+}
+
+/**
+ * Whether an in-page Share should send the result image or the link.
+ * Image delivery means a native sheet, a file share, or a clipboard copy.
+ * A failed fetch, an unsupported device, or a failed image handoff uses
+ * the existing link share. A user dismissing the sheet stays on "image"
+ * so we do not also copy the link.
+ */
+export function resultImageSharePlan(input: {
+  canAttemptImage: boolean;
+  imageReady: boolean;
+  delivered: boolean;
+}): "image" | "link" {
+  if (input.canAttemptImage && input.imageReady && input.delivered) return "image";
+  return "link";
+}
+
+/** True when this device can hand an image to a share sheet or the clipboard. */
+export function canAttemptResultImage(): boolean {
+  if (isAndroidNativeShare() || isIosNativeShare()) return true;
+  if (typeof navigator === "undefined") return false;
+  if (typeof navigator.canShare === "function" && typeof navigator.share === "function") return true;
+  return canCopyImageToClipboard();
 }
 
 /**
@@ -358,7 +462,11 @@ export async function shareImage(
     }
   }
 
-  // Step 3: universal download fallback
+  // Step 3: universal download fallback. Result-card shares skip this
+  // and let the caller fall back to the link share instead.
+  if (options.downloadFallback === false) {
+    return { status: "failed", error: new Error("image share unavailable") };
+  }
   try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

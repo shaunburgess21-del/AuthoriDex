@@ -4,7 +4,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage } from "@/lib/share";
+import { sharePage, shareResultImage } from "@/lib/share";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -31,7 +31,7 @@ import { SuggestOptionCard } from "@/components/opinion-polls/SuggestOptionCard"
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
 import { useDetailNavigation } from "@/hooks/useDetailNavigation";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
-import { opinionPollOgImagePath } from "@shared/opinion-poll-og";
+import { opinionDocumentDescription, opinionPollOgImagePath } from "@shared/opinion-poll-og";
 import { voteDetailSectionCardClass } from "@/lib/vote-detail-ui";
 import { CollapsibleCompactResultRows, type CompactResultRowData } from "@/components/vote/CompactResultRows";
 import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
@@ -316,17 +316,40 @@ export default function OpinionPollDetailPage() {
     setChangeDialogOpen(true);
   }, []);
 
+  const shareTitle = poll ? `${poll.title} | VoxDex` : "Opinion poll | VoxDex";
+  const opinionOptions = (Array.isArray(poll?.options) ? poll.options : []) as Array<{
+    name?: string;
+    percent?: number;
+    votes?: number;
+  }>;
+  const opinionLeader = (poll?.totalVotes || 0) > 0
+    ? [...opinionOptions].sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0))[0]
+    : undefined;
+
   const handleShare = () => {
-    sharePage(poll ? `${poll.title} on VoxDex` : "VoxDex", { surface: "poll" });
+    if (poll?.slug) {
+      void shareResultImage({
+        title: shareTitle,
+        imagePath: opinionPollOgImagePath(poll.slug),
+        surface: "poll",
+      });
+      return;
+    }
+    void sharePage(shareTitle, { surface: "poll" });
   };
 
-  // Dynamic <title> + OG/Twitter meta. Crawlers without JS hit
-  // /api/og/opinion-polls/:slug via the vercel.json bot rewrite; this
-  // hook keeps the live document head accurate for everyone else.
+  // Dynamic <title> + OG/Twitter meta. Middleware writes the same tags
+  // into the first HTML response; this keeps the live document head in sync.
   useDocumentMeta({
-    title: poll ? `${poll.title} • VoxDex` : "Opinion poll • VoxDex",
+    title: shareTitle,
     description: poll
-      ? poll.summary ?? poll.description ?? "Cast your vote on VoxDex."
+      ? opinionDocumentDescription({
+          summary: poll.summary,
+          description: poll.description,
+          leaderName: opinionLeader?.name,
+          leaderPercent: opinionLeader?.percent,
+          totalVotes: poll.totalVotes,
+        })
       : null,
     image: poll?.slug ? opinionPollOgImagePath(poll.slug) : null,
   });
