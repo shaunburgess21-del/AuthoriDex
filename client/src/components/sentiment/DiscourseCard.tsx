@@ -12,7 +12,7 @@ import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import { CardCommentsFocusOverlay } from "@/components/comments/CardComments";
 import { CardVoteCount, DiscussionButton } from "@/components/comments/DiscussionButton";
-import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare } from "lucide-react";
+import { Users, ThumbsUp, ThumbsDown, Minus, MessageSquare, type LucideIcon } from "lucide-react";
 import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
@@ -24,32 +24,75 @@ import {
   getSentimentPollVotedPillStyle,
 } from "@/lib/sentimentPollVoteDisplay";
 import { sentimentPollVoteKey } from "@shared/lib/sentiment-poll-vote-target";
+import { toastUnhandledSentimentVoteError } from "@/lib/sentimentVoteFailure";
 
-function ChoiceLabel({
+type SentimentChoice = "agree" | "neutral" | "disagree";
+
+const SENTIMENT_RESULT_ROWS: Array<{
+  choice: SentimentChoice;
+  icon: LucideIcon;
+  barClassName: string;
+  percentKey: "agreePercent" | "neutralPercent" | "disagreePercent";
+}> = [
+  { choice: "agree", icon: ThumbsUp, barClassName: "bg-[#00C853]", percentKey: "agreePercent" },
+  { choice: "neutral", icon: Minus, barClassName: "bg-slate-400", percentKey: "neutralPercent" },
+  { choice: "disagree", icon: ThumbsDown, barClassName: "bg-[#FF0000]", percentKey: "disagreePercent" },
+];
+
+/**
+ * Agree / Neutral / Disagree result row.
+ *
+ * The label and "Your pick" are one block, centred on that row's bar.
+ * The caption renders only on the chosen option, so the other labels stay
+ * on their bars' centres. Every row keeps the captioned min-height so
+ * casting a vote does not reflow the card. The icon sits on the label
+ * line; the percent stays centred with the bar.
+ */
+function SentimentChoiceResultRow({
   choice,
   voted,
   topicId,
+  percent,
+  icon: Icon,
+  barClassName,
 }: {
-  choice: "agree" | "neutral" | "disagree";
-  voted: "agree" | "neutral" | "disagree" | null;
+  choice: SentimentChoice;
+  voted: SentimentChoice | null;
   topicId: string;
+  percent: number;
+  icon: LucideIcon;
+  barClassName: string;
 }) {
   const chosen = voted === choice;
   return (
-    <span className="w-[4.5rem] shrink-0" style={{ color: getSentimentPollChoiceColor(choice) }}>
-      <span className="block whitespace-nowrap text-sm font-medium">
-        {getSentimentPollChoiceLabel(choice)}
-      </span>
-      <span
-        className="block h-3 text-[9px] font-semibold leading-3"
-        data-testid={chosen ? `badge-your-pick-${topicId}` : undefined}
+    <div className="flex min-h-8 items-center gap-3" data-sentiment-choice={choice}>
+      <div
+        className="grid shrink-0 grid-cols-[1rem_4.5rem] items-center gap-x-3"
+        style={{ color: getSentimentPollChoiceColor(choice) }}
       >
-        {chosen ? "Your pick" : "\u00a0"}
-      </span>
-    </span>
+        <Icon className="col-start-1 row-start-1 h-4 w-4" />
+        <span className="col-start-2 row-start-1 w-[4.5rem] whitespace-nowrap text-sm font-medium keep-descenders">
+          {getSentimentPollChoiceLabel(choice)}
+        </span>
+        {chosen ? (
+          <span
+            className="col-start-2 row-start-2 whitespace-nowrap text-[9px] font-semibold leading-3 keep-descenders"
+            data-testid={`badge-your-pick-${topicId}`}
+          >
+            Your pick
+          </span>
+        ) : null}
+      </div>
+      <div className="h-4 flex-1 self-center overflow-hidden rounded-full bg-white/5 md:h-3">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barClassName}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="w-10 self-center text-right text-sm text-muted-foreground">{percent}%</span>
+    </div>
   );
 }
-import { toastUnhandledSentimentVoteError } from "@/lib/sentimentVoteFailure";
 
 export function DiscourseCard({
   topic,
@@ -273,41 +316,17 @@ export function DiscourseCard({
       ) : (
         <>
         <div className="flex flex-col gap-5 md:gap-3 my-auto md:mt-auto">
-          <div className="flex items-center gap-3">
-            <ThumbsUp className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("agree") }} />
-            <ChoiceLabel choice="agree" voted={voted} topicId={topic.id} />
-            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
-              <div 
-                className="h-full bg-[#00C853] rounded-full transition-all duration-500"
-                style={{ width: `${topic.agreePercent}%` }}
-              />
-            </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{topic.agreePercent}%</span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <Minus className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("neutral") }} />
-            <ChoiceLabel choice="neutral" voted={voted} topicId={topic.id} />
-            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
-              <div 
-                className="h-full bg-slate-400 rounded-full transition-all duration-500"
-                style={{ width: `${topic.neutralPercent}%` }}
-              />
-            </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{topic.neutralPercent}%</span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <ThumbsDown className="h-4 w-4 shrink-0" style={{ color: getSentimentPollChoiceColor("disagree") }} />
-            <ChoiceLabel choice="disagree" voted={voted} topicId={topic.id} />
-            <div className="flex-1 h-4 md:h-3 bg-white/5 rounded-full overflow-hidden self-center">
-              <div 
-                className="h-full bg-[#FF0000] rounded-full transition-all duration-500"
-                style={{ width: `${topic.disagreePercent}%` }}
-              />
-            </div>
-            <span className="text-sm text-muted-foreground w-10 text-right">{topic.disagreePercent}%</span>
-          </div>
+          {SENTIMENT_RESULT_ROWS.map((row) => (
+            <SentimentChoiceResultRow
+              key={row.choice}
+              choice={row.choice}
+              voted={voted}
+              topicId={String(topic.id)}
+              percent={Number(topic[row.percentKey] ?? 0)}
+              icon={row.icon}
+              barClassName={row.barClassName}
+            />
+          ))}
           <CrowdLine
             text={crowd?.text ?? null}
             share={crowdShare}
