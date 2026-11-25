@@ -48,10 +48,16 @@ import {
   MessageSquare,
   Copy,
   Star,
-  Check,
   Swords,
   TrendingUp,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  MATCHUP_UNPICKED_CLASS,
+  MatchupPickBadge,
+  matchupPickedFrameClass,
+  matchupPickedNameBarClass,
+} from "@/components/matchups/matchupVoteChrome";
 
 interface MatchupDetail {
   id: string;
@@ -511,18 +517,22 @@ export default function MatchupDetailPage() {
             <div className="flex items-stretch gap-0 relative mb-4 -mx-5">
             <button
               disabled={votePendingOnOptions}
+              aria-pressed={votedA}
               onClick={() => {
                 if (!votedA && !votePendingOnOptions) handleVote(matchup.id, "option_a");
               }}
-              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
-                votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
-              } ${
+              className={cn(
+                "flex flex-1 cursor-pointer flex-col overflow-hidden rounded-none border transition-all duration-300 motion-reduce:transition-none",
+                votePendingOnOptions && "cursor-not-allowed opacity-60",
                 hasVoted
                   ? votedA
-                    ? 'border-slate-300/60 ring-2 ring-white/15'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-500/50 dark:border-slate-400/40'
-                  : 'border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50'
-              }`}
+                    ? matchupPickedFrameClass("a")
+                    : cn(
+                        "border-slate-700/30 hover:border-slate-500/50 dark:border-slate-400/40",
+                        !votePendingOnOptions && MATCHUP_UNPICKED_CLASS,
+                      )
+                  : "border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50",
+              )}
               data-testid="button-vote-option-a"
             >
               <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
@@ -539,6 +549,7 @@ export default function MatchupDetailPage() {
                 ) : (
                   <div className={`absolute inset-0 bg-gradient-to-br ${votedA ? 'from-blue-600/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
                 )}
+                {votedA ? <MatchupPickBadge side="a" testId="badge-matchup-pick-a" /> : null}
                 {votedA && (
                   <div className="absolute top-2 right-2">
                     <Badge variant="outline" className="text-[10px] border-blue-500/60 dark:border-blue-500/50 text-blue-600 dark:text-blue-400 bg-black/50 backdrop-blur-sm py-0">
@@ -547,7 +558,10 @@ export default function MatchupDetailPage() {
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-[#090B11] border-t border-slate-700/30 text-center">
+              <div className={cn(
+                "border-t px-3 py-3 text-center",
+                votedA ? matchupPickedNameBarClass("a") : "border-slate-700/30 bg-[#090B11]",
+              )}>
                 <span className={`font-semibold text-sm truncate block ${votedA ? 'text-blue-600 dark:text-blue-400' : ''}`}>{matchup.optionAText}</span>
               </div>
             </button>
@@ -578,18 +592,22 @@ export default function MatchupDetailPage() {
 
             <button
               disabled={votePendingOnOptions}
+              aria-pressed={votedB}
               onClick={() => {
                 if (!votedB && !votePendingOnOptions) handleVote(matchup.id, "option_b");
               }}
-              className={`flex-1 flex flex-col rounded-none border transition-all duration-300 overflow-hidden cursor-pointer ${
-                votePendingOnOptions ? "opacity-60 cursor-not-allowed" : ""
-              } ${
+              className={cn(
+                "flex flex-1 cursor-pointer flex-col overflow-hidden rounded-none border transition-all duration-300 motion-reduce:transition-none",
+                votePendingOnOptions && "cursor-not-allowed opacity-60",
                 hasVoted
                   ? votedB
-                    ? 'border-slate-300/60 ring-2 ring-white/15'
-                    : 'border-slate-700/30 opacity-70 hover:opacity-90 hover:border-slate-500/50 dark:border-slate-400/40'
-                  : 'border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50'
-              }`}
+                    ? matchupPickedFrameClass("b")
+                    : cn(
+                        "border-slate-700/30 hover:border-slate-500/50 dark:border-slate-400/40",
+                        !votePendingOnOptions && MATCHUP_UNPICKED_CLASS,
+                      )
+                  : "border-slate-700/50 hover:border-slate-500/60 dark:border-slate-400/50",
+              )}
               data-testid="button-vote-option-b"
             >
               <div className="relative min-h-[222px] md:min-h-0 md:aspect-[100/111]">
@@ -606,15 +624,19 @@ export default function MatchupDetailPage() {
                 ) : (
                   <div className={`absolute inset-0 bg-gradient-to-br ${votedB ? 'from-amber-700/30 via-slate-800 to-slate-900' : 'from-slate-700 via-slate-800 to-slate-900'}`} />
                 )}
+                {votedB ? <MatchupPickBadge side="b" testId="badge-matchup-pick-b" /> : null}
                 {votedB && (
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-2 right-10">
                     <Badge variant="outline" className="text-[10px] border-amber-500/60 dark:border-amber-500/50 text-amber-600 dark:text-amber-400 bg-black/50 backdrop-blur-sm py-0">
                       Your pick
                     </Badge>
                   </div>
                 )}
               </div>
-              <div className="px-3 py-3 bg-[#090B11] border-t border-slate-700/30 text-center">
+              <div className={cn(
+                "border-t px-3 py-3 text-center",
+                votedB ? matchupPickedNameBarClass("b") : "border-slate-700/30 bg-[#090B11]",
+              )}>
                 <span className={`font-semibold text-sm truncate block ${votedB ? 'text-amber-600 dark:text-amber-400' : ''}`}>{matchup.optionBText}</span>
               </div>
             </button>
