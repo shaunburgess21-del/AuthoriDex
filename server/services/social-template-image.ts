@@ -129,7 +129,7 @@ export async function renderNewMarketSocialPng(params: {
     throw new Error("new_market requires community slug or native marketId + predictType");
   }
 
-  const title = preview.title.replace(/ • VoxDex$/, "");
+  const title = preview.title.replace(/ (?:•|\|) VoxDex$/, "");
   const { width, height } = dims(params.aspect ?? "square");
   const maxChars = params.aspect === "landscape" ? 28 : 22;
   const titleLines = wrapLines(title, maxChars, 2);

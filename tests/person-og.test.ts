@@ -26,11 +26,11 @@ import {
 } from "../server/services/person-og-image";
 import { assertOgPathFontsLoaded } from "../server/services/og-svg-text-paths";
 
-test("personOgImagePath uses shared cache version v3", () => {
-  assert.equal(PERSON_OG_IMAGE_VERSION, "3");
+test("personOgImagePath uses shared cache version v4 png", () => {
+  assert.equal(PERSON_OG_IMAGE_VERSION, "4");
   assert.equal(
     personOgImagePath("elon-musk"),
-    "/api/og/person/elon-musk.jpg?v=3",
+    "/api/og/person/elon-musk.png?v=4",
   );
 });
 
@@ -38,7 +38,7 @@ test("personOgImagePath uses trending person id from profile URL", () => {
   const uuid = "191aa3af-3c31-4e8a-87c2-3f8a2d07ae1c";
   assert.equal(
     personOgImagePath(uuid),
-    `/api/og/person/${encodeURIComponent(uuid)}.jpg?v=3`,
+    `/api/og/person/${encodeURIComponent(uuid)}.png?v=4`,
   );
 });
 

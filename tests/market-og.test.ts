@@ -25,10 +25,10 @@ const TESLA_CTX: MarketOgImageContext = {
 };
 
 test("marketOgImagePath uses shared cache version", () => {
-  assert.equal(MARKET_OG_IMAGE_VERSION, "1");
+  assert.equal(MARKET_OG_IMAGE_VERSION, "2");
   assert.equal(
     marketOgImagePath("will-the-new-tesla-roaster-have-the-ability-to-fly"),
-    "/api/og/markets/will-the-new-tesla-roaster-have-the-ability-to-fly.jpg?v=1",
+    "/api/og/markets/will-the-new-tesla-roaster-have-the-ability-to-fly.png?v=2",
   );
 });
 

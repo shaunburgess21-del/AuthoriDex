@@ -13,6 +13,7 @@
  * + the bundled Inter TTFs, which librsvg fills like any vector shape.
  */
 import sharp from "sharp";
+import { encodeOgPng } from "./og-png";
 import type { AmmPriceChip } from "./og-page-payload";
 import { measureOutlinedTextWidth, textPath } from "./og-svg-text-paths";
 
@@ -314,7 +315,7 @@ export async function renderMarketOgImage(
   ctx: MarketOgImageContext,
 ): Promise<Buffer> {
   const composite = await composeMarketOg(ctx);
-  return composite.png().toBuffer();
+  return encodeOgPng(composite);
 }
 
 export async function renderMarketOgImageJpeg(

@@ -1,7 +1,14 @@
+import { sentimentDocumentDescription } from "@shared/sentiment-poll-og";
 import type { SentimentPollOgContext } from "./sentiment-poll-og-context";
 
-/** og:description — sub-text stays out of the JPEG. */
+/** og:description — subject text stays the lead; the live split follows when votes exist. */
 export function sentimentPollOgDescription(ctx: SentimentPollOgContext): string {
-  const text = (ctx.subjectText || ctx.description || "").trim();
-  return text || "Cast your vote on VoxDex.";
+  return sentimentDocumentDescription({
+    subjectText: ctx.subjectText,
+    description: ctx.description,
+    agreePercent: ctx.results?.agreePercent,
+    neutralPercent: ctx.results?.neutralPercent,
+    disagreePercent: ctx.results?.disagreePercent,
+    totalVotes: ctx.results ? 1 : 0,
+  });
 }
