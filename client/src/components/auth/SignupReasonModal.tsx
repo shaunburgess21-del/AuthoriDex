@@ -55,7 +55,7 @@ interface VariantCopy {
   primaryCta: string;
   secondaryCta: string;
   primaryCtaSubtext?: string;
-  /** Tailwind class fragment for primary button — cyan = Vote, violet = Predict. */
+  /** Tailwind class fragment for primary button — cyan = Vote, violet = Predict, amber = Favorite. */
   primaryAccentClass: string;
 }
 
@@ -77,6 +77,15 @@ const SIGNUP_REASON_VARIANTS: Record<AuthReason, VariantCopy> = {
     primaryCtaSubtext: "Free to sign up. No credit card.",
     primaryAccentClass:
       "bg-violet-500 hover:bg-violet-600 text-white border-violet-600",
+  },
+  favorite_signup: {
+    heading: "Keep the ones you follow.",
+    body: "Create a free account to save your favourites.",
+    primaryCta: "Join free",
+    secondaryCta: "Already have an account? Sign in.",
+    primaryCtaSubtext: "Free to sign up. No credit card.",
+    primaryAccentClass:
+      "bg-amber-500 hover:bg-amber-600 text-white border-amber-600",
   },
 };
 

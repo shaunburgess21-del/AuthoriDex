@@ -3,9 +3,12 @@
  *
  * The card sits in normal page flow where the returning-user strip sits.
  * Visibility is pure so the slot can be decided without a browser and so a
- * signed-out dismiss stays dismissed after sign-in. Ticks are never invented:
- * callers pass null until GET /api/me/votes, GET /api/me/predictions, and
- * GET /api/me/favorites have actually answered.
+ * signed-out dismiss stays dismissed after sign-in. Ticks are never invented.
+ * Signed-in callers pass null until GET /api/me/votes, GET /api/me/predictions,
+ * and GET /api/me/favorites have actually answered. A signed-out vote tick
+ * reads the existing anonymous budget (GET /api/anon-budget, keyed by the
+ * fdx_sid cookie): `used >= 1` means this browser already cast a vote of any
+ * type, and that payload is what a reload sees. No separate vote flag is stored.
  */
 
 export const WELCOME_CHECKLIST_HEADLINE =
@@ -23,6 +26,20 @@ export const WELCOME_PREDICT_HREF = "/predict";
 export const WELCOME_FAVORITE_HREF = "/rankings";
 
 export const WELCOME_STEP_COUNT = 3;
+
+/** Quiet hint on Predict and Favorite before a signed-out visitor taps. */
+export const WELCOME_FREE_ACCOUNT_HINT = "Free account";
+
+/** Accessible name for that hint. The visible words stay short. */
+export const WELCOME_ACCOUNT_GATE_LABEL = "requires a free account";
+
+export const WELCOME_JOIN_FREE_LABEL = "Join free";
+
+/**
+ * Pivot once a signed-out visitor has voted. The two remaining steps need
+ * an account, so the counter itself becomes the signup nudge.
+ */
+export const WELCOME_SIGNED_OUT_NUDGE = "2 more with a free account";
 
 /** How long the done line stays before the card leaves. */
 export const WELCOME_ALL_SET_MS = 2200;
@@ -105,8 +122,19 @@ export function readWelcomeOpen(storage: Pick<WelcomeStorage, "getItem">, userId
   return readFlag(storage, welcomeOpenKey(userId));
 }
 
+const welcomeDeviceDismissListeners = new Set<() => void>();
+
+/** Same-tab listeners. `storage` events do not fire in the tab that wrote. */
+export function subscribeWelcomeDeviceDismiss(listener: () => void): () => void {
+  welcomeDeviceDismissListeners.add(listener);
+  return () => {
+    welcomeDeviceDismissListeners.delete(listener);
+  };
+}
+
 export function writeWelcomeDeviceDismissed(storage: Pick<WelcomeStorage, "setItem">): void {
   writeFlag(storage, WELCOME_DEVICE_DISMISS_KEY);
+  for (const listener of welcomeDeviceDismissListeners) listener();
 }
 
 export function writeWelcomeUserDismissed(storage: Pick<WelcomeStorage, "setItem">, userId: string): void {
@@ -199,9 +227,36 @@ export function welcomeDoneCount(flags: {
   return [flags.hasVote, flags.hasPrediction, flags.hasFavorite].filter((value) => value === true).length;
 }
 
-export function welcomeProgressLabel(done: number): string {
+export function welcomeProgressLabel(
+  done: number,
+  options?: { signedOutNudge?: boolean },
+): string {
   const safe = Number.isFinite(done) ? Math.max(0, Math.min(WELCOME_STEP_COUNT, Math.floor(done))) : 0;
-  return `${safe} of ${WELCOME_STEP_COUNT}`;
+  const base = `${safe} of ${WELCOME_STEP_COUNT}`;
+  if (!options?.signedOutNudge || safe < 1 || safe >= WELCOME_STEP_COUNT) return base;
+  const remaining = WELCOME_STEP_COUNT - safe;
+  const nudge = remaining === 2 ? WELCOME_SIGNED_OUT_NUDGE : `${remaining} more with a free account`;
+  return `${base} · ${nudge}`;
+}
+
+/**
+ * Anonymous budget payload from GET /api/anon-budget, or the snapshot a
+ * vote response writes into that cache. Signed-in responses
+ * (`authenticated: true`) and a missing payload are not a tick.
+ */
+export function anonBudgetProvesVote(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const row = data as { authenticated?: unknown; used?: unknown };
+  if (row.authenticated !== false) return false;
+  return typeof row.used === "number" && Number.isFinite(row.used) && row.used >= 1;
+}
+
+/** Predict and Favorite need an account. Vote does not. */
+export function welcomeStepNeedsAccount(
+  stepId: WelcomeStepCopy["id"],
+  signedOut: boolean,
+): boolean {
+  return signedOut && (stepId === "predict" || stepId === "favorite");
 }
 
 /** True when the profile counters already rule out "has all three". */

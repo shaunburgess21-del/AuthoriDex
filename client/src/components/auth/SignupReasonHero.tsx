@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, TrendingUp } from "lucide-react";
+import { Check, Star, TrendingUp } from "lucide-react";
 import type { AuthReason } from "@/lib/authReturn";
 import { cn } from "@/lib/utils";
 import {
@@ -40,7 +40,18 @@ const ACCENT: Record<
     line: "stroke-violet-500",
     fill: "fill-violet-500/20",
   },
+  favorite_signup: {
+    boxBorder: "border-amber-500/30",
+    boxBg: "bg-amber-500/10",
+    ballot: "bg-amber-400/80",
+    shimmer: "via-amber-400/25",
+    chip: "bg-amber-500",
+    line: "stroke-amber-500",
+    fill: "fill-amber-500/20",
+  },
 };
+
+type SignupAccent = (typeof ACCENT)[AuthReason];
 
 function CheckBadge() {
   return (
@@ -68,7 +79,22 @@ export function SignupReasonHeroPlaceholder({ reason }: { reason: AuthReason }) 
       )}
       aria-hidden
     >
-      {reason === "vote_limit_reached" ? (
+      {reason === "favorite_signup" ? (
+        <div className="relative">
+          <div
+            className={cn(
+              "flex h-20 w-20 items-center justify-center rounded-2xl border",
+              accent.boxBorder,
+              accent.boxBg,
+            )}
+          >
+            <Star className="h-8 w-8 fill-amber-400 text-amber-500" />
+          </div>
+          <div className="absolute -right-2 -top-2">
+            <CheckBadge />
+          </div>
+        </div>
+      ) : reason === "vote_limit_reached" ? (
         <div className="relative">
           <div
             className={cn(
@@ -122,7 +148,37 @@ export function SignupReasonHeroPlaceholder({ reason }: { reason: AuthReason }) 
   );
 }
 
-function VoteBallotHero({ accent }: { accent: (typeof ACCENT)["vote_limit_reached"] }) {
+function FavoriteStarHero({ accent }: { accent: SignupAccent }) {
+  return (
+    <div className="relative">
+      <div
+        className={cn(
+          "flex h-20 w-20 items-center justify-center rounded-2xl border",
+          accent.boxBorder,
+          accent.boxBg,
+        )}
+      >
+        <motion.div
+          initial={{ scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.12 }}
+        >
+          <Star className="h-8 w-8 fill-amber-400 text-amber-500" />
+        </motion.div>
+      </div>
+      <motion.div
+        className="absolute -right-2 -top-2"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 420, damping: 22, delay: 0.45 }}
+      >
+        <CheckBadge />
+      </motion.div>
+    </div>
+  );
+}
+
+function VoteBallotHero({ accent }: { accent: SignupAccent }) {
   return (
     <div className="relative">
       <div
@@ -169,7 +225,7 @@ function VoteBallotHero({ accent }: { accent: (typeof ACCENT)["vote_limit_reache
   );
 }
 
-function PredictChartHero({ accent }: { accent: (typeof ACCENT)["predict_signup"] }) {
+function PredictChartHero({ accent }: { accent: SignupAccent }) {
   return (
     <div className="relative w-28">
       <svg viewBox="0 0 112 64" className="h-16 w-full" aria-hidden>
@@ -247,6 +303,8 @@ export function SignupReasonHero({ reason }: { reason: AuthReason }) {
     >
       {reason === "vote_limit_reached" ? (
         <VoteBallotHero accent={accent} />
+      ) : reason === "favorite_signup" ? (
+        <FavoriteStarHero accent={accent} />
       ) : (
         <PredictChartHero accent={accent} />
       )}

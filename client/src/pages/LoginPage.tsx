@@ -33,12 +33,7 @@ import { VoxDexLogo } from "@/components/VoxDexLogo";
 import type { AuthReason } from "@/lib/authReturn";
 import { SignupReasonModal } from "@/components/auth/SignupReasonModal";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
-
-function parseReason(value: string | null): AuthReason | null {
-  return value === "vote_limit_reached" || value === "predict_signup"
-    ? value
-    : null;
-}
+import { parseAuthReason, signupFormCopy } from "@/lib/signupReasonCopy";
 
 /**
  * Cooldown (seconds) applied after any email-code send attempt. Prevents a user
@@ -51,12 +46,13 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { user, profile, loading: authLoading, profileLoading } = useAuth();
   const params = new URLSearchParams(window.location.search);
+  const initialReason = parseAuthReason(params.get("reason"));
   const [isLogin, setIsLogin] = useState(params.get("mode") !== "signup");
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [password, setPassword] = useState("");
-  const [reason, setReason] = useState<AuthReason | null>(
-    parseReason(params.get("reason")),
-  );
+  const [reason, setReason] = useState<AuthReason | null>(initialReason);
+  // Survives modal dismiss so the card heading stays specific after Join free.
+  const [formReason, setFormReason] = useState<AuthReason | null>(initialReason);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
@@ -110,7 +106,9 @@ export default function LoginPage() {
       setIsLogin(next.get("mode") !== "signup");
       const qsEmail = next.get("email");
       if (qsEmail) setEmail(qsEmail);
-      setReason(parseReason(next.get("reason")));
+      const nextReason = parseAuthReason(next.get("reason"));
+      setReason(nextReason);
+      setFormReason(nextReason);
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
@@ -360,6 +358,7 @@ export default function LoginPage() {
   };
 
   const submitDisabled = loading || otpSending || googleLoading;
+  const formCopy = signupFormCopy(isLogin, formReason);
 
   return (
     <div
@@ -377,11 +376,11 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{isLogin ? "Welcome back" : "Create your account"}</CardTitle>
-            <CardDescription>
-              {isLogin
-                ? "Sign in to vote, predict, and track your favorites."
-                : "Make predictions, vote on what matters, build your track record."}
+            <CardTitle data-testid="login-heading" className="text-xl leading-snug sm:text-2xl">
+              {formCopy.title}
+            </CardTitle>
+            <CardDescription data-testid="login-subtext">
+              {formCopy.description}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

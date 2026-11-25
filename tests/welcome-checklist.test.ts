@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { authLoginPath } from "../client/src/lib/authReturn";
+import {
+  anonNudgePlacement,
+  isVoteChecklistRoute,
+  welcomeChecklistSuppressesAnonNudge,
+} from "../client/src/lib/anonFirstVoteNudge";
+import {
+  SIGNUP_GENERIC_DESCRIPTION,
+  SIGNUP_GENERIC_TITLE,
+  parseAuthReason,
+  signupFormCopy,
+} from "../client/src/lib/signupReasonCopy";
 import {
   WELCOME_ALL_SET_LABEL,
   WELCOME_CHECKLIST_HEADLINE,
@@ -16,14 +28,21 @@ import {
   readWelcomeComplete,
   readWelcomeDeviceDismissed,
   readWelcomeOpen,
+  subscribeWelcomeDeviceDismiss,
   readWelcomeUserDismissed,
   returningStripAllowed,
   voteListHasBallot,
+  WELCOME_ACCOUNT_GATE_LABEL,
+  WELCOME_FREE_ACCOUNT_HINT,
+  WELCOME_JOIN_FREE_LABEL,
+  WELCOME_SIGNED_OUT_NUDGE,
+  anonBudgetProvesVote,
   welcomeChecklistPhase,
   welcomeCompleteKey,
   welcomeDoneCount,
   welcomeOpenKey,
   welcomeProgressLabel,
+  welcomeStepNeedsAccount,
   welcomeUserDismissKey,
   writeWelcomeComplete,
   writeWelcomeDeviceDismissed,
@@ -400,5 +419,167 @@ describe("quick vote entry pill on /vote", () => {
     assert.equal(host.includes('if (!isMobile && surface === "vote") return;'), false);
     assert.match(host, /data-testid="quick-vote-reentry-pill"/);
     assert.match(host, /data-testid="quick-vote-nudge-pill"/);
+  });
+});
+
+describe("anonymous welcome vote tick", () => {
+  it("ticks from the anon-budget payload that survives a reload, and from nothing else", () => {
+    const voted = { authenticated: false, used: 1, limit: 8, remaining: 7, exhausted: false };
+    assert.equal(anonBudgetProvesVote(voted), true);
+    assert.equal(anonBudgetProvesVote({ ...voted, used: 4 }), true);
+    assert.equal(anonBudgetProvesVote({ ...voted, used: 0 }), false);
+    assert.equal(anonBudgetProvesVote({ authenticated: true }), false);
+    assert.equal(anonBudgetProvesVote({ used: 3 }), false);
+    assert.equal(anonBudgetProvesVote(null), false);
+    assert.equal(anonBudgetProvesVote([]), false);
+    assert.equal(welcomeDoneCount({ hasVote: true, hasPrediction: null, hasFavorite: null }), 1);
+    assert.equal(welcomeProgressLabel(1), "1 of 3");
+  });
+
+  it("reads that budget in the checklist and does not invent a vote flag", () => {
+    assert.match(checklist, /useAnonBudget\(\)/);
+    assert.match(checklist, /anonBudgetProvesVote\(/);
+    assert.equal(checklist.includes("voxdex_welcome_anon_voted"), false);
+    assert.equal(checklist.includes("authoridex-has-ever-voted"), false);
+    assert.match(checklist, /motion-reduce:transition-none/);
+    assert.match(checklist, /WELCOME_ACCOUNT_GATE_LABEL/);
+    assert.match(checklist, /aria-hidden=\{showJoin \? undefined : true\}/);
+    assert.match(checklist, /reason: "favorite_signup"/);
+    assert.match(checklist, /reason: "predict_signup"/);
+    assert.equal(checklist.includes("h-[339px]"), false);
+    assert.equal(checklist.includes("lockedVoteCardBox"), false);
+  });
+});
+
+describe("signed-out welcome pivot", () => {
+  it("keeps 0 of 3, then pivots once the vote step is done", () => {
+    assert.equal(welcomeProgressLabel(0), "0 of 3");
+    assert.equal(welcomeProgressLabel(0, { signedOutNudge: true }), "0 of 3");
+    assert.equal(welcomeProgressLabel(1), "1 of 3");
+    assert.equal(
+      welcomeProgressLabel(1, { signedOutNudge: true }),
+      `1 of 3 · ${WELCOME_SIGNED_OUT_NUDGE}`,
+    );
+    assert.equal(welcomeProgressLabel(1, { signedOutNudge: true }), "1 of 3 · 2 more with a free account");
+    assert.equal(welcomeProgressLabel(3, { signedOutNudge: true }), "3 of 3");
+    assert.equal(WELCOME_FREE_ACCOUNT_HINT, "Free account");
+    assert.equal(WELCOME_ACCOUNT_GATE_LABEL, "requires a free account");
+    assert.equal(WELCOME_JOIN_FREE_LABEL, "Join free");
+    assert.equal(welcomeStepNeedsAccount("vote", true), false);
+    assert.equal(welcomeStepNeedsAccount("predict", true), true);
+    assert.equal(welcomeStepNeedsAccount("favorite", true), true);
+    assert.equal(welcomeStepNeedsAccount("predict", false), false);
+    assert.equal(welcomeStepNeedsAccount("favorite", false), false);
+  });
+});
+
+describe("contextual signup from the checklist", () => {
+  it("sends Favorite to favorite_signup and Predict to predict_signup", () => {
+    assert.equal(
+      authLoginPath({ mode: "signup", reason: "favorite_signup" }),
+      "/login?mode=signup&reason=favorite_signup",
+    );
+    assert.equal(
+      authLoginPath({ mode: "signup", reason: "predict_signup" }),
+      "/login?mode=signup&reason=predict_signup",
+    );
+    assert.equal(authLoginPath({ mode: "signup" }), "/login?mode=signup");
+    assert.equal(parseAuthReason("favorite_signup"), "favorite_signup");
+    assert.equal(parseAuthReason("predict_signup"), "predict_signup");
+    assert.equal(parseAuthReason("vote_limit_reached"), "vote_limit_reached");
+    assert.equal(parseAuthReason("nope"), null);
+    assert.equal(parseAuthReason(null), null);
+  });
+
+  it("reflects the reason in the signup heading and subtext, and keeps the generic fallback", () => {
+    assert.deepEqual(signupFormCopy(false, "predict_signup"), {
+      title: "Create a free account to make predictions",
+      description: "You've got the instinct.",
+    });
+    assert.deepEqual(signupFormCopy(false, "favorite_signup"), {
+      title: "Create a free account to save your favourites",
+      description: "Keep the ones you follow.",
+    });
+    assert.deepEqual(signupFormCopy(false, null), {
+      title: SIGNUP_GENERIC_TITLE,
+      description: SIGNUP_GENERIC_DESCRIPTION,
+    });
+    assert.equal(signupFormCopy(true, "favorite_signup").title, "Welcome back");
+    assert.equal(SIGNUP_GENERIC_TITLE, "Create your account");
+
+    const login = readFileSync(new URL("../client/src/pages/LoginPage.tsx", import.meta.url), "utf8");
+    const modal = readFileSync(
+      new URL("../client/src/components/auth/SignupReasonModal.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(login, /signupFormCopy\(isLogin, formReason\)/);
+    assert.match(login, /parseAuthReason\(/);
+    assert.match(modal, /You've got the instinct\./);
+    assert.match(modal, /Create a free account to save your favourites\./);
+    assert.match(modal, /favorite_signup:/);
+  });
+});
+
+describe("post-vote strip vs welcome checklist", () => {
+  it("suppresses the strip while the checklist is open and keeps it after dismiss", () => {
+    assert.equal(isVoteChecklistRoute("/"), true);
+    assert.equal(isVoteChecklistRoute("/vote"), true);
+    assert.equal(isVoteChecklistRoute("/vote/"), true);
+    assert.equal(isVoteChecklistRoute("/rankings"), false);
+    assert.equal(isVoteChecklistRoute("/people/ada"), false);
+    assert.equal(
+      welcomeChecklistSuppressesAnonNudge({ pathname: "/", deviceDismissed: false }),
+      true,
+    );
+    assert.equal(
+      welcomeChecklistSuppressesAnonNudge({ pathname: "/vote?section=all", deviceDismissed: false }),
+      true,
+    );
+    assert.equal(
+      welcomeChecklistSuppressesAnonNudge({ pathname: "/", deviceDismissed: true }),
+      false,
+    );
+    assert.equal(
+      welcomeChecklistSuppressesAnonNudge({ pathname: "/rankings", deviceDismissed: false }),
+      false,
+    );
+    assert.equal(
+      anonNudgePlacement({ show: true, pathname: "/", deviceDismissed: false }),
+      "hidden",
+    );
+    assert.equal(
+      anonNudgePlacement({ show: true, pathname: "/vote", deviceDismissed: true }),
+      "above-nav",
+    );
+    assert.equal(
+      anonNudgePlacement({ show: true, pathname: "/rankings", deviceDismissed: false }),
+      "under-header",
+    );
+    assert.equal(
+      anonNudgePlacement({ show: false, pathname: "/rankings", deviceDismissed: true }),
+      "hidden",
+    );
+  });
+
+  it("tells the strip to leave document flow, and notifies a same-tab dismiss", () => {
+    const nudge = readFileSync(
+      new URL("../client/src/components/AnonFirstVoteNudge.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(nudge, /anonNudgePlacement\(/);
+    assert.match(nudge, /fixed inset-x-0/);
+    assert.equal(nudge.includes("container mx-auto flex"), true);
+    assert.match(nudge, /data-nudge-placement=\{placement\}/);
+    let heard = 0;
+    const stop = subscribeWelcomeDeviceDismiss(() => {
+      heard += 1;
+    });
+    const store = memory();
+    writeWelcomeDeviceDismissed(store);
+    assert.equal(heard, 1);
+    assert.equal(readWelcomeDeviceDismissed(store), true);
+    stop();
+    writeWelcomeDeviceDismissed(store);
+    assert.equal(heard, 1);
   });
 });
