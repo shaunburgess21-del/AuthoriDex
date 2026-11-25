@@ -47,6 +47,25 @@ test("matchupOgDescription formats option names", () => {
   );
 });
 
+test("matchup tab title and og:title are the same document title", async () => {
+  const { matchupDocumentTitle } = await import("@shared/matchup-og");
+  const { injectOgDocument } = await import("../shared/og-document");
+  const title = matchupDocumentTitle({
+    promptText: "Umbrella or sunscreen?",
+    title: "Rainy Days vs Sunny Days",
+    optionAText: "Rainy Days",
+    optionBText: "Sunny Days",
+  });
+  assert.equal(title, "Rainy Days vs Sunny Days: Umbrella or sunscreen? | VoxDex");
+  const html = injectOgDocument("<html><head><title>Old</title><meta property=\"og:title\" content=\"Old\" /></head><body></body></html>", {
+    title,
+    description: "Rainy Days vs Sunny Days",
+    canonicalUrl: "https://voxdex.com/vote/matchups/rainy-days-vs-sunny-days",
+  });
+  assert.match(html, /<title>Rainy Days vs Sunny Days: Umbrella or sunscreen\? \| VoxDex<\/title>/);
+  assert.match(html, /property="og:title" content="Rainy Days vs Sunny Days: Umbrella or sunscreen\? \| VoxDex"/);
+});
+
 test("matchupDocumentTitle leads with both sides", async () => {
   const { matchupDocumentTitle, matchupDocumentDescription } = await import("@shared/matchup-og");
   assert.equal(

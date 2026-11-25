@@ -59,7 +59,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
 import { hapticSuccess } from "@/lib/haptic";
-import { shareResultImage } from "@/lib/share";
+import { prefetchShareImage, shareResultImage } from "@/lib/share";
+import { usePrefetchShareImage } from "@/hooks/usePrefetchShareImage";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useOpinionPollVoteMutation } from "@/hooks/useOpinionPollVoteMutation";
 import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
@@ -916,6 +917,8 @@ export default function PersonDetailPage() {
 
   // Dynamic <title> + OG/Twitter meta. Crawlers use /api/og/person/:id
   // (vercel.json bot rewrite); keep the live document head in sync.
+  const profileShareImage = person?.id ? personOgImagePath(person.id) : null;
+  usePrefetchShareImage(profileShareImage);
   const profileShareTitle = person ? `${person.name} | VoxDex` : "Celebrity profile | VoxDex";
   const handleProfileShare = () => {
     if (!person?.id) return;
@@ -1508,7 +1511,7 @@ export default function PersonDetailPage() {
                   >
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                   </Button>
-                  <Button variant="outline" size="icon" className="sm:hidden" onClick={handleProfileShare} aria-label="Share" data-testid="button-share-mobile">
+                  <Button variant="outline" size="icon" className="sm:hidden" onClick={handleProfileShare} onMouseEnter={() => { if (profileShareImage) void prefetchShareImage(profileShareImage); }} onFocus={() => { if (profileShareImage) void prefetchShareImage(profileShareImage); }} aria-label="Share" data-testid="button-share-mobile">
                     <Share2 className="h-4 w-4" />
                   </Button>
                   <Button
@@ -1521,7 +1524,7 @@ export default function PersonDetailPage() {
                     <Star className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
                     {isFavorited ? "Favorited" : "Favorite"}
                   </Button>
-                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={handleProfileShare} data-testid="button-share">
+                  <Button variant="outline" className="hidden sm:inline-flex gap-2" onClick={handleProfileShare} onMouseEnter={() => { if (profileShareImage) void prefetchShareImage(profileShareImage); }} onFocus={() => { if (profileShareImage) void prefetchShareImage(profileShareImage); }} data-testid="button-share">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>

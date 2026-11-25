@@ -5,7 +5,8 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage, shareResultImage } from "@/lib/share";
+import { prefetchShareImage, sharePage, shareResultImage } from "@/lib/share";
+import { usePrefetchShareImage } from "@/hooks/usePrefetchShareImage";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -287,13 +288,15 @@ export default function MatchupDetailPage() {
       ? `${window.location.origin}/vote/matchups/${encodeURIComponent(matchup.slug)}`
       : undefined;
 
+  const shareImagePath = matchup?.slug ? matchupOgImagePath(matchup.slug) : null;
+  usePrefetchShareImage(shareImagePath);
   const shareTitle = matchup ? matchupDocumentTitle(matchup) : "Matchup | VoxDex";
 
   const handleShare = () => {
-    if (matchup?.slug) {
+    if (shareImagePath) {
       void shareResultImage({
         title: shareTitle,
-        imagePath: matchupOgImagePath(matchup.slug),
+        imagePath: shareImagePath,
         surface: "matchup",
         url: canonicalShareUrl,
       });
@@ -479,6 +482,12 @@ export default function MatchupDetailPage() {
               variant="ghost"
               size="sm"
               onClick={handleShare}
+              onMouseEnter={() => {
+                if (shareImagePath) void prefetchShareImage(shareImagePath);
+              }}
+              onFocus={() => {
+                if (shareImagePath) void prefetchShareImage(shareImagePath);
+              }}
               className="ml-auto"
               data-testid="button-share"
             >

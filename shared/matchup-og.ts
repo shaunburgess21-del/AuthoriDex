@@ -32,9 +32,10 @@ export function matchupPromptLine(m: {
 }
 
 /**
- * Document / OG title. Puts both sides in the title so the page can rank
- * for the matchup, then the question, then the brand.
- * Example: "Seal Team 6 vs Delta Force: Top tier one team? | VoxDex"
+ * Document title. The browser tab and `og:title` both use this string.
+ * The question alone is the card headline; the title also names both
+ * sides so a shared link is understandable without the image.
+ * Example: "Rainy Days vs Sunny Days: Umbrella or sunscreen? | VoxDex"
  */
 export function matchupDocumentTitle(m: MatchupTitleSource): string {
   const a = m.optionAText.trim();

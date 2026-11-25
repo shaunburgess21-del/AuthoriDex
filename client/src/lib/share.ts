@@ -204,14 +204,78 @@ export function appendShareAttribution(
   }
 }
 
+const readyShareImages = new Map<string, Blob>();
+const inflightShareImages = new Map<string, Promise<Blob | null>>();
+
+/** Test hook. Production callers leave the cache alone. */
+export function resetShareImageCacheForTests(): void {
+  readyShareImages.clear();
+  inflightShareImages.clear();
+}
+
+function peekCachedShareImage(imagePath: string): Blob | null {
+  try {
+    return readyShareImages.get(resolveShareImageUrl(imagePath)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load the result card before the click. A click that still has to wait on
+ * the network loses transient user activation, and `navigator.share` /
+ * `clipboard.write` then fail with nothing on screen.
+ * HTML (for example a Vercel SSO page) is not cached.
+ */
+export function prefetchShareImage(imagePath: string): Promise<Blob | null> {
+  let key: string;
+  try {
+    key = resolveShareImageUrl(imagePath);
+  } catch {
+    return Promise.resolve(null);
+  }
+  const ready = readyShareImages.get(key);
+  if (ready) return Promise.resolve(ready);
+  const existing = inflightShareImages.get(key);
+  if (existing) return existing;
+  const task = loadShareImageBlob(key)
+    .then((blob) => {
+      if (blob) readyShareImages.set(key, blob);
+      return blob;
+    })
+    .finally(() => {
+      inflightShareImages.delete(key);
+    });
+  inflightShareImages.set(key, task);
+  return task;
+}
+
+async function loadShareImageBlob(url: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const headerType = res.headers.get("content-type") ?? "";
+    if (headerType && !headerType.toLowerCase().startsWith("image/")) return null;
+    const blob = await res.blob();
+    const type = (blob.type || headerType).toLowerCase();
+    if (!type.startsWith("image/")) return null;
+    if (blob.size < 32) return null;
+    return blob;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Share the page's 1200×630 result card (the same image linked from
- * og:image). Sends the image when this device can share a file or copy
- * an image, and falls back to the current link share otherwise.
- * Capacitor shells load the image from the public site, not the WebView origin.
- * Attribution stays `?ref=` plus UTM. No profile id is written onto the link.
+ * og:image). The web click uses a blob that was prefetched on load or
+ * hover, so share/clipboard start in the same turn as the click. If that
+ * blob is not ready, or the response was not an image, this falls straight
+ * through to the link share. Capacitor may still wait to write the file
+ * into the cache. Attribution stays `?ref=` plus UTM. No profile id is
+ * written onto the link.
  */
-export async function shareResultImage(options: SharePageOptions & {
+export function shareResultImage(options: SharePageOptions & {
   title: string;
   imagePath: string;
 }): Promise<void> {
@@ -222,29 +286,14 @@ export async function shareResultImage(options: SharePageOptions & {
       surface: options.surface,
     });
 
-  const canAttemptImage = canAttemptResultImage();
-  if (!canAttemptImage) {
-    await linkShare();
-    return;
+  if (isAndroidNativeShare() || isIosNativeShare()) {
+    return shareResultImageNative(options, linkShare);
   }
 
-  let blob: Blob | null = null;
-  try {
-    const imageUrl = resolveShareImageUrl(options.imagePath);
-    const res = await fetch(imageUrl);
-    if (!res.ok) throw new Error(`share image ${res.status}`);
-    const fetched = await res.blob();
-    if (fetched.type && !fetched.type.startsWith("image/")) {
-      throw new Error("share image was not an image");
-    }
-    blob = fetched;
-  } catch {
-    blob = null;
-  }
-
-  if (!blob) {
-    await linkShare();
-    return;
+  const blob = peekCachedShareImage(options.imagePath);
+  if (!blob || !canAttemptResultImage()) {
+    void prefetchShareImage(options.imagePath);
+    return linkShare();
   }
 
   const pageUrl = appendShareAttribution(options.url ?? window.location.href, {
@@ -254,18 +303,43 @@ export async function shareResultImage(options: SharePageOptions & {
   const filename = /\.jpe?g(?:\?|$)/i.test(options.imagePath)
     ? "voxdex-share.jpg"
     : "voxdex-vote.png";
-  const result = await shareImage(blob, {
+  return shareImage(blob, {
     title: options.title,
     text: options.title,
     url: pageUrl,
     filename,
     downloadFallback: false,
+  }).then(async (result) => {
+    const delivered =
+      result.status === "shared" || result.status === "copied" || result.status === "cancelled";
+    if (resultImageSharePlan({ canAttemptImage: true, imageReady: true, delivered }) === "image") {
+      return;
+    }
+    await linkShare();
   });
-  const delivered =
-    result.status === "shared" || result.status === "copied" || result.status === "cancelled";
-  if (resultImageSharePlan({ canAttemptImage, imageReady: true, delivered }) === "image") {
+}
+
+async function shareResultImageNative(
+  options: SharePageOptions & { title: string; imagePath: string },
+  linkShare: () => Promise<void>,
+): Promise<void> {
+  const blob = peekCachedShareImage(options.imagePath) ?? (await prefetchShareImage(options.imagePath));
+  if (!blob) {
+    await linkShare();
     return;
   }
+  const pageUrl = appendShareAttribution(options.url ?? window.location.href, {
+    referralCode: options.referralCode,
+    surface: options.surface,
+  });
+  const result = await shareImage(blob, {
+    title: options.title,
+    text: options.title,
+    url: pageUrl,
+    filename: /\.jpe?g(?:\?|$)/i.test(options.imagePath) ? "voxdex-share.jpg" : "voxdex-vote.png",
+    downloadFallback: false,
+  });
+  if (result.status === "cancelled" || result.status === "shared" || result.status === "copied") return;
   await linkShare();
 }
 
@@ -286,7 +360,7 @@ function resolveShareImageUrl(imagePath: string): string {
  * Call sites that pass only `title` still work. Signed-out shares
  * stay free of a user identifier.
  */
-export async function sharePage(
+export function sharePage(
   title: string,
   options: SharePageOptions = {},
 ): Promise<void> {
@@ -296,10 +370,24 @@ export async function sharePage(
     surface: options.surface,
   });
 
+  // Web share and the clipboard have to be invoked in this turn. Waiting
+  // on the Capacitor import first drops the user gesture, and a rejected
+  // share then looks like "nothing happened".
+  if (!isAndroidNativeShare() && !isIosNativeShare()) {
+    return shareLinkOnWeb(title, url);
+  }
+  return sharePageNative(title, url);
+}
+
+async function sharePageNative(title: string, url: string): Promise<void> {
   const sheet = await shareWithSystemSheet({ title, url });
   if (sheet === "shared" || sheet === "cancelled") return;
+  await shareLinkOnWeb(title, url);
+}
 
-  if (navigator.share) {
+/** Web link share. `navigator.share` / `writeText` run before the first await. */
+export async function shareLinkOnWeb(title: string, url: string): Promise<void> {
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
     try {
       await navigator.share({ title, url });
       return;
@@ -309,6 +397,13 @@ export async function sharePage(
   }
 
   try {
+    if (
+      typeof navigator === "undefined" ||
+      typeof navigator.clipboard === "undefined" ||
+      typeof navigator.clipboard.writeText !== "function"
+    ) {
+      throw new Error("clipboard unavailable");
+    }
     await navigator.clipboard.writeText(url);
     toast.success("Link copied!", { duration: 1500 });
   } catch {

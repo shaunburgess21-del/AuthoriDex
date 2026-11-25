@@ -1,5 +1,6 @@
 import { Share2 } from "lucide-react";
-import { sharePage, shareResultImage, type ShareSurface } from "@/lib/share";
+import { prefetchShareImage, sharePage, shareResultImage, type ShareSurface } from "@/lib/share";
+import { usePrefetchShareImage } from "@/hooks/usePrefetchShareImage";
 import { Button } from "@/components/ui/button";
 
 interface ShareIconButtonProps {
@@ -40,12 +41,18 @@ interface ShareIconButtonProps {
  * consistent across the four detail variants.
  */
 export function ShareIconButton({ title, className, testId = "button-share", surface = "market", imagePath }: ShareIconButtonProps) {
+  usePrefetchShareImage(imagePath);
+  const warm = () => {
+    if (imagePath) void prefetchShareImage(imagePath);
+  };
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
       className={`h-8 w-8 shrink-0 ${className ?? ""}`}
+      onMouseEnter={warm}
+      onFocus={warm}
       onClick={() => {
         if (imagePath) {
           void shareResultImage({ title, imagePath, surface });

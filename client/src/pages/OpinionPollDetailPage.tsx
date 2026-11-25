@@ -4,7 +4,8 @@ import { useParams, useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { showVoteToast } from "@/lib/vote-toast";
-import { sharePage, shareResultImage } from "@/lib/share";
+import { prefetchShareImage, sharePage, shareResultImage } from "@/lib/share";
+import { usePrefetchShareImage } from "@/hooks/usePrefetchShareImage";
 import { goBack } from "@/lib/goBack";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -316,6 +317,8 @@ export default function OpinionPollDetailPage() {
     setChangeDialogOpen(true);
   }, []);
 
+  const opinionShareImage = poll?.slug ? opinionPollOgImagePath(poll.slug) : null;
+  usePrefetchShareImage(opinionShareImage);
   const shareTitle = poll ? `${poll.title} | VoxDex` : "Opinion poll | VoxDex";
   const opinionOptions = (Array.isArray(poll?.options) ? poll.options : []) as Array<{
     name?: string;
@@ -327,10 +330,10 @@ export default function OpinionPollDetailPage() {
     : undefined;
 
   const handleShare = () => {
-    if (poll?.slug) {
+    if (opinionShareImage) {
       void shareResultImage({
         title: shareTitle,
-        imagePath: opinionPollOgImagePath(poll.slug),
+        imagePath: opinionShareImage,
         surface: "poll",
       });
       return;
@@ -484,6 +487,12 @@ export default function OpinionPollDetailPage() {
               variant="ghost"
               size="sm"
               onClick={handleShare}
+              onMouseEnter={() => {
+                if (opinionShareImage) void prefetchShareImage(opinionShareImage);
+              }}
+              onFocus={() => {
+                if (opinionShareImage) void prefetchShareImage(opinionShareImage);
+              }}
               className="ml-auto"
               data-testid="button-share"
             >
