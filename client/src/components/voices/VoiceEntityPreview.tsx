@@ -22,6 +22,23 @@ import {
 } from "./voicesSurface";
 import { cn } from "@/lib/utils";
 
+/**
+ * Banner question on a fixed-height card. Wraps (break-words) and clamps
+ * instead of a one-line ellipsis. leading-snug keeps descenders inside the
+ * line box, so the keep-descenders utility is not required here.
+ * Line count is per variant so the fixed-height card still fits its body.
+ * Binary world markets have room for three lines above the YES/NO tiles.
+ * Multi-outcome rows need that third line on a phone, so those titles
+ * stop at two until sm, where the card is taller.
+ * Polls use two lines on a phone and three from sm, where the card is taller.
+ */
+const BANNER_TITLE_BASE =
+  "w-full min-w-0 shrink-0 break-words text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400";
+
+const MARKET_TITLE_CLASS = `${BANNER_TITLE_BASE} line-clamp-3`;
+const MULTI_MARKET_TITLE_CLASS = `${BANNER_TITLE_BASE} line-clamp-2 sm:line-clamp-3`;
+const POLL_TITLE_CLASS = `${BANNER_TITLE_BASE} line-clamp-2 sm:line-clamp-3`;
+
 const SURFACE_ICON: Record<VoicesEntity["refType"], typeof VoteIcon> = {
   matchup: VoteIcon,
   trending_poll: BarChart3,
@@ -184,11 +201,9 @@ export function VoiceEntityPreview({ entity, itemId, imagePriority = false }: Vo
           </div>
         ) : isSentimentPoll ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
-              {entity.title}
-            </span>
+            <span className={POLL_TITLE_CLASS}>{entity.title}</span>
             {entity.excerpt && (
-              <p className="mt-0.5 shrink-0 line-clamp-2 text-xs leading-snug text-muted-foreground sm:line-clamp-3">
+              <p className="mt-0.5 shrink-0 line-clamp-2 break-words text-xs leading-snug text-muted-foreground sm:line-clamp-3">
                 {entity.excerpt}
               </p>
             )}
@@ -200,11 +215,9 @@ export function VoiceEntityPreview({ entity, itemId, imagePriority = false }: Vo
           </div>
         ) : isOpinionPoll ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
-              {entity.title}
-            </span>
+            <span className={POLL_TITLE_CLASS}>{entity.title}</span>
             {entity.excerpt && (
-              <p className="mt-0.5 shrink-0 line-clamp-2 text-xs leading-snug text-muted-foreground">
+              <p className="mt-0.5 shrink-0 line-clamp-2 break-words text-xs leading-snug text-muted-foreground">
                 {entity.excerpt}
               </p>
             )}
@@ -216,7 +229,13 @@ export function VoiceEntityPreview({ entity, itemId, imagePriority = false }: Vo
           </div>
         ) : isOpenMarket ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-2.5 py-2 sm:px-3">
-            <span className="shrink-0 line-clamp-1 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
+            <span
+              className={
+                entity.worldMarketPreview?.layout === "multi"
+                  ? MULTI_MARKET_TITLE_CLASS
+                  : MARKET_TITLE_CLASS
+              }
+            >
               {entity.title}
             </span>
             {entity.worldMarketPreview ? (
@@ -227,9 +246,7 @@ export function VoiceEntityPreview({ entity, itemId, imagePriority = false }: Vo
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col justify-start gap-1 px-2.5 py-2 sm:px-3">
-            <span className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors group-hover/preview:text-amber-600 dark:group-hover/preview:text-amber-400">
-              {entity.title}
-            </span>
+            <span className={MARKET_TITLE_CLASS}>{entity.title}</span>
           </div>
         )}
       </Link>
