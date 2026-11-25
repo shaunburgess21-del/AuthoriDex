@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,16 @@ import { navigateToLogin } from "@/lib/authReturn";
 import {
   ANON_FIRST_VOTE_NUDGE_COPY,
   ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
+  anonNudgePlacement,
   shouldShowAnonFirstVoteNudge,
+  type AnonNudgePlacement,
 } from "@/lib/anonFirstVoteNudge";
+import { browserLocalStorage } from "@/lib/returningUserStrip";
+import {
+  readWelcomeDeviceDismissed,
+  subscribeWelcomeDeviceDismiss,
+} from "@/lib/welcomeChecklist";
+import { cn } from "@/lib/utils";
 
 function readDismissed(): boolean {
   if (typeof window === "undefined") return true;
@@ -20,31 +28,56 @@ function readDismissed(): boolean {
   }
 }
 
+function readWelcomeDismissed(): boolean {
+  const store = browserLocalStorage();
+  if (!store) return false;
+  return readWelcomeDeviceDismissed(store);
+}
+
 /**
- * Non-blocking strip after the first anonymous vote. Voting stays available
- * for the rest of the free budget — this never opens a modal or redirects.
+ * The strip is fixed, never in document flow, so appearing after a vote
+ * cannot push the page. On the vote hub it stays hidden while the welcome
+ * checklist is open — that card's pivot and Join free are the nudge.
+ * After a dismiss it floats above the bottom nav, clear of the sticky
+ * section chips. On every other page it overlays just under the header.
  */
+const PLACEMENT_CLASS: Record<Exclude<AnonNudgePlacement, "hidden">, string> = {
+  "above-nav":
+    "fixed inset-x-0 z-40 border-t bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0",
+  "under-header":
+    "fixed inset-x-0 z-40 border-b top-[calc(4rem+var(--site-banner-height,0px)+var(--offline-banner-height,0px))]",
+};
+
 function AnonFirstVoteNudgeBody() {
   const budget = useAnonBudget();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [dismissed, setDismissed] = useState(readDismissed);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(readWelcomeDismissed);
 
-  if (
-    !shouldShowAnonFirstVoteNudge({
-      isAnonymous: budget.isAnonymous,
-      used: budget.used,
-      dismissed,
-    })
-  ) {
-    return null;
-  }
+  useEffect(() => subscribeWelcomeDeviceDismiss(() => setWelcomeDismissed(true)), []);
+
+  const show = shouldShowAnonFirstVoteNudge({
+    isAnonymous: budget.isAnonymous,
+    used: budget.used,
+    dismissed,
+  });
+  const placement = anonNudgePlacement({
+    show,
+    pathname: location,
+    deviceDismissed: welcomeDismissed,
+  });
+  if (placement === "hidden") return null;
 
   return (
     <div
-      className="border-b border-cyan-500/30 bg-cyan-500/10"
+      className={cn(
+        "border-cyan-500/30 bg-cyan-500/10",
+        PLACEMENT_CLASS[placement],
+      )}
       role="region"
       aria-label="Save your votes"
       data-testid="anon-first-vote-nudge"
+      data-nudge-placement={placement}
     >
       <div className="container mx-auto flex items-center gap-2 px-3 py-2 sm:px-4">
         <p className="min-w-0 flex-1 text-sm leading-snug">{ANON_FIRST_VOTE_NUDGE_COPY}</p>

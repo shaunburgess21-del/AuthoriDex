@@ -25,7 +25,7 @@ export interface VoteResumePayload {
  * to render the variant-A / variant-B copy. Also stashed in sessionStorage as
  * part of the snapshot so post-login flows can branch on it.
  */
-export type AuthReason = "vote_limit_reached" | "predict_signup";
+export type AuthReason = "vote_limit_reached" | "predict_signup" | "favorite_signup";
 
 /**
  * Phase 4 — resumable action payload. When an anonymous user hits the vote
@@ -307,6 +307,18 @@ export function clearStaleAuthReturnSnapshotOnDirectVisit(): void {
  * The `?reason=` query string format is the contract Stage 6 reads from —
  * don't change values without updating the modal in lockstep.
  */
+/** Login URL for a signup/sign-in handoff. `reason` is the Stage 6 contract. */
+export function authLoginPath(opts?: {
+  mode?: "signup";
+  reason?: AuthReason;
+}): string {
+  const qs = new URLSearchParams();
+  if (opts?.mode === "signup") qs.set("mode", "signup");
+  if (opts?.reason) qs.set("reason", opts.reason);
+  const q = qs.toString();
+  return q ? `/login?${q}` : "/login";
+}
+
 export function navigateToLogin(
   setLocation: AuthSetLocation,
   opts?: {
@@ -321,9 +333,5 @@ export function navigateToLogin(
     ...(opts?.resumeAction != null ? { resumeAction: opts.resumeAction } : {}),
   });
   markAuthNavIntent();
-  const qs = new URLSearchParams();
-  if (opts?.mode === "signup") qs.set("mode", "signup");
-  if (opts?.reason) qs.set("reason", opts.reason);
-  const q = qs.toString();
-  setLocation(q ? `/login?${q}` : "/login");
+  setLocation(authLoginPath({ mode: opts?.mode, reason: opts?.reason }));
 }

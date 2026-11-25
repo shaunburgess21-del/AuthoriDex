@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { Check, X } from "lucide-react";
+import { Check, Lock, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAnonBudget } from "@/hooks/useAnonBudget";
 import { useFavorites } from "@/hooks/useFavorites";
 import { navigateToLogin } from "@/lib/authReturn";
 import { readStoredAuthUserId } from "@/lib/authSession";
@@ -18,14 +19,18 @@ import {
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import {
+  WELCOME_ACCOUNT_GATE_LABEL,
   WELCOME_ALL_SET_LABEL,
   WELCOME_ALL_SET_MS,
   WELCOME_CHECKLIST_HEADLINE,
   WELCOME_FAVORITE_HREF,
+  WELCOME_FREE_ACCOUNT_HINT,
   WELCOME_HOW_IT_WORKS_HREF,
   WELCOME_HOW_IT_WORKS_LABEL,
+  WELCOME_JOIN_FREE_LABEL,
   WELCOME_PREDICT_HREF,
   WELCOME_STEPS,
+  anonBudgetProvesVote,
   clearWelcomeOpen,
   favoriteListHasPerson,
   predictionListHasRow,
@@ -39,6 +44,7 @@ import {
   welcomeChecklistPhase,
   welcomeDoneCount,
   welcomeProgressLabel,
+  welcomeStepNeedsAccount,
   writeWelcomeComplete,
   writeWelcomeDeviceDismissed,
   writeWelcomeOpen,
@@ -73,9 +79,11 @@ interface WelcomeModel {
   done: number;
   flags: { vote: boolean; predict: boolean; favorite: boolean };
   pending: boolean;
+  signedOut: boolean;
   dismiss: () => void;
   openPredict: () => void;
   openFavorite: () => void;
+  openJoin: () => void;
 }
 
 function useWelcomeModel(): WelcomeModel {
@@ -111,8 +119,20 @@ function useWelcomeModel(): WelcomeModel {
     enabled: needsProgress,
   });
   const favorites = useFavorites();
+  const budget = useAnonBudget();
+  const anonVoted =
+    !signedIn &&
+    anonBudgetProvesVote(
+      budget.isAnonymous ? { authenticated: false, used: budget.used } : null,
+    );
 
-  const hasVote = votes.isSuccess ? voteListHasBallot(votes.data) : null;
+  const hasVote = signedIn
+    ? votes.isSuccess
+      ? voteListHasBallot(votes.data)
+      : null
+    : anonVoted
+      ? true
+      : null;
   const hasPrediction = predictions.isSuccess ? predictionListHasRow(predictions.data) : null;
   const hasFavorite =
     needsProgress && favorites.isAuthenticated && !favorites.isLoading && !favorites.error
@@ -200,11 +220,16 @@ function useWelcomeModel(): WelcomeModel {
       navigate(WELCOME_FAVORITE_HREF);
       return;
     }
+    navigateToLogin(navigate, { mode: "signup", reason: "favorite_signup" });
+  };
+
+  const openJoin = () => {
     navigateToLogin(navigate, { mode: "signup" });
   };
 
   return {
     phase,
+    signedOut: !signedIn,
     done: welcomeDoneCount({ hasVote, hasPrediction, hasFavorite }),
     flags: {
       vote: hasVote === true,
@@ -215,6 +240,7 @@ function useWelcomeModel(): WelcomeModel {
     dismiss,
     openPredict,
     openFavorite,
+    openJoin,
   };
 }
 
@@ -223,13 +249,19 @@ function StepMark({ done }: { done: boolean }) {
     <span
       aria-hidden
       className={cn(
-        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-[background-color,border-color,color] duration-300 ease-out motion-reduce:transition-none",
         done
           ? "border-cyan-600/70 bg-cyan-500/15 text-cyan-700 dark:border-cyan-300/60 dark:bg-cyan-400/15 dark:text-cyan-200"
           : "border-border bg-transparent text-transparent",
       )}
     >
-      <Check className="h-3 w-3" strokeWidth={2.5} />
+      <Check
+        className={cn(
+          "h-3 w-3 origin-center transition-transform duration-300 ease-out motion-reduce:transition-none",
+          done ? "scale-100" : "scale-0",
+        )}
+        strokeWidth={2.5}
+      />
     </span>
   );
 }
@@ -239,21 +271,27 @@ export function WelcomeChecklistCard({
   done,
   flags,
   pending,
+  signedOut,
   onVote,
   onPredict,
   onFavorite,
+  onJoin,
   onDismiss,
 }: {
   phase: WelcomePhase;
   done: number;
   flags: { vote: boolean; predict: boolean; favorite: boolean };
   pending: boolean;
+  signedOut: boolean;
   onVote: () => void;
   onPredict: () => void;
   onFavorite: () => void;
+  onJoin: () => void;
   onDismiss: () => void;
 }) {
-  const status = phase === "all-set" ? WELCOME_ALL_SET_LABEL : welcomeProgressLabel(done);
+  const signedOutNudge = signedOut && flags.vote && phase !== "all-set";
+  const status =
+    phase === "all-set" ? WELCOME_ALL_SET_LABEL : welcomeProgressLabel(done, { signedOutNudge });
   const checked = {
     vote: flags.vote || phase === "all-set",
     predict: flags.predict || phase === "all-set",
@@ -264,6 +302,7 @@ export function WelcomeChecklistCard({
     predict: onPredict,
     favorite: onFavorite,
   };
+  const showJoin = signedOutNudge;
 
   return (
     <section
@@ -272,30 +311,37 @@ export function WelcomeChecklistCard({
       aria-busy={pending && phase !== "all-set"}
       className="relative rounded-[12px] border border-cyan-500/35 bg-card/80 px-3 pb-2.5 pt-3 text-card-foreground shadow-none dark:border-cyan-400/25 md:rounded-xl"
     >
-      <div className="pr-12">
-        <h2 id="vote-welcome-heading" className="text-sm font-semibold leading-snug text-foreground">
+      <div className="relative">
+        <h2 id="vote-welcome-heading" className="pr-12 text-sm font-semibold leading-snug text-foreground">
           {WELCOME_CHECKLIST_HEADLINE}
         </h2>
-        <p
-          className="mt-1 text-xs font-medium leading-4 text-cyan-700 dark:text-cyan-300"
-          data-testid="vote-welcome-progress"
-          aria-live="polite"
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss welcome checklist"
+          data-testid="vote-welcome-dismiss"
+          className="absolute -right-2 -top-1.5 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {status}
-        </p>
+          <X className="h-4 w-4" aria-hidden />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss welcome checklist"
-        data-testid="vote-welcome-dismiss"
-        className="absolute right-1 top-1 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <p
+        className="mt-1 grid grid-cols-1 pr-12 text-xs font-medium leading-4 text-cyan-700 dark:text-cyan-300"
+        data-testid="vote-welcome-progress"
       >
-        <X className="h-4 w-4" aria-hidden />
-      </button>
+        <span className="col-start-1 row-start-1" aria-live="polite">
+          {status}
+        </span>
+        {signedOut ? (
+          <span className="invisible col-start-1 row-start-1 select-none" aria-hidden>
+            {welcomeProgressLabel(1, { signedOutNudge: true })}
+          </span>
+        ) : null}
+      </p>
       <ul className="mt-2" aria-label="Getting started steps">
         {WELCOME_STEPS.map((step) => {
           const isDone = checked[step.id];
+          const accountGated = welcomeStepNeedsAccount(step.id, signedOut) && !isDone;
           return (
             <li key={step.id}>
               <button
@@ -313,18 +359,47 @@ export function WelcomeChecklistCard({
               >
                 <StepMark done={isDone} />
                 <span className="min-w-0 flex-1">{step.label}</span>
+                {accountGated ? (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium leading-none text-muted-foreground"
+                    data-testid={`vote-welcome-account-hint-${step.id}`}
+                  >
+                    <Lock className="h-3 w-3" aria-hidden />
+                    <span className="whitespace-nowrap" aria-hidden>
+                      {WELCOME_FREE_ACCOUNT_HINT}
+                    </span>
+                    <span className="sr-only">{WELCOME_ACCOUNT_GATE_LABEL}</span>
+                  </span>
+                ) : null}
               </button>
             </li>
           );
         })}
       </ul>
-      <Link
-        href={WELCOME_HOW_IT_WORKS_HREF}
-        data-testid="vote-welcome-how-it-works"
-        className="mt-1 inline-flex min-h-8 items-center text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
-      >
-        {WELCOME_HOW_IT_WORKS_LABEL}
-      </Link>
+      <div className="mt-1 flex min-h-8 items-center justify-between gap-2">
+        <Link
+          href={WELCOME_HOW_IT_WORKS_HREF}
+          data-testid="vote-welcome-how-it-works"
+          className="inline-flex min-h-8 items-center text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
+        >
+          {WELCOME_HOW_IT_WORKS_LABEL}
+        </Link>
+        {signedOut ? (
+          <button
+            type="button"
+            onClick={onJoin}
+            tabIndex={showJoin ? 0 : -1}
+            aria-hidden={showJoin ? undefined : true}
+            data-testid="vote-welcome-join-free"
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-200",
+              showJoin ? "" : "invisible pointer-events-none",
+            )}
+          >
+            {WELCOME_JOIN_FREE_LABEL}
+          </button>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -379,9 +454,11 @@ export function VoteWelcomeSlot({ onVote }: { onVote: () => void }) {
                 done={model.done}
                 flags={model.flags}
                 pending={model.pending}
+                signedOut={model.signedOut}
                 onVote={onVote}
                 onPredict={model.openPredict}
                 onFavorite={model.openFavorite}
+                onJoin={model.openJoin}
                 onDismiss={model.dismiss}
               />
             </div>
