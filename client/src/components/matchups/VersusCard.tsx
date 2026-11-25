@@ -24,6 +24,13 @@ import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { matchupResultsVisible } from "@/lib/matchupResults";
 import { choiceCrowdLine } from "@/lib/crowdLine";
+import { cn } from "@/lib/utils";
+import {
+  MATCHUP_UNPICKED_CLASS,
+  MatchupPickBadge,
+  matchupPickedFrameClass,
+  matchupPickedNameBarClass,
+} from "@/components/matchups/matchupVoteChrome";
 
 /** Matchup row shape for VersusCard (Vote page + profile Vote tab). */
 export interface VersusCardMatchup {
@@ -236,21 +243,26 @@ export function VersusCard({
             <div className={`flex items-stretch gap-0 ${feedLayout ? "min-h-0 flex-1" : ""}`}>
             <button
               type="button"
+              aria-pressed={votedA}
               onClick={(e) => {
                 if (votedA) return;
                 trackMatchupNeutralVote(matchup.id, "option_a");
                 onVote(matchup.id, "option_a", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
+              className={cn(
+                "relative z-0 flex flex-1 cursor-pointer flex-col rounded-none border transition-all duration-300 motion-reduce:transition-none",
                 hasVoted
                   ? votedA
-                    ? "border-blue-400/50 dark:border-slate-300/60 ring-2 ring-blue-500/10 dark:ring-white/15"
-                    : "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40"
-                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
-              }`}
+                    ? matchupPickedFrameClass("a")
+                    : cn(
+                        "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40",
+                        MATCHUP_UNPICKED_CLASS,
+                      )
+                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50",
+              )}
               data-testid={`button-vote-a-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedA ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
+              <div className={cn("relative overflow-hidden", feedLayout && "min-h-[9rem] flex-1")} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionAImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -266,8 +278,16 @@ export function VersusCard({
                     className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedA ? "from-blue-100 via-blue-50 to-card dark:from-blue-600/30 dark:via-slate-800 dark:to-slate-900" : "from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"}`}
                   />
                 )}
+                {votedA ? (
+                  <MatchupPickBadge side="a" testId={`badge-matchup-pick-a-${matchup.id}`} />
+                ) : null}
               </div>
-              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedA ? "opacity-70" : ""}`}>
+              <div className={cn(
+                "border-t px-2 py-2 text-center",
+                votedA
+                  ? matchupPickedNameBarClass("a")
+                  : cn(footerBarClass, "border-border/40 dark:border-slate-700/30"),
+              )}>
                 <span className={`font-semibold text-sm truncate block ${votedA ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                   {matchup.optionAText}
                 </span>
@@ -276,21 +296,26 @@ export function VersusCard({
 
             <button
               type="button"
+              aria-pressed={votedB}
               onClick={(e) => {
                 if (votedB) return;
                 trackMatchupNeutralVote(matchup.id, "option_b");
                 onVote(matchup.id, "option_b", e);
               }}
-              className={`relative z-0 flex-1 flex flex-col rounded-none border transition-all duration-300 cursor-pointer ${
+              className={cn(
+                "relative z-0 flex flex-1 cursor-pointer flex-col rounded-none border transition-all duration-300 motion-reduce:transition-none",
                 hasVoted
                   ? votedB
-                    ? "border-amber-400/50 dark:border-slate-300/60 ring-2 ring-amber-500/10 dark:ring-white/15"
-                    : "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40"
-                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50"
-              }`}
+                    ? matchupPickedFrameClass("b")
+                    : cn(
+                        "border-border/40 dark:border-slate-700/30 hover:border-foreground/30 dark:hover:border-slate-400/40",
+                        MATCHUP_UNPICKED_CLASS,
+                      )
+                  : "border-border/50 dark:border-slate-700/50 hover:border-foreground/30 dark:hover:border-slate-400/50",
+              )}
               data-testid={`button-vote-b-${matchup.id}`}
             >
-              <div className={`relative overflow-hidden ${hasVoted && !votedB ? "opacity-70" : ""} ${feedLayout ? "min-h-[9rem] flex-1" : ""}`} style={feedLayout ? undefined : { minHeight: "222px" }}>
+              <div className={cn("relative overflow-hidden", feedLayout && "min-h-[9rem] flex-1")} style={feedLayout ? undefined : { minHeight: "222px" }}>
                 {matchup.optionBImage ? (
                   <div className="absolute inset-0">
                     <CardImage
@@ -306,8 +331,16 @@ export function VersusCard({
                     className={`absolute inset-0 bg-gradient-to-br ${hasVoted && votedB ? "from-amber-100 via-amber-50 to-card dark:from-amber-700/30 dark:via-slate-800 dark:to-slate-900" : "from-muted via-muted/80 to-card dark:from-slate-700 dark:via-slate-800 dark:to-slate-900"}`}
                   />
                 )}
+                {votedB ? (
+                  <MatchupPickBadge side="b" testId={`badge-matchup-pick-b-${matchup.id}`} />
+                ) : null}
               </div>
-              <div className={`px-2 py-2 ${footerBarClass} border-t border-border/40 dark:border-slate-700/30 text-center ${hasVoted && !votedB ? "opacity-70" : ""}`}>
+              <div className={cn(
+                "border-t px-2 py-2 text-center",
+                votedB
+                  ? matchupPickedNameBarClass("b")
+                  : cn(footerBarClass, "border-border/40 dark:border-slate-700/30"),
+              )}>
                 <span className={`font-semibold text-sm truncate block ${votedB ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
                   {matchup.optionBText}
                 </span>
