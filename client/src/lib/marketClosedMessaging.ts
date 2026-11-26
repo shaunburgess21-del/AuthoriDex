@@ -1,4 +1,5 @@
 import { getClientWeekDeadlines } from "@/hooks/useMarketCycle";
+import { deriveMarketDisplayStatus } from "@/lib/marketDisplayStatus";
 
 type DateInput = string | Date | null | undefined;
 
@@ -172,19 +173,18 @@ export function getCommunityMarketStatusMessage({
 
 /**
  * True when a World Market should show as trading-closed in the UI.
- * Mirrors `loadAndLockTradeContext` in amm-trades: status must be OPEN,
- * and trading stops at `closeAt` (auto-lock) or `endAt` (belt-and-
- * suspenders when closeAt is null or mis-set).
+ * Delegates to deriveMarketDisplayStatus so cards, the detail page, and
+ * stake entry points share one rule: status must be OPEN, and trading
+ * stops at closeAt (or endAt when closeAt is null or still ahead).
+ * Mirrors loadAndLockTradeContext in amm-trades.
  */
-export function isCommunityTradingClosed(market: {
-  status?: string | null;
-  closeAt?: string | Date | null;
-  endAt?: string | Date | null;
-}): boolean {
-  if (market.status !== "OPEN") return true;
-  const now = Date.now();
-  const closeAt = toDate(market.closeAt);
-  if (closeAt && closeAt.getTime() <= now) return true;
-  const endAt = toDate(market.endAt);
-  return !!endAt && endAt.getTime() <= now;
+export function isCommunityTradingClosed(
+  market: {
+    status?: string | null;
+    closeAt?: string | Date | null;
+    endAt?: string | Date | null;
+  },
+  nowMs: number = Date.now(),
+): boolean {
+  return !deriveMarketDisplayStatus(market, nowMs).canTrade;
 }

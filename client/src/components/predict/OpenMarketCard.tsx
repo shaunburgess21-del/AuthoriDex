@@ -17,7 +17,7 @@ import { formatVox, voxWord } from "@/lib/currency";
 import { formatOutcomeChance, formatVolumeWithUnit } from "@/lib/market-trust-copy";
 import { VoxText } from "@/components/VoxText";
 import { setPredictReturnAnchor } from "@/lib/predictReturnAnchor";
-import { isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { deriveMarketDisplayStatus } from "@/lib/marketDisplayStatus";
 import { formatMarketCountdown } from "@/lib/marketCountdown";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
 import { PositionSummaryRow, formatPickLabel } from "@/components/predict/PositionSummaryRow";
@@ -321,6 +321,8 @@ type OpenMarketCardSharedProps = {
   onNavigate: (slug: string, pick?: string, direction?: string) => void;
   onPickEntry?: (market: any, entry: any, direction: "yes" | "no") => void;
   isMarketClosed: boolean;
+  /** Label for the disabled trade control. Comes from deriveMarketDisplayStatus. */
+  closedActionLabel: string;
   isInactive?: boolean;
   inactiveMessage?: string;
   userBetResult?: { result: string; payout: number; entryLabel: string; stakeAmount: number };
@@ -346,6 +348,7 @@ function BinaryMarketCard({
   onNavigate,
   onPickEntry,
   isMarketClosed,
+  closedActionLabel,
   isInactive = false,
   inactiveMessage,
   userBetResult,
@@ -486,9 +489,9 @@ function BinaryMarketCard({
 
         <div>
           {isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed disabled:opacity-100" disabled aria-label={closedActionLabel}>
               <Lock className="h-4 w-4 mr-2" />
-              Closed
+              {closedActionLabel}
             </Button>
           ) : userBetResult?.result === "pending" ? (
             (() => {
@@ -952,7 +955,7 @@ function MultiMarketCard({
               href={`/markets/${market.slug}`}
               onLinkClick={rememberAnchor}
               onAdd={
-                singleTopUpTarget && onPickEntry
+                !isMarketClosed && singleTopUpTarget && onPickEntry
                   ? () => onPickEntry(market, singleTopUpTarget.entry, singleTopUpTarget.direction)
                   : undefined
               }
@@ -1046,6 +1049,7 @@ function UpDownMarketCard({
   onNavigate,
   onPickEntry,
   isMarketClosed,
+  closedActionLabel,
   isInactive = false,
   inactiveMessage,
   userBetResult,
@@ -1147,9 +1151,9 @@ function UpDownMarketCard({
 
         <div>
           {isMarketClosed ? (
-            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed" disabled>
+            <Button className="w-full bg-muted text-muted-foreground cursor-not-allowed disabled:opacity-100" disabled aria-label={closedActionLabel}>
               <Lock className="h-4 w-4 mr-2" />
-              Closed
+              {closedActionLabel}
             </Button>
           ) : userBetResult?.result === "pending" ? (
             (() => {
@@ -1252,12 +1256,14 @@ export function OpenMarketCard({
   const entries = market.entries || [];
   const participants = market.activeParticipantCount || market.betCount || 0;
   const isInactive = market.visibility === "inactive";
-  const tradingClosed = isMarketClosed || isCommunityTradingClosed(market);
+  const display = deriveMarketDisplayStatus(market);
+  const tradingClosed = isMarketClosed || !display.canTrade;
+  const closedActionLabel = display.canTrade ? "Closed" : display.label;
 
   // Countdown to trading cutoff (closeAt), falling back to endAt.
   const cutoff = market.closeAt || market.endAt || null;
   const countdown = tradingClosed
-    ? { label: "Closed", isUrgent: false }
+    ? { label: closedActionLabel, isUrgent: false }
     : formatMarketCountdown(cutoff);
   const timeLabel = countdown.label || "Closing soon";
   const timeUrgent = countdown.isUrgent;
@@ -1271,6 +1277,7 @@ export function OpenMarketCard({
     onNavigate,
     onPickEntry,
     isMarketClosed: tradingClosed || isInactive,
+    closedActionLabel,
     isInactive,
     inactiveMessage: market.inactiveMessage,
     userBetResult,
