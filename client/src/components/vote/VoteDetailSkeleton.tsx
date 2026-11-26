@@ -76,7 +76,29 @@ export function VoteDetailHeader({
   );
 }
 
-function TitleBlock({ withThumb }: { withThumb: boolean }) {
+/**
+ * Sentiment and opinion questions sit under the title as `text-base`
+ * (1.5rem line box). A measured poll wraps to 5 lines at 390px and 3 at
+ * 1280px. The min-height holds that space so the vote card does not jump
+ * up when the copy arrives; extra lines hide from `md` up.
+ */
+function DescriptionLines() {
+  return (
+    <div
+      className="mt-2 min-h-[7.5rem] space-y-2 md:min-h-[4.5rem]"
+      data-testid="vote-detail-description-skeleton"
+    >
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-11/12" />
+      <Skeleton className="h-4 w-full md:hidden" />
+      <Skeleton className="h-4 w-4/5 md:hidden" />
+    </div>
+  );
+}
+
+function TitleBlock({ variant }: { variant: VoteDetailSkeletonVariant }) {
+  const withThumb = variant !== "matchup";
   return (
     <div className="mb-6">
       <div className="mb-3 flex gap-2">
@@ -84,16 +106,19 @@ function TitleBlock({ withThumb }: { withThumb: boolean }) {
         <Skeleton className="h-5 w-24 rounded-full" />
       </div>
       {withThumb ? (
-        <div className="mb-4 flex items-start gap-4">
-          <Skeleton className="h-20 w-20 shrink-0 rounded-lg" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-8 w-4/5 max-w-md sm:h-9" />
-            <Skeleton className="h-4 w-2/3 max-w-sm" />
+        <div className="mb-4">
+          <div className="flex items-start gap-4">
+            <Skeleton className="h-20 w-20 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-8 w-4/5 max-w-md sm:h-9" />
+            </div>
           </div>
+          <DescriptionLines />
         </div>
       ) : (
         <div className="mb-3 space-y-2">
           <Skeleton className="h-8 w-4/5 max-w-md sm:h-9" />
+          <Skeleton className="h-8 w-3/5 max-w-xs sm:hidden" />
           <Skeleton className="h-4 w-1/2 max-w-xs" />
         </div>
       )}
@@ -240,7 +265,7 @@ export function VoteDetailSkeleton({
       <span className="sr-only">Loading</span>
       <VoteDetailHeader onBack={handleBack} listType={listType} slug={resolvedSlug} />
       <div className="mx-auto max-w-3xl px-4 pb-24 pt-6 md:pb-6">
-        <TitleBlock withThumb={variant !== "matchup"} />
+        <TitleBlock variant={variant} />
         {variant === "matchup" ? <MatchupVoteModule /> : null}
         {variant === "sentiment" ? <SentimentVoteModule /> : null}
         {variant === "opinion" ? <OpinionVoteModule /> : null}

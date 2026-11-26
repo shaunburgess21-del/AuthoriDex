@@ -80,6 +80,11 @@ test("injectOgDocument gives the shell a unique title, canonical, png image, and
   assert.match(html, /"@type":"WebPage"/);
   assert.match(html, /Delta Force leads with 57%/);
   assert.match(html, /id="root"/);
+  assert.match(html, /id="boot-shell"/);
+  assert.match(
+    html,
+    /property="og:description" content="Delta Force leads with 57% of 7 votes\. Seal Team 6 vs Delta Force\."/,
+  );
   assert.doesNotMatch(html, /Vox Populi - Indexed/);
 
   const other = injectOgDocument(SHELL, PREDICT);
