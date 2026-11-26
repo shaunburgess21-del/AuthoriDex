@@ -47,6 +47,11 @@ interface MarketActivityFeedProps {
    * from calling the viewer the first predictor.
    */
   traderCount?: number;
+  /**
+   * When false, the header does not say Live. Closed, resolved, and void
+   * markets pass false. Defaults to true so open markets stay unchanged.
+   */
+  showLive?: boolean;
 }
 
 /**
@@ -66,6 +71,7 @@ export function MarketActivityFeed({
   className,
   detailHeader = false,
   traderCount,
+  showLive = true,
 }: MarketActivityFeedProps) {
   const [, setLocation] = useLocation();
 
@@ -106,8 +112,12 @@ export function MarketActivityFeed({
                 terms={[{ term: "shares", label: "shares" }]}
                 testId="market-activity-glossary"
               />
-              <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 ml-auto">
-                Live
+              <Badge
+                variant="outline"
+                className="text-[10px] text-muted-foreground border-border/50 ml-auto"
+                data-testid="market-activity-liveness"
+              >
+                {showLive ? "Live" : "Closed"}
               </Badge>
             </>
           }
@@ -120,8 +130,11 @@ export function MarketActivityFeed({
             terms={[{ term: "shares", label: "shares" }]}
             testId="market-activity-glossary"
           />
-          <span className="text-[10px] text-muted-foreground uppercase tracking-wider ml-auto">
-            Live
+          <span
+            className="text-[10px] text-muted-foreground uppercase tracking-wider ml-auto"
+            data-testid="market-activity-liveness"
+          >
+            {showLive ? "Live" : "Closed"}
           </span>
         </div>
       )}

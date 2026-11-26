@@ -979,7 +979,11 @@ export default function H2HDetailPage() {
         })()}
 
         {/* Live trade feed for this H2H matchup. */}
-        <MarketActivityFeed marketId={marketId} traderCount={hydrated.totalParticipants} />
+        <MarketActivityFeed
+          marketId={marketId}
+          traderCount={hydrated.totalParticipants}
+          showLive={!isMarketClosed}
+        />
 
         {/* Score Comparison */}
         <Card className="border-border/50">

@@ -43,7 +43,8 @@ import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
-import { getCommunityMarketStatusMessage, isCommunityTradingClosed } from "@/lib/marketClosedMessaging";
+import { getCommunityMarketStatusMessage } from "@/lib/marketClosedMessaging";
+import { deriveMarketDisplayStatus } from "@/lib/marketDisplayStatus";
 import { selectHeldEntryIds } from "@/lib/heldEntryIds";
 import { JACKPOT_MAX_PREDICTED_SCORE } from "@shared/fame-scale";
 import { isOtherStyleOutcomeLabel } from "@shared/lib/other-outcome";
@@ -173,12 +174,29 @@ interface MarketData {
   linkedPersonAvatar?: string | null;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  OPEN: { label: "Open", className: "bg-green-500/25 dark:bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/40 dark:border-green-500/30" },
-  CLOSED_PENDING: { label: "Closed", className: "bg-amber-500/25 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40 dark:border-amber-500/30" },
-  RESOLVED: { label: "Resolved", className: "bg-blue-500/25 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/40 dark:border-blue-500/30" },
-  VOID: { label: "Void", className: "bg-red-500/25 dark:bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/40 dark:border-red-500/30" },
-};
+function ClosedTradeButton({
+  label,
+  className = "",
+  testId,
+}: {
+  label: string;
+  className?: string;
+  testId: string;
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled
+      aria-label={label}
+      data-testid={testId}
+      className={`h-8 bg-muted text-muted-foreground border-border/60 cursor-not-allowed disabled:opacity-100 ${className}`}
+    >
+      <Lock className="h-3.5 w-3.5" />
+      {label}
+    </Button>
+  );
+}
 
 function useCountdown(endDate: string | null) {
   const [timeLeft, setTimeLeft] = useState("");
@@ -190,7 +208,7 @@ function useCountdown(endDate: string | null) {
       const end = new Date(endDate).getTime();
       const diff = end - now;
       if (diff <= 0) {
-        setTimeLeft("Ended");
+        setTimeLeft("");
         return;
       }
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -1359,7 +1377,7 @@ export default function MarketDetailPage() {
   useEffect(() => {
     if (ammAutoOpenFiredRef.current) return;
     if (!ammAutoOpenEntryId || !isAmm || isJackpotMarket) return;
-    if (!market || isCommunityTradingClosed(market)) return;
+    if (!market || !deriveMarketDisplayStatus(market).canTrade) return;
     const entry = market.entries?.find((e) => e.id === ammAutoOpenEntryId);
     if (!entry) return;
     const direction: "yes" | "no" =
@@ -1387,7 +1405,7 @@ export default function MarketDetailPage() {
 
   // Must stay above the loading return. A hook after that return runs
   // only once the market arrives, and React throws on the extra hook.
-  const holdingsMarketOpen = !!market && !isCommunityTradingClosed(market);
+  const holdingsMarketOpen = !!market && deriveMarketDisplayStatus(market).canTrade;
   const heldEntryIds = useMemo(
     () =>
       selectHeldEntryIds({
@@ -1424,8 +1442,8 @@ export default function MarketDetailPage() {
     );
   }
 
-  const statusConfig = STATUS_CONFIG[market.status] || STATUS_CONFIG.OPEN;
-  const isOpen = !isCommunityTradingClosed(market);
+  const displayStatus = deriveMarketDisplayStatus(market);
+  const isOpen = displayStatus.canTrade;
   const isInactive = (market as any).visibility === "inactive";
   const isClosedMarket = !isOpen;
   const isResolved = market.status === "RESOLVED";
@@ -1441,7 +1459,7 @@ export default function MarketDetailPage() {
   // popovers) speaks in the same voice.
   const { title: resultTitle, description: resultDescription } =
     getCommunityMarketStatusMessage({
-      status: market.status,
+      status: displayStatus.messageStatus,
       outcomeLabel: market.resolutionSummary?.outcomeLabel ?? null,
       voidReason: market.voidReason ?? null,
       isJackpotMarket,
@@ -1454,8 +1472,8 @@ export default function MarketDetailPage() {
       <div className="container mx-auto px-4 pt-6 pb-24 md:pb-6 max-w-3xl">
         <div className="mb-6">
           <div className="flex items-center gap-2 flex-wrap mb-3">
-            <Badge variant="outline" className={statusConfig.className} data-testid="badge-status">
-              {statusConfig.label}
+            <Badge variant="outline" className={displayStatus.badgeClassName} data-testid="badge-status">
+              {displayStatus.label}
             </Badge>
             {market.category && <CategoryPill category={market.category} data-testid="badge-category" />}
             {market.featured && (
@@ -1514,7 +1532,7 @@ export default function MarketDetailPage() {
           )}
 
           <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground">
-            {timeLeft && (
+            {displayStatus.phase === "open" && timeLeft && (
               <div className="flex items-center gap-1.5" data-testid="text-time-remaining">
                 <Clock className="h-3.5 w-3.5" />
                 <span>{timeLeft}</span>
@@ -1574,16 +1592,18 @@ export default function MarketDetailPage() {
 
           {/* Native-parity timing strip: "Trading closes … / Results …"
               with a live countdown. Community only (jackpot rows on this
-              page keep their own weekly cutoff hero) and only while the
-              market is OPEN — the result card owns closed/resolved copy,
-              and the strip's RESOLVED variant carries weekly-native
-              wording that doesn't fit world events. */}
-          {market.marketType === "community" && market.status === "OPEN" && (market.closeAt || market.endAt) && (
+              page keep their own weekly cutoff hero). phaseStatus comes
+              from deriveMarketDisplayStatus so a row that is still OPEN
+              in the database cannot show "Trading closes" after closeAt.
+              Resolved and void markets skip the strip — the result card
+              owns that copy, and the strip's resolved line is weekly-native. */}
+          {market.marketType === "community" && displayStatus.cyclePhase && (market.closeAt || market.endAt) && (
             <MarketCycleStrip
               bettingCutoff={market.closeAt || market.endAt}
               resolveAt={market.endAt}
               variant="full"
               engine="amm"
+              phaseStatus={displayStatus.cyclePhase}
               className="mt-4"
             />
           )}
@@ -1702,8 +1722,12 @@ export default function MarketDetailPage() {
             <Card className={predictDetailSectionCardClass("p-4 mb-6")} data-testid="section-amm-live-market">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <h2 className="text-sm font-semibold flex items-center gap-1.5">
-                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Live Market
+                  {displayStatus.showLive ? (
+                    <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  )}
+                  {displayStatus.showLive ? "Live Market" : "Market prices"}
                 </h2>
                 <div className="flex items-center gap-1.5">
                   {liveVolumeLabel && (
@@ -1723,7 +1747,7 @@ export default function MarketDetailPage() {
                       <Users className="h-2.5 w-2.5" />
                       {traderCount}
                     </Badge>
-                  ) : (
+                  ) : displayStatus.canTrade ? (
                     <Badge
                       variant="outline"
                       className="text-[10px] text-muted-foreground border-border/50"
@@ -1731,9 +1755,21 @@ export default function MarketDetailPage() {
                     >
                       {FIRST_TO_PREDICT}
                     </Badge>
-                  )}
-                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]">
-                    LIVE
+                  ) : null}
+                  <Badge
+                    variant="outline"
+                    className={
+                      displayStatus.showLive
+                        ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/40 dark:border-emerald-500/30 text-[10px]"
+                        : `${displayStatus.badgeClassName} text-[10px]`
+                    }
+                    data-testid="badge-market-liveness"
+                  >
+                    {displayStatus.showLive
+                      ? "LIVE"
+                      : displayStatus.phase === "trading_closed"
+                        ? "CLOSED"
+                        : displayStatus.label.toUpperCase()}
                   </Badge>
                 </div>
               </div>
@@ -1789,31 +1825,42 @@ export default function MarketDetailPage() {
                             </p>
                           </div>
                           <div className="mt-2 flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              disabled={!isOpen}
-                              onClick={() => openCashOut(entry)}
-                              data-testid={`community-position-sell-${pos.entryId}`}
-                              className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
-                            >
-                              <Banknote className="h-3.5 w-3.5" />
-                              <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!isOpen}
-                              onClick={() => openBuyModal(entry, "yes")}
-                              data-testid={`community-position-add-${pos.entryId}`}
-                            >
-                              Add
-                            </Button>
+                            {isOpen ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => openCashOut(entry)}
+                                  data-testid={`community-position-sell-${pos.entryId}`}
+                                  className="gap-1 px-3 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                                >
+                                  <Banknote className="h-3.5 w-3.5" />
+                                  <span>Cash out ~<VoxText text={formatVox(Math.round(pos.currentValue))} /></span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openBuyModal(entry, "yes")}
+                                  data-testid={`community-position-add-${pos.entryId}`}
+                                >
+                                  Add
+                                </Button>
+                              </>
+                            ) : (
+                              <ClosedTradeButton
+                                label={displayStatus.label}
+                                testId={`community-position-closed-${pos.entryId}`}
+                              />
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   <p className="text-[10px] text-muted-foreground text-center pt-1">
-                    Live prices — these numbers shift as the market moves.
+                    {displayStatus.phase === "open"
+                      ? "Live prices — these numbers shift as the market moves."
+                      : displayStatus.phase === "trading_closed"
+                        ? "Trading is closed — these prices stay put until the market resolves."
+                        : "Trading is closed — these are the final prices."}
                   </p>
                 </div>
               )}
@@ -1847,7 +1894,7 @@ export default function MarketDetailPage() {
                             </span>
                           )}
                         </span>
-                        <div className="flex-1 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
+                        <div className="flex-1 min-w-0 h-5 rounded-md overflow-hidden border border-blue-500/25 bg-slate-900/80">
                           <div
                             className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400"
                             style={{ width: `${Math.max(entry.percentage, 1)}%` }}
@@ -1857,16 +1904,23 @@ export default function MarketDetailPage() {
                         <span className="font-mono text-[10px] text-muted-foreground w-14 text-right tabular-nums hidden sm:block">
                           <VoxText text={formatVoxPrice(livePrice)} />
                         </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!isOpen}
-                          onClick={() => openBuyModal(entry, "yes")}
-                          className="shrink-0 h-8 px-3"
-                          data-testid={`community-buy-${entry.id}`}
-                        >
-                          Buy
-                        </Button>
+                        {isOpen ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openBuyModal(entry, "yes")}
+                            className="shrink-0 h-8 px-3"
+                            data-testid={`community-buy-${entry.id}`}
+                          >
+                            Buy
+                          </Button>
+                        ) : (
+                          <ClosedTradeButton
+                            label={displayStatus.label}
+                            className="shrink-0 px-2"
+                            testId={`community-buy-${entry.id}`}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1905,23 +1959,36 @@ export default function MarketDetailPage() {
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider truncate">{entry.label}</p>
                         <p className={`text-2xl font-bold font-mono ${priceColor}`}>{entry.percentage}%</p>
                         <p className="text-[10px] text-muted-foreground tabular-nums"><VoxText text={formatVoxPrice(livePrice)} /> / share</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!isOpen}
-                          onClick={() => openBuyModal(entry, "yes")}
-                          className={`mt-2 w-full h-8 ${btnColor}`}
-                          data-testid={`community-buy-${entry.id}`}
-                        >
-                          Buy {entry.label}
-                        </Button>
+                        {isOpen ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openBuyModal(entry, "yes")}
+                            className={`mt-2 w-full h-8 ${btnColor}`}
+                            data-testid={`community-buy-${entry.id}`}
+                          >
+                            Buy {entry.label}
+                          </Button>
+                        ) : (
+                          <ClosedTradeButton
+                            label={displayStatus.label}
+                            className="mt-2 w-full"
+                            testId={`community-buy-${entry.id}`}
+                          />
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground/70 mt-3 text-center">
-                Live LMSR pricing — each share pays <VoxMark />1 if the outcome wins.
+              <p className="text-[10px] text-muted-foreground/70 mt-3 text-center" data-testid="text-amm-pricing-note">
+                {displayStatus.phase === "open" ? (
+                  <>Live LMSR pricing — each share pays <VoxMark />1 if the outcome wins.</>
+                ) : displayStatus.phase === "trading_closed" ? (
+                  <>Trading closed — buys and cash outs are off until this market resolves. Each share pays <VoxMark />1 if that outcome wins.</>
+                ) : (
+                  <>Trading is finished on this market.</>
+                )}
               </p>
             </Card>
           );
@@ -1957,7 +2024,11 @@ export default function MarketDetailPage() {
             sync with the rest of the platform's social surfaces. */}
         {market.id && (
           <div className="mb-6">
-            <MarketActivityFeed marketId={market.id} traderCount={totalParticipants} />
+            <MarketActivityFeed
+              marketId={market.id}
+              traderCount={totalParticipants}
+              showLive={displayStatus.showLive}
+            />
           </div>
         )}
 
@@ -2060,9 +2131,9 @@ export default function MarketDetailPage() {
           <Card className="p-5 mb-6 border-violet-500/30 dark:border-violet-500/20 bg-violet-500/8 dark:bg-violet-500/5" data-testid="section-result-summary">
             <div className="flex items-start gap-3 mb-4">
               <div className="h-10 w-10 rounded-full bg-violet-500/15 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
-                {market.status === "VOID" ? (
+                {displayStatus.phase === "void" ? (
                   <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                ) : market.status === "CLOSED_PENDING" ? (
+                ) : displayStatus.phase === "trading_closed" ? (
                   <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 ) : (
                   <Trophy className="h-5 w-5 text-violet-600 dark:text-violet-400" />
