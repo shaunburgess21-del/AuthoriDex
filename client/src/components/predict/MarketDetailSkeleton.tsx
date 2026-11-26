@@ -52,7 +52,7 @@ function CommunityMarketBody() {
           <Skeleton className="h-3.5 w-28" />
           <Skeleton className="ml-auto h-8 w-16" />
         </div>
-        <Skeleton className="mt-4 h-4 w-full" />
+        <CycleStripSkeleton tall className="mt-4" />
       </div>
       <Card className={predictDetailSectionCardClass("p-4")} data-testid="market-price-panel-skeleton">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -73,8 +73,40 @@ function CommunityMarketBody() {
   );
 }
 
-function CycleStripSkeleton() {
-  return <Skeleton className="h-4 w-full" />;
+/**
+ * Full MarketCycleStrip (p-3, two text-xs rows, border). A 16px line
+ * left the card short by the measured jump: world markets 90px at 390
+ * and 59px at 1280, native pages 42px and 33px. The box is that jump
+ * plus the 16px line it replaces.
+ */
+function CycleStripSkeleton({
+  tall = false,
+  className,
+}: {
+  tall?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col justify-center gap-1.5 rounded-lg border border-border/40 bg-muted/30 px-3",
+        tall
+          ? "min-h-[106px] md:min-h-[75px]"
+          : "min-h-[58px] md:min-h-[49px]",
+        className,
+      )}
+      data-testid="cycle-strip-skeleton"
+    >
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+        <Skeleton className="h-4 w-4/5 max-w-md" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
+        <Skeleton className="h-4 w-3/5 max-w-sm" />
+      </div>
+    </div>
+  );
 }
 
 function H2HBody() {

@@ -15,6 +15,7 @@ import { installNativeKeyboardListener } from "./lib/nativeKeyboardListener";
 import { installIosKeyboard } from "./lib/nativeIosKeyboardListener";
 import { primeAndroidNetworkStatus } from "./lib/nativeNetworkListener";
 import { syncNativeSystemBars } from "./lib/nativeSystemBars";
+import { waitForAppStylesheet } from "./lib/waitForAppStylesheet";
 import "./index.css";
 
 try {
@@ -60,7 +61,10 @@ if (window.location.pathname === "/" || window.location.pathname === "") {
   void import("./pages/HomePage");
 }
 
-function startApp() {
+async function startApp() {
+  // #boot-shell stays in #root until the app CSS is applied, so the
+  // first React paint is not an unstyled flash over the shell.
+  await waitForAppStylesheet();
   createRoot(rootEl).render(<App />);
 
   if (Capacitor.isNativePlatform()) {

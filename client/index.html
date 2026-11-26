@@ -44,30 +44,16 @@
         }
       })();
     </script>
-    <link rel="apple-touch-icon" href="/voxdex-logo.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!--
-      Load Google Fonts without blocking first paint: fetch the stylesheet as a
-      preload, then promote it to a real stylesheet once it arrives. `display=swap`
-      keeps text visible in a fallback face until the web font loads. <noscript>
-      covers the no-JS / crawler path.
+      Critical first paint. Must stay in <head> before any stylesheet
+      link: the app CSS is large enough to block painting for seconds on
+      a slow network. html.dark is the default (theme script above).
+      React removes #boot-shell only after this CSS and the app
+      stylesheet are both applied.
     -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    </noscript>
-  </head>
-  <body>
-    <!--
-      Static first paint, replaced when React mounts into #root.
-      CSS only: no images, no extra requests. Colors match the theme
-      tokens (light, and .dark set by the head script before body).
-      Header is the app nav's 64px bar so the handoff does not jump.
-    -->
-    <style>
-      html,body{margin:0;background:hsl(0 0% 98%)}
-      html.dark,html.dark body{background:hsl(220 31% 6%)}
+    <style id="boot-shell-css">
+      html,body{margin:0;background:hsl(0 0% 98%);color:hsl(220 20% 10%)}
+      html.dark,html.dark body{background:hsl(220 31% 6%);color:hsl(220 10% 98%)}
       #boot-shell{min-height:100vh;background:hsl(0 0% 98%);color:hsl(220 20% 10%)}
       html.dark #boot-shell{background:hsl(220 31% 6%);color:hsl(220 10% 98%)}
       .boot-header{position:sticky;top:0;z-index:50;box-sizing:border-box;height:65px;border-bottom:1px solid hsl(220 12% 88%);background:hsl(0 0% 98%)}
@@ -96,6 +82,21 @@
       }
       @keyframes boot-pulse{50%{opacity:.55}}
     </style>
+    <link rel="apple-touch-icon" href="/voxdex-logo.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!--
+      Load Google Fonts without blocking first paint: fetch the stylesheet as a
+      preload, then promote it to a real stylesheet once it arrives. `display=swap`
+      keeps text visible in a fallback face until the web font loads. <noscript>
+      covers the no-JS / crawler path.
+    -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    </noscript>
+  </head>
+  <body>
     <div id="root">
       <div id="boot-shell" aria-busy="true">
         <span class="boot-sr">Loading</span>

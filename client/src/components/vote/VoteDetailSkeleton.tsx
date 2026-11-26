@@ -78,14 +78,18 @@ export function VoteDetailHeader({
 
 /**
  * Sentiment and opinion questions sit under the title as `text-base`
- * (1.5rem line box). A measured poll wraps to 5 lines at 390px and 3 at
- * 1280px. The min-height holds that space so the vote card does not jump
- * up when the copy arrives; extra lines hide from `md` up.
+ * (1.5rem line box). The measured sentiment poll wraps to 6 lines at
+ * 390px and 3 at 1280px. The min-height holds that space so the vote
+ * card does not jump when the copy arrives; extra lines hide from `md`.
  */
-function DescriptionLines() {
+function DescriptionLines({ mobileLines }: { mobileLines: 5 | 6 }) {
   return (
     <div
-      className="mt-2 min-h-[7.5rem] space-y-2 md:min-h-[4.5rem]"
+      className={
+        mobileLines === 6
+          ? "mt-2 min-h-[9rem] space-y-2 md:min-h-[4.5rem]"
+          : "mt-2 min-h-[7.5rem] space-y-2 md:min-h-[4.5rem]"
+      }
       data-testid="vote-detail-description-skeleton"
     >
       <Skeleton className="h-4 w-full" />
@@ -93,6 +97,7 @@ function DescriptionLines() {
       <Skeleton className="h-4 w-11/12" />
       <Skeleton className="h-4 w-full md:hidden" />
       <Skeleton className="h-4 w-4/5 md:hidden" />
+      {mobileLines === 6 ? <Skeleton className="h-4 w-2/3 md:hidden" /> : null}
     </div>
   );
 }
@@ -113,7 +118,7 @@ function TitleBlock({ variant }: { variant: VoteDetailSkeletonVariant }) {
               <Skeleton className="h-8 w-4/5 max-w-md sm:h-9" />
             </div>
           </div>
-          <DescriptionLines />
+          <DescriptionLines mobileLines={variant === "sentiment" ? 6 : 5} />
         </div>
       ) : (
         <div className="mb-3 space-y-2">

@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { makeAppStylesheetsNonBlocking } from "./shared/boot-shell-html";
 
 const capacitorBuild = process.env.CAPACITOR_BUILD === "1";
 
@@ -148,6 +149,15 @@ export default defineConfig({
           ),
         ]
       : []),
+    {
+      name: "non-blocking-app-css",
+      transformIndexHtml: {
+        order: "post",
+        handler(html: string) {
+          return makeAppStylesheetsNonBlocking(html);
+        },
+      },
+    },
   ],
   define: capacitorBuild
     ? {
