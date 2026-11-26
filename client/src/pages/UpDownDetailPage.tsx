@@ -985,7 +985,11 @@ export default function UpDownDetailPage() {
 
         {/* Live trade feed — Up/Down trades flow heavily right around
             resolution windows, so seeing the late book matters here. */}
-        <MarketActivityFeed marketId={marketId} traderCount={hydrated.totalParticipants} />
+        <MarketActivityFeed
+          marketId={marketId}
+          traderCount={hydrated.totalParticipants}
+          showLive={!isMarketClosed}
+        />
 
         {/* Trend Score Chart */}
         <Card className="border-border/50">

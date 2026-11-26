@@ -7,7 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { InteractiveCategoryPill } from "@/components/InteractiveCategoryPill";
 import { AvatarHeightHeadline } from "@/components/AvatarHeightHeadline";
 import { PredictCard } from "@/components/predict/PredictCard";
-import { ParticipantAvatarStack } from "@/components/predict/ParticipantAvatarStack";
+import { ParticipantAvatarStack, type ParticipantPreview } from "@/components/predict/ParticipantAvatarStack";
 import { useLocation } from "wouter";
 import { Check, Clock, Lock, Trophy, XCircle, RotateCcw, X, ExternalLink, Plus } from "lucide-react";
 import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
@@ -31,6 +31,28 @@ import { cn } from "@/lib/utils";
  * this in-line; community cards historically didn't, so back-navigation
  * from /markets/:slug landed at the top of /predict.
  */
+/**
+ * Trader row on a world-market card. Closed markets with nobody in
+ * yet skip the "Be the first to predict" invite, and skip the wrapper
+ * so that slot does not leave a blank band.
+ */
+function CommunityTraderLine({
+  participants,
+  recentParticipants,
+  invite,
+}: {
+  participants: number;
+  recentParticipants?: ParticipantPreview[];
+  invite: boolean;
+}) {
+  if (participants <= 0 && !invite) return null;
+  return (
+    <div className="mb-2">
+      <ParticipantAvatarStack participants={recentParticipants} totalCount={participants} />
+    </div>
+  );
+}
+
 function rememberCommunityCardAnchor(marketId: string | number | undefined | null) {
   if (marketId == null) return;
   setPredictReturnAnchor(`card-community-${marketId}`);
@@ -446,10 +468,12 @@ function BinaryMarketCard({
         </a>
       )}
 
-      <div className="mt-auto">
-        <div className="mb-2">
-          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        </div>
+      <div className={isMarketClosed ? undefined : "mt-auto"}>
+        <CommunityTraderLine
+          participants={participants}
+          recentParticipants={market.recentParticipants}
+          invite={!isMarketClosed}
+        />
 
         <div className="mb-2">
           {isYesNoMarket ? (
@@ -845,11 +869,13 @@ function MultiMarketCard({
         </a>
       )}
 
-      <div className="mb-2">
-        <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-      </div>
+      <CommunityTraderLine
+        participants={participants}
+        recentParticipants={market.recentParticipants}
+        invite={!isMarketClosed}
+      />
 
-      <div className="mt-auto">
+      <div className={isMarketClosed ? undefined : "mt-auto"}>
         <div className="space-y-1.5">
           {visibleEntries.map((entry: any) => {
             const entryBet = userBetsPerEntry?.get(String(entry.id));
@@ -1134,10 +1160,12 @@ function UpDownMarketCard({
         </a>
       )}
 
-      <div className="mt-auto">
-        <div className="mb-2">
-          <ParticipantAvatarStack participants={market.recentParticipants} totalCount={participants} />
-        </div>
+      <div className={isMarketClosed ? undefined : "mt-auto"}>
+        <CommunityTraderLine
+          participants={participants}
+          recentParticipants={market.recentParticipants}
+          invite={!isMarketClosed}
+        />
 
         <div className="mb-2">
           <div className="h-3 rounded-full bg-red-500/25 dark:bg-red-500/20 overflow-hidden">

@@ -1019,6 +1019,7 @@ export default function CategoryRaceDetailPage() {
           limit={5}
           detailHeader
           traderCount={totalParticipants}
+          showLive={!isMarketClosed}
           className="border-border/50 shadow-none"
         />
 

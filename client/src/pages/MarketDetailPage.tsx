@@ -2024,7 +2024,11 @@ export default function MarketDetailPage() {
             sync with the rest of the platform's social surfaces. */}
         {market.id && (
           <div className="mb-6">
-            <MarketActivityFeed marketId={market.id} traderCount={totalParticipants} />
+            <MarketActivityFeed
+              marketId={market.id}
+              traderCount={totalParticipants}
+              showLive={displayStatus.showLive}
+            />
           </div>
         )}
 
