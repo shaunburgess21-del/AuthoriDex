@@ -39,6 +39,33 @@ export function isOgDetailPath(pathname: string): boolean {
 }
 
 /**
+ * Cache key for document meta. Matchup, poll, predict, and profile cards
+ * ignore the query string, so `?ref=` shares one entry and does not change
+ * the HTML. Insights and Explore copy depends on the query, so those keys
+ * keep it.
+ */
+export function ogDocumentMetaCacheKey(rawPath: string): string {
+  const trimmed = rawPath.trim();
+  let pathname = "/";
+  let search = "";
+  try {
+    const base =
+      trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        ? new URL(trimmed)
+        : new URL(trimmed.startsWith("/") ? trimmed : `/${trimmed}`, "https://voxdex.com");
+    pathname = base.pathname || "/";
+    search = base.search || "";
+  } catch {
+    pathname = "/";
+  }
+  if (pathname.length > 1 && pathname.endsWith("/")) pathname = pathname.slice(0, -1);
+  if (pathname === "/insights" || pathname === "/explore" || pathname.startsWith("/insights/")) {
+    return `${pathname}${search}`;
+  }
+  return pathname;
+}
+
+/**
  * Railway HTML endpoint that already renders this path for link-preview bots.
  * Used when the JSON meta route is not deployed yet.
  */

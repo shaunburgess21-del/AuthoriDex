@@ -76,7 +76,11 @@ import {
   SITE_NAME,
   DEFAULT_DESCRIPTION,
 } from "../services/og-page-payload";
-import { buildOgJsonLd, isOgDetailPath } from "@shared/og-document";
+import { buildOgJsonLd, isOgDetailPath, ogDocumentMetaCacheKey } from "@shared/og-document";
+import {
+  documentMetaCachePolicy,
+  readOrLoadOgDocumentMeta,
+} from "../services/og-document-meta-cache";
 import {
   renderInsightsOgImage,
   type InsightsOgRow,
@@ -1451,28 +1455,39 @@ export function registerOgRoutes(app: Express): void {
       return;
     }
     try {
-      const absolute = raw.startsWith("http")
-        ? raw
-        : `https://voxdex.com${raw.startsWith("/") ? raw : `/${raw}`}`;
-      const result = await resolveOgPagePayload({ url: absolute, pathname });
-      const meta = {
-        title: result.title,
-        description: result.description,
-        canonicalUrl: result.canonicalUrl,
-        imageUrl: result.imageUrl,
-        imageType: result.imageType,
-        jsonLd: buildOgJsonLd({
-          title: result.title,
-          description: result.description,
-          canonicalUrl: result.canonicalUrl,
-          imageUrl: result.imageUrl,
-        }),
-      };
-      res.setHeader(
-        "Cache-Control",
-        result.warnings.length > 0 ? "public, max-age=60" : "public, max-age=120",
-      );
-      res.json(meta);
+      const loaded = await readOrLoadOgDocumentMeta(ogDocumentMetaCacheKey(raw), async () => {
+        const absolute = raw.startsWith("http")
+          ? raw
+          : `https://voxdex.com${raw.startsWith("/") ? raw : `/${raw}`}`;
+        const result = await resolveOgPagePayload({ url: absolute, pathname });
+        const policy = documentMetaCachePolicy(result.warnings.length);
+        return {
+          ttlMs: policy.ttlMs,
+          entry: {
+            cacheControl: policy.cacheControl,
+            meta: {
+              title: result.title,
+              description: result.description,
+              canonicalUrl: result.canonicalUrl,
+              imageUrl: result.imageUrl,
+              imageType: result.imageType,
+              jsonLd: buildOgJsonLd({
+                title: result.title,
+                description: result.description,
+                canonicalUrl: result.canonicalUrl,
+                imageUrl: result.imageUrl,
+              }),
+            },
+          },
+        };
+      });
+      if (!loaded) {
+        res.status(404).json({ error: "no document meta for path" });
+        return;
+      }
+      res.setHeader("Cache-Control", loaded.entry.cacheControl);
+      res.setHeader("x-og-meta-cache", loaded.cache);
+      res.json(loaded.entry.meta);
     } catch (err: any) {
       console.error("[OG] document-meta failed:", err?.message);
       res.status(500).json({ error: "og meta failed" });
