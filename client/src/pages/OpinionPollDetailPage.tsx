@@ -7,7 +7,6 @@ import { showVoteToast } from "@/lib/vote-toast";
 import { prefetchShareImage, sharePage, shareResultImage } from "@/lib/share";
 import { usePrefetchShareImage } from "@/hooks/usePrefetchShareImage";
 import { goBack } from "@/lib/goBack";
-import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Button } from "@/components/ui/button";
 import { ChangeVoteConfirmModal } from "@/components/vote/ChangeVoteConfirmModal";
@@ -24,8 +23,7 @@ import { checkVoteGate } from "@/lib/voteGate";
 import { isBudgetExhaustedVoteError } from "@/lib/voteErrors";
 import { hapticSuccess } from "@/lib/haptic";
 import { formatDate } from "@/lib/formatDate";
-import { VoxDexLogo } from "@/components/VoxDexLogo";
-import { VoteDetailNavCluster } from "@/components/vote/VoteDetailNavCluster";
+import { VoteDetailHeader, VoteDetailSkeleton } from "@/components/vote/VoteDetailSkeleton";
 import { OpinionPollOptionRow } from "@/components/opinion-polls/OpinionPollOptionRow";
 import { OpinionPollGalleryOption } from "@/components/opinion-polls/OpinionPollGalleryOption";
 import { SuggestOptionCard } from "@/components/opinion-polls/SuggestOptionCard";
@@ -46,7 +44,6 @@ import {
   ArrowLeft,
   Clock,
   Users,
-  Loader2,
   MessageSquare,
   Share2,
   BarChart3,
@@ -359,9 +356,7 @@ export default function OpinionPollDetailPage() {
 
   if (isLoading && !poll) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-700 dark:text-cyan-500" />
-      </div>
+      <VoteDetailSkeleton variant="opinion" onBack={handleBackToVote} slug={slug || undefined} />
     );
   }
 
@@ -391,29 +386,7 @@ export default function OpinionPollDetailPage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="opinion-poll-detail-page">
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="flex items-center gap-3 min-w-0 justify-self-start">
-            <Link href="/" data-testid="link-logo-home">
-              <VoxDexLogo size={28} />
-            </Link>
-            {/* Icon-only on mobile so the prev-card chevron next to
-                it has visible breathing room and the two tap
-                targets don't fight for the same thumb. Label
-                returns at sm: for desktop clarity. */}
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" onClick={handleBackToVote} data-testid="button-back" aria-label="Back to Vote">
-              <ArrowLeft className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Vote</span>
-            </Button>
-          </div>
-          <div className="flex justify-center min-w-0 col-start-2">
-            <VoteDetailNavCluster listType="opinion" slug={slug} />
-          </div>
-          <div className="flex justify-end min-w-0 justify-self-end col-start-3">
-            <HeaderUserActions />
-          </div>
-        </div>
-      </header>
+      <VoteDetailHeader onBack={handleBackToVote} listType="opinion" slug={slug || undefined} />
 
       <SwipeNavigator
         onSwipeRight={goPrev}

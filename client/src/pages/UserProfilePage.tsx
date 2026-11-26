@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { PersonAvatar } from "@/components/PersonAvatar";
 import { UserProfileAvatar } from "@/components/UserProfileAvatar";
 import { SiteHeader } from "@/components/SiteHeader";
+import { AccountProfileSkeleton } from "@/components/profile/PublicProfileSkeleton";
 import { Star, TrendingUp, Calendar, Award, Lightbulb, ExternalLink } from "lucide-react";
 import { UserVote, UserFavourite } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
@@ -175,14 +176,7 @@ export default function UserProfilePage() {
   }, [user]);
 
   if (authLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-          <p className="mt-4 text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <AccountProfileSkeleton />;
   }
 
   const profileDisplayName = user.user_metadata?.full_name || user.email || "";

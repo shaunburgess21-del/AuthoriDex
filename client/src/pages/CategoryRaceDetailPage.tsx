@@ -12,7 +12,7 @@ import { useXpBurst } from "@/components/XpBurstProvider";
 import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
-import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { NativeMarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
 import { SettlementReceipt, type NativeResolution } from "@/components/predict/SettlementReceipt";
 import { MyPositionCard } from "@/components/predict/MyPositionCard";
@@ -573,7 +573,7 @@ export default function CategoryRaceDetailPage() {
   });
 
   if (isLoading && !market) {
-    return <MarketDetailSkeleton variant="weekly" />;
+    return <NativeMarketDetailSkeleton onBack={() => goBack(setLocation, "/predict")} />;
   }
 
   if (notFound || !market) {

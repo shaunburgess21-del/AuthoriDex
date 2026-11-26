@@ -22,6 +22,8 @@ import { ReferralPromptGate } from "@/components/referral/ReferralPromptGate";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { LeaderboardRowSkeleton } from "@/components/ui/card-skeletons";
+import { DetailPageFallback } from "@/components/DetailPageFallback";
+import { detailSkeletonKind } from "@/lib/detailRouteSkeleton";
 import { AnonFirstVoteNudge } from "@/components/AnonFirstVoteNudge";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { useDailyCheckin, useXpCelebration } from "@/hooks/useGamification";
@@ -118,6 +120,8 @@ const RankUpModal = lazyWithRetry(() =>
 
 function PageFallback() {
   const [location] = useLocation();
+  const detailKind = detailSkeletonKind(location);
+  if (detailKind) return <DetailPageFallback kind={detailKind} />;
   const navKey = primaryNavKeyForPath(location);
   if (navKey === "rankings") {
     return (
