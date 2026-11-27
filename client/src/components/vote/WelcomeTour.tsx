@@ -172,6 +172,42 @@ function scrollElementIntoView(element: HTMLElement, block: "center" | "start", 
   element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
 }
 
+function readSideNames(): { a: string; b: string } | null {
+  const card = findPracticeCard(document);
+  const a = card?.getAttribute("data-option-a-text")?.trim() ?? "";
+  const b = card?.getAttribute("data-option-b-text")?.trim() ?? "";
+  if (!a && !b) return null;
+  return { a, b };
+}
+
+function fitHole(
+  rect: RectBox,
+  reveal: boolean,
+  insets: { top: number; right: number; bottom: number; left: number },
+): { x: number; y: number; w: number; h: number } {
+  const pad = 8;
+  const margin = 8;
+  let x = rect.left - pad;
+  let y = rect.top - pad;
+  let w = rect.width + pad * 2;
+  let h = rect.height + pad * 2 + (reveal ? 76 : 0);
+  const minX = insets.left + margin;
+  const minY = insets.top + margin;
+  const maxX = window.innerWidth - insets.right - margin;
+  const maxY = window.innerHeight - insets.bottom - margin;
+  if (x < minX) {
+    w -= minX - x;
+    x = minX;
+  }
+  if (y < minY) {
+    h -= minY - y;
+    y = minY;
+  }
+  if (x + w > maxX) w = Math.max(28, maxX - x);
+  if (y + h > maxY) h = Math.max(28, maxY - y);
+  return { x, y, w, h };
+}
+
 function barWidth(value: number): string {
   return `${Math.min(100, Math.max(0, value))}%`;
 }
@@ -291,9 +327,15 @@ export function WelcomeTourHost() {
         }
       }
       if (cancel) return;
-      const rect = await waitForStableRect(() => measureStepTarget(measuredStep));
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        await document.fonts.ready;
+      }
       if (cancel) return;
-      setMeasured({ step: measuredStep, rect });
+      const rect = await waitForStableRect(() => measureStepTarget(measuredStep));
+      await nextFrames(1);
+      const again = measureStepTarget(measuredStep);
+      if (cancel) return;
+      setMeasured({ step: measuredStep, rect: sameBox(rect, again) ? rect : again });
       release = lockDocumentScroll(document);
     };
     void run();
@@ -396,6 +438,8 @@ export function WelcomeTourHost() {
       reveal={step === "practice_reveal"}
       split={rounded}
       picked={running?.side ?? null}
+      names={readSideNames()}
+      finale={step === "ready"}
       avoid={step === "your_turn" ? rect : null}
       practice={step === "practice_tap" && practiceLive}
       onPractice={onPractice}
@@ -431,6 +475,8 @@ function TourOverlay({
   reveal,
   split,
   picked,
+  names,
+  finale,
   avoid,
   practice,
   onPractice,
@@ -453,6 +499,8 @@ function TourOverlay({
   reveal: boolean;
   split: RunningTour["split"];
   picked: "a" | "b" | null;
+  names: { a: string; b: string } | null;
+  finale: boolean;
   avoid: RectBox | null;
   practice: boolean;
   onPractice: (side: "a" | "b") => void;
@@ -471,13 +519,13 @@ function TourOverlay({
 }) {
   const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
   const placement = placeBubble({
-    target,
+    target: finale ? null : target,
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
     bubbleWidth: BUBBLE_WIDTH,
     bubbleHeight,
     insets,
-    avoid,
+    avoid: finale ? null : avoid,
   });
 
   const onMeasureRef = useRef(onMeasureHeight);
@@ -494,14 +542,7 @@ function TourOverlay({
     bubbleRef.current?.focus({ preventScroll: true });
   }, [bubbleRef, title]);
 
-  const hole = rect
-    ? {
-        x: rect.left - 8,
-        y: rect.top - 8,
-        w: rect.width + 16,
-        h: rect.height + 16 + (reveal ? 76 : 0),
-      }
-    : null;
+  const hole = rect ? fitHole(rect, reveal, insets) : null;
 
   return (
     <div
@@ -510,8 +551,11 @@ function TourOverlay({
       data-native={native ? "true" : "false"}
     >
       <div className="absolute inset-0" />
+      {finale ? (
+        <div className="pointer-events-none absolute inset-0 bg-slate-950/40 dark:bg-black/55" data-testid="welcome-tour-finale-dim" />
+      ) : null}
       <AnimatePresence>
-        {hole ? (
+        {hole && !finale ? (
           <motion.div
             key="scrim"
             className="pointer-events-none absolute inset-0"
@@ -562,7 +606,7 @@ function TourOverlay({
           className="pointer-events-none absolute z-[86] px-1"
           style={{ top: rect.top + rect.height + 10, left: rect.left + 12, width: Math.max(0, rect.width - 24) }}
         >
-          <PracticeSplit split={split} picked={picked} />
+          <PracticeSplit split={split} picked={picked} names={names} />
         </div>
       ) : null}
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -613,12 +657,17 @@ function TourOverlay({
             </div>
           </>
         ) : null}
-        <div className="mt-3 flex items-center justify-between gap-2">
+      </div>
+      <div
+        className="fixed inset-x-0 z-[91] flex justify-center px-4 bottom-[max(5.5rem,calc(var(--safe-area-inset-bottom,0px)+5rem))] md:bottom-6"
+        data-testid="welcome-tour-actions"
+      >
+        <div className="flex h-11 w-full max-w-sm items-center justify-between gap-2">
           <button
             type="button"
             onClick={onSkip}
             data-testid="welcome-tour-skip"
-            className="inline-flex min-h-11 items-center rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-11 items-center rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Skip
           </button>
@@ -627,7 +676,7 @@ function TourOverlay({
               type="button"
               onClick={onNext}
               data-testid="welcome-tour-next"
-              className="inline-flex min-h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-semibold text-white hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-semibold text-white hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {nextLabel}
             </button>
@@ -684,19 +733,37 @@ function PracticeSide({
   );
 }
 
-function PracticeSplit({ split, picked }: { split: RunningTour["split"]; picked: "a" | "b" | null }) {
+function PracticeSplit({
+  split,
+  picked,
+  names,
+}: {
+  split: RunningTour["split"];
+  picked: "a" | "b" | null;
+  names: { a: string; b: string } | null;
+}) {
   return (
     <div className="rounded-xl border border-cyan-500/40 bg-popover/95 px-3 py-2 shadow-lg backdrop-blur-sm dark:border-cyan-300/30">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Practice</p>
       {split ? (
         <>
-          <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className={cn("h-full bg-gradient-to-r from-blue-600 to-blue-400", picked === "a" && "ring-2 ring-blue-300")} style={{ width: barWidth(split.a) }} />
-            <div className={cn("h-full bg-gradient-to-r from-amber-400 to-amber-600", picked === "b" && "ring-2 ring-amber-200")} style={{ width: barWidth(split.b) }} />
+          <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn("h-full bg-gradient-to-r from-blue-600 to-blue-400", picked === "a" && "ring-2 ring-inset ring-white")}
+              style={{ width: barWidth(split.a) }}
+            />
+            <div
+              className={cn("h-full bg-gradient-to-r from-amber-400 to-amber-600", picked === "b" && "ring-2 ring-inset ring-white")}
+              style={{ width: barWidth(split.b) }}
+            />
           </div>
-          <div className="mt-1 flex justify-between text-xs tabular-nums text-foreground">
-            <span className={cn(picked === "a" ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium")}>{split.a}%</span>
-            <span className={cn(picked === "b" ? "font-semibold text-amber-700 dark:text-amber-300" : "font-medium")}>{split.b}%</span>
+          <div className="mt-1.5 flex justify-between gap-3 text-xs tabular-nums text-foreground">
+            <span className={cn("min-w-0 truncate", picked === "a" ? "font-semibold text-blue-700 dark:text-blue-200" : "font-medium text-muted-foreground")}>
+              {names?.a ? `${names.a} ` : ""}{split.a}%
+            </span>
+            <span className={cn("min-w-0 truncate text-right", picked === "b" ? "font-semibold text-amber-700 dark:text-amber-200" : "font-medium text-muted-foreground")}>
+              {names?.b ? `${names.b} ` : ""}{split.b}%
+            </span>
           </div>
         </>
       ) : null}

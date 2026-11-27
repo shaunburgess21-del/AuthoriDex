@@ -53,7 +53,7 @@ import {
 } from "@/lib/welcomeChecklist";
 import { ReturningUserStrip } from "@/components/vote/ReturningUserStrip";
 import { WelcomeTourPreview } from "@/components/vote/WelcomeTourPreview";
-import { requestWelcomeTour } from "@/lib/welcomeTour";
+import { readTourSeen, requestWelcomeTour } from "@/lib/welcomeTour";
 
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(() => {
@@ -68,6 +68,22 @@ function usePrefersReducedMotion(): boolean {
     return () => media.removeEventListener("change", onChange);
   }, []);
   return reduce;
+}
+
+function useTourSeen(): boolean {
+  const [seen, setSeen] = useState(() => {
+    const store = storageOrNull();
+    return store ? readTourSeen(store) : false;
+  });
+  useEffect(() => {
+    const sync = () => {
+      const store = storageOrNull();
+      setSeen(store ? readTourSeen(store) : false);
+    };
+    window.addEventListener("voxdex-welcome-tour-seen", sync);
+    return () => window.removeEventListener("voxdex-welcome-tour-seen", sync);
+  }, []);
+  return seen;
 }
 
 function storageOrNull(): WelcomeStorage | null {
@@ -290,6 +306,7 @@ export function WelcomeChecklistCard({
   onJoin: () => void;
   onDismiss: () => void;
 }) {
+  const tourSeen = useTourSeen();
   const signedOutNudge = signedOut && flags.vote && phase !== "all-set";
   const status =
     phase === "all-set" ? WELCOME_ALL_SET_LABEL : welcomeProgressLabel(done, { signedOutNudge });
@@ -385,9 +402,10 @@ export function WelcomeChecklistCard({
           type="button"
           data-testid="vote-welcome-how-it-works"
           onClick={() => requestWelcomeTour("link")}
-          className="inline-flex min-h-8 items-center text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
+          className="inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
         >
-          {WELCOME_HOW_IT_WORKS_LABEL}
+          <StepMark done={tourSeen} />
+          <span>{WELCOME_HOW_IT_WORKS_LABEL}</span>
         </button>
         {signedOut ? (
           <button

@@ -135,6 +135,9 @@ export function readTourSeen(storage: Pick<TourStorage, "getItem">): boolean {
 /** Skip and completion both count as seen. */
 export function writeTourSeen(storage: Pick<TourStorage, "setItem">): void {
   writeFlag(storage, WELCOME_TOUR_SEEN_KEY);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("voxdex-welcome-tour-seen"));
+  }
 }
 
 export function writeTourPending(storage: Pick<TourStorage, "setItem">, source: TourSource): void {
@@ -507,9 +510,34 @@ export function isWelcomeTourActive(): boolean {
   return tourActive;
 }
 
+const nudgeResetListeners = new Set<() => void>();
+
+/** Cards listen so Done, Skip, Escape, and unmount clear tie / hesitation state. */
+export function subscribeNudgeReset(listener: () => void): () => void {
+  nudgeResetListeners.add(listener);
+  return () => {
+    nudgeResetListeners.delete(listener);
+  };
+}
+
+export function resetTourCardState(): void {
+  if (typeof document !== "undefined") {
+    document.querySelectorAll("[data-welcome-tour-h2h]").forEach((node) => {
+      node.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true }));
+      node.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+    });
+  }
+  for (const listener of nudgeResetListeners) listener();
+}
+
 export function setWelcomeTourActive(next: boolean): void {
   if (tourActive === next) return;
   tourActive = next;
+  if (typeof document !== "undefined") {
+    if (next) document.documentElement.dataset.welcomeTour = "on";
+    else delete document.documentElement.dataset.welcomeTour;
+  }
+  if (!next) resetTourCardState();
   for (const listener of activeListeners) listener();
 }
 

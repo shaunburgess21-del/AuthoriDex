@@ -200,6 +200,8 @@ export function VersusCard({
     <div
       ref={neutralNudge.cardRef}
       data-welcome-tour-h2h=""
+      data-option-a-text={matchup.optionAText}
+      data-option-b-text={matchup.optionBText}
       {...(practicePercentDataset(matchup.optionAPercent, matchup.optionBPercent) ?? {})}
       className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}
     >
