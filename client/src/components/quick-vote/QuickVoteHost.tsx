@@ -228,10 +228,13 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
           browser toolbar hides (its top edge rises), so the pill's bottom
           offset must ride the same inset to keep a constant 16px gap. */}
       <CornerFabSlot
-        className="fixed inset-x-0 bottom-20 md:bottom-6 z-[55] pointer-events-none"
+        className="fixed inset-x-0 bottom-20 md:bottom-[calc(1.5rem+var(--anon-nudge-height,0px)+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] z-[55] pointer-events-none"
         style={{
           ...(isMobile
-            ? { bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" }
+            ? {
+                bottom:
+                  "calc(5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + var(--anon-nudge-height, 0px))",
+              }
             : {}),
           transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
           willChange: "transform",
@@ -280,7 +283,8 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
       <CornerFabSlot
         className="fixed right-4 z-[55] pointer-events-none"
         style={{
-          bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
+          bottom:
+            "calc(5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + var(--anon-nudge-height, 0px))",
           transform: viewportOffset !== 0 ? `translateY(${viewportOffset}px)` : undefined,
           willChange: "transform",
         }}
@@ -334,7 +338,7 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
       </CornerFabSlot>
 
       {activityFilter && (
-        <CornerFabSlot className="pointer-events-auto fixed right-4 bottom-6 z-[55] hidden md:flex">
+        <CornerFabSlot className="fixed right-4 bottom-[calc(1.5rem+var(--anon-nudge-height,0px)+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))] z-[55] pointer-events-auto hidden md:flex">
           <VoteActivityFilterFab
             value={activityFilter.value}
             count={activityFilter.count}

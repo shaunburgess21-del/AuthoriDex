@@ -258,7 +258,7 @@ export function HelpChat() {
       {/* z-40: under every dialog, drawer, and sheet (z-50+), so the pill
           never floats over another modal. */}
       <div
-        className="pointer-events-none fixed right-4 z-40 bottom-[calc(5rem+env(safe-area-inset-bottom,0px)+var(--fab-stack,0px))] md:bottom-[calc(1.5rem+var(--fab-stack,0px))]"
+        className="pointer-events-none fixed right-4 z-40 bottom-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+var(--fab-stack,0px)+var(--anon-nudge-height,0px))] md:bottom-[calc(1.5rem+var(--fab-stack,0px)+var(--anon-nudge-height,0px)+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]"
         style={fabShift}
         data-android-keyboard-hide=""
       >

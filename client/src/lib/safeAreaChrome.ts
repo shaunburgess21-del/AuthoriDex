@@ -11,9 +11,15 @@
 export const ABOVE_TAB_BAR_BOTTOM =
   "bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-[env(safe-area-inset-bottom,0px)]";
 
-/** Page footer. 5rem matches the old `pb-20` gap above the tab bar. */
+/**
+ * Page footer. 5rem matches the old `pb-20` gap above the tab bar.
+ * `--anon-nudge-height` is 0px unless the vote-hub signup bar is open,
+ * so this adds nothing on other pages. On `md` the tab bar is gone and
+ * the bar sits on the home indicator; `--anon-nudge-safe` is that inset
+ * while the bar is open and 0px otherwise, so a hidden bar adds no padding.
+ */
 export const ABOVE_TAB_BAR_PADDING =
-  "pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0";
+  "pb-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+var(--anon-nudge-height,0px)+var(--anon-nudge-pills,0px))] md:pb-[calc(var(--anon-nudge-height,0px)+var(--anon-nudge-safe,0px))]";
 
 export const PREDICTION_DOCK_CLASS =
   `fixed ${ABOVE_TAB_BAR_BOTTOM} left-0 right-0 z-40 border-t border-border/50 bg-background/95 backdrop-blur-md`;

@@ -600,9 +600,11 @@ function App() {
                   <ShareCardProvider>
                     <SiteBanner />
                     <OfflineBanner />
-                    <AnonFirstVoteNudge />
                     <WarmTopPredictors />
                     <div className="min-h-0 pt-[calc(var(--site-banner-height,0px)+var(--offline-banner-height,0px))]">
+                      {/* In-flow placement reserves height above the page.
+                          Fixed placements leave this slot empty. */}
+                      <AnonFirstVoteNudge />
                       <ErrorBoundary>
                         <Router />
                       </ErrorBoundary>
