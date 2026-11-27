@@ -150,7 +150,12 @@ import { useMatchupVotes } from "@/hooks/useMatchupVotes";
 import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
 import { isNativeSurface } from "@/lib/nativeCopy";
-import { firstSwipableMatchupId, isSwipeTrialGateOpen } from "@/lib/swipeTrial";
+import {
+  categoryFilterPrimaryId,
+  firstSwipableMatchupId,
+  isSwipeTrialGateOpen,
+  nearbyFeedMatchupIds,
+} from "@/lib/swipeTrial";
 import { useSwipeTrialOverride } from "@/hooks/useSwipeTrialOverride";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
@@ -2121,10 +2126,26 @@ export default function VotePage() {
     }
     return rows;
   }, [mixedFeedEntries]);
+  const swipeTrialFilterKey = `${globalCategoryFilter}|${mixedFeedSearch}|${myVotesFilter}`;
+  const swipeTrialPrimaryId = categoryFilterPrimaryId(
+    globalCategoryFilter,
+    registry.resolveCanonicalId,
+  );
+  const swipeTrialNearby = useMemo(() => {
+    const map = new Map<string, ReadonlySet<string>>();
+    mixedFeedEntries.forEach((entry) => {
+      if (entry.kind !== "matchup") return;
+      map.set(entry.id, nearbyFeedMatchupIds(mixedFeedEntries, entry.id));
+    });
+    return map;
+  }, [mixedFeedEntries]);
   const swipeTrialNudgeAnchorId = useMemo(() => {
     if (!swipeTrialSurface) return null;
-    return firstSwipableMatchupId(swipeTrialMatchups, registry.resolveCanonicalId);
-  }, [registry, swipeTrialMatchups, swipeTrialSurface]);
+    return firstSwipableMatchupId(swipeTrialMatchups, registry.resolveCanonicalId, {
+      restrictToPrimaryId: swipeTrialPrimaryId,
+      excludeIdsFor: (id) => swipeTrialNearby.get(id),
+    });
+  }, [registry, swipeTrialMatchups, swipeTrialNearby, swipeTrialPrimaryId, swipeTrialSurface]);
 
   const mixedFeedLoading =
     (matchupsLoading && matchups.length === 0) ||
@@ -4066,6 +4087,9 @@ export default function VotePage() {
                         override={swipeTrialOverride}
                         allowFinePointer={swipeTrialOverride && !swipeTrialNative}
                         fallback={matchup}
+                        filterKey={swipeTrialFilterKey}
+                        restrictToPrimaryId={swipeTrialPrimaryId}
+                        excludeIds={swipeTrialNearby.get(matchup.id) ?? null}
                         renderItem={(item, opts) => matchupCard(item, opts.priority ? imagePriority : false)}
                       />
                     ) : (

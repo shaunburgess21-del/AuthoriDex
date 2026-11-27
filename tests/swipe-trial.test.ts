@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import {
   SWIPE_TRIAL_STORAGE_KEY,
   buildSameCategoryMatchupQueue,
+  categoryFilterPrimaryId,
   firstSwipableMatchupId,
   isSwipeTrialGateOpen,
   matchupMatchesCanonicalCategory,
+  nearbyFeedMatchupIds,
   readSwipeTrialOverride,
   reconcileSwipeQueueIndex,
   stepSwipeQueueIndex,
@@ -107,7 +109,7 @@ test("the gate opens only for a native shell or an explicit override on the All 
   );
 });
 
-test("same-category queue uses the canonical id on the primary or any secondary", () => {
+test("the queue matches the displayed primary category and ignores secondaries", () => {
   const items = [
     card("solo", "tech"),
     card("sports-media", "sports", ["Media & Podcast"]),
@@ -115,21 +117,66 @@ test("same-category queue uses the canonical id on the primary or any secondary"
     card("tech", "tech"),
     card("media-b", "Media & Podcast"),
     card("blank", ""),
-    card("media-secondary", "business", ["media"]),
+    card("food-lifestyle", "food", ["lifestyle"]),
+    card("lifestyle", "lifestyle"),
   ];
 
-  assert.equal(matchupMatchesCanonicalCategory(items[1]!, "media", resolve), true);
+  assert.equal(matchupMatchesCanonicalCategory(items[1]!, "media", resolve), false);
+  assert.equal(matchupMatchesCanonicalCategory(items[2]!, "media", resolve), true);
   assert.deepEqual(
     buildSameCategoryMatchupQueue(items, "media-a", resolve).map((item) => item.id),
-    ["sports-media", "media-a", "media-b", "media-secondary"],
+    ["media-a", "media-b"],
   );
   assert.deepEqual(
-    buildSameCategoryMatchupQueue(items, "media-b", resolve).map((item) => item.id),
-    ["sports-media", "media-a", "media-b", "media-secondary"],
+    buildSameCategoryMatchupQueue(items, "lifestyle", resolve).map((item) => item.id),
+    ["lifestyle"],
   );
   assert.deepEqual(
     buildSameCategoryMatchupQueue(items, "tech", resolve).map((item) => item.id),
     ["solo", "tech"],
+  );
+});
+
+test("an active category filter keeps only that primary, and a mismatched card does not page", () => {
+  const items = [
+    card("food", "food", ["dating"]),
+    card("date-a", "dating"),
+    card("date-b", "Dating"),
+    card("sports", "sports", ["dating"]),
+  ];
+  assert.equal(categoryFilterPrimaryId("all", resolve), null);
+  assert.equal(categoryFilterPrimaryId("dating", resolve), "dating");
+  assert.deepEqual(
+    buildSameCategoryMatchupQueue(items, "food", resolve, { restrictToPrimaryId: "dating" }).map((item) => item.id),
+    ["food"],
+  );
+  assert.deepEqual(
+    buildSameCategoryMatchupQueue(items, "date-a", resolve, { restrictToPrimaryId: "dating" }).map((item) => item.id),
+    ["date-a", "date-b"],
+  );
+  assert.equal(
+    firstSwipableMatchupId(items, resolve, { restrictToPrimaryId: "dating" }),
+    "date-a",
+  );
+  assert.deepEqual(stepSwipeQueueIndex(0, 1, "left"), { type: "edge" });
+});
+
+test("nearby feed slots are left out of the queue so a swipe does not repeat the card below", () => {
+  const feed = [
+    { kind: "matchup", id: "eth" },
+    { kind: "sentiment", id: "s1" },
+    { kind: "opinion", id: "o1" },
+    { kind: "rating", id: "r1" },
+    { kind: "matchup", id: "sol" },
+    { kind: "sentiment", id: "s2" },
+    { kind: "matchup", id: "ada" },
+  ];
+  const nearby = nearbyFeedMatchupIds(feed, "eth", 4);
+  assert.deepEqual([...nearby], ["sol"]);
+  const items = [card("eth", "crypto"), card("sol", "crypto"), card("ada", "crypto")];
+  assert.deepEqual(
+    buildSameCategoryMatchupQueue(items, "eth", resolve, { excludeIds: nearby }).map((item) => item.id),
+    ["eth", "ada"],
   );
 });
 

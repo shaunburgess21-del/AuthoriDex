@@ -113,8 +113,9 @@ export function primaryCanonicalId(
 }
 
 /**
- * Registry match used by the vote hub and RelatedVoteItems: the canonical
- * id hits the primary category or any secondary.
+ * The category printed on the card: its primary, resolved to a canonical id.
+ * Secondaries do not count. A Lifestyle card must not page into Food & Drink
+ * just because one of them lists the other as a secondary.
  */
 export function matchupMatchesCanonicalCategory(
   item: SwipeTrialMatchup,
@@ -122,33 +123,86 @@ export function matchupMatchesCanonicalCategory(
   resolveCanonicalId: CategoryIdResolver,
 ): boolean {
   if (!categoryId) return false;
-  if (primaryCanonicalId(item.category, resolveCanonicalId) === categoryId) return true;
-  for (const secondary of item.secondaryCategories ?? []) {
-    if (secondary == null || String(secondary).trim() === "") continue;
-    if (resolveCanonicalId(secondary) === categoryId) return true;
-  }
-  return false;
+  return primaryCanonicalId(item.category, resolveCanonicalId) === categoryId;
+}
+
+const OPEN_CATEGORY_FILTERS = new Set(["all", "trending", "favorites"]);
+
+/**
+ * Canonical id when a real category chip is selected.
+ * All, Trending, and Favorites are not a single primary.
+ */
+export function categoryFilterPrimaryId(
+  filter: string | null | undefined,
+  resolveCanonicalId: CategoryIdResolver,
+): string | null {
+  if (filter == null || OPEN_CATEGORY_FILTERS.has(filter)) return null;
+  return primaryCanonicalId(filter, resolveCanonicalId);
+}
+
+/** Feed entries on either side of a slot whose matchups must not be paged in. */
+export const SWIPE_NEARBY_FEED_RADIUS = 8;
+
+export interface MatchupQueueOptions {
+  /**
+   * Active category chip. Cards whose displayed primary is something else
+   * stay a queue of one, even if a secondary put them in the filtered feed.
+   */
+  restrictToPrimaryId?: string | null;
+  /** Other matchups sitting within a few feed slots of this one. */
+  excludeIds?: ReadonlySet<string> | null;
 }
 
 /**
- * Head-to-head cards that share the anchor's primary canonical category,
- * in the caller's order (the filtered feed order). A card with no primary
- * category is a queue of one. A missing anchor is an empty queue.
+ * Matchup ids in the feed within `radius` entries of the anchor, not
+ * including the anchor. A paged-in card then cannot repeat the one
+ * directly above or below.
+ */
+export function nearbyFeedMatchupIds(
+  feed: readonly { kind: string; id: string }[],
+  anchorId: string,
+  radius = SWIPE_NEARBY_FEED_RADIUS,
+): ReadonlySet<string> {
+  const index = feed.findIndex((entry) => entry.kind === "matchup" && entry.id === anchorId);
+  if (index < 0) return new Set();
+  const ids = new Set<string>();
+  const start = Math.max(0, index - radius);
+  const end = Math.min(feed.length, index + radius + 1);
+  for (let i = start; i < end; i += 1) {
+    const entry = feed[i];
+    if (!entry || entry.kind !== "matchup" || entry.id === anchorId) continue;
+    ids.add(entry.id);
+  }
+  return ids;
+}
+
+/**
+ * Head-to-head cards that share the anchor's displayed primary category,
+ * in the caller's order. Secondaries are ignored. Nearby feed slots and a
+ * mismatched category chip are left out. A card with no primary, or whose
+ * primary is not the active filter, is a queue of one. A missing anchor is
+ * an empty queue.
  */
 export function buildSameCategoryMatchupQueue<T extends SwipeTrialMatchup>(
   items: readonly T[],
   anchorId: string,
   resolveCanonicalId: CategoryIdResolver,
+  options?: MatchupQueueOptions,
 ): T[] {
   const anchor = items.find((item) => item.id === anchorId);
   if (!anchor) return [];
-  const categoryId = primaryCanonicalId(anchor.category, resolveCanonicalId);
+  const ownPrimary = primaryCanonicalId(anchor.category, resolveCanonicalId);
+  const restrict = options?.restrictToPrimaryId ?? null;
+  if (restrict && ownPrimary !== restrict) return [anchor];
+  const categoryId = restrict ?? ownPrimary;
   if (!categoryId) return [anchor];
 
+  const exclude = options?.excludeIds;
   const queue: T[] = [];
   const seen = new Set<string>();
   for (const item of items) {
     if (seen.has(item.id)) continue;
+    if (item.id !== anchor.id && exclude?.has(item.id)) continue;
     if (!matchupMatchesCanonicalCategory(item, categoryId, resolveCanonicalId)) continue;
     seen.add(item.id);
     queue.push(item);
@@ -161,9 +215,15 @@ export function buildSameCategoryMatchupQueue<T extends SwipeTrialMatchup>(
 export function firstSwipableMatchupId<T extends SwipeTrialMatchup>(
   items: readonly T[],
   resolveCanonicalId: CategoryIdResolver,
+  options?: MatchupQueueOptions & {
+    excludeIdsFor?: (anchorId: string) => ReadonlySet<string> | null | undefined;
+  },
 ): string | null {
   for (const item of items) {
-    const queue = buildSameCategoryMatchupQueue(items, item.id, resolveCanonicalId);
+    const queue = buildSameCategoryMatchupQueue(items, item.id, resolveCanonicalId, {
+      restrictToPrimaryId: options?.restrictToPrimaryId,
+      excludeIds: options?.excludeIdsFor?.(item.id) ?? options?.excludeIds,
+    });
     if (queue.length >= 2) return item.id;
   }
   return null;

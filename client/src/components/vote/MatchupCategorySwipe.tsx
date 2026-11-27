@@ -23,6 +23,7 @@ import {
   primaryCanonicalId,
   reconcileSwipeQueueIndex,
   stepSwipeQueueIndex,
+  type MatchupQueueOptions,
   type SwipeTrialMatchup,
   type SwipeTrialStorage,
 } from "@/lib/swipeTrial";
@@ -34,9 +35,17 @@ const NUDGE_DISMISS_MS = 5000;
 const SLOT_MEMORY_LIMIT = 80;
 
 const slotMemory = new Map<string, string>();
+let slotMemoryFilter = "";
 let discoveryPeekClaim: string | null = null;
 let discoveryPeekDone = false;
 let nudgeShownLogged = false;
+
+/** A category, search, or eye-filter change drops paged cards from the previous list. */
+function syncSlotMemoryFilter(filterKey: string): void {
+  if (slotMemoryFilter === filterKey) return;
+  slotMemory.clear();
+  slotMemoryFilter = filterKey;
+}
 
 function rememberSlot(anchorId: string, matchupId: string): void {
   if (!anchorId || !matchupId) return;
@@ -82,6 +91,9 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
   override,
   allowFinePointer,
   fallback,
+  filterKey,
+  restrictToPrimaryId = null,
+  excludeIds = null,
   renderItem,
 }: {
   anchorId: string;
@@ -95,18 +107,37 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
   override: boolean;
   allowFinePointer: boolean;
   fallback: T;
+  /** Category, search, and eye filter. Changing it returns the slot to its feed card. */
+  filterKey: string;
+  restrictToPrimaryId?: MatchupQueueOptions["restrictToPrimaryId"];
+  excludeIds?: MatchupQueueOptions["excludeIds"];
   renderItem: (item: T, opts: { priority: boolean }) => ReactNode;
 }) {
+  syncSlotMemoryFilter(filterKey);
+  const queueOptions = useMemo<MatchupQueueOptions>(
+    () => ({ restrictToPrimaryId, excludeIds }),
+    [excludeIds, restrictToPrimaryId],
+  );
   const liveQueue = useMemo(
-    () => buildSameCategoryMatchupQueue(items, anchorId, resolveCanonicalId),
-    [anchorId, items, resolveCanonicalId],
+    () => buildSameCategoryMatchupQueue(items, anchorId, resolveCanonicalId, queueOptions),
+    [anchorId, items, queueOptions, resolveCanonicalId],
   );
   const liveSignature = liveQueue.map((item) => item.id).join("\0");
   const [index, setIndex] = useState(() =>
     startingIndex(liveQueue.map((item) => item.id), anchorId),
   );
+  const [seenFilter, setSeenFilter] = useState(filterKey);
   const indexRef = useRef(index);
   const displayedIdRef = useRef(liveQueue[index]?.id ?? anchorId);
+  if (seenFilter !== filterKey) {
+    setSeenFilter(filterKey);
+    const ids = liveQueue.map((item) => item.id);
+    const found = ids.indexOf(anchorId);
+    const next = found >= 0 ? found : 0;
+    displayedIdRef.current = ids[next] ?? anchorId;
+    indexRef.current = next;
+    setIndex(next);
+  }
   const draggingRef = useRef(false);
   const frozenRef = useRef<readonly T[] | null>(null);
   const liveQueueRef = useRef(liveQueue);
@@ -249,7 +280,6 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
   const swipeRef = useRef<SwipeNavigatorHandle>(null);
   const [frameHeight, setFrameHeight] = useState<number | null>(null);
   const [smoothHeight, setSmoothHeight] = useState(false);
-  const previousHeightRef = useRef<number | null>(null);
   const [inView, setInView] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const tipDismissed = useRef(false);
@@ -276,19 +306,6 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
     observer.observe(page);
     return () => observer.disconnect();
   }, [displayedId, paging]);
-
-  useLayoutEffect(() => {
-    const frame = frameRef.current;
-    if (!frame || frameHeight == null) return;
-    const previous = previousHeightRef.current;
-    previousHeightRef.current = frameHeight;
-    if (previous == null || previous === frameHeight) return;
-    const box = frame.getBoundingClientRect();
-    // A card fully above the viewport must not pull the page when its
-    // height changes. A card on screen keeps its top and only the space
-    // below it eases.
-    if (box.bottom <= 0) window.scrollBy(0, frameHeight - previous);
-  }, [frameHeight]);
 
   useEffect(() => {
     const node = frameRef.current;
@@ -401,10 +418,15 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
       <div
         ref={frameRef}
         className={cn(
-          "relative min-w-0 overflow-hidden [overflow-anchor:none]",
+          "swipe-trial-pager relative min-w-0 [overflow-anchor:none]",
           smoothHeight && "transition-[height] duration-300 ease-out motion-reduce:transition-none",
         )}
-        style={frameHeight != null ? { height: frameHeight } : undefined}
+        style={{
+          overflowX: "clip",
+          overflowY: "visible",
+          touchAction: "pan-y",
+          height: frameHeight ?? undefined,
+        }}
         role="group"
         aria-roledescription="carousel"
         aria-label={`Head-to-head ${safeIndex + 1} of ${queue.length}`}
@@ -455,8 +477,7 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
             role="status"
             data-swipe-trial-nudge=""
             data-testid="matchup-swipe-trial-nudge"
-            className="absolute inset-x-3 bottom-3 z-20 rounded-xl border border-border bg-popover/95 px-3 py-2.5 text-left shadow-lg backdrop-blur-md"
-            onClick={() => dismissTip("dismissed")}
+            className="pointer-events-none absolute inset-x-3 bottom-3 z-20 rounded-xl border border-border bg-popover/95 px-3 py-2.5 text-left shadow-lg backdrop-blur-md"
           >
             <p className="flex items-center gap-1.5 text-[13px] font-medium leading-snug text-popover-foreground">
               <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden />

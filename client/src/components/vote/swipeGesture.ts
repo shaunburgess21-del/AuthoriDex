@@ -127,7 +127,14 @@ export function swipeCommitDirection(
   return offsetX > 0 ? "right" : "left";
 }
 
-/** True when the pointer is inside the left or right system-gesture band. */
+/**
+ * True when `clientX` is inside the left or right system-gesture band.
+ *
+ * `clientX` and `viewportWidth` are both CSS pixels of the visual viewport
+ * (`visualViewport.width`, otherwise `innerWidth`). A coordinate past the
+ * viewport (a scaled or page x) is not the edge — comparing it with
+ * `width - inset` would swallow swipes that start inside the card.
+ */
 export function pointerStartsInScreenEdge(
   clientX: number,
   viewportWidth: number,
@@ -137,7 +144,27 @@ export function pointerStartsInScreenEdge(
   if (!Number.isFinite(clientX) || !Number.isFinite(viewportWidth) || viewportWidth <= 0) {
     return false;
   }
+  if (clientX < 0 || clientX > viewportWidth) return false;
   return clientX <= insetPx || clientX >= viewportWidth - insetPx;
+}
+
+export type PointerAxisClaim = "pending" | "vertical" | "horizontal";
+
+/**
+ * Leave the gesture with the page until movement is clearly one axis.
+ * Vertical wins ties that are mostly downward or upward, so a scroll
+ * that drifts sideways is not captured.
+ */
+export function claimPointerAxis(
+  dx: number,
+  dy: number,
+  lockPx = 12,
+): PointerAxisClaim {
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (absY >= lockPx && absY >= absX) return "vertical";
+  if (absX >= lockPx && absX > absY) return "horizontal";
+  return "pending";
 }
 
 /**

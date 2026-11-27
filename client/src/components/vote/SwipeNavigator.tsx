@@ -13,7 +13,7 @@ import {
   SWIPE_CLICK_SUPPRESS_MS,
   SWIPE_COMMIT_OFFSET_PX,
   SWIPE_COMMIT_VELOCITY_PX_PER_S,
-  SWIPE_TAP_SLOP_PX,
+  claimPointerAxis,
   pointerStartsInScreenEdge,
   pointerTargetYieldsSwipeNav,
   swipeCommitDirection,
@@ -81,6 +81,18 @@ function prefersReducedMotion(): boolean {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
+}
+
+/** CSS pixels of the visible viewport. clientX is in this same space. */
+function visualViewportWidth(): number {
+  const visual = typeof window !== "undefined" ? window.visualViewport : null;
+  if (visual && visual.width > 0) return visual.width;
+  return typeof window !== "undefined" ? window.innerWidth : 0;
+}
+
+function visualViewportOffsetLeft(): number {
+  const visual = typeof window !== "undefined" ? window.visualViewport : null;
+  return visual?.offsetLeft ?? 0;
 }
 
 /**
@@ -225,6 +237,27 @@ function DetailSwipeSurface({
   );
 }
 
+/** How far the finger must travel on one axis before the pager claims it. */
+const PAGING_LOCK_PX = 12;
+
+interface PagingTrack {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastT: number;
+  vx: number;
+  locked: boolean;
+}
+
+function rubberOffset(dx: number, width: number, canGoLeft: boolean, canGoRight: boolean): number {
+  const min = canGoLeft ? -Math.max(width, 0) : 0;
+  const max = canGoRight ? Math.max(width, 0) : 0;
+  if (dx < min) return min + (dx - min) * 0.22;
+  if (dx > max) return max + (dx - max) * 0.22;
+  return dx;
+}
+
 const PagingSwipeSurface = forwardRef<SwipeNavigatorHandle, SwipeNavigatorProps>(
   function PagingSwipeSurface(
     {
@@ -245,16 +278,15 @@ const PagingSwipeSurface = forwardRef<SwipeNavigatorHandle, SwipeNavigatorProps>
     },
     ref,
   ) {
-    const dragControls = useDragControls();
     const rootRef = useRef<HTMLDivElement>(null);
     const x = useMotionValue(0);
     const widthRef = useRef(0);
-    const [trackWidth, setTrackWidth] = useState(0);
     const generation = useRef(0);
     const animRef = useRef<{ stop: () => void } | null>(null);
-    const intentSent = useRef(false);
     const suppressUntil = useRef(0);
     const activeRef = useRef(false);
+    const trackRef = useRef<PagingTrack | null>(null);
+    const detachRef = useRef<(() => void) | null>(null);
 
     const setActive = (active: boolean) => {
       if (activeRef.current === active) return;
@@ -267,8 +299,7 @@ const PagingSwipeSurface = forwardRef<SwipeNavigatorHandle, SwipeNavigatorProps>
       if (!node) return;
       const apply = () => {
         const next = node.offsetWidth;
-        widthRef.current = next;
-        setTrackWidth((prev) => (prev === next ? prev : next));
+        if (next > 0) widthRef.current = next;
       };
       apply();
       const observer = new ResizeObserver(apply);
@@ -363,42 +394,8 @@ const PagingSwipeSurface = forwardRef<SwipeNavigatorHandle, SwipeNavigatorProps>
       [disableLeft, disableRight, onEdgeBounce, onSwipeLeft, onSwipeRight, x],
     );
 
-    const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (pointerStartsInScreenEdge(event.clientX, window.innerWidth, edgeInsetPx)) return;
-      if (canStart && !canStart(event.clientX)) return;
-      if (pointerTargetYieldsSwipeNav(event.target, event.currentTarget, ignoreSelector)) {
-        return;
-      }
-      generation.current += 1;
-      animRef.current?.stop();
-      animRef.current = null;
-      intentSent.current = false;
-      setActive(true);
-      dragControls.start(event);
-    };
-
-    const noteIntent = (offsetX: number) => {
-      if (intentSent.current) return;
-      if (Math.abs(offsetX) < SWIPE_TAP_SLOP_PX) return;
-      intentSent.current = true;
-      suppressUntil.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
-      onHorizontalIntent?.(offsetX > 0 ? "right" : "left");
-    };
-
-    const handleDrag = (_event: unknown, info: PanInfo) => {
-      noteIntent(info.offset.x);
-    };
-
-    const handleDragEnd = (_event: unknown, info: PanInfo) => {
-      if (Math.abs(info.offset.x) >= SWIPE_TAP_SLOP_PX) {
-        suppressUntil.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
-      }
-      const direction = swipeCommitDirection(
-        info.offset.x,
-        info.velocity.x,
-        commitOffsetPx,
-        COMMIT_VELOCITY_PX_PER_S,
-      );
+    const finishLocked = (dx: number, vx: number) => {
+      const direction = swipeCommitDirection(dx, vx, commitOffsetPx, COMMIT_VELOCITY_PX_PER_S);
       const width = measuredWidth();
       if (!direction) {
         runAnimation(0, () => setActive(false));
@@ -420,25 +417,125 @@ const PagingSwipeSurface = forwardRef<SwipeNavigatorHandle, SwipeNavigatorProps>
       });
     };
 
-    const constraints = {
-      left: disableLeft ? 0 : -trackWidth,
-      right: disableRight ? 0 : trackWidth,
-    };
+    useEffect(() => {
+      const node = rootRef.current;
+      if (!node) return;
+
+      const preventTouch = (event: TouchEvent) => {
+        if (trackRef.current?.locked) event.preventDefault();
+      };
+
+      const detach = () => {
+        detachRef.current = null;
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        window.removeEventListener("touchmove", preventTouch);
+      };
+
+      const onMove = (event: PointerEvent) => {
+        const track = trackRef.current;
+        if (!track || event.pointerId !== track.pointerId) return;
+        const dx = event.clientX - track.startX;
+        const dy = event.clientY - track.startY;
+        if (!track.locked) {
+          const claim = claimPointerAxis(dx, dy, PAGING_LOCK_PX);
+          if (claim === "vertical") {
+            trackRef.current = null;
+            detach();
+            return;
+          }
+          if (claim !== "horizontal") return;
+          track.locked = true;
+          setActive(true);
+          suppressUntil.current = performance.now() + SWIPE_CLICK_SUPPRESS_MS;
+          onHorizontalIntent?.(dx < 0 ? "left" : "right");
+          window.addEventListener("touchmove", preventTouch, { passive: false });
+        }
+        // Only a claimed horizontal swipe may cancel the browser's pan.
+        if (event.cancelable) event.preventDefault();
+        const now = performance.now();
+        const dt = now - track.lastT;
+        if (dt > 0) {
+          const instant = ((event.clientX - track.lastX) / dt) * 1000;
+          track.vx = track.vx * 0.35 + instant * 0.65;
+        }
+        track.lastX = event.clientX;
+        track.lastT = now;
+        x.set(rubberOffset(dx, measuredWidth(), !disableLeft, !disableRight));
+      };
+
+      const onUp = (event: PointerEvent) => {
+        const track = trackRef.current;
+        if (!track || event.pointerId !== track.pointerId) return;
+        const locked = track.locked;
+        const dx = event.clientX - track.startX;
+        const vx = track.vx;
+        trackRef.current = null;
+        detach();
+        if (!locked) return;
+        finishLocked(dx, vx);
+      };
+
+      const onDown = (event: PointerEvent) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        const viewportX = event.clientX - visualViewportOffsetLeft();
+        if (pointerStartsInScreenEdge(viewportX, visualViewportWidth(), edgeInsetPx)) return;
+        if (canStart && !canStart(event.clientX)) return;
+        if (pointerTargetYieldsSwipeNav(event.target, node, ignoreSelector)) return;
+        if (trackRef.current) return;
+        // Drop a peek or intro slide so the finger owns the card, but do not
+        // preventDefault or capture the pointer. A vertical move stays a scroll.
+        generation.current += 1;
+        animRef.current?.stop();
+        animRef.current = null;
+        x.set(0);
+        trackRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          lastX: event.clientX,
+          lastT: performance.now(),
+          vx: 0,
+          locked: false,
+        };
+        detachRef.current = detach;
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+      };
+
+      const stopImageDrag = (event: DragEvent) => {
+        event.preventDefault();
+      };
+
+      node.addEventListener("pointerdown", onDown, true);
+      node.addEventListener("dragstart", stopImageDrag, true);
+      return () => {
+        node.removeEventListener("pointerdown", onDown, true);
+        node.removeEventListener("dragstart", stopImageDrag, true);
+        detach();
+        trackRef.current = null;
+      };
+    }, [
+      canStart,
+      commitOffsetPx,
+      disableLeft,
+      disableRight,
+      edgeInsetPx,
+      ignoreSelector,
+      onEdgeBounce,
+      onGestureActiveChange,
+      onHorizontalIntent,
+      onSwipeLeft,
+      onSwipeRight,
+      x,
+    ]);
 
     return (
       <motion.div
         ref={rootRef}
-        drag="x"
-        dragControls={dragControls}
-        dragListener={false}
-        dragDirectionLock
-        dragConstraints={constraints}
-        dragElastic={0.22}
-        dragMomentum={false}
         style={{ x, touchAction: "pan-y" }}
-        onPointerDown={handlePointerDown}
-        onDrag={handleDrag}
-        onDragEnd={handleDragEnd}
         className={className}
       >
         {children}
