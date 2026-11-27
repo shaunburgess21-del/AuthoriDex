@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CORNER_INTRO_MIN_JOIN_MS,
   CORNER_INTRO_MS,
@@ -117,6 +118,20 @@ describe("corner pill intro", () => {
     advance(CORNER_INTRO_SETTLE_CAP_MS);
     assert.equal(coordinator.isShowing(), false);
     assert.equal(saved(), null);
+  });
+
+  it("registers Quick Vote with the same intro as chat and the eye, with no opened-once gate", () => {
+    const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+    const host = read("../client/src/components/quick-vote/QuickVoteHost.tsx");
+    const help = read("../client/src/components/help-chat/HelpChat.tsx");
+    const eye = read("../client/src/components/VoteActivityFilterFab.tsx");
+
+    assert.match(host, /useCornerPillIntro\("quick-vote", showFab\)/);
+    assert.equal(host.includes("hasOpenedQuickVote"), false);
+    assert.equal(host.includes("voxdex_quick_vote_opened"), false);
+    assert.equal(host.includes("voxdex_quick_vote_pill_reminder"), false);
+    assert.match(help, /useCornerPillIntro\("help-chat", !hidden\)/);
+    assert.match(eye, /useCornerPillIntro\(scope === "predict" \? "predict-eye" : "vote-eye", true\)/);
   });
 
   it("finishes an intro already in progress after a reload instead of restarting it", () => {

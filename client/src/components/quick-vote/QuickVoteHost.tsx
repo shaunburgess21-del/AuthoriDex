@@ -11,7 +11,7 @@
  *
  * Overlay is mobile-only (v1). On desktop the first-visit nudge deep-links to /vote.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,50 +48,6 @@ const NUDGE_DWELL_MS = 7000;
  * filters out programmatic scrolls and mobile address-bar resize events. */
 const SCROLL_TRIGGER_DELTA_PX = 48;
 
-/** Set once the visitor opens Quick Vote (pill, nudge, or restore). */
-const QUICK_VOTE_OPENED_KEY = "voxdex_quick_vote_opened";
-/** When the pill first appeared this session; the reminder counts from here. */
-const PILL_INTRO_AT_KEY = "voxdex_quick_vote_pill_intro_at";
-/** Session flag so the later label pulse fires at most once. */
-const PILL_REMINDER_SHOWN_KEY = "voxdex_quick_vote_pill_reminder_shown";
-const PILL_REMINDER_DELAY_MS = 45000;
-const PILL_REMINDER_HOLD_MS = 2500;
-
-function hasOpenedQuickVote(): boolean {
-  try {
-    return localStorage.getItem(QUICK_VOTE_OPENED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markQuickVoteOpened(): void {
-  try {
-    localStorage.setItem(QUICK_VOTE_OPENED_KEY, "1");
-  } catch {
-    // Private mode — the pill just stays quiet this visit.
-  }
-}
-
-function pillIntroAt(): number | null {
-  try {
-    const raw = sessionStorage.getItem(PILL_INTRO_AT_KEY);
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
-}
-
-function pillReminderShown(): boolean {
-  try {
-    return sessionStorage.getItem(PILL_REMINDER_SHOWN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 export interface QuickVoteHostProps {
   surface: "home" | "vote";
   /**
@@ -123,7 +79,6 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
   // ── Overlay open/close with history back-to-close (same as snap) ────────
   const openOverlay = useCallback((source: string, cardId?: string) => {
     if (overlayOpenRef.current) return;
-    markQuickVoteOpened();
     setOverlaySource(source);
     setInitialCardId(cardId);
     setNudgeVisible(false);
@@ -259,50 +214,10 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
     openOverlay("persistent_pill");
   }, [openOverlay]);
 
-  // The pill stays mounted and tappable, collapsed to a dim icon. The full
-  // "Quick Vote" label shows during the shared corner intro (in step with the
-  // other corner pills), then once more ~45s later if they still haven't
-  // opened it. Scrolling never expands it. Visitors who have opened Quick
-  // Vote stay on the icon.
-  const introEnabled = showFab && !hasOpenedQuickVote();
-  const introProminent = useCornerPillIntro("quick-vote", introEnabled);
-  const [reminderProminent, setReminderProminent] = useState(false);
-  const pillProminent = introProminent || reminderProminent;
-  useLayoutEffect(() => {
-    if (!introEnabled) {
-      setReminderProminent(false);
-      return;
-    }
-
-    const timers: number[] = [];
-    let started = pillIntroAt();
-    if (started == null) {
-      started = Date.now();
-      try {
-        sessionStorage.setItem(PILL_INTRO_AT_KEY, String(started));
-      } catch {
-        // Private mode — the reminder clock just restarts on the next page.
-      }
-    }
-
-    if (!pillReminderShown()) {
-      const wait = Math.max(0, started + PILL_REMINDER_DELAY_MS - Date.now());
-      timers.push(window.setTimeout(() => {
-        if (hasOpenedQuickVote()) return;
-        try {
-          sessionStorage.setItem(PILL_REMINDER_SHOWN_KEY, "1");
-        } catch {
-          // Still show the pulse; a later page in this session may repeat it.
-        }
-        setReminderProminent(true);
-        timers.push(window.setTimeout(() => setReminderProminent(false), PILL_REMINDER_HOLD_MS));
-      }, wait));
-    }
-
-    return () => {
-      for (const id of timers) window.clearTimeout(id);
-    };
-  }, [introEnabled]);
+  // Same session intro as Ask VoxDex and the activity eye: whenever this pill
+  // is on screen it joins that one expand/collapse. Opening Quick Vote does
+  // not opt the label out.
+  const introProminent = useCornerPillIntro("quick-vote", showFab);
 
   return (
     <>
@@ -390,25 +305,25 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
                 />
               )}
               <motion.button
-                // Labelled only for the session intro and one later reminder.
-                // Otherwise a dim icon circle. Always tappable.
-                animate={{ opacity: pillProminent ? 1 : 0.5 }}
-                transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
+                animate={{ opacity: introProminent ? 1 : 0.5 }}
+                transition={{ duration: introProminent ? 0.2 : 0.45, ease: "easeOut" }}
                 onClick={openFromFab}
                 className="pointer-events-auto flex items-center rounded-full border border-white/15 bg-black/30 p-2.5 text-sm font-medium text-slate-100 shadow-2xl shadow-black/40 backdrop-blur-xl transition-transform active:scale-95"
                 aria-label="Quick Vote"
                 data-testid="quick-vote-reentry-pill"
               >
                 <Zap className="h-4 w-4 shrink-0 text-primary" />
+                {/* leading-4 matches the 16px icon so the open pill stays the
+                    same height as the round button and the stack does not jump. */}
                 <motion.span
                   initial={false}
                   animate={
-                    pillProminent
+                    introProminent
                       ? { width: "auto", opacity: 1, marginLeft: 6, marginRight: 4 }
                       : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
                   }
-                  transition={{ duration: pillProminent ? 0.2 : 0.45, ease: "easeOut" }}
-                  className="overflow-hidden whitespace-nowrap"
+                  transition={{ duration: introProminent ? 0.2 : 0.45, ease: "easeOut" }}
+                  className="overflow-hidden whitespace-nowrap leading-4"
                 >
                   Quick Vote
                 </motion.span>
