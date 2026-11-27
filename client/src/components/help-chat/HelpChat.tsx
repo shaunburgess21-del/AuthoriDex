@@ -281,7 +281,7 @@ export function HelpChat() {
                   : { width: 0, opacity: 0, marginLeft: 0, marginRight: 0 }
               }
               transition={{ duration: labelVisible ? 0.2 : 0.45, ease: "easeOut" }}
-              className="overflow-hidden whitespace-nowrap"
+              className="overflow-hidden whitespace-nowrap leading-4"
               aria-hidden
             >
               Ask VoxDex
