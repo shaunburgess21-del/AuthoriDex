@@ -39,14 +39,67 @@ export function welcomeChecklistSuppressesAnonNudge(input: {
 }
 
 /**
- * Where a visible strip sits. It is never in document flow.
+ * Sign-in, sign-up, verify, onboarding, and any auth callback or password
+ * reset. The checklist's Predict and Favorite steps land on
+ * `/login?mode=signup&reason=predict_signup` and
+ * `/login?mode=signup&reason=favorite_signup` (query string ignored).
+ * Those screens already ask the visitor to create an account, and they
+ * have no shared header, so the strip would cover the logo and title.
+ */
+const AUTH_SURFACE_ROOTS = [
+  "/login",
+  "/auth",
+  "/signup",
+  "/sign-up",
+  "/reset-password",
+  "/forgot-password",
+] as const;
+
+export function isAuthSurfaceRoute(pathname: string): boolean {
+  const path = pathnameOnly(pathname);
+  return AUTH_SURFACE_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+}
+
+/**
+ * Pages that do not render the shared h-16 SiteHeader. A strip fixed at
+ * `top: 4rem` lands on their own logo or title. The strip takes normal
+ * flow on these routes so that chrome starts underneath it.
+ *
+ * `/` and `/vote` are handled earlier (checklist / above the bottom nav).
+ * `/me` and `/me/settings` use SiteHeader; other `/me/*` pages do not.
+ * `/predict` uses SiteHeader; `/predict/*` detail and activity pages do not.
+ */
+export function anonNudgeReservesSpace(pathname: string): boolean {
+  const path = pathnameOnly(pathname);
+  if (
+    path === "/account-deletion" ||
+    path === "/takedown" ||
+    path === "/contact" ||
+    path === "/unsubscribe"
+  ) {
+    return true;
+  }
+  if (path === "/vote/all-ratings" || path === "/vote/induction") return true;
+  if (path.startsWith("/vote/opinion-polls") || path.startsWith("/vote/matchups")) return true;
+  if (path.startsWith("/polls/")) return true;
+  if (path.startsWith("/me/") && path !== "/me/settings") return true;
+  if (path.startsWith("/predict/")) return true;
+  if (path === "/admin" || path.startsWith("/admin/")) return true;
+  return false;
+}
+
+/**
+ * Where a visible strip sits.
  * - `above-nav`: vote hub after the checklist was dismissed. The header
  *   and the sticky section chips already own the top, so the strip floats
- *   above the bottom nav instead of covering them.
- * - `under-header`: every other page. It overlays the first sliver of
- *   content under the header and does not pad the document.
+ *   above the bottom nav instead of covering them. Out of document flow.
+ * - `under-header`: pages with the shared h-16 header. Fixed just under
+ *   that bar. Out of document flow, same as before.
+ * - `in-flow`: pages without that header (`anonNudgeReservesSpace`).
+ *   The strip is in normal flow at the top of the page and reserves its
+ *   height, so it cannot cover a logo or a title.
  */
-export type AnonNudgePlacement = "hidden" | "above-nav" | "under-header";
+export type AnonNudgePlacement = "hidden" | "above-nav" | "under-header" | "in-flow";
 
 export function anonNudgePlacement(input: {
   show: boolean;
@@ -54,6 +107,9 @@ export function anonNudgePlacement(input: {
   deviceDismissed: boolean;
 }): AnonNudgePlacement {
   if (!input.show) return "hidden";
+  if (isAuthSurfaceRoute(input.pathname)) return "hidden";
   if (welcomeChecklistSuppressesAnonNudge(input)) return "hidden";
-  return isVoteChecklistRoute(input.pathname) ? "above-nav" : "under-header";
+  if (isVoteChecklistRoute(input.pathname)) return "above-nav";
+  if (anonNudgeReservesSpace(input.pathname)) return "in-flow";
+  return "under-header";
 }

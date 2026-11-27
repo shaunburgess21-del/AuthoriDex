@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import { authLoginPath } from "../client/src/lib/authReturn";
 import {
   anonNudgePlacement,
+  anonNudgeReservesSpace,
+  isAuthSurfaceRoute,
   isVoteChecklistRoute,
   welcomeChecklistSuppressesAnonNudge,
 } from "../client/src/lib/anonFirstVoteNudge";
@@ -561,6 +563,72 @@ describe("post-vote strip vs welcome checklist", () => {
     );
   });
 
+  it("hides the strip on auth screens, including checklist signup redirects", () => {
+    const shown = { show: true, deviceDismissed: true };
+    const authUrls = [
+      "/login",
+      "/login?mode=signup",
+      "/login?mode=signup&reason=predict_signup",
+      "/login?mode=signup&reason=favorite_signup",
+      "/login?mode=signup&reason=predict_signup&email=a@b.com",
+      "/login?mode=signup&redirect=/predict",
+      "/login/verify",
+      "/login/verify?email=a@b.com",
+      "/login/welcome",
+      "/auth/callback",
+      "/auth/callback?code=pkce",
+      "/reset-password",
+      "/forgot-password",
+      "/signup",
+      "/sign-up",
+    ];
+    for (const url of authUrls) {
+      assert.equal(isAuthSurfaceRoute(url), true, url);
+      assert.equal(anonNudgePlacement({ ...shown, pathname: url }), "hidden", url);
+    }
+    assert.equal(isAuthSurfaceRoute("/rankings"), false);
+    assert.equal(isAuthSurfaceRoute("/login-help"), false);
+  });
+
+  it("reserves strip height on pages without the shared header", () => {
+    const shown = { show: true, deviceDismissed: false };
+    const reserves = [
+      "/contact",
+      "/unsubscribe",
+      "/account-deletion",
+      "/takedown",
+      "/vote/all-ratings",
+      "/vote/induction",
+      "/vote/opinion-polls/some-slug",
+      "/vote/matchups/some-slug",
+      "/polls/some-slug",
+      "/me/favorites",
+      "/me/votes",
+      "/predict/updown/abc",
+      "/predict/h2h/abc",
+      "/predict/race/abc",
+      "/predict/activity",
+      "/admin",
+    ];
+    for (const url of reserves) {
+      assert.equal(anonNudgeReservesSpace(url), true, url);
+      assert.equal(anonNudgePlacement({ ...shown, pathname: url }), "in-flow", url);
+    }
+    assert.equal(anonNudgeReservesSpace("/rankings"), false);
+    assert.equal(anonNudgeReservesSpace("/predict"), false);
+    assert.equal(anonNudgeReservesSpace("/me"), false);
+    assert.equal(anonNudgeReservesSpace("/me/settings"), false);
+    assert.equal(anonNudgeReservesSpace("/person/ada"), false);
+    assert.equal(
+      anonNudgePlacement({ ...shown, pathname: "/how-it-works" }),
+      "under-header",
+    );
+    assert.equal(
+      anonNudgePlacement({ ...shown, pathname: "/terms" }),
+      "under-header",
+    );
+  });
+
   it("tells the strip to leave document flow, and notifies a same-tab dismiss", () => {
     const nudge = readFileSync(
       new URL("../client/src/components/AnonFirstVoteNudge.tsx", import.meta.url),
@@ -568,6 +636,7 @@ describe("post-vote strip vs welcome checklist", () => {
     );
     assert.match(nudge, /anonNudgePlacement\(/);
     assert.match(nudge, /fixed inset-x-0/);
+    assert.match(nudge, /"in-flow": "relative z-30 w-full border-b"/);
     assert.equal(nudge.includes("container mx-auto flex"), true);
     assert.match(nudge, /data-nudge-placement=\{placement\}/);
     let heard = 0;

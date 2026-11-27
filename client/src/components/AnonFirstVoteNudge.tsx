@@ -35,17 +35,17 @@ function readWelcomeDismissed(): boolean {
 }
 
 /**
- * The strip is fixed, never in document flow, so appearing after a vote
- * cannot push the page. On the vote hub it stays hidden while the welcome
- * checklist is open — that card's pivot and Join free are the nudge.
- * After a dismiss it floats above the bottom nav, clear of the sticky
- * section chips. On every other page it overlays just under the header.
+ * Above the bottom nav and just under the shared header, the strip is
+ * fixed so it cannot push those layouts. On pages without that header it
+ * stays in normal flow (`in-flow`) and reserves its height, so a logo or
+ * title underneath is never covered. Auth screens hide it entirely.
  */
 const PLACEMENT_CLASS: Record<Exclude<AnonNudgePlacement, "hidden">, string> = {
   "above-nav":
     "fixed inset-x-0 z-40 border-t bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0",
   "under-header":
     "fixed inset-x-0 z-40 border-b top-[calc(4rem+var(--site-banner-height,0px)+var(--offline-banner-height,0px))]",
+  "in-flow": "relative z-30 w-full border-b",
 };
 
 function AnonFirstVoteNudgeBody() {
