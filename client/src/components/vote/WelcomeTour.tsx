@@ -39,8 +39,12 @@ import {
   type TourStepId,
 } from "@/lib/welcomeTour";
 
-const BUBBLE_WIDTH = 304;
-const BUBBLE_HEIGHT_ESTIMATE = 188;
+const BUBBLE_HEIGHT_ESTIMATE = 240;
+const SPLIT_BLOCK_PX = 96;
+
+function bubbleWidthFor(viewportWidth: number): number {
+  return viewportWidth >= 768 ? 320 : 304;
+}
 
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(() => {
@@ -149,16 +153,68 @@ function waitForScrollSettle(reduceMotion: boolean): Promise<void> {
   });
 }
 
-async function waitForStableRect(read: () => RectBox | null): Promise<RectBox | null> {
+async function waitForSwipeCarouselGone(): Promise<void> {
+  for (let frame = 0; frame < 24; frame += 1) {
+    if (!document.querySelector("[data-testid='matchup-category-swipe']")) {
+      await nextFrames(1);
+      return;
+    }
+    await nextFrames(1);
+  }
+}
+
+/**
+ * Several identical frames, and a quiet ResizeObserver, before the hole is trusted.
+ * A late image or the swipe carousel unmounting changes the card after the first read.
+ */
+async function waitForLayoutStable(read: () => RectBox | null, node: HTMLElement | null): Promise<RectBox | null> {
   let last = read();
   let stable = 0;
-  for (let frame = 0; frame < 12 && stable < 2; frame += 1) {
+  let resized = false;
+  const observer = node && typeof ResizeObserver !== "undefined"
+    ? new ResizeObserver(() => {
+      resized = true;
+    })
+    : null;
+  if (node && observer) observer.observe(node);
+  for (let frame = 0; frame < 30 && stable < 4; frame += 1) {
     await nextFrames(1);
+    if (resized) {
+      resized = false;
+      stable = 0;
+    }
     const next = read();
     stable = sameBox(last, next) ? stable + 1 : 0;
     last = next;
   }
+  observer?.disconnect();
   return last;
+}
+
+async function waitForCardImages(node: HTMLElement | null): Promise<void> {
+  if (!node) return;
+  const pending = [...node.querySelectorAll("img")].filter((img) => !img.complete);
+  if (pending.length === 0) return;
+  await Promise.race([
+    Promise.all(pending.map((img) => new Promise<void>((resolve) => {
+      img.addEventListener("load", () => resolve(), { once: true });
+      img.addEventListener("error", () => resolve(), { once: true });
+    }))),
+    delay(500),
+  ]);
+}
+
+function revealScrollDelta(card: HTMLElement, bubbleHeight: number): number {
+  const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
+  const rect = card.getBoundingClientRect();
+  const roomBelow = SPLIT_BLOCK_PX + 12 + bubbleHeight + 8;
+  const maxBottom = window.innerHeight - insets.bottom - roomBelow;
+  const delta = rect.bottom - maxBottom;
+  if (delta > 2) return delta;
+  const splitTop = rect.bottom + 10;
+  const minTop = insets.top + 8;
+  if (splitTop < minTop) return splitTop - minTop;
+  return 0;
 }
 
 function scrollElementIntoView(element: HTMLElement, block: "center" | "start", reduceMotion: boolean): void {
@@ -226,6 +282,8 @@ export function WelcomeTourHost() {
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const bubbleHeightRef = useRef(bubbleHeight);
+  bubbleHeightRef.current = bubbleHeight;
   const endedRef = useRef(false);
 
   const finish = useCallback((kind: "skip" | "complete") => {
@@ -295,6 +353,13 @@ export function WelcomeTourHost() {
     const measuredStep = step;
     let cancel = false;
     let release = () => {};
+    let tracker: ResizeObserver | null = null;
+    const publish = (rect: RectBox | null) => {
+      setMeasured((current) => {
+        if (current?.step === measuredStep && sameBox(current.rect, rect)) return current;
+        return { step: measuredStep, rect };
+      });
+    };
     const run = async () => {
       setPracticeLive(false);
       setMeasured(null);
@@ -302,45 +367,72 @@ export function WelcomeTourHost() {
         await delay(reduce ? 0 : 340);
         if (cancel) return;
       }
+      await waitForSwipeCarouselGone();
+      if (cancel) return;
       if (measuredStep === "categories") {
         window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
         await nextFrames(2);
         if (cancel) return;
       }
-      const node = measureNode(measuredStep);
+      let node = measureNode(measuredStep);
+      if (node) await waitForLayoutStable(() => toBox(node), node);
+      if (cancel) return;
+      node = measureNode(measuredStep);
       const fixedNav = Boolean(node?.closest("[data-testid='nav-bottom']"));
       if (node && tourTargetScrolls(measuredStep) && !fixedNav) {
-        const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
-        const box = node.getBoundingClientRect();
-        if (targetNeedsScroll(
-          { top: box.top, bottom: box.bottom, height: box.height },
-          window.innerHeight,
-          insets.top,
-          insets.bottom,
-        )) {
-          scrollElementIntoView(node, measuredStep === "categories" ? "start" : "center", reduce);
-          await waitForScrollSettle(reduce);
-          if (measuredStep === "categories") {
-            window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
-            await nextFrames(2);
+        if (measuredStep === "practice_reveal") {
+          const delta = revealScrollDelta(node, bubbleHeightRef.current);
+          if (Math.abs(delta) >= 2) {
+            window.scrollBy({ top: delta, behavior: reduce ? "auto" : "smooth" });
+            await waitForScrollSettle(reduce);
+          }
+        } else {
+          const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
+          const box = node.getBoundingClientRect();
+          if (targetNeedsScroll(
+            { top: box.top, bottom: box.bottom, height: box.height },
+            window.innerHeight,
+            insets.top,
+            insets.bottom,
+          )) {
+            scrollElementIntoView(node, measuredStep === "categories" ? "start" : "center", reduce);
+            await waitForScrollSettle(reduce);
+            if (measuredStep === "categories") {
+              window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
+              await nextFrames(2);
+            }
           }
         }
       }
       if (cancel) return;
+      node = measureNode(measuredStep);
+      await waitForCardImages(node);
       if (typeof document !== "undefined" && document.fonts?.ready) {
         await document.fonts.ready;
       }
       if (cancel) return;
-      const rect = await waitForStableRect(() => measureStepTarget(measuredStep));
+      node = measureNode(measuredStep);
+      const rect = await waitForLayoutStable(() => measureStepTarget(measuredStep), node);
       await nextFrames(1);
       const again = measureStepTarget(measuredStep);
       if (cancel) return;
-      setMeasured({ step: measuredStep, rect: sameBox(rect, again) ? rect : again });
+      publish(sameBox(rect, again) ? rect : again);
+      const tracked = measureNode(measuredStep);
+      if (tracked && typeof ResizeObserver !== "undefined") {
+        tracker = new ResizeObserver(() => {
+          if (cancel) return;
+          const next = toBox(tracked);
+          publish(next);
+        });
+        tracker.observe(tracked);
+        if (tracked.parentElement) tracker.observe(tracked.parentElement);
+      }
       release = lockDocumentScroll(document);
     };
     void run();
     return () => {
       cancel = true;
+      tracker?.disconnect();
       release();
     };
   }, [phase.status, step, reduce, phase.status === "running" ? phase.steps[0] : null]);
@@ -401,7 +493,7 @@ export function WelcomeTourHost() {
           type="button"
           onClick={skip}
           data-testid="welcome-tour-skip"
-          className="fixed z-[90] inline-flex min-h-11 items-center rounded-full bg-popover px-4 text-sm font-medium text-foreground shadow-lg"
+          className="fixed z-[90] inline-flex h-11 min-w-[5.5rem] items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-lg"
           style={{
             right: "max(1rem, var(--safe-area-inset-right, 0px))",
             bottom: "max(1rem, var(--safe-area-inset-bottom, 0px))",
@@ -522,7 +614,7 @@ function TourOverlay({
     target: finale ? null : target,
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
-    bubbleWidth: BUBBLE_WIDTH,
+    bubbleWidth: bubbleWidthFor(window.innerWidth),
     bubbleHeight,
     insets,
     avoid: finale ? null : avoid,
@@ -622,7 +714,7 @@ function TourOverlay({
         data-testid="welcome-tour-bubble"
         data-tour-allow-scroll=""
         data-side={placement.side}
-        className="fixed z-[90] max-h-[calc(100dvh-var(--safe-area-inset-top,0px)-var(--safe-area-inset-bottom,0px)-1rem)] overflow-auto rounded-2xl border border-cyan-500/35 bg-popover p-3.5 text-popover-foreground shadow-xl outline-none dark:border-cyan-400/30"
+        className="fixed z-[90] flex min-h-[240px] max-h-[calc(100dvh-var(--safe-area-inset-top,0px)-var(--safe-area-inset-bottom,0px)-1rem)] w-[304px] max-w-[calc(100vw-var(--safe-area-inset-left,0px)-var(--safe-area-inset-right,0px)-16px)] flex-col overflow-hidden rounded-2xl border border-cyan-500/35 bg-popover p-3.5 text-popover-foreground shadow-xl outline-none md:w-[320px] dark:border-cyan-400/30"
         style={{
           top: `max(${placement.top}px, calc(var(--safe-area-inset-top, 0px) + 8px))`,
           left: `max(${placement.left}px, calc(var(--safe-area-inset-left, 0px) + 8px))`,
@@ -657,17 +749,12 @@ function TourOverlay({
             </div>
           </>
         ) : null}
-      </div>
-      <div
-        className="fixed inset-x-0 z-[91] flex justify-center px-4 bottom-[max(5.5rem,calc(var(--safe-area-inset-bottom,0px)+5rem))] md:bottom-6"
-        data-testid="welcome-tour-actions"
-      >
-        <div className="flex h-11 w-full max-w-sm items-center justify-between gap-2">
+        <div className="mt-auto flex h-11 shrink-0 items-center justify-between gap-3" data-testid="welcome-tour-actions">
           <button
             type="button"
             onClick={onSkip}
             data-testid="welcome-tour-skip"
-            className="inline-flex h-11 items-center rounded-md px-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-11 min-w-[5.5rem] items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Skip
           </button>
@@ -676,12 +763,12 @@ function TourOverlay({
               type="button"
               onClick={onNext}
               data-testid="welcome-tour-next"
-              className="inline-flex h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-semibold text-white hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-11 min-w-[7rem] items-center justify-center rounded-full bg-cyan-500 px-4 text-sm font-semibold text-white hover:bg-cyan-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {nextLabel}
             </button>
           ) : (
-            <span className="text-xs font-medium text-muted-foreground">Tap a side</span>
+            <span className="inline-flex h-11 min-w-[7rem] items-center justify-center text-sm font-medium text-foreground">Tap a side</span>
           )}
         </div>
       </div>

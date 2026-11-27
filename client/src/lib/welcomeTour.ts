@@ -19,6 +19,11 @@ export const WELCOME_TOUR_REAL_VOTE_PENDING_KEY = "voxdex_welcome_tour_real_vote
 /** Set after tour_first_real_vote so a replay cannot log it again. */
 export const WELCOME_TOUR_REAL_VOTE_LOGGED_KEY = "voxdex_welcome_tour_real_vote_logged";
 
+/** sessionStorage timestamp. Tie and hesitation nudges stay quiet until it passes. */
+export const WELCOME_TOUR_NUDGE_QUIET_KEY = "voxdex_welcome_tour_nudge_quiet_until";
+
+export const WELCOME_TOUR_NUDGE_QUIET_MS = 60_000;
+
 export const WELCOME_TOUR_CARD_ATTR = "data-welcome-tour-h2h";
 
 /** How long to wait for a head-to-head card before the quick tour. */
@@ -137,6 +142,27 @@ export function writeTourSeen(storage: Pick<TourStorage, "setItem">): void {
   writeFlag(storage, WELCOME_TOUR_SEEN_KEY);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("voxdex-welcome-tour-seen"));
+  }
+}
+
+/** Done, Skip, Escape, and unmount share this. Cards read it even if they mount later. */
+export function writeTourNudgeQuiet(storage: Pick<TourStorage, "setItem">, now = Date.now()): void {
+  try {
+    storage.setItem(WELCOME_TOUR_NUDGE_QUIET_KEY, String(now + WELCOME_TOUR_NUDGE_QUIET_MS));
+  } catch {
+    /* private mode */
+  }
+}
+
+/** Milliseconds-since-epoch when the quiet period ends, or 0 when it is not active. */
+export function readTourNudgeQuietUntil(storage: Pick<TourStorage, "getItem">, now = Date.now()): number {
+  try {
+    const raw = storage.getItem(WELCOME_TOUR_NUDGE_QUIET_KEY);
+    const until = raw ? Number(raw) : 0;
+    if (!Number.isFinite(until) || until <= now) return 0;
+    return until;
+  } catch {
+    return 0;
   }
 }
 
@@ -506,6 +532,16 @@ function browserSession(): TourStorage | null {
   }
 }
 
+export function tourNudgeQuietUntil(now = Date.now()): number {
+  const session = browserSession();
+  if (!session) return 0;
+  return readTourNudgeQuietUntil(session, now);
+}
+
+export function isTourNudgeQuiet(now = Date.now()): boolean {
+  return tourNudgeQuietUntil(now) > 0;
+}
+
 export function isWelcomeTourActive(): boolean {
   return tourActive;
 }
@@ -537,7 +573,11 @@ export function setWelcomeTourActive(next: boolean): void {
     if (next) document.documentElement.dataset.welcomeTour = "on";
     else delete document.documentElement.dataset.welcomeTour;
   }
-  if (!next) resetTourCardState();
+  if (!next) {
+    const session = browserSession();
+    if (session) writeTourNudgeQuiet(session);
+    resetTourCardState();
+  }
   for (const listener of activeListeners) listener();
 }
 

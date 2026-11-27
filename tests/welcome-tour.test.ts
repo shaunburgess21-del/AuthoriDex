@@ -36,6 +36,10 @@ import {
   tourNextLabel,
   tourReplayDestination,
   tourStepCopy,
+  WELCOME_TOUR_NUDGE_QUIET_KEY,
+  WELCOME_TOUR_NUDGE_QUIET_MS,
+  readTourNudgeQuietUntil,
+  writeTourNudgeQuiet,
   writeTourPending,
   writeTourSeen,
   type TourPhase,
@@ -325,5 +329,32 @@ describe("welcome tour chrome", () => {
     assert.equal(body.style.paddingRight, "4px");
     assert.equal(body.style.position, "");
     assert.equal(listeners.size, 0);
+  });
+
+  it("keeps Skip and Next in the bubble and measures after the swipe carousel is gone", () => {
+    assert.match(tourUi, /data-testid="welcome-tour-actions"/);
+    assert.match(tourUi, /min-h-\[240px\]/);
+    assert.match(tourUi, /min-w-\[5\.5rem\]/);
+    assert.match(tourUi, /bg-background px-3 text-sm font-semibold text-foreground/);
+    assert.equal(tourUi.includes("md:bottom-6"), false);
+    assert.match(tourUi, /waitForSwipeCarouselGone/);
+    assert.match(tourUi, /new ResizeObserver/);
+    assert.match(tourUi, /revealScrollDelta/);
+    const nudgeHook = readFileSync(new URL("../client/src/hooks/useMatchupNeutralNudge.ts", import.meta.url), "utf8");
+    assert.match(nudgeHook, /isTourNudgeQuiet\(\)/);
+    assert.match(nudgeHook, /nudgeQuiet/);
+    assert.match(versus, /useMatchupNeutralNudge\(/);
+  });
+});
+
+describe("tour nudge quiet period", () => {
+  it("stays quiet for 60 seconds after a tour exit and then allows nudges again", () => {
+    const store = memory();
+    const now = 1_700_000_000_000;
+    writeTourNudgeQuiet(store, now);
+    assert.equal(store.getItem(WELCOME_TOUR_NUDGE_QUIET_KEY), String(now + WELCOME_TOUR_NUDGE_QUIET_MS));
+    assert.equal(readTourNudgeQuietUntil(store, now + 1_000), now + WELCOME_TOUR_NUDGE_QUIET_MS);
+    assert.equal(readTourNudgeQuietUntil(store, now + WELCOME_TOUR_NUDGE_QUIET_MS), 0);
+    assert.equal(readTourNudgeQuietUntil(memory(), now), 0);
   });
 });
