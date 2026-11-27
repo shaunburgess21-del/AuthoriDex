@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { authLoginPath } from "../client/src/lib/authReturn";
 import {
+  ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
+  ANON_NUDGE_HEIGHT_VAR,
   anonNudgePlacement,
   anonNudgeReservesSpace,
   isAuthSurfaceRoute,
@@ -626,6 +628,55 @@ describe("post-vote strip vs welcome checklist", () => {
     assert.equal(
       anonNudgePlacement({ ...shown, pathname: "/terms" }),
       "under-header",
+    );
+  });
+
+  it("reserves vote-hub height for an opaque bar and lifts the corner pills", () => {
+    assert.equal(ANON_NUDGE_HEIGHT_VAR, "--anon-nudge-height");
+    assert.equal(ANON_FIRST_VOTE_NUDGE_DISMISS_KEY, "voxdex_anon_first_vote_nudge_dismissed");
+    assert.equal(
+      anonNudgePlacement({ show: true, pathname: "/vote", deviceDismissed: true }),
+      "above-nav",
+    );
+    assert.equal(
+      anonNudgePlacement({ show: true, pathname: "/", deviceDismissed: false }),
+      "hidden",
+    );
+
+    const nudge = readFileSync(
+      new URL("../client/src/components/AnonFirstVoteNudge.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(nudge, /bg-background text-foreground/);
+    assert.equal(nudge.includes("bg-cyan-500/10"), false);
+    assert.match(nudge, /ANON_NUDGE_HEIGHT_VAR/);
+    assert.match(nudge, /reserveBottom = placement === "above-nav"/);
+    assert.equal(nudge.includes("useCornerPillIntro"), false);
+    assert.match(nudge, /var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)/);
+
+    const vote = readFileSync(new URL("../client/src/pages/VotePage.tsx", import.meta.url), "utf8");
+    assert.match(
+      vote,
+      /pb-\[calc\(13\.5rem\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\+var\(--anon-nudge-height,0px\)\)\] md:pb-\[calc\(var\(--anon-nudge-height,0px\)\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\)\]/,
+    );
+    assert.equal(vote.includes("md:min-h-[390px]"), false);
+    assert.equal(vote.includes("md:h-[390px]"), false);
+
+    const quickVote = readFileSync(
+      new URL("../client/src/components/quick-vote/QuickVoteHost.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(quickVote, /useCornerPillIntro\("quick-vote", showFab\)/);
+    assert.match(quickVote, /var\(--anon-nudge-height, 0px\)/);
+
+    const help = readFileSync(
+      new URL("../client/src/components/help-chat/HelpChat.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(help, /useCornerPillIntro\("help-chat", !hidden\)/);
+    assert.match(
+      help,
+      /var\(--fab-stack,0px\)\+var\(--anon-nudge-height,0px\)/,
     );
   });
 

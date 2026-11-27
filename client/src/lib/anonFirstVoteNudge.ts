@@ -2,6 +2,13 @@ import { pathnameOnly } from "@/lib/primaryNav";
 
 export const ANON_FIRST_VOTE_NUDGE_DISMISS_KEY = "voxdex_anon_first_vote_nudge_dismissed";
 
+/**
+ * Set on the document while the vote-hub bar is on screen. Vote scroll
+ * padding and the corner pills add it so the bar does not cover cards
+ * or sit under Quick Vote / Ask VoxDex. `0px` everywhere else.
+ */
+export const ANON_NUDGE_HEIGHT_VAR = "--anon-nudge-height";
+
 export const ANON_FIRST_VOTE_NUDGE_COPY = "Sign up to keep your votes and earn XP.";
 
 /**
@@ -92,7 +99,9 @@ export function anonNudgeReservesSpace(pathname: string): boolean {
  * Where a visible strip sits.
  * - `above-nav`: vote hub after the checklist was dismissed. The header
  *   and the sticky section chips already own the top, so the strip floats
- *   above the bottom nav instead of covering them. Out of document flow.
+ *   above the bottom nav. It stays fixed, and its measured height is
+ *   published as `--anon-nudge-height` so the vote page and corner pills
+ *   clear it.
  * - `under-header`: pages with the shared h-16 header. Fixed just under
  *   that bar. Out of document flow, same as before.
  * - `in-flow`: pages without that header (`anonNudgeReservesSpace`).
