@@ -10,6 +10,7 @@ import {
   ANON_FIRST_VOTE_NUDGE_COPY,
   ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
   ANON_NUDGE_HEIGHT_VAR,
+  ANON_NUDGE_SAFE_VAR,
   anonNudgePlacement,
   shouldShowAnonFirstVoteNudge,
   type AnonNudgePlacement,
@@ -77,15 +78,26 @@ function AnonFirstVoteNudgeBody() {
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    if (!reserveBottom) {
+    const clear = () => {
       root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, "0px");
+      root.style.setProperty(ANON_NUDGE_SAFE_VAR, "0px");
+    };
+    if (!reserveBottom) {
+      clear();
       return;
     }
     const node = barRef.current;
     if (!node) {
-      root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, "0px");
+      clear();
       return;
     }
+    // Same inset the bar sits on from `md` up. Mobile footer padding
+    // already includes the tab bar and this inset, so only the height
+    // is added there.
+    root.style.setProperty(
+      ANON_NUDGE_SAFE_VAR,
+      "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
+    );
     const publish = () => {
       root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, `${node.offsetHeight}px`);
     };
@@ -94,7 +106,7 @@ function AnonFirstVoteNudgeBody() {
     observer.observe(node);
     return () => {
       observer.disconnect();
-      root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, "0px");
+      clear();
     };
   }, [reserveBottom]);
 

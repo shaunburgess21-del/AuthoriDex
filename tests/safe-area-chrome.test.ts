@@ -20,8 +20,15 @@ test("fixed docks clear the tab bar and the home indicator", () => {
   assert.match(ABOVE_TAB_BAR_BOTTOM, /bottom-\[calc\(4rem\+env\(safe-area-inset-bottom,0px\)\)\]/);
   assert.match(ABOVE_TAB_BAR_BOTTOM, /md:bottom-\[env\(safe-area-inset-bottom,0px\)\]/);
   assert.equal(ABOVE_TAB_BAR_BOTTOM.includes("md:bottom-0"), false);
-  assert.match(ABOVE_TAB_BAR_PADDING, /pb-\[calc\(5rem\+env\(safe-area-inset-bottom,0px\)\)\]/);
-  assert.match(ABOVE_TAB_BAR_PADDING, /md:pb-0/);
+  assert.match(
+    ABOVE_TAB_BAR_PADDING,
+    /pb-\[calc\(5rem\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\+var\(--anon-nudge-height,0px\)\)\]/,
+  );
+  assert.match(
+    ABOVE_TAB_BAR_PADDING,
+    /md:pb-\[calc\(var\(--anon-nudge-height,0px\)\+var\(--anon-nudge-safe,0px\)\)\]/,
+  );
+  assert.equal(ABOVE_TAB_BAR_PADDING.includes("md:pb-0"), false);
   assert.match(PREDICTION_DOCK_CLASS, /fixed /);
   assert.equal(PREDICTION_DOCK_CLASS.includes(ABOVE_TAB_BAR_BOTTOM), true);
 });

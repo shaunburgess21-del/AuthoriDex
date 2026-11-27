@@ -5,6 +5,7 @@ import { authLoginPath } from "../client/src/lib/authReturn";
 import {
   ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
   ANON_NUDGE_HEIGHT_VAR,
+  ANON_NUDGE_SAFE_VAR,
   anonNudgePlacement,
   anonNudgeReservesSpace,
   isAuthSurfaceRoute,
@@ -633,6 +634,7 @@ describe("post-vote strip vs welcome checklist", () => {
 
   it("reserves vote-hub height for an opaque bar and lifts the corner pills", () => {
     assert.equal(ANON_NUDGE_HEIGHT_VAR, "--anon-nudge-height");
+    assert.equal(ANON_NUDGE_SAFE_VAR, "--anon-nudge-safe");
     assert.equal(ANON_FIRST_VOTE_NUDGE_DISMISS_KEY, "voxdex_anon_first_vote_nudge_dismissed");
     assert.equal(
       anonNudgePlacement({ show: true, pathname: "/vote", deviceDismissed: true }),
@@ -651,16 +653,29 @@ describe("post-vote strip vs welcome checklist", () => {
     assert.equal(nudge.includes("bg-cyan-500/10"), false);
     assert.match(nudge, /ANON_NUDGE_HEIGHT_VAR/);
     assert.match(nudge, /reserveBottom = placement === "above-nav"/);
+    assert.match(nudge, /ANON_NUDGE_SAFE_VAR/);
     assert.equal(nudge.includes("useCornerPillIntro"), false);
     assert.match(nudge, /var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)/);
 
     const vote = readFileSync(new URL("../client/src/pages/VotePage.tsx", import.meta.url), "utf8");
     assert.match(
       vote,
-      /pb-\[calc\(13\.5rem\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\+var\(--anon-nudge-height,0px\)\)\] md:pb-\[calc\(var\(--anon-nudge-height,0px\)\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\)\]/,
+      /pb-\[calc\(13\.5rem\+env\(safe-area-inset-bottom,0px\)\)\] md:pb-0/,
     );
+    assert.equal(vote.includes("--anon-nudge-height"), false);
     assert.equal(vote.includes("md:min-h-[390px]"), false);
     assert.equal(vote.includes("md:h-[390px]"), false);
+
+    const footerPad = readFileSync(
+      new URL("../client/src/lib/safeAreaChrome.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(footerPad, /var\(--anon-nudge-height,0px\)/);
+    assert.match(footerPad, /var\(--anon-nudge-safe,0px\)/);
+    assert.match(
+      readFileSync(new URL("../client/src/components/Footer.tsx", import.meta.url), "utf8"),
+      /ABOVE_TAB_BAR_PADDING/,
+    );
 
     const quickVote = readFileSync(
       new URL("../client/src/components/quick-vote/QuickVoteHost.tsx", import.meta.url),

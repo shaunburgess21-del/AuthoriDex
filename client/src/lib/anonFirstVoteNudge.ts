@@ -9,6 +9,13 @@ export const ANON_FIRST_VOTE_NUDGE_DISMISS_KEY = "voxdex_anon_first_vote_nudge_d
  */
 export const ANON_NUDGE_HEIGHT_VAR = "--anon-nudge-height";
 
+/**
+ * Home-indicator inset while the vote-hub bar is open, else `0px`.
+ * Desktop footer padding adds it under the bar. It stays 0 when the bar
+ * is hidden so the footer does not grow a second time.
+ */
+export const ANON_NUDGE_SAFE_VAR = "--anon-nudge-safe";
+
 export const ANON_FIRST_VOTE_NUDGE_COPY = "Sign up to keep your votes and earn XP.";
 
 /**
@@ -100,8 +107,9 @@ export function anonNudgeReservesSpace(pathname: string): boolean {
  * - `above-nav`: vote hub after the checklist was dismissed. The header
  *   and the sticky section chips already own the top, so the strip floats
  *   above the bottom nav. It stays fixed, and its measured height is
- *   published as `--anon-nudge-height` so the vote page and corner pills
- *   clear it.
+ *   published as `--anon-nudge-height` so the site footer (below the
+ *   page) and the corner pills clear it. The vote page itself does not
+ *   add that height — that would leave the footer behind the bar.
  * - `under-header`: pages with the shared h-16 header. Fixed just under
  *   that bar. Out of document flow, same as before.
  * - `in-flow`: pages without that header (`anonNudgeReservesSpace`).
