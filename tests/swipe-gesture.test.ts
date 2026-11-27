@@ -5,10 +5,16 @@ import { readFileSync } from "node:fs";
 import {
   HORIZONTAL_OVERFLOW_SLOP_PX,
   NO_SWIPE_NAV_SELECTOR,
+  SWIPE_COMMIT_OFFSET_PX,
+  SWIPE_COMMIT_VELOCITY_PX_PER_S,
+  SWIPE_EDGE_INSET_PX,
   elementCanScrollHorizontally,
   hasHorizontalOverflow,
   overflowXAllowsPan,
+  claimPointerAxis,
+  pointerStartsInScreenEdge,
   pointerTargetYieldsSwipeNav,
+  swipeCommitDirection,
   swipeNavShouldIgnoreGesture,
   type SwipeGestureNode,
 } from "../client/src/components/vote/swipeGesture";
@@ -114,6 +120,39 @@ test("the carousel opts out of swipe-nav and pans on both axes", () => {
   assert.ok(loading > 0 && ready > loading);
   assert.ok(carousel.slice(loading, ready).includes('data-no-swipe-nav=""'));
   assert.ok(carousel.slice(ready - 180, ready).includes('data-no-swipe-nav=""'));
+});
+
+test("a commit needs 80px or a fast flick, and the direction follows the offset", () => {
+  assert.equal(swipeCommitDirection(SWIPE_COMMIT_OFFSET_PX - 1, 0), null);
+  assert.equal(swipeCommitDirection(-(SWIPE_COMMIT_OFFSET_PX - 1), SWIPE_COMMIT_VELOCITY_PX_PER_S - 1), null);
+  assert.equal(swipeCommitDirection(SWIPE_COMMIT_OFFSET_PX, 0), "right");
+  assert.equal(swipeCommitDirection(-SWIPE_COMMIT_OFFSET_PX, 0), "left");
+  assert.equal(swipeCommitDirection(12, SWIPE_COMMIT_VELOCITY_PX_PER_S), "right");
+  assert.equal(swipeCommitDirection(-12, -SWIPE_COMMIT_VELOCITY_PX_PER_S), "left");
+  assert.equal(swipeCommitDirection(0, SWIPE_COMMIT_VELOCITY_PX_PER_S), "left");
+});
+
+test("screen-edge inset uses viewport CSS pixels and ignores scaled coordinates", () => {
+  assert.equal(pointerStartsInScreenEdge(0, 390, SWIPE_EDGE_INSET_PX), true);
+  assert.equal(pointerStartsInScreenEdge(SWIPE_EDGE_INSET_PX, 390, SWIPE_EDGE_INSET_PX), true);
+  assert.equal(pointerStartsInScreenEdge(SWIPE_EDGE_INSET_PX + 1, 390, SWIPE_EDGE_INSET_PX), false);
+  assert.equal(pointerStartsInScreenEdge(390 - SWIPE_EDGE_INSET_PX, 390, SWIPE_EDGE_INSET_PX), true);
+  assert.equal(pointerStartsInScreenEdge(200, 390, SWIPE_EDGE_INSET_PX), false);
+  assert.equal(pointerStartsInScreenEdge(0, 390, 0), false);
+  assert.equal(pointerStartsInScreenEdge(Number.NaN, 390, SWIPE_EDGE_INSET_PX), false);
+  // x=550 of a 1280px viewport is inside the card, not the 24px band.
+  assert.equal(pointerStartsInScreenEdge(550, 1280, SWIPE_EDGE_INSET_PX), false);
+  // A scaled x larger than the CSS viewport must not be treated as the right edge.
+  assert.equal(pointerStartsInScreenEdge(550, 390, SWIPE_EDGE_INSET_PX), false);
+  assert.equal(pointerStartsInScreenEdge(1270, 1280, SWIPE_EDGE_INSET_PX), true);
+});
+
+test("a vertical drag is not claimed, and a sideways drag is", () => {
+  assert.equal(claimPointerAxis(0, 150), "vertical");
+  assert.equal(claimPointerAxis(4, 80), "vertical");
+  assert.equal(claimPointerAxis(80, 10), "horizontal");
+  assert.equal(claimPointerAxis(8, 6), "pending");
+  assert.equal(claimPointerAxis(12, 12), "vertical");
 });
 
 test("swipe navigation yields before starting a drag on every detail pager", () => {

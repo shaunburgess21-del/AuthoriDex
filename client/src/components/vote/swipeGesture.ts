@@ -85,6 +85,88 @@ function adaptElement(el: Element, cache: Map<Element, SwipeGestureNode>): Swipe
   return node;
 }
 
+/** Distance (px) a horizontal drag must travel to commit navigation. */
+export const SWIPE_COMMIT_OFFSET_PX = 80;
+
+/**
+ * Velocity (px/s) that commits a flick even when the finger travels less
+ * than `SWIPE_COMMIT_OFFSET_PX`.
+ */
+export const SWIPE_COMMIT_VELOCITY_PX_PER_S = 500;
+
+/**
+ * Ignore gestures that start this close to either screen edge so they
+ * stay available for the system back gesture.
+ */
+export const SWIPE_EDGE_INSET_PX = 24;
+
+/** Finger travel before a touch stops being a tap. Matches Quick Vote. */
+export const SWIPE_TAP_SLOP_PX = 8;
+
+/** How long a drag keeps swallowing the synthetic click that follows pointerup. */
+export const SWIPE_CLICK_SUPPRESS_MS = 350;
+
+export type SwipeDirection = "left" | "right";
+
+/**
+ * Commit rule shared by detail-page swipe navigation and the mixed-feed
+ * category pager. Direction follows the finger's offset, including flicks
+ * that cross the velocity threshold before they cross the distance.
+ * A zero offset with a fast velocity resolves left — the same branch the
+ * detail navigator used before this helper existed.
+ */
+export function swipeCommitDirection(
+  offsetX: number,
+  velocityX: number,
+  commitOffsetPx = SWIPE_COMMIT_OFFSET_PX,
+  commitVelocityPxPerS = SWIPE_COMMIT_VELOCITY_PX_PER_S,
+): SwipeDirection | null {
+  if (Math.abs(offsetX) < commitOffsetPx && Math.abs(velocityX) < commitVelocityPxPerS) {
+    return null;
+  }
+  return offsetX > 0 ? "right" : "left";
+}
+
+/**
+ * True when `clientX` is inside the left or right system-gesture band.
+ *
+ * `clientX` and `viewportWidth` are both CSS pixels of the visual viewport
+ * (`visualViewport.width`, otherwise `innerWidth`). A coordinate past the
+ * viewport (a scaled or page x) is not the edge — comparing it with
+ * `width - inset` would swallow swipes that start inside the card.
+ */
+export function pointerStartsInScreenEdge(
+  clientX: number,
+  viewportWidth: number,
+  insetPx = SWIPE_EDGE_INSET_PX,
+): boolean {
+  if (insetPx <= 0) return false;
+  if (!Number.isFinite(clientX) || !Number.isFinite(viewportWidth) || viewportWidth <= 0) {
+    return false;
+  }
+  if (clientX < 0 || clientX > viewportWidth) return false;
+  return clientX <= insetPx || clientX >= viewportWidth - insetPx;
+}
+
+export type PointerAxisClaim = "pending" | "vertical" | "horizontal";
+
+/**
+ * Leave the gesture with the page until movement is clearly one axis.
+ * Vertical wins ties that are mostly downward or upward, so a scroll
+ * that drifts sideways is not captured.
+ */
+export function claimPointerAxis(
+  dx: number,
+  dy: number,
+  lockPx = 12,
+): PointerAxisClaim {
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  if (absY >= lockPx && absY >= absX) return "vertical";
+  if (absX >= lockPx && absX > absY) return "horizontal";
+  return "pending";
+}
+
 /**
  * DOM entry point used by SwipeNavigator. Returns false for non-elements
  * (and in non-DOM test runners) so a pointerdown still navigates.

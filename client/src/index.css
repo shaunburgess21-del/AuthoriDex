@@ -334,6 +334,17 @@
     touch-action: pan-y;
   }
 
+  /* Mixed-feed category pager: a vertical pan that starts on a vote photo
+     (a button) or the title chip must reach the page. Specificity beats
+     `button { touch-action: manipulation }`. */
+  .swipe-trial-pager,
+  .swipe-trial-pager button,
+  .swipe-trial-pager [role="button"],
+  .swipe-trial-pager img {
+    touch-action: pan-y;
+    -webkit-user-drag: none;
+  }
+
   /* Same token as body, so a native first-paint color on html does not
      stay behind a short light-theme page after CSS loads. */
   html {
