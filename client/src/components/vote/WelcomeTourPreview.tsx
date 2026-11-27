@@ -1,33 +1,14 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect } from "react";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
 import { requestWelcomeTour } from "@/lib/welcomeTour";
 
-const CYCLE_S = 10;
-
-function usePrefersReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReduce(media.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-  return reduce;
-}
-
 /**
  * Fixed-height illustration inside the welcome checklist. A finger taps one
- * side and the bar fills. No names and no live data. Tapping it starts the
- * tour; the loop never does.
+ * side and the bar fills, on a CSS loop so it keeps running after the
+ * checklist finishes opening. No names and no live data. Tapping it starts
+ * the tour; the loop never does. Reduced motion is the CSS media query only.
  */
 export function WelcomeTourPreview() {
-  const reduce = usePrefersReducedMotion();
-
   useEffect(() => {
     logFunnelEvent("tour_preview_viewed", "vote");
   }, []);
@@ -52,46 +33,11 @@ export function WelcomeTourPreview() {
         <SideBlock tone="amber" />
       </span>
       <span className="pointer-events-none absolute inset-x-4 bottom-3 h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
-        {reduce ? (
-          <motion.span
-            className="block h-full w-[68%] rounded-full bg-gradient-to-r from-blue-600 to-blue-400"
-            animate={{ opacity: [0.55, 1, 0.55] }}
-            transition={{ duration: CYCLE_S, repeat: Infinity, ease: "easeInOut" }}
-          />
-        ) : (
-          <motion.span
-            className="block h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400"
-            initial={false}
-            animate={{ width: ["12%", "12%", "12%", "68%", "68%", "12%"] }}
-            transition={{
-              duration: CYCLE_S,
-              repeat: Infinity,
-              ease: "easeInOut",
-              times: [0, 0.28, 0.36, 0.52, 0.78, 1],
-            }}
-          />
-        )}
+        <span className="welcome-tour-preview-bar block h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400" />
       </span>
-      <motion.span
+      <span
         aria-hidden
-        className="pointer-events-none absolute z-10 h-7 w-7 rounded-full border-2 border-foreground/80 bg-background shadow-md"
-        initial={false}
-        animate={
-          reduce
-            ? { left: "22%", top: "46%", opacity: [0.35, 0.9, 0.35], scale: 1 }
-            : {
-                left: ["58%", "58%", "22%", "22%", "22%", "58%"],
-                top: ["68%", "68%", "42%", "48%", "42%", "68%"],
-                scale: [1, 1, 1, 0.86, 1, 1],
-                opacity: [0, 1, 1, 1, 0, 0],
-              }
-        }
-        transition={{
-          duration: CYCLE_S,
-          repeat: Infinity,
-          ease: "easeInOut",
-          times: reduce ? undefined : [0, 0.12, 0.32, 0.38, 0.72, 1],
-        }}
+        className="welcome-tour-preview-finger pointer-events-none absolute z-10 h-7 w-7 rounded-full border-2 border-foreground/80 bg-background shadow-md"
       />
     </button>
   );

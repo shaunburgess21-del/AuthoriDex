@@ -8,6 +8,7 @@ import {
   isMorphPossible,
   markGuaranteedShimmer,
 } from "@/lib/matchup-neutral-nudge";
+import { useWelcomeTourActive } from "@/lib/welcomeTour";
 
 const MORPH_DURATION_MS = 2000;
 const MORPH_FLASH_MS = 1500;
@@ -151,6 +152,7 @@ export function useMatchupNeutralNudge(
   const [showVsShimmer, setShowVsShimmer] = useState(false);
   const [showHesitationLabel, setShowHesitationLabel] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
+  const tourActive = useWelcomeTourActive();
 
   useEffect(() => {
     const node = cardRef.current;
@@ -171,7 +173,7 @@ export function useMatchupNeutralNudge(
       : HESITATION_LABEL_DURATION_MS;
     const shimmerRepeatMs = isMobile ? MOBILE_SHIMMER_REPEAT_MS : SHIMMER_REPEAT_MS;
 
-    if (!node || !needsObserver) {
+    if (!node || !needsObserver || tourActive) {
       setShowMorph(false);
       setShowVsShimmer(false);
       setShowHesitationLabel(false);
@@ -484,7 +486,7 @@ export function useMatchupNeutralNudge(
       cancelDesktopHover();
       setShowMorph(false);
     };
-  }, [hasVoted, hesitation, hoverNudge, isMobile, matchupId, morph, prefersReducedMotion, shimmer]);
+  }, [hasVoted, hesitation, hoverNudge, isMobile, matchupId, morph, prefersReducedMotion, shimmer, tourActive]);
 
   return {
     cardRef,

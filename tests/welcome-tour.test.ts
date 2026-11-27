@@ -15,6 +15,7 @@ import {
   consumeTourRealVote,
   currentTourStep,
   formatLivePercent,
+  roundSplitTo100,
   lockDocumentScroll,
   pickVisibleId,
   placeBubble,
@@ -173,6 +174,11 @@ describe("practice vote data", () => {
     });
     assert.equal(formatLivePercent(62), "62");
     assert.equal(formatLivePercent(62.5), "62.5");
+    assert.deepEqual(roundSplitTo100(62, 38), { a: 62, b: 38 });
+    assert.deepEqual(roundSplitTo100(62.6, 37.4), { a: 63, b: 37 });
+    assert.deepEqual(roundSplitTo100(33.3, 66.6), { a: 33, b: 67 });
+    const thirds = roundSplitTo100(33.3, 66.6);
+    assert.equal(thirds && thirds.a + thirds.b, 100);
     const missing = practiceRevealCopy(null);
     assert.equal(missing.includes("%"), false);
     assert.match(missing, /not saved/);
@@ -201,8 +207,13 @@ describe("welcome tour entry points", () => {
     assert.match(checklist, /requestWelcomeTour\("link"\)/);
     assert.match(preview, /requestWelcomeTour\("preview"\)/);
     assert.match(preview, /tour_preview_tapped/);
-    assert.match(preview, /prefers-reduced-motion: reduce/);
+    assert.match(preview, /welcome-tour-preview-bar/);
+    assert.equal(preview.includes("usePrefersReducedMotion"), false);
     assert.equal(preview.includes("fetch("), false);
+    const css = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
+    assert.match(css, /@keyframes welcome-tour-preview-bar/);
+    assert.match(css, /@keyframes welcome-tour-preview-finger/);
+    assert.match(css, /prefers-reduced-motion: reduce/);
     assert.match(menu, /requestWelcomeTour\("replay"\)/);
     assert.match(menu, /button-show-me-how/);
     assert.equal(tourReplayDestination("/"), null);
@@ -302,13 +313,13 @@ describe("welcome tour chrome", () => {
       },
     };
     const release = lockDocumentScroll(doc as unknown as Document);
-    assert.equal(html.style.overflow, "hidden");
-    assert.equal(body.style.overflow, "hidden");
+    assert.equal(html.style.overflow, "");
+    assert.equal(body.style.overflow, "");
     assert.equal(body.style.position, "");
-    assert.equal(body.style.paddingRight, "19px");
-    assert.equal(body.style.touchAction, "none");
+    assert.equal(body.style.paddingRight, "4px");
     assert.equal(listeners.has("wheel"), true);
     assert.equal(listeners.has("touchmove"), true);
+    assert.equal(listeners.has("keydown"), true);
     release();
     assert.equal(html.style.overflow, "");
     assert.equal(body.style.paddingRight, "4px");

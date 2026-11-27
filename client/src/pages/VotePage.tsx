@@ -3557,7 +3557,7 @@ export default function VotePage() {
 
   return (
     <VotedCardRetainProvider value={votedRetainValue}>
-    <div className="min-h-screen overflow-x-clip pb-[calc(13.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+    <div className="min-h-screen overflow-x-clip pb-0">
       <SiteHeader active="vote" logoVariant="vote" backButton="none" />
       {/* Section chips stick as one band. The band slides up on scroll down
           and back on scroll up (useScrollHideTransform). */}

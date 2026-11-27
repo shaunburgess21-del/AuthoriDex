@@ -215,8 +215,30 @@ export function tourNextLabel(step: TourStepId): "Next" | "Done" | null {
   return "Next";
 }
 
+/** The closing line has no target. Fixed bottom-nav items are skipped in the caller. */
+export function tourTargetScrolls(step: TourStepId): boolean {
+  return step !== "ready";
+}
+
 export function stepSpotlights(step: TourStepId): boolean {
-  return step !== "your_turn" && step !== "ready";
+  return step !== "ready";
+}
+
+/**
+ * True when less than half of the target (capped at a short band) sits in
+ * the comfortable viewport. A sticky chip row already under the header does
+ * not need a scroll.
+ */
+export function targetNeedsScroll(
+  rect: { top: number; bottom: number; height: number },
+  viewportHeight: number,
+  topInset: number,
+  bottomInset = 0,
+): boolean {
+  const visibleTop = topInset + 8;
+  const visibleBottom = viewportHeight - bottomInset - 8;
+  const overlap = Math.min(rect.bottom, visibleBottom) - Math.max(rect.top, visibleTop);
+  return overlap < Math.min(Math.max(rect.height, 1), 56) * 0.5;
 }
 
 /**
@@ -256,11 +278,34 @@ export function formatLivePercent(value: number): string {
   return String(value);
 }
 
+/**
+ * Two feed percents as whole numbers that add to 100. Largest-remainder
+ * rounding of their share of the pair. Missing or non-finite inputs stay null.
+ */
+export function roundSplitTo100(a: number, b: number): { a: number; b: number } | null {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < 0) return null;
+  const sum = a + b;
+  if (sum <= 0) return { a: 0, b: 0 };
+  const exact = [(a / sum) * 100, (b / sum) * 100];
+  const floors = exact.map((value) => Math.floor(value));
+  let left = 100 - (floors[0] + floors[1]);
+  const order = exact
+    .map((value, index) => ({ index, frac: value - Math.floor(value) }))
+    .sort((leftSide, rightSide) => rightSide.frac - leftSide.frac || leftSide.index - rightSide.index);
+  for (const item of order) {
+    if (left <= 0) break;
+    floors[item.index] += 1;
+    left -= 1;
+  }
+  return { a: floors[0], b: floors[1] };
+}
+
 export function practiceRevealCopy(split: PracticeSplit | null): string {
-  if (!split) {
+  const rounded = split ? roundSplitTo100(split.a, split.b) : null;
+  if (!rounded) {
     return "That's the live split on this card. This practice tap was not saved.";
   }
-  return `That's the live split: ${formatLivePercent(split.a)}% and ${formatLivePercent(split.b)}%. This practice tap was not saved.`;
+  return `That's the live split: ${rounded.a}% and ${rounded.b}%. This practice tap was not saved.`;
 }
 
 export interface TourStepCopy {
@@ -349,6 +394,16 @@ function clamp(value: number, min: number, max: number): number {
  * A missing target centers it. Otherwise it sits above or below the target,
  * whichever has room, then clamps so it cannot slide under a notch or home bar.
  */
+function overlapArea(
+  bubble: { top: number; left: number; width: number; height: number },
+  avoid: RectBox,
+): number {
+  const width = Math.min(bubble.left + bubble.width, avoid.left + avoid.width) - Math.max(bubble.left, avoid.left);
+  const height = Math.min(bubble.top + bubble.height, avoid.top + avoid.height) - Math.max(bubble.top, avoid.top);
+  if (width <= 0 || height <= 0) return 0;
+  return width * height;
+}
+
 export function placeBubble(args: {
   target: RectBox | null;
   viewportWidth: number;
@@ -357,6 +412,8 @@ export function placeBubble(args: {
   bubbleHeight: number;
   insets: SafeAreaInsets;
   gap?: number;
+  /** Keep the bubble off this rectangle when another side has more room. */
+  avoid?: RectBox | null;
 }): BubblePlacement {
   const gap = args.gap ?? 12;
   const minLeft = args.insets.left + 8;
@@ -382,9 +439,19 @@ export function placeBubble(args: {
   const aboveTop = args.target.top - gap - args.bubbleHeight;
   const roomBelow = args.viewportHeight - args.insets.bottom - 8 - belowTop;
   const roomAbove = args.target.top - gap - (args.insets.top + 8);
-  const side: "top" | "bottom" =
+  let side: "top" | "bottom" =
     roomBelow >= args.bubbleHeight || roomBelow >= roomAbove ? "bottom" : "top";
-  const top = clamp(side === "bottom" ? belowTop : aboveTop, minTop, maxTop);
+  let top = clamp(side === "bottom" ? belowTop : aboveTop, minTop, maxTop);
+  if (args.avoid) {
+    const chosen = { top, left, width, height: args.bubbleHeight };
+    const otherSide: "top" | "bottom" = side === "bottom" ? "top" : "bottom";
+    const otherTop = clamp(otherSide === "bottom" ? belowTop : aboveTop, minTop, maxTop);
+    const other = { top: otherTop, left, width, height: args.bubbleHeight };
+    if (overlapArea(other, args.avoid) < overlapArea(chosen, args.avoid)) {
+      side = otherSide;
+      top = otherTop;
+    }
+  }
   return { top, left, width, side };
 }
 
@@ -397,49 +464,33 @@ export function rectNeedsScroll(
 }
 
 /**
- * Lock scroll without taking the body out of flow. position:fixed on the
- * body reflows the page and jumps the scroll offset, so this only clips
- * overflow and pads for the scrollbar that disappears.
+ * Block user scrolling without changing overflow or position. Setting
+ * overflow:hidden pulls sticky headers and the chip band back to their
+ * in-flow positions, which hides them when the page is scrolled.
  */
 export function lockDocumentScroll(doc: Document): () => void {
-  const html = doc.documentElement;
-  const body = doc.body;
-  const gap = Math.max(0, (doc.defaultView?.innerWidth ?? html.clientWidth) - html.clientWidth);
-  const previous = {
-    htmlOverflow: html.style.overflow,
-    overscroll: html.style.overscrollBehavior,
-    bodyOverflow: body.style.overflow,
-    paddingRight: body.style.paddingRight,
-    touchAction: body.style.touchAction,
-    position: body.style.position,
-  };
-  html.style.overflow = "hidden";
-  html.style.overscrollBehavior = "none";
-  body.style.overflow = "hidden";
-  body.style.touchAction = "none";
-  if (gap > 0) {
-    const current = Number.parseFloat(body.style.paddingRight || "0");
-    const base = Number.isFinite(current) ? current : 0;
-    body.style.paddingRight = `${base + gap}px`;
-  }
-
-  const block = (event: Event) => {
+  const blockPointer = (event: Event) => {
     const target = event.target;
     if (target instanceof Element && target.closest("[data-tour-allow-scroll]")) return;
     event.preventDefault();
   };
-  doc.addEventListener("wheel", block, { passive: false });
-  doc.addEventListener("touchmove", block, { passive: false });
+  const blockKeys = (event: Event) => {
+    if (!(event instanceof KeyboardEvent)) return;
+    const scrolls = event.key === " " || event.key === "PageUp" || event.key === "PageDown"
+      || event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Home" || event.key === "End";
+    if (!scrolls) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, a, input, textarea, [data-tour-allow-scroll]")) return;
+    event.preventDefault();
+  };
+  doc.addEventListener("wheel", blockPointer, { passive: false });
+  doc.addEventListener("touchmove", blockPointer, { passive: false });
+  doc.addEventListener("keydown", blockKeys);
 
   return () => {
-    html.style.overflow = previous.htmlOverflow;
-    html.style.overscrollBehavior = previous.overscroll;
-    body.style.overflow = previous.bodyOverflow;
-    body.style.paddingRight = previous.paddingRight;
-    body.style.touchAction = previous.touchAction;
-    body.style.position = previous.position;
-    doc.removeEventListener("wheel", block);
-    doc.removeEventListener("touchmove", block);
+    doc.removeEventListener("wheel", blockPointer);
+    doc.removeEventListener("touchmove", blockPointer);
+    doc.removeEventListener("keydown", blockKeys);
   };
 }
 

@@ -665,10 +665,8 @@ describe("post-vote strip vs welcome checklist", () => {
     assert.match(nudge, /var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)/);
 
     const vote = readFileSync(new URL("../client/src/pages/VotePage.tsx", import.meta.url), "utf8");
-    assert.match(
-      vote,
-      /pb-\[calc\(13\.5rem\+env\(safe-area-inset-bottom,0px\)\)\] md:pb-0/,
-    );
+    assert.equal(vote.includes("13.5rem"), false);
+    assert.match(vote, /min-h-screen overflow-x-clip pb-0/);
     assert.equal(vote.includes("--anon-nudge-height"), false);
     assert.equal(vote.includes("md:min-h-[390px]"), false);
     assert.equal(vote.includes("md:h-[390px]"), false);

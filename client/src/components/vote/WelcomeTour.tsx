@@ -9,7 +9,6 @@ import { VOTE_STICKY_BAND_REVEAL } from "@/lib/voteMixedFeed";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_BAND_TEST_ID,
-  PRACTICE_CARD_WAIT_MS,
   PREDICT_NAV_TEST_IDS,
   RANKINGS_NAV_TEST_IDS,
   WELCOME_TOUR_CARD_ATTR,
@@ -18,21 +17,20 @@ import {
   currentTourStep,
   lockDocumentScroll,
   pickVisibleId,
-  formatLivePercent,
   placeBubble,
   readPracticeSplit,
   readSafeAreaInsets,
-  rectNeedsScroll,
-  seekTour,
+  roundSplitTo100,
   setWelcomeTourActive,
-  shouldSkipPractice,
   startRunning,
   stepSpotlights,
   subscribeTourRequest,
   takeTourRequest,
+  targetNeedsScroll,
   tourAnnouncement,
   tourNextLabel,
   tourStepCopy,
+  tourTargetScrolls,
   writeTourSeen,
   type RectBox,
   type RunningTour,
@@ -83,11 +81,6 @@ function firstVisible(root: ParentNode, ids: readonly string[]): HTMLElement | n
   return id ? findVisibleByTestId(root, id) : null;
 }
 
-function visibleEmptyFeed(root: ParentNode): boolean {
-  const empty = root.querySelector<HTMLElement>("[data-testid='vote-mixed-feed-empty']");
-  return Boolean(empty && empty.getClientRects().length > 0);
-}
-
 function sameBox(a: RectBox | null, b: RectBox | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -106,36 +99,47 @@ function toBox(node: HTMLElement | null): RectBox | null {
   return { top: box.top, left: box.left, width: box.width, height: box.height };
 }
 
-function measureStepTarget(step: TourStepId): RectBox | null {
-  if (!stepSpotlights(step)) return null;
-  if (step === "practice_tap" || step === "practice_reveal") return toBox(findPracticeCard(document));
-  if (step === "categories") return toBox(findVisibleByTestId(document, CATEGORY_BAND_TEST_ID));
-  if (step === "predict") return toBox(firstVisible(document, PREDICT_NAV_TEST_IDS));
-  if (step === "rankings") return toBox(firstVisible(document, RANKINGS_NAV_TEST_IDS));
+function measureNode(step: TourStepId): HTMLElement | null {
+  if (step === "practice_tap" || step === "practice_reveal" || step === "your_turn") return findPracticeCard(document);
+  if (step === "categories") return findVisibleByTestId(document, CATEGORY_BAND_TEST_ID);
+  if (step === "predict") return firstVisible(document, PREDICT_NAV_TEST_IDS);
+  if (step === "rankings") return firstVisible(document, RANKINGS_NAV_TEST_IDS);
   return null;
 }
 
-function scrollTourTarget(element: HTMLElement, reduceMotion: boolean): Promise<void> {
-  element.scrollIntoView({
-    behavior: reduceMotion ? "auto" : "smooth",
-    block: "center",
-    inline: "nearest",
+function measureStepTarget(step: TourStepId): RectBox | null {
+  if (!stepSpotlights(step)) return null;
+  return toBox(measureNode(step));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
   });
-  if (reduceMotion) {
-    return new Promise((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
-  }
+}
+
+function nextFrames(count: number): Promise<void> {
+  return new Promise((resolve) => {
+    const step = (left: number) => {
+      if (left <= 0) resolve();
+      else requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}
+
+function waitForScrollSettle(reduceMotion: boolean): Promise<void> {
+  if (reduceMotion) return nextFrames(1);
   return new Promise((resolve) => {
     const started = performance.now();
-    let timer = window.setTimeout(finish, 80);
+    let timer = window.setTimeout(finish, 90);
     const onScroll = () => {
-      if (performance.now() - started > 700) {
+      if (performance.now() - started > 900) {
         finish();
         return;
       }
       window.clearTimeout(timer);
-      timer = window.setTimeout(finish, 90);
+      timer = window.setTimeout(finish, 120);
     };
     function finish() {
       window.removeEventListener("scroll", onScroll);
@@ -143,6 +147,29 @@ function scrollTourTarget(element: HTMLElement, reduceMotion: boolean): Promise<
     }
     window.addEventListener("scroll", onScroll, { passive: true });
   });
+}
+
+async function waitForStableRect(read: () => RectBox | null): Promise<RectBox | null> {
+  let last = read();
+  let stable = 0;
+  for (let frame = 0; frame < 12 && stable < 2; frame += 1) {
+    await nextFrames(1);
+    const next = read();
+    stable = sameBox(last, next) ? stable + 1 : 0;
+    last = next;
+  }
+  return last;
+}
+
+function scrollElementIntoView(element: HTMLElement, block: "center" | "start", reduceMotion: boolean): void {
+  if (block === "start") {
+    const header = document.querySelector("header");
+    const headerHeight = header instanceof HTMLElement ? header.getBoundingClientRect().height : 64;
+    const top = window.scrollY + element.getBoundingClientRect().top - headerHeight - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
+    return;
+  }
+  element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
 }
 
 function barWidth(value: number): string {
@@ -159,7 +186,7 @@ export function WelcomeTourHost() {
   const [phase, setPhase] = useState<TourPhase>({ status: "idle" });
   const [measured, setMeasured] = useState<{ step: TourStepId; rect: RectBox | null } | null>(null);
   const [bubbleHeight, setBubbleHeight] = useState(BUBBLE_HEIGHT_ESTIMATE);
-  const [seekVisible, setSeekVisible] = useState(false);
+  const [practiceLive, setPracticeLive] = useState(false);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -189,7 +216,8 @@ export function WelcomeTourHost() {
     logFunnelEvent("tour_started", "vote", { source });
     setWelcomeTourActive(true);
     setMeasured(null);
-    setPhase(seekTour(source));
+    setPracticeLive(false);
+    setPhase(startRunning(source, true));
   }, []);
 
   useEffect(() => {
@@ -206,45 +234,16 @@ export function WelcomeTourHost() {
     };
   }, [begin]);
 
-  useEffect(() => {
-    if (phase.status !== "seeking") {
-      setSeekVisible(false);
-      return;
-    }
-    const source = phase.source;
-    let cancel = false;
-    const started = performance.now();
-    let timer = 0;
-    const show = window.setTimeout(() => {
-      if (!cancel) setSeekVisible(true);
-    }, 280);
-    const tick = () => {
-      if (cancel) return;
-      const card = findPracticeCard(document);
-      const waited = performance.now() - started;
-      if (
-        card ||
-        shouldSkipPractice({
-          cardFound: Boolean(card),
-          waitedMs: waited,
-          feedEmpty: visibleEmptyFeed(document),
-          waitMs: PRACTICE_CARD_WAIT_MS,
-        })
-      ) {
-        setPhase(startRunning(source, Boolean(card)));
-        return;
-      }
-      timer = window.setTimeout(tick, 120);
-    };
-    tick();
-    return () => {
-      cancel = true;
-      window.clearTimeout(timer);
-      window.clearTimeout(show);
-    };
-  }, [phase]);
-
   const step = currentTourStep(phase);
+
+  useEffect(() => {
+    const active = phase.status === "running" || phase.status === "seeking";
+    if (!active) return;
+    document.documentElement.dataset.welcomeTour = "on";
+    return () => {
+      delete document.documentElement.dataset.welcomeTour;
+    };
+  }, [phase.status]);
 
   useEffect(() => {
     if (!step) return;
@@ -252,19 +251,49 @@ export function WelcomeTourHost() {
   }, [step]);
 
   useEffect(() => {
-    if (phase.status !== "running") return;
+    if (phase.status !== "running" || !step) {
+      setMeasured(null);
+      setPracticeLive(false);
+      return;
+    }
+    const measuredStep = step;
     let cancel = false;
     let release = () => {};
     const run = async () => {
-      const card = findPracticeCard(document);
-      if (card && phase.steps[0] === "practice_tap") {
-        const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
-        if (rectNeedsScroll(card.getBoundingClientRect(), window.innerHeight, insets.top)) {
-          await scrollTourTarget(card, reduce);
-        }
+      setPracticeLive(false);
+      setMeasured(null);
+      if (measuredStep === phase.steps[0]) {
+        await delay(reduce ? 0 : 340);
+        if (cancel) return;
+      }
+      if (measuredStep === "categories") {
         window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
+        await nextFrames(2);
+        if (cancel) return;
+      }
+      const node = measureNode(measuredStep);
+      const fixedNav = Boolean(node?.closest("[data-testid='nav-bottom']"));
+      if (node && tourTargetScrolls(measuredStep) && !fixedNav) {
+        const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
+        const box = node.getBoundingClientRect();
+        if (targetNeedsScroll(
+          { top: box.top, bottom: box.bottom, height: box.height },
+          window.innerHeight,
+          insets.top,
+          insets.bottom,
+        )) {
+          scrollElementIntoView(node, measuredStep === "categories" ? "start" : "center", reduce);
+          await waitForScrollSettle(reduce);
+          if (measuredStep === "categories") {
+            window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
+            await nextFrames(2);
+          }
+        }
       }
       if (cancel) return;
+      const rect = await waitForStableRect(() => measureStepTarget(measuredStep));
+      if (cancel) return;
+      setMeasured({ step: measuredStep, rect });
       release = lockDocumentScroll(document);
     };
     void run();
@@ -272,51 +301,16 @@ export function WelcomeTourHost() {
       cancel = true;
       release();
     };
-  }, [phase.status, reduce, phase.status === "running" ? phase.steps[0] : null]);
+  }, [phase.status, step, reduce, phase.status === "running" ? phase.steps[0] : null]);
 
   useEffect(() => {
-    if (phase.status !== "running" || step !== "categories") return;
-    window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
-  }, [phase.status, step]);
-
-  useEffect(() => {
-    if (phase.status !== "running" || !step) {
-      setMeasured(null);
+    if (step !== "practice_tap" || measured?.step !== "practice_tap") {
+      setPracticeLive(false);
       return;
     }
-    const measuredStep = step;
-    let frame = 0;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const rect = measureStepTarget(measuredStep);
-        setMeasured((current) => {
-          if (current && current.step === measuredStep && sameBox(current.rect, rect)) return current;
-          return { step: measuredStep, rect };
-        });
-      });
-    };
-    update();
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", update);
-    viewport?.addEventListener("scroll", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
-      viewport?.removeEventListener("resize", update);
-      viewport?.removeEventListener("scroll", update);
-    };
-  }, [phase.status, step]);
-
-  useEffect(() => {
-    if (phase.status !== "running") return;
-    if (step !== "practice_tap" && step !== "practice_reveal") return;
-    if (findPracticeCard(document)) return;
-    setPhase(startRunning(phase.source, false));
-  }, [phase, step]);
+    const timer = window.setTimeout(() => setPracticeLive(true), 400);
+    return () => window.clearTimeout(timer);
+  }, [step, measured]);
 
   useEffect(() => {
     if (phase.status === "idle") return;
@@ -358,21 +352,41 @@ export function WelcomeTourHost() {
     setPhase(moved);
   }, [complete]);
 
-  const showSeek = phase.status === "seeking" && seekVisible;
-  const showRun = phase.status === "running" && step != null;
-  if ((!showSeek && !showRun) || typeof document === "undefined") return null;
+  if (phase.status === "running" && step && measured?.step !== step && typeof document !== "undefined") {
+    return createPortal(
+      <div className="fixed inset-0 z-[80]" data-testid="welcome-tour-pending">
+        <button
+          type="button"
+          onClick={skip}
+          data-testid="welcome-tour-skip"
+          className="fixed z-[90] inline-flex min-h-11 items-center rounded-full bg-popover px-4 text-sm font-medium text-foreground shadow-lg"
+          style={{
+            right: "max(1rem, var(--safe-area-inset-right, 0px))",
+            bottom: "max(1rem, var(--safe-area-inset-bottom, 0px))",
+          }}
+        >
+          Skip
+        </button>
+      </div>,
+      document.body,
+    );
+  }
+
+  const showRun = phase.status === "running" && step != null && measured?.step === step;
+  if (!showRun || typeof document === "undefined") return null;
 
   const running = phase.status === "running" ? phase : null;
   const split = running?.split ?? null;
+  const rounded = split ? roundSplitTo100(split.a, split.b) : null;
   const rect = measured && measured.step === step ? measured.rect : null;
-  const copy = step ? tourStepCopy(step, split) : { title: "One moment", body: "Finding a head-to-head card." };
+  const copy = step ? tourStepCopy(step, rounded) : { title: "One moment", body: "Finding a head-to-head card." };
   const spotlight = step != null && stepSpotlights(step) && rect != null;
-  const targetForBubble: RectBox | null =
-    spotlight && rect
-      ? step === "practice_reveal"
-        ? { ...rect, height: rect.height + 76 }
-        : rect
-      : null;
+  const holeRect = spotlight && rect
+    ? step === "practice_reveal"
+      ? { ...rect, height: rect.height + 76 }
+      : rect
+    : null;
+  const targetForBubble = holeRect;
 
   return createPortal(
     <TourOverlay
@@ -380,22 +394,30 @@ export function WelcomeTourHost() {
       reduce={reduce}
       rect={spotlight ? rect : null}
       reveal={step === "practice_reveal"}
-      split={split}
-      practice={step === "practice_tap"}
+      split={rounded}
+      picked={running?.side ?? null}
+      avoid={step === "your_turn" ? rect : null}
+      practice={step === "practice_tap" && practiceLive}
       onPractice={onPractice}
       title={copy.title}
       body={copy.body}
-      announcement={step ? tourAnnouncement(step, split) : `${copy.title}. ${copy.body}`}
+      announcement={step ? tourAnnouncement(step, rounded) : `${copy.title}. ${copy.body}`}
       steps={running?.steps ?? null}
       index={running?.index ?? 0}
-      nextLabel={step ? tourNextLabel(step) : null}
+      nextLabel={
+        step === "practice_tap" && rect == null
+          ? "Next"
+          : step
+            ? tourNextLabel(step)
+            : null
+      }
       target={targetForBubble}
       bubbleHeight={bubbleHeight}
       bubbleRef={bubbleRef}
       onSkip={skip}
       onNext={onNext}
       onMeasureHeight={(next) => {
-        setBubbleHeight((current) => (Math.abs(current - next) > 1 ? next : current));
+        setBubbleHeight((current) => (current === BUBBLE_HEIGHT_ESTIMATE ? next : current));
       }}
     />,
     document.body,
@@ -408,6 +430,8 @@ function TourOverlay({
   rect,
   reveal,
   split,
+  picked,
+  avoid,
   practice,
   onPractice,
   title,
@@ -428,6 +452,8 @@ function TourOverlay({
   rect: RectBox | null;
   reveal: boolean;
   split: RunningTour["split"];
+  picked: "a" | "b" | null;
+  avoid: RectBox | null;
   practice: boolean;
   onPractice: (side: "a" | "b") => void;
   title: string;
@@ -451,6 +477,7 @@ function TourOverlay({
     bubbleWidth: BUBBLE_WIDTH,
     bubbleHeight,
     insets,
+    avoid,
   });
 
   const onMeasureRef = useRef(onMeasureHeight);
@@ -535,7 +562,7 @@ function TourOverlay({
           className="pointer-events-none absolute z-[86] px-1"
           style={{ top: rect.top + rect.height + 10, left: rect.left + 12, width: Math.max(0, rect.width - 24) }}
         >
-          <PracticeSplit split={split} />
+          <PracticeSplit split={split} picked={picked} />
         </div>
       ) : null}
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -571,17 +598,20 @@ function TourOverlay({
           {body}
         </p>
         {steps ? (
-          <div className="mt-3 flex items-center justify-center gap-1.5" data-testid="welcome-tour-dots" aria-hidden>
-            {steps.map((id, dot) => (
-              <span
-                key={id}
-                className={cn(
-                  "h-1.5 rounded-full transition-[width,background-color] duration-300 motion-reduce:transition-none",
-                  dot === index ? "w-4 bg-cyan-600 dark:bg-cyan-300" : "w-1.5 bg-foreground/20",
-                )}
-              />
-            ))}
-          </div>
+          <>
+            <p className="sr-only">{`Step ${index + 1} of ${steps.length}`}</p>
+            <div className="mt-3 flex items-center justify-center gap-1.5" data-testid="welcome-tour-dots" aria-hidden="true">
+              {steps.map((id, dot) => (
+                <span
+                  key={id}
+                  className={cn(
+                    "h-1.5 rounded-full",
+                    dot === index ? "w-4 bg-cyan-600 dark:bg-cyan-300" : "w-1.5 bg-foreground/20",
+                  )}
+                />
+              ))}
+            </div>
+          </>
         ) : null}
         <div className="mt-3 flex items-center justify-between gap-2">
           <button
@@ -622,6 +652,7 @@ function PracticeSide({
   onPractice: (side: "a" | "b") => void;
 }) {
   const width = rect.width / 2;
+  const armed = useRef(false);
   return (
     <button
       type="button"
@@ -634,28 +665,38 @@ function PracticeSide({
         width,
         height: rect.height,
       }}
-      onClick={(event) => {
+      onPointerDown={(event) => {
+        armed.current = true;
+        event.stopPropagation();
+      }}
+      onPointerUp={(event) => {
+        if (!armed.current) return;
+        armed.current = false;
         event.preventDefault();
         event.stopPropagation();
         onPractice(side);
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
       }}
     />
   );
 }
 
-function PracticeSplit({ split }: { split: RunningTour["split"] }) {
+function PracticeSplit({ split, picked }: { split: RunningTour["split"]; picked: "a" | "b" | null }) {
   return (
     <div className="rounded-xl border border-cyan-500/40 bg-popover/95 px-3 py-2 shadow-lg backdrop-blur-sm dark:border-cyan-300/30">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Practice</p>
       {split ? (
         <>
           <div className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400" style={{ width: barWidth(split.a) }} />
-            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-600" style={{ width: barWidth(split.b) }} />
+            <div className={cn("h-full bg-gradient-to-r from-blue-600 to-blue-400", picked === "a" && "ring-2 ring-blue-300")} style={{ width: barWidth(split.a) }} />
+            <div className={cn("h-full bg-gradient-to-r from-amber-400 to-amber-600", picked === "b" && "ring-2 ring-amber-200")} style={{ width: barWidth(split.b) }} />
           </div>
-          <div className="mt-1 flex justify-between text-xs font-medium tabular-nums text-foreground">
-            <span>{formatLivePercent(split.a)}%</span>
-            <span>{formatLivePercent(split.b)}%</span>
+          <div className="mt-1 flex justify-between text-xs tabular-nums text-foreground">
+            <span className={cn(picked === "a" ? "font-semibold text-blue-700 dark:text-blue-300" : "font-medium")}>{split.a}%</span>
+            <span className={cn(picked === "b" ? "font-semibold text-amber-700 dark:text-amber-300" : "font-medium")}>{split.b}%</span>
           </div>
         </>
       ) : null}
