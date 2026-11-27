@@ -77,7 +77,6 @@ import {
   Swords,
   UserPlus,
   ImageIcon,
-  BarChart3,
   ListChecks,
   Upload,
   Cpu,
@@ -130,8 +129,9 @@ import { OpinionPollCard } from "@/components/opinion-polls/OpinionPollCard";
 import { FilterDropdown } from "@/components/FilterDropdown";
 import { OverlayFilterBar } from "@/components/OverlayFilterBar";
 import { ViewAllOverlayHeader } from "@/components/ViewAllOverlayHeader";
-import { OnboardingDrawer, type OnboardingStep, type OnboardingDrawerHandle } from "@/components/OnboardingDrawer";
 import { StepModal } from "@/components/StepModal";
+import { WelcomeTourHost } from "@/components/vote/WelcomeTour";
+import { requestWelcomeTour } from "@/lib/welcomeTour";
 import { VOTE_RULES_STEPS } from "@/components/rulesStepData";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useScrollHideTransform } from "@/hooks/useScrollHideOffset";
@@ -242,30 +242,6 @@ import {
 import { HybridSubjectCombobox } from "@/components/suggest/HybridSubjectCombobox";
 import { OpinionOptionRow, type OpinionOptionInput } from "@/components/suggest/OpinionOptionRow";
 import { ContenderSelector, type ContenderSelection } from "@/components/suggest/ContenderSelector";
-
-const VOTE_ONBOARDING_STEPS: readonly OnboardingStep[] = [
-  {
-    icon: Swords,
-    heading: "Make Your Voice Heard",
-    description: "Choose a side, back your opinion, and weigh in on real-world topics.",
-    gradient: "from-cyan-500 to-teal-600",
-    glow: "shadow-cyan-500/25",
-  },
-  {
-    icon: BarChart3,
-    heading: "Shape The Rankings",
-    description: "Your vote feeds the index and helps shape the final rankings.",
-    gradient: "from-emerald-500 to-green-600",
-    glow: "shadow-emerald-500/25",
-  },
-  {
-    icon: Trophy,
-    heading: "Earn as You Vote",
-    description: "Rack up XP with every vote, climb the ranks, and build your reputation on VoxDex.",
-    gradient: "from-amber-500 to-orange-600",
-    glow: "shadow-amber-500/25",
-  },
-] as const;
 
 interface InductionCandidate {
   id: string;
@@ -1072,7 +1048,6 @@ export default function VotePage() {
   });
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const voteOnboardingRef = useRef<OnboardingDrawerHandle>(null);
   const { favorites, favoriteIds, isAuthenticated } = useFavorites();
   const raceMap = useCategoryRaceMap();
   const leaderboardCats = useLeaderboardCategories();
@@ -4406,12 +4381,12 @@ export default function VotePage() {
         <div className="text-center pb-8">
           <button
             type="button"
-            onClick={() => voteOnboardingRef.current?.open()}
+            onClick={() => requestWelcomeTour("replay")}
             className="text-sm text-muted-foreground hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
             data-testid="button-footer-how-it-works-vote"
           >
             <HelpCircle className="h-4 w-4 inline mr-1 align-text-bottom" />
-            How it works
+            Show me how
           </button>
         </div>
       </div>
@@ -4857,16 +4832,7 @@ export default function VotePage() {
           />
         );
       })}
-      <OnboardingDrawer
-        ref={voteOnboardingRef}
-        storageKey="authoridex_vote_welcome_seen"
-        steps={VOTE_ONBOARDING_STEPS}
-        toastLabel="New to voting?"
-        lastStepCta="Cast Your First Vote"
-        // The inline welcome checklist replaced this floating pill. The footer
-        // link can still open the drawer.
-        disableAutoToast
-      />
+      <WelcomeTourHost />
       <StepModal
         open={infoModalOpen === "governance"}
         onClose={() => setInfoModalOpen(null)}

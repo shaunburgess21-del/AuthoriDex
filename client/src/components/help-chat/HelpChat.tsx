@@ -26,6 +26,7 @@ import { helpFabStackPx, useCornerFabOffset } from "@/components/help-chat/place
 import { HelpRichText } from "@/components/help-chat/HelpRichText";
 import { friendlyHelpError } from "@/lib/helpChatFormat";
 import { useCornerPillIntro } from "@/lib/cornerPillIntro";
+import { useWelcomeTourActive } from "@/lib/welcomeTour";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -165,6 +166,7 @@ function useKeyboardPanelBox(enabled: boolean): { bottom: number; maxHeight: num
 
 export function HelpChat() {
   const [location] = useLocation();
+  const tourActive = useWelcomeTourActive();
   const isMobile = useIsMobile();
   const viewportOffset = useVisualViewportOffset();
   const cornerStack = useCornerFabOffset();
@@ -178,6 +180,10 @@ export function HelpChat() {
 
   const hidden = hideOnThisRoute(location);
   const labelVisible = useCornerPillIntro("help-chat", !hidden);
+
+  useEffect(() => {
+    if (tourActive) setOpen(false);
+  }, [tourActive]);
   const keyboardBox = useKeyboardPanelBox(open && isMobile);
 
   const suggestions = suggestionsForPath(location);
@@ -243,7 +249,7 @@ export function HelpChat() {
     if (!isMobile) inputRef.current?.focus();
   }
 
-  if (hidden) return null;
+  if (hidden || tourActive) return null;
 
   const fabShift =
     viewportOffset !== 0

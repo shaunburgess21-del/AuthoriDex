@@ -39,6 +39,7 @@ import {
   BookOpen,
   LineChart,
   Gift,
+  Sparkles,
 } from "lucide-react";
 import { CURRENCY, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
@@ -47,6 +48,7 @@ import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { VoxMark } from "@/components/VoxMark";
 import { InfoHint } from "@/components/InfoHint";
 import { useAccountWinRate } from "@/hooks/useAccountWinRate";
+import { requestWelcomeTour, tourReplayDestination } from "@/lib/welcomeTour";
 
 
 // Referral reward derives from credit-config so the menu label tracks the
@@ -103,6 +105,14 @@ function UserMenuContent({
   const handleNavClick = (path: string) => {
     onNavigate(path);
     onClose?.();
+  };
+
+  const replayTour = () => {
+    requestWelcomeTour("replay");
+    onClose?.();
+    const path = typeof window === "undefined" ? "" : window.location.pathname;
+    const destination = tourReplayDestination(path);
+    if (destination) onNavigate(destination);
   };
 
   const handleReferClick = () => {
@@ -173,6 +183,15 @@ function UserMenuContent({
         >
           <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <span className="text-sm">How It Works</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={replayTour}
+          data-testid="button-show-me-how-loggedout"
+        >
+          <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+          <span className="text-sm">Show me how</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
 
@@ -382,6 +401,15 @@ function UserMenuContent({
         >
           <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <span className="flex-1 text-sm">How It Works</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={replayTour}
+          data-testid="button-show-me-how"
+        >
+          <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+          <span className="flex-1 text-sm">Show me how</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
         {/* Always-available referral entry — Phase 1 leads with earning

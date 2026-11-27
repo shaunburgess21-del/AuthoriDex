@@ -42,6 +42,7 @@ import {
 } from "@/lib/interruptArbiter";
 import { AUTH_APPLY_QUICK_VOTE_ONCE_KEY } from "@/lib/authReturn";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
+import { useWelcomeTourActive } from "@/lib/welcomeTour";
 
 const NUDGE_DWELL_MS = 7000;
 /** Min. scroll movement before "first scroll" counts as an intent signal —
@@ -218,6 +219,14 @@ export function QuickVoteHost({ surface, activityFilter }: QuickVoteHostProps) {
   // is on screen it joins that one expand/collapse. Opening Quick Vote does
   // not opt the label out.
   const introProminent = useCornerPillIntro("quick-vote", showFab);
+  const tourActive = useWelcomeTourActive();
+
+  useEffect(() => {
+    if (!tourActive || !overlayOpenRef.current) return;
+    setOverlayOpen(false);
+  }, [tourActive]);
+
+  if (tourActive) return null;
 
   return (
     <>

@@ -16,6 +16,7 @@ import {
 import { SWIPE_EDGE_INSET_PX, type SwipeDirection } from "@/components/vote/swipeGesture";
 import { isDiscussionShellOpen } from "@/lib/discussionShell";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
+import { useWelcomeTourActive } from "@/lib/welcomeTour";
 import {
   buildSameCategoryMatchupQueue,
   hasSeenSwipeTrialNudge,
@@ -285,7 +286,8 @@ export function MatchupCategorySwipe<T extends SwipeTrialMatchup>({
   const tipDismissed = useRef(false);
   const peekedFor = useRef(new Set<string>());
 
-  const paging = gesturesEnabled && queue.length >= 2;
+  const tourActive = useWelcomeTourActive();
+  const paging = gesturesEnabled && !tourActive && queue.length >= 2;
   const hasNext = safeIndex < queue.length - 1;
   const displayedId = shown.id;
 

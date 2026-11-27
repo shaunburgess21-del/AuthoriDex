@@ -1,6 +1,7 @@
 import { getAuthHeaders } from "./queryClient";
 import { isFirstVisitSession } from "./firstVisit";
 import { noteHideHintVote } from "./hideHintSignals";
+import { consumeTourRealVote } from "./welcomeTour";
 
 /**
  * Fire-and-forget product funnel telemetry (POST /api/funnel/event).
@@ -111,6 +112,13 @@ export function trackVoteCast(
   writeCounter(sessionStorage, SESSION_VOTES_KEY, nth);
   writeCounter(localStorage, LIFETIME_VOTES_KEY, getLifetimeVoteCount() + 1);
   logFunnelEvent("vote_cast", surface, { ...metadata, nthInSession: nth });
+  try {
+    if (typeof localStorage !== "undefined" && consumeTourRealVote(localStorage)) {
+      logFunnelEvent("tour_first_real_vote", "vote");
+    }
+  } catch {
+    /* private mode */
+  }
 }
 
 /**
