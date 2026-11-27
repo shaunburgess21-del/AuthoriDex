@@ -36,6 +36,7 @@ import {
 export interface VersusCardMatchup {
   id: string;
   category: string;
+  secondaryCategories?: readonly string[] | null;
   title: string;
   optionAText: string;
   optionAImage: string | null;

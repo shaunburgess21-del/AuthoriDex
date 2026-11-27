@@ -149,8 +149,12 @@ import { DiscourseCard } from "@/components/sentiment/DiscourseCard";
 import { useMatchupVotes } from "@/hooks/useMatchupVotes";
 import { QuickVoteHost } from "@/components/quick-vote/QuickVoteHost";
 import { trackVoteCast } from "@/lib/funnelTelemetry";
+import { isNativeSurface } from "@/lib/nativeCopy";
+import { firstSwipableMatchupId, isSwipeTrialGateOpen } from "@/lib/swipeTrial";
+import { useSwipeTrialOverride } from "@/hooks/useSwipeTrialOverride";
 import { ShapeVoxDexStickyHeader } from "@/components/vote/ShapeVoxDexStickyHeader";
 import { VoteMixedFeed } from "@/components/vote/VoteMixedFeed";
+import { MatchupCategorySwipe } from "@/components/vote/MatchupCategorySwipe";
 import { VoteWelcomeSlot } from "@/components/vote/WelcomeChecklist";
 import { voteSectionCueKind, VoteTypeCueIcon } from "@/components/vote/VoteTypeCue";
 import { VoteChipLinkCuePill } from "@/components/vote/VoteChipLinkCue";
@@ -2084,6 +2088,44 @@ export default function VotePage() {
     voteActivityLifecycle,
   ]);
 
+  const swipeTrialOverride = useSwipeTrialOverride();
+  const swipeTrialNative = isNativeSurface();
+  const swipeTrialOverlayOpen =
+    snapScrollOpen ||
+    inductionOverlayOpen ||
+    topicsOverlayOpen ||
+    matchupsOverlayOpen ||
+    opinionPollsOverlayOpen ||
+    ratingOverlayOpen ||
+    startPollModalOpen ||
+    inductionSuggestOpen ||
+    matchupSuggestOpen ||
+    curateSuggestOpen ||
+    opinionSuggestOpen ||
+    rulesModalOpen != null ||
+    infoModalOpen != null;
+  // The slot stays mounted while a snap view or overlay is open so a paged
+  // card does not jump back to the feed anchor. Gestures stay off until it closes.
+  const swipeTrialSurface = isSwipeTrialGateOpen({
+    native: swipeTrialNative,
+    override: swipeTrialOverride,
+    allSelected: activeSection === "All",
+    mixedFeed: !desktopSectionLayout,
+    snapOrOverlayOpen: false,
+  });
+  const swipeTrialOn = swipeTrialSurface && !swipeTrialOverlayOpen;
+  const swipeTrialMatchups = useMemo(() => {
+    const rows: VersusCardMatchup[] = [];
+    for (const entry of mixedFeedEntries) {
+      if (entry.kind === "matchup") rows.push(entry.item as VersusCardMatchup);
+    }
+    return rows;
+  }, [mixedFeedEntries]);
+  const swipeTrialNudgeAnchorId = useMemo(() => {
+    if (!swipeTrialSurface) return null;
+    return firstSwipableMatchupId(swipeTrialMatchups, registry.resolveCanonicalId);
+  }, [registry, swipeTrialMatchups, swipeTrialSurface]);
+
   const mixedFeedLoading =
     (matchupsLoading && matchups.length === 0) ||
     (pollsLoading && dbPolls.length === 0) ||
@@ -3980,37 +4022,55 @@ export default function VotePage() {
               const loadingMode = imagePriority ? "eager" : "lazy";
               if (entry.kind === "matchup") {
                 const matchup = entry.item as VersusCardMatchup;
+                const matchupCard = (shown: VersusCardMatchup, priority: boolean) => (
+                  <VersusCard
+                    matchup={shown}
+                    userVote={matchupUserVotes[shown.id] || null}
+                    onVote={(id, option) => {
+                      pinMixedFeedCard(entry.key);
+                      handleMatchupVote(id, option);
+                    }}
+                    onRemoveVote={handleMatchupRemoveVote}
+                    onFilterCategory={handleCategoryPillFilter}
+                    categoryRaceMap={raceMap}
+                    leaderboardCategories={leaderboardCats}
+                    onNavigateToDetail={
+                      shown.slug
+                        ? () => {
+                            pinMixedFeedCard(entry.key);
+                            goMatchupDetail(shown.slug!);
+                          }
+                        : undefined
+                    }
+                    onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", shown.id, "browse-button") : undefined}
+                    enableDiscussion
+                    priority={priority}
+                    showTypeCue
+                    feedLayout
+                  />
+                );
                 return (
                   <HideExitCard
                     cardKey={`matchups:${matchup.id}`}
                     exiting={isHideExiting(`matchups:${matchup.id}`)}
                     unvoted={!entry.voted}
                   >
-                    <VersusCard
-                      matchup={matchup}
-                      userVote={matchupUserVotes[matchup.id] || null}
-                      onVote={(id, option) => {
-                        pinMixedFeedCard(entry.key);
-                        handleMatchupVote(id, option);
-                      }}
-                      onRemoveVote={handleMatchupRemoveVote}
-                      onFilterCategory={handleCategoryPillFilter}
-                      categoryRaceMap={raceMap}
-                      leaderboardCategories={leaderboardCats}
-                      onNavigateToDetail={
-                        matchup.slug
-                          ? () => {
-                              pinMixedFeedCard(entry.key);
-                              goMatchupDetail(matchup.slug!);
-                            }
-                          : undefined
-                      }
-                      onBrowseFullScreen={isMobile ? () => openSnapScroll("matchups", matchup.id, "browse-button") : undefined}
-                      enableDiscussion
-                      priority={imagePriority}
-                      showTypeCue
-                      feedLayout
-                    />
+                    {swipeTrialSurface ? (
+                      <MatchupCategorySwipe
+                        anchorId={matchup.id}
+                        items={swipeTrialMatchups}
+                        resolveCanonicalId={registry.resolveCanonicalId}
+                        gesturesEnabled={swipeTrialOn}
+                        offerNudge={swipeTrialNudgeAnchorId === matchup.id}
+                        native={swipeTrialNative}
+                        override={swipeTrialOverride}
+                        allowFinePointer={swipeTrialOverride && !swipeTrialNative}
+                        fallback={matchup}
+                        renderItem={(item, opts) => matchupCard(item, opts.priority ? imagePriority : false)}
+                      />
+                    ) : (
+                      matchupCard(matchup, imagePriority)
+                    )}
                   </HideExitCard>
                 );
               }
