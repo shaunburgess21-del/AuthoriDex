@@ -10,6 +10,7 @@ import {
   ANON_FIRST_VOTE_NUDGE_COPY,
   ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
   ANON_NUDGE_HEIGHT_VAR,
+  ANON_NUDGE_PILLS_VAR,
   ANON_NUDGE_SAFE_VAR,
   anonNudgePlacement,
   shouldShowAnonFirstVoteNudge,
@@ -81,6 +82,7 @@ function AnonFirstVoteNudgeBody() {
     const clear = () => {
       root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, "0px");
       root.style.setProperty(ANON_NUDGE_SAFE_VAR, "0px");
+      root.style.setProperty(ANON_NUDGE_PILLS_VAR, "0px");
     };
     if (!reserveBottom) {
       clear();
@@ -97,6 +99,11 @@ function AnonFirstVoteNudgeBody() {
     root.style.setProperty(
       ANON_NUDGE_SAFE_VAR,
       "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
+    );
+    // Help sits one stack above Quick Vote. 2.75rem clears that button.
+    root.style.setProperty(
+      ANON_NUDGE_PILLS_VAR,
+      "calc(var(--fab-stack, 0px) + 2.75rem)",
     );
     const publish = () => {
       root.style.setProperty(ANON_NUDGE_HEIGHT_VAR, `${node.offsetHeight}px`);

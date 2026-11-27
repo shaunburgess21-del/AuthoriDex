@@ -16,6 +16,13 @@ export const ANON_NUDGE_HEIGHT_VAR = "--anon-nudge-height";
  */
 export const ANON_NUDGE_SAFE_VAR = "--anon-nudge-safe";
 
+/**
+ * Corner-pill stack (Quick Vote height plus the Ask VoxDex button)
+ * while the vote-hub bar is open, else `0px`. Phone footer padding adds
+ * it so the disclaimer can scroll above those pills. Desktop does not.
+ */
+export const ANON_NUDGE_PILLS_VAR = "--anon-nudge-pills";
+
 export const ANON_FIRST_VOTE_NUDGE_COPY = "Sign up to keep your votes and earn XP.";
 
 /**

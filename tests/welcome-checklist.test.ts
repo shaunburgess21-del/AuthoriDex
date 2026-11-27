@@ -5,6 +5,7 @@ import { authLoginPath } from "../client/src/lib/authReturn";
 import {
   ANON_FIRST_VOTE_NUDGE_DISMISS_KEY,
   ANON_NUDGE_HEIGHT_VAR,
+  ANON_NUDGE_PILLS_VAR,
   ANON_NUDGE_SAFE_VAR,
   anonNudgePlacement,
   anonNudgeReservesSpace,
@@ -635,6 +636,7 @@ describe("post-vote strip vs welcome checklist", () => {
   it("reserves vote-hub height for an opaque bar and lifts the corner pills", () => {
     assert.equal(ANON_NUDGE_HEIGHT_VAR, "--anon-nudge-height");
     assert.equal(ANON_NUDGE_SAFE_VAR, "--anon-nudge-safe");
+    assert.equal(ANON_NUDGE_PILLS_VAR, "--anon-nudge-pills");
     assert.equal(ANON_FIRST_VOTE_NUDGE_DISMISS_KEY, "voxdex_anon_first_vote_nudge_dismissed");
     assert.equal(
       anonNudgePlacement({ show: true, pathname: "/vote", deviceDismissed: true }),
@@ -672,6 +674,7 @@ describe("post-vote strip vs welcome checklist", () => {
     );
     assert.match(footerPad, /var\(--anon-nudge-height,0px\)/);
     assert.match(footerPad, /var\(--anon-nudge-safe,0px\)/);
+    assert.match(footerPad, /var\(--anon-nudge-pills,0px\)/);
     assert.match(
       readFileSync(new URL("../client/src/components/Footer.tsx", import.meta.url), "utf8"),
       /ABOVE_TAB_BAR_PADDING/,

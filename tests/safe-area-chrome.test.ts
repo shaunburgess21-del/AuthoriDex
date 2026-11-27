@@ -22,7 +22,7 @@ test("fixed docks clear the tab bar and the home indicator", () => {
   assert.equal(ABOVE_TAB_BAR_BOTTOM.includes("md:bottom-0"), false);
   assert.match(
     ABOVE_TAB_BAR_PADDING,
-    /pb-\[calc\(5rem\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\+var\(--anon-nudge-height,0px\)\)\]/,
+    /pb-\[calc\(5rem\+var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)\+var\(--anon-nudge-height,0px\)\+var\(--anon-nudge-pills,0px\)\)\]/,
   );
   assert.match(
     ABOVE_TAB_BAR_PADDING,
