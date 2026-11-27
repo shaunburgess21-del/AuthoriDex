@@ -16,7 +16,7 @@ import { CategoryPill } from "@/components/CategoryPill";
 import { HeaderUserActions } from "@/components/HeaderUserActions";
 import { OutcomePathChart } from "@/components/predict/OutcomePathChart";
 import { WhatNeedsToHappen } from "@/components/predict/WhatNeedsToHappen";
-import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { NativeMarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
@@ -600,7 +600,7 @@ export default function UpDownDetailPage() {
   });
 
   if (isLoading && !market) {
-    return <MarketDetailSkeleton variant="weekly" />;
+    return <NativeMarketDetailSkeleton onBack={handleGoBack} />;
   }
 
   if (notFound || !market || !hydrated) {

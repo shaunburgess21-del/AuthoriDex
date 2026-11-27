@@ -38,7 +38,7 @@ import { resolveMarketHeadlineImageUrl } from "@/lib/predictMarketImage";
 import { MyPositionCard, myPositionQueryKey } from "@/components/predict/MyPositionCard";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
-import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { CommunityMarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { RelatedMarkets } from "@/components/predict/RelatedMarkets";
 import { MuteMarketToggle } from "@/components/predict/MuteMarketToggle";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
@@ -1418,12 +1418,7 @@ export default function MarketDetailPage() {
   );
 
   if ((authLoading || isLoading) && !market) {
-    return (
-      <div className="min-h-screen pb-20 md:pb-0">
-        <SiteHeader active="predict" logoVariant="predict" backButton="always" />
-        <MarketDetailSkeleton />
-      </div>
-    );
+    return <CommunityMarketDetailSkeleton />;
   }
 
   if (error || !market) {

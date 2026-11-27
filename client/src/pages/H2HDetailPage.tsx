@@ -13,7 +13,7 @@ import { StakeModal, type StakeSelection } from "@/components/StakeModal";
 import { CashOutSheet, type CashOutSelection } from "@/components/CashOutSheet";
 import { ClosedMarketActionTrigger } from "@/components/predict/ClosedMarketActionTrigger";
 import { MarketCycleStrip } from "@/components/predict/MarketCycleStrip";
-import { MarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
+import { NativeMarketDetailSkeleton } from "@/components/predict/MarketDetailSkeleton";
 import { AmmPriceHistoryChart } from "@/components/predict/AmmPriceHistoryChart";
 import { MarketActivityFeed } from "@/components/predict/MarketActivityFeed";
 import { MarketResolutionInfo } from "@/components/predict/MarketResolutionInfo";
@@ -600,7 +600,7 @@ export default function H2HDetailPage() {
   });
 
   if (isLoading && !market) {
-    return <MarketDetailSkeleton variant="weekly" />;
+    return <NativeMarketDetailSkeleton onBack={() => goBack(setLocation, "/predict")} />;
   }
 
   if (notFound || !market || !hydrated) {

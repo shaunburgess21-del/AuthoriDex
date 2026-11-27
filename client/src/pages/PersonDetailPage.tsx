@@ -11,6 +11,7 @@ import { PersonAvatar } from "@/components/PersonAvatar";
 import { TrendBadge } from "@/components/TrendBadge";
 import { StatCard } from "@/components/StatCard";
 import { SiteHeader } from "@/components/SiteHeader";
+import { PersonDetailSkeleton } from "@/components/profile/PersonDetailSkeleton";
 import { useXpBurst } from "@/components/XpBurstProvider";
 import { ProfileTabs } from "@/components/ProfileTabs";
 import { getCategoryStyle } from "@/components/CategoryPill";
@@ -1392,17 +1393,7 @@ export default function PersonDetailPage() {
   }
 
   if (isLoading && !person) {
-    return (
-      <div className="pb-20 md:pb-0">
-        <SiteHeader backButton="always" />
-        <div className="flex items-center justify-center px-4 py-24">
-          <div className="text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-            <p className="mt-4 text-muted-foreground">Loading person data...</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <PersonDetailSkeleton />;
   }
 
   if (error || !person) {

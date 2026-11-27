@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { SiteHeader } from "@/components/SiteHeader";
+import { PublicProfileSkeleton } from "@/components/profile/PublicProfileSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MyVoteCard, type MyVoteCardData } from "@/components/me/MyVoteCard";
 import { MyPredictionCard, type MyPredictionCardData } from "@/components/me/MyPredictionCard";
@@ -1461,25 +1462,7 @@ export default function PublicProfilePage() {
   }, [username]);
 
   if (isLoading && !profile) {
-    return (
-      <div className="pb-20 md:pb-0">
-        <SiteHeader backButton="always" />
-        <div className="container mx-auto px-2 sm:px-4 py-8 max-w-2xl">
-          <div className="flex items-center gap-4 mb-6">
-            <Skeleton className="h-20 w-20 rounded-full" />
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-40" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-          </div>
-        </div>
-      </div>
-    );
+    return <PublicProfileSkeleton />;
   }
 
   if (error || !profile) {
