@@ -5,7 +5,7 @@ import { browserLocalStorage } from "@/lib/returningUserStrip";
 import { logFunnelEvent } from "@/lib/funnelTelemetry";
 import { isNativeApp } from "@/lib/nativeOAuth";
 import { isNativeSurface } from "@/lib/nativeCopy";
-import { VOTE_STICKY_BAND_REVEAL } from "@/lib/voteMixedFeed";
+import { VOTE_FEED_REVEAL_FIRST_MATCHUP, VOTE_STICKY_BAND_REVEAL } from "@/lib/voteMixedFeed";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_BAND_TEST_ID,
@@ -31,6 +31,7 @@ import {
   tourNextLabel,
   tourStepCopy,
   tourTargetScrolls,
+  withoutPractice,
   writeTourSeen,
   type RectBox,
   type RunningTour,
@@ -39,7 +40,7 @@ import {
   type TourStepId,
 } from "@/lib/welcomeTour";
 
-const BUBBLE_HEIGHT_ESTIMATE = 240;
+const BUBBLE_HEIGHT_ESTIMATE = 176;
 const SPLIT_BLOCK_PX = 96;
 
 function bubbleWidthFor(viewportWidth: number): number {
@@ -61,14 +62,32 @@ function usePrefersReducedMotion(): boolean {
   return reduce;
 }
 
+/**
+ * The first head-to-head in document order. Off-screen cards still count.
+ * Swipe clones live in an aria-hidden slide, so they are not the feed card.
+ */
 function findPracticeCard(root: ParentNode): HTMLElement | null {
   const nodes = root.querySelectorAll<HTMLElement>(`[${WELCOME_TOUR_CARD_ATTR}]`);
   for (const node of nodes) {
     if (node.closest('[aria-hidden="true"]')) continue;
-    if (node.getClientRects().length === 0) continue;
     return node;
   }
-  return null;
+  return nodes[0] ?? null;
+}
+
+async function waitForFirstPracticeCard(): Promise<HTMLElement | null> {
+  window.dispatchEvent(new Event(VOTE_FEED_REVEAL_FIRST_MATCHUP));
+  for (let frame = 0; frame < 48; frame += 1) {
+    if (!document.querySelector("[data-testid='matchup-category-swipe']")) {
+      const node = findPracticeCard(document);
+      if (node) return node;
+    }
+    if (frame === 8 || frame === 24) {
+      window.dispatchEvent(new Event(VOTE_FEED_REVEAL_FIRST_MATCHUP));
+    }
+    await nextFrames(1);
+  }
+  return findPracticeCard(document);
 }
 
 function findVisibleByTestId(root: ParentNode, testId: string): HTMLElement | null {
@@ -360,12 +379,21 @@ export function WelcomeTourHost() {
         return { step: measuredStep, rect };
       });
     };
+    const practiceStep = measuredStep === "practice_tap" || measuredStep === "practice_reveal" || measuredStep === "your_turn";
     const run = async () => {
       setPracticeLive(false);
       setMeasured(null);
       if (measuredStep === phase.steps[0]) {
         await delay(reduce ? 0 : 340);
         if (cancel) return;
+      }
+      if (practiceStep) {
+        const card = await waitForFirstPracticeCard();
+        if (cancel) return;
+        if (!card) {
+          setPhase((current) => (current.status === "running" ? withoutPractice(current) : current));
+          return;
+        }
       }
       await waitForSwipeCarouselGone();
       if (cancel) return;
@@ -389,7 +417,8 @@ export function WelcomeTourHost() {
         } else {
           const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
           const box = node.getBoundingClientRect();
-          if (targetNeedsScroll(
+          const bringPracticeIn = measuredStep === "practice_tap";
+          if (bringPracticeIn || targetNeedsScroll(
             { top: box.top, bottom: box.bottom, height: box.height },
             window.innerHeight,
             insets.top,
@@ -416,7 +445,12 @@ export function WelcomeTourHost() {
       await nextFrames(1);
       const again = measureStepTarget(measuredStep);
       if (cancel) return;
-      publish(sameBox(rect, again) ? rect : again);
+      const settled = sameBox(rect, again) ? rect : again;
+      if (practiceStep && !settled) {
+        setPhase((current) => (current.status === "running" ? withoutPractice(current) : current));
+        return;
+      }
+      publish(settled);
       const tracked = measureNode(measuredStep);
       if (tracked && typeof ResizeObserver !== "undefined") {
         tracker = new ResizeObserver(() => {
@@ -553,7 +587,7 @@ export function WelcomeTourHost() {
       onSkip={skip}
       onNext={onNext}
       onMeasureHeight={(next) => {
-        setBubbleHeight((current) => (current === BUBBLE_HEIGHT_ESTIMATE ? next : current));
+        setBubbleHeight((current) => (Math.abs(current - next) < 1 ? current : next));
       }}
     />,
     document.body,
@@ -626,9 +660,12 @@ function TourOverlay({
   useLayoutEffect(() => {
     const node = bubbleRef.current;
     if (!node) return;
+    const previous = node.style.height;
+    node.style.height = "auto";
     const next = Math.ceil(node.getBoundingClientRect().height);
+    node.style.height = previous;
     if (next > 0) onMeasureRef.current(next);
-  }, [bubbleRef, title, body, placement.width]);
+  }, [bubbleRef, title, body, nextLabel, placement.width]);
 
   useEffect(() => {
     bubbleRef.current?.focus({ preventScroll: true });
@@ -714,11 +751,12 @@ function TourOverlay({
         data-testid="welcome-tour-bubble"
         data-tour-allow-scroll=""
         data-side={placement.side}
-        className="fixed z-[90] flex min-h-[240px] max-h-[calc(100dvh-var(--safe-area-inset-top,0px)-var(--safe-area-inset-bottom,0px)-1rem)] w-[304px] max-w-[calc(100vw-var(--safe-area-inset-left,0px)-var(--safe-area-inset-right,0px)-16px)] flex-col overflow-hidden rounded-2xl border border-cyan-500/35 bg-popover p-3.5 text-popover-foreground shadow-xl outline-none md:w-[320px] dark:border-cyan-400/30"
+        className="fixed z-[90] flex max-h-[calc(100dvh-var(--safe-area-inset-top,0px)-var(--safe-area-inset-bottom,0px)-1rem)] w-[304px] max-w-[calc(100vw-var(--safe-area-inset-left,0px)-var(--safe-area-inset-right,0px)-16px)] flex-col overflow-hidden rounded-2xl border border-cyan-500/35 bg-popover p-3.5 text-popover-foreground shadow-xl outline-none transition-[height] duration-200 ease-out motion-reduce:transition-none md:w-[320px] dark:border-cyan-400/30"
         style={{
           top: `max(${placement.top}px, calc(var(--safe-area-inset-top, 0px) + 8px))`,
           left: `max(${placement.left}px, calc(var(--safe-area-inset-left, 0px) + 8px))`,
           width: placement.width,
+          height: bubbleHeight === BUBBLE_HEIGHT_ESTIMATE ? undefined : bubbleHeight,
           maxWidth: "calc(100vw - var(--safe-area-inset-left, 0px) - var(--safe-area-inset-right, 0px) - 16px)",
         }}
         onKeyDown={(event) => {
@@ -749,7 +787,7 @@ function TourOverlay({
             </div>
           </>
         ) : null}
-        <div className="mt-auto flex h-11 shrink-0 items-center justify-between gap-3" data-testid="welcome-tour-actions">
+        <div className="mt-3 flex h-11 shrink-0 items-center justify-between gap-3" data-testid="welcome-tour-actions">
           <button
             type="button"
             onClick={onSkip}
@@ -834,21 +872,37 @@ function PracticeSplit({
       <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Practice</p>
       {split ? (
         <>
-          <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-muted">
+          <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-muted" data-testid="welcome-tour-split-bar">
             <div
-              className={cn("h-full bg-gradient-to-r from-blue-600 to-blue-400", picked === "a" && "ring-2 ring-inset ring-white")}
+              className={cn(
+                "h-full bg-gradient-to-r from-blue-600 to-blue-400",
+                picked === "a" && "opacity-100 ring-2 ring-inset ring-slate-950 dark:ring-white",
+                picked === "b" && "opacity-40",
+              )}
               style={{ width: barWidth(split.a) }}
             />
             <div
-              className={cn("h-full bg-gradient-to-r from-amber-400 to-amber-600", picked === "b" && "ring-2 ring-inset ring-white")}
+              className={cn(
+                "h-full bg-gradient-to-r from-amber-400 to-amber-600",
+                picked === "b" && "opacity-100 ring-2 ring-inset ring-slate-950 dark:ring-white",
+                picked === "a" && "opacity-40",
+              )}
               style={{ width: barWidth(split.b) }}
             />
           </div>
-          <div className="mt-1.5 flex justify-between gap-3 text-xs tabular-nums text-foreground">
-            <span className={cn("min-w-0 truncate", picked === "a" ? "font-semibold text-blue-700 dark:text-blue-200" : "font-medium text-muted-foreground")}>
+          <div className="mt-1.5 flex justify-between gap-3 text-xs tabular-nums">
+            <span
+              data-testid="welcome-tour-split-a"
+              data-emphasized={picked === "a" ? "true" : "false"}
+              className={cn("min-w-0 truncate", picked === "a" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-40")}
+            >
               {names?.a ? `${names.a} ` : ""}{split.a}%
             </span>
-            <span className={cn("min-w-0 truncate text-right", picked === "b" ? "font-semibold text-amber-700 dark:text-amber-200" : "font-medium text-muted-foreground")}>
+            <span
+              data-testid="welcome-tour-split-b"
+              data-emphasized={picked === "b" ? "true" : "false"}
+              className={cn("min-w-0 truncate text-right", picked === "b" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-40")}
+            >
               {names?.b ? `${names.b} ` : ""}{split.b}%
             </span>
           </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
@@ -86,6 +86,7 @@ interface UserMenuContentProps {
   onCreateAccount: () => void;
   onSignOut: () => void;
   onClose?: () => void;
+  onReplay: () => void;
 }
 
 function UserMenuContent({
@@ -98,6 +99,7 @@ function UserMenuContent({
   onCreateAccount,
   onSignOut,
   onClose,
+  onReplay,
 }: UserMenuContentProps) {
   const { open: openReferralModal } = useReferralModal();
   const winRate = useAccountWinRate();
@@ -108,11 +110,7 @@ function UserMenuContent({
   };
 
   const replayTour = () => {
-    requestWelcomeTour("replay");
-    onClose?.();
-    const path = typeof window === "undefined" ? "" : window.location.pathname;
-    const destination = tourReplayDestination(path);
-    if (destination) onNavigate(destination);
+    onReplay();
   };
 
   const handleReferClick = () => {
@@ -484,6 +482,28 @@ export function UserMenu() {
   const { theme, toggleTheme } = useThemeToggle();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const replayPending = useRef(false);
+
+  const beginReplay = () => {
+    requestWelcomeTour("replay");
+    const path = typeof window === "undefined" ? "" : window.location.pathname;
+    const destination = tourReplayDestination(path);
+    if (destination) setLocation(destination);
+  };
+
+  const requestReplay = () => {
+    replayPending.current = true;
+    if (isMobile) setSheetOpen(false);
+    else setMenuOpen(false);
+  };
+
+  const finishMenuClose = (event: Event) => {
+    event.preventDefault();
+    if (!replayPending.current) return;
+    replayPending.current = false;
+    beginReplay();
+  };
 
   const handleNavigate = (path: string) => {
     setLocation(path);
@@ -549,7 +569,7 @@ export function UserMenu() {
           <SheetContent
             side="right"
             className="w-[320px] p-0 overflow-y-auto"
-            onCloseAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={finishMenuClose}
           >
             <SheetHeader className="sr-only">
               <SheetTitle>User Menu</SheetTitle>
@@ -565,6 +585,7 @@ export function UserMenu() {
               onCreateAccount={handleCreateAccount}
               onSignOut={handleSignOut}
               onClose={() => setSheetOpen(false)}
+              onReplay={requestReplay}
             />
           </SheetContent>
         </Sheet>
@@ -573,14 +594,14 @@ export function UserMenu() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         {triggerButton}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         className="w-[300px] p-0"
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={finishMenuClose}
       >
         <UserMenuContent
           profile={profile}
@@ -591,6 +612,7 @@ export function UserMenu() {
           onSignIn={handleSignIn}
           onCreateAccount={handleCreateAccount}
           onSignOut={handleSignOut}
+          onReplay={requestReplay}
         />
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { VOTE_FEED_RELEASE_MATCHUP } from "@/lib/voteMixedFeed";
 
 /**
  * New-user welcome tour on /vote. Frontend only, once per device.
@@ -214,6 +215,12 @@ export function stepsForTour(hasPracticeCard: boolean): readonly TourStepId[] {
 
 export function seekTour(source: TourSource): TourPhase {
   return { status: "seeking", source };
+}
+
+/** Drop the practice steps when the feed has no head-to-head card. */
+export function withoutPractice(phase: RunningTour): RunningTour {
+  if (!phase.steps.includes("practice_tap")) return phase;
+  return { ...phase, steps: QUICK_TOUR_STEPS, index: 0, side: null, split: null };
 }
 
 export function startRunning(source: TourSource, hasPracticeCard: boolean): RunningTour {
@@ -577,6 +584,9 @@ export function setWelcomeTourActive(next: boolean): void {
     const session = browserSession();
     if (session) writeTourNudgeQuiet(session);
     resetTourCardState();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(VOTE_FEED_RELEASE_MATCHUP));
+    }
   }
   for (const listener of activeListeners) listener();
 }

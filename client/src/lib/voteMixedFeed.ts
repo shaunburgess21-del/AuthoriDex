@@ -413,6 +413,12 @@ export function voteFeedStickyOffset(headerHeight: number, bandHeight: number): 
 /** Ask the chip bar to show again and forget the hide offset from a restore scroll. */
 export const VOTE_STICKY_BAND_REVEAL = "vote-sticky-band-reveal";
 
+/** Ask the windowed All feed to mount the first head-to-head, even from the bottom of the page. */
+export const VOTE_FEED_REVEAL_FIRST_MATCHUP = "voxdex-vote-feed-reveal-first-matchup";
+
+/** Let the feed follow scroll again after the welcome tour releases the first card. */
+export const VOTE_FEED_RELEASE_MATCHUP = "voxdex-vote-feed-release-matchup";
+
 /** Document scrollY that puts the card just under the sticky chip band. */
 export function scrollYForFeedCard(
   cardTop: number,

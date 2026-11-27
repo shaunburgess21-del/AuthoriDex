@@ -36,6 +36,7 @@ import {
   tourNextLabel,
   tourReplayDestination,
   tourStepCopy,
+  withoutPractice,
   WELCOME_TOUR_NUDGE_QUIET_KEY,
   WELCOME_TOUR_NUDGE_QUIET_MS,
   readTourNudgeQuietUntil,
@@ -333,17 +334,29 @@ describe("welcome tour chrome", () => {
 
   it("keeps Skip and Next in the bubble and measures after the swipe carousel is gone", () => {
     assert.match(tourUi, /data-testid="welcome-tour-actions"/);
-    assert.match(tourUi, /min-h-\[240px\]/);
+    assert.equal(tourUi.includes("min-h-[240px]"), false);
+    assert.match(tourUi, /mt-3 flex h-11/);
     assert.match(tourUi, /min-w-\[5\.5rem\]/);
     assert.match(tourUi, /bg-background px-3 text-sm font-semibold text-foreground/);
     assert.equal(tourUi.includes("md:bottom-6"), false);
     assert.match(tourUi, /waitForSwipeCarouselGone/);
+    assert.match(tourUi, /waitForFirstPracticeCard/);
+    assert.match(tourUi, /VOTE_FEED_REVEAL_FIRST_MATCHUP/);
     assert.match(tourUi, /new ResizeObserver/);
     assert.match(tourUi, /revealScrollDelta/);
+    assert.match(tourUi, /data-emphasized=/);
+    assert.match(menu, /replayPending/);
+    assert.match(menu, /onCloseAutoFocus=\{finishMenuClose\}/);
+    const feed = readFileSync(new URL("../client/src/components/vote/VoteMixedFeed.tsx", import.meta.url), "utf8");
+    assert.match(feed, /VOTE_FEED_REVEAL_FIRST_MATCHUP/);
+    assert.match(feed, /item\.kind === "matchup"/);
     const nudgeHook = readFileSync(new URL("../client/src/hooks/useMatchupNeutralNudge.ts", import.meta.url), "utf8");
     assert.match(nudgeHook, /isTourNudgeQuiet\(\)/);
     assert.match(nudgeHook, /nudgeQuiet/);
     assert.match(versus, /useMatchupNeutralNudge\(/);
+    const running = startRunning("replay", true);
+    assert.equal(withoutPractice(running).steps[0], "categories");
+    assert.equal(withoutPractice(running).index, 0);
   });
 });
 
