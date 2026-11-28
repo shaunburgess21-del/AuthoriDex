@@ -151,25 +151,31 @@ function nextFrames(count: number): Promise<void> {
   });
 }
 
-function waitForScrollSettle(reduceMotion: boolean): Promise<void> {
-  if (reduceMotion) return nextFrames(1);
+function waitForScrollEnd(reduceMotion: boolean): Promise<void> {
+  if (reduceMotion) return nextFrames(2);
   return new Promise((resolve) => {
-    const started = performance.now();
-    let timer = window.setTimeout(finish, 90);
-    const onScroll = () => {
-      if (performance.now() - started > 900) {
-        finish();
-        return;
-      }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("scrollend", finish);
       window.clearTimeout(timer);
-      timer = window.setTimeout(finish, 120);
-    };
-    function finish() {
-      window.removeEventListener("scroll", onScroll);
       resolve();
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
+    };
+    window.addEventListener("scrollend", finish);
+    const timer = window.setTimeout(finish, 900);
   });
+}
+
+function chromeOffset(step: TourStepId): number {
+  const header = document.querySelector("header");
+  const headerH = header instanceof HTMLElement ? header.getBoundingClientRect().height : 64;
+  let offset = headerH + 12;
+  if (step === "practice_tap" || step === "practice_reveal" || step === "your_turn") {
+    const band = document.querySelector("[data-testid='vote-sticky-band']");
+    if (band instanceof HTMLElement) offset += band.getBoundingClientRect().height;
+  }
+  return offset;
 }
 
 async function waitForSwipeCarouselGone(): Promise<void> {
@@ -182,32 +188,119 @@ async function waitForSwipeCarouselGone(): Promise<void> {
   }
 }
 
+const SETTLED_FRAMES = 4;
+
 /**
- * Several identical frames, and a quiet ResizeObserver, before the hole is trusted.
- * A late image or the swipe carousel unmounting changes the card after the first read.
+ * After the scroll finishes, the rect must sit still for several frames.
+ * ResizeObserver and IntersectionObserver reset that count when the feed
+ * spacer, an image, or a swapped virtualized node moves the target.
  */
-async function waitForLayoutStable(read: () => RectBox | null, node: HTMLElement | null): Promise<RectBox | null> {
-  let last = read();
+async function waitForSettledRect(step: TourStepId): Promise<RectBox | null> {
+  let last = toBox(measureNode(step));
   let stable = 0;
-  let resized = false;
-  const observer = node && typeof ResizeObserver !== "undefined"
-    ? new ResizeObserver(() => {
-      resized = true;
-    })
+  let dirty = false;
+  const mark = () => {
+    dirty = true;
+  };
+  const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(mark) : null;
+  const io = typeof IntersectionObserver !== "undefined"
+    ? new IntersectionObserver(mark, { threshold: [0, 0.25, 0.5, 0.75, 1] })
     : null;
-  if (node && observer) observer.observe(node);
-  for (let frame = 0; frame < 30 && stable < 4; frame += 1) {
+  let watching: HTMLElement | null = null;
+  const watch = (node: HTMLElement | null) => {
+    if (node === watching) return;
+    ro?.disconnect();
+    io?.disconnect();
+    watching = node;
+    if (!node) return;
+    ro?.observe(node);
+    if (node.parentElement) ro?.observe(node.parentElement);
+    const feed = node.closest("[data-testid='vote-mixed-feed']");
+    if (feed instanceof HTMLElement) ro?.observe(feed);
+    io?.observe(node);
+  };
+  watch(measureNode(step));
+  const started = performance.now();
+  while (performance.now() - started < 1600 && stable < SETTLED_FRAMES) {
     await nextFrames(1);
-    if (resized) {
-      resized = false;
-      stable = 0;
+    const node = measureNode(step);
+    if (node !== watching) {
+      watch(node);
+      dirty = true;
     }
-    const next = read();
-    stable = sameBox(last, next) ? stable + 1 : 0;
+    const next = toBox(node);
+    if (dirty) {
+      dirty = false;
+      stable = 0;
+      last = next;
+      continue;
+    }
+    stable = sameBox(last, next) && next ? stable + 1 : 0;
     last = next;
   }
-  observer?.disconnect();
+  ro?.disconnect();
+  io?.disconnect();
   return last;
+}
+
+/** Keep the hole on the live card, including after the feed replaces the node. */
+function trackStepTarget(step: TourStepId, onRect: (rect: RectBox) => void): () => void {
+  let raf = 0;
+  let current: HTMLElement | null = null;
+  let ro: ResizeObserver | null = null;
+  let io: IntersectionObserver | null = null;
+  let mo: MutationObserver | null = null;
+  const publishNow = () => {
+    const node = measureNode(step);
+    attach(node);
+    const rect = toBox(node);
+    if (rect) onRect(rect);
+  };
+  const schedule = () => {
+    if (raf) return;
+    raf = window.requestAnimationFrame(() => {
+      raf = 0;
+      publishNow();
+    });
+  };
+  const attach = (node: HTMLElement | null) => {
+    if (node === current) return;
+    ro?.disconnect();
+    io?.disconnect();
+    mo?.disconnect();
+    ro = null;
+    io = null;
+    mo = null;
+    current = node;
+    if (!node) return;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(schedule);
+      ro.observe(node);
+      if (node.parentElement) ro.observe(node.parentElement);
+      const feed = node.closest("[data-testid='vote-mixed-feed']");
+      if (feed instanceof HTMLElement) ro.observe(feed);
+    }
+    if (typeof IntersectionObserver !== "undefined") {
+      io = new IntersectionObserver(schedule, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+      io.observe(node);
+    }
+    const feed = node.closest("[data-testid='vote-mixed-feed']");
+    if (feed instanceof HTMLElement && typeof MutationObserver !== "undefined") {
+      mo = new MutationObserver(schedule);
+      mo.observe(feed, { childList: true, subtree: true });
+    }
+  };
+  window.addEventListener("scroll", schedule, { capture: true, passive: true });
+  window.addEventListener("resize", schedule);
+  attach(measureNode(step));
+  return () => {
+    window.removeEventListener("scroll", schedule, true);
+    window.removeEventListener("resize", schedule);
+    if (raf) window.cancelAnimationFrame(raf);
+    ro?.disconnect();
+    io?.disconnect();
+    mo?.disconnect();
+  };
 }
 
 async function waitForCardImages(node: HTMLElement | null): Promise<void> {
@@ -236,15 +329,12 @@ function revealScrollDelta(card: HTMLElement, bubbleHeight: number): number {
   return 0;
 }
 
-function scrollElementIntoView(element: HTMLElement, block: "center" | "start", reduceMotion: boolean): void {
-  if (block === "start") {
-    const header = document.querySelector("header");
-    const headerHeight = header instanceof HTMLElement ? header.getBoundingClientRect().height : 64;
-    const top = window.scrollY + element.getBoundingClientRect().top - headerHeight - 12;
-    window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? "auto" : "smooth" });
-    return;
-  }
-  element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center", inline: "nearest" });
+function scrollTargetBelowChrome(element: HTMLElement, step: TourStepId, reduceMotion: boolean): boolean {
+  const rect = element.getBoundingClientRect();
+  const desired = Math.max(0, window.scrollY + rect.top - chromeOffset(step));
+  if (Math.abs(desired - window.scrollY) < 2) return false;
+  window.scrollTo({ top: desired, behavior: reduceMotion ? "auto" : "smooth" });
+  return true;
 }
 
 function readSideNames(): { a: string; b: string } | null {
@@ -372,7 +462,7 @@ export function WelcomeTourHost() {
     const measuredStep = step;
     let cancel = false;
     let release = () => {};
-    let tracker: ResizeObserver | null = null;
+    let stopTracking = () => {};
     const publish = (rect: RectBox | null) => {
       setMeasured((current) => {
         if (current?.step === measuredStep && sameBox(current.rect, rect)) return current;
@@ -403,16 +493,14 @@ export function WelcomeTourHost() {
         if (cancel) return;
       }
       let node = measureNode(measuredStep);
-      if (node) await waitForLayoutStable(() => toBox(node), node);
-      if (cancel) return;
-      node = measureNode(measuredStep);
       const fixedNav = Boolean(node?.closest("[data-testid='nav-bottom']"));
       if (node && tourTargetScrolls(measuredStep) && !fixedNav) {
+        let scrolled = false;
         if (measuredStep === "practice_reveal") {
           const delta = revealScrollDelta(node, bubbleHeightRef.current);
           if (Math.abs(delta) >= 2) {
             window.scrollBy({ top: delta, behavior: reduce ? "auto" : "smooth" });
-            await waitForScrollSettle(reduce);
+            scrolled = true;
           }
         } else {
           const insets = readSafeAreaInsets(getComputedStyle(document.documentElement));
@@ -424,13 +512,13 @@ export function WelcomeTourHost() {
             insets.top,
             insets.bottom,
           )) {
-            scrollElementIntoView(node, measuredStep === "categories" ? "start" : "center", reduce);
-            await waitForScrollSettle(reduce);
-            if (measuredStep === "categories") {
-              window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
-              await nextFrames(2);
-            }
+            scrolled = scrollTargetBelowChrome(node, measuredStep, reduce);
           }
+        }
+        if (scrolled) await waitForScrollEnd(reduce);
+        if (measuredStep === "categories") {
+          window.dispatchEvent(new Event(VOTE_STICKY_BAND_REVEAL));
+          await nextFrames(2);
         }
       }
       if (cancel) return;
@@ -440,33 +528,22 @@ export function WelcomeTourHost() {
         await document.fonts.ready;
       }
       if (cancel) return;
-      node = measureNode(measuredStep);
-      const rect = await waitForLayoutStable(() => measureStepTarget(measuredStep), node);
-      await nextFrames(1);
-      const again = measureStepTarget(measuredStep);
+      const settled = await waitForSettledRect(measuredStep);
       if (cancel) return;
-      const settled = sameBox(rect, again) ? rect : again;
       if (practiceStep && !settled) {
         setPhase((current) => (current.status === "running" ? withoutPractice(current) : current));
         return;
       }
       publish(settled);
-      const tracked = measureNode(measuredStep);
-      if (tracked && typeof ResizeObserver !== "undefined") {
-        tracker = new ResizeObserver(() => {
-          if (cancel) return;
-          const next = toBox(tracked);
-          publish(next);
-        });
-        tracker.observe(tracked);
-        if (tracked.parentElement) tracker.observe(tracked.parentElement);
-      }
+      stopTracking = trackStepTarget(measuredStep, (rect) => {
+        if (!cancel) publish(rect);
+      });
       release = lockDocumentScroll(document);
     };
     void run();
     return () => {
       cancel = true;
-      tracker?.disconnect();
+      stopTracking();
       release();
     };
   }, [phase.status, step, reduce, phase.status === "running" ? phase.steps[0] : null]);
@@ -519,26 +596,6 @@ export function WelcomeTourHost() {
     }
     setPhase(moved);
   }, [complete]);
-
-  if (phase.status === "running" && step && measured?.step !== step && typeof document !== "undefined") {
-    return createPortal(
-      <div className="fixed inset-0 z-[80]" data-testid="welcome-tour-pending">
-        <button
-          type="button"
-          onClick={skip}
-          data-testid="welcome-tour-skip"
-          className="fixed z-[90] inline-flex h-11 min-w-[5.5rem] items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-semibold text-foreground shadow-lg"
-          style={{
-            right: "max(1rem, var(--safe-area-inset-right, 0px))",
-            bottom: "max(1rem, var(--safe-area-inset-bottom, 0px))",
-          }}
-        >
-          Skip
-        </button>
-      </div>,
-      document.body,
-    );
-  }
 
   const showRun = phase.status === "running" && step != null && measured?.step === step;
   if (!showRun || typeof document === "undefined") return null;
@@ -877,7 +934,7 @@ function PracticeSplit({
               className={cn(
                 "h-full bg-gradient-to-r from-blue-600 to-blue-400",
                 picked === "a" && "opacity-100 ring-2 ring-inset ring-slate-950 dark:ring-white",
-                picked === "b" && "opacity-40",
+                picked === "b" && "opacity-60 dark:opacity-40",
               )}
               style={{ width: barWidth(split.a) }}
             />
@@ -885,7 +942,7 @@ function PracticeSplit({
               className={cn(
                 "h-full bg-gradient-to-r from-amber-400 to-amber-600",
                 picked === "b" && "opacity-100 ring-2 ring-inset ring-slate-950 dark:ring-white",
-                picked === "a" && "opacity-40",
+                picked === "a" && "opacity-60 dark:opacity-40",
               )}
               style={{ width: barWidth(split.b) }}
             />
@@ -894,14 +951,14 @@ function PracticeSplit({
             <span
               data-testid="welcome-tour-split-a"
               data-emphasized={picked === "a" ? "true" : "false"}
-              className={cn("min-w-0 truncate", picked === "a" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-40")}
+              className={cn("min-w-0 truncate", picked === "a" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-60 dark:opacity-40")}
             >
               {names?.a ? `${names.a} ` : ""}{split.a}%
             </span>
             <span
               data-testid="welcome-tour-split-b"
               data-emphasized={picked === "b" ? "true" : "false"}
-              className={cn("min-w-0 truncate text-right", picked === "b" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-40")}
+              className={cn("min-w-0 truncate text-right", picked === "b" ? "font-bold text-foreground opacity-100" : "font-medium text-muted-foreground opacity-60 dark:opacity-40")}
             >
               {names?.b ? `${names.b} ` : ""}{split.b}%
             </span>

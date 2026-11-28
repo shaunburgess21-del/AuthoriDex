@@ -343,6 +343,10 @@ describe("welcome tour chrome", () => {
     assert.match(tourUi, /waitForFirstPracticeCard/);
     assert.match(tourUi, /VOTE_FEED_REVEAL_FIRST_MATCHUP/);
     assert.match(tourUi, /new ResizeObserver/);
+    assert.match(tourUi, /new IntersectionObserver/);
+    assert.match(tourUi, /scrollend/);
+    assert.equal(tourUi.includes("welcome-tour-pending"), false);
+    assert.match(tourUi, /opacity-60 dark:opacity-40/);
     assert.match(tourUi, /revealScrollDelta/);
     assert.match(tourUi, /data-emphasized=/);
     assert.match(menu, /replayPending/);
