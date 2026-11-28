@@ -16,8 +16,13 @@ export const WELCOME_CHECKLIST_HEADLINE =
 
 export const WELCOME_ALL_SET_LABEL = "You're all set";
 
-export const WELCOME_HOW_IT_WORKS_LABEL = "How it works";
+/** Checklist control. Starts the in-place tour on /vote. */
+export const WELCOME_HOW_IT_WORKS_LABEL = "Show me how";
 
+/**
+ * Former destination of this checklist control. The control no longer
+ * navigates; /how-it-works keeps its own default tab.
+ */
 export const WELCOME_HOW_IT_WORKS_HREF = "/how-it-works";
 
 export const WELCOME_PREDICT_HREF = "/predict";

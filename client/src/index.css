@@ -2436,3 +2436,49 @@ button.sash-handle:active {
       0 0 12px 2px hsl(var(--primary) / 0.4);
   }
 }
+
+/* Welcome checklist preview. CSS, not Framer, so MotionConfig cannot freeze
+   the loop on the first keyframe. Reduced motion only fades. */
+@keyframes welcome-tour-preview-bar {
+  0%, 28% { transform: scaleX(0.12); }
+  52%, 78% { transform: scaleX(0.7); }
+  100% { transform: scaleX(0.12); }
+}
+
+@keyframes welcome-tour-preview-finger {
+  0% { left: 64%; top: 72%; opacity: 0; transform: translate(-50%, 0) scale(1); }
+  12% { left: 64%; top: 72%; opacity: 1; transform: translate(-50%, 0) scale(1); }
+  32% { left: 22%; top: 40%; opacity: 1; transform: translate(-50%, 0) scale(1); }
+  38% { left: 22%; top: 48%; opacity: 1; transform: translate(-50%, 0) scale(0.86); }
+  50%, 74% { left: 22%; top: 40%; opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { left: 64%; top: 72%; opacity: 0; transform: translate(-50%, 0) scale(1); }
+}
+
+@keyframes welcome-tour-preview-fade {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.welcome-tour-preview-bar {
+  width: 100%;
+  transform-origin: left center;
+  animation: welcome-tour-preview-bar 10s ease-in-out infinite;
+}
+
+.welcome-tour-preview-finger {
+  animation: welcome-tour-preview-finger 10s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-tour-preview-bar {
+    animation: welcome-tour-preview-fade 10s ease-in-out infinite;
+    transform: scaleX(0.7);
+  }
+
+  .welcome-tour-preview-finger {
+    animation: welcome-tour-preview-fade 10s ease-in-out infinite;
+    left: 22%;
+    top: 42%;
+    transform: translate(-50%, 0);
+  }
+}

@@ -8,6 +8,13 @@ import {
   isMorphPossible,
   markGuaranteedShimmer,
 } from "@/lib/matchup-neutral-nudge";
+import {
+  isTourNudgeQuiet,
+  isWelcomeTourActive,
+  subscribeNudgeReset,
+  tourNudgeQuietUntil,
+  useWelcomeTourActive,
+} from "@/lib/welcomeTour";
 
 const MORPH_DURATION_MS = 2000;
 const MORPH_FLASH_MS = 1500;
@@ -151,6 +158,30 @@ export function useMatchupNeutralNudge(
   const [showVsShimmer, setShowVsShimmer] = useState(false);
   const [showHesitationLabel, setShowHesitationLabel] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
+  const tourActive = useWelcomeTourActive();
+  const [nudgeQuiet, setNudgeQuiet] = useState(() => isTourNudgeQuiet());
+  const tourRef = useRef(tourActive);
+  tourRef.current = tourActive || isWelcomeTourActive();
+  const quietRef = useRef(nudgeQuiet);
+  quietRef.current = nudgeQuiet || isTourNudgeQuiet();
+
+  useEffect(() => subscribeNudgeReset(() => {
+    setShowMorph(false);
+    setShowVsShimmer(false);
+    setShowHesitationLabel(false);
+    setNudgeQuiet(true);
+  }), []);
+
+  useEffect(() => {
+    const until = tourNudgeQuietUntil();
+    if (!until) {
+      setNudgeQuiet(false);
+      return;
+    }
+    setNudgeQuiet(true);
+    const timer = window.setTimeout(() => setNudgeQuiet(isTourNudgeQuiet()), Math.max(0, until - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [tourActive]);
 
   useEffect(() => {
     const node = cardRef.current;
@@ -171,7 +202,7 @@ export function useMatchupNeutralNudge(
       : HESITATION_LABEL_DURATION_MS;
     const shimmerRepeatMs = isMobile ? MOBILE_SHIMMER_REPEAT_MS : SHIMMER_REPEAT_MS;
 
-    if (!node || !needsObserver) {
+    if (!node || !needsObserver || tourActive || nudgeQuiet || isTourNudgeQuiet()) {
       setShowMorph(false);
       setShowVsShimmer(false);
       setShowHesitationLabel(false);
@@ -273,25 +304,32 @@ export function useMatchupNeutralNudge(
       setShowVsShimmer(false);
     };
 
+    const blocked = () => tourRef.current || quietRef.current || isWelcomeTourActive() || isTourNudgeQuiet();
+
     const flashMorph = (durationMs: number, scheduleRepeat = false) => {
+      if (blocked()) return;
       setShowMorph(true);
       morphHideTimeout = window.setTimeout(() => {
         morphHideTimeout = null;
         setShowMorph(false);
+        if (blocked()) return;
         if (scheduleRepeat && inView && isMobile && !hasVoted && morph) {
           morphRepeatTimeout = window.setTimeout(() => {
             morphRepeatTimeout = null;
-            if (inView && !hasVoted) flashMorph(MORPH_FLASH_MS, true);
+            if (blocked() || !inView || hasVoted) return;
+            flashMorph(MORPH_FLASH_MS, true);
           }, MOBILE_MORPH_REPEAT_MS);
         }
       }, durationMs);
     };
 
     const showBubble = (durationMs: number, scheduleRepeat = false) => {
+      if (blocked()) return;
       setShowHesitationLabel(true);
       hesitationHideTimeout = window.setTimeout(() => {
         hesitationHideTimeout = null;
         setShowHesitationLabel(false);
+        if (blocked()) return;
         if (scheduleRepeat && inView && isMobile && !hasVoted && hesitation) {
           armBubbleRepeat();
         }
@@ -302,7 +340,7 @@ export function useMatchupNeutralNudge(
       bubbleRepeatArmed = true;
       bubbleRepeatTimeout = window.setTimeout(() => {
         bubbleRepeatTimeout = null;
-        if (!inView || hasVoted || !bubbleRepeatArmed) return;
+        if (blocked() || !inView || hasVoted || !bubbleRepeatArmed) return;
         startBubbleRepeatCountdown();
       }, MOBILE_BUBBLE_REPEAT_MS);
     };
@@ -311,21 +349,23 @@ export function useMatchupNeutralNudge(
       if (hesitationDelayTimeout !== null) window.clearTimeout(hesitationDelayTimeout);
       hesitationDelayTimeout = window.setTimeout(() => {
         hesitationDelayTimeout = null;
-        if (!inView || hasVoted) return;
+        if (blocked() || !inView || hasVoted) return;
         showBubble(hesitationLabelDurationMs, true);
       }, hesitationDelayMs);
     };
 
     const runShimmerBurst = (isGuaranteed: boolean) => {
+      if (blocked()) return;
       if (isGuaranteed) markGuaranteedShimmer(matchupId);
       setShowVsShimmer(true);
       shimmerHideTimeout = window.setTimeout(() => {
         shimmerHideTimeout = null;
         setShowVsShimmer(false);
-        if (!inView || hasVoted) return;
+        if (blocked() || !inView || hasVoted) return;
         shimmerRepeatTimeout = window.setTimeout(() => {
           shimmerRepeatTimeout = null;
-          if (inView && !hasVoted) runShimmerBurst(false);
+          if (blocked() || !inView || hasVoted) return;
+          runShimmerBurst(false);
         }, shimmerRepeatMs);
       }, SHIMMER_DURATION_MS);
     };
@@ -339,7 +379,7 @@ export function useMatchupNeutralNudge(
       const delay = needsGuaranteed ? SHIMMER_DWELL_MS : shimmerRepeatMs;
       shimmerDwellTimeout = window.setTimeout(() => {
         shimmerDwellTimeout = null;
-        if (!inView) return;
+        if (blocked() || !inView) return;
         runShimmerBurst(needsGuaranteed);
       }, delay);
     };
@@ -348,6 +388,7 @@ export function useMatchupNeutralNudge(
       if (hesitationDelayTimeout !== null) window.clearTimeout(hesitationDelayTimeout);
       hesitationDelayTimeout = window.setTimeout(() => {
         hesitationDelayTimeout = null;
+        if (blocked()) return;
         if (!consumeMatchupNeutralHesitation(matchupId, isMobile)) {
           if (!isHesitationPossible(matchupId, isMobile)) {
             hesitationDone = true;
@@ -373,7 +414,7 @@ export function useMatchupNeutralNudge(
     };
 
     const onActivity = () => {
-      if (!inView || hasVoted) return;
+      if (blocked() || !inView || hasVoted) return;
       if (bubbleRepeatArmed) {
         if (bubbleRepeatTimeout !== null) {
           window.clearTimeout(bubbleRepeatTimeout);
@@ -391,12 +432,12 @@ export function useMatchupNeutralNudge(
     };
 
     const onMouseEnter = () => {
-      if (!useDesktopHover || prefersReducedMotion) return;
+      if (blocked() || !useDesktopHover || prefersReducedMotion) return;
       isHovered = true;
 
       hoverMorphDelayTimeout = window.setTimeout(() => {
         hoverMorphDelayTimeout = null;
-        if (!isHovered) return;
+        if (blocked() || !isHovered) return;
         if (hoverNudge || morph) flashMorph(MORPH_FLASH_MS);
         if (shimmerEligible) {
           setShowVsShimmer(true);
@@ -410,7 +451,7 @@ export function useMatchupNeutralNudge(
       if (hoverNudge || hesitation) {
         hoverBubbleDelayTimeout = window.setTimeout(() => {
           hoverBubbleDelayTimeout = null;
-          if (!isHovered) return;
+          if (blocked() || !isHovered) return;
           setShowHesitationLabel(true);
           hoverBubbleMaxTimeout = window.setTimeout(() => {
             hoverBubbleMaxTimeout = null;
@@ -433,6 +474,7 @@ export function useMatchupNeutralNudge(
         if (!morphDone) {
           dwellTimeout = window.setTimeout(() => {
             dwellTimeout = null;
+            if (blocked()) return;
             if (!consumeMatchupNeutralMorph(matchupId, isMobile)) {
               if (!isMorphPossible(matchupId, isMobile)) morphDone = true;
               return;
@@ -450,7 +492,8 @@ export function useMatchupNeutralNudge(
         } else if (isMobile && morph && morphDone && !hasVoted) {
           morphRepeatTimeout = window.setTimeout(() => {
             morphRepeatTimeout = null;
-            if (inView && !hasVoted) flashMorph(MORPH_FLASH_MS, true);
+            if (blocked() || !inView || hasVoted) return;
+            flashMorph(MORPH_FLASH_MS, true);
           }, MOBILE_MORPH_REPEAT_MS);
         }
         scheduleShimmer();
@@ -484,13 +527,14 @@ export function useMatchupNeutralNudge(
       cancelDesktopHover();
       setShowMorph(false);
     };
-  }, [hasVoted, hesitation, hoverNudge, isMobile, matchupId, morph, prefersReducedMotion, shimmer]);
+  }, [hasVoted, hesitation, hoverNudge, isMobile, matchupId, morph, nudgeQuiet, prefersReducedMotion, shimmer, tourActive]);
 
+  const hideNudge = tourActive || nudgeQuiet;
   return {
     cardRef,
-    showMorph,
-    showVsShimmer,
-    showHesitationLabel,
+    showMorph: showMorph && !hideNudge,
+    showVsShimmer: showVsShimmer && !hideNudge,
+    showHesitationLabel: showHesitationLabel && !hideNudge,
     prefersReducedMotion,
   };
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, UserProfile } from "@/contexts/AuthContext";
 import { useThemeToggle } from "@/hooks/useThemeToggle";
@@ -39,6 +39,7 @@ import {
   BookOpen,
   LineChart,
   Gift,
+  Sparkles,
 } from "lucide-react";
 import { CURRENCY, voxWord } from "@/lib/currency";
 import { CREDIT_ACTIONS } from "@shared/credit-config";
@@ -47,6 +48,7 @@ import { logInsightsEvent } from "@/lib/insights-telemetry";
 import { VoxMark } from "@/components/VoxMark";
 import { InfoHint } from "@/components/InfoHint";
 import { useAccountWinRate } from "@/hooks/useAccountWinRate";
+import { requestWelcomeTour, tourReplayDestination } from "@/lib/welcomeTour";
 
 
 // Referral reward derives from credit-config so the menu label tracks the
@@ -84,6 +86,7 @@ interface UserMenuContentProps {
   onCreateAccount: () => void;
   onSignOut: () => void;
   onClose?: () => void;
+  onReplay: () => void;
 }
 
 function UserMenuContent({
@@ -96,6 +99,7 @@ function UserMenuContent({
   onCreateAccount,
   onSignOut,
   onClose,
+  onReplay,
 }: UserMenuContentProps) {
   const { open: openReferralModal } = useReferralModal();
   const winRate = useAccountWinRate();
@@ -103,6 +107,10 @@ function UserMenuContent({
   const handleNavClick = (path: string) => {
     onNavigate(path);
     onClose?.();
+  };
+
+  const replayTour = () => {
+    onReplay();
   };
 
   const handleReferClick = () => {
@@ -173,6 +181,15 @@ function UserMenuContent({
         >
           <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <span className="text-sm">How It Works</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+        </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={replayTour}
+          data-testid="button-show-me-how-loggedout"
+        >
+          <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+          <span className="text-sm">Show me how</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
         </button>
 
@@ -384,6 +401,15 @@ function UserMenuContent({
           <span className="flex-1 text-sm">How It Works</span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={replayTour}
+          data-testid="button-show-me-how"
+        >
+          <Sparkles className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+          <span className="flex-1 text-sm">Show me how</span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
         {/* Always-available referral entry — Phase 1 leads with earning
             (refer-and-earn pays both sides) rather than buying, so this
             sits right above Earn Vox in the same accented treatment. */}
@@ -456,6 +482,28 @@ export function UserMenu() {
   const { theme, toggleTheme } = useThemeToggle();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const replayPending = useRef(false);
+
+  const beginReplay = () => {
+    requestWelcomeTour("replay");
+    const path = typeof window === "undefined" ? "" : window.location.pathname;
+    const destination = tourReplayDestination(path);
+    if (destination) setLocation(destination);
+  };
+
+  const requestReplay = () => {
+    replayPending.current = true;
+    if (isMobile) setSheetOpen(false);
+    else setMenuOpen(false);
+  };
+
+  const finishMenuClose = (event: Event) => {
+    event.preventDefault();
+    if (!replayPending.current) return;
+    replayPending.current = false;
+    beginReplay();
+  };
 
   const handleNavigate = (path: string) => {
     setLocation(path);
@@ -521,7 +569,7 @@ export function UserMenu() {
           <SheetContent
             side="right"
             className="w-[320px] p-0 overflow-y-auto"
-            onCloseAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={finishMenuClose}
           >
             <SheetHeader className="sr-only">
               <SheetTitle>User Menu</SheetTitle>
@@ -537,6 +585,7 @@ export function UserMenu() {
               onCreateAccount={handleCreateAccount}
               onSignOut={handleSignOut}
               onClose={() => setSheetOpen(false)}
+              onReplay={requestReplay}
             />
           </SheetContent>
         </Sheet>
@@ -545,14 +594,14 @@ export function UserMenu() {
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         {triggerButton}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         className="w-[300px] p-0"
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={finishMenuClose}
       >
         <UserMenuContent
           profile={profile}
@@ -563,6 +612,7 @@ export function UserMenu() {
           onSignIn={handleSignIn}
           onCreateAccount={handleCreateAccount}
           onSignOut={handleSignOut}
+          onReplay={requestReplay}
         />
       </DropdownMenuContent>
     </DropdownMenu>

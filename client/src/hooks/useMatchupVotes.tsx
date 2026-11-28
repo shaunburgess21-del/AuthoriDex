@@ -40,8 +40,15 @@ import {
   type MatchupVoteOption,
   type MatchupVoteShape,
 } from "@/lib/optimisticMatchupVote";
-import { trackVoteCast } from "@/lib/funnelTelemetry";
+import { logFunnelEvent, trackVoteCast } from "@/lib/funnelTelemetry";
 import { hapticSuccess } from "@/lib/haptic";
+import { isTourVoteBlocked } from "@/lib/welcomeTour";
+
+function rejectTourVote(matchupId: string): boolean {
+  if (!isTourVoteBlocked()) return false;
+  logFunnelEvent("tour_practice_blocked_real_vote", "vote", { matchupId });
+  return true;
+}
 
 export const MATCHUPS_LIST_KEY = ["/api/matchups"] as const;
 export const MATCHUP_USER_VOTES_KEY = ["/api/matchups/user-votes"] as const;
@@ -77,7 +84,7 @@ export interface UseMatchupVotesOptions {
 
 export type MatchupVoteAttempt =
   | { ok: true; previousVote: MatchupVoteOption | null }
-  | { ok: false; reason: "rate_limited" | "redirected_to_signup" };
+  | { ok: false; reason: "rate_limited" | "redirected_to_signup" | "tour" };
 
 export function useMatchupVotes(options?: UseMatchupVotesOptions) {
   const queryClient = useQueryClient();
@@ -194,16 +201,20 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
 
   const voteMutation = useMutation<any, any, VoteVars, MutationContext>({
     mutationFn: async ({ matchupId, option }) => {
+      if (rejectTourVote(matchupId)) return { tourBlocked: true };
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
-    onMutate: ({ matchupId, option, previousVote }) =>
-      snapshotAndPatch(
+    onMutate: ({ matchupId, option, previousVote }) => {
+      if (isTourVoteBlocked()) return undefined;
+      return snapshotAndPatch(
         matchupId,
         (m) => optimisticMatchupVotePatch(m, option, previousVote),
         (current) => ({ ...current, [matchupId]: option }),
-      ),
+      );
+    },
     onSuccess: (data, variables) => {
+      if (!data || data.tourBlocked || isTourVoteBlocked()) return;
       hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       if (!variables.previousVote) {
@@ -230,19 +241,23 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
 
   const removeMutation = useMutation<any, any, RemoveVars, MutationContext>({
     mutationFn: async ({ matchupId }) => {
+      if (rejectTourVote(matchupId)) return { tourBlocked: true };
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
       return response.json();
     },
-    onMutate: ({ matchupId, previousVote }) =>
-      snapshotAndPatch(
+    onMutate: ({ matchupId, previousVote }) => {
+      if (isTourVoteBlocked()) return undefined;
+      return snapshotAndPatch(
         matchupId,
         (m) => optimisticMatchupRemovePatch(m, previousVote),
         (current) => {
           delete current[matchupId];
           return current;
         },
-      ),
+      );
+    },
     onSuccess: (data) => {
+      if (!data || data.tourBlocked || isTourVoteBlocked()) return;
       // Remove paths return budget: null (no budget delta) — helper handles it.
       applyBudgetFromVoteResponse(queryClient, data);
       queryClient.invalidateQueries({ queryKey: MATCHUPS_LIST_KEY });
@@ -277,6 +292,7 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
         ) => { optimisticFeedbackShown?: boolean } | void;
       },
     ): MatchupVoteAttempt => {
+      if (rejectTourVote(matchupId)) return { ok: false, reason: "tour" };
       if (isRateLimited) return { ok: false, reason: "rate_limited" };
       const previousVote = (userVotes[matchupId] as MatchupVoteOption | undefined) ?? null;
       const decision = checkVoteGate(budget, "matchup_poll", matchupId, previousVote !== null);
@@ -308,6 +324,7 @@ export function useMatchupVotes(options?: UseMatchupVotesOptions) {
   /** Optimistically remove the user's vote. No-op when there is none. */
   const removeMatchupVote = useCallback(
     (matchupId: string): boolean => {
+      if (rejectTourVote(matchupId)) return false;
       const previousVote = userVotes[matchupId] as MatchupVoteOption | undefined;
       if (!previousVote) return false;
       removeMutation.mutate({ matchupId, previousVote });

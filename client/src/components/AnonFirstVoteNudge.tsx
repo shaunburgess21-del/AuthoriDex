@@ -22,6 +22,7 @@ import {
   subscribeWelcomeDeviceDismiss,
 } from "@/lib/welcomeChecklist";
 import { cn } from "@/lib/utils";
+import { useWelcomeTourActive } from "@/lib/welcomeTour";
 
 function readDismissed(): boolean {
   if (typeof window === "undefined") return true;
@@ -56,6 +57,7 @@ const PLACEMENT_CLASS: Record<Exclude<AnonNudgePlacement, "hidden">, string> = {
 };
 
 function AnonFirstVoteNudgeBody() {
+  const tourActive = useWelcomeTourActive();
   const budget = useAnonBudget();
   const [location, setLocation] = useLocation();
   const [dismissed, setDismissed] = useState(readDismissed);
@@ -75,7 +77,7 @@ function AnonFirstVoteNudgeBody() {
     pathname: location,
     deviceDismissed: welcomeDismissed,
   });
-  const reserveBottom = placement === "above-nav";
+  const reserveBottom = placement === "above-nav" && !tourActive;
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -117,7 +119,7 @@ function AnonFirstVoteNudgeBody() {
     };
   }, [reserveBottom]);
 
-  if (placement === "hidden") return null;
+  if (placement === "hidden" || tourActive) return null;
 
   return (
     <div

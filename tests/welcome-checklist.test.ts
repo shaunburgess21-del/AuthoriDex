@@ -323,23 +323,28 @@ describe("welcome checklist on the vote page", () => {
   it("replaces the auto toast with one checklist and leaves How it works alone", () => {
     assert.match(votePage, /<VoteWelcomeSlot onVote=\{scrollToFirstUnvoted\} \/>/);
     assert.equal(votePage.includes("<ReturningUserStrip />"), false);
-    assert.match(votePage, /disableAutoToast\s*\n/);
-    assert.equal(votePage.includes('toastLabel="New to voting?"'), true);
+    assert.equal(votePage.includes("<OnboardingDrawer"), false);
+    assert.equal(votePage.includes('toastLabel="New to voting?"'), false);
+    assert.match(votePage, /<WelcomeTourHost/);
+    assert.match(votePage, /requestWelcomeTour\("replay"\)/);
     assert.equal((checklist.match(/data-testid="vote-welcome-checklist"/g) ?? []).length, 1);
     assert.equal(checklist.includes("md:hidden"), false);
     assert.equal(checklist.includes("hidden md:"), false);
     assert.match(checklist, /aria-checked=\{isDone\}/);
     assert.match(checklist, /aria-label="Dismiss welcome checklist"/);
     assert.match(checklist, /<ul /);
-    assert.match(checklist, /href=\{WELCOME_HOW_IT_WORKS_HREF\}/);
+    assert.equal(checklist.includes("href={WELCOME_HOW_IT_WORKS_HREF}"), false);
+    assert.match(checklist, /requestWelcomeTour\("link"\)/);
     assert.match(checklist, /\{WELCOME_HOW_IT_WORKS_LABEL\}/);
     assert.equal(WELCOME_HOW_IT_WORKS_HREF, "/how-it-works");
-    assert.equal(WELCOME_HOW_IT_WORKS_LABEL, "How it works");
+    assert.equal(WELCOME_HOW_IT_WORKS_LABEL, "Show me how");
     assert.equal(/\bXP\b|credits/i.test(checklist), false);
     assert.equal(/\bXP\b|credits/i.test(WELCOME_CHECKLIST_HEADLINE), false);
     assert.match(howItWorks, /toastLabel="First time here\?"/);
     assert.match(howItWorks, /toastCtaLabel="Take the tour"/);
     assert.match(howItWorksPage, /HowItWorksWelcomeModal/);
+    assert.match(howItWorksPage, /query string \(default: xp\)/);
+    assert.match(howItWorksPage, /if \(tab === "xp"\) url\.searchParams\.delete\("tab"\)/);
   });
 
   it("does not lock desktop vote-card height", () => {
@@ -660,10 +665,8 @@ describe("post-vote strip vs welcome checklist", () => {
     assert.match(nudge, /var\(--safe-area-inset-bottom,env\(safe-area-inset-bottom,0px\)\)/);
 
     const vote = readFileSync(new URL("../client/src/pages/VotePage.tsx", import.meta.url), "utf8");
-    assert.match(
-      vote,
-      /pb-\[calc\(13\.5rem\+env\(safe-area-inset-bottom,0px\)\)\] md:pb-0/,
-    );
+    assert.equal(vote.includes("13.5rem"), false);
+    assert.match(vote, /min-h-screen overflow-x-clip pb-0/);
     assert.equal(vote.includes("--anon-nudge-height"), false);
     assert.equal(vote.includes("md:min-h-[390px]"), false);
     assert.equal(vote.includes("md:h-[390px]"), false);

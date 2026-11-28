@@ -18,6 +18,8 @@ import {
   planFeedRestore,
   scrollYForFeedCard,
   voteFeedStickyOffset,
+  VOTE_FEED_RELEASE_MATCHUP,
+  VOTE_FEED_REVEAL_FIRST_MATCHUP,
   VOTE_STICKY_BAND_REVEAL,
   snapFeedWindow,
   VOTE_ALL_SECTION_LAYOUT_QUERY,
@@ -282,6 +284,24 @@ export function VoteMixedFeed<T extends VoteMixedFeedItem>({
     }
     return items.length - 1;
   }, [columns, items, spans]);
+
+  useEffect(() => {
+    const revealFirst = () => {
+      const index = items.findIndex((item) => item.kind === "matchup");
+      if (index < 0) return;
+      scrollLock.current = true;
+      applyWindow(index);
+    };
+    const release = () => {
+      scrollLock.current = false;
+    };
+    window.addEventListener(VOTE_FEED_REVEAL_FIRST_MATCHUP, revealFirst);
+    window.addEventListener(VOTE_FEED_RELEASE_MATCHUP, release);
+    return () => {
+      window.removeEventListener(VOTE_FEED_REVEAL_FIRST_MATCHUP, revealFirst);
+      window.removeEventListener(VOTE_FEED_RELEASE_MATCHUP, release);
+    };
+  }, [applyWindow, items]);
 
   useEffect(() => {
     let frame = 0;

@@ -23,6 +23,7 @@ import { getSentimentPollVotedPillStyle } from "@/lib/sentimentPollVoteDisplay";
 import { VoteCardHeader } from "@/components/vote/VoteCardHeader";
 import { CrowdLine, type CrowdLineShare } from "@/components/vote/CrowdLine";
 import { matchupResultsVisible } from "@/lib/matchupResults";
+import { practicePercentDataset } from "@/lib/welcomeTour";
 import { choiceCrowdLine } from "@/lib/crowdLine";
 import { cn } from "@/lib/utils";
 import {
@@ -196,7 +197,14 @@ export function VersusCard({
   );
 
   return (
-    <div ref={neutralNudge.cardRef} className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}>
+    <div
+      ref={neutralNudge.cardRef}
+      data-welcome-tour-h2h=""
+      data-option-a-text={matchup.optionAText}
+      data-option-b-text={matchup.optionBText}
+      {...(practicePercentDataset(matchup.optionAPercent, matchup.optionBPercent) ?? {})}
+      className={`hub-card-slot relative ${feedLayout ? "h-full md:min-h-0" : showResults ? "h-full" : "h-auto"}`}
+    >
       <Card className={`hub-card-hover lb-row-neutral relative bg-card dark:bg-[#11151D] shadow-sm dark:shadow-none md:shadow-sm flex flex-col rounded-[12px] md:rounded-xl ${feedLayout ? "h-auto min-h-[390px] md:h-full md:min-h-0 md:overflow-hidden" : showResults ? "h-full min-h-[390px] md:min-h-0" : "h-auto md:min-h-0"}`}>
         <div className="hub-card-surface absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-sky-600/5 rounded-lg md:rounded-xl" />
 

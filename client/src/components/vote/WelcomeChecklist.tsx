@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Check, Lock, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAnonBudget } from "@/hooks/useAnonBudget";
@@ -25,7 +25,6 @@ import {
   WELCOME_CHECKLIST_HEADLINE,
   WELCOME_FAVORITE_HREF,
   WELCOME_FREE_ACCOUNT_HINT,
-  WELCOME_HOW_IT_WORKS_HREF,
   WELCOME_HOW_IT_WORKS_LABEL,
   WELCOME_JOIN_FREE_LABEL,
   WELCOME_PREDICT_HREF,
@@ -53,6 +52,8 @@ import {
   type WelcomeStorage,
 } from "@/lib/welcomeChecklist";
 import { ReturningUserStrip } from "@/components/vote/ReturningUserStrip";
+import { WelcomeTourPreview } from "@/components/vote/WelcomeTourPreview";
+import { readTourSeen, requestWelcomeTour } from "@/lib/welcomeTour";
 
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState(() => {
@@ -67,6 +68,22 @@ function usePrefersReducedMotion(): boolean {
     return () => media.removeEventListener("change", onChange);
   }, []);
   return reduce;
+}
+
+function useTourSeen(): boolean {
+  const [seen, setSeen] = useState(() => {
+    const store = storageOrNull();
+    return store ? readTourSeen(store) : false;
+  });
+  useEffect(() => {
+    const sync = () => {
+      const store = storageOrNull();
+      setSeen(store ? readTourSeen(store) : false);
+    };
+    window.addEventListener("voxdex-welcome-tour-seen", sync);
+    return () => window.removeEventListener("voxdex-welcome-tour-seen", sync);
+  }, []);
+  return seen;
 }
 
 function storageOrNull(): WelcomeStorage | null {
@@ -289,6 +306,7 @@ export function WelcomeChecklistCard({
   onJoin: () => void;
   onDismiss: () => void;
 }) {
+  const tourSeen = useTourSeen();
   const signedOutNudge = signedOut && flags.vote && phase !== "all-set";
   const status =
     phase === "all-set" ? WELCOME_ALL_SET_LABEL : welcomeProgressLabel(done, { signedOutNudge });
@@ -338,6 +356,9 @@ export function WelcomeChecklistCard({
           </span>
         ) : null}
       </p>
+      <div className="mt-3 h-32" data-testid="vote-welcome-tour-slot">
+        <WelcomeTourPreview />
+      </div>
       <ul className="mt-2" aria-label="Getting started steps">
         {WELCOME_STEPS.map((step) => {
           const isDone = checked[step.id];
@@ -377,13 +398,15 @@ export function WelcomeChecklistCard({
         })}
       </ul>
       <div className="mt-1 flex min-h-8 items-center justify-between gap-2">
-        <Link
-          href={WELCOME_HOW_IT_WORKS_HREF}
+        <button
+          type="button"
           data-testid="vote-welcome-how-it-works"
-          className="inline-flex min-h-8 items-center text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
+          onClick={() => requestWelcomeTour("link")}
+          className="inline-flex min-h-8 items-center gap-1.5 text-xs font-medium text-cyan-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-cyan-300"
         >
-          {WELCOME_HOW_IT_WORKS_LABEL}
-        </Link>
+          <StepMark done={tourSeen} />
+          <span>{WELCOME_HOW_IT_WORKS_LABEL}</span>
+        </button>
         {signedOut ? (
           <button
             type="button"
