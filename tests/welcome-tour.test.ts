@@ -25,8 +25,10 @@ import {
   readTourPending,
   readTourSeen,
   rectNeedsScroll,
+  isTourVoteBlocked,
   requestWelcomeTour,
   resetWelcomeTourBus,
+  setWelcomeTourActive,
   shouldAutoStartTour,
   shouldSkipPractice,
   startRunning,
@@ -373,5 +375,42 @@ describe("tour nudge quiet period", () => {
     assert.equal(readTourNudgeQuietUntil(store, now + 1_000), now + WELCOME_TOUR_NUDGE_QUIET_MS);
     assert.equal(readTourNudgeQuietUntil(store, now + WELCOME_TOUR_NUDGE_QUIET_MS), 0);
     assert.equal(readTourNudgeQuietUntil(memory(), now), 0);
+  });
+});
+
+describe("tour vote block", () => {
+  it("arms when a tour is requested and clears on every exit", () => {
+    resetWelcomeTourBus();
+    assert.equal(isTourVoteBlocked(), false);
+    requestWelcomeTour("replay");
+    assert.equal(isTourVoteBlocked(), true);
+    setWelcomeTourActive(false);
+    assert.equal(isTourVoteBlocked(), false);
+
+    requestWelcomeTour("link");
+    assert.equal(isTourVoteBlocked(), true);
+    setWelcomeTourActive(true);
+    assert.equal(isTourVoteBlocked(), true);
+    setWelcomeTourActive(false);
+    assert.equal(isTourVoteBlocked(), false);
+    resetWelcomeTourBus();
+  });
+
+  it("refuses the matchup vote POST while the flag is set, including the duplicate call sites", () => {
+    const hook = readFileSync(new URL("../client/src/hooks/useMatchupVotes.tsx", import.meta.url), "utf8");
+    const cast = hook.slice(hook.indexOf("mutationFn: async ({ matchupId, option })"), hook.indexOf("onMutate: ({ matchupId, option, previousVote })"));
+    assert.match(cast, /rejectTourVote\(matchupId\)/);
+    assert.ok(cast.indexOf("rejectTourVote") < cast.indexOf("apiRequest"));
+    assert.match(hook, /if \(rejectTourVote\(matchupId\)\) return \{ ok: false, reason: "tour" \}/);
+    const remove = hook.slice(hook.indexOf("mutationFn: async ({ matchupId })"), hook.indexOf("onMutate: ({ matchupId, previousVote })"));
+    assert.ok(remove.indexOf("rejectTourVote") < remove.indexOf("apiRequest"));
+    for (const file of ["../client/src/pages/PersonDetailPage.tsx", "../client/src/pages/MatchupDetailPage.tsx"]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8");
+      assert.match(source, /isTourVoteBlocked\(\)/);
+      assert.match(source, /tour_practice_blocked_real_vote/);
+    }
+    assert.match(tourUi, /bindTourPracticeGuard/);
+    assert.match(tourUi, /data-welcome-tour-overlay/);
+    assert.match(tourUi, /setWelcomeTourActive\(false\)/);
   });
 });

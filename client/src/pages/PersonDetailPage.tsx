@@ -68,6 +68,8 @@ import { formatNumber, getApprovalColor } from "@/lib/formatNumber";
 import { WhyTrendingCard } from "@/components/WhyTrendingCard";
 import { InlineCelebrityBio } from "@/components/InlineCelebrityBio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { logFunnelEvent } from "@/lib/funnelTelemetry";
+import { isTourVoteBlocked } from "@/lib/welcomeTour";
 import { INDUCTION_VOTES_QUERY_KEY, stageInductionVote } from "@/lib/inductionVotedState";
 import { profileSectionGridClass } from "@/lib/profileSectionGridClass";
 import { isUnauthorizedApiError, signInToVoteToastOptions, signInToVoteTitle } from "@/lib/signInToVoteToast";
@@ -1053,10 +1055,15 @@ export default function PersonDetailPage() {
 
   const matchupVoteMutation = useMutation({
     mutationFn: async ({ matchupId, option }: { matchupId: string; option: "option_a" | "option_b" | "neutral"; previousVote?: string | null }) => {
+      if (isTourVoteBlocked()) {
+        logFunnelEvent("tour_practice_blocked_real_vote", "vote", { matchupId });
+        return { tourBlocked: true };
+      }
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return response.json();
     },
     onMutate: ({ matchupId, option, previousVote }) => {
+      if (isTourVoteBlocked()) return;
       setLocalMatchupVotes((prev) => ({ ...prev, [matchupId]: option }));
       const isChange = !!previousVote;
       showVoteToast("matchup", isChange ? "Vote changed!" : "Vote recorded!", {
@@ -1064,6 +1071,7 @@ export default function PersonDetailPage() {
       });
     },
     onSuccess: (data, variables) => {
+      if (data?.tourBlocked || isTourVoteBlocked()) return;
       hapticSuccess();
       // Phase 4 — sync the anon-budget cache from the server-authoritative
       // snapshot in the response.
@@ -1105,6 +1113,10 @@ export default function PersonDetailPage() {
 
   const matchupRemoveVoteMutation = useMutation({
     mutationFn: async ({ matchupId }: { matchupId: string; previousVote: string }) => {
+      if (isTourVoteBlocked()) {
+        logFunnelEvent("tour_practice_blocked_real_vote", "vote", { matchupId });
+        return { tourBlocked: true };
+      }
       const response = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
       return response.json();
     },

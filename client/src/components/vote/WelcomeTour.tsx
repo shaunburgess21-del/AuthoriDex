@@ -21,6 +21,8 @@ import {
   readPracticeSplit,
   readSafeAreaInsets,
   roundSplitTo100,
+  bindTourPracticeGuard,
+  setTourPracticeHandler,
   setWelcomeTourActive,
   startRunning,
   stepSpotlights,
@@ -272,6 +274,8 @@ function trackStepTarget(step: TourStepId, onRect: (rect: RectBox) => void): () 
     io = null;
     mo = null;
     current = node;
+    const practiceStep = step === "practice_tap" || step === "practice_reveal" || step === "your_turn";
+    bindTourPracticeGuard(practiceStep ? node : null);
     if (!node) return;
     if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver(schedule);
@@ -296,6 +300,7 @@ function trackStepTarget(step: TourStepId, onRect: (rect: RectBox) => void): () 
   return () => {
     window.removeEventListener("scroll", schedule, true);
     window.removeEventListener("resize", schedule);
+    bindTourPracticeGuard(null);
     if (raf) window.cancelAnimationFrame(raf);
     ro?.disconnect();
     io?.disconnect();
@@ -471,6 +476,7 @@ export function WelcomeTourHost() {
     };
     const practiceStep = measuredStep === "practice_tap" || measuredStep === "practice_reveal" || measuredStep === "your_turn";
     const run = async () => {
+      try {
       setPracticeLive(false);
       setMeasured(null);
       if (measuredStep === phase.steps[0]) {
@@ -539,6 +545,12 @@ export function WelcomeTourHost() {
         if (!cancel) publish(rect);
       });
       release = lockDocumentScroll(document);
+      } catch {
+        if (!cancel) {
+          setWelcomeTourActive(false);
+          setPhase({ status: "idle" });
+        }
+      }
     };
     void run();
     return () => {
@@ -585,6 +597,15 @@ export function WelcomeTourHost() {
     }
     setPhase(moved);
   }, [complete]);
+
+  useEffect(() => {
+    if (phase.status !== "running" || step !== "practice_tap") {
+      setTourPracticeHandler(null);
+      return;
+    }
+    setTourPracticeHandler((side) => onPractice(side));
+    return () => setTourPracticeHandler(null);
+  }, [phase.status, step, onPractice]);
 
   const onNext = useCallback(() => {
     const current = phaseRef.current;
@@ -734,6 +755,7 @@ function TourOverlay({
     <div
       className="fixed inset-0 z-[80]"
       data-testid="welcome-tour"
+      data-welcome-tour-overlay=""
       data-native={native ? "true" : "false"}
     >
       <div className="absolute inset-0" />

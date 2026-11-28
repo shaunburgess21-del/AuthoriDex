@@ -553,6 +553,84 @@ export function isWelcomeTourActive(): boolean {
   return tourActive;
 }
 
+/**
+ * Set synchronously in requestWelcomeTour, before React paints the overlay.
+ * The settle window used to leave the real card clickable, so VersusCard
+ * reached useMatchupVotes and POSTed /api/matchups/:id/vote.
+ */
+let votesBlocked = false;
+let practiceHandler: ((side: "a" | "b") => void) | null = null;
+let guardNode: HTMLElement | null = null;
+let removePointerBlock: (() => void) | null = null;
+
+export function isTourVoteBlocked(): boolean {
+  return votesBlocked;
+}
+
+function onGuardedPointerUp(event: Event): void {
+  if (!practiceHandler || !guardNode) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = guardNode.getBoundingClientRect();
+  const x = "clientX" in event ? Number((event as PointerEvent).clientX) : rect.left;
+  practiceHandler(x < rect.left + rect.width / 2 ? "a" : "b");
+}
+
+function onGuardedClick(event: Event): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+/** Re-bind when the virtualized feed replaces the head-to-head node. */
+export function bindTourPracticeGuard(node: HTMLElement | null): void {
+  if (guardNode === node) return;
+  if (guardNode) {
+    guardNode.removeEventListener("pointerup", onGuardedPointerUp, true);
+    guardNode.removeEventListener("click", onGuardedClick, true);
+  }
+  guardNode = node;
+  if (!guardNode) return;
+  guardNode.addEventListener("pointerup", onGuardedPointerUp, true);
+  guardNode.addEventListener("click", onGuardedClick, true);
+}
+
+export function setTourPracticeHandler(handler: ((side: "a" | "b") => void) | null): void {
+  practiceHandler = handler;
+}
+
+function clearPracticeGuard(): void {
+  bindTourPracticeGuard(null);
+  practiceHandler = null;
+}
+
+function blockFeedPointer(event: Event): void {
+  const el = event.target instanceof Element ? event.target : null;
+  if (el?.closest("[data-welcome-tour-overlay]")) return;
+  if (guardNode && el && guardNode.contains(el)) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function armVoteBlock(): void {
+  votesBlocked = true;
+  if (removePointerBlock || typeof document === "undefined") return;
+  document.addEventListener("pointerdown", blockFeedPointer, true);
+  document.addEventListener("pointerup", blockFeedPointer, true);
+  document.addEventListener("click", blockFeedPointer, true);
+  removePointerBlock = () => {
+    document.removeEventListener("pointerdown", blockFeedPointer, true);
+    document.removeEventListener("pointerup", blockFeedPointer, true);
+    document.removeEventListener("click", blockFeedPointer, true);
+    removePointerBlock = null;
+  };
+}
+
+function clearVoteBlock(): void {
+  votesBlocked = false;
+  clearPracticeGuard();
+  removePointerBlock?.();
+}
+
 const nudgeResetListeners = new Set<() => void>();
 
 /** Cards listen so Done, Skip, Escape, and unmount clear tie / hesitation state. */
@@ -574,6 +652,8 @@ export function resetTourCardState(): void {
 }
 
 export function setWelcomeTourActive(next: boolean): void {
+  if (next) armVoteBlock();
+  else clearVoteBlock();
   if (tourActive === next) return;
   tourActive = next;
   if (typeof document !== "undefined") {
@@ -611,6 +691,7 @@ export function subscribeTourRequest(listener: () => void): () => void {
 
 /** Queue a tour. Same-tab listeners hear it; a later /vote mount reads session storage. */
 export function requestWelcomeTour(source: TourSource): void {
+  armVoteBlock();
   queuedSource = source;
   const session = browserSession();
   if (session) writeTourPending(session, source);
@@ -630,6 +711,7 @@ export function takeTourRequest(): TourSource | null {
 export function resetWelcomeTourBus(): void {
   queuedSource = null;
   tourActive = false;
+  clearVoteBlock();
   activeListeners.clear();
   requestListeners.clear();
 }

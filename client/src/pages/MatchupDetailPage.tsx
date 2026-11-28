@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
+import { logFunnelEvent } from "@/lib/funnelTelemetry";
+import { isTourVoteBlocked } from "@/lib/welcomeTour";
 import { formatDate } from "@/lib/formatDate";
 import { VoteDetailHeader, VoteDetailSkeleton } from "@/components/vote/VoteDetailSkeleton";
 import { SwipeNavigator } from "@/components/vote/SwipeNavigator";
@@ -132,10 +134,15 @@ export default function MatchupDetailPage() {
 
   const voteMutation = useMutation({
     mutationFn: async ({ matchupId, option }: { matchupId: string; option: MatchupVoteOption }) => {
+      if (isTourVoteBlocked()) {
+        logFunnelEvent("tour_practice_blocked_real_vote", "vote", { matchupId });
+        return { tourBlocked: true };
+      }
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { option });
       return res.json();
     },
     onMutate: ({ matchupId, option }) => {
+      if (isTourVoteBlocked()) return;
       void queryClient.cancelQueries({ queryKey: slugQueryKey });
       void queryClient.cancelQueries({ queryKey: userVotesQueryKey });
       const previousMatchup = queryClient.getQueryData<MatchupDetail>(slugQueryKey);
@@ -180,6 +187,7 @@ export default function MatchupDetailPage() {
       toast.error("Error", { description: "Failed to cast vote. Please sign in." });
     },
     onSuccess: (data, _variables, context) => {
+      if (data?.tourBlocked || isTourVoteBlocked()) return;
       hapticSuccess();
       applyBudgetFromVoteResponse(queryClient, data);
       if (data && typeof data === "object" && context?.previousMatchup) {
@@ -205,6 +213,10 @@ export default function MatchupDetailPage() {
 
   const removeVoteMutation = useMutation({
     mutationFn: async (matchupId: string) => {
+      if (isTourVoteBlocked()) {
+        logFunnelEvent("tour_practice_blocked_real_vote", "vote", { matchupId });
+        return { tourBlocked: true };
+      }
       const res = await apiRequest("POST", `/api/matchups/${matchupId}/vote`, { remove: true });
       return res.json();
     },
